@@ -14,6 +14,16 @@ Install python dependencies:
 pip install -r requirements.txt
 ```
 
+If you want to use pyenv to manage your Python virtual environment, you can automatically enable
+it for the trainlog folder with:
+
+```bash
+pyenv install 3.9.18
+pyenv virtualenv 3.9.18 trainlog
+pyenv local trainlog
+pip install -r requirements.txt
+```
+
 Install pre-commit hooks, to automatically format and lint your code:
 
 ```bash
@@ -31,9 +41,17 @@ Edit the `.env` file with appropriate values.
 
 Edit the `config.yaml` in your preferred text editor to fill in your details:
 
+You'll also need to setup [Git LFS](https://git-lfs.com/).
+
+```bash
+git lfs install
+git lfs pull
+```
+
 #### SMTP Configuration
 
-This is for sending emails. Please provide the SMTP server details:
+This is for sending emails. You can ignore it for running the app locally.
+Please provide the SMTP server details:
 
 - `server`: The address of your SMTP server. Example: `smtp.gmail.com`
 - `port`: The port used by the SMTP server. Common ports include `587` (with STARTTLS) or `465` (for SSL/TLS).
