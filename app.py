@@ -184,6 +184,8 @@ from src.utils import (
     pathConn,
     readLang,
 )
+from src.trips import Trip, create_trip_in_db
+from src.paths import Path
 
 app = Flask(__name__)
 Compress(app)
@@ -478,98 +480,6 @@ class Friendship(authDb.Model):
     friend = authDb.relationship(
         "User", foreign_keys=[friend_id], backref="friend_users"
     )
-
-
-class Trip:
-    def __init__(
-        self,
-        username,
-        origin_station,
-        destination_station,
-        start_datetime,
-        end_datetime,
-        trip_length,
-        estimated_trip_duration,
-        operator,
-        countries,
-        manual_trip_duration,
-        utc_start_datetime,
-        utc_end_datetime,
-        created,
-        last_modified,
-        line_name,
-        type,
-        material_type,
-        seat,
-        reg,
-        waypoints,
-        notes,
-        price,
-        currency,
-        purchasing_date,
-        ticket_id,
-    ):
-        self.username = username
-        self.origin_station = origin_station
-        self.destination_station = destination_station
-        self.start_datetime = start_datetime
-        self.end_datetime = end_datetime
-        self.trip_length = trip_length
-        self.estimated_trip_duration = estimated_trip_duration
-        self.manual_trip_duration = manual_trip_duration
-        self.operator = operator
-        self.countries = countries
-        self.utc_start_datetime = utc_start_datetime
-        self.utc_end_datetime = utc_end_datetime
-        self.created = created
-        self.last_modified = last_modified
-        self.line_name = line_name
-        self.type = type
-        self.material_type = material_type
-        self.seat = seat
-        self.reg = reg
-        self.waypoints = waypoints
-        self.notes = notes
-        self.price = price
-        self.currency = currency
-        self.purchasing_date = purchasing_date
-        self.ticket_id = ticket_id
-
-    def keys(self):
-        return tuple(vars(self).keys())
-
-    def values(self):
-        return tuple(vars(self).values())
-
-
-class Node:
-    def __init__(self, trip_id, node_order, lat, lng):
-        self.trip_id = trip_id
-        self.node_order = node_order
-        self.lat = lat
-        self.lng = lng
-
-    def keys(self):
-        return tuple(vars(self).keys())
-
-    def values(self):
-        return tuple(vars(self).values())
-
-
-class Path:
-    def __init__(self, path, trip_id):
-        self.list = []
-        for node_order, node in enumerate(path):
-            new_node = Node(
-                trip_id=trip_id, node_order=node_order, lat=node["lat"], lng=node["lng"]
-            )
-            self.list.append(new_node)
-
-    def keys(self):
-        return ("trip_id", "path")
-
-    def values(self):
-        return [self.list[0].trip_id, str([[node.lat, node.lng] for node in self.list])]
 
 
 def sendOwnerEmail(subject, message):
@@ -1045,8 +955,11 @@ def saveTripToDb(username, newTrip, newPath, type="train"):
             station_type=type,
         )
 
+    user_id = User.query.filter_by(username=username).first().uid
+
     trip = Trip(
         username=username,
+        user_id=user_id,
         origin_station=newTrip["originStation"][1],
         destination_station=newTrip["destinationStation"][1],
         start_datetime=start_datetime,
@@ -1071,48 +984,10 @@ def saveTripToDb(username, newTrip, newPath, type="train"):
         currency=newTrip["currency"],
         purchasing_date=newTrip["purchasing_date"],
         ticket_id=newTrip["ticket_id"],
+        path=newPath,
     )
 
-    saveTripQuery = (
-        saveQuery.format(
-            table="trip", keys=trip.keys(), values=", ".join(("?",) * len(trip.keys()))
-        )
-        + " RETURNING uid;"
-    )
-
-    try:
-        # Begin transactions in both databases
-        mainConn.execute("BEGIN TRANSACTION")
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute(saveTripQuery, trip.values())
-            # Retrieve the trip_id directly from the INSERT statement
-            trip_id = cursor.fetchone()[0]
-            print(trip_id)
-
-        # Prepare the path data with the obtained trip_id
-        path = Path(path=newPath, trip_id=trip_id)
-
-        # Use your existing saveQuery template for the path
-        savePathQuery = saveQuery.format(
-            table="paths",
-            keys="({})".format(", ".join(path.keys())),
-            values=", ".join(["?"] * len(path.keys())),
-        )
-
-        pathConn.execute("BEGIN TRANSACTION")
-        with managed_cursor(pathConn) as cursor:
-            cursor.execute(savePathQuery, path.values())
-
-        # Commit both transactions
-        mainConn.commit()
-        pathConn.commit()
-
-    except Exception as e:
-        # Rollback both transactions in case of error
-        mainConn.rollback()
-        pathConn.rollback()
-        # Optionally, log the error or handle it as needed
-        raise e
+    create_trip_in_db(trip)
 
 
 def hasUncommonTrips(username):
@@ -1301,8 +1176,7 @@ def updateTripinDB(formData, tripId=None, updateCreated=False):
 
     with managed_cursor(mainConn) as cursor:
         cursor.execute(
-            "SELECT username FROM trip WHERE uid = :trip_id",
-            {"trip_id": tripId}
+            "SELECT username FROM trip WHERE uid = :trip_id", {"trip_id": tripId}
         )
         row = cursor.fetchone()
 
@@ -3619,10 +3493,13 @@ def borked_trips(username=None):
             if username:
                 # Single user mode
                 # trip_uids = {row['uid'] for row in trips}
-                missing = [{'uid': row['uid'], 'created': row['created']} 
-                          for row in trips if row['uid'] not in path_uids]
-                return jsonify({'missing_trips': missing, 'count': len(missing)})
-            
+                missing = [
+                    {"uid": row["uid"], "created": row["created"]}
+                    for row in trips
+                    if row["uid"] not in path_uids
+                ]
+                return jsonify({"missing_trips": missing, "count": len(missing)})
+
             # Global mode
             result = {}
             for row in trips:
@@ -6796,6 +6673,8 @@ def importAll(username):
     dataDict["created"] = now
     dataDict["last_modified"] = now
     dataDict["username"] = username
+    user_id = User.query.filter_by(username=username).first().uid
+    dataDict["user_id"] = username
     dataDict["ticket_id"] = ""
     # Remove path from main dict
     rawPath = dataDict.pop("path")
