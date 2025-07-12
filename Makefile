@@ -26,6 +26,10 @@ start-local: start-db
 stop:
 	docker compose down
 
+# show application logs
+logs:
+	docker compose logs -f --tail 1000
+
 # start psql connected to the app's db
 psql:
 	docker compose exec trainlog_db psql -U ${POSTGRES_USER} ${POSTGRES_DB}
