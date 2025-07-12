@@ -26,12 +26,16 @@ start-local: start-db
 stop:
 	docker compose down
 
+# show application logs
+logs:
+	docker compose logs -f --tail 1000
+
 # start psql connected to the app's db
 psql:
 	docker compose exec trainlog_db psql -U ${POSTGRES_USER} ${POSTGRES_DB}
 
 # refresh schema.sql
-make generate-schema-sql:
+generate-schema-sql:
 	@echo "-- File generated automatically, do not modify by hand!" > src/sql/migrations/schema.sql
 	@echo "-- Use \`make generate-schema-sql\` instead" >> src/sql/migrations/schema.sql
 	docker compose exec trainlog_db pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} --schema-only >> src/sql/migrations/schema.sql

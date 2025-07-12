@@ -270,7 +270,6 @@ def getCountriesFromPath(path, type):
         ]
         countries = {country: 0}
 
-    print(countries)
     return json.dumps(countries)
 
 

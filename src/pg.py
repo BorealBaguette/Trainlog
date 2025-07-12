@@ -36,6 +36,18 @@ def pg_session():
         threadlocal.inside_pg_session = False
 
 
+@contextmanager
+def get_or_create_pg_session(session=None):
+    """
+    Return the PG session if it exists, or create a new one if it doesn't.
+    """
+    if session is not None:
+        yield session
+    else:
+        with pg_session() as pg:
+            yield pg
+
+
 def init_db():
     """
     Run the schema.sql file on the database

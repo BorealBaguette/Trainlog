@@ -9,6 +9,7 @@ import logging
 import logging.config
 import math
 import os
+import pathlib
 import re
 import secrets
 import smtplib
@@ -25,7 +26,6 @@ from functools import wraps
 from glob import glob
 from inspect import getcallargs
 from io import BytesIO, StringIO
-from pathlib import Path
 
 import distinctipy
 import flask_monitoringdashboard as dashboard
@@ -175,6 +175,7 @@ from src.suspicious_activity import (
 )
 from src.utils import (
     getNameFromPath,
+    processDates,
     getUser,
     isCurrentTrip,
     lang,
@@ -184,7 +185,18 @@ from src.utils import (
     owner_required,
     pathConn,
     readLang,
+    sendOwnerEmail,
+    sendEmail,
 )
+from src.trips import (
+    Trip,
+    create_trip,
+    duplicate_trip,
+    update_trip,
+    _update_trip_in_sqlite,
+    delete_trip,
+)
+from src.paths import Path
 
 app = Flask(__name__)
 Compress(app)
@@ -247,7 +259,7 @@ app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 
 # SECRET_KEY required for session, flash and Flask Sqlalchemy to work
-SECRET_FILE_PATH = Path(".flask_secret")
+SECRET_FILE_PATH = pathlib.Path(".flask_secret")
 try:
     with SECRET_FILE_PATH.open("r") as secret_file:
         app.secret_key = secret_file.read()
@@ -402,9 +414,10 @@ def fr24_usage(username):
 
 @app.errorhandler(Exception)
 def all_exception_handler(error):
-    if "127.0.0.1" in request.url or "localhost" in request.url:
-        print(traceback.format_exc())
-    else:
+    logger.exception(error)
+
+    # send an email to the owner if not running the app locally
+    if not "127.0.0.1" in request.url and not "localhost" in request.url:
         trace = traceback.format_exc().replace("\n", "<br>")
         msg = "URL : {} <br><br> Logged in user : {}<br><br> Trace : <br><br>{}".format(
             request.url, getUser(), trace
@@ -480,106 +493,6 @@ class Friendship(authDb.Model):
     friend = authDb.relationship(
         "User", foreign_keys=[friend_id], backref="friend_users"
     )
-
-
-class Trip:
-    def __init__(
-        self,
-        username,
-        origin_station,
-        destination_station,
-        start_datetime,
-        end_datetime,
-        trip_length,
-        estimated_trip_duration,
-        operator,
-        countries,
-        manual_trip_duration,
-        utc_start_datetime,
-        utc_end_datetime,
-        created,
-        last_modified,
-        line_name,
-        type,
-        material_type,
-        seat,
-        reg,
-        waypoints,
-        notes,
-        price,
-        currency,
-        purchasing_date,
-        ticket_id,
-    ):
-        self.username = username
-        self.origin_station = origin_station
-        self.destination_station = destination_station
-        self.start_datetime = start_datetime
-        self.end_datetime = end_datetime
-        self.trip_length = trip_length
-        self.estimated_trip_duration = estimated_trip_duration
-        self.manual_trip_duration = manual_trip_duration
-        self.operator = operator
-        self.countries = countries
-        self.utc_start_datetime = utc_start_datetime
-        self.utc_end_datetime = utc_end_datetime
-        self.created = created
-        self.last_modified = last_modified
-        self.line_name = line_name
-        self.type = type
-        self.material_type = material_type
-        self.seat = seat
-        self.reg = reg
-        self.waypoints = waypoints
-        self.notes = notes
-        self.price = price
-        self.currency = currency
-        self.purchasing_date = purchasing_date
-        self.ticket_id = ticket_id
-
-    def keys(self):
-        return tuple(vars(self).keys())
-
-    def values(self):
-        return tuple(vars(self).values())
-
-
-class Node:
-    def __init__(self, trip_id, node_order, lat, lng):
-        self.trip_id = trip_id
-        self.node_order = node_order
-        self.lat = lat
-        self.lng = lng
-
-    def keys(self):
-        return tuple(vars(self).keys())
-
-    def values(self):
-        return tuple(vars(self).values())
-
-
-class Path:
-    def __init__(self, path, trip_id):
-        self.list = []
-        for node_order, node in enumerate(path):
-            new_node = Node(
-                trip_id=trip_id, node_order=node_order, lat=node["lat"], lng=node["lng"]
-            )
-            self.list.append(new_node)
-
-    def keys(self):
-        return ("trip_id", "path")
-
-    def values(self):
-        return [self.list[0].trip_id, str([[node.lat, node.lng] for node in self.list])]
-
-
-def sendOwnerEmail(subject, message):
-    address = load_config()["owner"]["email"]
-    if "127.0.0.1" in request.url or "localhost" in request.url:
-        print(f"Email to: {address}\nSubject: {subject}\nMessage: {message}")
-    else:
-        sendEmail(address, subject, message)
 
 
 def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date):
@@ -748,27 +661,6 @@ def flight_tracks(username, fr24_id):
     return jsonify(coordinates)
 
 
-def sendEmail(address, subject, message):
-    config = load_config()
-
-    try:
-        server = smtplib.SMTP(config["smtp"]["server"], config["smtp"]["port"])
-
-        server.starttls()  # Secure the connection
-        server.login(config["smtp"]["user"], config["smtp"]["password"])
-
-        msg = MIMEText(message, "html")
-        msg["From"] = config["smtp"]["user"]
-        msg["To"] = address
-        msg["Subject"] = subject
-        server.sendmail(msg["From"], msg["To"], msg.as_string())
-
-        server.quit()
-
-    except Exception as e:
-        print("Error:", e)
-
-
 def getLangDropdown(user):
     langs = []
     langs.append(
@@ -879,20 +771,6 @@ def get_country_codes_from_files():
 app.jinja_env.globals.update(get_country_codes_from_files=get_country_codes_from_files)
 
 
-def getUtcDatetime(lat, lng, dateTime):
-    # Instantiate TimezoneFinder and find timezone for given lat, lng
-    tf = TimezoneFinder()
-    timezone_str = tf.timezone_at(lat=lat, lng=lng)
-
-    # Localize the given datetime to the found timezone
-    timezone = pytz.timezone(timezone_str)
-    localized_datetime = timezone.localize(dateTime)
-
-    # Convert the localized datetime to UTC
-    utc_datetime = localized_datetime.astimezone(pytz.utc).replace(tzinfo=None)
-    return utc_datetime
-
-
 def getLocalDatetime(lat, lng, dateTime):
     # Instantiate TimezoneFinder and find timezone for given lat, lng
     tf = TimezoneFinder()
@@ -934,46 +812,12 @@ def get_local_time():
         ), 400
 
 
-def processDates(newTrip, newPath):
-    manDuration = utc_start_datetime = utc_end_datetime = None
-    if newTrip["precision"] == "preciseDates":
-        start_datetime = datetime.strptime(newTrip["newTripStart"], "%Y-%m-%dT%H:%M")
-        end_datetime = datetime.strptime(newTrip["newTripEnd"], "%Y-%m-%dT%H:%M")
-        utc_start_datetime = getUtcDatetime(dateTime=start_datetime, **newPath[0])
-        utc_end_datetime = getUtcDatetime(dateTime=end_datetime, **newPath[-1])
-
-    elif newTrip["precision"] == "onlyDate":
-        start_datetime = datetime.strptime(
-            newTrip["onlyDate"] + "T00:00:01", "%Y-%m-%dT%H:%M:%S"
-        )
-        end_datetime = datetime.strptime(
-            newTrip["onlyDate"] + "T00:00:01", "%Y-%m-%dT%H:%M:%S"
-        )
-        if newTrip["onlyDateDuration"] != "":
-            manDuration = newTrip["onlyDateDuration"]
-
-    else:
-        if newTrip["onlyDateDuration"] != "":
-            manDuration = newTrip["onlyDateDuration"]
-        if newTrip["unknownType"] == "past":
-            start_datetime = end_datetime = -1
-        else:
-            start_datetime = end_datetime = 1
-    return (
-        manDuration,
-        start_datetime,
-        end_datetime,
-        utc_start_datetime,
-        utc_end_datetime,
-    )
-
-
 def starts_with_flag_emoji(s):
     pattern = r"^[\U0001F1E6-\U0001F1FF][\U0001F1E6-\U0001F1FF]"
     return bool(re.match(pattern, s))
 
 
-def saveTripToDb(username, newTrip, newPath, type="train"):
+def saveTripToDb(username, newTrip, newPath, trip_type="train"):
     newPath[0]["lat"] = float(newPath[0]["lat"])
     newPath[0]["lng"] = float(newPath[0]["lng"])
     newPath[-1]["lat"] = float(newPath[-1]["lat"])
@@ -1018,7 +862,7 @@ def saveTripToDb(username, newTrip, newPath, type="train"):
     if "ticket_id" not in newTrip.keys():
         newTrip["ticket_id"] = ""
 
-    if type in ("air", "helicopter"):
+    if trip_type in ("air", "helicopter"):
         countries = {}
         countries[getCountryFromCoordinates(**newPath[0])["countryCode"]] = (
             newTrip["trip_length"] / 2
@@ -1036,7 +880,7 @@ def saveTripToDb(username, newTrip, newPath, type="train"):
             creator=username,
             lat=newTrip["originManualLat"],
             lng=newTrip["originManualLng"],
-            station_type=type,
+            station_type=trip_type,
         )
     if "destinationManualToggle" in newTrip.keys():
         saveManualStation(
@@ -1044,77 +888,43 @@ def saveTripToDb(username, newTrip, newPath, type="train"):
             creator=username,
             lat=newTrip["destinationManualLat"],
             lng=newTrip["destinationManualLng"],
-            station_type=type,
+            station_type=trip_type,
         )
+
+    user_id = User.query.filter_by(username=username).first().uid
 
     trip = Trip(
         username=username,
-        origin_station=newTrip["originStation"][1],
-        destination_station=newTrip["destinationStation"][1],
-        start_datetime=start_datetime,
+        user_id=user_id,
+        origin_station=sanitize_param(newTrip["originStation"][1]),
+        destination_station=sanitize_param(newTrip["destinationStation"][1]),
+        start_datetime=start_datetime if start_datetime not in [-1, 1] else None,
         utc_start_datetime=utc_start_datetime,
-        end_datetime=end_datetime,
+        end_datetime=end_datetime if end_datetime not in [-1, 1] else None,
         utc_end_datetime=utc_end_datetime,
-        trip_length=newTrip["trip_length"],
-        estimated_trip_duration=newTrip["estimated_trip_duration"],
+        trip_length=sanitize_param(newTrip["trip_length"]),
+        estimated_trip_duration=sanitize_param(newTrip["estimated_trip_duration"]),
         manual_trip_duration=manDuration,
-        operator=newTrip["operator"],
-        countries=countries,
-        line_name=newTrip["lineName"],
+        operator=sanitize_param(newTrip["operator"]),
+        countries=sanitize_param(countries),
+        line_name=sanitize_param(newTrip["lineName"]),
         created=now,
         last_modified=now,
-        type=type,
-        seat=newTrip["seat"],
-        material_type=newTrip["material_type"],
-        reg=newTrip["reg"],
-        waypoints=newTrip["waypoints"],
-        notes=newTrip["notes"],
-        price=newTrip["price"],
-        currency=newTrip["currency"],
-        purchasing_date=newTrip["purchasing_date"],
-        ticket_id=newTrip["ticket_id"],
+        type=sanitize_param(trip_type),
+        seat=sanitize_param(newTrip["seat"]),
+        material_type=sanitize_param(newTrip["material_type"]),
+        reg=sanitize_param(newTrip["reg"]),
+        waypoints=sanitize_param(newTrip["waypoints"]),
+        notes=sanitize_param(newTrip["notes"]),
+        price=sanitize_param(newTrip["price"]),
+        currency=sanitize_param(newTrip["currency"]),
+        purchasing_date=sanitize_param(newTrip["purchasing_date"]),
+        ticket_id=sanitize_param(newTrip["ticket_id"]),
+        is_project=start_datetime == 1 or end_datetime == 1,
+        path=newPath,
     )
 
-    saveTripQuery = (
-        saveQuery.format(
-            table="trip", keys=trip.keys(), values=", ".join(("?",) * len(trip.keys()))
-        )
-        + " RETURNING uid;"
-    )
-
-    try:
-        # Begin transactions in both databases
-        mainConn.execute("BEGIN TRANSACTION")
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute(saveTripQuery, trip.values())
-            # Retrieve the trip_id directly from the INSERT statement
-            trip_id = cursor.fetchone()[0]
-            print(trip_id)
-
-        # Prepare the path data with the obtained trip_id
-        path = Path(path=newPath, trip_id=trip_id)
-
-        # Use your existing saveQuery template for the path
-        savePathQuery = saveQuery.format(
-            table="paths",
-            keys="({})".format(", ".join(path.keys())),
-            values=", ".join(["?"] * len(path.keys())),
-        )
-
-        pathConn.execute("BEGIN TRANSACTION")
-        with managed_cursor(pathConn) as cursor:
-            cursor.execute(savePathQuery, path.values())
-
-        # Commit both transactions
-        mainConn.commit()
-        pathConn.commit()
-
-    except Exception as e:
-        # Rollback both transactions in case of error
-        mainConn.rollback()
-        pathConn.rollback()
-        # Optionally, log the error or handle it as needed
-        raise e
+    create_trip(trip)
 
 
 def hasUncommonTrips(username):
@@ -1131,33 +941,6 @@ def hasUncommonTrips(username):
             {"username": username},
         )
         return cursor.fetchone()[0] == 1
-
-
-def deleteTripfromDB(username, tripId):
-    with managed_cursor(mainConn) as cursor:
-        # Check ownership
-        cursor.execute(
-            "SELECT username FROM trip WHERE uid = :trip_id",
-            {"trip_id": tripId},
-        )
-        row = cursor.fetchone()
-
-        if row is None:
-            abort(404)  # Trip does not exist
-        elif row["username"] != username:
-            abort(404)  # Trip exists but doesn't belong to the user
-
-        # Delete only if the trip exists and belongs to the user
-        cursor.execute("DELETE FROM trip WHERE uid = :trip_id", {"trip_id": tripId})
-        cursor.execute(
-            "DELETE FROM tags_associations WHERE trip_id = :trip_id",
-            {"trip_id": tripId},
-        )
-
-    with managed_cursor(pathConn) as cursor:
-        cursor.execute(deletePathQuery, {"trip_id": tripId})
-    mainConn.commit()
-    pathConn.commit()
 
 
 def formatTrip(trip, public=False):
@@ -1261,133 +1044,6 @@ def getDistinctStatYears(username, tripType):
                 distinctStatYears, {"username": username, "tripType": tripType}
             ).fetchall()
         ]
-
-
-def duplicate_trip(trip_id):
-    with managed_cursor(mainConn) as cursor:
-        # Fetch the column names
-        cursor.execute("PRAGMA table_info(trip)")
-        columns = cursor.fetchall()
-        column_names = [col[1] for col in columns if col[1] != "uid"]
-
-        # Fetch the row to duplicate
-        cursor.execute("SELECT * FROM trip WHERE uid = ?", (trip_id,))
-        row_to_duplicate = cursor.fetchone()
-
-        if row_to_duplicate:
-            # Create a new row with the new UID
-            row_to_duplicate = list(row_to_duplicate)
-            row_to_duplicate.pop(0)
-
-            # Construct the INSERT statement dynamically
-            columns_str = ", ".join(column_names)
-            placeholders = ", ".join(["?"] * len(column_names))
-            insert_query = f"INSERT INTO trip ({columns_str}) VALUES ({placeholders})"
-            cursor.execute(insert_query, row_to_duplicate)
-            new_trip_id = cursor.lastrowid
-    with managed_cursor(pathConn) as cursor:
-        cursor.execute("select path from paths where trip_id = ?", (trip_id,))
-        path_to_duplicate = cursor.fetchone()["path"]
-        cursor.execute(
-            "insert into paths (trip_id, path) VALUES (?, ?)",
-            (new_trip_id, path_to_duplicate),
-        )
-    mainConn.commit()
-    pathConn.commit()
-    return new_trip_id
-
-
-def updateTripinDB(formData, tripId=None, updateCreated=False):
-    if tripId is None:
-        tripId = formData["trip_id"]
-
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(
-            "SELECT username FROM trip WHERE uid = :trip_id",
-            {"trip_id": tripId}
-        )
-        row = cursor.fetchone()
-
-        if row is None:
-            abort(404)  # Trip does not exist
-        elif getUser() not in (row["username"], owner):
-            abort(404)  # Trip does not belong to the user
-
-    formattedGetUserLines = getUserLines.format(trip_ids=tripId)
-    with managed_cursor(pathConn) as cursor:
-        pathResult = cursor.execute(formattedGetUserLines).fetchone()
-
-    if "path" in formData.keys():
-        path = [[coord["lat"], coord["lng"]] for coord in json.loads(formData["path"])]
-    else:
-        path = json.loads(pathResult["path"])
-
-    limits = [
-        {
-            "lat": path[0][0],
-            "lng": path[0][1],
-        },
-        {
-            "lat": path[-1][0],
-            "lng": path[-1][1],
-        },
-    ]
-
-    (
-        manual_trip_duration,
-        start_datetime,
-        end_datetime,
-        utc_start_datetime,
-        utc_end_datetime,
-    ) = processDates(formData, limits)
-    updateData = {
-        "trip_id": tripId,
-        "manual_trip_duration": manual_trip_duration,
-        "origin_station": formData["origin_station"],
-        "destination_station": formData["destination_station"],
-        "start_datetime": start_datetime,
-        "end_datetime": end_datetime,
-        "utc_start_datetime": utc_start_datetime,
-        "utc_end_datetime": utc_end_datetime,
-        "operator": formData["operator"],
-        "line_name": formData["lineName"],
-        "material_type": formData["material_type"],
-        "reg": formData["reg"],
-        "seat": formData["seat"],
-        "notes": formData["notes"],
-        "last_modified": datetime.now(),
-        "price": formData["price"],
-        "currency": formData.get("currency") if formData["price"] != "" else None,
-        "ticket_id": formData.get("ticket_id"),
-        "purchasing_date": formData.get("purchasing_date")
-        if formData["price"] != ""
-        else None,
-    }
-
-    if updateCreated:
-        updateData["created"] = datetime.now()
-
-    if "estimated_trip_duration" in formData and "trip_length" in formData:
-        updateData["countries"] = getCountriesFromPath(
-            [{"lat": coord[0], "lng": coord[1]} for coord in path], formData["type"]
-        )
-        updateData["estimated_trip_duration"] = formData["estimated_trip_duration"]
-        updateData["trip_length"] = formData["trip_length"]
-    if "waypoints" in formData:
-        updateData["waypoints"] = formData["waypoints"]
-
-    formatted_values = [
-        (value + " = :" + value) for value in updateData if value != "trip_id"
-    ]
-    formattedUpdateQuery = updateTripQuery.format(values=", ".join(formatted_values))
-
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(formattedUpdateQuery, {**updateData})
-    if path:
-        with managed_cursor(pathConn) as cursor:
-            cursor.execute(updatePath, {"trip_id": int(tripId), "path": str(path)})
-        pathConn.commit()
-    mainConn.commit()
 
 
 def saveManualStation(creator, name, lat, lng, station_type):
@@ -2370,7 +2026,9 @@ def saveTripFromGPX(username, gpx_id):
         mainConn.commit()
 
         # Call the saveTripToDb function to save the trip
-        saveTripToDb(username=username, newTrip=newTrip, newPath=path, type=trip_type)
+        saveTripToDb(
+            username=username, newTrip=newTrip, newPath=path, trip_type=trip_type
+        )
 
         return jsonify({"success": True}), 200
 
@@ -3621,10 +3279,13 @@ def borked_trips(username=None):
             if username:
                 # Single user mode
                 # trip_uids = {row['uid'] for row in trips}
-                missing = [{'uid': row['uid'], 'created': row['created']} 
-                          for row in trips if row['uid'] not in path_uids]
-                return jsonify({'missing_trips': missing, 'count': len(missing)})
-            
+                missing = [
+                    {"uid": row["uid"], "created": row["created"]}
+                    for row in trips
+                    if row["uid"] not in path_uids
+                ]
+                return jsonify({"missing_trips": missing, "count": len(missing)})
+
             # Global mode
             result = {}
             for row in trips:
@@ -4100,7 +3761,7 @@ def saveTrip(username):
         jsonNewTrip = request.form["newTrip"]
         newTrip = json.loads(jsonNewTrip)
         saveTripToDb(
-            username=username, newTrip=newTrip, newPath=newPath, type=newTrip["type"]
+            username=username, newTrip=newTrip, newPath=newPath, trip_type=newTrip["type"]
         )
 
     return ""
@@ -4162,7 +3823,7 @@ def scottySaveTrip(username):
                     username=username,
                     newTrip=newTrip,
                     newPath=waypoints if not routerPolyline else routerPolyline,
-                    type=trip_type,
+                    trip_type=trip_type,
                 )
                 print(routing_result)
                 return "Error in routing", 500
@@ -4184,7 +3845,7 @@ def scottySaveTrip(username):
                     username=username,
                     newTrip=newTrip,
                     newPath=newPath,  # Use the routing response as the new path
-                    type=trip_type,
+                    trip_type=trip_type,
                 )
 
                 return "Trip saved successfully", 200
@@ -4201,7 +3862,7 @@ def saveFlight(username, type):
         jsonNewTrip = request.form["newTrip"]
         newTrip = json.loads(jsonNewTrip)
         airlineLogoProcess(newTrip)
-        saveTripToDb(username=username, newTrip=newTrip, newPath=newPath, type=type)
+        saveTripToDb(username=username, newTrip=newTrip, newPath=newPath, trip_type=type)
 
     return ""
 
@@ -4213,7 +3874,7 @@ def deleteTrip(username):
         data = json.loads(request.form["tripId"])
         tripIds = data if isinstance(data, list) else [data]
         for id in tripIds:
-            deleteTripfromDB(username=username, tripId=id)
+            delete_trip(id, username)
 
     return ""
 
@@ -4223,7 +3884,12 @@ def deleteTrip(username):
 def updateTrip(username):
     if request.method == "POST":
         formData = dict(request.form)
-        updateTripinDB(formData=formData)
+        trip_id = formData["trip_id"]
+
+        check_current_user_owns_trip(trip_id)
+
+        new_trip = update_trip_values_from_form_data(trip_id, formData)
+        update_trip(trip_id, new_trip, formData)
     return ""
 
 
@@ -4232,10 +3898,172 @@ def updateTrip(username):
 def copyTrip(username):
     if request.method == "POST":
         formData = dict(request.form)
-        new_trip_id = duplicate_trip(formData["trip_id"])
-        formData["trip_id"] = new_trip_id
-        updateTripinDB(formData=formData, updateCreated=True)
+        trip_id = formData["trip_id"]
+
+        check_current_user_owns_trip(trip_id)
+
+        new_trip_id = duplicate_trip(trip_id)
+        new_trip = update_trip_values_from_form_data(new_trip_id, formData)
+
+        update_trip(new_trip_id, new_trip, formData)
     return ""
+
+
+def check_current_user_owns_trip(trip_id):
+    """
+    Ensures that a given trip belongs to the currently logged in user
+    """
+    with managed_cursor(mainConn) as cursor:
+        cursor.execute(
+            "SELECT username FROM trip WHERE uid = :trip_id", {"trip_id": trip_id}
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            abort(404)  # Trip does not exist
+        elif getUser() not in (row["username"], owner):
+            logger.error(
+                f"User {getUser()} tried to access trip {trip_id} owned by {row['username']}"
+            )
+            abort(404)  # Trip does not belong to the user
+
+
+def get_user_id(username):
+    return User.query.filter_by(username=username).first().uid
+
+
+def get_trip(trip_id):
+    with managed_cursor(mainConn) as cursor:
+        trip = cursor.execute(getTrip, {"trip_id": trip_id}).fetchone()
+
+    if trip is not None:
+        trip = dict(trip)
+
+    formattedGetUserLines = getUserLines.format(trip_ids=trip_id)
+    with managed_cursor(pathConn) as cursor:
+        pathResult = cursor.execute(formattedGetUserLines).fetchone()
+    path = json.loads(pathResult["path"])
+
+    return Trip(
+        trip_id=trip_id,
+        username=sanitize_param(trip["username"]),
+        user_id=get_user_id(trip["username"]),
+        origin_station=sanitize_param(trip["origin_station"]),
+        destination_station=sanitize_param(trip["destination_station"]),
+        start_datetime=sanitize_param(trip["start_datetime"])
+        if trip["start_datetime"] not in [-1, 1]
+        else None,
+        utc_start_datetime=sanitize_param(trip["utc_start_datetime"]),
+        end_datetime=sanitize_param(trip["end_datetime"])
+        if trip["end_datetime"] not in [-1, 1]
+        else None,
+        utc_end_datetime=sanitize_param(trip["utc_end_datetime"]),
+        trip_length=sanitize_param(trip["trip_length"]),
+        estimated_trip_duration=sanitize_param(trip["estimated_trip_duration"]),
+        manual_trip_duration=sanitize_param(trip["manual_trip_duration"]),
+        operator=sanitize_param(trip["operator"]),
+        countries=sanitize_param(trip["countries"]),
+        line_name=sanitize_param(trip["line_name"]),
+        created=sanitize_param(trip["created"]),
+        last_modified=sanitize_param(trip["last_modified"]),
+        type=sanitize_param(trip["type"]),
+        seat=sanitize_param(trip["seat"]),
+        material_type=sanitize_param(trip["material_type"]),
+        reg=sanitize_param(trip["reg"]),
+        waypoints=sanitize_param(trip["waypoints"]),
+        notes=sanitize_param(trip["notes"]),
+        price=sanitize_param(trip["price"]),
+        currency=sanitize_param(trip["currency"]),
+        purchasing_date=sanitize_param(trip["purchasing_date"]),
+        ticket_id=sanitize_param(trip["ticket_id"]),
+        is_project=trip["start_datetime"] == 1 or trip["end_datetime"] == 1,
+        path=path,
+    )
+
+
+def sanitize_param(param):
+    return param if param != "" else None
+
+
+def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False):
+    formattedGetUserLines = getUserLines.format(trip_ids=trip_id)
+    with managed_cursor(pathConn) as cursor:
+        pathResult = cursor.execute(formattedGetUserLines).fetchone()
+
+    if "path" in formData.keys():
+        path = [[coord["lat"], coord["lng"]] for coord in json.loads(formData["path"])]
+    else:
+        path = json.loads(pathResult["path"])
+
+    limits = [
+        {
+            "lat": path[0][0],
+            "lng": path[0][1],
+        },
+        {
+            "lat": path[-1][0],
+            "lng": path[-1][1],
+        },
+    ]
+    (
+        manual_trip_duration,
+        start_datetime,
+        end_datetime,
+        utc_start_datetime,
+        utc_end_datetime,
+    ) = processDates(formData, limits)
+
+    original_trip = get_trip(trip_id)
+
+    if "estimated_trip_duration" in formData and "trip_length" in formData:
+        countries = getCountriesFromPath(
+            [{"lat": coord[0], "lng": coord[1]} for coord in path], formData["type"]
+        )
+        estimated_trip_duration = sanitize_param(formData["estimated_trip_duration"])
+        trip_length = sanitize_param(formData["trip_length"])
+    else:
+        countries = original_trip.countries
+        estimated_trip_duration = original_trip.estimated_trip_duration
+        trip_length = original_trip.trip_length
+
+    created = datetime.now() if update_created_ts else original_trip.created
+
+    trip = Trip(
+        username=getUser(),
+        user_id=get_user_id(getUser()),
+        origin_station=sanitize_param(formData["origin_station"]),
+        destination_station=sanitize_param(formData["destination_station"]),
+        start_datetime=start_datetime if start_datetime not in [-1, 1] else None,
+        utc_start_datetime=utc_start_datetime,
+        end_datetime=end_datetime if end_datetime not in [-1, 1] else None,
+        utc_end_datetime=utc_end_datetime,
+        trip_length=trip_length,
+        estimated_trip_duration=estimated_trip_duration,
+        manual_trip_duration=manual_trip_duration,
+        operator=sanitize_param(formData["operator"]),
+        countries=countries,
+        line_name=sanitize_param(formData["lineName"]),
+        created=created,
+        last_modified=datetime.now(),
+        type=original_trip.type,
+        seat=sanitize_param(formData["seat"]),
+        material_type=sanitize_param(formData["material_type"]),
+        reg=sanitize_param(formData["reg"]),
+        waypoints=sanitize_param(formData.get("waypoints", original_trip.waypoints)),
+        notes=sanitize_param(formData["notes"]),
+        price=sanitize_param(formData["price"]),
+        currency=sanitize_param(formData.get("currency"))
+        if formData["price"] != ""
+        else None,
+        purchasing_date=sanitize_param(formData.get("purchasing_date"))
+        if formData["price"] != ""
+        else None,
+        ticket_id=sanitize_param(formData.get("ticket_id")),
+        is_project=start_datetime == 1 or end_datetime == 1,
+        path=path,
+    )
+
+    return trip
 
 
 @app.route(
@@ -6560,18 +6388,98 @@ def processMFR24(username):
                 "%Y-%m-%d %H:%M:%S",
             )
 
-        with managed_cursor(mainConn) as cursor:
-            trip = cursor.execute(getDuplicate, options).fetchone()
+        limits = [
+            {
+                "lat": newPath[0]["lat"],
+                "lng": newPath[0]["lng"],
+            },
+            {
+                "lat": newPath[-1]["lat"],
+                "lng": newPath[-1]["lng"],
+            },
+        ]
+        (
+            manual_trip_duration,
+            start_datetime,
+            end_datetime,
+            utc_start_datetime,
+            utc_end_datetime,
+        ) = processDates(newTrip, limits)
+        countries = getCountriesFromPath(newPath, "air")
+        now = datetime.now()
 
-        if trip is not None:
+        with managed_cursor(mainConn) as cursor:
+            sqlite_trip = cursor.execute(getDuplicate, options).fetchone()
+
+        if sqlite_trip is not None:
+            trip = get_trip(sqlite_trip["uid"])
+
             newTrip["origin_station"] = newTrip["originStation"][1]
             newTrip["destination_station"] = newTrip["destinationStation"][1]
-            newTrip["type"]='air'
-            updateTripinDB(newTrip, trip["uid"])
-        else:
-            saveTripToDb(
-                username=username, newTrip=newTrip, newPath=newPath, type="air"
+            newTrip["type"] = "air"
+
+            trip.origin_station = sanitize_param(newTrip["originStation"][1])
+            trip.destination_station = sanitize_param(newTrip["destinationStation"][1])
+            trip.start_datetime = start_datetime
+            trip.utc_start_datetime = utc_start_datetime
+            trip.end_datetime = end_datetime
+            trip.utc_end_datetime = utc_end_datetime
+            trip.trip_length = sanitize_param(newTrip["trip_length"])
+            trip.estimated_trip_duration = sanitize_param(
+                newTrip["estimated_trip_duration"]
             )
+            trip.manual_trip_duration = manual_trip_duration
+            trip.operator = sanitize_param(newTrip["operator"])
+            trip.countries = sanitize_param(countries)
+            trip.line_name = (sanitize_param(newTrip["lineName"]),)
+            trip.last_modified = now
+            trip.seat = sanitize_param(newTrip["seat"])
+            trip.material_type = sanitize_param(newTrip["material_type"])
+            trip.reg = sanitize_param(newTrip["reg"])
+            trip.waypoints = None
+            trip.notes = sanitize_param(newTrip["notes"])
+            trip.price = sanitize_param(newTrip["price"])
+            trip.currency = sanitize_param(newTrip["currency"])
+            trip.purchasing_date = sanitize_param(newTrip["purchasing_date"])
+            trip.ticket_id = None
+            trip.is_project = options["start_datetime"] == 1 or end_datetime == 1
+            trip.path = newPath
+
+            update_trip(trip.trip_id, trip, newTrip)
+        else:
+            trip = Trip(
+                username=username,
+                user_id=get_user_id(username),
+                origin_station=sanitize_param(newTrip["originStation"][1]),
+                destination_station=sanitize_param(newTrip["destinationStation"][1]),
+                start_datetime=start_datetime,
+                utc_start_datetime=utc_start_datetime,
+                end_datetime=end_datetime,
+                utc_end_datetime=utc_end_datetime,
+                trip_length=sanitize_param(newTrip["trip_length"]),
+                estimated_trip_duration=sanitize_param(
+                    newTrip["estimated_trip_duration"]
+                ),
+                manual_trip_duration=manual_trip_duration,
+                operator=sanitize_param(newTrip["operator"]),
+                countries=sanitize_param(countries),
+                line_name=sanitize_param(newTrip["lineName"]),
+                created=now,
+                last_modified=now,
+                type="air",
+                seat=sanitize_param(newTrip["seat"]),
+                material_type=sanitize_param(newTrip["material_type"]),
+                reg=sanitize_param(newTrip["reg"]),
+                waypoints=None,
+                notes=sanitize_param(newTrip["notes"]),
+                price=sanitize_param(newTrip["price"]),
+                currency=sanitize_param(newTrip["currency"]),
+                purchasing_date=sanitize_param(newTrip["purchasing_date"]),
+                ticket_id=None,
+                is_project=options["start_datetime"] == 1 or end_datetime == 1,
+                path=newPath,
+            )
+            create_trip(trip)
 
         airlineLogoProcess(newTrip)
 
@@ -6775,6 +6683,9 @@ def p_timeline(username):
 @app.route("/<username>/import", methods=["POST"])
 @login_required
 def importAll(username):
+    if getUser() != username:
+        abort(403)
+
     data = list(request.form.to_dict().items())[0][0]
 
     csvfile = StringIO(data)
@@ -6787,7 +6698,8 @@ def importAll(username):
     now = datetime.now()
 
     # Handle special cases
-    dataDict.pop("uid")
+    if dataDict.get("uid"):
+        dataDict.pop("uid")
     if dataDict.get("countries") is not None:
         dataDict["countries"] = (
             dataDict["countries"].replace(' "', ', "').replace(",,", ",")
@@ -6799,62 +6711,110 @@ def importAll(username):
     dataDict["created"] = now
     dataDict["last_modified"] = now
     dataDict["username"] = username
+    user_id = User.query.filter_by(username=username).first().uid
+    dataDict["user_id"] = user_id
     dataDict["ticket_id"] = ""
     # Remove path from main dict
-    rawPath = dataDict.pop("path")
-
-    trip = Trip(**dataDict)
-
-    saveTripQuery = saveQuery.format(
-        table="trip", keys=trip.keys(), values=", ".join(("?",) * len(trip.keys()))
-    )
+    if dataDict.get("path"):
+        rawPath = dataDict.pop("path")
 
     decodedPath = polyline.decode(rawPath)
+    tmp_path = [{"lat": node[0], "lng": node[1]} for node in decodedPath]
 
-    path = Path(
-        path=[{"lat": node[0], "lng": node[1]} for node in decodedPath], trip_id=None
+    path = Path(path=tmp_path, trip_id=None)
+
+    dataDict["precision"] = detect_precision(
+        dataDict["start_datetime"], dataDict["end_datetime"]
     )
+    if dataDict["precision"] == "unknown":
+        dataDict["unknownType"] = (
+            "future"
+            if dataDict["start_datetime"] in [1, "1"]
+            or dataDict["end_datetime"] in [1, "1"]
+            else "past"
+        )
+    elif dataDict["precision"] == "preciseDates":
+        dataDict["newTripStart"] = datetime.strftime(
+            datetime.strptime(dataDict["start_datetime"], "%Y-%m-%d %H:%M:%S"),
+            "%Y-%m-%dT%H:%M",
+        )
+        dataDict["newTripEnd"] = datetime.strftime(
+            datetime.strptime(dataDict["end_datetime"], "%Y-%m-%d %H:%M:%S"),
+            "%Y-%m-%dT%H:%M",
+        )
+    else:
+        dataDict["unknownType"] = None
 
-    savePathQuery = saveQuery.format(
-        table="paths", keys=path.keys(), values=", ".join(("?",) * len(path.keys()))
+    manDuration, start_datetime, end_datetime, utc_start_datetime, utc_end_datetime = (
+        processDates(dataDict, tmp_path)
+    )
+    dataDict["is_project"] = start_datetime in [1, "1"] or end_datetime in [1, "1"]
+    if start_datetime in [-1, 1, "-1", "1"]:
+        start_datetime = None
+    if end_datetime in [-1, 1, "-1", "1"]:
+        end_datetime = None
+
+    trip = Trip(
+        trip_id=None,
+        username=sanitize_param(dataDict["username"]),
+        user_id=dataDict["user_id"],
+        origin_station=sanitize_param(dataDict["origin_station"]),
+        destination_station=sanitize_param(dataDict["destination_station"]),
+        start_datetime=sanitize_param(start_datetime),
+        end_datetime=sanitize_param(end_datetime),
+        trip_length=sanitize_param(dataDict["trip_length"]),
+        estimated_trip_duration=sanitize_param(dataDict["estimated_trip_duration"]),
+        operator=sanitize_param(dataDict["operator"]),
+        countries=sanitize_param(dataDict["countries"]),
+        manual_trip_duration=manDuration,
+        utc_start_datetime=utc_start_datetime,
+        utc_end_datetime=utc_end_datetime,
+        created=sanitize_param(dataDict["created"]),
+        last_modified=sanitize_param(dataDict["last_modified"]),
+        line_name=sanitize_param(dataDict["line_name"]),
+        type=sanitize_param(dataDict["type"]),
+        material_type=sanitize_param(dataDict["material_type"]),
+        seat=sanitize_param(dataDict["seat"]),
+        reg=sanitize_param(dataDict["reg"]),
+        waypoints=sanitize_param(dataDict["waypoints"]),
+        notes=sanitize_param(dataDict["notes"]),
+        price=sanitize_param(dataDict["price"]),
+        currency=sanitize_param(dataDict["currency"]),
+        purchasing_date=sanitize_param(dataDict["purchasing_date"]),
+        ticket_id=sanitize_param(dataDict["ticket_id"]),
+        is_project=dataDict["start_datetime"] == 1 or dataDict["end_datetime"] == 1,
+        path=path,
     )
 
     try:
-        # Begin transactions
-        with (
-            managed_cursor(mainConn) as main_cursor,
-            managed_cursor(pathConn) as path_cursor,
-        ):
-            # Save trip
-            main_cursor.execute(saveTripQuery, trip.values())
-            trip_id = main_cursor.lastrowid
-
-            path = Path(
-                path=[{"lat": node[0], "lng": node[1]} for node in decodedPath],
-                trip_id=trip_id,
-            )
-
-            savePathQuery = saveQuery.format(
-                table="paths",
-                keys=path.keys(),
-                values=", ".join(("?",) * len(path.keys())),
-            )
-            # Save path
-            path_cursor.execute(savePathQuery, path.values())
-
-            # Commit both transactions if everything is successful
-            mainConn.commit()
-            pathConn.commit()
-
+        create_trip(trip)
     except Exception as e:
-        print(e)
-        # Roll back both transactions on error
-        mainConn.rollback()
-        pathConn.rollback()
         # Return an appropriate error response
+        logger.exception(e)
         return jsonify({"error": "Failed to import data"}), 500
 
     return jsonify({"message": "Data imported successfully"}), 200
+
+
+def detect_precision(start_date, end_date):
+    if (
+        start_date is None
+        or start_date in ["", "1", 1, "-1", -1]
+        or end_date is None
+        or end_date in ["", "1", 1, "-1", -1]
+    ):
+        return "unknown"
+
+    try:
+        datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S")
+        datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
+        return "preciseDates"
+    except ValueError:
+        pass
+
+    datetime.strptime(start_date, "%Y-%m-%d")
+    datetime.end_date(start_date, "%Y-%m-%d")
+    return "onlyDate"
 
 
 @app.route("/admin/manual")
@@ -7246,6 +7206,7 @@ def editManual(id):
 
 @app.errorhandler(405)
 def handle_405(e):
+    logger.error(e)
     log_suspicious_activity(
         request.url,
         "method_not_allowed",
@@ -7262,8 +7223,8 @@ def handle_405(e):
 @app.errorhandler(416)
 @app.errorhandler(500)
 def handle_error(e):
+    logger.error(e)
     error_code = getattr(e, "code", 500)  # Default to 500 if no code attribute
-    print(e)
     template_data = {
         "errorTitle": lang[session["userinfo"]["lang"]].get(
             f"error{error_code}Title", "Error"
