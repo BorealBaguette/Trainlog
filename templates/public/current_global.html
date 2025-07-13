@@ -43,13 +43,10 @@ function getPopupContent(tripObj) {
     ? `<div><strong>Line:</strong>${lineName}</div>`
     : '';
 
-  // Operator content (logos or plain text)
-  console.log('trip.multi_operators:', trip.multi_operators);
-  console.log('trip.logo_url:', trip.logo_url);
-  console.log('trip.operator:', trip.operator);
-  console.log('logosList:', logosList);
-
-
+// Operator content (logos or plain text)
+console.log('trip.multi_operators:', trip.multi_operators);
+console.log('trip.logo_url:', trip.logo_url);
+console.log('trip.operator:', trip.operator);
 
 let operatorContents = [];
 
@@ -106,7 +103,6 @@ let logoHTML = operatorContents.length
     </div>`
   : '';
 
-// Existing infoHTML from your original snippet
 let infoHTML = `
   <div class="info-column" style="
       flex: initial;
