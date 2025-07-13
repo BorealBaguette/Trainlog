@@ -263,7 +263,7 @@ var map = createMap({
 }, null);
 
 function loadTrips(){
-  $.get("http://localhost:8080/https://trainlog.me/public/current_trips", renderTrips);
+  $.get("/public/current_trips", renderTrips);
 }
 
 loadTrips();                    // first draw
