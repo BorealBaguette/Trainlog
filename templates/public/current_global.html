@@ -44,85 +44,116 @@ function getPopupContent(tripObj) {
     : '';
 
   // Operator content (logos or plain text)
-  let operatorContents = [];
-  if (trip.operator) {
-    let operators = String(trip.operator).split(",").map(op => op.trim());
+  console.log('trip.multi_operators:', trip.multi_operators);
+  console.log('trip.logo_url:', trip.logo_url);
+  console.log('trip.operator:', trip.operator);
+  console.log('logosList:', logosList);
 
-    operators.forEach(operator => {
-      if (operator in logosList) {
-        let imgElement = `<img src="/static/${logosList[operator]}" title="${operator}" class="itineraryOperatorLogo" style="max-height: 240px; max-width: 100%; object-fit: contain; margin: 0 4px;" />`;
-        operatorContents.push(imgElement);
-      } else {
-        operatorContents.push(`<span>${operator}</span>`);
-      }
-    });
-  }
+
+
+let operatorContents = [];
+
+if (trip.multi_operators) {
+  // Handle multiple operators
+  trip.multi_operators.forEach(multiOperator => {
+    if (multiOperator.logo_url) {
+      operatorContents.push(`
+        <div class="popupInfo operator_popupInfo" title="${multiOperator.operator_name}" style="margin-right: 6px;">
+          <img src="/static/${multiOperator.logo_url}" alt="${multiOperator.operator_name}" class="itineraryOperatorLogo"
+               style="max-height: 50px; height: auto; width: auto; object-fit: contain; display: block;" />
+        </div>
+      `);
+    } else {
+      operatorContents.push(`<span style="margin-right: 6px;">${multiOperator.operator_name}</span>`);
+    }
+  });
+}
+else if (trip.logo_url) {
+  // Single logo with trip.logo_url
+  operatorContents.push(`
+    <div class="popupInfo operator_popupInfo" title="${trip.operator}" style="margin-right: 6px;">
+      <img src="/static/${trip.logo_url}" alt="${trip.operator}" class="itineraryOperatorLogo"
+           style="max-height: 50px; height: auto; width: auto; object-fit: contain; display: block;" />
+    </div>
+  `);
+}
+else if (trip.operator) {
+  // Fallback: operator string (possibly comma-separated)
+  let operators = String(trip.operator).split(",").map(op => op.trim());
+
+  operators.forEach(operator => {
+    if (logosList && logosList[operator]) {
+      operatorContents.push(`
+        <div class="popupInfo operator_popupInfo" title="${operator}" style="margin-right: 6px;">
+          <img src="/static/${logosList[operator]}" alt="${operator}" class="itineraryOperatorLogo"
+               style="max-height: 50px; height: auto; width: auto; object-fit: contain; display: block;" />
+        </div>
+      `);
+    } else {
+      operatorContents.push(`<span style="margin-right: 6px;">${operator}</span>`);
+    }
+  });
+}
 
 let logoHTML = operatorContents.length
   ? `<div class="logo-column" style="
-        margin-right: 10px;
         display: flex;
-        align-items: flex-start;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 6px;
       ">
-        <img src="/static/${logosList[trip.operator]}" 
-            title="${trip.operator}" 
-            class="itineraryOperatorLogo"
-            style="
-              max-height: 85px;
-              height: auto;
-              width: auto;
-              object-fit: contain;
-              display: block;
-            " />
+        ${operatorContents.join('')}
     </div>`
   : '';
 
-  let infoHTML = `
-    <div class="info-column" style="
-        flex: initial;
-        max-width: 100%;
-      ">
-      <div class="operator-name" style="
-          font-weight: bold;
-          font-size: 1.1em;
-          margin-bottom: 6px;
-          white-space: nowrap;
-          overflow: hidden;
-          text-overflow: ellipsis;
-        ">
-        <a href="${profile_url}" target="_blank" style="text-decoration: none;">${username}</a>
-      </div>
-      <div class="trip-info" style="font-size: 0.9em; color: #333;">
-        <div><strong>From:</strong> ${origin}</div>
-        <div><strong>To:</strong> ${destination}</div>
-        <div><strong>Date:</strong> ${startDate}</div>
-        <div><strong>Time:</strong> ${startTime} – ${endTime}</div>
-        ${trip.line_name ? `<div><strong>Line:</strong> ${trip.line_name}</div>` : ''}
-      </div>
-    </div>
-  `;
-
-  return `
-    <style>
-      .leaflet-popup-content {
-        width: auto !important;
-        max-width: 600px;
-        display: inline-block;
-        white-space: nowrap; 
+// Existing infoHTML from your original snippet
+let infoHTML = `
+  <div class="info-column" style="
+      flex: initial;
+      max-width: 100%;
+    ">
+    <div class="operator-name" style="
+        font-weight: bold;
+        font-size: 1.1em;
+        margin-bottom: 6px;
+        white-space: nowrap;
         overflow: hidden;
-      }
-    </style>
-    <div class="popup-content" style="
-        font-family: Century Gothic, sans-serif;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 10px;
+        text-overflow: ellipsis;
       ">
-      ${infoHTML}
-      ${logoHTML}
+      <a href="${profile_url}" target="_blank" style="text-decoration: none;">${username}</a>
     </div>
-  `;
+    <div class="trip-info" style="font-size: 0.9em; color: #333;">
+      <div><strong>From:</strong> ${origin}</div>
+      <div><strong>To:</strong> ${destination}</div>
+      <div><strong>Date:</strong> ${startDate}</div>
+      <div><strong>Time:</strong> ${startTime} – ${endTime}</div>
+      ${trip.line_name ? `<div><strong>Line:</strong> ${trip.line_name}</div>` : ''}
+    </div>
+  </div>
+`;
+
+return `
+  <style>
+    .leaflet-popup-content {
+      width: auto !important;
+      max-width: 600px;
+      display: inline-block;
+      white-space: nowrap; 
+      overflow: hidden;
+    }
+  </style>
+  <div class="popup-content" style="
+      font-family: Century Gothic, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 10px;
+    ">
+    ${infoHTML}
+    ${logoHTML}
+  </div>
+`;
+
 }
 
 function calculateProgress(tripObj) {
@@ -232,7 +263,7 @@ var map = createMap({
 }, null);
 
 function loadTrips(){
-  $.get("/public/current_trips", renderTrips);
+  $.get("http://localhost:8080/https://trainlog.me/public/current_trips", renderTrips);
 }
 
 loadTrips();                    // first draw
