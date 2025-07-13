@@ -4375,6 +4375,126 @@ def google_route_display(
         **session["userinfo"],
     )
 
+def convert_graphhopper_to_osrm(gh_response):
+    """Convert GraphHopper response to OSRM format for compatibility"""
+    if not gh_response.get('paths'):
+        return {"code": "NoRoute", "message": "No route found"}
+    
+    path = gh_response['paths'][0]
+    
+    # Decode polyline to get actual coordinates
+    encoded_points = path.get('points', '')
+    if encoded_points:
+        # GraphHopper uses precision 5 by default
+        coordinates = decode_polyline(encoded_points, precision=5)
+        
+        # Create waypoints from first and last coordinates
+        waypoints = []
+        if len(coordinates) >= 2:
+            # Start point
+            waypoints.append({
+                "name": "",
+                "location": [coordinates[0][1], coordinates[0][0]],  # [lng, lat]
+                "distance": 0,
+                "hint": "",
+                "waypoint_index": 0
+            })
+            # End point
+            waypoints.append({
+                "name": "",
+                "location": [coordinates[-1][1], coordinates[-1][0]],  # [lng, lat]
+                "distance": 0,
+                "hint": "",
+                "waypoint_index": len(coordinates) - 1
+            })
+    else:
+        # Fallback to bbox if no encoded points
+        bbox = path.get('bbox', [])
+        waypoints = []
+        if len(bbox) >= 4:
+            waypoints.append({
+                "name": "",
+                "location": [bbox[0], bbox[1]],  # [lng, lat]
+                "distance": 0,
+                "hint": "",
+                "waypoint_index": 0
+            })
+            waypoints.append({
+                "name": "",
+                "location": [bbox[2], bbox[3]],  # [lng, lat]
+                "distance": 0,
+                "hint": "",
+                "waypoint_index": 1
+            })
+    
+    # Create legs structure (required by Leaflet Routing Machine)
+    legs = [{
+        "distance": path.get('distance', 0),
+        "duration": path.get('time', 0) / 1000,  # Convert ms to seconds
+        "summary": "",
+        "steps": [],  # Empty steps array
+        "weight": path.get('weight', 0),
+        "weight_name": "routability",
+        "annotation": {
+            "distance": [path.get('distance', 0)],
+            "duration": [path.get('time', 0) / 1000]
+        }
+    }]
+    
+    # Build OSRM-compatible response
+    osrm_response = {
+        "code": "Ok",
+        "routes": [{
+            "geometry": encoded_points,  # Keep the encoded polyline
+            "distance": path.get('distance', 0),
+            "duration": path.get('time', 0) / 1000,  # Convert ms to seconds
+            "weight": path.get('weight', 0),
+            "weight_name": "routability",
+            "legs": legs
+        }],
+        "waypoints": waypoints
+    }
+    
+    return osrm_response
+
+
+def decode_polyline(encoded, precision=5):
+    """Decode a polyline string into a list of lat/lng tuples."""
+    coordinates = []
+    index = 0
+    lat = 0
+    lng = 0
+    factor = 10 ** precision
+    
+    while index < len(encoded):
+        # Latitude
+        shift = 0
+        result = 0
+        while True:
+            byte = ord(encoded[index]) - 63
+            index += 1
+            result |= (byte & 0x1f) << shift
+            shift += 5
+            if byte < 0x20:
+                break
+        lat += (~result >> 1) if (result & 1) else (result >> 1)
+        
+        # Longitude
+        shift = 0
+        result = 0
+        while True:
+            byte = ord(encoded[index]) - 63
+            index += 1
+            result |= (byte & 0x1f) << shift
+            shift += 5
+            if byte < 0x20:
+                break
+        lng += (~result >> 1) if (result & 1) else (result >> 1)
+        
+        coordinates.append((lat / factor, lng / factor))
+    
+    return coordinates
+
 
 @app.route("/forwardRouting/<routingType>/<path:path>")
 def forwardRouting(path, routingType, args=None):
@@ -4384,7 +4504,45 @@ def forwardRouting(path, routingType, args=None):
     radiuses = None  # initialize in case ferry needs it later
 
     if routingType == "train":
-        base = "http://routing.trainlog.me:5000"
+        # Check for router parameter
+        if not args:
+            args = request.query_string.decode("utf-8")
+        
+        # Parse router type from query parameters
+        use_graphhopper = 'router=graphhopper' in args
+        
+        if use_graphhopper:
+            # GraphHopper configuration
+            base = "http://localhost:8989"
+            
+            # Convert OSRM path format to GraphHopper format
+            # OSRM: route/v1/train/lng1,lat1;lng2,lat2
+            # GH: route?point=lat1,lng1&point=lat2,lng2
+            coords = path.replace("route/v1/train/", "").split(";")
+            gh_points = []
+            for coord in coords:
+                lng, lat = coord.split(",")
+                gh_points.append(f"point={lat}%2C{lng}")
+            
+            # Build GraphHopper query
+            gh_path = "route?" + "&".join(gh_points)
+            gh_path += "&type=json&locale=fr-FR&profile=non_tgv"
+            gh_path += "&points_encoded=true&instructions=false&elevation=false"
+            
+            # Remove router parameter from args to avoid conflicts
+            args_list = [arg for arg in args.split('&') if not arg.startswith('router=')]
+            args = '&'.join(args_list) if args_list else ''
+            print(f"{base}/{gh_path}")
+            # Return GraphHopper response converted to OSRM format
+            try:
+                gh_response = requests.get(f"{base}/{gh_path}", timeout=10).json()
+                return jsonify(convert_graphhopper_to_osrm(gh_response))
+            except Exception as e:
+                print(f"GraphHopper request failed: {e}")
+                return jsonify({"code": "Error", "message": str(e)}), 500
+        else:
+            # Default OSRM router
+            base = "http://routing.trainlog.me:5000"
     elif routingType == "ferry":
         base = "http://routing.trainlog.me:5001"
         coord_pairs = [
@@ -4516,8 +4674,12 @@ def forwardRouting(path, routingType, args=None):
             return make_response(requests.get(fallback_url).json(), 235)
     else:
         # Other routing types: no fallback
-        return requests.get(build_url(base)).text
-
+        # GraphHopper already handled above for train routing
+        if routingType == "train" and use_graphhopper:
+            # Already handled above
+            pass
+        else:
+            return requests.get(build_url(base)).text
 
 latin_letters = {}
 

@@ -20,6 +20,8 @@ var urlParams = new URLSearchParams(window.location.search);
 var gpx = urlParams.get('gpx');
 var geojson = urlParams.get('geojson');
 var useAntPath = urlParams.get('antpath') === 'true' ? true : false
+// ADD THIS LINE FOR GRAPHHOPPER SUPPORT
+var useGraphhopper = urlParams.get('gh') === 'true' ? true : false
 
 antpathStyles =  {
   antpath:true,
@@ -75,6 +77,15 @@ function recomputeRoute() {
     } else {
     delete control.options.router.options.requestParameters;
     }
+    
+    // PRESERVE GRAPHHOPPER PARAMETER WHEN RECOMPUTING
+    if (useGraphhopper && ["train", "tram", "metro"].includes(type)) {
+        if (!control.options.router.options.requestParameters) {
+            control.options.router.options.requestParameters = {};
+        }
+        control.options.router.options.requestParameters.router = 'graphhopper';
+    }
+    
     control.route();
 }
 
@@ -276,6 +287,12 @@ function routing(map, showSidebar=true, type){
       profile = "ferry";
     }
 
+    // BUILD REQUEST PARAMETERS FOR GRAPHHOPPER
+    var requestParams = {};
+    if (useGraphhopper && ["train", "tram", "metro"].includes(type)) {
+        requestParams.router = 'graphhopper';
+    }
+
     var control = L.Routing.control({
       routeWhileDragging: true,
       plan: plan,
@@ -295,7 +312,13 @@ function routing(map, showSidebar=true, type){
           useAntPath ? antpathStyles : {color: '#52b0fe', opacity: 0.9, weight: 3}
         ]
       },
-      router: L.Routing.osrmv1({serviceUrl: routerurl, profile: profile, useHints: false})
+      router: L.Routing.osrmv1({
+        serviceUrl: routerurl, 
+        profile: profile, 
+        useHints: false,
+        // ADD GRAPHHOPPER PARAMETER IF NEEDED
+        requestParameters: Object.keys(requestParams).length > 0 ? requestParams : undefined
+      })
     }).on('routeselected', function(){
       var content = `<h4>${texts.routeTitle.replace("{origLabel}", origLabel).replace("{destLabel}", destLabel)}</h4>`;
       
@@ -332,6 +355,9 @@ function routing(map, showSidebar=true, type){
     }).on('routingerror', function(){
       sidebar.setContent(errorContent);
     }).addTo(map);
+    
+    // STORE CONTROL GLOBALLY FOR recomputeRoute()
+    window.control = control;
   }
 
   if (showSidebar){
