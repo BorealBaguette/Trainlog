@@ -55,7 +55,7 @@ if (trip.multi_operators) {
   trip.multi_operators.forEach(multiOperator => {
     if (multiOperator.logo_url) {
       operatorContents.push(`
-        <div class="popupInfo operator_popupInfo" title="${multiOperator.operator_name}" style="margin-right: 6px;">
+        <div class="popupInfo operator_popupInfo" popupinfo_content="${multiOperator.operator_name}" style="margin-right: 6px;">
           <img src="/static/${multiOperator.logo_url}" alt="${multiOperator.operator_name}" class="itineraryOperatorLogo"
                style="max-height: 50px; height: auto; width: auto; object-fit: contain; display: block;" />
         </div>
@@ -68,7 +68,7 @@ if (trip.multi_operators) {
 else if (trip.logo_url) {
   // Single logo with trip.logo_url
   operatorContents.push(`
-    <div class="popupInfo operator_popupInfo" title="${trip.operator}" style="margin-right: 6px;">
+    <div class="popupInfo operator_popupInfo" popupinfo_content="${trip.operator}" style="margin-right: 6px;">
       <img src="/static/${trip.logo_url}" alt="${trip.operator}" class="itineraryOperatorLogo"
            style="max-height: 50px; height: auto; width: auto; object-fit: contain; display: block;" />
     </div>
@@ -81,7 +81,7 @@ else if (trip.operator) {
   operators.forEach(operator => {
     if (logosList && logosList[operator]) {
       operatorContents.push(`
-        <div class="popupInfo operator_popupInfo" title="${operator}" style="margin-right: 6px;">
+        <div class="popupInfo operator_popupInfo" popupinfo_content="${operator}" style="margin-right: 6px;">
           <img src="/static/${logosList[operator]}" alt="${operator}" class="itineraryOperatorLogo"
                style="max-height: 50px; height: auto; width: auto; object-fit: contain; display: block;" />
         </div>
