@@ -493,7 +493,7 @@ function getCompositeScore(station, term) {
   return (occurrenceScore * 0.3) + (similarityScore * 0.5) + (positionScore * 0.8);
 }
 
-function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
+function stationSearchAutocomplete(autoClass, visitedStations, url, manual, vehicleType) {
   $(autoClass).autocomplete({
     source: function (request, response) {
       var inputElement = this.element;
@@ -509,14 +509,14 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
         data: {
           q: request.term
         },
-        success: function (data) {
+        success: async function (data) {
           var stationList = [];
           data.features.forEach(function (item) {
             flag = getFlagEmoji(item.properties.countrycode);
             label = `${flag} ${item.properties.name}`;
             disambiguation = item.properties.homonymy_order ? [item.properties.street, item.properties.locality, item.properties.district, item.properties.city].filter(e => (e)).join(", ") : null;
             displayLabel = label + (item.properties.homonymy_order ? item.properties.homonymy_order : "");
-            stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation });
+            stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation, "osm_id": item.properties.osm_id });
             globalStationDict[displayLabel] = [item.geometry.coordinates.reverse(), label];
           });
 
@@ -538,6 +538,20 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
 
           // Limit the results to a maximum of 20 elements
           var limitedList = combinedList.slice(0, 20);
+
+          // Pull Overpass data for ambiguous stations (done last to reduce calls/load on Overpass)
+          switch (vehicleType) {
+            case "train":
+            case "tram":
+            case "metro":
+              await getAdditionalStationInformation(limitedList, vehicleType);
+              break;
+            case "bus":
+              await getAdditionalStationInformation(limitedList, vehicleType);
+              break;
+            default:
+              break;
+          }
 
           // Hide spinner
           inputElement.removeClass("spinning");
@@ -562,7 +576,7 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
       } else {
         var disambiguation = "";
         if (item.disambiguation) {
-          disambiguation = " <span class='disambiguation'>" + sanitize(item.disambiguation) + "</span>"
+          disambiguation = " <span class='disambiguation'>" + sanitize(item.disambiguation).replace("\n", "<br>") + "</span>"
         }
         return $("<li>")
           .append("<div>" + sanitize(item.label) + disambiguation + "</div>")
@@ -583,6 +597,71 @@ function sanitize(string) {
   };
   const reg = /[&<>"'/]/ig;
   return string.replace(reg, (match)=>(map[match]));
+}
+
+async function getAdditionalStationInformation(stationList, vehicleType){
+  osmIdList = []
+  stationList.forEach(station => {
+    if (station.disambiguation) { osmIdList.push(station.osm_id); }
+  });
+  if (osmIdList.length == 0)
+    return;
+  const overpassCall = await fetch("https://overpass-api.de/api/interpreter", {
+    method: "POST", body: 
+      `[out:json];node(id:${osmIdList.join(',')});out tags;`
+  });
+  const overpassResults = await overpassCall.json();
+  stationList.forEach(station => {
+    if (station.disambiguation) {
+      const osm_id = station.osm_id;
+      overpassResults["elements"].forEach(element => {
+        if (!element.tags)
+          return;
+        if (element.id == station.osm_id)
+        {
+          // OSM station=* tag
+          var stationTag = element.tags["station"];
+          switch (stationTag) {
+            case "subway": stationTag = "Metro"; break;
+            case "light_rail": stationTag = "Light rail"; break;
+            case "train": stationTag = "Train"; break;
+            case "monorail": stationTag = "Monorail"; break;
+            case "funicular": stationTag = "Funicular"; break;
+            case "tram": stationTag = "Tram"; break;
+            default: stationTag = null;
+          }
+
+          var tags = [
+            stationTag,
+            getLocalOsmTag("local_ref", element.tags),
+            getLocalOsmTag("ref", element.tags),
+            getLocalOsmTag("network", element.tags),
+            getLocalOsmTag("line", element.tags),
+            getLocalOsmTag("operator", element.tags)
+          ];
+          // Remove duplicates and empty values
+          tags = tags.filter((e, i) => (e && tags.indexOf(e) === i));
+
+          if (tags.length > 0) {
+            station.disambiguation = tags.join(" \u2022 ")
+              + "\n" + station.disambiguation;
+          }
+        }
+      });
+    }
+  });
+}
+
+function getLocalOsmTag(key, values, lang = "en") {
+  results = null;
+  if (values[`{key}:{lang}`])
+    results = values[`{key}:{lang}`];
+  else if (values[key])
+    results = values[key];
+
+  if (results)
+    results = results.replaceAll(";", "/");
+  return results;
 }
 
 function manualCopyHandler(){
