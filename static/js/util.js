@@ -557,19 +557,32 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
         return $("<li>")
           .addClass("manualStationSelect")
           .attr("text", manual)
-          .append("<div>" + item.label + "</div>")
+          .append("<div>" + sanitize(item.label) + "</div>")
           .appendTo(ul);
       } else {
         var disambiguation = "";
         if (item.disambiguation) {
-          disambiguation = " <span class='disambiguation'>" + item.disambiguation + "</span>"
+          disambiguation = " <span class='disambiguation'>" + sanitize(item.disambiguation) + "</span>"
         }
         return $("<li>")
-          .append("<div>" + item.label + disambiguation + "</div>")
+          .append("<div>" + sanitize(item.label) + disambiguation + "</div>")
           .appendTo(ul);
       }
     };
   });
+}
+
+function sanitize(string) {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#x27;',
+    "/": '&#x2F;',
+  };
+  const reg = /[&<>"'/]/ig;
+  return string.replace(reg, (match)=>(map[match]));
 }
 
 function manualCopyHandler(){
