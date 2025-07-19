@@ -514,8 +514,9 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
           data.features.forEach(function (item) {
             flag = getFlagEmoji(item.properties.countrycode);
             label = `${flag} ${item.properties.name}`;
+            disambiguation = item.properties.homonymy_order ? [item.properties.street, item.properties.locality, item.properties.district, item.properties.city].filter(e => (e)).join(", ") : null;
             displayLabel = label + (item.properties.homonymy_order ? item.properties.homonymy_order : "");
-            stationList.push({ "label": displayLabel, "value": displayLabel });
+            stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation });
             globalStationDict[displayLabel] = [item.geometry.coordinates.reverse(), label];
           });
 
@@ -556,15 +557,32 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
         return $("<li>")
           .addClass("manualStationSelect")
           .attr("text", manual)
-          .append("<div>" + item.label + "</div>")
+          .append("<div>" + sanitize(item.label) + "</div>")
           .appendTo(ul);
       } else {
+        var disambiguation = "";
+        if (item.disambiguation) {
+          disambiguation = " <span class='disambiguation'>" + sanitize(item.disambiguation) + "</span>"
+        }
         return $("<li>")
-          .append("<div>" + item.label + "</div>")
+          .append("<div>" + sanitize(item.label) + disambiguation + "</div>")
           .appendTo(ul);
       }
     };
   });
+}
+
+function sanitize(string) {
+  const map = {
+    '&': '&amp;',
+    '<': '&lt;',
+    '>': '&gt;',
+    '"': '&quot;',
+    "'": '&#x27;',
+    "/": '&#x2F;',
+  };
+  const reg = /[&<>"'/]/ig;
+  return string.replace(reg, (match)=>(map[match]));
 }
 
 function manualCopyHandler(){
