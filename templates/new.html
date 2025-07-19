@@ -279,10 +279,10 @@
 
   console.log(special);
   if("{{vehicle_type}}" == "train" && special){
-    stationSearchAutocomplete(".stationSearch", visitedStations, specialURLs[special], "{{manual}}");
+    stationSearchAutocomplete(".stationSearch", visitedStations, specialURLs[special], "{{manual}}", "{{vehicle_type}}");
   }
   else{
-    stationSearchAutocomplete(".stationSearch", visitedStations, URLs["{{vehicle_type}}"], "{{manual}}");
+    stationSearchAutocomplete(".stationSearch", visitedStations, URLs["{{vehicle_type}}"], "{{manual}}", "{{vehicle_type}}");
   }
 
   const currencySelect = document.getElementById('currency');

@@ -399,6 +399,13 @@ body::before {
   background-color: #ffb4b43b;
 }
 
+.ui-autocomplete .disambiguation{
+  opacity: 0.5;
+  font-size: 75%;
+  padding-left: 1.75em;
+  display: block;
+}
+
 #operatorGroup .operatorLogoWrapper{
   display:inline-block;
   vertical-align: middle;
