@@ -6,10 +6,11 @@
 config.yaml
 .python-version
 .env
-.venv
+.venv/
 logs/
 static/images/operator_logos/
 node_modules/
 package.json
 package-lock.json
 server.js
+venv/
