@@ -934,7 +934,7 @@ def hasUncommonTrips(username):
             SELECT EXISTS (
                 SELECT 1
                 FROM trip
-                WHERE type NOT IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'tram', 'metro')
+                WHERE type NOT IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'tram', 'metro', 'aerialway')
                 AND username = :username
             ) AS has_uncommon_trips;
         """,
