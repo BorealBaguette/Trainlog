@@ -14,7 +14,7 @@ services:
       - .env
 
   trainlog_db:
-    image: postgres:17
+    image: postgis/postgis:17-3.5-alpine
     container_name: trainlog_db
     restart: unless-stopped
     volumes:
