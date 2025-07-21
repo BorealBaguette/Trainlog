@@ -166,7 +166,7 @@ from py.utils import (
 )
 from src.api.admin import admin_blueprint
 from src.api.feature_requests import feature_requests_blueprint
-from src.consts import DbNames
+from src.consts import DbNames, TripTypes
 from src.pg import setup_db
 from src.suspicious_activity import (
     check_denied_login,
@@ -195,6 +195,7 @@ from src.trips import (
     update_trip,
     _update_trip_in_sqlite,
     delete_trip,
+    update_trip_type,
 )
 from src.paths import Path
 
@@ -3761,7 +3762,10 @@ def saveTrip(username):
         jsonNewTrip = request.form["newTrip"]
         newTrip = json.loads(jsonNewTrip)
         saveTripToDb(
-            username=username, newTrip=newTrip, newPath=newPath, trip_type=newTrip["type"]
+            username=username,
+            newTrip=newTrip,
+            newPath=newPath,
+            trip_type=newTrip["type"],
         )
 
     return ""
@@ -3862,7 +3866,9 @@ def saveFlight(username, type):
         jsonNewTrip = request.form["newTrip"]
         newTrip = json.loads(jsonNewTrip)
         airlineLogoProcess(newTrip)
-        saveTripToDb(username=username, newTrip=newTrip, newPath=newPath, trip_type=type)
+        saveTripToDb(
+            username=username, newTrip=newTrip, newPath=newPath, trip_type=type
+        )
 
     return ""
 
@@ -5082,9 +5088,12 @@ def fetchTripsPaths(username, lastLocal, public):
         for key in times:
             trip.pop(key, None)
 
-
         tripList.append(
-            {"trip": trip, "time":time, "path": json.loads(paths.get(trip["uid"], "{}"))}
+            {
+                "trip": trip,
+                "time": time,
+                "path": json.loads(paths.get(trip["uid"], "{}")),
+            }
         )
 
     print(datetime.now() - now)
@@ -5314,23 +5323,12 @@ def getPublicTrips():
 @app.route("/<username>/toType/<tripType>/<tripIds>", methods=["GET"])
 @login_required
 def changeTripType(username, tripType, tripIds):
-    # Define allowed type buckets
-    allowed_buckets = {
-        "car": {"car", "bus"},
-        "bus": {"car", "bus"},
-        "train": {"train", "tram", "metro"},
-        "tram": {"train", "tram", "metro"},
-        "metro": {"train", "tram", "metro"},
-        "poi": {"poi", "accommodation", "restaurant"},
-        "accommodation": {"poi", "accommodation", "restaurant"},
-        "restaurant": {"poi", "accommodation", "restaurant"},
-        "ferry": {},
-        "walk": {},
-        "cycle": {},
-        "helicopter": {"air", "helicopter"},
-        "air": {"air", "helicopter"},
-        "aerialway": {},
-    }
+    # make sure the user owns all the listed trips
+    trip_ids = [int(id) for id in tripIds.split(",")]
+    for trip in trip_ids:
+        check_current_user_owns_trip(trip)
+
+    new_type = TripTypes.from_str(tripType)
 
     # Fetch trips and verify permissions
     trips, _ = processPublicTrips(tripIds)
@@ -5339,11 +5337,8 @@ def changeTripType(username, tripType, tripIds):
 
     # Check if all trips can be changed to the requested type
     for trip in trips:
-        current_type = trip["trip"].get("type", "")
-        if (
-            current_type not in allowed_buckets
-            or tripType not in allowed_buckets[current_type]
-        ):
+        current_type = TripTypes.from_str(trip["trip"].get("type", ""))
+        if not TripTypes.can_transform(current_type, new_type):
             return jsonify(
                 {
                     "error": f"Cannot change trip type from '{current_type}' to '{tripType}'."
@@ -5353,17 +5348,13 @@ def changeTripType(username, tripType, tripIds):
     try:
         # Update each trip's type
         for trip in trips:
-            with managed_cursor(mainConn) as cursor:
-                cursor.execute(
-                    "UPDATE trip SET type = :newType WHERE uid = :tripId",
-                    {"newType": tripType, "tripId": trip["trip"]["uid"]},
-                )
-        mainConn.commit()
+            update_trip_type(trip["trip"]["uid"], new_type)
 
         return jsonify(
             {"message": "Trip types updated successfully", "updated_type": tripType}
         )
     except Exception as e:
+        logger.exception(e)
         return jsonify({"error": str(e)}), 500
 
 

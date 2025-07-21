@@ -14,6 +14,7 @@ from src.sql.trips import (
     duplicate_trip_query,
     insert_trip_query,
     update_trip_query,
+    update_trip_type_query,
 )
 from src.utils import (
     get_user_id,
@@ -476,6 +477,23 @@ def _delete_trip_in_sqlite(username, tripId):
         cursor.execute(deletePathQuery, {"trip_id": tripId})
     mainConn.commit()
     pathConn.commit()
+
+
+def update_trip_type(trip_id, new_type):
+    with pg_session() as pg:
+        update_trip_type_in_sqlite(trip_id, new_type)
+        pg.execute(
+            update_trip_type_query(), {"trip_id": trip_id, "trip_type": new_type}
+        )
+
+
+def update_trip_type_in_sqlite(trip_id, new_type):
+    with managed_cursor(mainConn) as cursor:
+        cursor.execute(
+            "UPDATE trip SET type = :newType WHERE uid = :tripId",
+            {"newType": new_type, "tripId": trip_id},
+        )
+    mainConn.commit()
 
 
 def ensure_values_equal(sqlite_trip, pg_trip, property_name):
