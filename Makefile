@@ -20,7 +20,11 @@ start-db:
 
 # start the app only, locally (non-docker)
 start-local: start-db
-	env $(cat .env | xargs) POSTGRES_HOST=localhost FLASK_APP=app flask --debug run
+	env $(cat .env | xargs) POSTGRES_HOST=localhost gunicorn --timeout 1000 --bind 0.0.0.0:5000 app:app --reload
+
+# run trip sync + comparison
+sync-trips:
+	env $(cat .env | xargs) POSTGRES_HOST=localhost python -c "from src.db_sync import sync_db_from_sqlite; sync_db_from_sqlite()"
 
 # stop all containers
 stop:
