@@ -4,6 +4,7 @@ import logging
 import traceback
 
 from flask import abort, request
+from datetime import datetime
 
 from py.sql import deletePathQuery, getUserLines, saveQuery, updatePath, updateTripQuery
 from py.utils import getCountriesFromPath
@@ -14,6 +15,7 @@ from src.sql.trips import (
     duplicate_trip_query,
     insert_trip_query,
     update_trip_query,
+    get_unique_user_trips
 )
 from src.utils import (
     get_user_id,
@@ -650,3 +652,110 @@ def compare_trip(trip_id: int):
         if "127.0.0.1" not in request.url and "localhost" not in request.url:
             msg = ""
             sendOwnerEmail("Error : " + str(e), msg)
+
+def fetch_trips_paths(username, lastLocal, public):
+    now = datetime.now()
+    user_id = get_user_id(username)
+   
+    # Handle lastLocal parameter - convert 'all' to None for cleaner SQL
+    if lastLocal == 'all':
+        last_modified_filter = None
+    else:
+        try:
+            # Convert string to datetime if needed
+            if isinstance(lastLocal, str):
+                last_modified_filter = datetime.fromisoformat(lastLocal.replace('T', ' '))
+            else:
+                last_modified_filter = lastLocal
+        except ValueError:
+            last_modified_filter = None
+   
+    with pg_session() as pg:
+        # Single query to get all trips with their paths and time status
+        result = pg.execute(
+            get_unique_user_trips(),
+            {
+                "user_id": user_id,
+                "lastLocal": last_modified_filter,
+                "public": public
+            }
+        ).fetchall()
+   
+    # Convert to list and reverse order
+    trips_data = list(reversed(result))
+    print(public, len(trips_data))
+   
+    # Helper function to format datetime to ISO string
+    def format_datetime_iso(dt):
+        """Convert datetime to ISO format string 'YYYY-MM-DD HH:MM:SS'"""
+        if dt is None:
+            return None
+        if isinstance(dt, str):
+            try:
+                dt = datetime.fromisoformat(dt.replace('T', ' '))
+            except ValueError:
+                return dt
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+   
+    # Build response
+    tripList = []
+    idList = []
+   
+    for row in trips_data:
+        trip_dict = dict(row)
+       
+        # Format all datetime fields to ISO format
+        datetime_fields = [
+            'start_datetime', 'end_datetime', 'utc_start_datetime', 'utc_end_datetime',
+            'created', 'last_modified', 'purchase_date'
+        ]
+        
+        for field in datetime_fields:
+            if field in trip_dict and trip_dict[field] is not None:
+                trip_dict[field] = format_datetime_iso(trip_dict[field])
+              
+        # Extract and remove metadata
+        time_status = trip_dict.pop('time_status')
+        path_json_str = trip_dict.pop('path', '{}')
+       
+        # Parse path JSON
+        if path_json_str:
+            try:
+                path_json = json.loads(path_json_str) if isinstance(path_json_str, str) else path_json_str
+            except (json.JSONDecodeError, TypeError):
+                path_json = {}
+        else:
+            path_json = {}
+        print(path_json["type"])
+        path = path_json["coordinates"] if path_json['type']=="LineString" else [path_json["coordinates"]]
+        # Add to lists
+        idList.append(trip_dict.get('trip_id'))
+        tripList.append({
+            "trip": trip_dict,
+            "time": time_status,
+            "path": path
+        })
+
+        #TODO: Remove legacy compat of frontend once Frontend is updated
+        if trip_dict["start_datetime"] is None:
+            if trip_dict["is_project"] is True:
+                trip_dict["start_datetime"] = 1
+                trip_dict["end_datetime"] = 1
+            else:
+                trip_dict["start_datetime"] = -1
+                trip_dict["end_datetime"] = -1
+        else:
+            trip_dict["utc_filtered_start_datetime"] = trip_dict["utc_start_datetime"] if trip_dict["utc_start_datetime"] is not None else trip_dict["start_datetime"]
+            trip_dict["utc_filtered_end_datetime"] = trip_dict["utc_end_datetime"] if trip_dict["utc_end_datetime"] is not None else trip_dict["end_datetime"]
+        trip_dict["uid"] = trip_dict.pop("trip_id")
+        trip_dict["type"] = trip_dict.pop("trip_type")
+
+   
+    print(datetime.now() - now)
+    lastLocal = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+   
+    return {
+        "trips": tripList,
+        "lastLocal": lastLocal,
+        "idList": idList
+    }

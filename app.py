@@ -195,6 +195,7 @@ from src.trips import (
     update_trip,
     _update_trip_in_sqlite,
     delete_trip,
+    fetch_trips_paths
 )
 from src.paths import Path
 
@@ -5029,80 +5030,17 @@ def delete_user(uid):
     return ""
 
 
-def fetchTripsPaths(username, lastLocal, public):
-    tripList = []
-    now = datetime.now()
-    with managed_cursor(mainConn) as cursor:
-        idList = [
-            row["uid"]
-            for row in cursor.execute(
-                "SELECT uid FROM trip WHERE username=:username", {"username": username}
-            ).fetchall()
-        ]
-
-        trips = cursor.execute(
-            getUniqueUserTrips,
-            {"username": username, "lastLocal": lastLocal, "public": public},
-        ).fetchall()
-
-    trips.reverse()
-    tripIds = [trip["uid"] for trip in trips]
-    print(public, len(tripIds))
-    formattedGetUserLines = getUserLines.format(
-        trip_ids=", ".join(("?",) * len(tripIds))
-    )
-
-    tripIds = []
-    for trip in trips:
-        tripIds.append(trip["uid"])
-    formattedGetUserLines = getUserLines.format(
-        trip_ids=", ".join(("?",) * len(tripIds))
-    )
-
-    tripIds = []
-    for trip in trips:
-        tripIds.append(trip["uid"])
-    formattedGetUserLines = getUserLines.format(
-        trip_ids=", ".join(("?",) * len(tripIds))
-    )
-    with managed_cursor(pathConn) as cursor:
-        pathResult = cursor.execute(formattedGetUserLines, tuple(tripIds)).fetchall()
-
-    paths = {path["trip_id"]: path["path"] for path in pathResult}
-
-    for trip in trips:
-        trip = dict(trip)
-        time = None
-        times = ["past", "plannedFuture", "current", "future"]
-        for key in times:
-            if trip.get(key) == 1:
-                time = key
-                break
-
-        for key in times:
-            trip.pop(key, None)
-
-
-        tripList.append(
-            {"trip": trip, "time":time, "path": json.loads(paths.get(trip["uid"], "{}"))}
-        )
-
-    print(datetime.now() - now)
-    lastLocal = datetime.strftime(datetime.now(), "%Y-%m-%dT%H:%M:%S.%f")
-    return {"trips": tripList, "lastLocal": lastLocal, "idList": idList}
-
-
 @app.route("/public/<username>/getTripsPaths/<lastLocal>", methods=["GET", "POST"])
 @public_required  # Public access check
 def public_getTripsPaths(username, lastLocal):
-    result = fetchTripsPaths(username, lastLocal, public=1)
+    result = fetch_trips_paths(username, lastLocal, public=1)
     return jsonify(result)
 
 
 @app.route("/<username>/getTripsPaths/<lastLocal>", methods=["GET", "POST"])
 @login_required  # Login access check
 def getTripsPaths(username, lastLocal):
-    result = fetchTripsPaths(username, lastLocal, public=0)
+    result = fetch_trips_paths(username, lastLocal, public=0)
     return jsonify(result)
 
 
