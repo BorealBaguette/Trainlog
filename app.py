@@ -197,6 +197,8 @@ from src.trips import (
     _update_trip_in_sqlite,
     delete_trip,
     update_trip_type,
+    attach_ticket_to_trips,
+    delete_ticket_from_db
 )
 from src.paths import Path
 
@@ -2338,30 +2340,31 @@ def get_all_tags(username):
 @app.route("/<username>/delete_ticket/<ticket_id>")
 @login_required
 def delete_ticket(username, ticket_id):
-    try:
-        # Using transaction management with context manager
-        with managed_cursor(mainConn) as cursor:
-            # Unassigning the ticket from trips
-            cursor.execute(
-                "UPDATE trip SET ticket_id = NULL WHERE username = ? AND ticket_id = ?",
-                (username, ticket_id),
-            )
-            # Deleting the ticket
-            cursor.execute(
-                "DELETE FROM tickets WHERE username = ? AND uid = ?",
-                (username, ticket_id),
-            )
-            # Committing changes to the database
-            mainConn.commit()
-
-        # If no exceptions, return success
+    success, error = delete_ticket_from_db(username, ticket_id)
+    if success:
         return jsonify({"success": True}), 200
-    except Exception as e:
-        # Roll back in case of error
-        mainConn.rollback()
-        # Return an error message
-        print(e)
+    else:
+        print(error)
         return jsonify({"error": "An error occurred while deleting the ticket"}), 500
+
+
+@app.route("/<username>/attachSelected")
+@login_required
+def attachSelected(username):
+    trip_ids = request.args.get("trips")
+    ticket_id = request.args.get("ticket_id")
+
+    if not trip_ids or not ticket_id:
+        return jsonify({"error": "Missing parameters"}), 400
+
+    trip_id_list = trip_ids.split(",")
+    success, error = attach_ticket_to_trips(username, ticket_id, trip_id_list)
+
+    if success:
+        return redirect(url_for("ticket_list", username=username))
+    else:
+        print(error)
+        return jsonify({"error": "An error occurred while attaching the ticket"}), 500
 
 
 @app.route("/<username>/toggle_ticket_active/<ticket_id>")
@@ -2384,25 +2387,6 @@ def toggle_ticket_active(username, ticket_id):
         # Return an error message
         print(e)
         return jsonify({"error": "An error occurred while toggling the ticket"}), 500
-
-
-@app.route("/<username>/attachSelected")
-@login_required
-def attachSelected(username):
-    requestedTrips = request.args.get("trips", default=None)
-    ticket_id = request.args.get("ticket_id", default=None)
-
-    with managed_cursor(mainConn) as cursor:
-        query = "UPDATE trip SET ticket_id = '{ticket_id}' WHERE username = '{username}' AND uid IN ({requestedTrips})"
-        formattedQuery = query.format(
-            username=username,
-            ticket_id=ticket_id,
-            requestedTrips=", ".join(("?",) * len(requestedTrips.split(","))),
-        )
-        cursor.execute(formattedQuery, requestedTrips.split(","))
-    mainConn.commit()
-
-    return redirect(url_for("ticket_list", username=username))
 
 
 @app.route("/<username>/new_flight")

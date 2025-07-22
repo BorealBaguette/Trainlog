@@ -15,6 +15,8 @@ from src.sql.trips import (
     insert_trip_query,
     update_trip_query,
     update_trip_type_query,
+    update_ticket_null_query,
+    attach_ticket_query
 )
 from src.utils import (
     get_user_id,
@@ -494,6 +496,64 @@ def update_trip_type_in_sqlite(trip_id, new_type):
             {"newType": new_type, "tripId": trip_id},
         )
     mainConn.commit()
+
+def delete_ticket_from_db(username, ticket_id):
+    try:
+        trip_ids = []
+
+        with managed_cursor(mainConn) as cursor:
+            cursor.execute(
+                "SELECT uid FROM trip WHERE username = ? AND ticket_id = ?",
+                (username, ticket_id),
+            )
+            trip_ids = [row["uid"] for row in cursor.fetchall()]
+
+            cursor.execute(
+                "UPDATE trip SET ticket_id = NULL WHERE username = ? AND ticket_id = ?",
+                (username, ticket_id),
+            )
+            cursor.execute(
+                "DELETE FROM tickets WHERE username = ? AND uid = ?",
+                (username, ticket_id),
+            )
+
+        with pg_session() as pg:
+            for trip_id in trip_ids:
+                pg.execute(update_ticket_null_query(), {"trip_id": trip_id})
+        compare_trip(trip_id)
+
+        mainConn.commit()
+        return True, None
+    except Exception as e:
+        mainConn.rollback()
+        return False, str(e)
+
+
+def attach_ticket_to_trips(username, ticket_id, trip_ids):
+    try:
+        placeholders = ", ".join(["?"] * len(trip_ids))
+
+        with managed_cursor(mainConn) as cursor:
+            cursor.execute(
+                f"""
+                UPDATE trip SET ticket_id = ? 
+                WHERE username = ? AND uid IN ({placeholders})
+                """,
+                [ticket_id, username] + trip_ids,
+            )
+
+        with pg_session() as pg:
+            for trip_id in trip_ids:
+                pg.execute(
+                    attach_ticket_query(), {"trip_id": trip_id, "ticket_id": ticket_id}
+                )
+        compare_trip(trip_id)
+
+        mainConn.commit()
+        return True, None
+    except Exception as e:
+        mainConn.rollback()
+        return False, str(e)
 
 
 def ensure_values_equal(sqlite_trip, pg_trip, property_name):
