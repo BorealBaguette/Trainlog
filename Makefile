@@ -20,7 +20,7 @@ start-db:
 
 # start the app only, locally (non-docker)
 start-local: start-db
-	env $(cat .env | xargs) POSTGRES_HOST=localhost FLASK_APP=app gunicorn --timeout 1000 --bind 0.0.0.0:5000 app:app --reload --access-logfile - --access-logformat '%(h)s %(r)s %(s)s'
+	env $$(cat .env | xargs) POSTGRES_HOST=localhost FLASK_APP=app gunicorn --timeout 1000 --bind 0.0.0.0:5000 app:app --reload --access-logfile - --access-logformat '%(h)s %(r)s %(s)s'
 
 # stop all containers
 stop:
