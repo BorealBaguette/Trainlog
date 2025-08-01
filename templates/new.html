@@ -201,6 +201,7 @@
 
 
     operatorAutocomplete( $("#operator"), manAndOps, "{{ url_for('static',filename='')}}",  "{{ url_for('static',filename='images/icons/trip_logos/' + vehicle_type + '.png')}}", "{{vehicle_type}}");
+    materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
   });
 
 

@@ -107,8 +107,8 @@
       manualStationsList.push({"label":station, "value":station, "manual":true})
     })
 
-    operatorAutocomplete( $("#operator"), manAndOps, "{{ url_for('static',filename='images/operator_logos/')}}",  "{{ url_for('static',filename='images/icons/trip_logos/train.png')}}");
-
+    operatorAutocomplete( $("#operator"), manAndOps, "{{ url_for('static',filename='images/operator_logos/')}}",  "{{ url_for('static',filename='images/icons/trip_logos/train.png')}}", "train");
+    materialTypeAutocomplete( $("#material_type"), manAndOps, "train");
   });
 
   

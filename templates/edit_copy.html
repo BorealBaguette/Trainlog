@@ -1299,8 +1299,9 @@
         .done(function () { $(".operatorLogo").attr("src", origFilepath); })
         .fail(function () { $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}"); });
 
-    $.get('{{url_for("getManAndOps", username=username, station_type="*", tripType=tripType)}}', function (manAndOps, status) {
+    $.get('{{url_for("getManAndOps", username=username, station_type=tripType)}}', function (manAndOps, status) {
         operatorAutocomplete($("#operator"), manAndOps, "{{ url_for('static',filename='')}}", "{{ url_for('static',filename='images/icons/trip_logos/' + tripType + '.png')}}", "{{tripType}}");
+        materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
     });
 
 

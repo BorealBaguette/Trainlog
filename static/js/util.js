@@ -681,7 +681,7 @@ function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
   select.autocomplete({
     source: function (request, response) {
         // Normalize the search term
-        var searchTerm = request.term.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim(); 
+        var searchTerm = request.term.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
         var matches = $.map(Object.keys(manAndOps.operators), function (item) {
             // Normalize the comparison (for instance, replace 'č' with 'c')
             var normalizedItem = item.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
@@ -721,7 +721,38 @@ function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
   });
 }
 
+function materialTypeAutocomplete(select, manAndOps, type) {
+  select.autocomplete({
+    source: function (request, response) {
+        // Normalize the search term
+        var searchTerm = request.term.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
+        var matches = $.map(Object.keys(manAndOps.materialTypes), function (item) {
+            // Normalize the comparison (for instance, replace 'č' with 'c')
+            var normalizedItem = item.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
+            var index = normalizedItem.indexOf(searchTerm);
+            if (index !== -1) {
+                return {
+                    value: item,
+                    index: index
+                };
+            }
+            return null;
+        });
 
+        // Sort matches based on the position of the search term (index)
+        matches.sort(function (a, b) {
+            return a.index - b.index;
+        });
+
+        // Extract the sorted operator names
+        var sortedMaterialTypes = $.map(matches, function (match) {
+            return match.value;
+        });
+
+        response(sortedMaterialTypes);
+    }
+  });
+}
 
 
 function getRegionFromCode(region_code){
