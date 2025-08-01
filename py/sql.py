@@ -13,6 +13,7 @@ getUserTrips = open("sql/getUserTrips.sql", "r").read()
 getUniqueUserTrips = open("sql/getUniqueUserTrips.sql", "r").read()
 getAllTrips = open("sql/getAllTrips.sql", "r").read()
 getOperators = open("sql/getOperators.sql", "r").read()
+getMaterialTypes = open("sql/getMaterialTypes.sql", "r").read()
 statsOperatorTrips = (
     open("sql/stats/CTEs/tripsCTE.sql", "r").read()
     + open("sql/stats/operators.sql", "r").read()

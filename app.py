@@ -101,6 +101,7 @@ from py.sql import (
     getDynamicUserTrips,
     getLeaderboardCountries,
     getManualStationsQuery,
+    getMaterialTypes,
     getNumberStations,
     getOperators,
     getTags,
@@ -4670,6 +4671,14 @@ def getManAndOps(username, station_type):
                 getOperators, {"username": username}
             ).fetchall()
         ]
+    with managed_cursor(mainConn) as cursor:
+        # Fetching material types for station_type from the database
+        material_types_from_db = [
+            str(material_type["material_type"]).strip()
+            for material_type in cursor.execute(
+                getMaterialTypes, {"trip_type": station_type, "username": username}
+            ).fetchall()
+        ]
 
     # Getting the list of operators from the logos function
     operators_logos = listOperatorsLogos(tripType)
@@ -4685,9 +4694,12 @@ def getManAndOps(username, station_type):
         operator: operators_logos.get(operator, None) for operator in all_operators
     }
 
+    material_types = {material_type: None for material_type in material_types_from_db if material_type}
+
     manAndOps = {
         "operators": result,
         "manualStations": manualStations,
+        "materialTypes": material_types,
         "visitedStations": visitedStations,
     }
     return jsonify(manAndOps)
