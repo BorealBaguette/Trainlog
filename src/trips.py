@@ -7,16 +7,17 @@ from flask import abort, request
 
 from py.sql import deletePathQuery, getUserLines, saveQuery, updatePath, updateTripQuery
 from py.utils import getCountriesFromPath
+from src.consts import TripTypes
 from src.paths import Path
 from src.pg import get_or_create_pg_session, pg_session
 from src.sql.trips import (
+    attach_ticket_query,
     delete_trip_query,
     duplicate_trip_query,
     insert_trip_query,
+    update_ticket_null_query,
     update_trip_query,
     update_trip_type_query,
-    update_ticket_null_query,
-    attach_ticket_query
 )
 from src.utils import (
     get_user_id,
@@ -481,21 +482,22 @@ def _delete_trip_in_sqlite(username, tripId):
     pathConn.commit()
 
 
-def update_trip_type(trip_id, new_type):
+def update_trip_type(trip_id, new_type: TripTypes):
     with pg_session() as pg:
         update_trip_type_in_sqlite(trip_id, new_type)
         pg.execute(
-            update_trip_type_query(), {"trip_id": trip_id, "trip_type": new_type}
+            update_trip_type_query(), {"trip_id": trip_id, "trip_type": new_type.value}
         )
 
 
-def update_trip_type_in_sqlite(trip_id, new_type):
+def update_trip_type_in_sqlite(trip_id, new_type: TripTypes):
     with managed_cursor(mainConn) as cursor:
         cursor.execute(
             "UPDATE trip SET type = :newType WHERE uid = :tripId",
-            {"newType": new_type, "tripId": trip_id},
+            {"newType": new_type.value, "tripId": trip_id},
         )
     mainConn.commit()
+
 
 def delete_ticket_from_db(username, ticket_id):
     try:

@@ -266,7 +266,7 @@ dashboard.config.version = r.git.describe(tags=True).split("-")[0]
 dashboard.config.group_by = getUser
 dashboard.bind(app)
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///{db}".format(db=DbNames.AUTH_DB)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///{db}".format(db=DbNames.AUTH_DB.value)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 
@@ -8892,8 +8892,8 @@ def user_dashboard(username):
 
 if not database_exists(authDb.get_engine().url):
     create_authDb()
-init_main(DbNames.MAIN_DB)
-init_data(DbNames.MAIN_DB)
+init_main(DbNames.MAIN_DB.value)
+init_data(DbNames.MAIN_DB.value)
 authDb.create_all()
 with managed_cursor(pathConn) as cursor:
     cursor.execute(initPath)

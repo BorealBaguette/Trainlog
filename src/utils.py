@@ -16,13 +16,13 @@ from py.sql import getCurrentTrip
 from py.utils import load_config
 from src.consts import DbNames
 
-pathConn = sqlite3.connect(DbNames.PATH_DB, check_same_thread=False)
+pathConn = sqlite3.connect(DbNames.PATH_DB.value, check_same_thread=False)
 pathConn.row_factory = sqlite3.Row
 
-mainConn = sqlite3.connect(DbNames.MAIN_DB, check_same_thread=False)
+mainConn = sqlite3.connect(DbNames.MAIN_DB.value, check_same_thread=False)
 mainConn.row_factory = sqlite3.Row
 
-authConn = sqlite3.connect(DbNames.AUTH_DB, check_same_thread=False)
+authConn = sqlite3.connect(DbNames.AUTH_DB.value, check_same_thread=False)
 authConn.row_factory = sqlite3.Row
 
 
@@ -115,7 +115,7 @@ def getUtcDatetime(lat, lng, dateTime):
     timezone_str = tf.timezone_at(lat=lat, lng=lng)
 
     # Handle override for specific zones
-    if timezone_str in ['Asia/Urumqi', 'Asia/Kashgar']:
+    if timezone_str in ["Asia/Urumqi", "Asia/Kashgar"]:
         # Force UTC+8 manually
         timezone = pytz.FixedOffset(480)  # 480 minutes = 8 hours
         localized_datetime = timezone.localize(dateTime)
@@ -126,17 +126,19 @@ def getUtcDatetime(lat, lng, dateTime):
     utc_datetime = localized_datetime.astimezone(pytz.utc).replace(tzinfo=None)
     return utc_datetime
 
+
 def getLocalDatetime(lat, lng, dateTime):
     # Instantiate TimezoneFinder and find timezone for given lat, lng
     tf = TimezoneFinder()
     timezone_str = tf.timezone_at(lat=lat, lng=lng)
 
-    if timezone_str in ['Asia/Urumqi', 'Asia/Kashgar']:
+    if timezone_str in ["Asia/Urumqi", "Asia/Kashgar"]:
         local_timezone = pytz.FixedOffset(480)  # 480 minutes = 8 hours
     else:
         local_timezone = pytz.timezone(timezone_str)
     local_datetime = dateTime.astimezone(local_timezone).replace(tzinfo=None)
     return local_datetime
+
 
 def get_user_id(username):
     with managed_cursor(authConn) as cursor:
