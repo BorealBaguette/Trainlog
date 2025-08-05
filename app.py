@@ -3759,6 +3759,7 @@ def privacy(override_lang):
 
     return render_template(
         "privacy.html",
+        title=lang[chosen_lang]["privacy_title"],
         nav="bootstrap/nav.html",
         **lang[chosen_lang],
         **session["userinfo"],
