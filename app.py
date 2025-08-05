@@ -1439,7 +1439,7 @@ def new_tag(username):
         )
     return render_template(
         "new_tag.html",
-        title="",
+        title=lang[session["userinfo"]["lang"]]["new_tag_nav"],
         suggested_colour=suggested_colour,
         username=username,
         **lang[session["userinfo"]["lang"]],
