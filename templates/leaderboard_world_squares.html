@@ -2,6 +2,13 @@
 {% block content %}
 {% include nav%}
 
+<style>
+    #leaderboard tr.highlight td {
+        color: white;
+        background-color: #6c757d;
+    }
+</style>
+
 <div id="leaderboard-container" class="container mt-3">
     <h2>
         {{worldSquares}}
@@ -29,6 +36,16 @@
 var table = $('#leaderboard');
 
 $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(countries, status){
+    function generateLink(username, highlighted=false) {
+        if (countries.non_public_users.includes(username)) {
+            return `${username}`;
+        } else if (highlighted) {
+            return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+        } else {
+            return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+        }
+    }
+
     const users = countries.leaderboard_data[0].data; // Adjust to access the data array
 
     users.forEach(function(user, index) {
@@ -49,18 +66,11 @@ $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(countries, statu
                 break;
         }
 
-        function generateLink(username) {         
-            if(countries.non_public_users.includes(username)){
-                return `${username}`;
-            }
-            else{
-                return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${username}">${username}</a>`;
-            }
-        }
+        highlighted = user.usernames.includes('{{ username }}');
 
-        table.append($('<tr>')
+        table.append($('<tr>').addClass( highlighted ? 'highlight' : '' )
             .append($('<td>').html(medalIcon))
-            .append($('<td>').html(user.usernames.map(username => generateLink(username)).join(', ')))
+            .append($('<td>').html(user.usernames.map(username => generateLink(username, highlighted)).join(', ')))
             .append($('<td>').text(user.percent.toFixed(2) + "%"))
         );
     });
