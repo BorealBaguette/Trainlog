@@ -8879,9 +8879,9 @@ def user_bounds(username):
 
 @app.route("/status")
 def router_status():
-    # Use your existing translations logic
     return render_template(
         "status.html",
+        title=lang[session["userinfo"]["lang"]]["router_status"],
         username=getUser(),
         translations=lang[session["userinfo"]["lang"]],
         **lang[session["userinfo"]["lang"]],
