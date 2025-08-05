@@ -1693,7 +1693,7 @@ def handle_gpx_upload(username, source):
 def upload_gpx(username):
     return render_template(
         "upload_gpx.html",
-        title="gpx",
+        title=lang[session["userinfo"]["lang"]]["upload_gpx_files"],
         username=username,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
