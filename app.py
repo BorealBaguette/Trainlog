@@ -7393,7 +7393,7 @@ def leaderboard(type):
         template,
         nav=nav,
         username=getUser(),
-        title="Leaderboard",
+        title=lang[session["userinfo"]["lang"]]["leaderboard"],
         type=type,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
