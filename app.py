@@ -2290,6 +2290,7 @@ def tag_list(username):
 
     return render_template(
         "tag_list.html",
+        title=lang[session["userinfo"]["lang"]]["manage_tags"],
         tagsList=tags,
         username=username,
         **lang[session["userinfo"]["lang"]],
