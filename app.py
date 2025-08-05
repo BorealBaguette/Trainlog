@@ -7869,7 +7869,7 @@ def friends(username):
         incoming_requests=incoming_requests,
         current_friends=current_friends,
         username=username,
-        title="Friends",
+        title=lang[session["userinfo"]["lang"]]["friends"],
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
