@@ -8992,6 +8992,7 @@ def user_completion(username):
 def user_dashboard(username):
     return render_template(
         "dashboard.html",
+        title=lang[session["userinfo"]["lang"]]["user_dashboard"],
         username=username,
         nav="bootstrap/navigation.html",
         **lang[session["userinfo"]["lang"]],
