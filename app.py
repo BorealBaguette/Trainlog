@@ -1810,6 +1810,7 @@ def list_gpx(username):
     # Pass the GPX files to the template
     return render_template(
         "list_gpx.html",
+        title=lang[session["userinfo"]["lang"]]["manage_gpx_files"],
         trip_types=trip_types,
         username=username,
         gpxList=gpx_files,
