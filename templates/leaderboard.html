@@ -8,8 +8,12 @@
     }
     #leaderboard th {
         color: black;
-        background-color: #f2f2f2; 
+        background-color: #f2f2f2;
         border-top: 1px solid #dddddd !important;
+    }
+    #leaderboard tr.highlight td {
+        color: white;
+        background-color: #6c757d;
     }
     #leaderboard_filter {
         margin-bottom: 5px;
@@ -61,19 +65,21 @@ var table = $('#leaderboard');
 
 $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(users, status){
 
-    function generateLink(username) {         
-        if(users.non_public_users.includes(username)){
+    function generateLink(username, highlighted=false) {
+        if (users.non_public_users.includes(username)) {
             return `${username}`;
-        }
-        else{
+        } else if (highlighted) {
+            return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+        } else {
             return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${username}">${username}</a>`;
         }
     }
     
     users.leaderboard_data.forEach(function(user){
         var public;
-        table.append($('<tr>').append($('<td>')).append($('<td>'))
-            .append($('<td>').html(generateLink(user.username)))
+        highlighted = user.username === '{{ username }}';
+        table.append($('<tr>').addClass( highlighted ? 'highlight' : '' ).append($('<td>')).append($('<td>'))
+            .append($('<td>').html(generateLink(user.username, highlighted)))
             .append($('<td>').attr("data-sort", user.trips).text(user.trips.toLocaleString()))
             .append($('<td>').attr("data-sort", user.length).text(mToKm(user.length).toLocaleString() + " km"))
             .append(
