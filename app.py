@@ -8867,9 +8867,9 @@ def get_bounds(username):
 @app.route("/<username>/bounds")
 @login_required
 def user_bounds(username):
-    # Use your existing translations logic
     return render_template(
         "bounds.html",
+        title=lang[session["userinfo"]["lang"]]["travel_bounds_header"],
         username=username,
         translations=lang[session["userinfo"]["lang"]],
         **lang[session["userinfo"]["lang"]],
