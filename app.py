@@ -2414,19 +2414,6 @@ def new_flight(username):
     )
 
 
-@app.route("/<username>/new_train")
-@login_required
-def new_train(username):
-    return render_template(
-        "new_train.html",
-        title=lang[session["userinfo"]["lang"]]["newTripTrain"],
-        username=username,
-        currencyOptions=get_available_currencies(),
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-    )
-
-
 @app.route("/<username>/routing")
 @login_required
 def routing(username):
