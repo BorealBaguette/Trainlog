@@ -220,16 +220,16 @@
                 km: groupData(data.countries.km, 'country')
             },
             operators: {
-                trips: groupData(data.newOperators.trips, 'operator'),
-                km: groupData(data.newOperators.km, 'operator')
+                trips: groupData(data.operators.trips, 'operator'),
+                km: groupData(data.operators.km, 'operator')
             },
             routes: {
-                trips: groupData(data.newRoutes.trips, 'route'),
-                km: groupData(data.newRoutes.km, 'route')
+                trips: groupData(data.routes.trips, 'route'),
+                km: groupData(data.routes.km, 'route')
             },
             stations: {
-                trips: groupData(data.newStations.trips, 'station'),
-                km: groupData(data.newStations.km, 'station')
+                trips: groupData(data.stations.trips, 'station'),
+                km: groupData(data.stations.km, 'station')
             },
             material: {
                 trips: groupData(data.material.trips, 'material'),
@@ -538,9 +538,9 @@
         // Use the original ungrouped chartData when in expanded mode
         var dataKeyMap = {
             'chart-countries': 'countries',
-            'chart-operators': 'newOperators',
-            'chart-routes': 'newRoutes',
-            'chart-stations': 'newStations',
+            'chart-operators': 'operators',
+            'chart-routes': 'routes',
+            'chart-stations': 'stations',
             'chart-material': 'material',
             'chart-years': 'years'
         };
@@ -566,7 +566,7 @@
             option.xAxis[0].data = dataToUse.map(item => {
                 if (dataKey === 'material') {
                     return item.material;
-                } else if (dataKey === 'newRoutes') {
+                } else if (dataKey === 'routes') {
                     return JSON.parse(item.route).join('\n');
                 } else if (dataKey === 'years') {
                     return item.year;

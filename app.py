@@ -114,8 +114,8 @@ from py.sql import (
     getUserTrips,
     initPath,
     leaderboardStats,
-    newStatsOperatorKm,
-    newStatsOperatorTrips,
+    statsOperatorKm,
+    statsOperatorTrips,
     publicStats,
     saveQuery,
     statsCountries,
@@ -5514,9 +5514,9 @@ def fetch_stats(username, tripType, year=None):
     with managed_cursor(mainConn) as cursor:
         for avType in cursor.execute(typeAvailable, {"username": username}).fetchall():
             if avType["type"] == tripType:
-                stats["newOperators"] = {
+                stats["operators"] = {
                     "km": getStatsGeneral(
-                        query=newStatsOperatorKm,
+                        query=statsOperatorKm,
                         cursor=cursor,
                         username=username,
                         statName="operator",
@@ -5524,7 +5524,7 @@ def fetch_stats(username, tripType, year=None):
                         year=year,
                     ),
                     "trips": getStatsGeneral(
-                        query=newStatsOperatorTrips,
+                        query=statsOperatorTrips,
                         cursor=cursor,
                         username=username,
                         statName="operator",
@@ -5586,7 +5586,7 @@ def fetch_stats(username, tripType, year=None):
                         year=year,
                     ),
                 }
-                stats["newRoutes"] = {
+                stats["routes"] = {
                     "km": getStatsGeneral(
                         query=statsRoutesKm + " 10",
                         cursor=cursor,
@@ -5604,7 +5604,7 @@ def fetch_stats(username, tripType, year=None):
                         year=year,
                     ),
                 }
-                stats["newStations"] = {
+                stats["stations"] = {
                     "km": getStatsGeneral(
                         query=statsStationsKm + " 10",
                         cursor=cursor,

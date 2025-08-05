@@ -14,9 +14,9 @@ getUniqueUserTrips = open("sql/getUniqueUserTrips.sql", "r").read()
 getAllTrips = open("sql/getAllTrips.sql", "r").read()
 getOperators = open("sql/getOperators.sql", "r").read()
 getMaterialTypes = open("sql/getMaterialTypes.sql", "r").read()
-newStatsOperatorTrips = (
+statsOperatorTrips = (
     open("sql/stats/CTEs/tripsCTE.sql", "r").read()
-    + open("sql/stats/newOperators.sql", "r").read()
+    + open("sql/stats/operators.sql", "r").read()
 )
 statsCountries = (
     open("sql/stats/CTEs/tripsCTE.sql", "r").read()
@@ -42,9 +42,9 @@ statsMaterialTrips = (
     open("sql/stats/CTEs/tripsCTE.sql", "r").read()
     + open("sql/stats/materialType.sql", "r").read()
 )
-newStatsOperatorKm = (
+statsOperatorKm = (
     open("sql/stats/CTEs/kmCTE.sql", "r").read()
-    + open("sql/stats/newOperators.sql", "r").read()
+    + open("sql/stats/operators.sql", "r").read()
 )
 statsYearKm = (
     open("sql/stats/CTEs/kmCTE.sql", "r").read()
