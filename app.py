@@ -2228,6 +2228,7 @@ def ticket_list(username):
 
     return render_template(
         "ticket_list.html",
+        title=lang[session["userinfo"]["lang"]]["ticket_list"],
         tickets=result,
         username=username,
         country_list=get_all_countries(),
