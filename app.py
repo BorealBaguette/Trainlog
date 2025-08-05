@@ -3695,6 +3695,7 @@ def current(username):
     """
     return render_template(
         "current.html",
+        title=lang[session["userinfo"]["lang"]]["current"],
         username=username,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
