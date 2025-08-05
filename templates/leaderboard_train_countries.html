@@ -2,6 +2,13 @@
 {% block content %}
 {% include nav%}
 
+<style>
+    #leaderboard tr.highlight td {
+        color: white;
+        background-color: #6c757d;
+    }
+</style>
+
 <div id="leaderboard-container" class="container mt-3">
     <h2>
         {{ leaderboardCountries }}
@@ -36,6 +43,16 @@ const countryParam = params.get('country');
 const countriesWithRegions = new Set();
 
 $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(countries, status){
+    function generateLink(username, highlighted=false) {
+        if (countries.non_public_users.includes(username)) {
+            return `${username}`;
+        } else if (highlighted) {
+            return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+        } else {
+            return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+        }
+    }
+
     countries.leaderboard_data.forEach(item => {
         const cc = item.cc;
         // Check if the 'cc' value is longer than 2, implying it's a subregion
@@ -86,9 +103,11 @@ $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(countries, statu
                         break;
                 }
 
-                userRow = $('<tr>')
+                highlighted = data.usernames.includes('{{ username }}');
+
+                userRow = $('<tr>').addClass( highlighted ? 'highlight' : '' )
                     .append($('<td>').html(medalIcon))
-                    .append($('<td>').html(data.usernames.map(username => generateLink(username)).join(', ')))
+                    .append($('<td>').html(data.usernames.map(username => generateLink(username, highlighted)).join(', ')))
                     .append($('<td>').text(data.percent + "%"));
                 usersTable.append(userRow);
 
@@ -97,25 +116,24 @@ $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(countries, statu
 
             var { flag, name } = processCountryCode(country.cc, flagPositions);
 
-            function generateLink(username) {         
-                if(countries.non_public_users.includes(username)){
-                    return `${username}`;
-                } else {
-                    return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${username}">${username}</a>`;
-                }
-            }
+            highlighted = firstData.usernames.includes('{{ username }}');
 
             if (countriesWithRegions.has(country.cc.substring(0, 2).toLowerCase()) && !regionsParam) {
-                var regionsLink = `<a class="leaderboardLink link-dark" href={{url_for('leaderboard', type="train_countries")}}?regions=true&country=${country.cc.substring(0, 2).toLowerCase()}>⁺</a>`;
+                if (highlighted) {
+                    var regionsLink = `<a class="leaderboardLink link-light" href={{url_for('leaderboard', type="train_countries")}}?regions=true&country=${country.cc.substring(0, 2).toLowerCase()}>⁺</a>`;
+                } else {
+                    var regionsLink = `<a class="leaderboardLink link-dark" href={{url_for('leaderboard', type="train_countries")}}?regions=true&country=${country.cc.substring(0, 2).toLowerCase()}>⁺</a>`;
+                }
                 var countryDisplay = `${flag} ${name} ${regionsLink}`;
             } else {
                 var countryDisplay = `${flag} ${name}`;
             }
 
-            var displayUsernames = firstData.usernames.length > 10 ? 'Over 10 people' : firstData.usernames.map(username => generateLink(username)).join(', ');
+            var displayUsernames = firstData.usernames.length > 10 ? 'Over 10 people' : firstData.usernames.map(username => generateLink(username, highlighted)).join(', ');
 
             // Append to the main table
-            table.append($('<tr>').attr("data-subTable", country.data.length == 1 && displayUsernames != 'Over 10 people' ? false : true)
+            table.append($('<tr>').addClass( highlighted ? 'highlight' : '' )
+                .attr("data-subTable", country.data.length == 1 && displayUsernames != 'Over 10 people' ? false : true)
                 .append($('<td>'))
                 .append($('<td>').html(countryDisplay))
                 .append($('<td>').html(displayUsernames))
