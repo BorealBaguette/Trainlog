@@ -2,6 +2,13 @@
 {% block content %}
 {% include nav%}
 
+<style>
+    #leaderboard tr.highlight td {
+        color: white;
+        background-color: #6c757d;
+    }
+</style>
+
 <div id="leaderboard-container" class="container mt-3">
     <h2>
         {{ countryCountLeaderboard }}
@@ -30,6 +37,16 @@
 var table = $('#leaderboard');
 
 $.get('{{url_for("getLeaderboardUsers", type="country_count")}}', function(countries, status){
+    function generateLink(username, highlighted=false) {
+        if (countries.non_public_users.includes(username)) {
+            return `${username}`;
+        } else if (highlighted) {
+            return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+        } else {
+            return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+        }
+    }
+
     const users = countries.leaderboard_data;
 
     users.sort((a, b) => b.country_count - a.country_count); // Sort users by country count in descending order
@@ -52,22 +69,15 @@ $.get('{{url_for("getLeaderboardUsers", type="country_count")}}', function(count
                 break;
         }
 
-        function generateLink(username) {         
-            if(countries.non_public_users.includes(username)){
-                return `${username}`;
-            }
-            else{
-                return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${username}">${username}</a>`;
-            }
-        }
-
         var countriesWithTooltips = user.countries_visited.map(function(country) {
             return getTooltipNew(country);
         }).join(' ');
 
-        table.append($('<tr>')
+        highlighted = user.username === '{{ username }}';
+
+        table.append($('<tr>').addClass( highlighted ? 'highlight' : '' )
             .append($('<td>').html(medalIcon))
-            .append($('<td>').html(generateLink(user.username)))
+            .append($('<td>').html(generateLink(user.username, highlighted)))
             .append($('<td>').text(user.country_count))
             .append($('<td>').addClass('text-wrap').html(countriesWithTooltips))
         );
