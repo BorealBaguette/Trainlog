@@ -334,14 +334,14 @@
     $(".countries_menu").width("280px");
 
     $('.dropdown-search').on('input', function() {
-      var searchVal = $(this).val().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
+      var searchVal = normalizeForSearch($(this).val());
 
       // Loop through each continent group
       $(".countries_menu").each(function () {
         var anyVisible = false; // Flag to check if any countries are visible
 
         $(this).find('.countryLink').each(function() {
-          var countryText = $(this).text().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
+          var countryText = normalizeForSearch($(this).text());
           var isoCode = $(this).data('country').toLowerCase();
           if (countryText.includes(searchVal) || isoCode.includes(searchVal)) {
             $(this).show();

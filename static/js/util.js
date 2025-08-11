@@ -310,6 +310,11 @@ function truncate(input, length) {
   return input;
 };
 
+function normalizeForSearch(string) {
+  // Normalize the comparison (for instance, replace 'č' with 'c')
+  return string.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim()
+}
+
 function getTooltipFromStationNew(station){
   if (station != ""){
     flag = station.substring(0, 4);
@@ -681,10 +686,9 @@ function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
   select.autocomplete({
     source: function (request, response) {
         // Normalize the search term
-        var searchTerm = request.term.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
+        var searchTerm = normalizeForSearch(request.term);
         var matches = $.map(Object.keys(manAndOps.operators), function (item) {
-            // Normalize the comparison (for instance, replace 'č' with 'c')
-            var normalizedItem = item.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
+            var normalizedItem = normalizeForSearch(item);
             var index = normalizedItem.indexOf(searchTerm);
             if (index !== -1) {
                 return {
@@ -725,10 +729,10 @@ function materialTypeAutocomplete(select, manAndOps, type) {
   select.autocomplete({
     source: function (request, response) {
         // Normalize the search term
-        var searchTerm = request.term.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
+        var searchTerm = normalizeForSearch(request.term);
         var matches = $.map(Object.keys(manAndOps.materialTypes), function (item) {
             // Normalize the comparison (for instance, replace 'č' with 'c')
-            var normalizedItem = item.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim();
+            var normalizedItem = normalizeForSearch(item);
             var index = normalizedItem.indexOf(searchTerm);
             if (index !== -1) {
                 return {
