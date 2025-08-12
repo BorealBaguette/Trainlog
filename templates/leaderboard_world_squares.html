@@ -88,7 +88,24 @@ $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(countries, statu
             }
         ],
         responsive: true,
-        order: [[2, 'desc']]  // Order by percent in descending order
+        order: [[2, 'desc']],  // Order by percent in descending order
+        language: {
+            info: "{{dtInfo}}",
+            paginate: {
+                next: "{{dtNext}}",
+                previous: "{{dtPrevious}}",
+            },
+            emptyTable: "{{dtEmptyTable}}",
+            select: {
+                rows: {
+                    "_": "{{dtMultipleLineSelected}}",
+                    "0": "",
+                    "1": "{{dtOneLineSelected}}"
+                },
+            },
+            lengthMenu: "{{dtLengthMenu}}",
+            search: "{{dtSearch}}"
+        },
     });
         hideLoading();
 }).fail(function() {

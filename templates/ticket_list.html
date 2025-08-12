@@ -238,7 +238,24 @@ $(document).ready(function () {
                         false;
                 }
             }
-        }
+        },
+        language: {
+            info: "{{dtInfo}}",
+            paginate: {
+                next: "{{dtNext}}",
+                previous: "{{dtPrevious}}",
+            },
+            emptyTable: "{{dtEmptyTable}}",
+            select: {
+                rows: {
+                    "_": "{{dtMultipleLineSelected}}",
+                    "0": "",
+                    "1": "{{dtOneLineSelected}}"
+                },
+            },
+            lengthMenu: "{{dtLengthMenu}}",
+            search: "{{dtSearch}}"
+        },
     });
 
     /* NEW: button toggles filter and redraws */

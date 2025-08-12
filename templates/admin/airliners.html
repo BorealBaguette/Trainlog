@@ -68,7 +68,24 @@
 <script>
     $(document).ready(function() {
         $('#airlinerTable').DataTable({
-            responsive:true
+            responsive:true,
+            language: {
+                info: "{{dtInfo}}",
+                paginate: {
+                    next: "{{dtNext}}",
+                    previous: "{{dtPrevious}}",
+                },
+                emptyTable: "{{dtEmptyTable}}",
+                select: {
+                    rows: {
+                        "_": "{{dtMultipleLineSelected}}",
+                        "0": "",
+                        "1": "{{dtOneLineSelected}}"
+                    },
+                },
+                lengthMenu: "{{dtLengthMenu}}",
+                search: "{{dtSearch}}"
+            },
         });
 
         $('#airlinerForm').on('submit', function(e) {

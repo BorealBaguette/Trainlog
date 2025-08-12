@@ -66,7 +66,24 @@
 <script>
     $(document).ready(function() {
         $('#shipTable').DataTable({
-            responsive: true
+            responsive: true,
+            language: {
+                info: "{{dtInfo}}",
+                paginate: {
+                    next: "{{dtNext}}",
+                    previous: "{{dtPrevious}}",
+                },
+                emptyTable: "{{dtEmptyTable}}",
+                select: {
+                    rows: {
+                        "_": "{{dtMultipleLineSelected}}",
+                        "0": "",
+                        "1": "{{dtOneLineSelected}}"
+                    },
+                },
+                lengthMenu: "{{dtLengthMenu}}",
+                search: "{{dtSearch}}"
+            },
         });
 
         $('#shipForm').on('submit', function(e) {
