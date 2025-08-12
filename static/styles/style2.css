@@ -1327,11 +1327,18 @@ html, body {
 #leaderboard tbody td {
   vertical-align: middle;
 }
+
 #leaderboard th {
   color: black;
-  background-color: #f2f2f2; 
+  background-color: #f2f2f2;
   border-top: 1px solid #dddddd !important;
 }
+
+#leaderboard tr.highlight td {
+  color: white;
+  background-color: #6c757d;
+}
+
 #leaderboard_filter {
   margin-bottom: 5px;
 }
