@@ -64,6 +64,23 @@
         drawCallback: function(settings) {
             $('[data-toggle="tooltip"]').tooltip();
         },
+        language: {
+            info: "{{dtInfo}}",
+            paginate: {
+                next: "{{dtNext}}",
+                previous: "{{dtPrevious}}",
+            },
+            emptyTable: "{{dtEmptyTable}}",
+            select: {
+                rows: {
+                    "_": "{{dtMultipleLineSelected}}",
+                    "0": "",
+                    "1": "{{dtOneLineSelected}}"
+                },
+            },
+            lengthMenu: "{{dtLengthMenu}}",
+            search: "{{dtSearch}}"
+        },
     });
 </script>
 

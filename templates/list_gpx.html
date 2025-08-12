@@ -264,7 +264,24 @@
       order: [],
       responsive: true,
       paging: false,
-      lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]]
+      lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]],
+      language: {
+        info: "{{dtInfo}}",
+        paginate: {
+            next: "{{dtNext}}",
+            previous: "{{dtPrevious}}",
+        },
+        emptyTable: "{{dtEmptyTable}}",
+        select: {
+            rows: {
+                "_": "{{dtMultipleLineSelected}}",
+                "0": "",
+                "1": "{{dtOneLineSelected}}"
+            },
+        },
+        lengthMenu: "{{dtLengthMenu}}",
+        search: "{{dtSearch}}"
+      },
     });
 
     // Sync modal toggle with main toggle
