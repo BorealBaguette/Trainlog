@@ -734,7 +734,7 @@ def get_country_codes_from_files():
             "KR", "LK", "SY", "TJ", "TH", "TR", "TM", "AE", "UZ", "VN", "YE", "TW",
             "HK"
         ],
-        "NA": ["CA", "US", "MX", "CU", "KN", "PR"],
+        "NA": ["CA", "US", "MX", "CU", "KN", "PR", "GP", "MQ"],
         "CA": ["BZ", "CR", "SV", "GT", "HN", "NI", "PA"],
         "SA": ["AR", "BO", "BR", "CL", "CO", "EC", "GY", "PY", "PE", "SR", "UY", "VE"],
         "OC": [
