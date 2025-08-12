@@ -1334,7 +1334,8 @@ html, body {
   border-top: 1px solid #dddddd !important;
 }
 
-#leaderboard tr.highlight td {
+#leaderboard tr.highlight > td,
+#leaderboard tr.highlight + tr.child > td:not(:has(table)) { /* we don't want to highlight childs that contain another table */
   color: white;
   background-color: #6c757d;
 }
