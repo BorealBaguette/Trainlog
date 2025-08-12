@@ -7,10 +7,10 @@
     /* --- General UI --- */
     .ui-front { z-index: 9999999 !important; }
 
-    #dataTable_wrapper { min-height: 600px; }
+    .dt-container { min-height: 600px; }
 
     @media screen and (max-width: 767px) {
-        #dataTable_wrapper { margin-top: 15px; }
+        .dt-container { margin-top: 15px; }
     }
 
     /* Trainset picker in edit/new forms */
@@ -1337,7 +1337,7 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
 
 (function() {
     var $btn = $('<label>{{sortTitle}} : <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
-    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($btn);
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($btn);
     updateSortButton();
 })();
 
@@ -1346,7 +1346,7 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
         <input class="form-check-input" type="checkbox" id="filterTypeSwitch" onchange="toggleTypeFilter()">
         <label class="form-check-label" for="filterTypeSwitch">{{showPlaces}}</label>
     </div>`);
-    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($switch);
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($switch);
 {% endif %}
 
 // Sort modal
@@ -1497,7 +1497,7 @@ function updateSelectionMessage() {
             message = "{{dtMultipleLineSelected}}".replace('%d', checkedTrips.length);
         }
 
-        var $dataTablesInfo = $('.dataTables_info');
+        var $dataTablesInfo = $('.dt-info');
 
         // Check if .select-info class exists
         if ($dataTablesInfo.find('.select-info').length === 0) {
@@ -2153,7 +2153,7 @@ $('#submitBtn').on('click', function() {
         }
 
         setTimeout(function() {
-            var searchContainer = $('.dataTables_filter');
+            var searchContainer = $('.dt-search');
             if (searchContainer.length && !searchContainer.find('.search-help-icon').length) {
                 var $input = searchContainer.find('input');
                 var $wrapper = $('<span style="display:inline-flex;align-items:center;gap:1px;"></span>');
@@ -2167,9 +2167,9 @@ $('#submitBtn').on('click', function() {
 
     function addPageJumpInput() {
         // Only add if it doesn't already exist
-        if ($('.dataTables_paginate input.page-jump-input').length === 0) {
+        if ($('.dt-paging input.page-jump-input').length === 0) {
             $('<input type="number" placeholder="#" class="form-control page-jump-input" style="width: 70px; margin-left: 10px; display: inline-block;" min="1">')
-                .appendTo($('.dataTables_paginate'))
+                .appendTo($('.dt-paging'))
                 .on('keyup blur', function(e) {
                     if (e.type === 'keyup' && e.key !== 'Enter') return;
                     if (!this.value) return;
