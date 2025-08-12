@@ -41,4 +41,4 @@ generate-schema-sql:
 	docker compose exec trainlog_db pg_dump -U ${POSTGRES_USER} ${POSTGRES_DB} --schema-only >> src/sql/migrations/schema.sql
 	@echo "SET search_path TO DEFAULT;" >> src/sql/migrations/schema.sql
 
-.PHONY: start start-db start-app stop psql generate-schema-sql
+.PHONY: start start-db start-local stop logs psql generate-schema-sql
