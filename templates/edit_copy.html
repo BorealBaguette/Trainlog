@@ -1301,7 +1301,9 @@
 
     $.get('{{url_for("getManAndOps", username=username, station_type=tripType)}}', function (manAndOps, status) {
         operatorAutocomplete($("#operator"), manAndOps, "{{ url_for('static',filename='')}}", "{{ url_for('static',filename='images/icons/trip_logos/' + tripType + '.png')}}", "{{tripType}}");
-        materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
+        if (tripType != 'air') {
+            materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
+        }
     });
 
 
