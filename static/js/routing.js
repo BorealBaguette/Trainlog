@@ -34,16 +34,6 @@ var markerIconEnd = L.icon({
     tooltipAnchor: [16, -28],
 });
 
-// Orange icon for freehand waypoints
-var markerIconFreehand = L.icon({
-	iconUrl: '/static/images/icons/marker-icon-2x-orange.png',
-	iconRetinaUrl: '/static/images/icons/marker-icon-2x-orange.png',
-	iconSize:    [25, 41],
-	iconAnchor:  [12, 41],
-	popupAnchor: [1, -34],
-	tooltipAnchor: [16, -28],
-});
-
 var urlParams = new URLSearchParams(window.location.search);
 var gpx = urlParams.get('gpx');
 var geojson = urlParams.get('geojson');
@@ -104,8 +94,8 @@ var routeDetails = null;
   };
 })();
 
-// Track freehand waypoints
-var freehandWaypoints = new Set();
+// Track freehand segments (from waypoint i to i+1)
+var freehandSegments = new Set();
 var freehandLines = [];
 
 function downloadCurrentRouteAsGeoJSON(distance) {
@@ -263,21 +253,21 @@ window.removeWaypoint = function(index) {
   // Close any open popups
   map.closePopup();
   
-  // Remove from freehand set if it was a freehand waypoint
-  freehandWaypoints.delete(index);
-  
-  // Adjust indices in freehand set for waypoints after the removed one
-  var newFreehandSet = new Set();
-  freehandWaypoints.forEach(function(wpIndex) {
-    if (wpIndex > index) {
-      newFreehandSet.add(wpIndex - 1);
-    } else if (wpIndex < index) {
-      newFreehandSet.add(wpIndex);
+  // Update freehand segments when removing waypoint
+  var newFreehandSegments = new Set();
+  freehandSegments.forEach(function(segIndex) {
+    if (segIndex < index) {
+      // Segments before the removed waypoint stay the same
+      newFreehandSegments.add(segIndex);
+    } else if (segIndex > index) {
+      // Segments after the removed waypoint shift down by 1
+      newFreehandSegments.add(segIndex - 1);
     }
+    // segIndex === index gets removed (segment FROM the removed waypoint)
   });
-  freehandWaypoints = newFreehandSet;
+  freehandSegments = newFreehandSegments;
   
-  // Find the plan instance
+  // Find the plan instance and remove the waypoint
   if (window.currentPlan) {
     window.currentPlan.spliceWaypoints(index, 1);
   }
@@ -287,11 +277,15 @@ window.toggleFreehand = function(index) {
   // Close popup
   map.closePopup();
   
-  if (freehandWaypoints.has(index)) {
-    freehandWaypoints.delete(index);
+  // For waypoint at index, toggle the segment FROM index TO index+1
+  if (freehandSegments.has(index)) {
+    freehandSegments.delete(index);
   } else {
-    freehandWaypoints.add(index);
+    freehandSegments.add(index);
   }
+  
+  // Update marker visual appearance
+  updateMarkerVisuals();
   
   // Force re-route to update the display
   if (window.currentControl) {
@@ -299,8 +293,63 @@ window.toggleFreehand = function(index) {
   }
 };
 
+// Function to update all marker visual indicators
+window.updateMarkerVisuals = function() {
+  if (window.currentPlan && window.currentPlan._markers) {
+    window.currentPlan._markers.forEach(function(marker, index) {
+      if (index > 0 && index < window.currentPlan._markers.length - 1) {
+        let segmentIsFreehand = freehandSegments.has(index);
+        
+        setTimeout(() => {
+          if (marker.getElement()) {
+            if (segmentIsFreehand) {
+              addFreehandOverlay(marker.getElement());
+            } else {
+              removeFreehandOverlay(marker.getElement());
+            }
+          }
+        }, 100);
+      }
+    });
+  }
+};
+
+// Function to add freehand overlay
+window.addFreehandOverlay = function(element) {
+  // Remove existing overlay if present
+  removeFreehandOverlay(element);
+  
+  // Create star overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'freehand-overlay';
+  overlay.innerHTML = '★';
+  overlay.style.cssText = `
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    color: #ff8800;
+    font-size: 16px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+    pointer-events: none;
+    z-index: 1000;
+    line-height: 1;
+  `;
+  
+  element.style.position = 'relative';
+  element.appendChild(overlay);
+};
+
+// Function to remove freehand overlay
+window.removeFreehandOverlay = function(element) {
+  const existing = element.querySelector('.freehand-overlay');
+  if (existing) {
+    existing.remove();
+  }
+};
+
 // Custom router that handles freehand segments
-function createCustomRouter(baseRouter, freehandWaypoints) {
+function createCustomRouter(baseRouter, freehandSegments) {
   return {
     route: function(waypoints, callback, context, options) {
       // Clear previous freehand lines
@@ -322,44 +371,52 @@ function createCustomRouter(baseRouter, freehandWaypoints) {
         return;
       }
       
-      // Identify segments that need routing vs straight lines
+      // Build segments based on freehand configuration
       var segments = [];
-      var currentSegment = [];
+      var currentRouted = [];
       
       for (var i = 0; i < waypoints.length; i++) {
-        currentSegment.push(waypoints[i]);
+        currentRouted.push(waypoints[i]);
         
-        // Check if we need to end current segment
-        if (i < waypoints.length - 1) {
-          var nextIsFreehand = freehandWaypoints.has(i + 1);
-          var currentIsFreehand = freehandWaypoints.has(i);
-          
-          // If next is freehand and current is not, or vice versa, end segment
-          if (nextIsFreehand !== currentIsFreehand && i > 0) {
+        // Check if the segment FROM i TO i+1 is freehand
+        var segmentIsFreehand = freehandSegments.has(i);
+        
+        if (segmentIsFreehand && i < waypoints.length - 1) {
+          // End current routed segment (if it has multiple points)
+          if (currentRouted.length > 1) {
             segments.push({
-              waypoints: currentSegment.slice(),
-              isFreehand: currentIsFreehand,
-              startIndex: i - currentSegment.length + 1,
-              endIndex: i
+              waypoints: [...currentRouted],
+              isFreehand: false,
+              type: 'routed'
             });
-            currentSegment = [waypoints[i]];
           }
-        } else {
-          // Last waypoint
+          
+          // Add freehand segment
           segments.push({
-            waypoints: currentSegment,
-            isFreehand: freehandWaypoints.has(i),
-            startIndex: i - currentSegment.length + 1,
-            endIndex: i
+            waypoints: [waypoints[i], waypoints[i + 1]],
+            isFreehand: true,
+            type: 'freehand'
           });
+          
+          // Start new routed segment with the end point
+          currentRouted = [waypoints[i + 1]];
+        } else if (i === waypoints.length - 1) {
+          // Last waypoint - finish current segment if it has multiple points
+          if (currentRouted.length > 1) {
+            segments.push({
+              waypoints: [...currentRouted],
+              isFreehand: false,
+              type: 'routed'
+            });
+          }
         }
       }
       
-      // If we only have one segment with less than 2 waypoints, handle it
-      if (segments.length === 1 && segments[0].waypoints.length < 2) {
+      // Handle case where we have no segments (single waypoint)
+      if (segments.length === 0) {
         callback.call(context, null, [{
           name: 'Single point',
-          coordinates: [{lat: waypoints[0].latLng.lat, lng: waypoints[0].latLng.lng}],
+          coordinates: waypoints.length > 0 ? [{lat: waypoints[0].latLng.lat, lng: waypoints[0].latLng.lng}] : [],
           instructions: [],
           summary: { totalDistance: 0, totalTime: 0 },
           waypoints: waypoints,
@@ -368,53 +425,43 @@ function createCustomRouter(baseRouter, freehandWaypoints) {
         return;
       }
       
-      // Process segments
+      // Process all segments
       var allRoutes = new Array(segments.length);
       var processedSegments = 0;
       var hasError = false;
       
       segments.forEach(function(segment, segmentIndex) {
-        if (segment.isFreehand && segment.waypoints.length >= 2) {
-          // Create straight line segments
-          var segmentCoords = [];
-          var segmentDistance = 0;
+        if (segment.isFreehand) {
+          // Handle freehand segment
+          var start = segment.waypoints[0].latLng;
+          var end = segment.waypoints[1].latLng;
           
-          for (var i = 0; i < segment.waypoints.length - 1; i++) {
-            var coords = [
-              segment.waypoints[i].latLng,
-              segment.waypoints[i + 1].latLng
-            ];
-            
-            // Draw orange dashed line for freehand segments
-            var freehandLine = L.polyline(coords, {
-              color: '#ff8800',
-              weight: 4,
-              opacity: 0.8,
-              dashArray: '10, 10'
-            }).addTo(map);
-            freehandLines.push(freehandLine);
-            
-            // Add to segment coordinates
-            if (i === 0) {
-              segmentCoords.push({lat: coords[0].lat, lng: coords[0].lng});
-            }
-            segmentCoords.push({lat: coords[1].lat, lng: coords[1].lng});
-            
-            segmentDistance += segment.waypoints[i].latLng.distanceTo(segment.waypoints[i + 1].latLng);
-          }
+          // Draw orange dashed line for freehand segments
+          var freehandLine = L.polyline([start, end], {
+            color: '#ff8800',
+            weight: 4,
+            opacity: 0.8,
+            dashArray: '10, 10',
+            interactive: false  // Prevent clicks on freehand lines
+          }).addTo(map);
+          freehandLines.push(freehandLine);
           
-          // Create a fake route object for consistency
+          var distance = start.distanceTo(end);
+          
           allRoutes[segmentIndex] = {
-            coordinates: segmentCoords,
+            coordinates: [
+              {lat: start.lat, lng: start.lng},
+              {lat: end.lat, lng: end.lng}
+            ],
             instructions: [{
               type: 'Straight',
               text: 'Freehand segment',
-              distance: segmentDistance,
+              distance: distance,
               time: 0,
               index: 0
             }],
             summary: {
-              totalDistance: segmentDistance,
+              totalDistance: distance,
               totalTime: 0
             },
             inputWaypoints: segment.waypoints,
@@ -425,8 +472,9 @@ function createCustomRouter(baseRouter, freehandWaypoints) {
           if (processedSegments === segments.length && !hasError) {
             combineRoutes(allRoutes, waypoints, callback, context);
           }
-        } else if (segment.waypoints.length >= 2) {
-          // Use normal routing
+          
+        } else {
+          // Handle routed segment
           baseRouter.route(segment.waypoints, function(err, routes) {
             if (err) {
               hasError = true;
@@ -434,7 +482,6 @@ function createCustomRouter(baseRouter, freehandWaypoints) {
               return;
             }
             
-            // Ensure the route has instructions
             if (routes && routes[0]) {
               if (!routes[0].instructions) {
                 routes[0].instructions = [];
@@ -453,24 +500,10 @@ function createCustomRouter(baseRouter, freehandWaypoints) {
             }
             
             processedSegments++;
-            
             if (processedSegments === segments.length && !hasError) {
               combineRoutes(allRoutes, waypoints, callback, context);
             }
           }, context, options);
-        } else {
-          // Single waypoint segment
-          allRoutes[segmentIndex] = {
-            coordinates: [{lat: segment.waypoints[0].latLng.lat, lng: segment.waypoints[0].latLng.lng}],
-            instructions: [],
-            summary: { totalDistance: 0, totalTime: 0 },
-            inputWaypoints: segment.waypoints
-          };
-          
-          processedSegments++;
-          if (processedSegments === segments.length && !hasError) {
-            combineRoutes(allRoutes, waypoints, callback, context);
-          }
         }
       });
     }
@@ -478,47 +511,49 @@ function createCustomRouter(baseRouter, freehandWaypoints) {
 }
 
 function combineRoutes(routes, waypoints, callback, context) {
-  // Combine all route segments
   var combinedCoordinates = [];
   var combinedInstructions = [];
   var totalDistance = 0;
   var totalTime = 0;
-  var inputWaypoints = [];
   
   routes.forEach(function(route, idx) {
     if (route && route.coordinates) {
-      // Avoid duplicating connection points
-      if (combinedCoordinates.length > 0) {
-        combinedCoordinates.pop();
+      // Avoid duplicating connection points between segments
+      if (combinedCoordinates.length > 0 && route.coordinates.length > 0) {
+        var lastCoord = combinedCoordinates[combinedCoordinates.length - 1];
+        var firstCoord = route.coordinates[0];
+        // Check if coordinates are very close (within ~1 meter)
+        if (Math.abs(lastCoord.lat - firstCoord.lat) < 0.00001 && 
+            Math.abs(lastCoord.lng - firstCoord.lng) < 0.00001) {
+          // Skip the first coordinate of this route to avoid duplication
+          combinedCoordinates = combinedCoordinates.concat(route.coordinates.slice(1));
+        } else {
+          combinedCoordinates = combinedCoordinates.concat(route.coordinates);
+        }
+      } else {
+        combinedCoordinates = combinedCoordinates.concat(route.coordinates);
       }
-      combinedCoordinates = combinedCoordinates.concat(route.coordinates);
+      
       totalDistance += route.summary.totalDistance;
       
       if (!route.isFreehand) {
         totalTime += route.summary.totalTime;
-        // Add instructions if they exist
-        if (route.instructions) {
-          combinedInstructions = combinedInstructions.concat(route.instructions);
-        }
-      } else {
-        // Add a simple instruction for freehand segments
-        combinedInstructions.push({
-          type: 'Straight',
-          text: 'Continue straight (freehand segment)',
-          distance: route.summary.totalDistance,
-          time: 0,
-          index: combinedCoordinates.length - route.coordinates.length
-        });
       }
       
-      // Add input waypoints if they exist
-      if (route.inputWaypoints) {
-        inputWaypoints = inputWaypoints.concat(route.inputWaypoints);
+      // Add instructions
+      if (route.instructions && route.instructions.length > 0) {
+        var instructionsToAdd = route.instructions.map(function(instruction) {
+          return {
+            ...instruction,
+            index: instruction.index + combinedCoordinates.length - route.coordinates.length
+          };
+        });
+        combinedInstructions = combinedInstructions.concat(instructionsToAdd);
       }
     }
   });
   
-  // Ensure we have at least empty instructions array
+  // Ensure we have at least one instruction
   if (combinedInstructions.length === 0) {
     combinedInstructions = [{
       type: 'Head',
@@ -538,7 +573,7 @@ function combineRoutes(routes, waypoints, callback, context) {
       totalTime: totalTime
     },
     waypoints: waypoints,
-    inputWaypoints: inputWaypoints.length > 0 ? inputWaypoints : waypoints
+    inputWaypoints: waypoints
   };
   
   callback.call(context, null, [combinedRoute]);
@@ -608,14 +643,11 @@ function routing(map, showSidebar=true, type){
       routeWhileDragging: true,
       createMarker: function(i, wp, n) {
         let icon;
-        let isFreehand = freehandWaypoints.has(i);
         
         if (i === 0) {
           icon = markerIconStart;
         } else if (i === n - 1) {
           icon = markerIconEnd;
-        } else if (isFreehand) {
-          icon = markerIconFreehand;
         } else {
           icon = new L.NumberedDivIcon({ number: i });
         }
@@ -627,16 +659,37 @@ function routing(map, showSidebar=true, type){
 
         // For intermediate waypoints, add popup with delete and freehand toggle
         if (i > 0 && i < n - 1) {
-          // Store the current index with the marker
-          marker.waypointIndex = i;
+          // Check if the segment FROM this waypoint is freehand
+          let segmentIsFreehand = freehandSegments.has(i);
+          
+          // Add visual indicator for freehand waypoints
+          if (segmentIsFreehand) {
+            // Add a simple star overlay to indicate freehand segment starts here
+            setTimeout(() => {
+              if (marker.getElement()) {
+                addFreehandOverlay(marker.getElement());
+              }
+            }, 100);
+          } else {
+            // Remove overlay for non-freehand waypoints
+            setTimeout(() => {
+              if (marker.getElement()) {
+                removeFreehandOverlay(marker.getElement());
+              }
+            }, 100);
+          }
           
           // Create popup content with delete button and freehand toggle
-          const freehandLabel = isFreehand ? texts.normalRoute || 'Normal Route' : texts.freehandRoute || 'Freehand Route';
-          const freehandButtonColor = isFreehand ? '#28a745' : '#ff8800';
+          const freehandLabel = segmentIsFreehand ? (texts.normalRoute || 'Normal Route') : (texts.freehandRoute || 'Freehand Route');
+          const freehandButtonColor = segmentIsFreehand ? '#28a745' : '#ff8800';
+          const freehandIcon = segmentIsFreehand ? '🔄' : '✏️';
           
           const popupContent = `
             <div style="text-align: center; min-width: 150px;">
-              <p style="margin: 5px 0 10px 0;">${texts.waypoint} ${i}</p>
+              <p style="margin: 5px 0 10px 0;">
+                ${segmentIsFreehand ? '✏️ ' : ''}${texts.waypoint || 'Waypoint'} ${i}
+                ${segmentIsFreehand ? ' (Freehand Start)' : ''}
+              </p>
               <button 
                 onclick="toggleFreehand(${i})" 
                 style="
@@ -649,11 +702,13 @@ function routing(map, showSidebar=true, type){
                   font-size: 13px;
                   margin-bottom: 5px;
                   width: 100%;
+                  font-weight: bold;
                 "
                 onmouseover="this.style.opacity='0.8'"
                 onmouseout="this.style.opacity='1'"
+                title="Toggle freehand for segment from this waypoint to next"
               >
-                ${isFreehand ? '🔄' : '✏️'} ${freehandLabel}
+                ${freehandIcon} ${freehandLabel}
               </button>
               <button 
                 onclick="removeWaypoint(${i})" 
@@ -670,7 +725,7 @@ function routing(map, showSidebar=true, type){
                 onmouseover="this.style.backgroundColor='#c82333'"
                 onmouseout="this.style.backgroundColor='#dc3545'"
               >
-                🗑️ ${texts.remove}
+                🗑️ ${texts.remove || 'Remove'}
               </button>
             </div>
           `;
@@ -690,6 +745,7 @@ function routing(map, showSidebar=true, type){
         return marker;
       },
       waypointMode: 'snap',
+      addWaypoints: true
     });
     window.currentPlan = plan;
 
@@ -709,7 +765,7 @@ function routing(map, showSidebar=true, type){
     }
 
     var baseRouter = L.Routing.osrmv1({serviceUrl: routerurl, profile: profile, useHints: false});
-    var customRouter = createCustomRouter(baseRouter, freehandWaypoints);
+    var customRouter = createCustomRouter(baseRouter, freehandSegments);
 
     var control = L.Routing.control({
       routeWhileDragging: true,
@@ -728,7 +784,8 @@ function routing(map, showSidebar=true, type){
             weight: 6 // Visible line
           },
           useAntPath ? antpathStyles : {color: '#52b0fe', opacity: 0.9, weight: 3}
-        ]
+        ],
+        addWaypoints: true  // Allow adding waypoints on regular segments
       },
       router: customRouter
     }).on('routeselected', function(){
@@ -754,8 +811,8 @@ function routing(map, showSidebar=true, type){
       }
       
       // Add note about freehand segments if any exist
-      if (freehandWaypoints.size > 0) {
-        content += `<p><small>⚠️ Route includes ${freehandWaypoints.size} freehand segment(s) shown as orange dashed lines</small></p>`;
+      if (freehandSegments.size > 0) {
+        content += `<p><small>⚠️ Route includes ${freehandSegments.size} freehand segment(s) shown as orange dashed lines</small></p>`;
       }
 
       var distanceM = this._selectedRoute.summary.totalDistance;
@@ -798,9 +855,9 @@ function routing(map, showSidebar=true, type){
           newTrip["waypoints"] = JSON.stringify(latLngs);
       }
       
-      // Store freehand waypoint indices
-      if (freehandWaypoints.size > 0) {
-          newTrip["freehandWaypoints"] = JSON.stringify(Array.from(freehandWaypoints));
+      // Store freehand segment indices
+      if (freehandSegments.size > 0) {
+          newTrip["freehandSegments"] = JSON.stringify(Array.from(freehandSegments));
       }
     }).on('routingerror', function(){
       var errorContentWithToggle = errorContent;
