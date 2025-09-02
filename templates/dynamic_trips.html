@@ -1075,12 +1075,12 @@ $('#submitBtn').on('click', function() {
                     let value = term.substring(prefix.length);
                     let isExact = false;
                     
-                    // Double quotes = exact match
+                    // Single quotes = exact match
                     if (value.startsWith("'") && value.endsWith("'") && value.length > 1) {
                         value = value.slice(1, -1); // Remove quotes
                         isExact = true;
                     }
-                    // Single quotes = partial match with spaces
+                    // Double quotes = partial match with spaces
                     else if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
                         value = value.slice(1, -1); // Remove quotes
                         isExact = false; // Partial match
