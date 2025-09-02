@@ -574,7 +574,7 @@ var table = $('#tripRows');
             // Parse smart search
             const searchValue = d.search.value || '';
             const { columnFilters, globalSearch } = parseSmartSearch(searchValue);
-            
+
             // Set global search to the non-prefixed terms
             d.search.value = globalSearch;
             
@@ -1075,18 +1075,18 @@ $('#submitBtn').on('click', function() {
                     let value = term.substring(prefix.length);
                     let isExact = false;
                     
-                    // Single quotes = exact match
-                    if (value.startsWith("'") && value.endsWith("'") && value.length > 1) {
-                        value = value.slice(1, -1); // Remove quotes
-                        isExact = true;
-                    }
-                    // Double quotes = partial match with spaces
-                    else if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
-                        value = value.slice(1, -1); // Remove quotes
-                        isExact = false; // Partial match
-                    }
-                    
                     if (value) {
+                        // Single quotes = exact match
+                        if (value.startsWith("'") && value.endsWith("'") && value.length > 1) {
+                            value = value.slice(1, -1); // Remove quotes
+                            isExact = true;
+                        }
+                        // Double quotes = partial match with spaces
+                        else if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
+                            value = value.slice(1, -1); // Remove quotes
+                            isExact = false; // Partial match
+                        }
+
                         columnFilters[columnIndex] = { value, isExact };
                         matched = true;
                         break;

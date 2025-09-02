@@ -5914,8 +5914,7 @@ def get_trips_api_internal(username, is_public=False):
     for i in range(20):  # Check up to 20 columns
         column_search = request.form.get(f"columns[{i}][search][value]", "")
         column_exact = request.form.get(f"columns[{i}][search][exact]", "false") == "true"
-        if column_search:
-            column_searches[i] = {"value": column_search, "exact": column_exact}
+        column_searches[i] = {"value": column_search, "exact": column_exact}
 
     # Build additional WHERE conditions for column-specific searches
     additional_conditions = []
@@ -5934,7 +5933,7 @@ def get_trips_api_internal(username, is_public=False):
                 search_pattern = search_term  # Exact match
             else:
                 search_pattern = f"%{search_term}%"  # Partial match
-            
+
             # Map frontend column names to actual query column names in FilteredTrips
             if column_name == "type":
                 if is_exact:
@@ -5958,14 +5957,14 @@ def get_trips_api_internal(username, is_public=False):
                     additional_conditions.append(f"DATE(start_datetime) LIKE :{param_name}")
             elif column_name == "operator":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(operator) = LOWER(:{param_name})")
+                    additional_conditions.append(f"LOWER(COALESCE(operator, '')) = LOWER(:{param_name})")
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(operator)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(operator, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
             elif column_name == "line_name":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(line_name) = LOWER(:{param_name})")
+                    additional_conditions.append(f"LOWER(COALESCE(line_name, '')) = LOWER(:{param_name})")
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(line_name)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(line_name, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
             elif column_name == "countries":
                 if is_exact:
                     additional_conditions.append(f"LOWER(countries) = LOWER(:{param_name})")
@@ -5973,25 +5972,25 @@ def get_trips_api_internal(username, is_public=False):
                     additional_conditions.append(f"remove_diacritics(LOWER(countries)) LIKE remove_diacritics(LOWER(:{param_name}))")
             elif column_name == "material_type":
                 if is_exact:
-                    additional_conditions.append(f"(LOWER(material_type) = LOWER(:{param_name}) OR LOWER(iata) = LOWER(:{param_name}) OR LOWER(manufacturer) = LOWER(:{param_name}) OR LOWER(model) = LOWER(:{param_name}))")
+                    additional_conditions.append(f"(LOWER(COALESCE(material_type, '')) = LOWER(:{param_name}) OR LOWER(iata) = LOWER(:{param_name}) OR LOWER(manufacturer) = LOWER(:{param_name}) OR LOWER(model) = LOWER(:{param_name}))")
                 else:
-                    additional_conditions.append(f"(remove_diacritics(LOWER(material_type)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(iata)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(manufacturer)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(model)) LIKE remove_diacritics(LOWER(:{param_name})))")
+                    additional_conditions.append(f"(remove_diacritics(LOWER(COALESCE(material_type, ''))) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(iata)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(manufacturer)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(model)) LIKE remove_diacritics(LOWER(:{param_name})))")
             elif column_name == "reg":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(reg) = LOWER(:{param_name})")
+                    additional_conditions.append(f"LOWER(COALESCE(reg, '')) = LOWER(:{param_name})")
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(reg)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(reg, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
             elif column_name == "notes":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(notes) = LOWER(:{param_name})")
+                    additional_conditions.append(f"LOWER(COALESCE(notes, '')) = LOWER(:{param_name})")
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(notes)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(notes, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
             else:
                 # Fallback for other columns
                 if is_exact:
-                    additional_conditions.append(f"LOWER({column_name}) = LOWER(:{param_name})")
+                    additional_conditions.append(f"LOWER(COALESCE({column_name}, '')) = LOWER(:{param_name})")
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER({column_name})) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE({column_name}, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
             
             search_params[param_name] = search_pattern
 
