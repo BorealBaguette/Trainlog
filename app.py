@@ -5959,9 +5959,9 @@ def get_trips_api_internal(username, is_public=False):
                     additional_conditions.append(f"remove_diacritics(LOWER(destination_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
             elif column_name == "start_datetime":
                 if is_exact:
-                    additional_conditions.append(f"DATE(start_datetime) = :{param_name}")
+                    additional_conditions.append(f"COALESCE(DATE(start_datetime), '') = :{param_name}")
                 else:
-                    additional_conditions.append(f"DATE(start_datetime) LIKE :{param_name}")
+                    additional_conditions.append(f"COALESCE(DATE(start_datetime), '') LIKE :{param_name}")
             elif column_name == "operator":
                 if is_exact:
                     additional_conditions.append(f"LOWER(COALESCE(operator, '')) = LOWER(:{param_name})")
