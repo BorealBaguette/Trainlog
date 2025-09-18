@@ -14,6 +14,7 @@ from src.sql.trips import (
     attach_ticket_query,
     delete_trip_query,
     duplicate_trip_query,
+    duplicate_trip_query_new_user,
     insert_trip_query,
     update_ticket_null_query,
     update_trip_query,
@@ -276,7 +277,36 @@ def duplicate_trip(trip_id: int):
     return new_trip_id
 
 
-def _duplicate_trip_in_sqlite(trip_id):
+def duplicate_trips(trip_ids: list[int], owner_id: int, owner_username: str) -> list[int]:
+    """
+    Duplicates a list of trip ids to a new owner
+    """
+    new_trip_ids = []
+    for trip_id in trip_ids:
+        new_trip_ids.append(_duplicate_trip(trip_id, owner_id, owner_username))
+
+    return new_trip_ids
+
+
+def _duplicate_trip(trip_id: int, owner_id: int, owner_username: str) -> int:
+    with pg_session() as pg:
+        new_trip_id = _duplicate_trip_in_sqlite(trip_id, owner_username)
+        pg.execute(
+            duplicate_trip_query_new_user(),
+            {
+                "trip_id": trip_id,
+                "new_trip_id": new_trip_id,
+                "new_user_id": owner_id
+            },
+        )
+
+    compare_trip(trip_id)
+    compare_trip(new_trip_id)
+    logger.info(f"Successfully duplicated trip {trip_id} into {new_trip_id}")
+    return new_trip_id
+
+
+def _duplicate_trip_in_sqlite(trip_id, new_owner: str | None = None):
     with managed_cursor(mainConn) as cursor:
         # Fetch the column names
         cursor.execute("PRAGMA table_info(trip)")
@@ -288,8 +318,15 @@ def _duplicate_trip_in_sqlite(trip_id):
         row_to_duplicate = cursor.fetchone()
 
         if row_to_duplicate:
+            # Handling edgecase where someone has a different field set to
+            # their name and that is updated leading to duplicate on their
+            # account
+            row_to_duplicate = dict(row_to_duplicate)
+            if new_owner:
+                row_to_duplicate['username'] = new_owner
             # Create a new row with the new UID
-            row_to_duplicate = list(row_to_duplicate)
+            row_to_duplicate = list(row_to_duplicate.values())
+
             row_to_duplicate.pop(0)
 
             # Construct the INSERT statement dynamically

@@ -2,6 +2,7 @@ from src.sql import SqlTemplate
 
 insert_trip_query = SqlTemplate("src/sql/trips/insert_trip.sql")
 duplicate_trip_query = SqlTemplate("src/sql/trips/duplicate_trip.sql")
+duplicate_trip_query_new_user = SqlTemplate("src/sql/trips/duplicate_trip_new_user.sql")
 update_trip_query = SqlTemplate("src/sql/trips/update_trip.sql")
 update_trip_type_query = SqlTemplate("src/sql/trips/update_trip_type.sql")
 delete_trip_query = SqlTemplate("src/sql/trips/delete_trip.sql")

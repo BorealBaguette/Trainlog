@@ -7,6 +7,7 @@ from datetime import datetime
 from email.mime.text import MIMEText
 from functools import wraps
 from glob import glob
+from typing import Optional
 
 import pytz
 from flask import abort, request, session
@@ -182,3 +183,28 @@ def sendOwnerEmail(subject, message):
         print(f"Email to: {address}\nSubject: {subject}\nMessage: {message}")
     else:
         sendEmail(address, subject, message)
+
+
+def get_trip_owner(trip_id: int) -> Optional[tuple[int, str]]:
+    """
+    Gets the owner of a specific trip in both DB formats
+
+    Paramaters:
+    - trip_id (int): The ID of the trip
+
+    Retruns:
+    - (int, str) | None: This will return None if the trip does not exist,
+                         otherwise the str format for SQLite and the int
+                         format for postgres
+    """
+    with managed_cursor(mainConn) as cursor:
+        cursor.execute(
+            "SELECT username FROM trip WHERE uid = :trip_id", {"trip_id": trip_id}
+        )
+        row = cursor.fetchone()
+
+        if row is None:
+            return None
+
+        username = row["username"]
+        return (get_user_id(username), username)

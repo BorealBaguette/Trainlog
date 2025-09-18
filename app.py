@@ -201,12 +201,13 @@ from src.utils import (
     readLang,
     sendOwnerEmail,
     sendEmail,    
-    getLocalDatetime
+    getLocalDatetime,
+    get_trip_owner
 )
 from src.trips import (
     Trip,
     create_trip,
-    duplicate_trip,
+    _duplicate_trip,
     update_trip,
     _update_trip_in_sqlite,
     delete_trip,
@@ -4133,9 +4134,21 @@ def copyTrip(username):
         formData = dict(request.form)
         trip_id = formData["trip_id"]
 
+        # TODO: Change this to check if trip is public
         check_current_user_owns_trip(trip_id)
 
-        new_trip_id = duplicate_trip(trip_id)
+        trip_owner = get_trip_owner(trip_id)
+        if trip_owner is None:
+            abort(404)
+
+        owner_id, owner_username = trip_owner
+
+        # TODO: Make this change to allow users to copy others trips
+        # The ID of the user that is logged in
+        # logged_in_username = getUser()
+        # logged_in_id = get_user_id(owner_username)
+
+        new_trip_id = _duplicate_trip(trip_id, owner_id, owner_username)
         new_trip = update_trip_values_from_form_data(new_trip_id, formData)
 
         update_trip(new_trip_id, new_trip, formData)
@@ -6363,6 +6376,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
             list(cursor.execute(formattedGetUserLines, (tripId,)).fetchone())[1]
         )
     user = User.query.filter_by(username=trip["username"]).first()
+    # TODO: Update to check for public trips if people want them to copy
     if not (session.get(user.username) or session.get(owner)):
         abort(401)
     with managed_cursor(mainConn) as cursor:
