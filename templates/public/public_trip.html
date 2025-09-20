@@ -8,6 +8,24 @@
     <div class="itineraryWrapper">
       <ul class="events" id="itinerary">
         <div id="tripDetails">
+        {% if logged_in_user != "public" %}
+        <button
+          id="submit"
+          class="btn btn-labeled btn-success copyButton"
+          onClick="bulkCopyTrips()"
+          style="min-width: 5em;"
+        >
+
+          <div class="spinner-border" role="status" style="display:none;"></div>
+          <div id="rideAlongText">
+            <div class="btn-label">
+              <i class="fa-solid fa-copy"></i>
+            </div>
+            Ride Along
+          </div>
+        </button>
+        {% endif %}
+
         {%if tag_description != None%}
         <div class="itinerary_tag_description">
 
@@ -587,6 +605,25 @@ $.post({
     console.error("Error:", error);
   }
 });
+
+{% if logged_in_user != "public" %}
+function bulkCopyTrips() {
+  $("#rideAlongText").hide();
+  $(".spinner-border").show();
+
+  $.post({
+    url: '{{ url_for("trips.bulk_copy_trips") }}',
+    contentType: 'application/json',
+    data: JSON.stringify({ tripIds: tripIds }),
+    success: function(data, status) {
+      location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}"
+    },
+    fail: function () {
+      alert("Could not duplicate all trips")
+    }
+  })
+}
+{% endif %}
 
 </script>
 
