@@ -58,10 +58,6 @@ from flask import (
     url_for,
     g
 )
-from flask_caching import Cache
-from flask_compress import Compress
-from flask_sqlalchemy import SQLAlchemy
-from flaskext.autoversion import Autoversion
 from geopy.geocoders import Nominatim
 from PIL import Image
 from requests.adapters import HTTPAdapter, Retry
@@ -217,23 +213,30 @@ from src.trips import (
     delete_ticket_from_db
 )
 from src.paths import Path
+from src.models.authDb import authDb
+from src.setup.flask import FlaskApp
+from src.models.user import User
 
-app = Flask(__name__)
-app.config['DEBUG'] = True
-Compress(app)
-app.autoversion = True
-Autoversion(app)
-app.url_map.strict_slashes = False
+SECRET_FILE_PATH = pathlib.Path(".flask_secret")
 
-app.register_blueprint(admin_blueprint, url_prefix="/admin")
-app.register_blueprint(feature_requests_blueprint)
-app.register_blueprint(finance_blueprint)
-app.register_blueprint(news_blueprint)
-app.register_blueprint(trips_blueprint)
+# Handles loading the DB from a different location
+DB_FILE_PATH = os.path.abspath(os.getcwd() + "/" + DbNames.AUTH_DB.value)
 
-app.config["CACHE_TYPE"] = "SimpleCache"
-app.config["CACHE_DEFAULT_TIMEOUT"] = 864000
-cache = Cache(app)
+app_handler = FlaskApp(
+               __name__=__name__,
+               sql_db_uri="sqlite:///{path}".format(path=DB_FILE_PATH),
+               secret_file_path=SECRET_FILE_PATH
+)
+app_handler.init_db(authDb)
+
+app = app_handler.get_raw_app()
+# This must be imported after flask 
+
+app_handler.register_blueprint(admin_blueprint, url_prefix="/admin")
+app_handler.register_blueprint(feature_requests_blueprint)
+app_handler.register_blueprint(finance_blueprint)
+app_handler.register_blueprint(news_blueprint)
+app_handler.register_blueprint(trips_blueprint)
 
 matomo_config = load_config().get("matomo")
 
@@ -278,26 +281,6 @@ dashboard.config.version = r.git.describe(tags=True).split("-")[0]
 dashboard.config.group_by = getUser
 dashboard.bind(app)
 latest_commit = r.head.commit
-
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///{db}".format(db=DbNames.AUTH_DB.value)
-app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-
-
-# SECRET_KEY required for session, flash and Flask Sqlalchemy to work
-SECRET_FILE_PATH = pathlib.Path(".flask_secret")
-try:
-    with SECRET_FILE_PATH.open("r") as secret_file:
-        app.secret_key = secret_file.read()
-except FileNotFoundError:
-    # Let's create a cryptographically secure code in that file
-    with SECRET_FILE_PATH.open("w") as secret_file:
-        app.secret_key = secrets.token_hex(32)
-        secret_file.write(app.secret_key)
-
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
-
-
-authDb = SQLAlchemy(app)
 
 
 def public_required(f):
@@ -435,56 +418,6 @@ def fr24_usage(username):
         )
         row = cursor.fetchone() or (0,)
     return row[0]
-
-class User(authDb.Model):
-    uid = authDb.Column(authDb.Integer, primary_key=True)
-    username = authDb.Column(authDb.String(100), unique=True, nullable=False)
-    email = authDb.Column(authDb.String(100), unique=True, nullable=False)
-    pass_hash = authDb.Column(authDb.String(100), nullable=False)
-    lang = authDb.Column(authDb.String(2), nullable=False, default="en")
-    share_level = authDb.Column(authDb.Integer, nullable=False, default=0)
-    leaderboard = authDb.Column(authDb.Boolean, nullable=False, default=False)
-    creation_date = authDb.Column(
-        authDb.DateTime, nullable=False, default=datetime.utcnow
-    )
-    last_login = authDb.Column(authDb.DateTime, nullable=False, default=datetime.utcnow)
-    admin = authDb.Column(authDb.Boolean, nullable=False, default=False)
-    alpha = authDb.Column(authDb.Boolean, nullable=False, default=False)
-    translator = authDb.Column(authDb.Boolean, nullable=False, default=False)
-    user_currency = authDb.Column(authDb.String(3), nullable=False, default="EUR")
-    friend_search = authDb.Column(authDb.Boolean, nullable=False, default=True)
-    reset_token = authDb.Column(authDb.String(100), default="")
-    default_landing = authDb.Column(authDb.String(20), nullable=False, default="map")
-    appear_on_global = authDb.Column(authDb.Boolean, nullable=False, default=False)
-    tileserver = authDb.Column(authDb.String(50), nullable=False, default="default")
-    globe = authDb.Column(authDb.Boolean, nullable=False, default=False)
-    premium = authDb.Column(authDb.Boolean, nullable=False, default=False)
-
-    def toDict(self):
-        return {
-            "uid": self.uid,
-            "username": self.username,
-            "email": self.email,
-            "lang": self.lang,
-            "leaderboard": self.leaderboard,
-            "admin": self.admin,
-            "alpha": self.alpha,
-            "translator": self.translator,
-            "creation_date": self.creation_date,
-            "last_login": self.last_login,
-            "reset_token": self.reset_token,
-            "share_level": self.share_level,
-            "user_currency": self.user_currency,
-            "tileserver": self.tileserver,
-            "globe": self.globe,
-            "premium": self.premium,
-        }
-
-    def is_public(self):
-        return True if self.share_level >= 2 else False
-
-    def is_public_trips(self):
-        return True if self.share_level >= 1 else False
 
 
 class Friendship(authDb.Model):
@@ -9301,12 +9234,13 @@ def user_dashboard(username):
     )
 
 
-if not database_exists(authDb.get_engine().url):
-    create_authDb()
-init_main(DbNames.MAIN_DB.value)
-init_data(DbNames.MAIN_DB.value)
-authDb.create_all()
-with managed_cursor(pathConn) as cursor:
-    cursor.execute(initPath)
+with app.app_context():
+    if not database_exists(authDb.get_engine().url):
+        create_authDb()
+    init_main(DbNames.MAIN_DB.value)
+    init_data(DbNames.MAIN_DB.value)
+    authDb.create_all()
+    with managed_cursor(pathConn) as cursor:
+        cursor.execute(initPath)
 
-setup_db()
+    setup_db()
