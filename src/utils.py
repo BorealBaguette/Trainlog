@@ -7,15 +7,18 @@ from datetime import datetime
 from email.mime.text import MIMEText
 from functools import wraps
 from glob import glob
+from inspect import getcallargs
 from typing import Optional
 
 import pytz
-from flask import abort, request, session
+from flask import abort, redirect, request, session, url_for
 from timezonefinder import TimezoneFinder
 
 from py.sql import getCurrentTrip
 from py.utils import load_config
 from src.consts import DbNames
+from src.models.authDb import authDb
+from src.models.user import User
 
 pathConn = sqlite3.connect(DbNames.PATH_DB.value, check_same_thread=False)
 pathConn.row_factory = sqlite3.Row
@@ -59,6 +62,27 @@ def owner_required(f):
     def decorated_function(*args, **kwargs):
         if not session.get(owner):
             abort(401)
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
+def login_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        inspection = getcallargs(f, *args, **kwargs)
+        username = inspection["username"]
+        user = User.query.filter_by(username=username).first()
+
+        if not session.get("logged_in"):
+            return redirect(url_for("login"))
+        elif user is None:
+            abort(404)
+        elif not (session.get(username) or session.get(owner)):
+            abort(401)
+
+        user.last_login = datetime.utcnow()
+        authDb.session.commit()
         return f(*args, **kwargs)
 
     return decorated_function

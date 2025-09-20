@@ -199,7 +199,8 @@ from src.utils import (
     sendOwnerEmail,
     sendEmail,    
     getLocalDatetime,
-    get_trip_owner
+    get_trip_owner,
+    login_required
 )
 from src.trips import (
     Trip,
@@ -308,27 +309,6 @@ def public_required(f):
             abort(401)
         else:
             return f(*args, **kwargs)
-
-    return decorated_function
-
-
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        inspection = getcallargs(f, *args, **kwargs)
-        username = inspection["username"]
-        user = User.query.filter_by(username=username).first()
-
-        if not session.get("logged_in"):
-            return redirect(url_for("login"))
-        elif user is None:
-            abort(404)
-        elif not (session.get(username) or session.get(owner)):
-            abort(401)
-
-        user.last_login = datetime.utcnow()
-        authDb.session.commit()
-        return f(*args, **kwargs)
 
     return decorated_function
 

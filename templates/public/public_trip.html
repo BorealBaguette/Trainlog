@@ -612,16 +612,17 @@ function bulkCopyTrips() {
   $(".spinner-border").show();
 
   $.post({
-    url: '{{ url_for("trips.bulk_copy_trips") }}',
+    url: '{{ url_for("trips.bulk_copy_trips", username=username) }}',
     contentType: 'application/json',
     data: JSON.stringify({ tripIds: tripIds }),
     success: function(data, status) {
       location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}"
     },
-    fail: function () {
+  }).fail(function () {
       alert("Could not duplicate all trips")
-    }
-  })
+      $("#rideAlongText").show();
+      $(".spinner-border").hide();
+    })
 }
 {% endif %}
 
