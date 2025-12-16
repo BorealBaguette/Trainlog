@@ -4504,7 +4504,8 @@ def forwardRouting(path, routingType, args=None):
                     "AD",
                     "MC",  # Western Europe
                     "PL",
-                    "CZ",  # Central
+                    "CZ",
+                    "HU",  # Central
                     "IT",
                     "ES",
                     "PT",  # Southern
