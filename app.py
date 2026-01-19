@@ -4549,7 +4549,7 @@ def router_status_photon():
     if not url:
         return jsonify({"status": "ERROR", "message": "Missing url"}), 400
     try:
-        resp = requests.get(url, timeout=3)
+        resp = requests.get(f"{url}/status", timeout=3)
         if resp.status_code == 200:
             data = resp.json()
             # Extract and prettify import_date
@@ -4674,18 +4674,21 @@ def placeAutocomplete():
     return jsonify(response_json)
 
 
+photonInstances = {
+    "komoot": "https://photon.komoot.io",
+    "chiel": "https://photon.chiel.uk",
+}
+
 @app.route("/stationAutocomplete")
 def stationAutocomplete():
-    komoot = "https://photon.komoot.io/api"
-    chiel = "https://photon.chiel.uk/api"  # Test Chiel's server
     args = request.query_string.decode("utf-8")
     timeout = 2
     en = "lang=en"
     
     responseJson = None
-    for url in [chiel, komoot]:
+    for url in photonInstances.values():
         try:
-            resp = requests.get(f"{url}?{args}&{en}", timeout=timeout)
+            resp = requests.get(f"{url}/api?{args}&{en}", timeout=timeout)
             resp.raise_for_status()
             responseJson = resp.json()
             if responseJson.get("features") is not None:
@@ -8690,44 +8693,52 @@ def trainloglogger(username):
 @login_required
 def get_bounds(username):
     def get_location(lat, lon):
-        try:
-            response = requests.get(
-                f"https://photon.komoot.io/reverse?lon={lon}&lat={lat}&lang=en"
+        args = f"lon={lon}&lat={lat}"
+        timeout = 10
+        en = "lang=en"
+        
+        responseJson = None
+        for url in photonInstances.values():
+            try:
+                resp = requests.get(f"{url}/reverse?{args}&{en}", timeout=timeout)
+                resp.raise_for_status()
+                responseJson = resp.json()
+                if responseJson.get("features") is not None:
+                    break
+            except Exception:
+                continue
+        
+        if responseJson is not None and responseJson["features"] is not None:      
+            properties = responseJson["features"][0]["properties"]
+
+            # Extract relevant location details
+            country = properties.get("country", "Unknown")
+            city = properties.get("city", None)
+            county = properties.get("county", None)
+            state = properties.get("state", None)
+            country_code = properties.get("countrycode", None)
+
+            # Add flag to the country
+            flag_country = (
+                f"{get_flag_emoji(country_code)} {country}"
+                if country_code
+                else country
             )
-            if response.status_code == 200:
-                data = response.json()
-                if data["features"]:
-                    properties = data["features"][0]["properties"]
 
-                    # Extract relevant location details
-                    country = properties.get("country", "Unknown")
-                    city = properties.get("city", None)
-                    county = properties.get("county", None)
-                    state = properties.get("state", None)
-                    country_code = properties.get("countrycode", None)
+            # Build preferred location string
+            if city:
+                location = f"{city}, {flag_country}"
+            elif county and state:
+                location = f"{county}, {state}, {flag_country}"
+            elif county or state:
+                location = f"{county or state}, {flag_country}"
+            else:
+                location = flag_country
 
-                    # Add flag to the country
-                    flag_country = (
-                        f"{get_flag_emoji(country_code)} {country}"
-                        if country_code
-                        else country
-                    )
-
-                    # Build preferred location string
-                    if city:
-                        location = f"{city}, {flag_country}"
-                    elif county and state:
-                        location = f"{county}, {state}, {flag_country}"
-                    elif county or state:
-                        location = f"{county or state}, {flag_country}"
-                    else:
-                        location = flag_country
-
-                    # Add OpenStreetMap link
-                    osm_link = f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}"
-                    return {"location": location, "osm_link": osm_link}
-                return {"location": "Unknown", "osm_link": None}
-        except Exception:
+            # Add OpenStreetMap link
+            osm_link = f"https://www.openstreetmap.org/?mlat={lat}&mlon={lon}"
+            return {"location": location, "osm_link": osm_link}
+        else:
             return {"location": "Unknown", "osm_link": None}
 
     # Dictionary to store boundary values
@@ -8844,6 +8855,7 @@ def router_status():
         title=lang[session["userinfo"]["lang"]]["router_status"],
         username=getUser(),
         translations=lang[session["userinfo"]["lang"]],
+        photon_instances=photonInstances,
         latest_commit_hex=latest_commit_hex,
         latest_commit_hex_short=latest_commit_hex[:7],
         latest_commit_display=latest_commit_dt.strftime("%Y-%m-%d %H:%M UTC"),

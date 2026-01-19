@@ -55,43 +55,37 @@
 </div>
 
 <script>
-const photonInstances = [
-  {
-    name: "Chiel",
-    url: "https://photon.chiel.uk/status"
-  },
-  {
-    name: "Komoot.io",
-    url: "https://photon.komoot.io/status"
-  }
-];
+const photonInstances = {{ photon_instances | tojson }};
 
 function renderPhotonStatus() {
   const row = document.getElementById("photon-status-row");
-  photonInstances.forEach(inst => {
-    const divId = "photon-" + inst.name.replace(/[^\w]/g, '-');
+  Object.entries(photonInstances).forEach(inst => {
+    console.log(inst);
+    const [inst_name, inst_url] = inst;
+    console.log(inst_url);
+    const divId = "photon-" + inst_name.replace(/[^\w]/g, '-');
     row.insertAdjacentHTML('beforeend', `
       <div id="${divId}">
-        <strong>${escapeHTML(inst.name)}</strong> 
+        <strong>${escapeHTML(inst_name)}</strong> 
         <span class="spinner-border spinner-border-sm"></span>
       </div>
     `);
 
-    fetch(`/photon_status?url=${encodeURIComponent(inst.url)}`)
+    fetch(`/photon_status?url=${encodeURIComponent(inst_url)}`)
       .then(r => r.json())
       .then(data => {
         const badgeClass = data.status && data.status.toLowerCase() === "ok" ? "badge-success" : "badge-danger";
         const status = data.status || "ERROR";
         const updated = data.last_updated ? `Last updated: ${escapeHTML(data.last_updated)}` : "";
         document.getElementById(divId).innerHTML = `
-          <strong>${escapeHTML(inst.name)}</strong>
+          <strong>${escapeHTML(inst_name)}</strong>
           <span class="badge ${badgeClass}" data-toggle="tooltip" title="${updated || escapeHTML(status)}">${escapeHTML(status.toUpperCase())}</span>
           ${updated ? `<span class="text-muted small ml-2">${updated}</span>` : ""}
         `;
       })
       .catch(e => {
         document.getElementById(divId).innerHTML = `
-          <strong>${escapeHTML(inst.name)}</strong>
+          <strong>${escapeHTML(inst_name)}</strong>
           <span class="badge badge-warning" data-toggle="tooltip" title="Status check failed">ERROR</span>
         `;
       });
