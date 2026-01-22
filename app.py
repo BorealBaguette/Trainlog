@@ -5515,6 +5515,27 @@ def getTrips(username, projects):
     return json.dumps(tripList)
 
 
+trip_column_names = [
+    "type",
+    "origin_station", 
+    "destination_station",
+    "start_datetime",
+    "start_time",
+    "end_time",
+    "trip_duration_seconds",
+    "trip_length",
+    "trip_speed",
+    "operator",
+    "line_name",
+    "countries",
+    "visibility",
+    "price",
+    "material_type",
+    "reg",
+    "seat",
+    "notes"
+]
+
 def get_trips_api_internal(username, is_public=False):
     # Retrieve parameters from DataTables request
     start = request.form.get("start", type=int, default=0)
@@ -5529,31 +5550,10 @@ def get_trips_api_internal(username, is_public=False):
     # Sorting parameters
     sort_column = request.form.get("order[0][column]", type=int, default=3)
     sort_direction = request.form.get("order[0][dir]", default="desc" if past == 1 else "asc")
-    
-    column_names = [
-        "type",
-        "origin_station", 
-        "destination_station",
-        "start_datetime",
-        "start_time",
-        "end_time",
-        "trip_duration_seconds",
-        "trip_length",
-        "trip_speed",
-        "operator",
-        "line_name",
-        "countries",
-        "visibility",
-        "price",
-        "material_type",
-        "reg",
-        "seat",
-        "notes"
-    ]
-    
+
     sort_column_name = (
-        column_names[sort_column]
-        if 0 <= sort_column < len(column_names)
+        trip_column_names[sort_column]
+        if 0 <= sort_column < len(trip_column_names)
         else "default_column_name"
     )
 
@@ -5570,8 +5570,8 @@ def get_trips_api_internal(username, is_public=False):
     
     # Add column-specific search conditions
     for column_index, search_data in column_searches.items():
-        if column_index < len(column_names):
-            column_name = column_names[column_index]
+        if column_index < len(trip_column_names):
+            column_name = trip_column_names[column_index]
             param_name = f"col_search_{column_index}"
             search_term = search_data["value"]
             is_exact = search_data["exact"]
@@ -5944,6 +5944,7 @@ def dynamic_trips(username, time=None):
         isCurrent=has_current_trip(get_user_id(username)),
         isPublic=False,
         projects=projects,
+        trip_column_names=trip_column_names,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -5966,9 +5967,10 @@ def public_trips(username, time=None):
         hasPrice=True,
         hasUncommonTrips=hasUncommonTrips(username),
         nav="bootstrap/public_nav.html",
-        isPublic=True,
         isCurrent=has_current_trip(get_user_id(username)),
+        isPublic=True,
         projects=projects,
+        trip_column_names=trip_column_names,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

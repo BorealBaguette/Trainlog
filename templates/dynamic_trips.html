@@ -1198,17 +1198,17 @@ $('#submitBtn').on('click', function() {
     }
 
     const SEARCH_PREFIXES = {
-        'type:': 0,
-        'from:': 1,
-        'to:': 2,
-        'date:': 3,
-        'operator:': 9,
-        'line:': 10,
-        'country:': 11,
-        'visibility:': 12,
-        'material:': 14,
-        'reg:': 15,
-        'notes:': 17
+        'type:': {{ trip_column_names.index("type") }},
+        'from:': {{ trip_column_names.index("origin_station") }},
+        'to:': {{ trip_column_names.index("destination_station") }},
+        'date:': {{ trip_column_names.index("start_datetime") }},
+        'operator:': {{ trip_column_names.index("operator") }},
+        'line:': {{ trip_column_names.index("line_name") }},
+        'country:': {{ trip_column_names.index("countries") }},
+        'visibility:': {{ trip_column_names.index("visibility") }},
+        'material:': {{ trip_column_names.index("material_type") }},
+        'reg:': {{ trip_column_names.index("reg") }},
+        'notes:': {{ trip_column_names.index("notes") }}
     };
 
     // Parse search query for prefixes
