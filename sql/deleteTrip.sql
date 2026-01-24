@@ -1,1 +1,0 @@
-DELETE FROM trip where uid = :trip_id

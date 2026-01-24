@@ -92,12 +92,8 @@ from py.g_search import get_vessel_picture
 from py.image_generator import generate_image
 from py.sql import (
     adminStats,
-    countriesLeaderboard,
-    deletePathQuery,
-    deleteTripQuery,
     deleteUserPath,
     deleteUserTrips,
-    distinctStatYears,
     getAirports,
     getCurrentTrip,
     getDuplicate,
@@ -117,33 +113,11 @@ from py.sql import (
     getUserLines,
     getUserTrips,
     initPath,
-    leaderboardStats,
-    statsOperatorKm,
-    statsOperatorTrips,
     publicStats,
     saveQuery,
-    statsCountries,
-    statsMaterialKm,
-    statsMaterialTrips,
-    statsRoutesKm,
-    statsRoutesTrips,
-    statsStationsKm,
-    statsStationsTrips,
-    statsYearKm,
-    statsYearTrips,
-    typeAvailable,
-    updatePath,
-    updateTripQuery,
     upsertPercent,
 )
-from py.stats import (
-    getStatsCountries,
-    getStatsGeneral,
-    getStatsYears,
-)
 from py.motis import (
-    convert_motis_to_trip,
-    call_motis_api,
     handle_search_form,
     handle_search_params,
 )
@@ -228,7 +202,6 @@ from src.trips import (
 )
 from src.paths import Path
 from src.carbon import *
-from src.graphhopper import convert_graphhopper_to_osrm
 from src.users import User, Friendship, authDb
 from src.mail import start_email_listener
 from src.routing import forward_routing_core
