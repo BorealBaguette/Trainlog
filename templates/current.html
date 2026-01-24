@@ -330,7 +330,7 @@ L.control.myControl({
 }).addTo(map);
 
 
-$.get('{{url_for("getCurrentTripPath", username=username)}}', function(trips, status){
+$.get('{{url_for("get_current_trip_path", username=username)}}', function(trips, status){
   trips.reverse();
   buildItinerary(trips);
   placePolylines(trips);

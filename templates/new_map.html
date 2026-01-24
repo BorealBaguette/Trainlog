@@ -225,7 +225,7 @@ function loadTripsData() {
     localforage.getItem("lastLocal_" + username, function(error, lastLocal){
         if (lastLocal === null) {
             // No cache, fetch all
-            $.get('{{ url_for("public_getTripsPaths", username=username, lastLocal="all") if public else url_for("getTripsPaths", username=username, lastLocal="all") }}', function(data, status){
+            $.get('{{ url_for("public_getTripsPaths", username=username, lastLocal="all") if public else url_for("get_trip_paths", username=username, lastLocal="all") }}', function(data, status){
                 trips = data.trips;
                 processTrips();
                 localforage.setItem("trips_" + username, trips);
@@ -233,7 +233,7 @@ function loadTripsData() {
             });
         } else {
             // Cache exists, fetch updates
-            $.get('{{ url_for("public_getTripsPaths", username=username, lastLocal="") if public else url_for("getTripsPaths", username=username, lastLocal="") }}' + lastLocal, function(data, status){
+            $.get('{{ url_for("public_getTripsPaths", username=username, lastLocal="") if public else url_for("get_trip_paths", username=username, lastLocal="") }}' + lastLocal, function(data, status){
                 localforage.getItem("trips_" + username, function(error, storedTrips){
                     let currentTripIds = data.idList;
                     trips = integrateChanges(storedTrips, data.trips, currentTripIds);

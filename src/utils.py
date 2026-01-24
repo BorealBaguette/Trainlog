@@ -1,4 +1,5 @@
 import json
+import logging
 import re
 import smtplib
 import sqlite3
@@ -14,10 +15,13 @@ import requests
 from flask import abort, redirect, request, session, url_for
 from timezonefinder import TimezoneFinder
 
-from py.sql import getCurrentTrip
 from py.utils import load_config
 from src.consts import DbNames
+from src.pg import pg_session
+from src.sql.trips import get_current_trip_query
 from src.users import Friendship, User, authDb
+
+logger = logging.getLogger(__name__)
 
 pathConn = sqlite3.connect(DbNames.PATH_DB.value, check_same_thread=False)
 pathConn.row_factory = sqlite3.Row
@@ -27,7 +31,6 @@ mainConn.row_factory = sqlite3.Row
 
 authConn = sqlite3.connect(DbNames.AUTH_DB.value, check_same_thread=False)
 authConn.row_factory = sqlite3.Row
-
 
 owner = load_config()["owner"]["username"]
 
@@ -70,13 +73,49 @@ def getUser():
     return session.get("logged_in") if session.get("logged_in") else "public"
 
 
-def isCurrentTrip(username):
-    with managed_cursor(mainConn) as cursor:
-        trip = cursor.execute(getCurrentTrip, {"username": username}).fetchone()
-    if trip is not None:
-        return True
+# Test
+def get_user_id(username: str | None = None) -> int | None:
+    """
+    Get the specified user's id, or the logged-in user's id if username is not specified.
+
+    :param username: the username of the user to query, :code:`None` to query the currently logged-in user.
+    :return: the user's id, or :code:`None` if the user is not logged-in or if the specified user does not exist.
+    """
+    if username is None:
+        return (
+            session.get("logged_in_user_id")
+            if session.get("logged_in_user_id")
+            else None
+        )
     else:
+        user = User.query.filter_by(username=username).first()
+        return user.uid if user is not None else None
+
+
+def get_username(user_id: int | None = None) -> str | None:
+    """
+    Get the specified user' s ussername, or the logged-in user's username if user_id is not specified.
+
+    :param user_id: the id of the user to query, :code:`None` to query the currently logged-in user.
+    :return: the user's username, or :code:`None` if the user is not logged-in or if the specified user does not exist.
+    """
+    if user_id is None:
+        return session.get("logged_in") if session.get("logged_in") else None
+    else:
+        user = User.query.filter_by(uid=user_id).first()
+        return user.username if user is not None else None
+
+
+def has_current_trip(user_id: int | None = None) -> bool:
+    """
+    Whether the specified user has a current trip, or whether the currently logged in user has a current trip when user_id is not specified.
+    """
+    if not user_id:
         return False
+
+    with pg_session() as pg:
+        trip = pg.execute(get_current_trip_query(), {"user_id": user_id}).fetchone()
+    return trip is not None
 
 
 def processDates(newTrip, newPath):
@@ -141,21 +180,6 @@ def getLocalDatetime(lat, lng, dateTime):
         local_timezone = pytz.timezone(timezone_str)
     local_datetime = dateTime.astimezone(local_timezone).replace(tzinfo=None)
     return local_datetime
-
-
-def get_user_id(username):
-    with managed_cursor(authConn) as cursor:
-        cursor.execute(
-            """
-            SELECT uid FROM user
-            WHERE username = ?
-        """,
-            (username,),
-        )
-        row = cursor.fetchone()
-    if row:
-        return row[0]
-    return None
 
 
 def sendEmail(address, subject, message):
@@ -319,13 +343,13 @@ def public_required(f):
 def login_required(f):
     @wraps(f)
     def decorated_function(*args, **kwargs):
+        if not session.get("logged_in") or not session.get("logged_in_user_id"):
+            return redirect(url_for("login", next=request.path))
+
         inspection = getcallargs(f, *args, **kwargs)
         username = inspection["username"]
         user = User.query.filter_by(username=username).first()
-
-        if not session.get("logged_in"):
-            return redirect(url_for("login", next=request.path))
-        elif user is None:
+        if user is None:
             abort(404)
         elif not (session.get(username) or session.get(owner)):
             abort(401)
@@ -482,3 +506,27 @@ def current_user_is_friend_with(target_username):
         )
     else:
         return 0
+
+
+def parse_date(date: str):
+    try:
+        return datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
+    except Exception:
+        pass
+    try:
+        return datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%S.%f")
+    except Exception:
+        pass
+    try:
+        return datetime.datetime.strptime(date, "%Y/%m/%d %H:%M:%S")
+    except Exception:
+        pass
+    try:
+        return datetime.datetime.strptime(date, "%d/%m/%Y %H:%M")
+    except Exception:
+        pass
+    try:
+        return datetime.datetime.strptime(date, "%Y-%m-%d")
+    except Exception:
+        logger.error(f"Date format not recognized: {date} ({type(date)})")
+        raise

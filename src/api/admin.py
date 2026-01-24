@@ -4,7 +4,7 @@ from flask import Blueprint, render_template, request, session
 
 from py.utils import get_flag_emoji
 from src.suspicious_activity import list_denied_logins, list_suspicious_activity
-from src.utils import getUser, isCurrentTrip, lang, owner_required
+from src.utils import getUser, has_current_trip, lang, owner_required
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +25,7 @@ def denied_logins():
         nav="bootstrap/navigation.html",
         username=getUser(),
         denied_logins=denied_logins,
-        isCurrent=isCurrentTrip(getUser()),
+        isCurrent=has_current_trip(),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -57,7 +57,7 @@ def suspicious_activity():
         nav="bootstrap/navigation.html",
         username=getUser(),
         activities=suspicious_activities,
-        isCurrent=isCurrentTrip(getUser()),
+        isCurrent=has_current_trip(),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

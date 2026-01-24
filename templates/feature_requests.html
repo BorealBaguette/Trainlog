@@ -17,7 +17,7 @@
             </button>
             <ul class="dropdown-menu">
                 <li><a class="dropdown-item {{ 'active' if current_sort == 'score' else '' }}" href="{{ url_for('feature_requests.feature_requests', sort='score') }}">
-                    <i class="fa-solid fa-trophy"></i> {{ feature_requests_sort_by_score }}
+                    <i class="fa-solid fa-trophy"></i> {{ featre_requests_sort_by_score }}
                 </a></li>
                 <li><a class="dropdown-item {{ 'active' if current_sort == 'date' else '' }}" href="{{ url_for('feature_requests.feature_requests', sort='date') }}">
                     <i class="fa-solid fa-calendar"></i> {{ feature_requests_sort_by_date }}

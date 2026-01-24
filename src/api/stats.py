@@ -1,16 +1,14 @@
+import json
 import logging
-from flask import Blueprint, render_template, request, session, redirect, url_for, jsonify, abort
+
+from flask import (
+    Blueprint,
+    session,
+)
 
 from src.pg import pg_session
 from src.sql import stats as stats_sql
-from src.utils import (
-    getUser,
-    isCurrentTrip,
-    lang,
-    listOperatorsLogos,
-    get_user_id
-)
-import json
+from src.utils import get_user_id, lang
 
 logger = logging.getLogger(__name__)
 
@@ -20,8 +18,7 @@ METRIC_NAMES = ["Trips", "Km", "Duration", "CO2"]
 
 # Auto-generate the column keys for each metric
 DEFAULT_METRICS = {
-    m: (f"past{m}", f"plannedFuture{m}", f"future{m}")
-    for m in METRIC_NAMES
+    m: (f"past{m}", f"plannedFuture{m}", f"future{m}") for m in METRIC_NAMES
 }
 
 METRIC_TO_DB_COLUMN = {
@@ -38,20 +35,20 @@ def _safe_get(d, key, default=0):
 def get_stats_countries(pg, user_id, trip_type, year=None):
     result = pg.execute(
         stats_sql.stats_countries(),
-        {"user_id": user_id, "tripType": trip_type, "year": year}
+        {"user_id": user_id, "tripType": trip_type, "year": year},
     ).fetchall()
 
     countries = {}
 
     for row in result:
         row_dict = dict(row._mapping)
-        
+
         try:
             # The JSON object mapping country codes to distances.
-            country_distances = json.loads(row_dict['countries'])
+            country_distances = json.loads(row_dict["countries"])
         except (json.JSONDecodeError, TypeError):
             continue
-        
+
         # Total distance from the main trip record, used for proportions.
         total_trip_km = _safe_get(row_dict, "trip_length", 0)
         is_past = _safe_get(row_dict, "past", 0) != 0
@@ -63,18 +60,23 @@ def get_stats_countries(pg, user_id, trip_type, year=None):
         for country_code, country_km_data in country_distances.items():
             # Initialize the dictionary for a country if it's the first time we see it.
             # It will create keys like 'pastTrips', 'plannedFutureTrips', 'pastKm', etc.
-            countries.setdefault(country_code, {
-                col: 0 for m in METRIC_NAMES for col in DEFAULT_METRICS[m]
-            })
+            countries.setdefault(
+                country_code,
+                {col: 0 for m in METRIC_NAMES for col in DEFAULT_METRICS[m]},
+            )
 
             # Handle cases where distance can be a simple number or a dict of values.
-            country_km = sum(country_km_data.values()) if isinstance(country_km_data, dict) else country_km_data
+            country_km = (
+                sum(country_km_data.values())
+                if isinstance(country_km_data, dict)
+                else country_km_data
+            )
 
             # --- Metric-agnostic value calculation ---
             for metric in METRIC_NAMES:
                 past_key, planned_future_key, _ = DEFAULT_METRICS[metric]
                 value_to_add = 0
-                
+
                 if metric == "Trips":
                     # Trips are counted as 1 for each country in the trip.
                     value_to_add = 1
@@ -86,7 +88,7 @@ def get_stats_countries(pg, user_id, trip_type, year=None):
                     db_column = METRIC_TO_DB_COLUMN.get(metric)
                     if not db_column:
                         continue
-                        
+
                     total_metric_value = _safe_get(row_dict, db_column, 0)
                     if total_trip_km > 0:
                         proportion = country_km / total_trip_km
@@ -100,13 +102,15 @@ def get_stats_countries(pg, user_id, trip_type, year=None):
 
     # Calculate total trips for sorting purposes. This is done after all rows are processed.
     for country_code, stats in countries.items():
-        stats['totalTrips'] = stats.get('pastTrips', 0) + stats.get('plannedFutureTrips', 0)
+        stats["totalTrips"] = stats.get("pastTrips", 0) + stats.get(
+            "plannedFutureTrips", 0
+        )
 
     # Sort countries by the calculated total trips, descending.
     sorted_countries = dict(
         sorted(
             countries.items(),
-            key=lambda item: item[1].get('totalTrips', 0),
+            key=lambda item: item[1].get("totalTrips", 0),
             reverse=True,
         )
     )
@@ -124,14 +128,16 @@ def get_stats_countries(pg, user_id, trip_type, year=None):
     return countries_list
 
 
-def get_stats_years(pg, user_id, lang, trip_type, year=None, metrics_map=DEFAULT_METRICS):
+def get_stats_years(
+    pg, user_id, lang, trip_type, year=None, metrics_map=DEFAULT_METRICS
+):
     """Process year statistics with gap filling; supports dynamic metrics (Trips, Km, Duration, …)."""
     years = []
     years_temp = {}
 
     result = pg.execute(
         stats_sql.stats_year(),
-        {"user_id": user_id, "tripType": trip_type, "year": year}
+        {"user_id": user_id, "tripType": trip_type, "year": year},
     ).fetchall()
 
     if not result:
@@ -150,7 +156,9 @@ def get_stats_years(pg, user_id, lang, trip_type, year=None, metrics_map=DEFAULT
             # fill 0s for counts first
             entry["pastTrips"] = 0
             entry["plannedFutureTrips"] = 0
-            entry["futureTrips"] = int(_safe_get(future, "futureTrips", _safe_get(future, "futuretrips", 0)))
+            entry["futureTrips"] = int(
+                _safe_get(future, "futureTrips", _safe_get(future, "futuretrips", 0))
+            )
             # include any metrics the SQL provided
             for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
                 # counts already covered above
@@ -168,7 +176,9 @@ def get_stats_years(pg, user_id, lang, trip_type, year=None, metrics_map=DEFAULT
         years_temp[y] = {}
         # Always include Trips
         years_temp[y]["pastTrips"] = int(_safe_get(year_row, "pastTrips", 0))
-        years_temp[y]["plannedFutureTrips"] = int(_safe_get(year_row, "plannedFutureTrips", 0))
+        years_temp[y]["plannedFutureTrips"] = int(
+            _safe_get(year_row, "plannedFutureTrips", 0)
+        )
         years_temp[y]["futureTrips"] = int(_safe_get(year_row, "futureTrips", 0))
         # Include any present metrics (Km, Duration, …)
         for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
@@ -198,7 +208,12 @@ def get_stats_years(pg, user_id, lang, trip_type, year=None, metrics_map=DEFAULT
             years.append(entry)
         else:
             # fully zeroed row
-            entry = {"year": year_num, "pastTrips": 0, "plannedFutureTrips": 0, "futureTrips": 0}
+            entry = {
+                "year": year_num,
+                "pastTrips": 0,
+                "plannedFutureTrips": 0,
+                "futureTrips": 0,
+            }
             for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
                 if metric_name == "Trips":
                     continue
@@ -209,8 +224,14 @@ def get_stats_years(pg, user_id, lang, trip_type, year=None, metrics_map=DEFAULT
 
     # Append "future" bucket if exists
     if future:
-        entry = {"year": lang.get("future", "Future"), "pastTrips": 0, "plannedFutureTrips": 0}
-        entry["futureTrips"] = int(_safe_get(future, "futureTrips", _safe_get(future, "futuretrips", 0)))
+        entry = {
+            "year": lang.get("future", "Future"),
+            "pastTrips": 0,
+            "plannedFutureTrips": 0,
+        }
+        entry["futureTrips"] = int(
+            _safe_get(future, "futureTrips", _safe_get(future, "futuretrips", 0))
+        )
         for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
             if metric_name == "Trips":
                 continue
@@ -228,10 +249,9 @@ def get_stats_general(pg, query_func, user_id, stat_name, trip_type, year=None):
     Now returns both Trips and Km data in unified format
     """
     result = pg.execute(
-        query_func(),
-        {"user_id": user_id, "tripType": trip_type, "year": year}
+        query_func(), {"user_id": user_id, "tripType": trip_type, "year": year}
     ).fetchall()
-    
+
     stats = []
     for row in result:
         row_dict = dict(row._mapping)
@@ -263,7 +283,7 @@ def get_stats_routes(pg, user_id, trip_type, year=None):
     """
     result = pg.execute(
         stats_sql.stats_routes(),
-        {"user_id": user_id, "tripType": trip_type, "year": year}
+        {"user_id": user_id, "tripType": trip_type, "year": year},
     ).fetchall()
 
     routes = []
@@ -288,7 +308,7 @@ def get_stats_stations(pg, user_id, trip_type, year=None):
     """
     result = pg.execute(
         stats_sql.stats_stations(),
-        {"user_id": user_id, "tripType": trip_type, "year": year}
+        {"user_id": user_id, "tripType": trip_type, "year": year},
     ).fetchall()
 
     stations = []
@@ -310,25 +330,24 @@ def fetch_stats(username, trip_type, year=None):
     If username is None, fetch stats for all users (admin mode)
     """
     stats = {}
-    
+
     # Handle admin case - use None as user_id to get all users
     user_id = None if username is None else get_user_id(username)
-    
+
     with pg_session() as pg:
         # Check if trip type is available for user (or any user if admin)
         available_types = pg.execute(
-            stats_sql.type_available(),
-            {"user_id": user_id}
+            stats_sql.type_available(), {"user_id": user_id}
         ).fetchall()
-        
+
         type_exists = any(row[0] == trip_type for row in available_types)
-        
+
         if not type_exists:
             return stats
-            
+
         user_lang = session.get("userinfo", {}).get("lang", "en")
         lang_dict = lang.get(user_lang, {})
-        
+
         # Fetch all stats with combined queries
         stats["operators"] = get_stats_general(
             pg=pg,
@@ -338,7 +357,7 @@ def fetch_stats(username, trip_type, year=None):
             trip_type=trip_type,
             year=year,
         )
-        
+
         stats["material"] = get_stats_general(
             pg=pg,
             query_func=stats_sql.stats_material,
@@ -347,14 +366,14 @@ def fetch_stats(username, trip_type, year=None):
             trip_type=trip_type,
             year=year,
         )
-        
+
         stats["countries"] = get_stats_countries(
             pg=pg,
             user_id=user_id,
             trip_type=trip_type,
             year=year,
         )
-        
+
         stats["years"] = get_stats_years(
             pg=pg,
             user_id=user_id,
@@ -362,7 +381,7 @@ def fetch_stats(username, trip_type, year=None):
             trip_type=trip_type,
             year=year,
         )
-        
+
         # Updated to use new functions
         stats["routes"] = get_stats_routes(
             pg=pg,
@@ -370,7 +389,7 @@ def fetch_stats(username, trip_type, year=None):
             trip_type=trip_type,
             year=year,
         )
-        
+
         stats["stations"] = get_stats_stations(
             pg=pg,
             user_id=user_id,
@@ -384,10 +403,9 @@ def fetch_stats(username, trip_type, year=None):
 def get_distinct_stat_years(username, trip_type):
     """Get list of years with statistics available"""
     user_id = None if username is None else get_user_id(username)
-    
+
     with pg_session() as pg:
         result = pg.execute(
-            stats_sql.distinct_stat_years(),
-            {"user_id": user_id, "tripType": trip_type}
+            stats_sql.distinct_stat_years(), {"user_id": user_id, "tripType": trip_type}
         ).fetchall()
     return [row[0] for row in result]

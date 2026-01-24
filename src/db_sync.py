@@ -4,8 +4,8 @@ import logging
 import logging.config
 
 from src.pg import get_or_create_pg_session, pg_session
-from src.trips import Trip, compare_trip, parse_date
-from src.utils import get_user_id, mainConn, managed_cursor
+from src.trips import Trip, compare_trip
+from src.utils import get_user_id, mainConn, managed_cursor, parse_date
 
 logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
@@ -180,7 +180,12 @@ def compare_all_trips():
 
     # Fetch trip IDs from PostgreSQL
     with pg_session() as pg:
-        pg_trips = {row[0] for row in pg.execute("SELECT trip_id FROM trips ORDER BY trip_id").fetchall()}
+        pg_trips = {
+            row[0]
+            for row in pg.execute(
+                "SELECT trip_id FROM trips ORDER BY trip_id"
+            ).fetchall()
+        }
 
     # Compare the counts
     if len(sqlite_trips) != len(pg_trips):
@@ -205,4 +210,3 @@ def compare_all_trips():
     except Exception:
         logger.error(f"Found exception while processing trip {trip_id}")
         raise
-
