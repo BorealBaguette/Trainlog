@@ -6835,7 +6835,7 @@ def detect_precision(start_date, end_date):
         pass
 
     datetime.strptime(start_date, "%Y-%m-%d")
-    datetime.end_date(start_date, "%Y-%m-%d")
+    datetime.strptime(end_date, "%Y-%m-%d")
     return "onlyDate"
 
 
