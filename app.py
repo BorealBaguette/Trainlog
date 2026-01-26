@@ -5982,6 +5982,53 @@ def user_settings(username):
         **session["userinfo"],
     )
 
+@app.route("/u/<username>/settings_app", methods=["GET", "POST"])
+@login_required
+def user_settings_app(username):
+    """
+    User settings API
+    """
+    user = User.query.filter_by(username=username).first()
+
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+
+        allowed = {
+            "share_level", 
+            "leaderboard", 
+            "friend_search", 
+            "appear_on_global", 
+            "user_currency"
+        }
+        changed = {}
+
+        for k in allowed:
+            if k in data:
+                v = data[k]
+                if k == "share_level":
+                    v = int(v)
+                else:
+                    v = bool(v)
+
+                if getattr(user, k) != v:
+                    setattr(user, k, v)
+                    changed[k] = v
+        
+        authDb.session.commit()
+
+    langs = getLangDropdown(user)
+
+    return jsonify({
+        "username": user.username,
+        "currencyOptions": get_available_currencies(),
+        "langs": langs,
+        "share_level": user.share_level,
+        "leaderboard": user.leaderboard,
+        "friend_search": user.friend_search,
+        "appear_on_global": user.appear_on_global,
+        "user_currency": user.user_currency,
+    }), 200
+
 
 @app.route("/u/<username>/dynamic/<time>")
 def redirect_dynamic_trips(username, time):
