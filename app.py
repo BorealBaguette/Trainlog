@@ -8689,7 +8689,7 @@ def trainloglogger(username):
     )
 
 
-@app.route("/getBounds/u/<username>")
+@app.route("/u/<username>/getBounds")
 @login_required
 def get_bounds(username):
     def get_location(lat, lon):
