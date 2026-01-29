@@ -3893,7 +3893,7 @@ def public_stats(username, tripType=None, year=None):
     distinctStatYears = get_distinct_stat_years(username, tripType)
     if year is not None and year not in distinctStatYears:
         return redirect(
-            url_for("stats", username=username, tripType=tripType, year=None)
+            url_for("public_stats", username=username, tripType=tripType, year=None)
         )
 
     return render_template(
