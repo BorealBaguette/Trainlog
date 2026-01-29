@@ -8765,7 +8765,7 @@ def get_bounds(username):
                     FROM trip
                 )
 
-            SELECT uid from UTC_Filtered
+            SELECT uid, type from UTC_Filtered
                 WHERE
                     (
                         julianday('now') > julianday(utc_filtered_start_datetime)
@@ -8776,16 +8776,16 @@ def get_bounds(username):
             """,
             {"username": username},
         )
-        trip_ids = [row[0] for row in main_cursor.fetchall()]
+        trip_ids_with_type = dict((row[0], row[1]) for row in main_cursor.fetchall())
 
-    if not trip_ids:
+    if not trip_ids_with_type:
         return jsonify({"error": "No trips found for this user"}), 404
 
     with managed_cursor(pathConn) as path_cursor:
         # Fetch all paths associated with the user's trips using IN
         path_cursor.execute(
-            f"SELECT trip_id, path FROM paths WHERE trip_id IN ({','.join(['?'] * len(trip_ids))})",
-            trip_ids,
+            f"SELECT trip_id, path FROM paths WHERE trip_id IN ({','.join(['?'] * len(trip_ids_with_type))})",
+            [trip_id for trip_id in trip_ids_with_type.keys()],
         )
         paths = path_cursor.fetchall()
 
@@ -8795,6 +8795,9 @@ def get_bounds(username):
     # Process each path to update the boundary values
     for trip_id, path_row in paths:
         path = json.loads(path_row)  # path is a list of lists with coordinates
+        if trip_ids_with_type[trip_id] == "air":
+            path = [path[0], path[-1]]  # Only consider start and end points for flights
+
         for coord in path:
             lat, lon = coord
             # Update bounds with coordinates, place information, and trip_id
