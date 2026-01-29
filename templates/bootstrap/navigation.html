@@ -1,7 +1,7 @@
 {% set friendsIcon = getFriendsRequestsNumber() %}
 <nav class="navbar navbar-expand-xl navbar-light bg-light">
   <div class="container-fluid">
-    <a class="navbar-brand" href="#">
+    <a class="navbar-brand" href="{{ url_for('landing') }}">
       <img src="{{ url_for('static',filename='images/logo_square.png') }}" width="30" height="30" alt="">
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
