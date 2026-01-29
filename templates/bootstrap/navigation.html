@@ -193,35 +193,35 @@
         <a class="nav-link" href="{{ url_for('leaderboard') }}"><i class="bi bi-trophy"></i> {{leaderboard}}</a>
       </li>
       <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-bar-chart-line"></i> {{ stats }}
-          </a>
-          <ul class="dropdown-menu">
-              <li>
-                <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType='combined') }}">
-                  <i></i> {{ all }}
-                </a>
-              </li>
-            {% for type, data in distinctTypes.items() %}
-              <li>
-                <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType=type) }}">
-                  <i class="{{ data.icon }}"></i> {{ data.label }}
-                </a>
-              </li>
-            {% endfor %}
-          </ul>
-        </li>
-        <li  class="nav-item tripCurrent">
-          <a class="nav-link" href="{{ url_for('current', username=username) }}"><i class="bi bi-broadcast"></i> {{current}}</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('wrapped.wrapped', username=username) }}">
-            <span class="gift-wrap">
-              <span class="gift-lid">🎁</span>
-              <span class="gift-open">🎉</span>
-            </span>
-            Trainlog {{wrapped_title}}
-          </a>
+        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="bi bi-bar-chart-line"></i> {{ stats }}
+        </a>
+        <ul class="dropdown-menu">
+            <li>
+              <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType='combined') }}">
+                <i></i> {{ all }}
+              </a>
+            </li>
+          {% for type, data in distinctTypes.items() %}
+            <li>
+              <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType=type) }}">
+                <i class="{{ data.icon }}"></i> {{ data.label }}
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
+      </li>
+      <li  class="nav-item tripCurrent">
+        <a class="nav-link" href="{{ url_for('current', username=username) }}"><i class="bi bi-broadcast"></i> {{current}}</a>
+      </li>
+      <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('wrapped.wrapped', username=username) }}">
+          <span class="gift-wrap">
+            <span class="gift-lid">🎁</span>
+            <span class="gift-open">🎉</span>
+          </span>
+          Trainlog {{wrapped_title}}
+        </a>
       </li>
       </ul>
       <ul class="navbar-nav ms-auto">
