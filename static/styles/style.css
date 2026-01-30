@@ -463,6 +463,11 @@ nav .current{
   font-size: 1.7em;
 }
 
+#hiddenTripsInfo {
+  font-size: 0.7em;
+  color: #999;
+}
+
 #tripTotals{
   font-size: 0.5em;
 }

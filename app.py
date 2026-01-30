@@ -3553,23 +3553,30 @@ def render_public_trip_page(
     #array keeping track of who the current user is friends with, so that each target user only needs to be queried once in the DB.
     friends_cache = []
     trip_list = []
+    num_hidden_trips = 0
     for trip_id in tripIds.split(","):
         with managed_cursor(mainConn) as cursor:
             trip = cursor.execute(getTrip, {"trip_id": trip_id}).fetchone()
         if trip is not None:
+            user = User.query.filter_by(username=trip["username"]).first()
+
+            if trip['visibility'] == 'private' and not session.get(user.username):
+                num_hidden_trips += 1
+                continue
+
+            if trip['visibility'] == 'friends' and not session.get(user.username) and not user.username in friends_cache:
+                if current_user_is_friend_with(user.username):
+                    friends_cache.append(user.username)
+                else:
+                    num_hidden_trips += 1
+                    continue
+
             for country in json.loads(trip["countries"]).keys():
                 if country not in countries:
                     countries.append(country)
             length += trip["trip_length"]
             trip_list.append(dict(trip))
-            user = User.query.filter_by(username=trip["username"]).first()
-            if trip['visibility'] == 'private' and not session.get(user.username):
-                abort(401)
-            if trip['visibility'] == 'friends' and not session.get(user.username) and not user.username in friends_cache:
-                if current_user_is_friend_with(user.username):
-                    friends_cache.append(user.username)
-                else:
-                    abort(401)
+
             if (
                 not session.get(user.username)
                 and not user.is_public_trips()
@@ -3579,6 +3586,9 @@ def render_public_trip_page(
 
         else:
             abort(410)
+
+    if not trip_list and num_hidden_trips > 0: # all requested trips are hidden
+        abort(401)
 
     try:
         trip_list_sorted = sorted(
@@ -3619,13 +3629,14 @@ def render_public_trip_page(
     return render_template(
         template,
         logosList=listOperatorsLogos(),
-        tripIds=tripIds,
+        tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
         collection_voyage=tag_type,
         tag_description=tag_name,
         special_og=True,
         tileserver=tileserver,
         globe=globe,
         og=og,
+        num_hidden_trips=num_hidden_trips,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

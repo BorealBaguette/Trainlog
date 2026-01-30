@@ -652,6 +652,8 @@
     "share_trips_some_trips_not_public": "Some of the selected trips are not public. Do you want to make them public now?",
     "share_trips_leave_as_is": "Leave as is",
     "share_trips_make_public": "Make public",
+    "trip_view_hidden_trips_singular": "hidden trip",
+    "trip_view_hidden_trips_plural": "hidden trips",
     "wrapped_title": "RECAP",
     "wrapped_your_year": "Your Year",
     "wrapped_in_travel": "in Travel",
