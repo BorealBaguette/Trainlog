@@ -3465,8 +3465,6 @@ def listOperatorsLogos(tripType=None):
 
     logoURLs = {}
 
-    print(selected_types)
-
     with managed_cursor(mainConn) as cursor:
         for logo_type in selected_types:
             # Fetch logos based on operator_type field
