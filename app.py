@@ -490,7 +490,7 @@ def changeLang(langToSet, session=False):
     session["userinfo"]["logged_in_user"] = getUser()
     session["userinfo"]["is_owner"] = True if getUser() == owner else False
     user = User.query.filter_by(username=session.get("logged_in")).first()
-    session["userinfo"]["user_id"] = user.uid
+    session["userinfo"]["user_id"] = user.uid if user and user.uid else False
     session["userinfo"]["is_alpha"] = True if user and user.alpha else False
     session["userinfo"]["is_premium"] = True if user and user.premium else False
     session["userinfo"]["is_admin"] = True if user and user.admin else False
