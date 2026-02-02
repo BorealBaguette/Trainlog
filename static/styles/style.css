@@ -698,10 +698,10 @@ nav .current{
 }
 
 .modeProportionContainer {
-  margin-top:5px;
-  margin-bottom:5px;
+  margin-top: 5px;
+  margin-bottom: 5px;
   max-width: 500px;
-  width:100%;
+  width: calc(100% - 40px); /* to make space for the x button on the old map on mobile devies */
 }
 
 .modeProportionIcon{
