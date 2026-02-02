@@ -4470,20 +4470,6 @@ def forwardRouting(path, routingType):
     return forward_routing_core(routingType=routingType, path=path, flask_request=request)
 
 
-latin_letters = {}
-
-
-def is_latin(uchr):
-    try:
-        return latin_letters[uchr]
-    except KeyError:
-        return latin_letters.setdefault(uchr, "LATIN" in ud.name(uchr))
-
-
-def only_roman_chars(unistr):
-    return all(is_latin(uchr) for uchr in unistr if uchr.isalpha())
-
-
 @app.route("/router_status/single")
 def router_status_single():
     url = request.args.get("url")
