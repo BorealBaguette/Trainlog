@@ -716,6 +716,7 @@ nav .current{
   vertical-align: middle;
   position: relative;
   box-shadow: 1px 1px 2px 0px rgba(0,0,0,0.75);
+  display: grid;
 }
 .currency{
   font-size: 0.8em;
@@ -731,11 +732,8 @@ nav .current{
 }
 
 .percent_bar {
-  position: absolute;
-  height: 15px;
-  z-index: 2;
-  top: 0;
- }
+  min-width: min(5px, 3vw);
+}
 
  .percent_bar:hover {
 	opacity: .65;

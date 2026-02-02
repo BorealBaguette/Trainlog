@@ -186,43 +186,39 @@ if (prices.total_carbon != 0){
     }
     sortArray.sort(function(a,b){return a.value - b.value;}).reverse();  
   
-    var tripLeft = kmLeft = timeLeft = carbonLeft = 0;
     for(let i in sortArray){
       var num = total_trips_per_type[sortArray[i].key]
       var km = mToKm(total_length_per_type[sortArray[i].key])
       var time = secondsToDhm(sortArray[i].value, "{{langId}}")
       var carbon = formatCarbonFootprint(total_carbon_per_type[sortArray[i].key] || 0, "{{langId}}")
       var type = text[sortArray[i].key];
-
-      var trip_percent = (num/total_trips)*100
-      var km_percent = (total_length_per_type[sortArray[i].key]/total_length)*100
-      var time_percent = (total_duration_per_type[sortArray[i].key]/total_duration)*100
-      var carbon_percent = total_carbon > 0 ? ((total_carbon_per_type[sortArray[i].key] || 0)/total_carbon)*100 : 0
-      
+     
       $('.tripModeProportion').append(
-        $("<div>").attr("title", num == 1 ? `${type}: ${num} {{singularTrip}}` : `${type}: ${num} {{trips}}`).addClass("percent_bar").addClass(sortArray[i].key).css("width", trip_percent + "%").css("left", tripLeft + "%")
+        $("<div>").attr("title", num == 1 ? `${type}: ${num} {{singularTrip}}` : `${type}: ${num} {{trips}}`).addClass("percent_bar").addClass(sortArray[i].key)
       );
-      tripLeft += trip_percent;
 
       $('.kmModeProportion').append(
-        $("<div>").attr("title", `${type}: ${km} km`).addClass("percent_bar").addClass(sortArray[i].key).css("width", km_percent + "%").css("left", kmLeft+"%")
+        $("<div>").attr("title", `${type}: ${km} km`).addClass("percent_bar").addClass(sortArray[i].key)
       );
-      kmLeft += km_percent;
 
       $('.timeModeProportion').append(
-        $("<div>").attr("title", `${type}: ${time}`).addClass("percent_bar").addClass(sortArray[i].key).css("width", time_percent + "%").css("left", timeLeft+"%")
+        $("<div>").attr("title", `${type}: ${time}`).addClass("percent_bar").addClass(sortArray[i].key)
       );
-      timeLeft += time_percent;
 
       // Add carbon proportion bar
       if (total_carbon > 0) {
         $('.carbonProportion').append(
-          $("<div>").attr("title", `${type}: ${carbon}`).addClass("percent_bar").addClass(sortArray[i].key).css("width", carbon_percent + "%").css("left", carbonLeft+"%")
+          $("<div>").attr("title", `${type}: ${carbon}`).addClass("percent_bar").addClass(sortArray[i].key)
         );
-        carbonLeft += carbon_percent;
       }
     }
     $(".percent_bar").tooltip();
+    $(".tripModeProportion").css("grid-template-columns", sortArray.map(x => total_trips_per_type[x.key].toString() + "fr").join(" "));
+    $(".kmModeProportion").css("grid-template-columns", sortArray.map(x => total_length_per_type[x.key].toString() + "fr").join(" "));
+    $(".timeModeProportion").css("grid-template-columns", sortArray.map(x => total_duration_per_type[x.key].toString() + "fr").join(" "));
+    if (total_carbon > 0) {
+      $(".carbonProportion").css("grid-template-columns", sortArray.map(x => (total_carbon_per_type[x.key] || 0).toString() + "fr").join(" "));
+    }
 
     $(".modeProportionIcon.trip").attr("title", `{{totalTrips}}: ${total_trips}`);
     $(".modeProportionIcon.km").attr("title", `{{totalLength}}: ${mToKm(total_length)} km`);
