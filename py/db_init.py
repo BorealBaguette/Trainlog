@@ -307,6 +307,13 @@ def init_main(path):
         ("fr24_calls", "INTEGER DEFAULT 0"),
     }
 
+    ai_usage_columns = {
+        ("uid", "SERIAL PRIMARY KEY"),
+        ("username", "TEXT NOT NULL"),
+        ("month_year", "TEXT NOT NULL"),
+        ("ai_calls", "INTEGER DEFAULT 0"),
+    }
+
     daily_active_users_columns = {("date", "DATETIME"), ("number", "INT")}
 
     gpx_columns = {
@@ -338,6 +345,7 @@ def init_main(path):
         ("gpx", "uid", gpx_columns),
         ("daily_active_users", "date", daily_active_users_columns),
         ("fr24_usage", "uid", fr24_usage_columns),
+        ("ai_usage", "uid", ai_usage_columns),
     ]
 
     for table_name, primary_key, columns in tables:

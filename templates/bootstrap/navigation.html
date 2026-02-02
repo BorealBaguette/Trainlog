@@ -1,7 +1,7 @@
 {% set friendsIcon = getFriendsRequestsNumber() %}
 <nav class="navbar navbar-expand-xl navbar-light bg-light">
   <div class="container-fluid">
-    <a class="navbar-brand" href="#">
+    <a class="navbar-brand" href="{{ url_for('landing') }}">
       <img src="{{ url_for('static',filename='images/logo_square.png') }}" width="30" height="30" alt="">
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
@@ -78,9 +78,13 @@
             <i class="bi bi-plus-circle"></i> {{new}}
           </a>
           <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
+            {% if is_alpha and is_premium %}
+            <a class="dropdown-item" href="{{ url_for('ai.new_trip_ai', username=username) }}"><i class="fa-solid fa-wand-magic-sparkles"></i> AI<sub>(α)</sub> </a>
+            <hr class="dropdown-divider">
+            {% endif%}
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='train') }}"><i class="fa-solid fa-train"></i> {{ train }}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='tram') }}"><i class="fa-solid fa-train-tram"></i> {{ tram }}ᵦ</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='metro') }}"><i class="fa-solid fa-train-subway"></i> {{ metro }}ᵦ</a>
+            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='tram') }}"><i class="fa-solid fa-train-tram"></i> {{ tram }}</a>
+            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='metro') }}"><i class="fa-solid fa-train-subway"></i> {{ metro }}</a>
             <hr class="dropdown-divider">
             <a class="dropdown-item" href="{{ url_for('new_flight', username=username) }}"><i class="fa-solid fa-plane-up"></i>{{air}}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="bus") }}"><i class="fa-solid fa-bus"></i>{{bus}}</a>
@@ -92,9 +96,9 @@
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="cycle") }}"><i class="fa-solid fa-bicycle"></i> {{cycle}}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="car") }}"><i class="fa-solid fa-car-side"></i> {{car}}</a>
             <hr class="dropdown-divider">
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="accommodation") }}"><i class="fa-solid fa-bed"></i> {{accommodation}} ᵦ</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="poi") }}"><i class="fa-solid fa-map-location-dot"></i> {{poi}} ᵦ</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="restaurant") }}"><i class="fa-solid fa-utensils"></i> {{restaurant}} ᵦ</a>
+            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="accommodation") }}"><i class="fa-solid fa-bed"></i> {{accommodation}}</a>
+            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="poi") }}"><i class="fa-solid fa-map-location-dot"></i> {{poi}}</a>
+            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="restaurant") }}"><i class="fa-solid fa-utensils"></i> {{restaurant}}</a>
           </div>
         </li>
         <li class="nav-item dropdown">
@@ -193,31 +197,37 @@
         <a class="nav-link" href="{{ url_for('leaderboard') }}"><i class="bi bi-trophy"></i> {{leaderboard}}</a>
       </li>
       <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-bar-chart-line"></i> {{ stats }}
-          </a>
-          <ul class="dropdown-menu">
-            {% for type, data in distinctTypes.items() %}
-              <li>
-                <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType=type) }}">
-                  <i class="{{ data.icon }}"></i> {{ data.label }}
-                </a>
-              </li>
-            {% endfor %}
-          </ul>
-        </li>
-        <li  class="nav-item tripCurrent">
-          <a class="nav-link" href="{{ url_for('current', username=username) }}"><i class="bi bi-broadcast"></i> {{current}}</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('wrapped.wrapped', username=username) }}">
-            <span class="gift-wrap">
-              <span class="gift-lid">🎁</span>
-              <span class="gift-open">🎉</span>
-            </span>
-            Trainlog {{wrapped_title}}
-          </a>
+        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+          <i class="bi bi-bar-chart-line"></i> {{ stats }}
+        </a>
+        <ul class="dropdown-menu">
+            <li>
+              <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType='combined') }}">
+                <i></i> {{ all }}
+              </a>
+            </li>
+          {% for type, data in distinctTypes.items() %}
+            <li>
+              <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType=type) }}">
+                <i class="{{ data.icon }}"></i> {{ data.label }}
+              </a>
+            </li>
+          {% endfor %}
+        </ul>
       </li>
+      <li  class="nav-item tripCurrent">
+        <a class="nav-link" href="{{ url_for('current', username=username) }}"><i class="bi bi-broadcast"></i> {{current}}</a>
+      </li>
+      <!-- Remove wrapped until next year -->
+      <!-- <li class="nav-item">
+        <a class="nav-link" href="{{ url_for('wrapped.wrapped', username=username) }}">
+          <span class="gift-wrap">
+            <span class="gift-lid">🎁</span>
+            <span class="gift-open">🎉</span>
+          </span>
+          Trainlog {{wrapped_title}}
+        </a>
+      </li> -->
       </ul>
       <ul class="navbar-nav ms-auto">
         <li class="nav-item">

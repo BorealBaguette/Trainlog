@@ -157,6 +157,7 @@ from src.api.finance import finance_blueprint
 from src.api.carbon import carbon_blueprint
 from src.api.wrapped import wrapped_blueprint
 from src.api.stats import stats_blueprint, fetch_stats, get_distinct_stat_years
+from src.api.ai import ai_blueprint
 from src.consts import DbNames, TripTypes
 from src.pg import setup_db
 from src.suspicious_activity import (
@@ -204,7 +205,7 @@ from src.trips import (
 from src.paths import Path
 from src.carbon import *
 from src.users import User, Friendship, authDb
-from src.mail import start_email_listener
+from src.email_parser import start_email_listener
 from src.routing import forward_routing_core
 
 app = Flask(__name__)
@@ -222,6 +223,7 @@ app.register_blueprint(news_blueprint)
 app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
 app.register_blueprint(wrapped_blueprint)
+app.register_blueprint(ai_blueprint)
 
 app.config["CACHE_TYPE"] = "SimpleCache"
 app.config["CACHE_DEFAULT_TIMEOUT"] = 864000
@@ -3468,8 +3470,6 @@ def listOperatorsLogos(tripType=None):
 
     logoURLs = {}
 
-    print(selected_types)
-
     with managed_cursor(mainConn) as cursor:
         for logo_type in selected_types:
             # Fetch logos based on operator_type field
@@ -3531,23 +3531,30 @@ def render_public_trip_page(
     #array keeping track of who the current user is friends with, so that each target user only needs to be queried once in the DB.
     friends_cache = []
     trip_list = []
+    num_hidden_trips = 0
     for trip_id in tripIds.split(","):
         with managed_cursor(mainConn) as cursor:
             trip = cursor.execute(getTrip, {"trip_id": trip_id}).fetchone()
         if trip is not None:
+            user = User.query.filter_by(username=trip["username"]).first()
+
+            if trip['visibility'] == 'private' and not session.get(user.username):
+                num_hidden_trips += 1
+                continue
+
+            if trip['visibility'] == 'friends' and not session.get(user.username) and not user.username in friends_cache:
+                if current_user_is_friend_with(user.username):
+                    friends_cache.append(user.username)
+                else:
+                    num_hidden_trips += 1
+                    continue
+
             for country in json.loads(trip["countries"]).keys():
                 if country not in countries:
                     countries.append(country)
             length += trip["trip_length"]
             trip_list.append(dict(trip))
-            user = User.query.filter_by(username=trip["username"]).first()
-            if trip['visibility'] == 'private' and not session.get(user.username):
-                abort(401)
-            if trip['visibility'] == 'friends' and not session.get(user.username) and not user.username in friends_cache:
-                if current_user_is_friend_with(user.username):
-                    friends_cache.append(user.username)
-                else:
-                    abort(401)
+
             if (
                 not session.get(user.username)
                 and not user.is_public_trips()
@@ -3557,6 +3564,9 @@ def render_public_trip_page(
 
         else:
             abort(410)
+
+    if not trip_list and num_hidden_trips > 0: # all requested trips are hidden
+        abort(401)
 
     try:
         trip_list_sorted = sorted(
@@ -3597,13 +3607,14 @@ def render_public_trip_page(
     return render_template(
         template,
         logosList=listOperatorsLogos(),
-        tripIds=tripIds,
+        tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
         collection_voyage=tag_type,
         tag_description=tag_name,
         special_og=True,
         tileserver=tileserver,
         globe=globe,
         og=og,
+        num_hidden_trips=num_hidden_trips,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -3869,7 +3880,7 @@ def public_stats(username, tripType=None, year=None):
     distinctStatYears = get_distinct_stat_years(username, tripType)
     if year is not None and year not in distinctStatYears:
         return redirect(
-            url_for("stats", username=username, tripType=tripType, year=None)
+            url_for("public_stats", username=username, tripType=tripType, year=None)
         )
 
     return render_template(
@@ -4455,20 +4466,6 @@ def forwardRouting(path, routingType):
     return forward_routing_core(routingType=routingType, path=path, flask_request=request)
 
 
-latin_letters = {}
-
-
-def is_latin(uchr):
-    try:
-        return latin_letters[uchr]
-    except KeyError:
-        return latin_letters.setdefault(uchr, "LATIN" in ud.name(uchr))
-
-
-def only_roman_chars(unistr):
-    return all(is_latin(uchr) for uchr in unistr if uchr.isalpha())
-
-
 @app.route("/router_status/single")
 def router_status_single():
     url = request.args.get("url")
@@ -4656,10 +4653,15 @@ def stationAutocomplete():
     timeout = 2
     en = "lang=en"
     
+    # Check if this is a reverse geocoding request
+    params = request.args
+    is_reverse = params.get("lat") and params.get("lon")
+    endpoint = "/reverse" if is_reverse else "/api"
+    
     responseJson = None
     for url in photonInstances.values():
         try:
-            resp = requests.get(f"{url}/api?{args}&{en}", timeout=timeout)
+            resp = requests.get(f"{url}{endpoint}?{args}&{en}", timeout=timeout)
             resp.raise_for_status()
             responseJson = resp.json()
             if responseJson.get("features") is not None:
@@ -4671,19 +4673,15 @@ def stationAutocomplete():
         return "Photon Error", 500
     
     homonymy_filter = {}
-
     for index, result in enumerate(responseJson["features"]):
         props = result["properties"]
-
         # Special country handling
         special_countries = ["CN", "FI"]
         if props.get("countrycode") in special_countries:
             lon, lat = result["geometry"]["coordinates"]
             manual_country = getCountryFromCoordinates(lat, lon)
             props["countrycode"] = manual_country["countryCode"]
-
         country_code = props.get("countrycode", "unknown")
-
         # Add city name if not similar to name
         city = props.get("city")
         if city and stringSimmilarity(city.lower(), props["name"].lower()) < 50:
@@ -4701,18 +4699,14 @@ def stationAutocomplete():
                 or (not district and not locality)
             ):
                 props["name"] = f"{city} - {props['name']}"
-
         # Homonymy by name and country
         key = (props["name"], country_code)
-
         if key in homonymy_filter:
             homonymy_filter[key]["count"] += 1
             homonymy_filter[key]["states"].append(props.get("state"))
         else:
             homonymy_filter[key] = {"count": 1, "states": [props.get("state")]}
-
         responseJson["features"][index]["properties"] = props
-
     # Resolve homonyms
     for (name, country), details in homonymy_filter.items():
         if details["count"] > 1:
@@ -4731,9 +4725,7 @@ def stationAutocomplete():
                     if props["name"] == name and props.get("countrycode") == country:
                         props["homonymy_order"] = f" ({chr(suffix)})"
                         suffix += 1
-
     return jsonify(responseJson)
-
 
 @app.route("/u/<username>/getManAndOps/<station_type>", methods=["GET", "POST"])
 def getManAndOps(username, station_type):
@@ -5955,6 +5947,53 @@ def user_settings(username):
         **session["userinfo"],
     )
 
+@app.route("/u/<username>/settings_app", methods=["GET", "POST"])
+@login_required
+def user_settings_app(username):
+    """
+    User settings API
+    """
+    user = User.query.filter_by(username=username).first()
+
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+
+        allowed = {
+            "share_level", 
+            "leaderboard", 
+            "friend_search", 
+            "appear_on_global", 
+            "user_currency"
+        }
+        changed = {}
+
+        for k in allowed:
+            if k in data:
+                v = data[k]
+                if k == "share_level":
+                    v = int(v)
+                else:
+                    v = bool(v)
+
+                if getattr(user, k) != v:
+                    setattr(user, k, v)
+                    changed[k] = v
+        
+        authDb.session.commit()
+
+    langs = getLangDropdown(user)
+
+    return jsonify({
+        "username": user.username,
+        "currencyOptions": get_available_currencies(),
+        "langs": langs,
+        "share_level": user.share_level,
+        "leaderboard": user.leaderboard,
+        "friend_search": user.friend_search,
+        "appear_on_global": user.appear_on_global,
+        "user_currency": user.user_currency,
+    }), 200
+
 
 @app.route("/u/<username>/dynamic/<time>")
 def redirect_dynamic_trips(username, time):
@@ -6808,7 +6847,7 @@ def detect_precision(start_date, end_date):
         pass
 
     datetime.strptime(start_date, "%Y-%m-%d")
-    datetime.end_date(start_date, "%Y-%m-%d")
+    datetime.strptime(end_date, "%Y-%m-%d")
     return "onlyDate"
 
 
@@ -8662,7 +8701,7 @@ def trainloglogger(username):
     )
 
 
-@app.route("/getBounds/u/<username>")
+@app.route("/u/<username>/getBounds")
 @login_required
 def get_bounds(username):
     def get_location(lat, lon):
@@ -8738,7 +8777,7 @@ def get_bounds(username):
                     FROM trip
                 )
 
-            SELECT uid from UTC_Filtered
+            SELECT uid, type from UTC_Filtered
                 WHERE
                     (
                         julianday('now') > julianday(utc_filtered_start_datetime)
@@ -8749,16 +8788,16 @@ def get_bounds(username):
             """,
             {"username": username},
         )
-        trip_ids = [row[0] for row in main_cursor.fetchall()]
+        trip_ids_with_type = dict((row[0], row[1]) for row in main_cursor.fetchall())
 
-    if not trip_ids:
+    if not trip_ids_with_type:
         return jsonify({"error": "No trips found for this user"}), 404
 
     with managed_cursor(pathConn) as path_cursor:
         # Fetch all paths associated with the user's trips using IN
         path_cursor.execute(
-            f"SELECT trip_id, path FROM paths WHERE trip_id IN ({','.join(['?'] * len(trip_ids))})",
-            trip_ids,
+            f"SELECT trip_id, path FROM paths WHERE trip_id IN ({','.join(['?'] * len(trip_ids_with_type))})",
+            [trip_id for trip_id in trip_ids_with_type.keys()],
         )
         paths = path_cursor.fetchall()
 
@@ -8768,6 +8807,9 @@ def get_bounds(username):
     # Process each path to update the boundary values
     for trip_id, path_row in paths:
         path = json.loads(path_row)  # path is a list of lists with coordinates
+        if trip_ids_with_type[trip_id] == "air":
+            path = [path[0], path[-1]]  # Only consider start and end points for flights
+
         for coord in path:
             lat, lon = coord
             # Update bounds with coordinates, place information, and trip_id

@@ -447,6 +447,65 @@ def fr24_usage(username):
         row = cursor.fetchone() or (0,)
     return row[0]
 
+def check_and_increment_ai_usage(username, count=1, limit=10):
+    month_key = datetime.utcnow().strftime("%Y-%m")
+    is_premium = bool(User.query.filter_by(username=username).first().premium)
+    
+    with managed_cursor(mainConn) as cursor:
+        cursor.execute(
+            """
+            SELECT ai_calls FROM ai_usage
+            WHERE username = ? AND month_year = ?
+            """,
+            (username, month_key),
+        )
+        row = cursor.fetchone()
+        if row:
+            ai_calls = row[0]
+        else:
+            ai_calls = 0
+            cursor.execute(
+                """
+                INSERT INTO ai_usage (username, month_year, ai_calls)
+                VALUES (?, ?, 0)
+                ON CONFLICT DO NOTHING
+                """,
+                (username, month_key),
+            )
+        
+        # Check limit before incrementing (for non-premium)
+        if not is_premium and ai_calls + count > limit:
+            return False
+        
+        # Increment usage
+        cursor.execute(
+            """
+            UPDATE ai_usage
+            SET ai_calls = ai_calls + ?
+            WHERE username = ? AND month_year = ?
+            """,
+            (count, username, month_key),
+        )
+        mainConn.commit()
+    
+    return True
+
+
+def ai_usage(username):
+    if User.query.filter_by(username=username).first().premium:
+        return "premium"
+    month_key = datetime.utcnow().strftime("%Y-%m")
+    with managed_cursor(mainConn) as cursor:
+        cursor.execute(
+            """
+            SELECT ai_calls
+            FROM ai_usage
+            WHERE username = ? AND month_year = ?
+            """,
+            (username, month_key),
+        )
+        row = cursor.fetchone() or (0,)
+    return row[0]
 
 def get_default_trip_visibility(x):
     match x:

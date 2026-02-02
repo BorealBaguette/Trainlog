@@ -1,0 +1,331 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+{% include "bootstrap/navigation.html" %}
+<div class="container mt-4">
+  <div class="row">
+    <div class="col-md-8 offset-md-2">
+      <h2 class="mb-3 text-center">
+        {{ l.get("ai_trip_title", "Create trip from text") }}
+        {% if ai_calls == 'premium' %}
+          <small><i class="fa-solid fa-gem" style="color: #F39C12;"></i></small>
+        {% else %}
+          <small class="text-muted">({{ ai_calls }}/10)</small>
+        {% endif %}
+      </h2>
+
+      {% if ai_calls is number and ai_calls >= 10 %}
+      <div class="alert alert-warning">
+        {{ l.get("ai_limit_reached", "Monthly limit reached. Upgrade to premium for unlimited AI imports.") }}
+      </div>
+      {% endif %}
+      
+      <div id="inputSection">
+        <form id="parseForm">
+          <div class="form-group mb-3">
+            <label for="text">{{ l.get("ai_trip_description", "Describe your trip or paste an image") }}</label>
+            <textarea class="form-control" id="text" name="text" rows="5" placeholder="{{ l.get('ai_trip_placeholder', 'e.g. Train from Paris to Lyon on March 15th at 14:30, or paste a screenshot') }}"></textarea>
+          </div>
+          
+          <div class="form-group mb-3">
+            <label>{{ l.get("ai_trip_files", "Or upload files") }}</label>
+            <div id="dropZone" class="border border-2 border-dashed rounded p-4 text-center" style="cursor:pointer; border-color:#ccc;">
+              <div id="dropText">
+                <i class="bi bi-cloud-upload fs-2 text-muted"></i>
+                <p class="mb-0 text-muted">{{ l.get("ai_drop_files", "Drop files here or click to browse") }}</p>
+                <small class="text-muted">PDF, ICS, CSV, PNG, JPG</small>
+              </div>
+              <div id="fileList" class="mt-2"></div>
+            </div>
+            <input type="file" id="fileInput" name="files" multiple accept=".pdf,.ics,.csv,.png,.jpg,.jpeg,.gif,.webp" class="d-none">
+          </div>
+          
+          <div id="pastePreview" class="mb-3 d-none"></div>
+          
+          <button type="submit" class="btn btn-primary w-100" id="parseBtn" {% if ai_calls is number and ai_calls >= 10 %}disabled{% endif %}>
+            <span id="parseBtnText">{{ l.get("analyze", "Analyze") }}</span>
+            <span id="parseBtnSpinner" class="spinner-border spinner-border-sm d-none"></span>
+          </button>
+        </form>
+      </div>
+      
+      <div id="previewSection" class="d-none">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h4>{{ l.get("trips_found", "Trips found") }}</h4>
+          <button class="btn btn-sm btn-outline-secondary" id="backBtn">{{ l.get("back", "Back") }}</button>
+        </div>
+        <div id="tripsList"></div>
+        <div class="mt-3 d-flex gap-2">
+          <button class="btn btn-success flex-grow-1" id="saveBtn">
+            <span id="saveBtnText">{{ l.get("save_selected", "Save selected") }}</span>
+            <span id="saveBtnSpinner" class="spinner-border spinner-border-sm d-none"></span>
+          </button>
+          <button class="btn btn-outline-danger" id="cancelBtn">{{ l.get("cancel", "Cancel") }}</button>
+        </div>
+      </div>
+      
+      <div id="resultSection" class="mt-4 d-none">
+        <div class="alert" id="resultAlert"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+.trip-card { border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 10px; }
+.trip-card.selected { border-color: #198754; background: #f8fff8; }
+.trip-card:hover { border-color: #aaa; cursor: pointer; }
+.trip-header { font-weight: bold; font-size: 1.1em; }
+.trip-details { color: #666; font-size: 0.9em; margin-top: 5px; }
+#dropZone.dragover { border-color: #0d6efd !important; background: #f0f7ff; }
+.file-item { display: inline-flex; align-items: center; background: #e9ecef; padding: 4px 8px; border-radius: 4px; margin: 4px; font-size: 0.85em; }
+.file-item .remove { cursor: pointer; margin-left: 6px; color: #dc3545; }
+</style>
+
+<script>
+const URLS = {
+  parse: "{{ url_for('ai.parse_trip_ai', username=username) }}",
+  save: "{{ url_for('ai.save_trip_ai', username=username) }}",
+  cancel: "{{ url_for('ai.cancel_trip_ai', username=username) }}",
+  trip: "{{ url_for('public_trip', tripIds='__ID__') }}"
+};
+
+let parseId = null;
+let tripsData = [];
+let selectedFiles = [];
+let pastedFiles = [];
+
+// Drop zone
+const dropZone = document.getElementById('dropZone');
+const fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  addFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', () => addFiles(fileInput.files));
+
+function addFiles(files) {
+  for (const f of files) {
+    if (!selectedFiles.some(s => s.name === f.name && s.size === f.size)) {
+      selectedFiles.push(f);
+    }
+  }
+  renderFileList();
+}
+
+function renderFileList() {
+  const list = document.getElementById('fileList');
+  if (!selectedFiles.length) {
+    list.innerHTML = '';
+    return;
+  }
+  list.innerHTML = selectedFiles.map((f, i) => 
+    `<span class="file-item">${f.name} <span class="remove" data-idx="${i}">&times;</span></span>`
+  ).join('');
+}
+
+$('#fileList').on('click', '.remove', function() {
+  selectedFiles.splice($(this).data('idx'), 1);
+  renderFileList();
+});
+
+// Paste images
+document.addEventListener('paste', (e) => {
+  const items = e.clipboardData?.items;
+  if (!items) return;
+  
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      pastedFiles.push(file);
+      e.preventDefault();
+    }
+  }
+  renderPastedImages();
+});
+
+function renderPastedImages() {
+  if (!pastedFiles.length) {
+    $('#pastePreview').addClass('d-none').html('');
+    return;
+  }
+  
+  let html = '<label>{{ l.get("pasted_images", "Pasted images") }}</label><div>';
+  pastedFiles.forEach((file, i) => {
+    const url = URL.createObjectURL(file);
+    html += `
+      <div class="position-relative d-inline-block me-2 mb-2">
+        <img src="${url}" class="img-thumbnail" style="max-height:100px;">
+        <button type="button" class="btn btn-sm btn-danger position-absolute top-0 end-0 remove-paste" data-idx="${i}">&times;</button>
+      </div>
+    `;
+  });
+  html += '</div>';
+  
+  $('#pastePreview').html(html).removeClass('d-none');
+}
+
+$(document).on('click', '.remove-paste', function() {
+  pastedFiles.splice($(this).data('idx'), 1);
+  renderPastedImages();
+});
+
+$('#parseForm').on('submit', function(e) {
+  e.preventDefault();
+  const formData = new FormData();
+  formData.append('text', $('#text').val());
+  
+  selectedFiles.forEach(f => formData.append('files', f));
+  pastedFiles.forEach((f, i) => formData.append('files', f, `pasted-image-${i}.png`));
+  
+  $('#parseBtn').prop('disabled', true);
+  $('#parseBtnText').addClass('d-none');
+  $('#parseBtnSpinner').removeClass('d-none');
+  $('#resultSection').addClass('d-none');
+  
+  $.ajax({
+    url: URLS.parse,
+    type: 'POST',
+    data: formData,
+    processData: false,
+    contentType: false,
+    success: function(response) {
+      parseId = response.parse_id;
+      tripsData = response.trips;
+      renderTrips(tripsData);
+      $('#inputSection').addClass('d-none');
+      $('#previewSection').removeClass('d-none');
+    },
+    error: function(xhr) {
+      showResult('danger', xhr.responseJSON?.error || '{{ l.get("error_generic", "An error occurred") }}');
+    },
+    complete: function() {
+      $('#parseBtn').prop('disabled', false);
+      $('#parseBtnText').removeClass('d-none');
+      $('#parseBtnSpinner').addClass('d-none');
+    }
+  });
+});
+
+function renderTrips(trips) {
+  let html = '';
+  trips.forEach(function(t, i) {
+    const origin = t._resolved_origin || t.origin || '?';
+    const dest = t._resolved_destination || t.destination || '?';
+    let date = t.date || '?';
+    let time = '';
+    if (t.time_departure) time += t.time_departure;
+    if (t.time_arrival) time += ' → ' + t.time_arrival;
+    if (t.arrival_date && t.arrival_date !== t.date) date += ' → ' + t.arrival_date;
+    
+    const details = [];
+    if (t.operator) details.push(t.operator);
+    if (t.line_name) details.push(t.line_name);
+    if (t._distance) details.push(Math.round(t._distance / 1000) + ' km');
+    if (t.price && t.currency) details.push(t.price + ' ' + t.currency);
+    if (t.seat) details.push('{{ l.get("seat", "Seat") }}: ' + t.seat);
+    
+    const failed = t._enrich_failed;
+    const cardClass = failed ? 'trip-card' : 'trip-card selected';
+    
+    html += '<div class="' + cardClass + '" data-index="' + i + '">';
+    html += '<div class="d-flex justify-content-between">';
+    html += '<div class="trip-header">' + origin + ' → ' + dest + '</div>';
+    if (!failed) {
+      html += '<input type="checkbox" class="trip-checkbox form-check-input" checked>';
+    } else {
+      html += '<span class="badge bg-warning">{{ l.get("geocode_failed", "Could not locate") }}</span>';
+    }
+    html += '</div>';
+    html += '<div class="trip-details">';
+    html += '<div><strong>' + t.type + '</strong> | ' + date + (time ? ' | ' + time : '') + '</div>';
+    if (details.length) html += '<div>' + details.join(' | ') + '</div>';
+    html += '</div></div>';
+  });
+  $('#tripsList').html(html);
+}
+
+$(document).on('click', '.trip-card', function(e) {
+  if ($(e.target).is('.trip-checkbox')) return;
+  const $card = $(this);
+  if ($card.find('.trip-checkbox').length === 0) return;
+  const $cb = $card.find('.trip-checkbox');
+  $cb.prop('checked', !$cb.prop('checked'));
+  $card.toggleClass('selected', $cb.prop('checked'));
+});
+
+$(document).on('change', '.trip-checkbox', function() {
+  $(this).closest('.trip-card').toggleClass('selected', this.checked);
+});
+
+function resetForm() {
+  parseId = null;
+  selectedFiles = [];
+  pastedFiles = [];
+  renderFileList();
+  renderPastedImages();
+  $('#parseForm')[0].reset();
+  $('#previewSection').addClass('d-none');
+  $('#inputSection').removeClass('d-none');
+}
+
+$('#backBtn').on('click', function() {
+  if (parseId) $.post(URLS.cancel, JSON.stringify({parse_id: parseId}), null, 'json');
+  resetForm();
+});
+
+$('#cancelBtn').on('click', function() {
+  if (parseId) $.post(URLS.cancel, JSON.stringify({parse_id: parseId}), null, 'json');
+  resetForm();
+});
+
+$('#saveBtn').on('click', function() {
+  const selected = [];
+  $('.trip-checkbox:checked').each(function() {
+    selected.push($(this).closest('.trip-card').data('index'));
+  });
+  
+  if (!selected.length) {
+    showResult('warning', '{{ l.get("select_at_least_one", "Select at least one trip") }}');
+    return;
+  }
+  
+  $('#saveBtn').prop('disabled', true);
+  $('#saveBtnText').addClass('d-none');
+  $('#saveBtnSpinner').removeClass('d-none');
+  
+  $.ajax({
+    url: URLS.save,
+    type: 'POST',
+    contentType: 'application/json',
+    data: JSON.stringify({parse_id: parseId, selected: selected}),
+    success: function(response) {
+      const ids = response.trips.map(t => t.id);
+      const links = response.trips.map(t => 
+        '<a href="' + URLS.trip.replace('__ID__', t.id) + '">' + t.origin + ' → ' + t.destination + '</a>'
+      ).join('<br>');
+      const allLink = '<a href="' + URLS.trip.replace('__ID__', ids.join(',')) + '">{{ l.get("view_all_trips", "View all trips") }}</a>';
+      showResult('success', '<strong>' + response.count + ' {{ l.get("trips_created", "trip(s) created") }}</strong><br>' + links + '<br><br>' + allLink);
+      resetForm();
+    },
+    error: function(xhr) {
+      showResult('danger', xhr.responseJSON?.error || '{{ l.get("error_generic", "An error occurred") }}');
+    },
+    complete: function() {
+      $('#saveBtn').prop('disabled', false);
+      $('#saveBtnText').removeClass('d-none');
+      $('#saveBtnSpinner').addClass('d-none');
+    }
+  });
+});
+
+function showResult(type, message) {
+  $('#resultSection').removeClass('d-none');
+  $('#resultAlert').removeClass('alert-success alert-danger alert-warning').addClass('alert-' + type).html(message);
+}
+</script>
+{% endblock %}

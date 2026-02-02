@@ -463,6 +463,11 @@ nav .current{
   font-size: 1.7em;
 }
 
+#hiddenTripsInfo {
+  font-size: 0.7em;
+  color: #999;
+}
+
 #tripTotals{
   font-size: 0.5em;
 }
@@ -693,10 +698,10 @@ nav .current{
 }
 
 .modeProportionContainer {
-  margin-top:5px;
-  margin-bottom:5px;
+  margin-top: 5px;
+  margin-bottom: 5px;
   max-width: 500px;
-  width:100%;
+  width: calc(100% - 40px); /* to make space for the x button on the old map on mobile devies */
 }
 
 .modeProportionIcon{
@@ -707,10 +712,12 @@ nav .current{
   margin-left:17px;
   height: 15px;
   border-radius: 10px;
+  overflow: hidden;
   text-align: center;
   vertical-align: middle;
   position: relative;
   box-shadow: 1px 1px 2px 0px rgba(0,0,0,0.75);
+  display: grid;
 }
 .currency{
   font-size: 0.8em;
@@ -726,11 +733,8 @@ nav .current{
 }
 
 .percent_bar {
-  position: absolute;
-  height: 15px;
-  z-index: 2;
-  top: 0;
- }
+  min-width: min(5px, 3vw);
+}
 
  .percent_bar:hover {
 	opacity: .65;
@@ -769,18 +773,6 @@ nav .current{
 
  .percent_bar.aerialway{
   background-color: var(--aerialway);
- }
-
-.percent_bar:first-child{
-  border-radius: 10px 0px 0px 10px;
- }
-
-.percent_bar:last-child{
-  border-radius: 0px 10px 10px 0px;
- }
-
-.percent_bar:only-child{
-  border-radius: 10px 10px 10px 10px;
  }
 
 .leaflet-sidebar {
