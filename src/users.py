@@ -1,6 +1,9 @@
+from datetime import UTC, datetime
+
 from flask_sqlalchemy import SQLAlchemy
-from datetime import datetime
+
 authDb = SQLAlchemy()
+
 
 class User(authDb.Model):
     uid = authDb.Column(authDb.Integer, primary_key=True)
@@ -11,9 +14,11 @@ class User(authDb.Model):
     share_level = authDb.Column(authDb.Integer, nullable=False, default=0)
     leaderboard = authDb.Column(authDb.Boolean, nullable=False, default=False)
     creation_date = authDb.Column(
-        authDb.DateTime, nullable=False, default=datetime.utcnow
+        authDb.DateTime, nullable=False, default=datetime.now(UTC)
     )
-    last_login = authDb.Column(authDb.DateTime, nullable=False, default=datetime.utcnow)
+    last_login = authDb.Column(
+        authDb.DateTime, nullable=False, default=datetime.now(UTC)
+    )
     admin = authDb.Column(authDb.Boolean, nullable=False, default=False)
     alpha = authDb.Column(authDb.Boolean, nullable=False, default=False)
     translator = authDb.Column(authDb.Boolean, nullable=False, default=False)
@@ -62,7 +67,9 @@ class Friendship(authDb.Model):
     friend_id = authDb.Column(
         authDb.Integer, authDb.ForeignKey("user.uid"), nullable=False
     )
-    created_at = authDb.Column(authDb.DateTime, nullable=False, default=datetime.utcnow)
+    created_at = authDb.Column(
+        authDb.DateTime, nullable=False, default=datetime.now(UTC)
+    )
     accepted = authDb.Column(authDb.DateTime, default=None)
 
     # Relationships

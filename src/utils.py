@@ -4,7 +4,7 @@ import re
 import smtplib
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import UTC, datetime
 from email.mime.text import MIMEText
 from functools import wraps
 from glob import glob
@@ -36,7 +36,7 @@ owner = load_config()["owner"]["username"]
 
 
 def getNameFromPath(path):
-    return re.search(r"[A-Za-z0-9_\-\.]+(?=\.[A-Za-z0-9]+$)", path).group(0)
+    return re.search(r"[A-Za-z0-9_\-.]+(?=\.[A-Za-z0-9]+$)", path).group(0)
 
 
 def readLang():
@@ -118,33 +118,33 @@ def has_current_trip(user_id: int | None = None) -> bool:
     return trip is not None
 
 
-def processDates(newTrip, newPath):
-    manDuration = utc_start_datetime = utc_end_datetime = None
-    if newTrip["precision"] == "preciseDates":
-        start_datetime = datetime.strptime(newTrip["newTripStart"], "%Y-%m-%dT%H:%M")
-        end_datetime = datetime.strptime(newTrip["newTripEnd"], "%Y-%m-%dT%H:%M")
-        utc_start_datetime = getUtcDatetime(dateTime=start_datetime, **newPath[0])
-        utc_end_datetime = getUtcDatetime(dateTime=end_datetime, **newPath[-1])
+def processDates(new_trip, new_path):
+    man_duration = utc_start_datetime = utc_end_datetime = None
+    if new_trip["precision"] == "preciseDates":
+        start_datetime = datetime.strptime(new_trip["newTripStart"], "%Y-%m-%dT%H:%M")
+        end_datetime = datetime.strptime(new_trip["newTripEnd"], "%Y-%m-%dT%H:%M")
+        utc_start_datetime = getUtcDatetime(dateTime=start_datetime, **new_path[0])
+        utc_end_datetime = getUtcDatetime(dateTime=end_datetime, **new_path[-1])
 
-    elif newTrip["precision"] == "onlyDate":
+    elif new_trip["precision"] == "onlyDate":
         start_datetime = datetime.strptime(
-            newTrip["onlyDate"] + "T00:00:01", "%Y-%m-%dT%H:%M:%S"
+            new_trip["onlyDate"] + "T00:00:01", "%Y-%m-%dT%H:%M:%S"
         )
         end_datetime = datetime.strptime(
-            newTrip["onlyDate"] + "T00:00:01", "%Y-%m-%dT%H:%M:%S"
+            new_trip["onlyDate"] + "T00:00:01", "%Y-%m-%dT%H:%M:%S"
         )
-        if newTrip.get("onlyDateDuration") != "":
-            manDuration = newTrip.get("onlyDateDuration")
+        if new_trip.get("onlyDateDuration") != "":
+            man_duration = new_trip.get("onlyDateDuration")
 
     else:
-        if newTrip.get("onlyDateDuration") != "":
-            manDuration = newTrip.get("onlyDateDuration")
-        if newTrip["unknownType"] == "past":
+        if new_trip.get("onlyDateDuration") != "":
+            man_duration = new_trip.get("onlyDateDuration")
+        if new_trip["unknownType"] == "past":
             start_datetime = end_datetime = -1
         else:
             start_datetime = end_datetime = 1
     return (
-        manDuration,
+        man_duration,
         start_datetime,
         end_datetime,
         utc_start_datetime,
@@ -280,7 +280,7 @@ def post_to_discord(
                         :4096
                     ],  # Discord's max description length
                     "color": color,
-                    "timestamp": datetime.utcnow().isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                 }
             ]
         }
@@ -354,7 +354,7 @@ def login_required(f):
         elif not (session.get(username) or session.get(owner)):
             abort(401)
 
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(UTC)
         authDb.session.commit()
         return f(*args, **kwargs)
 
@@ -384,7 +384,7 @@ def translator_required(f):
 
 
 def check_and_increment_fr24_usage(username, limit=5):
-    month_key = datetime.utcnow().strftime("%Y-%m")
+    month_key = datetime.now(UTC).strftime("%Y-%m")
 
     is_premium = bool(User.query.filter_by(username=username).first().premium)
 
@@ -433,7 +433,7 @@ def fr24_usage(username):
     if User.query.filter_by(username=username).first().premium:
         return "premium"
 
-    month_key = datetime.utcnow().strftime("%Y-%m")
+    month_key = datetime.now(UTC).strftime("%Y-%m")
 
     with managed_cursor(mainConn) as cursor:
         cursor.execute(
@@ -510,23 +510,23 @@ def current_user_is_friend_with(target_username):
 
 def parse_date(date: str):
     try:
-        return datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
+        return datetime.strptime(date, "%Y-%m-%d %H:%M:%S")
     except Exception:
         pass
     try:
-        return datetime.datetime.strptime(date, "%Y-%m-%d %H:%M:%S.%f")
+        return datetime.strptime(date, "%Y-%m-%d %H:%M:%S.%f")
     except Exception:
         pass
     try:
-        return datetime.datetime.strptime(date, "%Y/%m/%d %H:%M:%S")
+        return datetime.strptime(date, "%Y/%m/%d %H:%M:%S")
     except Exception:
         pass
     try:
-        return datetime.datetime.strptime(date, "%d/%m/%Y %H:%M")
+        return datetime.strptime(date, "%d/%m/%Y %H:%M")
     except Exception:
         pass
     try:
-        return datetime.datetime.strptime(date, "%Y-%m-%d")
+        return datetime.strptime(date, "%Y-%m-%d")
     except Exception:
         logger.error(f"Date format not recognized: {date} ({type(date)})")
         raise

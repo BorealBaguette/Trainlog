@@ -20,7 +20,7 @@ import uuid
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, UTC
 from email.mime.text import MIMEText
 from functools import wraps
 from glob import glob
@@ -958,7 +958,7 @@ def before_request():
     ]
 
     # Check if language is set in session
-    if "userinfo" in session:
+    if "userinfo" in session and "lang" in session["userinfo"]:
         language = session["userinfo"]["lang"]
         # Temp fix for pt to pt-PT
         if language == "pt":
@@ -2524,11 +2524,11 @@ def signup():
 
 def update_user_count():
     # Update Active Users Count
-    twenty_four_hours_ago = datetime.utcnow() - timedelta(days=1)
+    twenty_four_hours_ago = datetime.now(UTC) - timedelta(days=1)
     active_users_count = User.query.filter(
         User.last_login >= twenty_four_hours_ago
     ).count()
-    today = datetime.utcnow().date()
+    today = datetime.now(UTC).date()
     with managed_cursor(mainConn) as cursor:
         cursor.execute("SELECT number FROM daily_active_users WHERE date = ?", (today,))
         result = cursor.fetchone()
@@ -3166,7 +3166,7 @@ def edit_translations(langid):
 
                     # Log the change
                     log_entry = (
-                        f"[{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}] "
+                        f"[{datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')}] "
                         f'User: {getUser()}, Key: {key}, "{old_value}" -> "{value}"\n'
                     )
                     with open(log_file_path, "a", encoding="utf-8") as log_file:
@@ -3200,7 +3200,7 @@ def edit_translations(langid):
 
                 # Log the change
                 username = session["userinfo"].get("username", "unknown_user")
-                log_entry = f"[{datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')}] User: {username}, Key: {key}, Old: {old_value}, New: {new_value}\n"
+                log_entry = f"[{datetime.now(UTC).strftime('%Y-%m-%d %H:%M:%S')}] User: {username}, Key: {key}, Old: {old_value}, New: {new_value}\n"
                 with open(log_file_path, "a", encoding="utf-8") as log_file:
                     log_file.write(log_entry)
 
@@ -3796,8 +3796,6 @@ def download_path(trip_ids):
         )
 
     # Otherwise, zip up all files.
-    from datetime import datetime
-
     zip_buffer = BytesIO()
     with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for trip_id, origin, destination, data in files_to_zip:
@@ -7855,13 +7853,13 @@ def acceptFriendship(username, friendId):
         return redirect(url_for("friends", username=username))
 
     # If a pending friendship request exists, accept it by setting the current date in the accepted column
-    friendship.accepted = datetime.utcnow()
+    friendship.accepted = datetime.now(UTC)
 
     # Create the reciprocal friendship record
     reciprocal_friendship = Friendship(
         user_id=user_id,  # The current user becomes the 'user_id'
         friend_id=friendId,  # The friend becomes the 'friend_id'
-        accepted=datetime.utcnow(),  # Set the accepted date to now
+        accepted=datetime.now(UTC),  # Set the accepted date to now
     )
     authDb.session.add(reciprocal_friendship)
 
