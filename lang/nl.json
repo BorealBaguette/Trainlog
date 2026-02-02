@@ -149,6 +149,7 @@
     "travelTotals": "Reis van ${first_trip_start} tot ${last_trip_end}",
     "all": "Alle",
     "ferry": "Veerboot",
+    "totalTrips": "Reizen in Totaal",
     "totalDuration": "Totale tijdsduur",
     "totalLength": "Totale lengte",
     "manual": "Handmatig",

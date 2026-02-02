@@ -149,6 +149,7 @@
     "travelTotals": "Putuj od ${first_trip_start} do ${last_trip_end}",
     "all": "Svi",
     "ferry": "Trajekt",
+    "totalTrips": "Ukupna putovanja",
     "totalDuration": "Ukupno trajanje",
     "totalLength": "Ukupna duljina",
     "manual": "Priručnik",

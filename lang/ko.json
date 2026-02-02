@@ -149,6 +149,7 @@
     "travelTotals": "Travel from ${first_trip_start} to ${last_trip_end}",
     "all": "모두",
     "ferry": "페리",
+    "totalTrips": "총 여정 수",
     "totalDuration": "총 소요시간",
     "totalLength": "총 거리",
     "manual": "Manual",

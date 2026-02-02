@@ -149,6 +149,7 @@
     "travelTotals": "Reis vo ${first_trip_start} uf ${last_trip_end}",
     "all": "Alli",
     "ferry": "Fähre",
+    "totalTrips": "Gsamtfahrte",
     "totalDuration": "Gsamtduur",
     "totalLength": "Gsamtlängi",
     "manual": "Manuell",

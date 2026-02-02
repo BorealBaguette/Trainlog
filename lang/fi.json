@@ -149,6 +149,7 @@
     "travelTotals": "Matka ${first_trip_start} - ${last_trip_end} välillä",
     "all": "Kaikki",
     "ferry": "Lautta",
+    "totalTrips": "Kokonaismatkoja",
     "totalDuration": "Kokonaiskesto",
     "totalLength": "Kokonaispituus",
     "manual": "Manuaalinen",

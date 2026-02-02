@@ -149,6 +149,7 @@
     "travelTotals": "Utazás ${first_trip_start} és ${last_trip_end} között",
     "all": "Minden",
     "ferry": "Komp",
+    "totalTrips": "Teljes utazás",
     "totalDuration": "Teljes időtartam",
     "totalLength": "Teljes hossz",
     "manual": "Kézikönyv",

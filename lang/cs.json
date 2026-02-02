@@ -149,6 +149,7 @@
     "travelTotals": "Cesta od ${first_trip_start} do ${last_trip_end}",
     "all": "Vše",
     "ferry": "Trajekt",
+    "totalTrips": "Celkové cesty",
     "totalDuration": "Celková doba",
     "totalLength": "Celková délka",
     "manual": "Ručně",

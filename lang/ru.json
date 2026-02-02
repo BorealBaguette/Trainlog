@@ -149,6 +149,7 @@
     "travelTotals": "Путешествие от ${first_trip_start} до ${last_trip_end}",
     "all": "Все",
     "ferry": "Паром",
+    "totalTrips": "Общая поездок",
     "totalDuration": "Общая продолжительность",
     "totalLength": "Общая длина",
     "manual": "Руководство",

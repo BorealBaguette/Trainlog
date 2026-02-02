@@ -149,6 +149,7 @@
     "travelTotals": "${first_trip_start} から ${last_trip_end} までの旅行",
     "all": "すべて",
     "ferry": "フェリー",
+    "totalTrips": "合計旅行数",
     "totalDuration": "合計所要時間",
     "totalLength": "合計距離",
     "manual": "手動",

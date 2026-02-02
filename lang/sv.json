@@ -149,6 +149,7 @@
     "travelTotals": "Res från ${first_trip_start} till ${last_trip_end}",
     "all": "Alla",
     "ferry": "Färja",
+    "totalTrips": "Totalt antal resor",
     "totalDuration": "Total varaktighet",
     "totalLength": "Total längd",
     "manual": "Manuell",

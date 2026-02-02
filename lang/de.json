@@ -149,6 +149,7 @@
     "travelTotals": "Reisen Sie von ${first_trip_start} nach ${last_trip_end}",
     "all": "Alle",
     "ferry": "Fähre",
+    "totalTrips": "Gesamtfahrten",
     "totalDuration": "Gesamtdauer",
     "totalLength": "Gesamtlänge",
     "manual": "Manuell",

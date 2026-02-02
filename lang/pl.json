@@ -149,6 +149,7 @@
     "travelTotals": "Podróż z ${first_trip_start} do ${last_trip_end}",
     "all": "Wszystko",
     "ferry": "Prom",
+    "totalTrips": "Całkowity liczba podróży",
     "totalDuration": "Całkowity czas",
     "totalLength": "Całkowity dystans",
     "manual": "Ręczny",

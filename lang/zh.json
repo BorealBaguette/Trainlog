@@ -149,6 +149,7 @@
     "travelTotals": "从 ${first_trip_start} 到 ${last_trip_end} 的旅行",
     "all": "全部",
     "ferry": "渡轮",
+    "totalTrips": "总行程",
     "totalDuration": "总持续时间",
     "totalLength": "总长度",
     "manual": "手动",

@@ -149,6 +149,7 @@
     "travelTotals": "Travel from ${first_trip_start} to ${last_trip_end}",
     "all": "Hepsi",
     "ferry": "Vapur",
+    "totalTrips": "Toplam seyahatler",
     "totalDuration": "Toplam süre",
     "totalLength": "Toplam mesafe",
     "manual": "Manuel",

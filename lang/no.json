@@ -149,6 +149,7 @@
     "travelTotals": "Reiser fra ${first_trip_start} til ${last_trip_end}",
     "all": "Alle",
     "ferry": "Ferge",
+    "totalTrips": "Totalt Antall Reiser",
     "totalDuration": "Total varighet",
     "totalLength": "Total lengde",
     "manual": "Manuell",

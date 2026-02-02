@@ -149,6 +149,7 @@
     "travelTotals": "Viaggio dal ${first_trip_start} al ${last_trip_end}",
     "all": "Tutto",
     "ferry": "Traghetto",
+    "totalTrips": "Viaggi totali",
     "totalDuration": "Durata totale",
     "totalLength": "Distanza totale",
     "manual": "Manuale",

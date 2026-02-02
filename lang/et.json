@@ -149,6 +149,7 @@
     "travelTotals": "Reisige alates ${first_trip_start} kuni ${last_trip_end}",
     "all": "Kõik",
     "ferry": "Praam",
+    "totalTrips": "Kogureiside",
     "totalDuration": "Kogukestus",
     "totalLength": "Kogupikkus",
     "manual": "Käsiraamat",
