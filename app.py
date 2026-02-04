@@ -4056,7 +4056,7 @@ def scottySaveTrip(username):
             router_path = (
                 f"route/v1/{'driving' if trip_type == 'bus' else trip_type}/{path}"
             )
-            response = forwardRouting(router_path, trip_type, "overview=full")
+            response = forwardRouting(router_path, trip_type)
 
             # Parse the router response (if necessary for your DB structure)
             if hasattr(response, 'text'):
