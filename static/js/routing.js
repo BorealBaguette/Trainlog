@@ -183,7 +183,7 @@ function handleGpxUpload(event) {
       }).on('loaded', function(e) {
           map.fitBounds(e.target.getBounds());
           var gpxContent = `<h4>GPX Route</h4>`;
-          gpxContent += `<p><button id="saveTrip" type="button" onclick="saveTrip()"> Submit </button></p>`;
+          gpxContent += `<p><button id="saveTrip" type="button" class="btn btn-switch" aria-current="page" onclick="saveTrip()"> Submit </button></p>`;
           sidebar.setContent(gpxContent);
           
           // You can still use leaflet polyline to visualize the route on the map
@@ -253,6 +253,7 @@ function routing(map, showSidebar=true, type){
       position: 'right',
       autoPan: autoPan
   }).addTo(map);
+
   sidebar.setContent(spinnerContent);
 
   L.Control.MyControl = L.Control.extend({
@@ -291,7 +292,7 @@ function routing(map, showSidebar=true, type){
     // Center the map on the accommodation marker
     map.setView([wplist[0][0], wplist[0][1]], 13);
     var content = `<h4>${origLabel}</h4>`;
-    content += `<p><button id="saveTrip" type="button" onclick="saveTrip()"> Submit </button></p>`;        
+    content += `<p><button id="saveTrip" type="button" class="btn btn-switch" aria-current="page" onclick="saveTrip()"> Submit </button></p>`;        
     sidebar.setContent(content);
   }
   else if(gpx){
@@ -432,11 +433,11 @@ function routing(map, showSidebar=true, type){
       content += `<p><i>${texts.distanceTime.replace("{km}", km).replace("{time}", time)}</i></p>`;
     
       if(geojson){
-        content += `<p><button id="downloadGeoJSON" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></p>`;
+        content += `<p><button id="downloadGeoJSON" type="button" class="btn btn-switch" aria-current="page" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></p>`;
       } else {
-        content += `<p><button id="saveTrip" type="button" onclick="saveTrip()">${texts.saveTripButton}</button></p>`;
+        content += `<p><button id="saveTrip" type="button" class="btn btn-switch" aria-current="page" onclick="saveTrip()">${texts.saveTripButton}</button></p>`;
         if(newTrip.precision == "preciseDates"){
-          content += `<button id="saveTripContinue" type="button"  onclick="saveTrip(true)">${texts.saveTripContinueButton}</button>`;
+          content += `<button id="saveTripContinue" type="button" class="btn btn-switch" aria-current="page" onclick="saveTrip(true)">${texts.saveTripContinueButton}</button>`;
         }
       }
        
@@ -492,4 +493,5 @@ function routing(map, showSidebar=true, type){
     }, 500);
   }
 }
+
 window.switchRouter = switchRouter;
