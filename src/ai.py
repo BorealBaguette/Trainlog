@@ -504,7 +504,8 @@ def create_trip_from_parsed(user, parsed_trip, purchase_date=None, source="ai"):
         material_type = None
     
     tf = TimezoneFinder()
-    start_datetime = end_datetime = utc_start_datetime = utc_end_datetime = estimated_duration = None
+    start_datetime = end_datetime = utc_start_datetime = utc_end_datetime =  None
+    estimated_duration = 0
     
     utc_start = parsed_trip.get("utc_start_datetime")
     utc_end = parsed_trip.get("utc_end_datetime")
@@ -551,7 +552,7 @@ def create_trip_from_parsed(user, parsed_trip, purchase_date=None, source="ai"):
     if utc_start_datetime and utc_end_datetime:
         estimated_duration = int((utc_end_datetime - utc_start_datetime).total_seconds())
         if estimated_duration < 0:
-            estimated_duration = None
+            estimated_duration = 0
     
     trip = Trip(
         username=user.username, user_id=user.uid, origin_station=origin_station, destination_station=dest_station,
