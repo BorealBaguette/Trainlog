@@ -768,5 +768,8 @@
     "error_parse_failed": "Misslyckades att tolka",
     "error_no_trips": "Inga resor hittades",
     "error_invalid_parse": "Ogiltig eller förfallen tolkning",
-    "error_unauthorized": "Obehörig"
+    "error_unauthorized": "Obehörig",
+    "routeTrip" : "Ruttplanering",
+    "sharedLink" : "Delad resa",
+    "colorblindMode" : "Färgblindhetsläge"
 }

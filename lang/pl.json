@@ -768,5 +768,8 @@
     "error_parse_failed": "Nie udało się przeanalizować",
     "error_no_trips": "Nie znaleziono podróży",
     "error_invalid_parse": "Nieprawidłowa lub wygasła analiza",
-    "error_unauthorized": "Nieautoryzowany"
+    "error_unauthorized": "Nieautoryzowany",
+    "routeTrip" : "Planowanie trasy",
+    "sharedLink" : "Wspólna podróż",
+    "colorblindMode" : "Tryb dla daltonistów"
 }

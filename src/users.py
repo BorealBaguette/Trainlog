@@ -24,6 +24,7 @@ class User(authDb.Model):
     translator = authDb.Column(authDb.Boolean, nullable=False, default=False)
     user_currency = authDb.Column(authDb.String(3), nullable=False, default="EUR")
     friend_search = authDb.Column(authDb.Boolean, nullable=False, default=True)
+    colorblind = authDb.Column(authDb.Boolean, nullable=False, default=False)
     reset_token = authDb.Column(authDb.String(100), default="")
     default_landing = authDb.Column(authDb.String(20), nullable=False, default="map")
     appear_on_global = authDb.Column(authDb.Boolean, nullable=False, default=False)
@@ -46,6 +47,7 @@ class User(authDb.Model):
             "reset_token": self.reset_token,
             "share_level": self.share_level,
             "user_currency": self.user_currency,
+            "colorblind": self.colorblind,
             "tileserver": self.tileserver,
             "globe": self.globe,
             "premium": self.premium,

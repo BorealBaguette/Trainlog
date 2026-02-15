@@ -768,5 +768,8 @@
     "error_parse_failed": "Не вдалося розібрати",
     "error_no_trips": "Подорожі не знайдено",
     "error_invalid_parse": "Неправильний або прострочений розбір",
-    "error_unauthorized": "Несанкціоновано"
+    "error_unauthorized": "Несанкціоновано",
+    "routeTrip" : "Планування маршруту",
+    "sharedLink" : "Спільна поїздка",
+    "colorblindMode" : "Режим для дальтоніків"
 }

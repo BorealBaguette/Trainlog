@@ -768,5 +768,8 @@
     "error_parse_failed": "Échec de l'analyse",
     "error_no_trips": "Aucun trajet trouvé",
     "error_invalid_parse": "Analyse invalide ou expirée",
-    "error_unauthorized": "Non autorisé"
+    "error_unauthorized": "Non autorisé",
+    "routeTrip" : "Planification d’itinéraire",
+    "sharedLink" : "Voyage partagé",
+    "colorblindMode" : "Mode daltonien"
 }

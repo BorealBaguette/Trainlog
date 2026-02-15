@@ -768,5 +768,8 @@
     "error_parse_failed": "Kunne ikke analysere",
     "error_no_trips": "Ingen rejser fundet",
     "error_invalid_parse": "Ugyldig eller udløbet analyse",
-    "error_unauthorized": "Uautoriseret"
+    "error_unauthorized": "Uautoriseret",
+    "routeTrip" : "Rejseruting",
+    "sharedLink" : "Fælles tur",
+    "colorblindMode" : "Farveblind tilstand"
 }

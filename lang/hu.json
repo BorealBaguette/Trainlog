@@ -768,5 +768,8 @@
     "error_parse_failed": "Sikertelen feldolgozás",
     "error_no_trips": "Nem található utazás",
     "error_invalid_parse": "Érvénytelen vagy lejárt feldolgozás",
-    "error_unauthorized": "Engedély nélküli"
+    "error_unauthorized": "Engedély nélküli",
+    "routeTrip" : "Útvonaltervezés",
+    "sharedLink" : "Megosztott utazás",
+    "colorblindMode" : "Színvakság mód"
 }

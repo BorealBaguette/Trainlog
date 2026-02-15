@@ -768,5 +768,8 @@
     "error_parse_failed": "Parsimine ebaõnnestus",
     "error_no_trips": "Reise ei leitud",
     "error_invalid_parse": "Kehtetu või aegunud parsimine",
-    "error_unauthorized": "Volitamata"
+    "error_unauthorized": "Volitamata",
+    "routeTrip" : "Marsruudi planeerimine",
+    "sharedLink" : "Jagatud reis",
+    "colorblindMode" : "Värvipimeduse režiim"
 }
