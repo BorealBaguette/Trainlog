@@ -768,5 +768,8 @@
     "error_parse_failed": "Kon niet analyseren",
     "error_no_trips": "Geen reizen gevonden",
     "error_invalid_parse": "Ongeldige of verlopen analyse",
-    "error_unauthorized": "Ongeautoriseerd"
+    "error_unauthorized": "Ongeautoriseerd",
+    "routeTrip" : "Routeplanning",
+    "sharedLink" : "Gedeelde reis",
+    "colorblindMode" : "Kleurenblindmodus"
 }

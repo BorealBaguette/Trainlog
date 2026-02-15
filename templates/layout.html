@@ -37,6 +37,9 @@
   <script src="{{ url_for('static',filename='js/lib/leaflet.geometryutil.js') }}"></script>
   <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
   <script src="{{ url_for('static',filename='js/util.js') }}"></script>
+  <script>
+    window.colorblindMode = {{ 'true' if colorblind else 'false' }};
+  </script>
   <script src="{{ static_autoversion(filename='js/routing.js') }}"></script>
 
   {% if not special_og %}

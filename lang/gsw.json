@@ -768,5 +768,8 @@
     "error_parse_failed": "Verarbeitig fählgschlaa",
     "error_no_trips": "Kei Trips gfunde",
     "error_invalid_parse": "Uugültigi oder abgloffni Verarbeitig",
-    "error_unauthorized": "Nit bevochtiget"
+    "error_unauthorized": "Nit bevochtiget",
+    "routeTrip" : "Routenplanung",
+    "sharedLink" : "Geteilte Reise",
+    "colorblindMode" : "Farbenblindmodus"
 }

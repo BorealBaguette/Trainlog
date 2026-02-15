@@ -768,5 +768,8 @@
     "error_parse_failed": "解析に失敗しました",
     "error_no_trips": "旅行が見つかりませんでした",
     "error_invalid_parse": "無効または期限切れの解析",
-    "error_unauthorized": "未認可"
+    "error_unauthorized": "未認可",
+    "routeTrip" : "旅行ルート",
+    "sharedLink" : "共有された旅行",
+    "colorblindMode" : "色覚モード"
 }

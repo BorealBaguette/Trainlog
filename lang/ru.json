@@ -768,5 +768,8 @@
     "error_parse_failed": "Не удалось разобрать",
     "error_no_trips": "Поездок не найдено",
     "error_invalid_parse": "Недействительный или истекший анализ",
-    "error_unauthorized": "Неавторизованный"
+    "error_unauthorized": "Неавторизованный",
+    "routeTrip" : "Планирование маршрута",
+    "sharedLink" : "Совместная поездка",
+    "colorblindMode" : "Режим для дальтоников"
 }

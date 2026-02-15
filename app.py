@@ -2314,10 +2314,16 @@ def routing(username):
         trip_data = request.form.get('trip_data') or request.get_json()
         if isinstance(trip_data, dict):
             trip_data = json.dumps(trip_data)
+    
+    user_obj = User.query.filter_by(username=username).first()
+    colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
+
     return render_template(
         "routing.html",
+        title=lang[session["userinfo"]["lang"]]["routeTrip"],
         username=username,
         trip_data=trip_data,
+        colorblind=colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -2332,6 +2338,7 @@ def air_routing(username, type):
             trip_data = json.dumps(trip_data)
     return render_template(
         "air_routing.html",
+        title=lang[session["userinfo"]["lang"]]["routeTrip"],
         type=type,
         username=username,
         trip_data=trip_data,
@@ -2343,9 +2350,12 @@ def air_routing(username, type):
 @app.route("/u/<username>/freehand")
 @login_required
 def freehand(username):
+    user_obj = User.query.filter_by(username=username).first()
+    colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
     return render_template(
         "freehand.html",
         username=username,
+        colorblind=colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -2354,9 +2364,12 @@ def freehand(username):
 @app.route("/u/<username>/ship_routing")
 @login_required
 def ship_routing(username):
+    user_obj = User.query.filter_by(username=username).first()
+    colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
     return render_template(
         "ship_routing.html",
         username=username,
+        colorblind=colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -2806,10 +2819,14 @@ def countries(username, cc):
     if not os.path.exists(file_path):
         abort(410)
 
+    user_obj = User.query.filter_by(username=username).first()
+    colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
+
     return render_template(
         "countries.html",
         title=lang[session["userinfo"]["lang"]]["map"],
         username=username,
+        colorblind=colorblind,
         nav=nav,
         cc=cc,
         isCurrent=has_current_trip(get_user_id(username)),
@@ -3493,6 +3510,14 @@ def listOperatorsLogos(tripType=None):
 def render_public_trip_page(
     tripIds=None, tagId=None, ticketId=None, template="public/public_trip.html"
 ):
+    
+    user_obj = None
+    colorblind = False
+    username = getUser()
+    if username:
+        user_obj = User.query.filter_by(username=username).first()
+        colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
+
     tag_type = None
     tag_name = None
     countries = []
@@ -3609,6 +3634,7 @@ def render_public_trip_page(
         template,
         logosList=listOperatorsLogos(),
         tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
+        title=lang[session["userinfo"]["lang"]]["sharedLink"],
         collection_voyage=tag_type,
         tag_description=tag_name,
         special_og=True,
@@ -3616,6 +3642,7 @@ def render_public_trip_page(
         globe=globe,
         og=og,
         num_hidden_trips=num_hidden_trips,
+        colorblind = colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -3632,8 +3659,13 @@ def public_trip(tripIds=None, tagId=None, ticketId=None):
 @app.route("/public/new/tag/<tagId>")
 @app.route("/public/new/ticket/<ticketId>")
 def public_trip_new(tripIds=None, tagId=None, ticketId=None):
+    colorblind = False
+    username = getUser()
+    if username:
+        user_obj = User.query.filter_by(username=username).first()
+        colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
     return render_public_trip_page(
-        tripIds, tagId, ticketId, template="public/new_trip.html"
+        tripIds, tagId, ticketId, template="public/new_trip.html", colorblind=colorblind
     )
 
 
@@ -3660,6 +3692,7 @@ def multi_trip(tripIds):
 
     return render_template(
         "public/multi_trip.html",
+        title=lang[session["userinfo"]["lang"]]["sharedLink"],
         tripIds=tripIds,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
@@ -3832,10 +3865,13 @@ def current(username):
     """
     Current trip
     """
+    user_obj = User.query.filter_by(username=username).first()
+    colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
     return render_template(
         "current.html",
         title=lang[session["userinfo"]["lang"]]["current"],
         username=username,
+        colorblind=colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -4377,10 +4413,21 @@ def here_route_display(
     # 4) Pass trips into the template as JSON
     trips_json = json.dumps(sortedTripList)
 
+    # 5) Checks if there's a user for colorblind information
+    user_obj = None
+    colorblind = False
+    if "userinfo" in session and session["userinfo"]:
+        try:
+            user_obj = User.query.filter_by(username=username).first()
+            colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
+        except Exception:
+            colorblind = False
+
     return render_template(
         "here_routing.html",  # see below
         trips_json=trips_json,
         username=username,
+        colorblind=colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -5910,6 +5957,7 @@ def user_settings(username):
         params["leaderboard"] = "leaderboard" in request.form
         params["friend_search"] = "friend_search" in request.form
         params["appear_on_global"] = "appear_on_global" in request.form
+        params["colorblind"] = "colorblind" in request.form
         params["lang"] = request.form["lang"]
         params["user_currency"] = request.form["user_currency"]
         params["default_landing"] = request.form["default_landing"]
@@ -5930,6 +5978,7 @@ def user_settings(username):
     leaderboard_checked = "checked" if user.leaderboard else ""
     friend_search_checked = "checked" if user.friend_search else ""
     appear_on_global_checked = "checked" if user.appear_on_global else ""
+    colorblind_checked = "checked" if user.colorblind else ""
 
     return render_template(
         "user_settings.html",
@@ -5941,6 +5990,7 @@ def user_settings(username):
         leaderboard_checked=leaderboard_checked,
         friend_search_checked=friend_search_checked,
         appear_on_global_checked=appear_on_global_checked,
+        colorblind_checked=colorblind_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
@@ -5965,6 +6015,7 @@ def user_settings_app(username):
             "leaderboard", 
             "friend_search", 
             "appear_on_global", 
+            "colorblind",
             "user_currency"
         }
         changed = {}
@@ -5993,6 +6044,7 @@ def user_settings_app(username):
         "leaderboard": user.leaderboard,
         "friend_search": user.friend_search,
         "appear_on_global": user.appear_on_global,
+        "colorblind": user.colorblind,
         "user_currency": user.user_currency,
     }), 200
 
@@ -6060,6 +6112,9 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     """
     Edit or copy trip details
     """
+    user_obj = User.query.filter_by(username=username).first()
+    colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
+
     if "edit" in request.path:
         edit_copy_type = "edit"
     elif "copy" in request.path:
@@ -6159,6 +6214,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         tripTicketId=tripTicketId or "",
         wplist=wplist,
         tripNotes=tripNotes or "",
+        colorblind=colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -8977,13 +9033,13 @@ def live_map():
     """
     return render_template(
         "public/current_global.html",
-        title=lang[session["userinfo"]["lang"]]["live_map"],
         username=getUser(),
         logosList=listOperatorsLogos(),
         translations=lang[session["userinfo"]["lang"]],
         api_endpoint=url_for("get_public_current_trips"),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
+        title=lang[session["userinfo"]["lang"]]["live_map"],
     )
 
 @app.route("/admin/live_map")

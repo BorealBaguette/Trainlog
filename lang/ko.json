@@ -768,5 +768,8 @@
     "error_parse_failed": "구문 분석 실패",
     "error_no_trips": "여행을 찾을 수 없습니다",
     "error_invalid_parse": "유효하지 않거나 만료된 구문 분석",
-    "error_unauthorized": "권한 없음"
+    "error_unauthorized": "권한 없음",
+    "routeTrip" : "여행 경로",
+    "sharedLink" : "공유 여행",
+    "colorblindMode" : "색각 이상 모드"
 }

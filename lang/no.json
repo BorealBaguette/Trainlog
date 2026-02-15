@@ -768,5 +768,8 @@
     "error_parse_failed": "Kunne ikke analysere",
     "error_no_trips": "Ingen turer funnet",
     "error_invalid_parse": "Ugyldig eller utløpt analyse",
-    "error_unauthorized": "Uautorisert"
+    "error_unauthorized": "Uautorisert",
+    "routeTrip" : "Ruteplanlegging",
+    "sharedLink" : "Delt tur",
+    "colorblindMode" : "Fargeblindmodus"
 }

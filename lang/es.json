@@ -768,5 +768,8 @@
     "error_parse_failed": "Error al analizar",
     "error_no_trips": "No se encontraron viajes",
     "error_invalid_parse": "Análisis inválido o expirado",
-    "error_unauthorized": "No autorizado"
+    "error_unauthorized": "No autorizado",
+    "routeTrip" : "Planificación de ruta",
+    "sharedLink" : "Viaje compartido",
+    "colorblindMode" : "Modo para daltónicos"
 }
