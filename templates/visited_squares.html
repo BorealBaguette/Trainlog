@@ -1,7 +1,13 @@
 {% extends "bootstrap/layout.html" %}
-{% include "bootstrap/leafletLayout.html" %}
+{% set leaflet = True %}
 
 {% block content %}
+
+<link rel="stylesheet" href="{{ url_for('static',filename='styles/new_map.css') }}">
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
 
 {% include nav %}
@@ -19,81 +25,156 @@
 <div id="map" class="mapUser"></div>
 
 <script>
-  var map = createMap();
+    let map;
+    async function initVisitedSquaresMap() {
+        const params = new URLSearchParams(window.location.search);
+        const serverType = params.get('tileserver') || "{{ tileserver }}";
+        const useGlobe = params.has('globe') ? params.get('globe') === 'true' : {{ 'true' if globe else 'false' }};
 
-  function fetchVisitedSquaresGeoJSON() {
+        map = await MapLibreUtils.initializeMapLibre({
+            container: 'map',
+            tileserver: serverType,
+            useGlobe,
+            userLanguage: "{{langId}}",
+            center: [10, 50],
+            zoom: 3
+        });
+
+        map.on("load", () => {
+            addPercentageControl();
+            fetchVisitedSquaresGeoJSON();
+        });
+    }
+
+    function fetchVisitedSquaresGeoJSON() {
     fetch(`/u/{{username}}/visited_squares_data`)
-      .then(response => {
-        if (!response.ok) {
-          throw new Error('Network response was not ok');
-        }
-        return response.json();
-      })
-      .then(data => {
-        document.getElementById('percentageLand').textContent = data.land_percentage.toFixed(2) + '%';
-        document.getElementById('percentageAir').textContent = data.air_percentage.toFixed(2) + '%';
-        document.getElementById('percentageTotal').textContent = (data.land_percentage + data.air_percentage).toFixed(2) + '%';
+        .then(r => r.json())
+        .then(data => {
 
+        // percentages
+        document.getElementById('percentageLand').textContent =
+            data.land_percentage.toFixed(2) + '%';
+        document.getElementById('percentageAir').textContent =
+            data.air_percentage.toFixed(2) + '%';
+        document.getElementById('percentageTotal').textContent =
+            (data.land_percentage + data.air_percentage).toFixed(2) + '%';
 
-        var geoLayer = L.geoJSON(data.geojson, {
-            style: function (feature) {
-                const status = feature.properties.status;
-                let fillColor = "blue";
-                let fillOpacity = 0.5;
+        // --- GRID LAYER (underneath) ---
+        if (data.grid_geojson) {
+            map.addSource("grid", {
+            type: "geojson",
+            data: data.grid_geojson
+            });
 
-                if (status === "stopped") {
-                    fillOpacity = 0.7;
-                }
-
-                if (status === "air") {
-                    fillColor = "green";
-                    fillOpacity = 0.5;
-                }
-
-                return {
-                    fillColor: fillColor,
-                    weight: 2,
-                    opacity: 1,
-                    color: fillColor,
-                    fillOpacity: fillOpacity
-                };
+            map.addLayer({
+            id: "grid-layer",
+            type: "line",
+            source: "grid",
+            paint: {
+                "line-color": "#aaaaaa",
+                "line-width": 0.5,
+                "line-opacity": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    0, 0.1,
+                    7, 0.5,
+                    10, 0.9
+                ]
             }
-        }).addTo(map);
+            });
+        }
 
-        map.fitBounds(geoLayer.getBounds());
+        // --- VISITED SQUARES ---
+        map.addSource("visited", {
+            type: "geojson",
+            data: data.geojson
+        });
 
-        $('.loading-screen').css('display', 'none');
-      })
-      .catch(error => {
-        alert('There was a problem with the fetch operation:', error.message);
-        $('.loading-screen').css('display', 'none');
-      });
-  }
+        map.addLayer({
+            id: "visited-fill",
+            type: "fill",
+            source: "visited",
+            paint: {
+            "fill-color": [
+                "match",
+                ["get", "status"],
+                "air", "#00aa00",
+                "stopped", "#0000ff",
+                "#3388ff"
+            ],
+            "fill-opacity": [
+                "match",
+                ["get", "status"],
+                "stopped", 0.7,
+                "air", 0.5,
+                0.5
+            ]
+            }
+        });
 
-  fetchVisitedSquaresGeoJSON();
+        map.addLayer({
+            id: "visited-outline",
+            type: "line",
+            source: "visited",
+            paint: {
+            "line-color": [
+                "match",
+                ["get", "status"],
+                "air", "#00aa00",
+                "stopped", "#0000ff",
+                "#3388ff"
+            ],
+            "line-width": 1
+            }
+        });
 
-  var PercentageControl = L.Control.extend({
-      options: {
-          position: 'topleft'
-      },
+        // auto zoom
+        const bounds = new maplibregl.LngLatBounds();
+        data.geojson.features.forEach(f => {
+            f.geometry.coordinates[0].forEach(coord => bounds.extend(coord));
+        });
+        if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 40 });
 
-      onAdd: function () {
-          var div = L.DomUtil.create('div', 'percentage-control');
-          div.innerHTML = `
-            <h4><i class="fas fa-percent"></i></h4><br/>
-            <div><i class="fas fa-globe"></i> <span id="percentageLand">...</span></div>
-            <div><i class="fas fa-plane"></i> <span id="percentageAir">...</span></div>
-            <div><i class="fas fa-chart-pie"></i> <span id="percentageTotal">...</span></div>
+        $('.loading-screen').hide();
+        })
+        .catch(err => {
+        alert("Error loading map: " + err);
+        $('.loading-screen').hide();
+        });
+    }
 
-            <div class="legend mt-2">
-              <div><span class="legend-color" style="background-color: blue; opacity: 0.7;"></span> {{stopped}}</div>
-              <div><span class="legend-color" style="background-color: blue; opacity: 0.5;"></span> {{passed}}</div>
-              <div><span class="legend-color" style="background-color: green; opacity: 0.5;"></span> {{air}}</div>
-            </div>`;
-          return div;
-      }
-  });
-  map.addControl(new PercentageControl());
+    class PercentageControl {
+    onAdd() {
+        this._div = document.createElement("div");
+        this._div.className = "percentage-control";
+        this._div.innerHTML = `
+        <h4><i class="fas fa-percent"></i></h4><br/>
+        <div><i class="fas fa-globe"></i> <span id="percentageLand">...</span></div>
+        <div><i class="fas fa-plane"></i> <span id="percentageAir">...</span></div>
+        <div><i class="fas fa-chart-pie"></i> <span id="percentageTotal">...</span></div>
+
+        <div class="legend mt-2">
+            <div><span class="legend-color" style="background-color: blue; opacity:0.7;"></span> {{stopped}}</div>
+            <div><span class="legend-color" style="background-color: blue; opacity:0.5;"></span> {{passed}}</div>
+            <div><span class="legend-color" style="background-color: green; opacity:0.5;"></span> {{air}}</div>
+        </div>
+        `;
+        return this._div;
+    }
+    }
+
+    function addPercentageControl() {
+    const ctrl = new PercentageControl();
+    const el = ctrl.onAdd();
+    el.style.position = "absolute";
+    el.style.top = "10px";
+    el.style.left = "10px";
+    el.style.zIndex = 10;
+    document.getElementById("map").appendChild(el);
+    }
+
+    initVisitedSquaresMap();
 </script>
 
 <style>

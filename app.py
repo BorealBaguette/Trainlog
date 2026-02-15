@@ -8096,11 +8096,10 @@ def visited_squares(username):
 @public_required
 def visited_squares_data(username):
     """Fetch the GeoJSON data for the visited squares."""
-    geojson_data, land_percentage, air_percentage = generate_visited_squares_geojson(
-        username
-    )  # This is the updated function
+    geojson_data, grid_geojson, land_percentage, air_percentage = generate_visited_squares_geojson(username)
     response = {
         "geojson": geojson_data,
+        "grid_geojson": grid_geojson,
         "land_percentage": land_percentage,
         "air_percentage": air_percentage,
     }
@@ -8252,30 +8251,57 @@ def generate_visited_squares_geojson(username):
         )
     mainConn.commit()
 
-    features = []
+    # --- VISITED FEATURES ---
+    visited_features = []
     for square, status in visited_squares.items():
         lat, lon = square
         feature = {
             "type": "Feature",
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [
-                    [
+                "coordinates": [[
+                    [lon, lat],
+                    [lon + 1, lat],
+                    [lon + 1, lat + 1],
+                    [lon, lat + 1],
+                    [lon, lat],
+                ]],
+            },
+            "properties": {"status": status},
+        }
+        visited_features.append(feature)
+
+    visited_geojson = {
+        "type": "FeatureCollection",
+        "features": visited_features
+    }
+
+    # --- FULL GRID FEATURES (ALL WORLD SQUARES) ---
+    grid_features = []
+
+    for lat in range(-90, 90):
+        for lon in range(-180, 180):
+            grid_features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
                         [lon, lat],
                         [lon + 1, lat],
                         [lon + 1, lat + 1],
                         [lon, lat + 1],
                         [lon, lat],
-                    ]
-                ],
-            },
-            "properties": {"status": status},
-        }
-        features.append(feature)
+                    ]],
+                },
+                "properties": {}
+            })
 
-    geojson_data = {"type": "FeatureCollection", "features": features}
-    return geojson_data, land_percentage, air_percentage
+    grid_geojson = {
+        "type": "FeatureCollection",
+        "features": grid_features
+    }
 
+    return visited_geojson, grid_geojson, land_percentage, air_percentage
 
 @app.route("/tile/<style>/<x>/<y>/<z>/")
 @app.route("/tile/<style>/<x>/<y>/<z>/<r>")
