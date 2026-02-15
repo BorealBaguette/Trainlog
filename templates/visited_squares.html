@@ -72,7 +72,14 @@
             source: "grid",
             paint: {
                 "line-color": "#aaaaaa",
-                "line-width": 0.5,
+                "line-width": [
+                    "interpolate",
+                    ["linear"],
+                    ["zoom"],
+                    0, 0.1,
+                    7, 0.5,
+                    10, 0.9
+                ],
                 "line-opacity": [
                     "interpolate",
                     ["linear"],
