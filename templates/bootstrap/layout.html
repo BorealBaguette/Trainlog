@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html lang="{{ langId }}">
+
 <head>
-	<meta http-equiv="Content-type" content="text/html; charset=utf-8">
+  <meta charset="utf-8">
+  <meta http-equiv="Content-type" content="text/html; charset=utf-8">
 	<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
   <meta name="title" content="Trainlog - Your online trip diary">
   <meta name="description" content="Your go-to app for storing and sharing public transport trips. Use Trainlog to create, edit, share routes using OSM data, and more.">
@@ -20,14 +22,15 @@
   <link rel="shortcut icon" href="/static/favicon/favicon.ico" type="image/x-icon">
 
     <title>
-      {% if title %}
-          {{title}} - 
-      {% endif %}
-      Trainlog
-      {% if username %}
-          - {{username}}
-      {% endif %}
+    {% if title %}
+        {{title}} - 
+    {% endif %}
+    Trainlog
+    {% if username %}
+        - {{username}}
+    {% endif %}
   </title>
+
   {% if not special_og %}
     <meta content="Trainlog" property="og:title" />
     <meta content="Your online travel diary" property="og:description" />
@@ -35,63 +38,129 @@
     <meta content="{{ url_for('static',filename='images/logo_og.png', _external=True) }}" property="og:image" />
   {% else %}
     <meta content="{{og['title']}}" property="og:title" />
-    <meta content="Your online travel diary" property="og:description" />
+    <meta content="{{og['description']}}" property="og:description" />
     <meta content="{{request.url_root}}" property="og:url" />
     <meta content="{{ url_for('static',filename='images/logo_og.png', _external=True) }}" property="og:image" />
   {% endif %}
+    <meta content="{{request.url_root}}" property="og:url" />
+    <meta content="{{ url_for('static',filename='images/logo_og.png', _external=True) }}" property="og:image" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<!-- ===================================================== -->
+<!-- CORE CSS (frameworks first) -->
+<!-- ===================================================== -->
+
+<!-- Bootstrap + icons -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+
+<!-- jQuery UI -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-ui-dist@1.13.2/jquery-ui.min.css">
+<link rel="stylesheet" href="{{ url_for('static',filename='styles/lib/jquery-ui.css') }}">
+
+<!-- DataTables -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-dt@1.13.4/css/jquery.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-responsive-dt@2.4.1/css/responsive.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-select-dt@1.6.2/css/select.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-scroller-dt@2.4.3/css/scroller.dataTables.min.css">
+
+<!-- Bootstrap plugins -->
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-colorpicker@3.4.0/dist/css/bootstrap-colorpicker.css">
+
+<!-- ===================================================== -->
+<!-- CORE JS (LOAD ORDER MATTERS) -->
+<!-- ===================================================== -->
+
+<!-- jQuery FIRST (everything depends on it) -->
+<script src="https://code.jquery.com/jquery-3.5.1.js"></script>
+<script src="{{ url_for('static',filename='js/lib/jquery-3.6.0.min.js') }}"></script>
+
+<!-- jQuery UI -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
+<script src="{{ url_for('static',filename='js/lib/jquery-ui.min.js') }}"></script>
+
+<!-- Popper -> Bootstrap -->
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js"></script>
+
+<!-- Bootstrap plugins -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/js/bootstrap-select.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-colorpicker/3.4.0/js/bootstrap-colorpicker.min.js"></script>
+
+<!-- ===================================================== -->
+<!-- DATATABLES -->
+<!-- ===================================================== -->
+
+<script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net-responsive@2.4.1/js/dataTables.responsive.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net-select@1.6.2/js/dataTables.select.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net-plugins@2.3.2/dataRender/ellipsis.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/datatables.net-scroller@2.4.3/js/dataTables.scroller.min.js"></script>
+
+<!-- ===================================================== -->
+<!-- UTIL LIBS -->
+<!-- ===================================================== -->
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-cookie"></script>
+<script src="https://cdn.jsdelivr.net/npm/masonry-layout@4/dist/masonry.pkgd.min.js"></script>
+<script src="{{ url_for('static',filename='js/lib/localforage.min.js') }}"></script>
+
+<!-- ===================================================== -->
+<!-- LEAFLET + MAP LIBS -->
+<!-- ===================================================== -->
+
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-ant-path@1.3.0/dist/leaflet-ant-path.js"></script>
+<script src="https://unpkg.com/osmtogeojson@2.2.12/osmtogeojson.js"></script>
+
+<script src="{{ url_for('static',filename='js/lib/Control.Geocoder.js') }}"></script>
+<script src="{{ url_for('static',filename='js/lib/leaflet-routing-machine-antpath.js') }}"></script>
+<script src="{{ url_for('static',filename='js/lib/L.Control.Sidebar.js') }}"></script>
+<script src="{{ url_for('static',filename='js/lib/L.Geodesic.js') }}"></script>
+<script src="{{ url_for('static',filename='js/lib/leaflet-numbered-markers.js') }}"></script>
+<script src="{{ url_for('static',filename='js/lib/leaflet.geometryutil.js') }}"></script>
+
+<!-- ===================================================== -->
+<!-- CHARTS -->
+<!-- ===================================================== -->
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@3.8.0/dist/chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels"></script>
+
+<!-- ===================================================== -->
+<!-- CUSTOM APP JS -->
+<!-- ===================================================== -->
+
+<script src="{{ url_for('static',filename='js/util.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/map.js') }}"></script>
+
+<script>
+  window.colorblindMode = {{ 'true' if colorblind else 'false' }};
+</script>
+
+<script src="{{ static_autoversion(filename='js/routing.js') }}"></script>
+
+<!-- ===================================================== -->
+<!-- LEAFLET + MAP CSS -->
+<!-- ===================================================== -->
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"/>
+<link rel="stylesheet" href="{{ url_for('static',filename='styles/lib/Control.Geocoder.css') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='styles/lib/leaflet-routing-machine.css') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='styles/lib/L.Control.Sidebar.css') }}">
+<link rel="stylesheet" href="{{ url_for('static',filename='styles/lib/leaflet-numbered-markers.css') }}">
+
+<!-- ===================================================== -->
+<!-- CUSTOM CSS -->
+<!-- ===================================================== -->
+
+<link rel="stylesheet" href="{{ static_autoversion(filename='styles/style.css') }}">
+<link rel="stylesheet" href="{{ static_autoversion(filename='styles/style2.css') }}">
   
-  <!-- CSS	 -->
-    <!-- Jquery -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/jquery-ui-dist@1.13.2/jquery-ui.min.css">
-    <!-- Jquery DataTables -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-dt@1.13.4/css/jquery.dataTables.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-responsive-dt@2.4.1/css/responsive.dataTables.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-select-dt@1.6.2/css/select.dataTables.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-scroller-dt@2.4.3/css/scroller.dataTables.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-colorpicker@3.4.0/dist/css/bootstrap-colorpicker.css">
-
-
-    <!-- bootstrap -->
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.3/font/bootstrap-icons.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/css/bootstrap-select.min.css">
-    <!-- Custom -->
-    <link rel="stylesheet" href="{{ static_autoversion(filename='styles/style2.css') }}">
-
-    {% if leaflet %}
-      {% include "bootstrap/leafletLayout.html" %}
-    {% endif %}
-
-
-  <!-- JS -->
-    <!-- Jquery -->
-      <script type="text/javascript" language="javascript" src="https://code.jquery.com/jquery-3.5.1.js"></script>
-      <script type="text/javascript" language="javascript" src="https://cdnjs.cloudflare.com/ajax/libs/jqueryui/1.13.2/jquery-ui.min.js"></script>
-    <!-- Jquery DataTables -->
-      <script src="https://cdn.jsdelivr.net/npm/datatables.net@1.13.4/js/jquery.dataTables.min.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/datatables.net-responsive@2.4.1/js/dataTables.responsive.min.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/datatables.net-select@1.6.2/js/dataTables.select.min.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/datatables.net-plugins@2.3.2/dataRender/ellipsis.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/datatables.net-scroller@2.4.3/js/dataTables.scroller.min.js"></script>
-
-    <!-- bootstrap -->
-      <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/bootstrap-select@1.14.0-beta3/dist/js/bootstrap-select.min.js"></script>
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-colorpicker/3.4.0/js/bootstrap-colorpicker.min.js"></script>
-    <!-- Moment -->
-      <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
-    <!-- Custom --> 
-      <script src="{{ static_autoversion(filename='js/util.js') }}"></script>
-    <!--JS cookie-->
-      <script src="https://cdn.jsdelivr.net/npm/js-cookie"></script>
-    <!-- Masonry -->
-      <script src="https://cdn.jsdelivr.net/npm/masonry-layout@4/dist/masonry.pkgd.min.js"></script>
-    <!-- LocalForage -->
-      <script src="{{ url_for('static',filename='js/lib/localforage.min.js') }}"></script>
-
-    
   <script>
     const langId = '{{langId}}' ? '{{langId}}' : 'en';
     const _regionNames = new Intl.DisplayNames(
