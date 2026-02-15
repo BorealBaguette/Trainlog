@@ -1,4 +1,4 @@
-{% extends "layout.html" %}
+{% extends "bootstrap/layout.html" %}
 {% block content %}
 <script>
 </script>
@@ -7,7 +7,7 @@
 </div>
 
 <div id="sidebar">
-    <div id="sidebar-content">
+    <div id="sidebar-content" class="sidebar-nav">
     </div>
 </div>
 
@@ -53,11 +53,11 @@ var destLabel = newTrip["destinationStation"][1];
 var spinnerContent = '<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>';
 var errorContent = "<h4> {{routingError}} <h4>";
 errorContent += "<p> {{routingErrorDetails}} </p>";
-errorContent += `<p><button onclick="location.reload()"> {{retry}} </button></p>`;
+errorContent += `<p><button class="btn btn-switch" aria-current="page" onclick="location.reload()"> {{retry}} </button></p>`;
 
 var saveErrorContent = "<h4> {{saveError}} </h4>";
 saveErrorContent += "<p> {{saveErrorDetails}} </p>";
-saveErrorContent += `<p><button onclick="location.reload();"> {{retry}} </button></p>`;
+saveErrorContent += `<p><button class="btn btn-switch" aria-current="page" onclick="location.reload();"> {{retry}} </button></p>`;
 
 var map = createMap(null, origCoord);
 var sidebar;
@@ -150,7 +150,7 @@ async function updateRoute() {
 
     var content = `<h4>${origLabel} to ${destLabel}</h4>`;
     content += `<p><i>${km} km, ${time}</i></p>`;
-    content += `<p><button id="saveTrip" type="button" onclick="saveTrip()"> Submit </button></p>`;
+    content += `<p><button id="saveTrip"class="btn btn-switch" aria-current="page" type="button" onclick="saveTrip()"> Submit </button></p>`;
 
     sidebar.setContent(content);
 }
