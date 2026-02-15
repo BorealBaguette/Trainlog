@@ -1,4 +1,4 @@
-{% extends "layout.html" %}
+{% extends "bootstrap/layout.html" %}
 {% block content %}
 <script>
 </script>
@@ -7,7 +7,7 @@
 </div>
 
 <div id="sidebar">
-    <div id="sidebar-content">
+    <div id="sidebar-content" class="sidebar-nav">
     </div>
 </div>
 {% if from_app %}
@@ -179,7 +179,7 @@ function updateSidebar(isFr24Active) {
         content += `<p><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></p>`;
     }
 
-    content += `<p><button id="saveTrip" type="button" onclick="saveTrip()" class="btn btn-success">Submit</button></p>`;
+    content += `<p><button id="saveTrip" type="button" class="btn btn-switch" aria-current="page" onclick="saveTrip()" class="btn btn-success">Submit</button></p>`;
     sidebar.setContent(content);
 }
 

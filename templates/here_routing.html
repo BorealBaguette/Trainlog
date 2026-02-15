@@ -1,4 +1,4 @@
-{% extends "layout.html" %}
+{% extends "bootstrap/layout.html" %}
 {% block content %}
 
 
@@ -24,7 +24,7 @@
 <div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>
 
 <div id="sidebar">
-  <div id="sidebar-content">
+  <div id="sidebar-content" class="sidebar-nav">
     <div class="itineraryWrapper">
       <ul class="events" id="itinerary">
         <div id="tripDetails">
@@ -452,7 +452,7 @@ if (operatorContents.length) {
     );
   }
 });
-$('.itineraryWrapper').append('<button id="saveButton" style="margin-left:100px" disabled>Save</button>');
+$('.itineraryWrapper').append('<button class="btn btn-switch" aria-current="page" id="saveButton" style="margin-left:100px" disabled>Save</button>');
 }
 
 function getPopupContent(uid, origin_station, destination_station, start_date, start_time, end_time){

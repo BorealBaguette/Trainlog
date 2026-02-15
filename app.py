@@ -2354,6 +2354,7 @@ def routing(username):
         from_app=from_app,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
+        title=lang[session["userinfo"]["lang"]]["routeTrip"],
     )
 
 @app.route("/u/<username>/air_routing/<type>", methods=['GET', 'POST'])
@@ -2374,6 +2375,7 @@ def air_routing(username, type):
         from_app=from_app,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
+        title=lang[session["userinfo"]["lang"]]["routeTrip"],
     )
 
 
@@ -2935,10 +2937,30 @@ def getCountryGeoJSON(username, cc):
         total_area = geojson_data["total_area_m2"]
         percent = math.ceil(min((traveled_area / total_area) * 100, 100))
         with managed_cursor(mainConn) as cursor:
+            # Check if the row already exists
             cursor.execute(
-                upsertPercent, {"username": username, "cc": cc, "percent": percent}
+                "SELECT cc, username FROM percents WHERE cc = ? AND username = ?",
+                (cc, username),
             )
+            existing = cursor.fetchone()
+
+            if existing:
+                # Update the existing row
+                cursor.execute(
+                    "UPDATE percents SET percent = ? WHERE cc = ? AND username = ?",
+                    (percent, cc, username),
+                )
+                print(f"Updated percent for {username} / {cc} -> {percent}%")
+            else:
+                # Insert a new row
+                cursor.execute(
+                    "INSERT INTO percents (username, cc, percent) VALUES (?, ?, ?)",
+                    (username, cc, percent),
+                )
+                print(f"Inserted percent for {username} / {cc} -> {percent}%")
+
         mainConn.commit()
+
     end_time = datetime.now()  # End the timer
     render_time = end_time - start_time  # Calculate the difference
     print(render_time)
@@ -3598,6 +3620,7 @@ def render_public_trip_page(
         colorblind = colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
+        title=lang[session["userinfo"]["lang"]]["sharedLink"],
     )
 
 
@@ -3649,6 +3672,7 @@ def multi_trip(tripIds):
         tripIds=tripIds,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
+        title=lang[session["userinfo"]["lang"]]["sharedLink"],
     )
 
 

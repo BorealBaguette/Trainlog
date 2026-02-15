@@ -1,9 +1,9 @@
-{% extends "layout.html" %}
+{% extends "bootstrap/layout.html" %}
 {% block content %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
 <div id="map" class="mapRouting"></div>
 <div id="sidebar">
-    <div id="sidebar-content"></div>
+    <div id="sidebar-content" class="sidebar-nav"></div>
 </div>
 {% if from_app %}
 <style>
@@ -70,8 +70,8 @@ var origLabel = newTrip["originStation"][1];
 var destLabel = newTrip["destinationStation"][1];
 var wplist = [origCoord, destCoord];
 var spinnerContent = '<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>';
-var errorContent = '<h4 id="routing-error">{{routingError}}<h4><p>{{routingErrorDetails}}</p><p><button onclick=\"location.reload()\">{{retry}}</button></p>';
-var saveErrorContent = '<h4 id="save-error">{{saveError}}</h4><p>{{saveErrorDetails}}</p><p><button onclick=\"location.reload();\">{{retry}}</button></p>';
+var errorContent = '<h4 id="routing-error">{{routingError}}<h4><p>{{routingErrorDetails}}</p><p><button class="btn btn-switch" aria-current="page" onclick=\"location.reload()\">{{retry}}</button></p>';
+var saveErrorContent = '<h4 id="save-error">{{saveError}}</h4><p>{{saveErrorDetails}}</p><p><button class="btn btn-switch" aria-current="page" onclick=\"location.reload();\">{{retry}}</button></p>';
 var map = createMap(null, origCoord);
 var sidebar;
 var getCountryUrl = '{{url_for("getCountry")}}';
