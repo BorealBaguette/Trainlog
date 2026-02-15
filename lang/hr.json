@@ -768,5 +768,8 @@
     "error_parse_failed": "Neuspjelo parsiranje",
     "error_no_trips": "Nema pronađenih putovanja",
     "error_invalid_parse": "Nevažeće ili isteklo parsiranje",
-    "error_unauthorized": "Neovlašteno"
+    "error_unauthorized": "Neovlašteno",
+    "routeTrip" : "Planiranje rute",
+    "sharedLink" : "Dijeljeno putovanje",
+    "colorblindMode" : "Način za daltonizam"
 }

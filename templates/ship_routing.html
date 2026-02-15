@@ -12,19 +12,30 @@
 </div>
 
 <script>
+const colorblindMode = {{ 'true' if colorblind else 'false' }};
+
 var markerIconStart = L.icon({
-    iconUrl: '/static/images/icons/marker-icon-2x-green.png',
-    iconRetinaUrl: '/static/images/icons/marker-icon-2x-green.png',
-    iconSize:    [25, 41],
-    iconAnchor:  [12, 41],
+    iconUrl: colorblindMode
+        ? '/static/images/icons/marker-icon-2x-purple.png'
+        : '/static/images/icons/marker-icon-2x-green.png',
+    iconRetinaUrl: colorblindMode
+        ? '/static/images/icons/marker-icon-2x-purple.png'
+        : '/static/images/icons/marker-icon-2x-green.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
     popupAnchor: [1, -34],
     tooltipAnchor: [16, -28],
 });
+
 var markerIconEnd = L.icon({
-    iconUrl: '/static/images/icons/marker-icon-2x-red.png',
-    iconRetinaUrl: '/static/images/icons/marker-icon-2x-red.png',
-    iconSize:    [25, 41],
-    iconAnchor:  [12, 41],
+    iconUrl: colorblindMode
+        ? '/static/images/icons/marker-icon-2x-orange.png'
+        : '/static/images/icons/marker-icon-2x-red.png',
+    iconRetinaUrl: colorblindMode
+        ? '/static/images/icons/marker-icon-2x-orange.png'
+        : '/static/images/icons/marker-icon-2x-red.png',
+    iconSize: [25, 41],
+    iconAnchor: [12, 41],
     popupAnchor: [1, -34],
     tooltipAnchor: [16, -28],
 });

@@ -768,5 +768,8 @@
     "error_parse_failed": "Jäsentäminen epäonnistui",
     "error_no_trips": "Ei matkoja löytynyt",
     "error_invalid_parse": "Virheellinen tai vanhentunut jäsennys",
-    "error_unauthorized": "Valtuuttamaton"
+    "error_unauthorized": "Valtuuttamaton",
+    "routeTrip" : "Reitin suunnittelu",
+    "sharedLink" : "Jaettu matka",
+    "colorblindMode" : "Värisokeustila"
 }

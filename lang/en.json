@@ -128,7 +128,7 @@
     "stationChange": "Station change",
     "copyLink": "Link copied",
     "lineName": "Line",
-    "current": "Current trip",
+    "current": "Current Trip",
     "others": "Others",
     "cancel": "Cancel",
     "yes": "Yes",
@@ -768,5 +768,8 @@
     "error_parse_failed": "Failed to parse",
     "error_no_trips": "No trips found",
     "error_invalid_parse": "Invalid or expired parse",
-    "error_unauthorized": "Unauthorized"
+    "error_unauthorized": "Unauthorized",
+    "routeTrip" : "Trip Routing",
+    "sharedLink" : "Shared Trip",
+    "colorblindMode" : "Colourblind Mode"
 }

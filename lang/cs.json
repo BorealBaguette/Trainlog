@@ -768,5 +768,8 @@
     "error_parse_failed": "Nepodařilo se zpracovat",
     "error_no_trips": "Nebyly nalezeny žádné výlety",
     "error_invalid_parse": "Neplatné nebo vypršelé zpracování",
-    "error_unauthorized": "Neautorizováno"
+    "error_unauthorized": "Neautorizováno",
+    "routeTrip" : "Směrování cesty",
+    "sharedLink" : "Společný výlet",
+    "colorblindMode" : "Barvoslepý režim"
 }

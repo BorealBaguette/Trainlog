@@ -2,7 +2,6 @@
 {% block content %}
 
 <div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>
-
 <div id="sidebar">
   <div id="sidebar-content">
     <ul class="events" id="itinerary">
@@ -17,10 +16,13 @@
 <script>
 
 const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+const colorblindMode = {{ 'true' if colorblind else 'false' }};
 
 var greenIcon = new L.Icon({
-  iconUrl: "{{ url_for('static',filename='images/icons/marker-icon-2x-green.png') }}",
-  shadowUrl: "{{ url_for('static',filename='images/icons/marker-shadow.png') }}",
+  iconUrl: colorblindMode
+    ? "{{ url_for('static', filename='images/icons/marker-icon-2x-purple.png') }}"
+    : "{{ url_for('static', filename='images/icons/marker-icon-2x-green.png') }}",
+  shadowUrl: "{{ url_for('static', filename='images/icons/marker-shadow.png') }}",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
@@ -28,16 +30,21 @@ var greenIcon = new L.Icon({
 });
 
 var redIcon = new L.Icon({
-  iconUrl: "{{ url_for('static',filename='images/icons/marker-icon-2x-red.png') }}",
-  shadowUrl: "{{ url_for('static',filename='images/icons/marker-shadow.png') }}",
+  iconUrl: colorblindMode
+    ? "{{ url_for('static', filename='images/icons/marker-icon-2x-orange.png') }}"
+    : "{{ url_for('static', filename='images/icons/marker-icon-2x-red.png') }}",
+  shadowUrl: "{{ url_for('static', filename='images/icons/marker-shadow.png') }}",
   iconSize: [25, 41],
   iconAnchor: [12, 41],
   popupAnchor: [1, -34],
   shadowSize: [41, 41]
 });
+
 var redGreenIcon = new L.Icon({
-  iconUrl: "{{ url_for('static',filename='images/icons/marker-icon-2x-redGreen.png') }}",
-  shadowUrl: "{{ url_for('static',filename='images/icons/marker-shadow.png') }}",
+  iconUrl: colorblindMode
+    ? "{{ url_for('static', filename='images/icons/marker-icon-2x-orangePurple.png') }}"
+    : "{{ url_for('static', filename='images/icons/marker-icon-2x-redGreen.png') }}",
+  shadowUrl: "{{ url_for('static', filename='images/icons/marker-shadow.png') }}",
   iconSize: [46, 41],
   iconAnchor: [23, 41],
   popupAnchor: [1, -34],

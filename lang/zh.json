@@ -768,5 +768,8 @@
     "error_parse_failed": "解析失败",
     "error_no_trips": "未找到行程",
     "error_invalid_parse": "解析无效或已过期",
-    "error_unauthorized": "未经授权"
+    "error_unauthorized": "未经授权",
+    "routeTrip" : "行程路线规划",
+    "sharedLink" : "共享行程",
+    "colorblindMode" : "色盲模式"
 }

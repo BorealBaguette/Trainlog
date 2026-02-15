@@ -768,5 +768,8 @@
     "error_parse_failed": "Ayrıştırma başarısız oldu",
     "error_no_trips": "Seyahat bulunamadı",
     "error_invalid_parse": "Geçersiz veya süresi dolmuş ayrıştırma",
-    "error_unauthorized": "Yetkisiz"
+    "error_unauthorized": "Yetkisiz",
+    "routeTrip" : "Rota planlama",
+    "sharedLink" : "Paylaşılan yolculuk",
+    "colorblindMode" : "Renk körü modu"
 }

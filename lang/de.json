@@ -768,5 +768,8 @@
     "error_parse_failed": "Analyse fehlgeschlagen",
     "error_no_trips": "Keine Reisen gefunden",
     "error_invalid_parse": "Ungültige oder abgelaufene Analyse",
-    "error_unauthorized": "Nicht autorisiert"
+    "error_unauthorized": "Nicht autorisiert",
+    "routeTrip" : "Routenplanung",
+    "sharedLink" : "Geteilte Reise",
+    "colorblindMode" : "Farbenblindmodus"
 }
