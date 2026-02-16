@@ -1,14 +1,14 @@
 import csv
 import io
-import logging
 import logging.config
 
 from src.pg import get_or_create_pg_session, pg_session
 from src.trips import Trip, compare_trip
-from src.utils import mainConn, managed_cursor, parse_date, authConn
+from src.utils import authConn, mainConn, managed_cursor, parse_date
 
 logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
+
 
 def get_user_id(username):
     with managed_cursor(authConn) as cursor:
@@ -33,6 +33,7 @@ def sync_db_from_sqlite():
     logger.info("Syncing SQLite database with PostgreSQL...")
     with pg_session() as pg:
         sync_trips_from_sqlite(pg)
+        sync_operators_from_sqlite(pg)
 
 
 def trip_to_csv(trip: Trip):
@@ -64,7 +65,7 @@ def trip_to_csv(trip: Trip):
         trip.currency,
         trip.ticket_id,
         trip.purchasing_date,
-        trip.visibility
+        trip.visibility,
     ]
     return items
 
@@ -186,6 +187,11 @@ def sync_trips_from_sqlite(pg_session=None):
         logger.info("Bulk inserting trips in pg...")
         cursor = pg.connection().connection.cursor()
         cursor.copy_expert(query, csv_buf)
+
+        # reset ID sequence so future rows line up with SQLite
+        pg.execute(
+            "SELECT setval(pg_get_serial_sequence('trips', 'trip_id'),COALESCE((SELECT MAX(trip_id) FROM trips), 0),true)"
+        )
     logger.info("Finished migrating trips from sqlite to pg!")
 
 
@@ -227,3 +233,72 @@ def compare_all_trips():
     except Exception:
         logger.error(f"Found exception while processing trip {trip_id}")
         raise
+
+
+def _insert_operator_into_pg(pg_session, operator):
+    pg_session.execute(
+        "INSERT INTO operators (operator_id, operator_type, short_name, long_name) VALUES (:id, :type, :short_name, :long_name)",
+        {
+            "id": operator["uid"],
+            "type": operator["operator_type"],
+            "short_name": operator["short_name"],
+            "long_name": operator["long_name"],
+        },
+    )
+
+
+def _insert_operator_logo_into_pg(pg_session, operator):
+    pg_session.execute(
+        "INSERT INTO operator_logos (uid, operator_id, logo_url, effective_date) VALUES (:uid, :operator_id, :logo_url, :effective_date)",
+        {
+            "uid": operator["uid"],
+            "operator_id": operator["operator_id"],
+            "logo_url": operator["logo_url"],
+            "effective_date": operator["effective_date"],
+        },
+    )
+
+
+def sync_operators_from_sqlite(pg_session=None):
+    logger.info("Step 1/2: Syncing operators from SQLite to PostgreSQL...")
+
+    with managed_cursor(mainConn) as main_cursor:
+        main_cursor.execute("SELECT count(*) FROM operators")
+        num_operators = main_cursor.fetchone()[0]
+        logger.info(f"Syncing {num_operators} operators from SQLite to PostgreSQL")
+        non_alias_operators = main_cursor.execute(
+            "SELECT * FROM operators WHERE alias_of IS NULL ORDER BY uid"
+        ).fetchall()
+        alias_operators = main_cursor.execute(
+            "SELECT * FROM operators WHERE alias_of IS NOT NULL ORDER BY uid"
+        ).fetchall()
+
+    with get_or_create_pg_session(pg_session) as pg:
+        pg.execute("DELETE FROM operators;")
+        for i, row in enumerate(non_alias_operators):
+            _insert_operator_into_pg(pg, row)
+        for i, row in enumerate(alias_operators):
+            _insert_operator_into_pg(pg, row)
+        # reset ID sequence so future rows line up with SQLite
+        pg.execute(
+            "SELECT setval(pg_get_serial_sequence('operators', 'operator_id'),COALESCE((SELECT MAX(operator_id) FROM operators), 0),true)"
+        )
+
+    logger.info("Step 2/2: Syncing operator logos from SQLite to PostgreSQL...")
+
+    with managed_cursor(mainConn) as main_cursor:
+        main_cursor.execute("SELECT count(*) from operator_logos")
+        num_logos = main_cursor.fetchone()[0]
+        logger.info(f"Syncing {num_logos} operator logos from SQLite to PostgreSQL")
+        operator_logos = main_cursor.execute("SELECT * FROM operator_logos").fetchall()
+
+    with get_or_create_pg_session(pg_session) as pg:
+        pg.execute("DELETE FROM operator_logos;")
+        for i, row in enumerate(operator_logos):
+            _insert_operator_logo_into_pg(pg, row)
+        # reset ID sequence so future rows line up with SQLite
+        pg.execute(
+            "SELECT setval(pg_get_serial_sequence('operator_logos', 'uid'),COALESCE((SELECT MAX(uid) FROM operator_logos), 0),true)"
+        )
+
+    logger.info("Finished migrating operators from sqlite to pg!")

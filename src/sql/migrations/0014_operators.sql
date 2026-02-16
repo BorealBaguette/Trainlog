@@ -1,0 +1,1 @@
+ALTER SEQUENCE operator_logos_uid_seq RESTART WITH 3

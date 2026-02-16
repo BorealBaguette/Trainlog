@@ -447,10 +447,11 @@ def fr24_usage(username):
         row = cursor.fetchone() or (0,)
     return row[0]
 
+
 def check_and_increment_ai_usage(username, count=1, limit=10):
     month_key = datetime.utcnow().strftime("%Y-%m")
     is_premium = bool(User.query.filter_by(username=username).first().premium)
-    
+
     with managed_cursor(mainConn) as cursor:
         cursor.execute(
             """
@@ -472,11 +473,11 @@ def check_and_increment_ai_usage(username, count=1, limit=10):
                 """,
                 (username, month_key),
             )
-        
+
         # Check limit before incrementing (for non-premium)
         if not is_premium and ai_calls + count > limit:
             return False
-        
+
         # Increment usage
         cursor.execute(
             """
@@ -487,7 +488,7 @@ def check_and_increment_ai_usage(username, count=1, limit=10):
             (count, username, month_key),
         )
         mainConn.commit()
-    
+
     return True
 
 
@@ -506,6 +507,7 @@ def ai_usage(username):
         )
         row = cursor.fetchone() or (0,)
     return row[0]
+
 
 def get_default_trip_visibility(x):
     match x:
