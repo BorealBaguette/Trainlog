@@ -38,12 +38,7 @@ def add_operator():
     if not logo:
         abort(400, description="logo is required")
 
-    if (
-        operator_type != "operator"
-        and operator_type != "accommodation"
-        and operator_type != "car"
-        and operator_type != "poi"
-    ):
+    if operator_type not in ("operator", "accommodation", "car", "poi"):
         abort(400, description="invalid operator_type")
 
     if len(short_name) == 0:
@@ -122,11 +117,6 @@ def get_operator_logos(operator_id: int):
 def add_operator_logo(operator_id: int):
     if not OperatorsRepository.operator_exists(operator_id):
         abort(404, description="operator not found")
-
-    logger.info("Content-Type: %s", request.content_type)
-    logger.info("Mimetype: %s", request.mimetype)
-    logger.info("Form keys: %s", list(request.form.keys()))
-    logger.info("Files keys: %s", list(request.files.keys()))
 
     logo = request.files.get("logo")
     effective_date = request.form.get("effective_date", type=parse_date)

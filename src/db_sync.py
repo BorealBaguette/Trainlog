@@ -266,19 +266,15 @@ def sync_operators_from_sqlite(pg_session=None):
         main_cursor.execute("SELECT count(*) FROM operators")
         num_operators = main_cursor.fetchone()[0]
         logger.info(f"Syncing {num_operators} operators from SQLite to PostgreSQL")
-        non_alias_operators = main_cursor.execute(
-            "SELECT * FROM operators WHERE alias_of IS NULL ORDER BY uid"
-        ).fetchall()
-        alias_operators = main_cursor.execute(
-            "SELECT * FROM operators WHERE alias_of IS NOT NULL ORDER BY uid"
+        all_operators = main_cursor.execute(
+            "SELECT * FROM operators ORDER BY uid"
         ).fetchall()
 
     with get_or_create_pg_session(pg_session) as pg:
         pg.execute("DELETE FROM operators;")
-        for i, row in enumerate(non_alias_operators):
+        for i, row in enumerate(all_operators):
             _insert_operator_into_pg(pg, row)
-        for i, row in enumerate(alias_operators):
-            _insert_operator_into_pg(pg, row)
+
         # reset ID sequence so future rows line up with SQLite
         pg.execute(
             "SELECT setval(pg_get_serial_sequence('operators', 'operator_id'),COALESCE((SELECT MAX(operator_id) FROM operators), 0),true)"
@@ -296,6 +292,7 @@ def sync_operators_from_sqlite(pg_session=None):
         pg.execute("DELETE FROM operator_logos;")
         for i, row in enumerate(operator_logos):
             _insert_operator_logo_into_pg(pg, row)
+
         # reset ID sequence so future rows line up with SQLite
         pg.execute(
             "SELECT setval(pg_get_serial_sequence('operator_logos', 'uid'),COALESCE((SELECT MAX(uid) FROM operator_logos), 0),true)"

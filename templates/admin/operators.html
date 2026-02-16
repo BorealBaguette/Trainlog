@@ -508,7 +508,7 @@
     function updateOperator(operator_id, field, value) {
         fetch(`/api/admin/operators/${operator_id}/${field}`, {
             method: 'PUT',
-            body: value.trim(),
+            body: value.replace(/\s+/g, ' ').trim(),
             headers: {
                 'Content-Type': 'plain/text'
             }
