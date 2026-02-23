@@ -499,7 +499,7 @@
     "privacy_section_contact_content": "For any questions or concerns about your privacy or this policy, please contact us at: <a href=\"mailto:admin@trainlog.me\">admin@trainlog.me</a>.",
     "use_routing": "Use routing",
     "routing_tooltip": "Process the GPX file through the routing tool, using each GPS reading as a waypoint.",
-    "appearOnGlobalText": "Appear on the <a href='{global_live_map}'>global live map</a> (public transport only, personal trips are excluded)",
+    "appearOnGlobalText": "Appear on the <a href='{global_live_map}'>global live map</a> (public trips only)",
     "router_status": "Router Status",
     "live_map": "Live Map",
     "tilesetLabel": "Tileset",
