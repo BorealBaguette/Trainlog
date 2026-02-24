@@ -1,5 +1,6 @@
 import json
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import polyline
 import requests
@@ -143,7 +144,23 @@ def call_motis_api(forwardRouting=None):
             
         params['fromPlace'] = from_place
         params['toPlace'] = to_place
-        
+        from_tz = request.args.get('fromTz')
+        to_tz = request.args.get('toTz')
+        if not from_tz and to_tz:
+            from_tz = to_tz
+        elif not to_tz and from_tz:
+            to_tz = from_tz
+
+        # Boolean parameters - fix string conversion
+        arrive_by = request.args.get('arriveBy', 'false')
+        if arrive_by and arrive_by.lower() not in ['none', '']:
+            params['arriveBy'] = arrive_by.lower() == 'true'
+        else:
+            params['arriveBy'] = False
+
+        tz_str = to_tz if params['arriveBy'] else from_tz
+        tz = ZoneInfo(tz_str) if tz_str else None
+
         # Time parameter - fix the "None" issue
         time_param = request.args.get('time')
         if time_param and time_param != 'None' and not time_param.startswith('NoneT'):
@@ -154,23 +171,15 @@ def call_motis_api(forwardRouting=None):
                     clean_time = time_param.replace('NoneT', '').replace('None', '')
                     if clean_time:
                         # Validate the datetime format
-                        datetime.fromisoformat(clean_time.replace('Z', '+00:00'))
-                        params['time'] = clean_time
+                        params['time'] = datetime.fromisoformat(clean_time.replace('Z', '+00:00')).replace(tzinfo=tz).isoformat()
                 else:
                     # If no 'T', assume it's a date and add current time
                     clean_time = time_param.replace('None', '')
                     if clean_time and len(clean_time) == 10:  # YYYY-MM-DD format
-                        params['time'] = f"{clean_time}T12:00:00"
+                        params['time'] = datetime.fromisoformat(f"{clean_time}T12:00:00").replace(tzinfo=tz).isoformat()
             except (ValueError, AttributeError):
                 # If time parsing fails, don't include time parameter (will use current time)
                 pass
-        
-        # Boolean parameters - fix string conversion
-        arrive_by = request.args.get('arriveBy', 'false')
-        if arrive_by and arrive_by.lower() not in ['none', '']:
-            params['arriveBy'] = arrive_by.lower() == 'true'
-        else:
-            params['arriveBy'] = False
             
         params['detailedTransfers'] = True
         params['timetableView'] = True
@@ -372,9 +381,11 @@ def handle_search_form(username):
         # Handle time - ensure we don't send "None"
         if date and time and date != 'None' and time != 'None':
             params['time'] = f"{date}T{time}"
-        
+        elif time and time != 'None':
+            params['time'] = time
+
         # Handle boolean parameters
-        arrive_by = 'arriveBy' in request.form
+        arrive_by = request.form.get('arriveBy', 'false') != 'false'
         params['arriveBy'] = str(arrive_by).lower()
         
         detailed_transfers = request.form.get('detailedTransfers', 'true')
@@ -382,8 +393,8 @@ def handle_search_form(username):
         
         # Add optional parameters only if they have valid values
         optional_params = [
-            'maxTransfers', 'numItineraries', 'pedestrianProfile', 
-            'elevationCosts', 'searchWindow'
+            'maxTransfers', 'numItineraries', 'pedestrianProfile',
+            'elevationCosts', 'searchWindow', 'fromTz', 'toTz',
         ]
         for param in optional_params:
             value = request.form.get(param, '').strip()
@@ -411,7 +422,7 @@ def handle_search_form(username):
             'useRoutedTransfers'
         ]
         for param in boolean_params:
-            if param in request.form:
+            if request.form.get(param, 'false') != 'false':
                 params[param] = 'true'
         
         # Clean up params - remove any remaining None values

@@ -6,6 +6,8 @@ from py.utils import get_flag_emoji
 from src.suspicious_activity import list_denied_logins, list_suspicious_activity
 from src.utils import getUser, has_current_trip, lang, owner_required
 
+from .operators import operators_api_blueprint
+
 logger = logging.getLogger(__name__)
 
 admin_blueprint = Blueprint("admin", __name__)
@@ -61,3 +63,9 @@ def suspicious_activity():
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
+
+
+__all__ = [
+    "admin_blueprint",
+    "operators_api_blueprint",
+]
