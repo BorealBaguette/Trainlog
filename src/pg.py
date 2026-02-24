@@ -40,15 +40,15 @@ def init_db_engine():
     This should be called after forking to ensure each worker has its own connection pool.
     """
     global pg_session_engine, Session
-    
+
     if pg_session_engine is None:
         logger.info(f"Initializing database engine for process {os.getpid()}")
         pg_session_engine = create_engine(
             get_db_connection_string(),
             pool_pre_ping=True,  # Verify connections before using them
-            pool_recycle=3600,   # Recycle connections after 1 hour
-            pool_size=5,         # Connections per worker
-            max_overflow=10,     # Additional connections if needed
+            pool_recycle=3600,  # Recycle connections after 1 hour
+            pool_size=5,  # Connections per worker
+            max_overflow=10,  # Additional connections if needed
         )
         Session = sessionmaker(bind=pg_session_engine)
         logger.info(f"Database engine initialized for process {os.getpid()}")
@@ -58,7 +58,7 @@ def init_db_engine():
 def pg_session():
     # Ensure engine is initialized (handles both preload and non-preload cases)
     init_db_engine()
-    
+
     # prevent nested sessions to avoid difficult bugs
     if getattr(threadlocal, "inside_pg_session", False):
         raise Exception("Cannot open a pg session while already in a pg session")
@@ -112,19 +112,21 @@ def setup_db():
 
     This means running schema.sql if necessary (not in prod though) and running any
     migrations that have not been applied yet.
-    
+
     This should be called BEFORE workers are forked (in master process with --preload)
     or in each worker if not using --preload.
     """
     global _setup_complete
-    
+
     # Prevent running setup multiple times
     if _setup_complete:
-        logger.info(f"Database setup already complete, skipping in process {os.getpid()}")
+        logger.info(
+            f"Database setup already complete, skipping in process {os.getpid()}"
+        )
         return
-    
+
     logger.info(f"Running database setup in process {os.getpid()}")
-    
+
     if not db_exists():
         logger.info("Database was detected to be empty")
         # check the current environment; in production, raise an error
@@ -149,14 +151,14 @@ def setup_db():
         for m in migrations:
             apply_migration(session, m)
         load_base_data(session, "airliners")
-    
+
     # Dispose the engine used during setup - workers will create their own
     global pg_session_engine
     if pg_session_engine is not None:
         logger.info(f"Disposing setup engine in process {os.getpid()}")
         pg_session_engine.dispose()
         pg_session_engine = None
-    
+
     _setup_complete = True
     logger.info(f"Database setup complete in process {os.getpid()}")
 
@@ -216,35 +218,34 @@ def load_base_data(pg, table_name):
     """
     Load base data from CSV files into the database using COPY.
     Only loads data if the table is empty.
-    
+
     Args:
         pg: PostgreSQL session
         table_name: Name of the table to load data into (also the CSV filename without extension)
     """
     # Check if table already has data
     result = pg.execute(f"SELECT COUNT(*) FROM {table_name}").scalar()
-    
+
     if result > 0:
-        logger.info(f"{table_name} table already contains {result} rows, skipping base data load")
+        logger.info(
+            f"{table_name} table already contains {result} rows, skipping base data load"
+        )
         return
-    
+
     logger.info(f"Loading base data for {table_name}...")
-    
+
     csv_path = os.path.abspath(f"base_data/{table_name}.csv")
-    
+
     if not os.path.exists(csv_path):
         logger.error(f"Base data file not found: {csv_path}")
         raise FileNotFoundError(f"Base data file not found: {csv_path}")
-    
+
     # Use raw connection for COPY command
     raw_conn = pg.connection().connection
     with raw_conn.cursor() as cursor:
-        with open(csv_path, 'r') as f:
+        with open(csv_path, "r") as f:
             # Skip header row and copy data
             next(f)
-            cursor.copy_expert(
-                f"COPY {table_name} FROM STDIN WITH (FORMAT CSV)",
-                f
-            )
-    
+            cursor.copy_expert(f"COPY {table_name} FROM STDIN WITH (FORMAT CSV)", f)
+
     logger.info(f"Base data loaded successfully for {table_name}!")

@@ -26,7 +26,7 @@ class Path:
 
     def values(self):
         return [self.list[0].trip_id, str([[node.lat, node.lng] for node in self.list])]
-    
+
     def __len__(self):
         return len(self.list)
 

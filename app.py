@@ -56,7 +56,7 @@ from flask import (
     send_from_directory,
     session,
     url_for,
-    g
+    g,
 )
 from flask_caching import Cache
 from flask_compress import Compress
@@ -148,7 +148,7 @@ from py.utils import (
     stringSimmilarity,
     unicodedata,
     validate_png_file,
-    time_ago
+    time_ago,
 )
 from src.api.admin import admin_blueprint
 from src.api.feature_requests import feature_requests_blueprint
@@ -189,7 +189,7 @@ from src.utils import (
     check_and_increment_fr24_usage,
     fr24_usage,
     get_default_trip_visibility,
-    current_user_is_friend_with
+    current_user_is_friend_with,
 )
 from src.trips import (
     Trip,
@@ -211,7 +211,7 @@ from src.routing import forward_routing_core
 
 app = Flask(__name__)
 start_email_listener(app)
-app.config['DEBUG'] = True
+app.config["DEBUG"] = True
 Compress(app)
 app.autoversion = True
 Autoversion(app)
@@ -274,7 +274,9 @@ dashboard.config.group_by = getUser
 dashboard.bind(app)
 latest_commit = r.head.commit
 
-app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///{db}".format(db=DbNames.AUTH_DB.value)
+app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///{db}".format(
+    db=DbNames.AUTH_DB.value
+)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
 
@@ -293,6 +295,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 
 authDb.init_app(app)
+
 
 def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date):
     from_iso = f"{target_date - timedelta(days=1)}T12:00:00"
@@ -327,7 +330,7 @@ def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date
             first_seen_str = f.get("first_seen")
             landing_str = f.get("datetime_landed")
             last_seen_str = f.get("last_seen")
-            
+
             if orig_icao and (takeoff_str or first_seen_str):
                 cursor.execute(
                     "SELECT latitude, longitude FROM airports WHERE ident = :icao",
@@ -347,11 +350,17 @@ def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date
                         if local_departure.date() == target_date:
                             # Set the appropriate field based on what we used
                             if takeoff_str:
-                                f["datetime_takeoff_local"] = local_departure.isoformat()
+                                f["datetime_takeoff_local"] = (
+                                    local_departure.isoformat()
+                                )
                             else:
-                                f["datetime_takeoff_local"] = local_departure.isoformat()
-                                f["_used_first_seen_for_takeoff"] = True  # Optional flag for debugging
-                            
+                                f["datetime_takeoff_local"] = (
+                                    local_departure.isoformat()
+                                )
+                                f["_used_first_seen_for_takeoff"] = (
+                                    True  # Optional flag for debugging
+                                )
+
                             if dest_icao and (landing_str or last_seen_str):
                                 cursor.execute(
                                     "SELECT latitude, longitude FROM airports WHERE ident = :icao",
@@ -360,7 +369,9 @@ def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date
                                 dest_coords = cursor.fetchone()
                                 if dest_coords:
                                     # Use landing time if available, otherwise fall back to last_seen
-                                    arrival_str = landing_str if landing_str else last_seen_str
+                                    arrival_str = (
+                                        landing_str if landing_str else last_seen_str
+                                    )
                                     utc_landing = datetime.fromisoformat(
                                         arrival_str.replace("Z", "+00:00")
                                     )
@@ -669,7 +680,12 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train"):
         )
         countries = json.dumps(countries)
     else:
-        countries = getCountriesFromPath(newPath, newTrip["type"], newTrip.get("details", None), newTrip.get("powerType", None))
+        countries = getCountriesFromPath(
+            newPath,
+            newTrip["type"],
+            newTrip.get("details", None),
+            newTrip.get("powerType", None),
+        )
 
     if "originManualToggle" in newTrip.keys():
         saveManualStation(
@@ -719,7 +735,9 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train"):
         ticket_id=sanitize_param(newTrip["ticket_id"]),
         is_project=start_datetime == 1 or end_datetime == 1,
         path=newPath,
-        visibility=sanitize_param(newTrip.get("visibility", get_default_trip_visibility(trip_type)))
+        visibility=sanitize_param(
+            newTrip.get("visibility", get_default_trip_visibility(trip_type))
+        ),
     )
 
     create_trip(trip)
@@ -832,6 +850,7 @@ def formatTrip(trip, public=False):
 def user_exists(username):
     user = User.query.filter_by(username=username).first()
     return user is not None
+
 
 def saveManualStation(creator, name, lat, lng, station_type):
     if station_type in (
@@ -1045,6 +1064,7 @@ def inject_distinct_types():
 
     g.distinct_types_ctx = types
     return {"distinctTypes": types}
+
 
 @app.route("/robots.txt")
 def robots_txt():
@@ -1765,29 +1785,39 @@ def saveTripFromGPX(username, gpx_id):
 
     # Process the route based on user preferences
     if use_routing and trip_type in [
-        "train", "metro", "tram", "ferry", "aerialway", "bus", "car", "walk", "cycle"
+        "train",
+        "metro",
+        "tram",
+        "ferry",
+        "aerialway",
+        "bus",
+        "car",
+        "walk",
+        "cycle",
     ]:
         # Use advanced GPS cleaning instead of basic routing
-        print(f"Processing GPS route with {len(raw_waypoints)} points using smart routing...")
-        
+        print(
+            f"Processing GPS route with {len(raw_waypoints)} points using smart routing..."
+        )
+
         cleaning_result = clean_gps_route(
             raw_waypoints=raw_waypoints,
             forwardRouting=forwardRouting,
             trip_type=trip_type,
-            deviation_threshold=800,       # Kept: Now defines the "validation corridor" width
-            max_search_points=75
+            deviation_threshold=800,  # Kept: Now defines the "validation corridor" width
+            max_search_points=75,
         )
-        
+
         if cleaning_result["success"]:
             # Use cleaned route
             path = cleaning_result["path"]
             waypoints = cleaning_result["waypoints"]
-            
+
             # Update trip details with cleaned route info
             newTrip["trip_length"] = cleaning_result["distance"]
             newTrip["estimated_trip_duration"] = cleaning_result["duration"]
             newTrip["waypoints"] = json.dumps(waypoints)
-            
+
             # Add processing stats to notes (optional - can be removed for production)
             processing_stats = (
                 f" [Smart routing: {len(raw_waypoints)}→{len(path)} points "
@@ -1795,16 +1825,20 @@ def saveTripFromGPX(username, gpx_id):
                 f"{cleaning_result['reroute_count']} route corrections]"
             )
             newTrip["notes"] = (notes or "") + processing_stats
-            
-            print(f"Smart routing successful: {cleaning_result['compression_ratio']:.1f}x compression")
-            
+
+            print(
+                f"Smart routing successful: {cleaning_result['compression_ratio']:.1f}x compression"
+            )
+
         else:
             # Fallback to basic clustering if smart routing fails
-            print(f"Smart routing failed: {cleaning_result.get('error')}. Using basic clustering.")
+            print(
+                f"Smart routing failed: {cleaning_result.get('error')}. Using basic clustering."
+            )
             waypoints = cluster_waypoints(raw_waypoints, 20)
             path = raw_waypoints
             newTrip["waypoints"] = json.dumps(waypoints)
-            
+
     else:
         # No routing - use original GPX path with basic clustering
         path = raw_waypoints
@@ -1820,81 +1854,92 @@ def saveTripFromGPX(username, gpx_id):
     mainConn.commit()
 
     # Call the saveTripToDb function to save the trip
-    saveTripToDb(
-        username=username, newTrip=newTrip, newPath=path, trip_type=trip_type
-    )
+    saveTripToDb(username=username, newTrip=newTrip, newPath=path, trip_type=trip_type)
 
-    return jsonify({
-        "success": True,
-        "message": f"Trip saved with {'smart routing' if use_routing else 'original path'}",
-        "points_processed": len(raw_waypoints),
-        "final_points": len(path)
-    }), 200
+    return jsonify(
+        {
+            "success": True,
+            "message": f"Trip saved with {'smart routing' if use_routing else 'original path'}",
+            "points_processed": len(raw_waypoints),
+            "final_points": len(path),
+        }
+    ), 200
 
 
-@app.route("/u/<username>/preview_smart_routing/<gpx_id>/<trip_type>", methods=["POST", "GET"])
-@login_required  
+@app.route(
+    "/u/<username>/preview_smart_routing/<gpx_id>/<trip_type>", methods=["POST", "GET"]
+)
+@login_required
 def previewSmartRouting(username, gpx_id, trip_type):
     """
     Preview smart routing results without saving the trip
     GET: Shows interactive map with original vs cleaned route
     POST: Returns JSON data for API usage
     """
-   
+
     # Retrieve GPX data
     with managed_cursor(mainConn) as cursor:
         cursor.execute(
             "SELECT * FROM gpx WHERE uid = ? AND username = ?", (gpx_id, username)
         )
         gpx = cursor.fetchone()
-    
+
     if not gpx:
         if request.method == "GET":
-            return render_template('error.html', error="GPX file not found"), 404
+            return render_template("error.html", error="GPX file not found"), 404
         return jsonify({"error": "GPX file not found"}), 404
 
     # Convert to waypoints format
     raw_waypoints = [
         {"lat": point[0], "lng": point[1]} for point in json.loads(gpx["path"])
     ]
-   
+
     # Clean the GPS route with smart routing
     cleaning_result = clean_gps_route(
         raw_waypoints=raw_waypoints,
         forwardRouting=forwardRouting,
         trip_type=trip_type,
-        deviation_threshold=800,       # Kept: Now defines the "validation corridor" width
-        max_search_points=75
+        deviation_threshold=800,  # Kept: Now defines the "validation corridor" width
+        max_search_points=75,
     )
-   
+
     if request.method == "POST":
         # Return JSON for API usage
         if cleaning_result["success"]:
-            return jsonify({
-                "success": True,
-                "original_points": len(raw_waypoints),
-                "cleaned_points": len(cleaning_result["path"]),
-                "waypoints_count": len(cleaning_result["waypoints"]),
-                "compression_ratio": cleaning_result["compression_ratio"],
-                "reroute_count": cleaning_result["reroute_count"],
-                "distance": cleaning_result["distance"],
-                "duration": cleaning_result["duration"],
-                "preview_path": cleaning_result["path"][:100]  # First 100 points for preview
-            })
+            return jsonify(
+                {
+                    "success": True,
+                    "original_points": len(raw_waypoints),
+                    "cleaned_points": len(cleaning_result["path"]),
+                    "waypoints_count": len(cleaning_result["waypoints"]),
+                    "compression_ratio": cleaning_result["compression_ratio"],
+                    "reroute_count": cleaning_result["reroute_count"],
+                    "distance": cleaning_result["distance"],
+                    "duration": cleaning_result["duration"],
+                    "preview_path": cleaning_result["path"][
+                        :100
+                    ],  # First 100 points for preview
+                }
+            )
         else:
-            return jsonify({
-                "success": False,
-                "error": cleaning_result["error"],
-                "fallback_points": len(raw_waypoints)
-            })
-    
+            return jsonify(
+                {
+                    "success": False,
+                    "error": cleaning_result["error"],
+                    "fallback_points": len(raw_waypoints),
+                }
+            )
+
     # GET request: Show interactive map
-    return render_template('preview_route.html',
-                         gpx=gpx,
-                         trip_type=trip_type,
-                         raw_waypoints=json.dumps(raw_waypoints),
-                         cleaning_result=json.dumps(cleaning_result),
-                         success=cleaning_result["success"])
+    return render_template(
+        "preview_route.html",
+        gpx=gpx,
+        trip_type=trip_type,
+        raw_waypoints=json.dumps(raw_waypoints),
+        cleaning_result=json.dumps(cleaning_result),
+        success=cleaning_result["success"],
+    )
+
 
 @app.route("/u/<username>/submit_ticket", methods=["POST"])
 @login_required
@@ -2022,16 +2067,15 @@ def ticket_list(username):
 
                 for trip in trips:
                     countries_data = json.loads(trip["countries"])
-                    
+
                     # Check if any active country is in this trip
                     has_active_country = any(
-                        country in active_countries
-                        for country in countries_data.keys()
+                        country in active_countries for country in countries_data.keys()
                     )
-                    
+
                     if has_active_country:
                         trips_in_active_countries.append(trip)
-                        
+
                         # Calculate distance based on format
                         for country, value in countries_data.items():
                             if country in active_countries:
@@ -2250,6 +2294,7 @@ def attachSelected(username):
         logger.exception(error)
         return jsonify({"error": "An error occurred while attaching the ticket"}), 500
 
+
 @app.route("/u/<username>/bulkChangeVisibility")
 @login_required
 def bulkChangeVisibility(username):
@@ -2267,6 +2312,7 @@ def bulkChangeVisibility(username):
     else:
         logger.exception(error)
         return jsonify({"error": "An error occured while changing the visibility"}), 500
+
 
 @app.route("/u/<username>/toggle_ticket_active/<ticket_id>")
 @login_required
@@ -2306,15 +2352,15 @@ def new_flight(username):
     )
 
 
-@app.route("/u/<username>/routing", methods=['GET', 'POST'])
+@app.route("/u/<username>/routing", methods=["GET", "POST"])
 @login_required
 def routing(username):
     trip_data = None
-    if request.method == 'POST':
-        trip_data = request.form.get('trip_data') or request.get_json()
+    if request.method == "POST":
+        trip_data = request.form.get("trip_data") or request.get_json()
         if isinstance(trip_data, dict):
             trip_data = json.dumps(trip_data)
-    
+
     user_obj = User.query.filter_by(username=username).first()
     colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
 
@@ -2328,12 +2374,13 @@ def routing(username):
         title=lang[session["userinfo"]["lang"]]["routeTrip"],
     )
 
-@app.route("/u/<username>/air_routing/<type>", methods=['GET', 'POST'])
+
+@app.route("/u/<username>/air_routing/<type>", methods=["GET", "POST"])
 @login_required
 def air_routing(username, type):
     trip_data = None
-    if request.method == 'POST':
-        trip_data = request.form.get('trip_data') or request.get_json()
+    if request.method == "POST":
+        trip_data = request.form.get("trip_data") or request.get_json()
         if isinstance(trip_data, dict):
             trip_data = json.dumps(trip_data)
     return render_template(
@@ -2584,9 +2631,7 @@ def landing():
                     url_for("dynamic_trips", username=username, time="projects")
                 )
             elif user.default_landing == "new_map":
-                return redirect(
-                    url_for("new_map", username=username)
-                )
+                return redirect(url_for("new_map", username=username))
             else:  # Default to map
                 return redirect(url_for("user_home", username=username))
 
@@ -2623,8 +2668,12 @@ def login():
         # Safely get form data to avoid KeyError
         username = request.form.get("username", "").strip()
         password = request.form.get("password", "").strip()
-        # Ensure the next URL starts with / to avoid sending to external websites. 
-        next_page = n if (n := request.form.get("next", "").strip()).startswith("/") else url_for("landing", username=username)
+        # Ensure the next URL starts with / to avoid sending to external websites.
+        next_page = (
+            n
+            if (n := request.form.get("next", "").strip()).startswith("/")
+            else url_for("landing", username=username)
+        )
 
         # Check if username and password are provided
         if not username or not password:
@@ -2713,6 +2762,7 @@ def user_home(username):
         **session["userinfo"],
     )
 
+
 # 1. SEARCH PAGE - Shows the search form
 @app.route("/u/<username>/motis")
 @login_required
@@ -2729,9 +2779,10 @@ def motis_search(username):
         **session["userinfo"],
     )
 
+
 # 2. RESULTS PAGE - Shows routing results and handles search
 @app.route("/u/<username>/motis/results", methods=["GET", "POST"])
-@login_required 
+@login_required
 def motis_results(username):
     """
     Handle search and display results
@@ -2742,7 +2793,6 @@ def motis_results(username):
     else:
         # Handle direct GET requests (from URL parameters)
         return handle_search_params(username, forwardRouting, lang)
-
 
 
 @app.route("/getVectorStyle/<language>/<style>.json")
@@ -2988,67 +3038,73 @@ def get_full_geojson(cc):
 def process_queue(cc):
     try:
         operations = request.json
-        
+
         if not operations or len(operations) == 0:
             return jsonify({"success": False, "message": "No operations to process"})
-        
+
         directory_path = "country_percent/countries/processed/"
         file_path = os.path.join(directory_path, f"{cc}.geojson")
-        
+
         # Load the current GeoJSON data
         with open(file_path, "r") as file:
             geojson_data = json.load(file)
-        
+
         print(f"Processing {len(operations)} operations for {cc}")
-        
+
         # Process each operation in the queue
         for i, operation in enumerate(operations):
             operation_type = operation["type"]
             polygon_ids = operation["polygonIds"]
-            
-            print(f"Operation {i+1}: {operation_type} on polygons {polygon_ids}")
-            
+
+            print(f"Operation {i + 1}: {operation_type} on polygons {polygon_ids}")
+
             if operation_type == "delete":
                 # Find polygons to delete and calculate area to subtract
                 total_area_to_subtract = 0
                 remaining_features = []
-                
+
                 for feature in geojson_data["features"]:
                     if feature["properties"]["id"] in polygon_ids:
                         total_area_to_subtract += feature["properties"]["area_m2"]
-                        print(f"  Deleting polygon {feature['properties']['id']} with area {feature['properties']['area_m2']}")
+                        print(
+                            f"  Deleting polygon {feature['properties']['id']} with area {feature['properties']['area_m2']}"
+                        )
                     else:
                         remaining_features.append(feature)
-                
+
                 # Update the GeoJSON data
                 geojson_data["features"] = remaining_features
                 geojson_data["total_area_m2"] -= total_area_to_subtract
-                
+
             elif operation_type == "merge":
                 if len(polygon_ids) != 2:
-                    return jsonify({
-                        "success": False, 
-                        "message": f"Merge operation requires exactly 2 polygons, got {len(polygon_ids)}"
-                    })
-                
+                    return jsonify(
+                        {
+                            "success": False,
+                            "message": f"Merge operation requires exactly 2 polygons, got {len(polygon_ids)}",
+                        }
+                    )
+
                 # Find the polygons to merge
                 polygons_to_merge = []
                 remaining_features = []
-                
+
                 for feature in geojson_data["features"]:
                     if feature["properties"]["id"] in polygon_ids:
                         polygons_to_merge.append(feature)
                     else:
                         remaining_features.append(feature)
-                
+
                 if len(polygons_to_merge) != 2:
-                    return jsonify({
-                        "success": False, 
-                        "message": f"Could not find both polygons to merge (found {len(polygons_to_merge)})"
-                    })
-                
+                    return jsonify(
+                        {
+                            "success": False,
+                            "message": f"Could not find both polygons to merge (found {len(polygons_to_merge)})",
+                        }
+                    )
+
                 print(f"  Merging polygons {polygon_ids}")
-                
+
                 # Check if polygons are contiguous
                 def polygons_are_contiguous(poly1, poly2, tolerance=0.0001):
                     def get_all_coordinates(poly):
@@ -3061,94 +3117,116 @@ def process_queue(cc):
                                 for ring in polygon:
                                     coords.extend(ring)
                         return coords
-                    
+
                     def distance(coord1, coord2):
-                        return ((coord1[0] - coord2[0]) ** 2 + (coord1[1] - coord2[1]) ** 2) ** 0.5
-                    
+                        return (
+                            (coord1[0] - coord2[0]) ** 2 + (coord1[1] - coord2[1]) ** 2
+                        ) ** 0.5
+
                     coords1 = get_all_coordinates(poly1)
                     coords2 = get_all_coordinates(poly2)
-                    
+
                     # Check if any coordinates are within tolerance
                     for c1 in coords1:
                         for c2 in coords2:
                             if distance(c1, c2) <= tolerance:
                                 return True
-                    
+
                     # Check if any line segments are close
                     for i in range(len(coords1) - 1):
                         line1_start = coords1[i]
                         line1_end = coords1[i + 1]
-                        
+
                         for j in range(len(coords2) - 1):
                             line2_start = coords2[j]
                             line2_end = coords2[j + 1]
-                            
-                            if (distance(line1_start, line2_start) <= tolerance and 
-                                distance(line1_end, line2_end) <= tolerance) or \
-                               (distance(line1_start, line2_end) <= tolerance and 
-                                distance(line1_end, line2_start) <= tolerance):
+
+                            if (
+                                distance(line1_start, line2_start) <= tolerance
+                                and distance(line1_end, line2_end) <= tolerance
+                            ) or (
+                                distance(line1_start, line2_end) <= tolerance
+                                and distance(line1_end, line2_start) <= tolerance
+                            ):
                                 return True
-                    
+
                     return False
-                
-                if not polygons_are_contiguous(polygons_to_merge[0], polygons_to_merge[1]):
-                    return jsonify({
-                        "success": False, 
-                        "message": "Selected polygons are not contiguous and cannot be merged"
-                    })
-                
+
+                if not polygons_are_contiguous(
+                    polygons_to_merge[0], polygons_to_merge[1]
+                ):
+                    return jsonify(
+                        {
+                            "success": False,
+                            "message": "Selected polygons are not contiguous and cannot be merged",
+                        }
+                    )
+
                 # Perform geometric union using Shapely
                 shapely_polygons = []
                 total_area = 0
-                
+
                 for poly in polygons_to_merge:
                     shapely_poly = shape(poly["geometry"])
                     shapely_polygons.append(shapely_poly)
                     total_area += poly["properties"]["area_m2"]
-                
+
                 # Create the merged geometry
                 merged_geometry = unary_union(shapely_polygons)
                 merged_area = merged_geometry.area
-                
+
                 # Handle potential overlap in area calculation
-                if abs(merged_area - sum(poly["properties"]["area_m2"] for poly in polygons_to_merge)) > 0.000001:
-                    overlap_ratio = merged_area / sum(shapely_poly.area for shapely_poly in shapely_polygons)
+                if (
+                    abs(
+                        merged_area
+                        - sum(
+                            poly["properties"]["area_m2"] for poly in polygons_to_merge
+                        )
+                    )
+                    > 0.000001
+                ):
+                    overlap_ratio = merged_area / sum(
+                        shapely_poly.area for shapely_poly in shapely_polygons
+                    )
                     actual_area = total_area * overlap_ratio
                 else:
                     actual_area = total_area
-                
+
                 # Create the new merged polygon
                 merged_polygon = {
                     "type": "Feature",
                     "geometry": mapping(merged_geometry),
                     "properties": {
                         "id": min(polygon_ids),  # Use the smaller ID
-                        "area_m2": actual_area
-                    }
+                        "area_m2": actual_area,
+                    },
                 }
-                
-                print(f"  Created merged polygon with ID {merged_polygon['properties']['id']} and area {actual_area}")
-                
+
+                print(
+                    f"  Created merged polygon with ID {merged_polygon['properties']['id']} and area {actual_area}"
+                )
+
                 # Add merged polygon to remaining features
                 remaining_features.append(merged_polygon)
                 geojson_data["features"] = remaining_features
-        
+
         # Write the updated data back to the file
         with open(file_path, "w") as file:
             json.dump(geojson_data, file)
-        
+
         print(f"Successfully processed {len(operations)} operations")
-        return jsonify({
-            "success": True, 
-            "message": f"Successfully processed {len(operations)} operation{'s' if len(operations) > 1 else ''}"
-        })
-    
+        return jsonify(
+            {
+                "success": True,
+                "message": f"Successfully processed {len(operations)} operation{'s' if len(operations) > 1 else ''}",
+            }
+        )
+
     except Exception as e:
         print(f"Error processing queue: {str(e)}")
-        return jsonify({
-            "success": False, 
-            "message": f"Error processing operations: {str(e)}"
-        })
+        return jsonify(
+            {"success": False, "message": f"Error processing operations: {str(e)}"}
+        )
 
 
 @app.route("/about")
@@ -3384,6 +3462,7 @@ def borked_trips(username=None):
                 }
             )
 
+
 @app.route("/admin/missing_operators")
 @admin_required
 def missing_operators():
@@ -3396,14 +3475,10 @@ def missing_operators():
             AND type not in ('car', 'walk', 'cycle', 'poi', 'accommodation', 'restaurant')
         """)
         trip_rows = main_cursor.fetchall()
-        
+
         if not trip_rows:
-            return jsonify({
-                "missing_operators": [],
-                "total_count": 0,
-                "by_type": {}
-            })
-        
+            return jsonify({"missing_operators": [], "total_count": 0, "by_type": {}})
+
         # Split comma-separated operators and count them by type
         operator_counts = {}  # {(operator, type): count}
         for row in trip_rows:
@@ -3413,18 +3488,14 @@ def missing_operators():
                 if operator:  # Skip empty strings
                     key = (operator, trip_type)
                     operator_counts[key] = operator_counts.get(key, 0) + 1
-        
+
         if not operator_counts:
-            return jsonify({
-                "missing_operators": [],
-                "total_count": 0,
-                "by_type": {}
-            })
-        
+            return jsonify({"missing_operators": [], "total_count": 0, "by_type": {}})
+
         # Get all unique operators
         all_operators = list(set(op for op, _ in operator_counts.keys()))
         existing_operators = set()
-        
+
         # Check which operators exist in batches
         batch_size = 999
         for i in range(0, len(all_operators), batch_size):
@@ -3432,34 +3503,35 @@ def missing_operators():
             placeholders = ",".join(["?"] * len(batch))
             main_cursor.execute(
                 f"SELECT DISTINCT short_name FROM operators WHERE short_name IN ({placeholders})",
-                batch
+                batch,
             )
-            existing_operators.update(row["short_name"] for row in main_cursor.fetchall())
-        
+            existing_operators.update(
+                row["short_name"] for row in main_cursor.fetchall()
+            )
+
         # Build results by type
         by_type = {}
         total_occurrences = 0
-        
+
         for (operator, trip_type), count in operator_counts.items():
             if operator not in existing_operators:
                 if trip_type not in by_type:
                     by_type[trip_type] = []
-                by_type[trip_type].append({
-                    "operator": operator,
-                    "occurrences": count
-                })
+                by_type[trip_type].append({"operator": operator, "occurrences": count})
                 total_occurrences += count
-        
+
         # Sort each type's operators by occurrences descending
         for trip_type in by_type:
             by_type[trip_type].sort(key=lambda x: x["occurrences"], reverse=True)
-        
-        return jsonify({
-            "missing_operators_by_type": by_type,
-            "total_occurrences": total_occurrences,
-            "unique_missing_operators": sum(len(ops) for ops in by_type.values())
-        })
-    
+
+        return jsonify(
+            {
+                "missing_operators_by_type": by_type,
+                "total_occurrences": total_occurrences,
+                "unique_missing_operators": sum(len(ops) for ops in by_type.values()),
+            }
+        )
+
 
 @app.route("/admin/add_dummy_path/<trip_id>", methods=["GET"])
 @owner_required
@@ -3467,29 +3539,27 @@ def add_dummy_path(trip_id):
     with managed_cursor(pathConn) as path_cursor:
         # Check if trip already has a path
         path_cursor.execute(
-            "SELECT COUNT(*) as count FROM paths WHERE trip_id = ?",
-            (trip_id,)
+            "SELECT COUNT(*) as count FROM paths WHERE trip_id = ?", (trip_id,)
         )
         existing = path_cursor.fetchone()["count"]
-        
+
         if existing > 0:
-            return jsonify({
-                "success": False,
-                "message": "Trip already has a path"
-            }), 400
-        
+            return jsonify(
+                {"success": False, "message": "Trip already has a path"}
+            ), 400
+
         # Insert dummy path
         dummy_path_data = "[[0,0],[1,1]]"
         path_cursor.execute(
             "INSERT INTO paths (trip_id, path) VALUES (?, ?)",
-            (trip_id, dummy_path_data)
+            (trip_id, dummy_path_data),
         )
         pathConn.commit()
-        
-        return jsonify({
-            "success": True,
-            "message": f"Dummy path added to trip {trip_id}"
-        })
+
+        return jsonify(
+            {"success": True, "message": f"Dummy path added to trip {trip_id}"}
+        )
+
 
 def listOperatorsLogos(tripType=None):
     """
@@ -3530,7 +3600,6 @@ def listOperatorsLogos(tripType=None):
 def render_public_trip_page(
     tripIds=None, tagId=None, ticketId=None, template="public/public_trip.html"
 ):
-    
     user_obj = None
     colorblind = False
     username = getUser()
@@ -3574,7 +3643,7 @@ def render_public_trip_page(
     if not tripIds:
         abort(410)
 
-    #array keeping track of who the current user is friends with, so that each target user only needs to be queried once in the DB.
+    # array keeping track of who the current user is friends with, so that each target user only needs to be queried once in the DB.
     friends_cache = []
     trip_list = []
     num_hidden_trips = 0
@@ -3584,11 +3653,15 @@ def render_public_trip_page(
         if trip is not None:
             user = User.query.filter_by(username=trip["username"]).first()
 
-            if trip['visibility'] == 'private' and not session.get(user.username):
+            if trip["visibility"] == "private" and not session.get(user.username):
                 num_hidden_trips += 1
                 continue
 
-            if trip['visibility'] == 'friends' and not session.get(user.username) and not user.username in friends_cache:
+            if (
+                trip["visibility"] == "friends"
+                and not session.get(user.username)
+                and not user.username in friends_cache
+            ):
                 if current_user_is_friend_with(user.username):
                     friends_cache.append(user.username)
                 else:
@@ -3611,7 +3684,7 @@ def render_public_trip_page(
         else:
             abort(410)
 
-    if not trip_list and num_hidden_trips > 0: # all requested trips are hidden
+    if not trip_list and num_hidden_trips > 0:  # all requested trips are hidden
         abort(401)
 
     try:
@@ -3661,7 +3734,7 @@ def render_public_trip_page(
         globe=globe,
         og=og,
         num_hidden_trips=num_hidden_trips,
-        colorblind = colorblind,
+        colorblind=colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
         title=lang[session["userinfo"]["lang"]]["sharedLink"],
@@ -3896,6 +3969,7 @@ def current(username):
         **session["userinfo"],
     )
 
+
 @app.route("/u/<username>/getStats/<tripType>", methods=["GET"])
 @app.route("/u/<username>/getStats/<year>/<tripType>", methods=["GET"])
 @public_required
@@ -3913,12 +3987,13 @@ def get_admin_stats_api(tripType, year=None):
     stats = fetch_stats(None, tripType, year)
     return jsonify(stats)
 
+
 @app.route("/public/<username>/stats/<year>/<tripType>")
 @app.route("/public/<username>/stats/<tripType>")
 @app.route("/public/<username>/stats")
 @public_required
 def public_stats(username, tripType=None, year=None):
-    if tripType in ('poi', 'accommodation', 'restaurant', 'walk', 'cycle', 'car'):
+    if tripType in ("poi", "accommodation", "restaurant", "walk", "cycle", "car"):
         abort(401)
     with managed_cursor(mainConn) as cursor:
         cursor.execute(
@@ -4116,9 +4191,9 @@ def scottySaveTrip(username):
             response = forwardRouting(router_path, trip_type)
 
             # Parse the router response (if necessary for your DB structure)
-            if hasattr(response, 'text'):
+            if hasattr(response, "text"):
                 routing_result = json.loads(response.text)
-            elif hasattr(response, 'json'):
+            elif hasattr(response, "json"):
                 routing_result = response.json
             else:
                 routing_result = json.loads(response)
@@ -4238,6 +4313,7 @@ def check_current_user_owns_trip(trip_id):
             )
             abort(404)  # Trip does not belong to the user
 
+
 def get_trip(trip_id):
     with managed_cursor(mainConn) as cursor:
         trip = cursor.execute(getTrip, {"trip_id": trip_id}).fetchone()
@@ -4323,10 +4399,11 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
 
     if "estimated_trip_duration" in formData and "trip_length" in formData:
         countries = getCountriesFromPath(
-            [
-                {"lat": coord[0], "lng": coord[1]} for coord in path], 
-                formData["type"], 
-                json.loads(formData.get("details")) if formData.get("details") is not None else None
+            [{"lat": coord[0], "lng": coord[1]} for coord in path],
+            formData["type"],
+            json.loads(formData.get("details"))
+            if formData.get("details") is not None
+            else None,
         )
         estimated_trip_duration = sanitize_param(formData["estimated_trip_duration"])
         trip_length = sanitize_param(formData["trip_length"])
@@ -4375,7 +4452,7 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         ticket_id=sanitize_param(formData.get("ticket_id")),
         is_project=start_datetime == 1 or end_datetime == 1,
         path=path,
-        visibility=visibility if visibility != "" else None
+        visibility=visibility if visibility != "" else None,
     )
 
     return trip
@@ -4529,9 +4606,12 @@ def google_route_display(
         **session["userinfo"],
     )
 
+
 @app.route("/forwardRouting/<routingType>/<path:path>")
 def forwardRouting(path, routingType):
-    return forward_routing_core(routingType=routingType, path=path, flask_request=request)
+    return forward_routing_core(
+        routingType=routingType, path=path, flask_request=request
+    )
 
 
 @app.route("/router_status/single")
@@ -4716,17 +4796,18 @@ photonInstances = {
     "komoot": "https://photon.komoot.io",
 }
 
+
 @app.route("/stationAutocomplete")
 def stationAutocomplete():
     args = request.query_string.decode("utf-8")
     timeout = 2
     en = "lang=en"
-    
+
     # Check if this is a reverse geocoding request
     params = request.args
     is_reverse = params.get("lat") and params.get("lon")
     endpoint = "/reverse" if is_reverse else "/api"
-    
+
     responseJson = None
     for url in photonInstances.values():
         try:
@@ -4737,10 +4818,10 @@ def stationAutocomplete():
                 break
         except Exception:
             continue
-    
+
     if responseJson is None:
         return "Photon Error", 500
-    
+
     homonymy_filter = {}
     for index, result in enumerate(responseJson["features"]):
         props = result["properties"]
@@ -4796,6 +4877,7 @@ def stationAutocomplete():
                         suffix += 1
     return jsonify(responseJson)
 
+
 @app.route("/u/<username>/getManAndOps/<station_type>", methods=["GET", "POST"])
 def getManAndOps(username, station_type):
     manualStations = {}
@@ -4847,7 +4929,9 @@ def getManAndOps(username, station_type):
         operator: operators_logos.get(operator, None) for operator in all_operators
     }
 
-    material_types = {material_type: None for material_type in material_types_from_db if material_type}
+    material_types = {
+        material_type: None for material_type in material_types_from_db if material_type
+    }
 
     manAndOps = {
         "operators": result,
@@ -5083,7 +5167,7 @@ def getLeaderboardUsers(type):
             for username in user_list
             if not User.query.filter_by(username=username).first().is_public()
         ]
-       
+
         countries_dict = {}
         usernames_placeholders = ",".join(["?" for _ in user_list])
         with managed_cursor(mainConn) as cursor:
@@ -5099,7 +5183,7 @@ def getLeaderboardUsers(type):
                 if item["percent"] not in countries_dict[item["cc"]]:
                     countries_dict[item["cc"]][item["percent"]] = []
                 countries_dict[item["cc"]][item["percent"]].append(item["username"])
-       
+
         leaderboard_data = []
         for country, percentages in countries_dict.items():
             users_percents = []
@@ -5109,10 +5193,11 @@ def getLeaderboardUsers(type):
         return jsonify(
             {"leaderboard_data": leaderboard_data, "non_public_users": non_public_users}
         )
-   
+
     # For all other types, use the helper function with PostgreSQL
     result = _getLeaderboardUsers(type, User)
     return jsonify(result)
+
 
 @app.route("/deleteUser/<int:uid>", methods=["POST"])
 @owner_required
@@ -5166,7 +5251,12 @@ def fetchTripsPaths(username, lastLocal, public):
 
         trips = cursor.execute(
             getUniqueUserTrips,
-            {"username": username, "lastLocal": lastLocal, "public": public, "friend": current_user_is_friend_with(username)},
+            {
+                "username": username,
+                "lastLocal": lastLocal,
+                "public": public,
+                "friend": current_user_is_friend_with(username),
+            },
         ).fetchall()
 
     trips.reverse()
@@ -5239,7 +5329,9 @@ def get_current_trip_path(username):
         trip_ids=", ".join(("?",) * len(trip_ids))
     )
     with managed_cursor(pathConn) as cursor:
-        pathResult = cursor.execute(formatted_get_user_lines, tuple(trip_ids)).fetchall()
+        pathResult = cursor.execute(
+            formatted_get_user_lines, tuple(trip_ids)
+        ).fetchall()
     paths = {}
     for path in pathResult:
         paths[path["trip_id"]] = path["path"]
@@ -5342,7 +5434,7 @@ def processPublicTrips(tripIds):
     total_price = 0
     total_carbon = 0
     total_distance = 0
-    
+
     for tripId in tripIds:
         with managed_cursor(mainConn) as cursor:
             trip = formatTrip(
@@ -5405,11 +5497,11 @@ def processPublicTrips(tripIds):
         path_data = json.loads(paths[trip["uid"]]) if trip["uid"] in paths else []
         trip_carbon = calculate_carbon_footprint_for_trip(trip, path_data)
         trip["carbon_footprint"] = round(trip_carbon, 6)
-        
+
         # Add to totals
         total_carbon += trip_carbon
-        if trip.get('trip_length', 0) > 0:
-            total_distance += trip['trip_length'] / 1000  # Convert to km
+        if trip.get("trip_length", 0) > 0:
+            total_distance += trip["trip_length"] / 1000  # Convert to km
 
         user = User.query.filter_by(username=trip["username"]).first()
         if (
@@ -5425,21 +5517,21 @@ def processPublicTrips(tripIds):
                 "path": path_data,
             }
         )
-    
+
     sortedTripList = sorted(tripList, key=lambda d: d["trip"]["uid"], reverse=True)
     sortedTripList = sorted(
         sortedTripList,
         key=lambda d: d["trip"]["utc_filtered_start_datetime"],
         reverse=True,
     )
-    
+
     priceDict = {
-        "total_price": total_price, 
+        "total_price": total_price,
         "user_currency": user_currency,
         "total_carbon": round(total_carbon, 6),
-        "total_distance": round(total_distance, 2)
+        "total_distance": round(total_distance, 2),
     }
-    
+
     return sortedTripList, priceDict
 
 
@@ -5579,12 +5671,12 @@ def mergeTrips(username, tripIds):
         for trip_item in sortedTripList
     )
 
-    #get new visibility
+    # get new visibility
     visibility = "public"
     for item in sortedTripList:
         if item["trip"]["visibility"] == "friends":
             visibility = "friends"
-        if item["trip"]["visibility"] == 'private':
+        if item["trip"]["visibility"] == "private":
             visibility = "private"
             break
 
@@ -5675,11 +5767,13 @@ def get_trips_api_internal(username, is_public=False):
 
     # Sorting parameters
     sort_column = request.form.get("order[0][column]", type=int, default=3)
-    sort_direction = request.form.get("order[0][dir]", default="desc" if past == 1 else "asc")
-    
+    sort_direction = request.form.get(
+        "order[0][dir]", default="desc" if past == 1 else "asc"
+    )
+
     column_names = [
         "type",
-        "origin_station", 
+        "origin_station",
         "destination_station",
         "start_datetime",
         "start_time",
@@ -5695,9 +5789,9 @@ def get_trips_api_internal(username, is_public=False):
         "material_type",
         "reg",
         "seat",
-        "notes"
+        "notes",
     ]
-    
+
     sort_column_name = (
         column_names[sort_column]
         if 0 <= sort_column < len(column_names)
@@ -5708,13 +5802,15 @@ def get_trips_api_internal(username, is_public=False):
     column_searches = {}
     for i in range(20):  # Check up to 20 columns
         column_search = request.form.get(f"columns[{i}][search][value]", "")
-        column_exact = request.form.get(f"columns[{i}][search][exact]", "false") == "true"
+        column_exact = (
+            request.form.get(f"columns[{i}][search][exact]", "false") == "true"
+        )
         column_searches[i] = {"value": column_search, "exact": column_exact}
 
     # Build additional WHERE conditions for column-specific searches
     additional_conditions = []
     search_params = {"username": username, "past": past, "search": f"%{search_value}%"}
-    
+
     # Add column-specific search conditions
     for column_index, search_data in column_searches.items():
         if column_index < len(column_names):
@@ -5734,72 +5830,118 @@ def get_trips_api_internal(username, is_public=False):
                 if is_exact:
                     additional_conditions.append(f"LOWER(type) = LOWER(:{param_name})")
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(type)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(
+                        f"remove_diacritics(LOWER(type)) LIKE remove_diacritics(LOWER(:{param_name}))"
+                    )
             elif column_name == "origin_station":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(origin_station) = LOWER(:{param_name})")
+                    additional_conditions.append(
+                        f"LOWER(origin_station) = LOWER(:{param_name})"
+                    )
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(origin_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(
+                        f"remove_diacritics(LOWER(origin_station)) LIKE remove_diacritics(LOWER(:{param_name}))"
+                    )
             elif column_name == "destination_station":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(destination_station) = LOWER(:{param_name})")
+                    additional_conditions.append(
+                        f"LOWER(destination_station) = LOWER(:{param_name})"
+                    )
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(destination_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(
+                        f"remove_diacritics(LOWER(destination_station)) LIKE remove_diacritics(LOWER(:{param_name}))"
+                    )
             elif column_name == "start_datetime":
                 if is_exact:
-                    additional_conditions.append(f"COALESCE(DATE(start_datetime), '') = :{param_name}")
+                    additional_conditions.append(
+                        f"COALESCE(DATE(start_datetime), '') = :{param_name}"
+                    )
                 else:
-                    additional_conditions.append(f"COALESCE(DATE(start_datetime), '') LIKE :{param_name}")
+                    additional_conditions.append(
+                        f"COALESCE(DATE(start_datetime), '') LIKE :{param_name}"
+                    )
             elif column_name == "operator":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(operator, '')) = LOWER(:{param_name})")
+                    additional_conditions.append(
+                        f"LOWER(COALESCE(operator, '')) = LOWER(:{param_name})"
+                    )
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(operator, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(
+                        f"remove_diacritics(LOWER(COALESCE(operator, ''))) LIKE remove_diacritics(LOWER(:{param_name}))"
+                    )
             elif column_name == "line_name":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(line_name, '')) = LOWER(:{param_name})")
+                    additional_conditions.append(
+                        f"LOWER(COALESCE(line_name, '')) = LOWER(:{param_name})"
+                    )
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(line_name, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(
+                        f"remove_diacritics(LOWER(COALESCE(line_name, ''))) LIKE remove_diacritics(LOWER(:{param_name}))"
+                    )
             elif column_name == "countries":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(countries) = LOWER(:{param_name})")
+                    additional_conditions.append(
+                        f"LOWER(countries) = LOWER(:{param_name})"
+                    )
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(countries)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(
+                        f"remove_diacritics(LOWER(countries)) LIKE remove_diacritics(LOWER(:{param_name}))"
+                    )
             elif column_name == "visibility":
                 if is_exact and search_term == "":
                     additional_conditions.append(f"visibility IS NULL")
                 elif is_exact:
-                    additional_conditions.append(f"LOWER(visibility) = LOWER(:{param_name})")
+                    additional_conditions.append(
+                        f"LOWER(visibility) = LOWER(:{param_name})"
+                    )
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(visibility)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(
+                        f"remove_diacritics(LOWER(visibility)) LIKE remove_diacritics(LOWER(:{param_name}))"
+                    )
             elif column_name == "material_type":
                 if is_exact:
-                    additional_conditions.append(f"(LOWER(COALESCE(material_type, '')) = LOWER(:{param_name}) OR LOWER(iata) = LOWER(:{param_name}) OR LOWER(manufacturer) = LOWER(:{param_name}) OR LOWER(model) = LOWER(:{param_name}))")
+                    additional_conditions.append(
+                        f"(LOWER(COALESCE(material_type, '')) = LOWER(:{param_name}) OR LOWER(iata) = LOWER(:{param_name}) OR LOWER(manufacturer) = LOWER(:{param_name}) OR LOWER(model) = LOWER(:{param_name}))"
+                    )
                 else:
-                    additional_conditions.append(f"(remove_diacritics(LOWER(COALESCE(material_type, ''))) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(iata)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(manufacturer)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(model)) LIKE remove_diacritics(LOWER(:{param_name})))")
+                    additional_conditions.append(
+                        f"(remove_diacritics(LOWER(COALESCE(material_type, ''))) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(iata)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(manufacturer)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(model)) LIKE remove_diacritics(LOWER(:{param_name})))"
+                    )
             elif column_name == "reg":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(reg, '')) = LOWER(:{param_name})")
+                    additional_conditions.append(
+                        f"LOWER(COALESCE(reg, '')) = LOWER(:{param_name})"
+                    )
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(reg, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(
+                        f"remove_diacritics(LOWER(COALESCE(reg, ''))) LIKE remove_diacritics(LOWER(:{param_name}))"
+                    )
             elif column_name == "notes":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(notes, '')) = LOWER(:{param_name})")
+                    additional_conditions.append(
+                        f"LOWER(COALESCE(notes, '')) = LOWER(:{param_name})"
+                    )
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(notes, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    additional_conditions.append(
+                        f"remove_diacritics(LOWER(COALESCE(notes, ''))) LIKE remove_diacritics(LOWER(:{param_name}))"
+                    )
             else:
                 # Fallback for other columns
                 if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE({column_name}, '')) = LOWER(:{param_name})")
+                    additional_conditions.append(
+                        f"LOWER(COALESCE({column_name}, '')) = LOWER(:{param_name})"
+                    )
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE({column_name}, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            
+                    additional_conditions.append(
+                        f"remove_diacritics(LOWER(COALESCE({column_name}, ''))) LIKE remove_diacritics(LOWER(:{param_name}))"
+                    )
+
             search_params[param_name] = search_pattern
 
     # Build the queries
     base_count_query = getDynamicUserTrips + "SELECT COUNT(*) FROM FilteredTrips"
     base_data_query = getDynamicUserTrips + "SELECT * FROM FilteredTrips"
-    
+
     # Add type filtering if needed
     if is_public and is_friend:
         base_count_query += " WHERE visibility = 'public' OR visibility = 'friends' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro'))"
@@ -5812,7 +5954,7 @@ def get_trips_api_internal(username, is_public=False):
     elif is_public:
         base_count_query += " WHERE visibility = 'public' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro'))"
         base_data_query += " WHERE visibility = 'public' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro'))"
-        
+
         # Add column-specific conditions
         if additional_conditions:
             base_count_query += " AND " + " AND ".join(additional_conditions)
@@ -5824,12 +5966,18 @@ def get_trips_api_internal(username, is_public=False):
             base_data_query += " WHERE " + " AND ".join(additional_conditions)
 
     count_query = base_count_query
-    
+
     # Add sorting to data query
     if sort_column_name != "start_datetime":
-        data_query = base_data_query + f" ORDER BY {sort_column_name} {sort_direction} LIMIT :limit OFFSET :offset"
+        data_query = (
+            base_data_query
+            + f" ORDER BY {sort_column_name} {sort_direction} LIMIT :limit OFFSET :offset"
+        )
     else:
-        data_query = base_data_query + f" ORDER BY utc_filtered_start_datetime = 1 {sort_direction}, utc_filtered_start_datetime {sort_direction}, uid {sort_direction} LIMIT :limit OFFSET :offset"
+        data_query = (
+            base_data_query
+            + f" ORDER BY utc_filtered_start_datetime = 1 {sort_direction}, utc_filtered_start_datetime {sort_direction}, uid {sort_direction} LIMIT :limit OFFSET :offset"
+        )
 
     mainConn.create_function("remove_diacritics", 1, remove_diacritics)
 
@@ -5843,10 +5991,7 @@ def get_trips_api_internal(username, is_public=False):
         records_filtered = cursor.fetchone()[0]
 
         # Fetch the actual page data
-        search_params.update({
-            "limit": length,
-            "offset": start
-        })
+        search_params.update({"limit": length, "offset": start})
         cursor.execute(data_query, search_params)
         trips = cursor.fetchall()
 
@@ -6019,6 +6164,7 @@ def user_settings(username):
         **session["userinfo"],
     )
 
+
 @app.route("/u/<username>/settings_app", methods=["GET", "POST"])
 @login_required
 def user_settings_app(username):
@@ -6031,12 +6177,12 @@ def user_settings_app(username):
         data = request.get_json(silent=True) or {}
 
         allowed = {
-            "share_level", 
-            "leaderboard", 
-            "friend_search", 
-            "appear_on_global", 
+            "share_level",
+            "leaderboard",
+            "friend_search",
+            "appear_on_global",
             "colorblind",
-            "user_currency"
+            "user_currency",
         }
         changed = {}
 
@@ -6051,22 +6197,24 @@ def user_settings_app(username):
                 if getattr(user, k) != v:
                     setattr(user, k, v)
                     changed[k] = v
-        
+
         authDb.session.commit()
 
     langs = getLangDropdown(user)
 
-    return jsonify({
-        "username": user.username,
-        "currencyOptions": get_available_currencies(),
-        "langs": langs,
-        "share_level": user.share_level,
-        "leaderboard": user.leaderboard,
-        "friend_search": user.friend_search,
-        "appear_on_global": user.appear_on_global,
-        "colorblind": user.colorblind,
-        "user_currency": user.user_currency,
-    }), 200
+    return jsonify(
+        {
+            "username": user.username,
+            "currencyOptions": get_available_currencies(),
+            "langs": langs,
+            "share_level": user.share_level,
+            "leaderboard": user.leaderboard,
+            "friend_search": user.friend_search,
+            "appear_on_global": user.appear_on_global,
+            "colorblind": user.colorblind,
+            "user_currency": user.user_currency,
+        }
+    ), 200
 
 
 @app.route("/u/<username>/dynamic/<time>")
@@ -6124,7 +6272,6 @@ def public_trips(username, time=None):
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
-
 
 
 @app.route("/u/<username>/<edit_copy_type>/<tripId>")
@@ -6822,6 +6969,7 @@ def importAll(username):
     dataDict["ticket_id"] = ""
     # Remove path from main dict
     from pprint import pprint
+
     pprint(dataDict)
     if dataDict.get("path"):
         rawPath = dataDict.pop("path")
@@ -7336,8 +7484,8 @@ def handle_405(e):
 @app.errorhandler(410)
 @app.errorhandler(416)
 @app.errorhandler(500)
-@app.errorhandler(sqlite3.OperationalError)   # handle db errors
-@app.errorhandler(Exception)                  # catch-all
+@app.errorhandler(sqlite3.OperationalError)  # handle db errors
+@app.errorhandler(Exception)  # catch-all
 def handle_error(e):
     # Let context processors know to skip DB work
     g.suppress_context_queries = True
@@ -7350,14 +7498,16 @@ def handle_error(e):
             # Short description for client errors
             short_desc = e.name or "Client Error"
             logger.warning(
-                "%s %s (URL: %s, User: %s)",
-                error_code, short_desc, request.url, user
+                "%s %s (URL: %s, User: %s)", error_code, short_desc, request.url, user
             )
         else:
             # Server-side HTTP errors
             logger.error(
                 "%s %s (URL: %s, User: %s)",
-                error_code, e.name or "Server Error", request.url, user
+                error_code,
+                e.name or "Server Error",
+                request.url,
+                user,
             )
     elif isinstance(e, sqlite3.OperationalError):
         logger.exception("Unhandled sqlite error", exc_info=e)
@@ -7390,16 +7540,20 @@ def handle_error(e):
 
     # Unified language keys
     title_key = f"error{error_code}Title"
-    body_key  = f"error{error_code}Body"
+    body_key = f"error{error_code}Body"
 
     template_data = {
-        "errorTitle":  lang_dict.get(title_key, "Error"),
+        "errorTitle": lang_dict.get(title_key, "Error"),
         "errorHeader": lang_dict.get(title_key, "Error"),
         "errorImagePath": url_for("static", filename=f"images/errors/{error_code}.png"),
-        "errorBody":   lang_dict.get(body_key, "An error occurred."),
+        "errorBody": lang_dict.get(body_key, "An error occurred."),
     }
 
-    nav = "bootstrap/no_user_nav.html" if getUser() == "public" else "bootstrap/navigation.html"
+    nav = (
+        "bootstrap/no_user_nav.html"
+        if getUser() == "public"
+        else "bootstrap/navigation.html"
+    )
 
     return (
         render_template(
@@ -7881,7 +8035,6 @@ def admin_user_growth():
     )
 
 
-
 @app.route("/u/<username>/friends")
 @login_required
 def friends(username):
@@ -8172,7 +8325,9 @@ def visited_squares(username):
 @public_required
 def visited_squares_data(username):
     """Fetch the GeoJSON data for the visited squares."""
-    geojson_data, grid_geojson, land_percentage, air_percentage = generate_visited_squares_geojson(username)
+    geojson_data, grid_geojson, land_percentage, air_percentage = (
+        generate_visited_squares_geojson(username)
+    )
     response = {
         "geojson": geojson_data,
         "grid_geojson": grid_geojson,
@@ -8335,49 +8490,50 @@ def generate_visited_squares_geojson(username):
             "type": "Feature",
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [[
-                    [lon, lat],
-                    [lon + 1, lat],
-                    [lon + 1, lat + 1],
-                    [lon, lat + 1],
-                    [lon, lat],
-                ]],
+                "coordinates": [
+                    [
+                        [lon, lat],
+                        [lon + 1, lat],
+                        [lon + 1, lat + 1],
+                        [lon, lat + 1],
+                        [lon, lat],
+                    ]
+                ],
             },
             "properties": {"status": status},
         }
         visited_features.append(feature)
 
-    visited_geojson = {
-        "type": "FeatureCollection",
-        "features": visited_features
-    }
+    visited_geojson = {"type": "FeatureCollection", "features": visited_features}
 
     # --- FULL GRID FEATURES (ALL WORLD SQUARES) ---
     grid_features = []
 
     for lat in range(-90, 90):
         for lon in range(-180, 180):
-            grid_features.append({
-                "type": "Feature",
-                "geometry": {
-                    "type": "Polygon",
-                    "coordinates": [[
-                        [lon, lat],
-                        [lon + 1, lat],
-                        [lon + 1, lat + 1],
-                        [lon, lat + 1],
-                        [lon, lat],
-                    ]],
-                },
-                "properties": {}
-            })
+            grid_features.append(
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [
+                            [
+                                [lon, lat],
+                                [lon + 1, lat],
+                                [lon + 1, lat + 1],
+                                [lon, lat + 1],
+                                [lon, lat],
+                            ]
+                        ],
+                    },
+                    "properties": {},
+                }
+            )
 
-    grid_geojson = {
-        "type": "FeatureCollection",
-        "features": grid_features
-    }
+    grid_geojson = {"type": "FeatureCollection", "features": grid_features}
 
     return visited_geojson, grid_geojson, land_percentage, air_percentage
+
 
 @app.route("/tile/<style>/<x>/<y>/<z>/")
 @app.route("/tile/<style>/<x>/<y>/<z>/<r>")
@@ -8814,7 +8970,7 @@ def get_bounds(username):
         args = f"lon={lon}&lat={lat}"
         timeout = 10
         en = "lang=en"
-        
+
         responseJson = None
         for url in photonInstances.values():
             try:
@@ -8825,7 +8981,7 @@ def get_bounds(username):
                     break
             except Exception:
                 continue
-        
+
         if responseJson is not None and responseJson["features"] is not None:
             properties = {}
             if responseJson["features"] != []:
@@ -8840,9 +8996,7 @@ def get_bounds(username):
 
             # Add flag to the country
             flag_country = (
-                f"{get_flag_emoji(country_code)} {country}"
-                if country_code
-                else country
+                f"{get_flag_emoji(country_code)} {country}" if country_code else country
             )
 
             # Build preferred location string
@@ -8991,10 +9145,10 @@ def router_status():
 def get_current_trips_data(public_only=True):
     """
     Get current trips data, optionally filtered by public visibility.
-    
+
     Args:
         public_only (bool): If True, only return trips from public users
-    
+
     Returns:
         list: List of trip data with paths and distances
     """
@@ -9007,10 +9161,10 @@ def get_current_trips_data(public_only=True):
             AND (visibility = 'public' OR (visibility IS NULL AND type not in ('poi', 'accommodation', 'restaurant', 'walk', 'cycle', 'car')))
         """)
         trips = cursor.fetchall()
-    
+
     if not trips:
         return []
-    
+
     # 2. Filter trips based on visibility requirements
     if public_only:
         # Collect usernames
@@ -9027,21 +9181,21 @@ def get_current_trips_data(public_only=True):
     else:
         # Return all trips (for owner/admin access)
         filtered_trips = trips
-    
+
     if not filtered_trips:
         return []
-    
+
     trip_ids = [trip["uid"] for trip in filtered_trips]
-    
+
     # 3. Get paths
     formattedGetUserLines = getUserLines.format(
         trip_ids=", ".join(("?",) * len(trip_ids))
     )
     with managed_cursor(pathConn) as cursor:
         pathResult = cursor.execute(formattedGetUserLines, tuple(trip_ids)).fetchall()
-    
+
     paths = {path["trip_id"]: path["path"] for path in pathResult}
-    
+
     result = []
     for trip in filtered_trips:
         path = json.loads(paths.get(trip["uid"], "[]"))
@@ -9053,7 +9207,7 @@ def get_current_trips_data(public_only=True):
                 "distances": getDistanceFromPath(path),
             }
         )
-    
+
     return result
 
 
@@ -9088,6 +9242,7 @@ def live_map():
         title=lang[session["userinfo"]["lang"]]["live_map"],
     )
 
+
 @app.route("/admin/live_map")
 @owner_required
 def admin_live_map():
@@ -9104,6 +9259,7 @@ def admin_live_map():
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
+
 
 @app.route("/api/user_completion/u/<username>")
 @login_required
@@ -9132,14 +9288,15 @@ def user_completion(username):
 
     return jsonify({"countries": countries, "regions": regions})
 
-@app.route('/sitemap.xml', methods=['GET'])
+
+@app.route("/sitemap.xml", methods=["GET"])
 def sitemap():
     # Only list the routes you want
     pages = [
-        url_for('landing', _external=True),
-        url_for('login', _external=True),
-        url_for('signup', _external=True),
-        url_for('privacy', _external=True),
+        url_for("landing", _external=True),
+        url_for("login", _external=True),
+        url_for("signup", _external=True),
+        url_for("privacy", _external=True),
     ]
 
     xml = ['<?xml version="1.0" encoding="UTF-8"?>']
@@ -9154,8 +9311,9 @@ def sitemap():
     sitemap_xml = "\n".join(xml)
 
     response = make_response(sitemap_xml)
-    response.headers['Content-Type'] = 'application/xml'
+    response.headers["Content-Type"] = "application/xml"
     return response
+
 
 @app.route("/public/video/<tripIds>")
 def video(tripIds):
@@ -9169,6 +9327,7 @@ def video(tripIds):
     else:
         abort(401)
 
+
 @app.route("/u/<username>/dashboard")
 @login_required
 def user_dashboard(username):
@@ -9181,28 +9340,29 @@ def user_dashboard(username):
         **session["userinfo"],
     )
 
-@app.route('/debug/routes')
+
+@app.route("/debug/routes")
 def list_routes():
     routes = set()
     for rule in app.url_map.iter_rules():
         path = rule.rule
         # Extract first level path segment
-        parts = path.strip('/').split('/')
+        parts = path.strip("/").split("/")
         if parts and parts[0]:
             # Remove parameter markers like <username>
-            first_segment = parts[0].split('<')[0].split('>')[0]
+            first_segment = parts[0].split("<")[0].split(">")[0]
             if first_segment:
                 routes.add(first_segment)
-    
-    return '<br>'.join(sorted(routes))
+
+    return "<br>".join(sorted(routes))
+
 
 @app.get("/flags/<code>.svg")
 def get_flag(code):
     w = request.args.get("w")
     h = request.args.get("h")
     svg = open(f"static/images/flags/{code}.svg").read()
-    svg = re.sub(r'<svg([^>]*)>',
-                 rf'<svg\1 width="{w}" height="{h}">', svg)
+    svg = re.sub(r"<svg([^>]*)>", rf'<svg\1 width="{w}" height="{h}">', svg)
 
     resp = make_response(svg)
     resp.mimetype = "image/svg+xml"

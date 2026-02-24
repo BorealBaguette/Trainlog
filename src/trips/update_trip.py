@@ -137,7 +137,9 @@ def _update_trip_in_sqlite(
         "price": formData["price"],
         "currency": formData.get("currency") if formData["price"] != "" else None,
         "ticket_id": formData.get("ticket_id"),
-        "purchasing_date": formData.get("purchasing_date") if formData["price"] != "" else None,
+        "purchasing_date": formData.get("purchasing_date")
+        if formData["price"] != ""
+        else None,
         "visibility": visibility if visibility != "" else None,
     }
 

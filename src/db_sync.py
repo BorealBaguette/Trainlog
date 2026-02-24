@@ -5,10 +5,11 @@ import logging.config
 
 from src.pg import get_or_create_pg_session, pg_session
 from src.trips import Trip, compare_trip
-from src.utils import mainConn, managed_cursor, parse_date, authConn
+from src.utils import authConn, mainConn, managed_cursor, parse_date
 
 logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
+
 
 def get_user_id(username):
     with managed_cursor(authConn) as cursor:
@@ -64,7 +65,7 @@ def trip_to_csv(trip: Trip):
         trip.currency,
         trip.ticket_id,
         trip.purchasing_date,
-        trip.visibility
+        trip.visibility,
     ]
     return items
 
