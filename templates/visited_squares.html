@@ -13,16 +13,21 @@
 {% include nav %}
 
 <!-- Spinner Overlay -->
-<div class="loading-screen position-relative">
-  <div class="loading-text text-center position-absolute top-0 w-100" style="padding-top: 50px;">Loading...</div>
-  <div class="spinner-container">
+<div class="loading-screen position-relative" style="width:100%; height:100vh;">
+  <div class="loading-text text-center position-absolute w-100" 
+       style="top: 45vh; transform: translateY(-45%);">
+    Loading...
+  </div>
+  <div class="spinner-container position-absolute w-100" 
+       style="top: 50vh; transform: translateY(-50%); text-align: center;">
       <div class="lds-spinner">
-          <div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div>
+          <div></div><div></div><div></div><div></div><div></div><div></div>
+          <div></div><div></div><div></div><div></div><div></div><div></div>
       </div>
   </div>
 </div>
 
-<div id="map" class="mapUser"></div>
+<div id="map" class="mapUser" style="visibility: hidden;"></div>
 
 <script>
     let map;
@@ -135,7 +140,7 @@
             f.geometry.coordinates[0].forEach(coord => bounds.extend(coord));
         });
         if (!bounds.isEmpty()) map.fitBounds(bounds, { padding: 40 });
-
+        document.getElementById("map").style.visibility = "visible";
         $('.loading-screen').hide();
         })
         .catch(err => {
@@ -156,7 +161,7 @@
 
         <div class="legend mt-2">
             <div><span class="legend-color" style="background-color: blue; opacity:0.7;"></span> {{stopped}}</div>
-            <div><span class="legend-color" style="background-color: blue; opacity:0.5;"></span> {{passed}}</div>
+            <div><span class="legend-color" style="background-color: #3388ff; opacity:0.5;"></span> {{passed}}</div>
             <div><span class="legend-color" style="background-color: green; opacity:0.5;"></span> {{air}}</div>
         </div>
         `;
