@@ -73,6 +73,7 @@ class OperatorsRepository:
                 SELECT o.operator_id, o.short_name, o.long_name, o.operator_type, ol.logo_url
                 FROM operators o
                 LEFT JOIN operator_logos ol ON ol.operator_id = o.operator_id AND ol.uid = (SELECT MAX(uid) FROM operator_logos WHERE operator_id=o.operator_id)
+                ORDER BY o.short_name DESC
             """)
             columns = [
                 "operator_id",
