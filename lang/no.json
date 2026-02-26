@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Velg togsett",
     "tsbUseOnce": "Bruk én gang",
     "tsbSaveAndUse": "Lagre og bruk",
-    "tsbNoResults": "Ingen resultater"
+    "tsbNoResults": "Ingen resultater",
+    "routeTrip" : "Ruteplanlegging",
+    "sharedLink" : "Delt tur",
+    "colorblindMode" : "Fargeblindmodus"
 }

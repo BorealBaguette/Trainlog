@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Valitse junasetti",
     "tsbUseOnce": "Käytä kerran",
     "tsbSaveAndUse": "Tallenna ja käytä",
-    "tsbNoResults": "Ei tuloksia"
+    "tsbNoResults": "Ei tuloksia",
+    "routeTrip" : "Reitin suunnittelu",
+    "sharedLink" : "Jaettu matka",
+    "colorblindMode" : "Värisokeustila"
 }

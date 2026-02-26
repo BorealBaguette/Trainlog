@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Zugset auswählen",
     "tsbUseOnce": "Einmal verwenden",
     "tsbSaveAndUse": "Speichern und verwenden",
-    "tsbNoResults": "Keine Ergebnisse"
+    "tsbNoResults": "Keine Ergebnisse",
+    "routeTrip" : "Routenplanung",
+    "sharedLink" : "Geteilte Reise",
+    "colorblindMode" : "Farbenblindmodus"
 }

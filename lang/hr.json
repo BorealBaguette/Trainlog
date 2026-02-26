@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Odaberi vlak set",
     "tsbUseOnce": "Koristi jednom",
     "tsbSaveAndUse": "Spremi i koristi",
-    "tsbNoResults": "Nema rezultata"
+    "tsbNoResults": "Nema rezultata",
+    "routeTrip" : "Planiranje rute",
+    "sharedLink" : "Dijeljeno putovanje",
+    "colorblindMode" : "Način za daltonizam"
 }

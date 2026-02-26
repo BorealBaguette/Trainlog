@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Vali rongikomplekt",
     "tsbUseOnce": "Kasuta üks kord",
     "tsbSaveAndUse": "Salvesta ja kasuta",
-    "tsbNoResults": "Tulemusi pole"
+    "tsbNoResults": "Tulemusi pole",
+    "routeTrip" : "Marsruudi planeerimine",
+    "sharedLink" : "Jagatud reis",
+    "colorblindMode" : "Värvipimeduse režiim"
 }

@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Välj tågset",
     "tsbUseOnce": "Använd en gång",
     "tsbSaveAndUse": "Spara och använd",
-    "tsbNoResults": "Inga resultat"
+    "tsbNoResults": "Inga resultat",
+    "routeTrip" : "Ruttplanering",
+    "sharedLink" : "Delad resa",
+    "colorblindMode" : "Färgblindhetsläge"
 }

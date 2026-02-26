@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Choisir un ensemble de train",
     "tsbUseOnce": "Utiliser une fois",
     "tsbSaveAndUse": "Enregistrer et utiliser",
-    "tsbNoResults": "Aucun résultat"
+    "tsbNoResults": "Aucun résultat",
+    "routeTrip" : "Planification d’itinéraire",
+    "sharedLink" : "Voyage partagé",
+    "colorblindMode" : "Mode daltonien"
 }
