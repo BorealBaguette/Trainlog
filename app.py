@@ -4,27 +4,19 @@
 # Standard Library Imports
 import calendar
 import csv
-import json
-import logging
 import logging.config
-import math
 import os
 import pathlib
 import re
 import secrets
-import smtplib
 import traceback
-import unicodedata as ud
 import urllib
 import uuid
 import xml.etree.ElementTree as ET
 import zipfile
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta, UTC
-from email.mime.text import MIMEText
-from functools import wraps
 from glob import glob
-from inspect import getcallargs
 from io import BytesIO, StringIO
 from shapely.geometry import shape, mapping
 from shapely.ops import unary_union
@@ -60,7 +52,6 @@ from flask import (
 )
 from flask_caching import Cache
 from flask_compress import Compress
-from flask_sqlalchemy import SQLAlchemy
 from flaskext.autoversion import Autoversion
 from geopy.geocoders import Nominatim
 from PIL import Image
@@ -68,7 +59,6 @@ from requests.adapters import HTTPAdapter, Retry
 from scgraph.geographs.marnet import marnet_geograph
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy_utils import database_exists
-from timezonefinder import TimezoneFinder
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -150,7 +140,7 @@ from py.utils import (
     validate_png_file,
     time_ago
 )
-from src.api.admin import admin_blueprint
+from src.api.admin import admin_blueprint, operators_api_blueprint
 from src.api.feature_requests import feature_requests_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
@@ -159,6 +149,7 @@ from src.api.carbon import carbon_blueprint
 from src.api.wrapped import wrapped_blueprint
 from src.api.stats import stats_blueprint, fetch_stats, get_distinct_stat_years
 from src.api.ai import ai_blueprint
+from src.api.trainset import trainset_blueprint
 from src.consts import DbNames, TripTypes
 from src.pg import setup_db
 from src.suspicious_activity import (
@@ -218,6 +209,8 @@ Autoversion(app)
 app.url_map.strict_slashes = False
 
 app.register_blueprint(admin_blueprint, url_prefix="/admin")
+
+app.register_blueprint(operators_api_blueprint, url_prefix="/api/admin/operators")
 app.register_blueprint(feature_requests_blueprint)
 app.register_blueprint(finance_blueprint)
 app.register_blueprint(news_blueprint)
@@ -225,6 +218,7 @@ app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
 app.register_blueprint(wrapped_blueprint)
 app.register_blueprint(ai_blueprint)
+app.register_blueprint(trainset_blueprint)
 
 app.config["CACHE_TYPE"] = "SimpleCache"
 app.config["CACHE_DEFAULT_TIMEOUT"] = 864000
@@ -723,16 +717,17 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train"):
     )
 
     create_trip(trip)
+    return trip
 
 
-def hasUncommonTrips(username):
+def hasPrivateTrips(username):
     with managed_cursor(mainConn) as cursor:
         cursor.execute(
             """
             SELECT EXISTS (
                 SELECT 1
                 FROM trip
-                WHERE type NOT IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'tram', 'metro', 'aerialway')
+                WHERE visibility = 'private'
                 AND username = :username
             ) AS has_uncommon_trips;
         """,
@@ -3369,83 +3364,6 @@ def borked_trips(username=None):
                 }
             )
 
-@app.route("/admin/missing_operators")
-@admin_required
-def missing_operators():
-    with managed_cursor(mainConn) as main_cursor:
-        # Get all distinct operators from trips with their types and counts
-        main_cursor.execute("""
-            SELECT operator, type
-            FROM trip
-            WHERE operator IS NOT NULL AND operator != ''
-            AND type not in ('car', 'walk', 'cycle', 'poi', 'accommodation', 'restaurant')
-        """)
-        trip_rows = main_cursor.fetchall()
-        
-        if not trip_rows:
-            return jsonify({
-                "missing_operators": [],
-                "total_count": 0,
-                "by_type": {}
-            })
-        
-        # Split comma-separated operators and count them by type
-        operator_counts = {}  # {(operator, type): count}
-        for row in trip_rows:
-            operators = [op.strip() for op in str(row["operator"]).split(",")]
-            trip_type = row["type"]
-            for operator in operators:
-                if operator:  # Skip empty strings
-                    key = (operator, trip_type)
-                    operator_counts[key] = operator_counts.get(key, 0) + 1
-        
-        if not operator_counts:
-            return jsonify({
-                "missing_operators": [],
-                "total_count": 0,
-                "by_type": {}
-            })
-        
-        # Get all unique operators
-        all_operators = list(set(op for op, _ in operator_counts.keys()))
-        existing_operators = set()
-        
-        # Check which operators exist in batches
-        batch_size = 999
-        for i in range(0, len(all_operators), batch_size):
-            batch = all_operators[i : i + batch_size]
-            placeholders = ",".join(["?"] * len(batch))
-            main_cursor.execute(
-                f"SELECT DISTINCT short_name FROM operators WHERE short_name IN ({placeholders})",
-                batch
-            )
-            existing_operators.update(row["short_name"] for row in main_cursor.fetchall())
-        
-        # Build results by type
-        by_type = {}
-        total_occurrences = 0
-        
-        for (operator, trip_type), count in operator_counts.items():
-            if operator not in existing_operators:
-                if trip_type not in by_type:
-                    by_type[trip_type] = []
-                by_type[trip_type].append({
-                    "operator": operator,
-                    "occurrences": count
-                })
-                total_occurrences += count
-        
-        # Sort each type's operators by occurrences descending
-        for trip_type in by_type:
-            by_type[trip_type].sort(key=lambda x: x["occurrences"], reverse=True)
-        
-        return jsonify({
-            "missing_operators_by_type": by_type,
-            "total_occurrences": total_occurrences,
-            "unique_missing_operators": sum(len(ops) for ops in by_type.values())
-        })
-    
-
 @app.route("/admin/add_dummy_path/<trip_id>", methods=["GET"])
 @owner_required
 def add_dummy_path(trip_id):
@@ -4027,12 +3945,16 @@ def saveTrip(username):
         newPath = json.loads(jsonPath)
         jsonNewTrip = request.form["newTrip"]
         newTrip = json.loads(jsonNewTrip)
-        saveTripToDb(
+        trip = saveTripToDb(
             username=username,
             newTrip=newTrip,
             newPath=newPath,
             trip_type=newTrip["type"],
         )
+        if request.form["fromApp"] == "true":
+            return jsonify({
+                "newTrip": trip.to_dict(),
+            }), 200
 
     return ""
 
@@ -5619,6 +5541,27 @@ def getTrips(username, projects):
     return json.dumps(tripList)
 
 
+trip_column_names = [
+    "type",
+    "origin_station", 
+    "destination_station",
+    "start_datetime",
+    "start_time",
+    "end_time",
+    "trip_duration_seconds",
+    "trip_length",
+    "trip_speed",
+    "operator",
+    "line_name",
+    "countries",
+    "visibility",
+    "price",
+    "material_type",
+    "reg",
+    "seat",
+    "notes"
+]
+
 def get_trips_api_internal(username, is_public=False):
     # Retrieve parameters from DataTables request
     start = request.form.get("start", type=int, default=0)
@@ -5633,31 +5576,10 @@ def get_trips_api_internal(username, is_public=False):
     # Sorting parameters
     sort_column = request.form.get("order[0][column]", type=int, default=3)
     sort_direction = request.form.get("order[0][dir]", default="desc" if past == 1 else "asc")
-    
-    column_names = [
-        "type",
-        "origin_station", 
-        "destination_station",
-        "start_datetime",
-        "start_time",
-        "end_time",
-        "trip_duration_seconds",
-        "trip_length",
-        "trip_speed",
-        "operator",
-        "line_name",
-        "countries",
-        "visibility",
-        "price",
-        "material_type",
-        "reg",
-        "seat",
-        "notes"
-    ]
-    
+
     sort_column_name = (
-        column_names[sort_column]
-        if 0 <= sort_column < len(column_names)
+        trip_column_names[sort_column]
+        if 0 <= sort_column < len(trip_column_names)
         else "default_column_name"
     )
 
@@ -5674,8 +5596,8 @@ def get_trips_api_internal(username, is_public=False):
     
     # Add column-specific search conditions
     for column_index, search_data in column_searches.items():
-        if column_index < len(column_names):
-            column_name = column_names[column_index]
+        if column_index < len(trip_column_names):
+            column_name = trip_column_names[column_index]
             param_name = f"col_search_{column_index}"
             search_term = search_data["value"]
             is_exact = search_data["exact"]
@@ -5775,10 +5697,14 @@ def get_trips_api_internal(username, is_public=False):
             base_count_query += " AND " + " AND ".join(additional_conditions)
             base_data_query += " AND " + " AND ".join(additional_conditions)
     else:
-        # Add column-specific conditions
-        if additional_conditions:
-            base_count_query += " WHERE " + " AND ".join(additional_conditions)
-            base_data_query += " WHERE " + " AND ".join(additional_conditions)
+        # Add type filter and column-specific conditions
+        all_conditions = []
+        if filter_types == 1:
+            all_conditions.append("(visibility IS NULL OR visibility != 'private')")
+        all_conditions.extend(additional_conditions)
+        if all_conditions:
+            base_count_query += " WHERE " + " AND ".join(all_conditions)
+            base_data_query += " WHERE " + " AND ".join(all_conditions)
 
     count_query = base_count_query
     
@@ -6043,11 +5969,12 @@ def dynamic_trips(username, time=None):
         username=username,
         privateButtons=True,
         hasPrice=True,
-        hasUncommonTrips=hasUncommonTrips(username),
+        hasPrivateTrips=hasPrivateTrips(username),
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id(username)),
         isPublic=False,
         projects=projects,
+        trip_column_names=trip_column_names,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -6068,11 +5995,12 @@ def public_trips(username, time=None):
         username=username,
         privateButtons=True,
         hasPrice=True,
-        hasUncommonTrips=hasUncommonTrips(username),
+        hasPrivateTrips=hasPrivateTrips(username),
         nav="bootstrap/public_nav.html",
-        isPublic=True,
         isCurrent=has_current_trip(get_user_id(username)),
+        isPublic=True,
         projects=projects,
+        trip_column_names=trip_column_names,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -8402,257 +8330,13 @@ os.makedirs(LOGO_UPLOAD_FOLDER, exist_ok=True)
 @app.route("/admin/operators", methods=["GET"])
 @admin_required
 def show_operators():
-    # Fetch all operators and their logos from the database
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute("""
-            SELECT
-                o.uid,
-                o.short_name,
-                o.long_name,
-                o.alias_of,
-                o.operator_type,  -- New field
-                l.logo_url
-            FROM
-                operators o
-            LEFT JOIN operator_logos l ON l.operator_id = o.uid
-                AND l.rowid = (
-                    SELECT l1.rowid
-                    FROM operator_logos l1
-                    WHERE l1.operator_id = o.uid
-                    ORDER BY
-                        CASE WHEN l1.effective_date IS NULL THEN 1 ELSE 0 END ASC,
-                        l1.effective_date DESC
-                    LIMIT 1
-                );
-        """)
-        operator_list = cursor.fetchall()
-
     return render_template(
         "admin/operators.html",
         nav="bootstrap/navigation.html",
         username=getUser(),
-        operatorList=operator_list,
         **session["userinfo"],
         **lang[session["userinfo"]["lang"]],
     )
-
-
-@app.route("/admin/operators", methods=["POST"])
-@admin_required
-def add_operator():
-    short_name = request.form.get("short_name")
-    long_name = request.form.get("long_name")
-    alias_of = request.form.get("alias_of")
-    operator_type = request.form.get("operator_type")
-    logo = request.files.get("logo")
-    error_log_name = "logs/operator_logo_save_errors.txt"
-    log_name = "logs/operator_logo_log.txt"
-
-    try:
-        # Insert the operator into the database
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute(
-                """
-                INSERT INTO operators (short_name, long_name, alias_of, operator_type)
-                VALUES (?, ?, ?, ?)
-            """,
-                (short_name, long_name, alias_of if alias_of else None, operator_type),
-            )
-
-            operator_id = cursor.lastrowid  # Get the inserted operator ID
-
-            # Handle the logo upload
-            if logo:
-                validate_png_file(logo)  # Validate the logo file
-                filename = secure_filename(
-                    f"{operator_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-                )
-                logo.save(os.path.join(LOGO_UPLOAD_FOLDER, filename))
-
-                # Insert the logo into the operator_logos table
-                cursor.execute(
-                    """
-                    INSERT INTO operator_logos (operator_id, logo_url)
-                    VALUES (?, ?)
-                """,
-                    (operator_id, f"{REL_LOGO_UPLOAD_FOLDER}/{filename}"),
-                )
-
-        mainConn.commit()
-
-        # Log the successful addition to the save log
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(log_name, "a", encoding="utf-8") as log:
-            log.write(
-                f"{current_time} - From: {getUser()} - Operator Added: {short_name} (ID: {operator_id})\n"
-            )
-
-        return jsonify(
-            {"status": "success", "message": "Operator added successfully."}
-        ), 200
-
-    except Exception as e:
-        # Log the error
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(error_log_name, "a", encoding="utf-8") as log:
-            log.write(
-                f"{current_time} - From: {getUser()} - Error: {e} - File: {short_name}\n"
-            )
-        return jsonify({"status": "error", "message": str(e)}), 400
-
-
-@app.route("/admin/operators/update", methods=["POST"])
-@admin_required
-def update_operator():
-    uid = request.form.get("uid")
-    field = request.form.get("field")
-    value = request.form.get("value")
-    log_name = "logs/operator_logo_log.txt"
-
-    # Update the operator in the database
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(
-            f"""
-            UPDATE operators SET {field} = ? WHERE uid = ?
-        """,
-            (value, uid),
-        )
-
-    mainConn.commit()  # Commit the changes before returning the response
-
-    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    with open(log_name, "a", encoding="utf-8") as log:
-        log.write(
-            f"{current_time} - From: {getUser()} - Operator Updated: Field '{field}' set to '{value}' (Operator ID: {uid})\n"
-        )
-
-    return jsonify({"status": "success", "message": "Operator updated successfully."})
-
-
-@app.route("/admin/operators/upload-logo", methods=["POST"])
-@admin_required
-def upload_logo():
-    uid = request.form.get("uid")
-    logo = request.files.get("logo")
-    effective_date = request.form.get("effective_date")
-    action = request.form.get("action")
-    error_log_name = "logs/operator_logo_save_errors.txt"
-    log_name = "logs/operator_logo_log.txt"
-
-    try:
-        if logo:
-            validate_png_file(logo)  # Validate the logo file
-
-            # Save the new logo with a unique name using a timestamp
-            filename = secure_filename(
-                f"{uid}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-            )
-            logo.save(os.path.join(LOGO_UPLOAD_FOLDER, filename))
-
-            with managed_cursor(mainConn) as cursor:
-                cursor.execute(
-                    """
-                    INSERT INTO operator_logos (operator_id, logo_url, effective_date)
-                    VALUES (?, ?, ?)
-                """,
-                    (
-                        uid,
-                        f"{REL_LOGO_UPLOAD_FOLDER}/{filename}",
-                        effective_date if effective_date else None,
-                    ),
-                )
-
-            mainConn.commit()
-
-            # Log the successful upload to the save log
-            current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            with open(log_name, "a", encoding="utf-8") as log:
-                log.write(
-                    f"{current_time} - From: {getUser()} - Logo {'Replaced' if action == 'replace' else 'Added'} for Operator ID: {uid} - Filename: {filename}\n"
-                )
-
-            return jsonify(
-                {"status": "success", "message": "Logo uploaded successfully."}
-            )
-
-    except Exception as e:
-        # Log the error
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        with open(error_log_name, "a", encoding="utf-8") as log:
-            log.write(
-                f"{current_time} - From: {getUser()} - Error: {e} - Operator ID: {uid}\n"
-            )
-        return jsonify({"status": "error", "message": str(e)}), 400
-
-
-@app.route("/admin/operators/delete", methods=["POST"])
-@admin_required
-def delete_operator():
-    uid = request.form.get("uid")
-
-    # Delete the operator and their logos from the database
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute("DELETE FROM operator_logos WHERE operator_id = ?", (uid,))
-        cursor.execute("DELETE FROM operators WHERE uid = ?", (uid,))
-
-        # Delete all logos related to this operator from the filesystem
-        for file in os.listdir(LOGO_UPLOAD_FOLDER):
-            if file.startswith(f"{uid}_"):
-                logo_path = os.path.join(LOGO_UPLOAD_FOLDER, file)
-                if os.path.exists(logo_path):
-                    os.remove(logo_path)
-
-    mainConn.commit()
-    return jsonify(
-        {
-            "status": "success",
-            "message": "Operator and associated logos deleted successfully.",
-        }
-    )
-
-
-@app.route("/admin/operators/<int:uid>/logos", methods=["GET"])
-@admin_required
-def get_operator_logos(uid):
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(
-            """
-            SELECT uid, logo_url, effective_date FROM operator_logos WHERE operator_id = ? ORDER by effective_date
-        """,
-            (uid,),
-        )
-        logos = [
-            {
-                "uid": row["uid"],
-                "logo_url": row["logo_url"],
-                "effective_date": row["effective_date"],
-            }
-            for row in cursor.fetchall()
-        ]
-
-    return jsonify({"logos": logos})
-
-
-@app.route("/admin/operators/delete-logo", methods=["POST"])
-@admin_required
-def delete_logo():
-    logo_id = request.form.get("logo_id")
-    print(logo_id)
-
-    try:
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute(
-                """
-                DELETE FROM operator_logos WHERE uid = ?
-            """,
-                (logo_id,),
-            )
-        mainConn.commit()
-        return jsonify({"status": "success", "message": "Logo deleted successfully."})
-
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
-
 
 @app.route("/migrate-logos")
 @owner_required
