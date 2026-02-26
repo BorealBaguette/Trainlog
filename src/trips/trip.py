@@ -1,4 +1,9 @@
+import datetime
+import json
+from enum import Enum
+
 from src.carbon import calculate_carbon_footprint_for_trip
+from src.paths import Path
 from src.utils import get_username, managed_cursor, pathConn
 
 
@@ -114,3 +119,21 @@ class Trip:
             trip["trip_id"],
             trip["visibility"],
         )
+
+    def _json_safe(self, value):
+        if isinstance(value, (datetime.datetime, datetime.date)):
+            return value.isoformat()
+        if isinstance(value, Enum):
+            return value.value
+        if isinstance(value, set):
+            return list(value)
+        if isinstance(value, Path):
+            return value.to_dict(include_trip_id=True, include_node_order=False)
+        return value
+
+    def to_dict(self):
+        d = vars(self).copy()
+        return {k: self._json_safe(v) for k, v in d.items()}
+
+    def to_json(self, **json_kwargs):
+        return json.dumps(self.to_dict(), ensure_ascii=False, **json_kwargs)

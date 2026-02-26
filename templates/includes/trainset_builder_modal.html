@@ -1,0 +1,247 @@
+<!-- Trainset Builder Modal — include in forms that have a #material_type input -->
+<style>
+  .tsb-unit { min-width:68px; max-width:84px; font-size:.7rem; background:#f8f9fa;
+              border:1px solid #dee2e6; border-radius:4px; padding:4px; text-align:center; }
+  .tsb-unit img { max-height:38px; max-width:76px; display:block; margin:0 auto 2px; }
+  .tsb-unit .tsb-nom { display:block; overflow:hidden; text-overflow:ellipsis;
+                       white-space:nowrap; width:100%; }
+</style>
+
+<div class="modal fade" id="tsbModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header py-2">
+        <h6 class="modal-title mb-0"><i class="fas fa-train me-2"></i>{{tsbBuildTrainset}}</h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body pb-2">
+        <input type="text" id="tsb-q" class="form-control form-control-sm mb-1"
+               placeholder="{{tsSearchWagons}}" autocomplete="off">
+        <div id="tsb-results" class="list-group mb-2" style="max-height:160px;overflow-y:auto"></div>
+        <hr class="my-2">
+        <div id="tsb-strip" class="d-flex flex-wrap gap-2 py-1" style="min-height:60px">
+          <span id="tsb-empty" class="text-muted fst-italic small m-auto">{{tsEmptyHint}}</span>
+        </div>
+      </div>
+      <div class="modal-footer flex-wrap gap-2 py-2">
+        <!-- Save name row, hidden until "Save & use" is clicked -->
+        <div id="tsb-save-row" class="input-group input-group-sm me-auto d-none" style="max-width:260px">
+          <input type="text" id="tsb-save-name" class="form-control" placeholder="{{tsTrainsetNamePlaceholder}}">
+          <button type="button" class="btn btn-success" onclick="tsbConfirmSave()">{{tsSaveBtn}}</button>
+        </div>
+        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{cancel}}</button>
+        <button type="button" class="btn btn-outline-primary btn-sm" id="tsb-use-btn"
+                onclick="tsbUseOnce()" disabled>{{tsbUseOnce}}</button>
+        <button type="button" class="btn btn-primary btn-sm" id="tsb-save-btn"
+                onclick="tsbToggleSave()" disabled>{{tsbSaveAndUse}}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  var _units   = [];
+  var _uid     = 0;
+  var _timer   = null;
+  var WAGONS   = '{{ url_for("static", filename="images/wagons") }}';
+  var _i18n    = {
+    noResults:  '{{tsbNoResults}}',
+    flip:       '{{tsFlipSide}}',
+    remove:     '{{remove}}',
+    saveFailed: '{{tsSaveFailed}}'
+  };
+
+  /* ── open ── */
+  window.openTsbModal = function () {
+    _units = [];
+    document.getElementById('tsb-q').value = '';
+    document.getElementById('tsb-results').innerHTML = '';
+    document.getElementById('tsb-save-row').classList.add('d-none');
+    document.getElementById('tsb-save-name').value = '';
+    _render();
+    $('#tsbModal').modal('show');
+  };
+
+  /* ── search ── */
+  $(document).on('input', '#tsb-q', function () {
+    clearTimeout(_timer);
+    var q = this.value.trim();
+    if (!q) { document.getElementById('tsb-results').innerHTML = ''; return; }
+    _timer = setTimeout(function () { _search(q); }, 250);
+  });
+
+  function _search(q) {
+    $.getJSON('/api/wagons/search', { q: q, limit: 12 }, function (rows) {
+      var el = document.getElementById('tsb-results');
+      el.innerHTML = '';
+      if (!rows.length) {
+        el.innerHTML = '<div class="list-group-item small text-muted py-1">' + _i18n.noResults + '</div>';
+        return;
+      }
+      rows.forEach(function (w) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'list-group-item list-group-item-action py-1 px-2 d-flex align-items-center gap-2';
+
+        /* thumbnail */
+        if (w.image) {
+          var thumb = document.createElement('img');
+          thumb.src = _imgSrc(w.image, 'L');
+          thumb.style.cssText = 'height:28px;width:auto;flex-shrink:0;object-fit:contain';
+          thumb.onerror = function () { this.remove(); };
+          btn.appendChild(thumb);
+        }
+
+        /* text block */
+        var info = document.createElement('div');
+        info.className = 'flex-fill overflow-hidden';
+
+        var top = document.createElement('div');
+        top.className = 'd-flex align-items-baseline gap-1';
+
+        var nomEl = document.createElement('strong');
+        nomEl.className = 'text-truncate';
+        nomEl.style.fontSize = '.8rem';
+        nomEl.textContent = w.nom || '?';
+        top.appendChild(nomEl);
+
+        if (w.epo) {
+          var epo = document.createElement('span');
+          epo.className = 'badge bg-secondary ms-1';
+          epo.style.fontSize = '.6rem';
+          epo.textContent = w.epo;
+          top.appendChild(epo);
+        }
+        info.appendChild(top);
+
+        var desc = [w.titre1, w.titre2].filter(Boolean).join(' · ');
+        if (desc) {
+          var sub = document.createElement('div');
+          sub.className = 'text-muted text-truncate';
+          sub.style.fontSize = '.72rem';
+          sub.textContent = desc;
+          info.appendChild(sub);
+        }
+        btn.appendChild(info);
+
+        btn.onclick = function () {
+          _addUnit(w);
+          el.innerHTML = '';
+          document.getElementById('tsb-q').value = '';
+        };
+        el.appendChild(btn);
+      });
+    });
+  }
+
+  /* ── unit management ── */
+  function _addUnit(wagon) {
+    _units.push(Object.assign({}, wagon, { _uid: ++_uid, _side: 'L' }));
+    _render();
+  }
+
+  window.tsbFlip = function (uid) {
+    var u = _units.find(function (u) { return u._uid === uid; });
+    if (u) { u._side = u._side === 'L' ? 'R' : 'L'; _render(); }
+  };
+
+  window.tsbRemove = function (uid) {
+    _units = _units.filter(function (u) { return u._uid !== uid; });
+    _render();
+  };
+
+  /* ── render strip ── */
+  function _imgSrc(image, side) {
+    if (!image) return '';
+    var base = image.replace(/_[LR]$/, '');
+    return WAGONS + '/' + base + (side === 'R' ? '_R' : '_L') + '.gif';
+  }
+
+  function _render() {
+    var strip = document.getElementById('tsb-strip');
+    strip.querySelectorAll('.tsb-unit').forEach(function (el) { el.remove(); });
+    document.getElementById('tsb-empty').style.display = _units.length ? 'none' : '';
+
+    _units.forEach(function (u) {
+      var card = document.createElement('div');
+      card.className = 'tsb-unit';
+
+      var img = document.createElement('img');
+      img.src = _imgSrc(u.image, u._side);
+      img.title = u.nom || '';
+      img.onerror = function () { this.style.display = 'none'; };
+      card.appendChild(img);
+
+      var nom = document.createElement('span');
+      nom.className = 'tsb-nom';
+      nom.textContent = u.nom || '?';
+      card.appendChild(nom);
+
+      var btns = document.createElement('div');
+      btns.className = 'd-flex justify-content-center gap-1 mt-1';
+
+      var flip = document.createElement('button');
+      flip.type = 'button';
+      flip.className = 'btn btn-outline-secondary p-0';
+      flip.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
+      flip.title = _i18n.flip;
+      flip.textContent = '↔';
+      flip.onclick = (function (uid) { return function () { tsbFlip(uid); }; })(u._uid);
+
+      var rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'btn btn-outline-danger p-0';
+      rm.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
+      rm.title = _i18n.remove;
+      rm.textContent = '×';
+      rm.onclick = (function (uid) { return function () { tsbRemove(uid); }; })(u._uid);
+
+      btns.appendChild(flip);
+      btns.appendChild(rm);
+      card.appendChild(btns);
+      strip.appendChild(card);
+    });
+
+    var any = _units.length > 0;
+    document.getElementById('tsb-use-btn').disabled  = !any;
+    document.getElementById('tsb-save-btn').disabled = !any;
+  }
+
+  /* ── actions ── */
+  window.tsbUseOnce = function () {
+    var json = JSON.stringify(_units.map(function (u) {
+      return { name: u.name, image: u.image, nom: u.nom, _side: u._side };
+    }));
+    document.getElementById('material_type').value = json;
+    $('#tsbModal').modal('hide');
+  };
+
+  window.tsbToggleSave = function () {
+    var row = document.getElementById('tsb-save-row');
+    row.classList.toggle('d-none');
+    if (!row.classList.contains('d-none'))
+      document.getElementById('tsb-save-name').focus();
+  };
+
+  window.tsbConfirmSave = function () {
+    var name = document.getElementById('tsb-save-name').value.trim();
+    if (!name) { document.getElementById('tsb-save-name').focus(); return; }
+    var units = _units.map(function (u) { return { name: u.name, _side: u._side || 'L' }; });
+    $.ajax({
+      url: '/api/trainsets', method: 'POST',
+      contentType: 'application/json',
+      data: JSON.stringify({ name: name, units: units }),
+      success: function (data) {
+        document.getElementById('material_type').value = data.name;
+        $('#tsbModal').modal('hide');
+      },
+      error: function (xhr) {
+        var msg = _i18n.saveFailed;
+        try { msg = JSON.parse(xhr.responseText).error || msg; } catch (e) {}
+        alert(msg);
+      }
+    });
+  };
+}());
+</script>
