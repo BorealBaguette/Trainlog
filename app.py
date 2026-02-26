@@ -317,6 +317,7 @@ def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date
         for f in flights:
             orig_icao = f.get("orig_icao")
             dest_icao = f.get("dest_icao")
+            diverted_icao = f.get("destination_icao_actual")
             takeoff_str = f.get("datetime_takeoff")
             first_seen_str = f.get("first_seen")
             landing_str = f.get("datetime_landed")
@@ -345,8 +346,30 @@ def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date
                             else:
                                 f["datetime_takeoff_local"] = local_departure.isoformat()
                                 f["_used_first_seen_for_takeoff"] = True  # Optional flag for debugging
+
+                            if diverted_icao and (landing_str or last_seen_str):
+                                cursor.execute(
+                                    "SELECT latitude, longitude FROM airports WHERE ident = :icao",
+                                    {"icao": diverted_icao},
+                                )
+                                dest_coords = cursor.fetchone()
+                                if dest_coords:
+                                    # Use landing time if available, otherwise fall back to last_seen
+                                    arrival_str = landing_str if landing_str else last_seen_str
+                                    utc_landing = datetime.fromisoformat(
+                                        arrival_str.replace("Z", "+00:00")
+                                    )
+                                    local_landing = getLocalDatetime(
+                                        dest_coords[0], dest_coords[1], utc_landing
+                                    )
+                                    f["datetime_landed_local"] = (
+                                        local_landing.isoformat()
+                                    )
+                                    # Optional flag for debugging
+                                    if not landing_str:
+                                        f["_used_last_seen_for_landing"] = True
                             
-                            if dest_icao and (landing_str or last_seen_str):
+                            elif dest_icao and (landing_str or last_seen_str):
                                 cursor.execute(
                                     "SELECT latitude, longitude FROM airports WHERE ident = :icao",
                                     {"icao": dest_icao},
