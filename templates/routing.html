@@ -5,7 +5,27 @@
 <div id="sidebar">
     <div id="sidebar-content"></div>
 </div>
+{% if from_app %}
+<style>
+  div.leaflet-control-container { display: none !important; }
+  nav.navbar { display: none !important; }
+</style>
+{% endif %}
 <script>
+// ─── Flutter bridge (for app) ───────────────────────────────────────────────
+window.flutterBridge = {
+  _send(event, payload) {
+    if (!window.flutter_inappwebview) return;
+    window.flutter_inappwebview.callHandler('routingEvent',  { event, ...payload });
+  },
+  loading(isLoading)          { this._send('loading',        { isLoading }); },
+  routeInfo(text, distanceM, durationS) {
+                                this._send('routeInfo',      { text, distanceM, durationS }); },
+  routingError(message)       { this._send('routingError',   { message }); },
+  saveTripDone(ok, trip)      { this._send('saveTripDone',   { ok, trip }); },
+  saveError(message)          { this._send('saveError',      { message }); },
+};
+// ─── End Flutter bridge (for app) ───────────────────────────────────────────
 var id = getGetParams().get("id");
 var newTrip = null;
 var currentRoute;
@@ -63,6 +83,7 @@ async function saveTrip(continueTrip=false) {
         newTrip["estimated_trip_duration"] = 0;
     }
     sidebar.setContent(spinnerContent);
+    flutterBridge.loading(true);
     newTrip["details"] = routeDetails;
     $.post({
         url: '{{url_for("saveTrip", username=username)}}',
@@ -72,6 +93,12 @@ async function saveTrip(continueTrip=false) {
             fromApp: fromApp
         },
         success: function(res) {
+            if (fromApp) {
+                flutterBridge.loading(false);
+                flutterBridge.saveTripDone(true, res);
+                return;
+            }
+
             if (!continueTrip || newTrip.precision != "preciseDates") {
                 location.href = "{{ url_for('landing') }}";
             } else {
@@ -79,6 +106,8 @@ async function saveTrip(continueTrip=false) {
             }
         },
         error: function() {
+            flutterBridge.loading(false);
+            flutterBridge.saveError(xhr.responseText || 'Save failed');
             sidebar.setContent(saveErrorContent);
         }
     });
