@@ -763,12 +763,14 @@
     } else {
       formData.fromPlace = `${selectedFromPlace.lat},${selectedFromPlace.lon}`;
     }
+    formData.fromTz = selectedFromPlace.tz;
 
     if (selectedToPlace.id && selectedToPlace.type === 'STOP') {
       formData.toPlace = selectedToPlace.id;
     } else {
       formData.toPlace = `${selectedToPlace.lat},${selectedToPlace.lon}`;
     }
+    formData.toTz = selectedToPlace.tz;
     
     formData.fromName = selectedFromPlace.name;
     formData.toName = selectedToPlace.name;

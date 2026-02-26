@@ -149,6 +149,7 @@ def setup_db():
         for m in migrations:
             apply_migration(session, m)
         load_base_data(session, "airliners")
+        load_base_data(session, "wagons")
     
     # Dispose the engine used during setup - workers will create their own
     global pg_session_engine
@@ -240,11 +241,12 @@ def load_base_data(pg, table_name):
     raw_conn = pg.connection().connection
     with raw_conn.cursor() as cursor:
         with open(csv_path, 'r') as f:
-            # Skip header row and copy data
-            next(f)
+            # Read the header to build an explicit column list so SERIAL/identity
+            # columns (not present in the CSV) are handled transparently.
+            columns = ', '.join(c.strip() for c in next(f).strip().split(','))
             cursor.copy_expert(
-                f"COPY {table_name} FROM STDIN WITH (FORMAT CSV)",
+                f"COPY {table_name} ({columns}) FROM STDIN WITH (FORMAT CSV, NULL '')",
                 f
             )
-    
+
     logger.info(f"Base data loaded successfully for {table_name}!")

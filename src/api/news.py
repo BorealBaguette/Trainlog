@@ -49,6 +49,51 @@ def get_news_count():
         return jsonify({"count": 0})
 
 
+@news_blueprint.route("/api/news/count/app/<date_last_visit>")
+def get_news_count_app(date_last_visit):
+    """Get count of news items since last visit"""
+    try:
+        date_last_visit = datetime.fromisoformat(date_last_visit)
+    except (ValueError, TypeError):
+        # Should we put now to get 0, or a date in the past to get all the news count?
+        date_last_visit = datetime.now()
+        # date_last_visit = datetime(1970, 1, 1, 0, 0, 0)
+
+    try:
+        with pg_session() as pg:
+            result = pg.execute(
+                news_sql.count_news_since_date(), {"last_visit": date_last_visit}
+            ).fetchone()
+
+            count = result[0] if result else 0
+            return jsonify({"count": count})
+    except (ValueError, TypeError):
+        return jsonify({"count": 0})
+
+
+@news_blueprint.route("/api/news/app")
+def news_app():
+    """Get news list for app"""
+
+    with pg_session() as pg:
+        result = pg.execute(news_sql.list_news()).fetchall()
+
+        news_list = []
+        for item in result:
+            author_display = "admin" if item[3] == owner else item[3]
+            news_dict = {
+                "id": item[0],
+                "title": item[1],
+                "content": item[2],
+                "author_display": author_display,
+                "created": item[4],
+                "last_modified": item[5],
+            }
+            news_list.append(news_dict)
+
+    return jsonify(news_list), 200
+
+
 @news_blueprint.route("/news")
 def news(username=None):
     """Display news page"""
