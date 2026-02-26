@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Escolher conjunto de comboio",
     "tsbUseOnce": "Usar uma vez",
     "tsbSaveAndUse": "Guardar e usar",
-    "tsbNoResults": "Sem resultados"
+    "tsbNoResults": "Sem resultados",
+    "routeTrip" : "Planeamento de rota",
+    "sharedLink" : "Viagem partilhada",
+    "colorblindMode" : "Modo para daltónicos"
 }

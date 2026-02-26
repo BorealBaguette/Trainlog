@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Vælg togstamme",
     "tsbUseOnce": "Brug én gang",
     "tsbSaveAndUse": "Gem og brug",
-    "tsbNoResults": "Ingen resultater"
+    "tsbNoResults": "Ingen resultater",
+    "routeTrip" : "Rejseruting",
+    "sharedLink" : "Fælles tur",
+    "colorblindMode" : "Farveblind tilstand"
 }

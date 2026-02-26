@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Выбрать поезд",
     "tsbUseOnce": "Использовать один раз",
     "tsbSaveAndUse": "Сохранить и использовать",
-    "tsbNoResults": "Нет результатов"
+    "tsbNoResults": "Нет результатов",
+    "routeTrip" : "Планирование маршрута",
+    "sharedLink" : "Совместная поездка",
+    "colorblindMode" : "Режим для дальтоников"
 }

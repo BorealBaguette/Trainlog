@@ -827,5 +827,8 @@
     "tsbPickTrainset": "トレインセットを選択",
     "tsbUseOnce": "一度使用",
     "tsbSaveAndUse": "保存して使用",
-    "tsbNoResults": "結果がありません"
+    "tsbNoResults": "結果がありません",
+    "routeTrip" : "旅行ルート",
+    "sharedLink" : "共有された旅行",
+    "colorblindMode" : "色覚モード"
 }

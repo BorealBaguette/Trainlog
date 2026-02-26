@@ -827,5 +827,8 @@
     "tsbPickTrainset": "选择列车组",
     "tsbUseOnce": "使用一次",
     "tsbSaveAndUse": "保存并使用",
-    "tsbNoResults": "没有结果"
+    "tsbNoResults": "没有结果",
+    "routeTrip" : "行程路线规划",
+    "sharedLink" : "共享行程",
+    "colorblindMode" : "色盲模式"
 }

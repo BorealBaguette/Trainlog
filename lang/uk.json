@@ -827,5 +827,8 @@
     "tsbPickTrainset": "Вибрати потяг",
     "tsbUseOnce": "Використати один раз",
     "tsbSaveAndUse": "Зберегти та використати",
-    "tsbNoResults": "Немає результатів"
+    "tsbNoResults": "Немає результатів",
+    "routeTrip" : "Планування маршруту",
+    "sharedLink" : "Спільна поїздка",
+    "colorblindMode" : "Режим для дальтоніків"
 }
