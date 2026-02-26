@@ -827,8 +827,5 @@
     "tsbPickTrainset": "Zugset ussuche",
     "tsbUseOnce": "Einmol verwände",
     "tsbSaveAndUse": "Spychere und verwände",
-    "tsbNoResults": "Kei Resultat",
-    "routeTrip" : "Routenplanung",
-    "sharedLink" : "Geteilte Reise",
-    "colorblindMode" : "Farbenblindmodus"
+    "tsbNoResults": "Kei Resultat"
 }

@@ -827,8 +827,5 @@
     "tsbPickTrainset": "Pick trainset",
     "tsbUseOnce": "Use once",
     "tsbSaveAndUse": "Save & use",
-    "tsbNoResults": "No results", 
-    "routeTrip" : "Trip Routing", 
-    "sharedLink" : "Shared Trip", 
-    "colorblindMode" : "Colourblind Mode"
+    "tsbNoResults": "No results"
 }

@@ -827,8 +827,5 @@
     "tsbPickTrainset": "Treinstel kiezen",
     "tsbUseOnce": "Eenmaal gebruiken",
     "tsbSaveAndUse": "Opslaan en gebruiken",
-    "tsbNoResults": "Geen resultaten",
-    "routeTrip" : "Routeplanning",
-    "sharedLink" : "Gedeelde reis",
-    "colorblindMode" : "Kleurenblindmodus"
+    "tsbNoResults": "Geen resultaten"
 }

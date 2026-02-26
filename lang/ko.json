@@ -827,8 +827,5 @@
     "tsbPickTrainset": "기차 세트 선택",
     "tsbUseOnce": "한 번 사용하기",
     "tsbSaveAndUse": "저장 및 사용",
-    "tsbNoResults": "결과 없음",
-    "routeTrip" : "여행 경로",
-    "sharedLink" : "공유 여행",
-    "colorblindMode" : "색각 이상 모드"
+    "tsbNoResults": "결과 없음"
 }

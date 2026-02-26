@@ -827,8 +827,5 @@
     "tsbPickTrainset": "Vonatszett kiválasztása",
     "tsbUseOnce": "Egyszeri használat",
     "tsbSaveAndUse": "Mentés és használat",
-    "tsbNoResults": "Nincs eredmény",
-    "routeTrip" : "Útvonaltervezés",
-    "sharedLink" : "Megosztott utazás",
-    "colorblindMode" : "Színvakság mód"
+    "tsbNoResults": "Nincs eredmény"
 }

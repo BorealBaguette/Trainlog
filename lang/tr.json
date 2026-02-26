@@ -827,8 +827,5 @@
     "tsbPickTrainset": "Tren seti seç",
     "tsbUseOnce": "Bir kere kullan",
     "tsbSaveAndUse": "Kaydet ve kullan",
-    "tsbNoResults": "Sonuç yok",
-    "routeTrip" : "Rota planlama",
-    "sharedLink" : "Paylaşılan yolculuk",
-    "colorblindMode" : "Renk körü modu"
+    "tsbNoResults": "Sonuç yok"
 }

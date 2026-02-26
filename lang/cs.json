@@ -827,8 +827,5 @@
     "tsbPickTrainset": "Vybrat vlakovou soupravu",
     "tsbUseOnce": "Použít jednou",
     "tsbSaveAndUse": "Uložit a použít",
-    "tsbNoResults": "Žádné výsledky",
-    "routeTrip" : "Plánování trasy",
-    "sharedLink" : "Sdílený výlet",
-    "colorblindMode" : "Režim pro barvoslepé"
+    "tsbNoResults": "Žádné výsledky"
 }
