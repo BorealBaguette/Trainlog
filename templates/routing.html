@@ -35,6 +35,7 @@ if (!newTrip) {
     throw new Error('No trip data');
 }
 
+var fromApp = !!getGetParams().get("fromApp");
 var type = getGetParams().get("type") || newTrip.type;
 newTrip["type"] = type;
 var freehand = getGetParams().get("freehand");
@@ -67,7 +68,8 @@ async function saveTrip(continueTrip=false) {
         url: '{{url_for("saveTrip", username=username)}}',
         data: {
             jsonPath: JSON.stringify(currentRoute),
-            newTrip: JSON.stringify(newTrip)
+            newTrip: JSON.stringify(newTrip),
+            fromApp: fromApp
         },
         success: function(res) {
             if (!continueTrip || newTrip.precision != "preciseDates") {

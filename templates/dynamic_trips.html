@@ -4,53 +4,133 @@
 {% include nav %}
 
 <style>
-    .ui-front {
-        z-index: 9999999 !important;
-    }
-    .search-container {
-        position: relative;
-        display: inline-block;
+    /* --- General UI --- */
+    .ui-front { z-index: 9999999 !important; }
+
+    /* --- Composition Modal Styles --- */
+    
+    /* 1. The Scrollable Window (Dark Box) */
+    .compo-container {
+        display: block;
         width: 100%;
+        overflow-x: auto;       /* Force horizontal scroll */
+        overflow-y: hidden;     /* Hide vertical overflow */
+        background: #1a1a2e;    /* Dark Blue Background */
+        border-radius: 8px;
+        padding: 20px 10px;     /* Internal spacing */
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.5); /* Depth effect */
+        text-align: left;       /* Default align left */
     }
 
-    .search-help-icon {
-        position: absolute;
-        right: 10px;
-        top: 50%;
-        transform: translateY(-50%);
-        color: #6c757d;
-        cursor: pointer;
-        z-index: 10;
+    /* Scrollbar styling */
+    .compo-container::-webkit-scrollbar { height: 10px; }
+    .compo-container::-webkit-scrollbar-track { background: #121220; border-radius: 4px; }
+    .compo-container::-webkit-scrollbar-thumb { background: #4a4a6a; border-radius: 5px; border: 2px solid #121220; }
+    .compo-container::-webkit-scrollbar-thumb:hover { background: #6a6a8a; }
+
+    /* 2. The Train Strip (The long content) */
+    .compo-strip {
+        display: inline-flex;   /* Aligns wagons in a row */
+        align-items: flex-end;  /* Aligns wheels at the bottom */
+        gap: 0;                 /* Connect wagons */
+        min-width: 100%;        /* Ensure it takes full width */
+        width: max-content;     /* Allow it to grow infinitely */
+        padding: 0 10px;
     }
 
-    .search-help-icon:hover {
-        color: #495057;
-    }
-
-    .dataTables_filter {
+    /* 3. Individual Wagon */
+    .compo-wagon {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
         position: relative;
+        flex-shrink: 0;         /* Prevent wagon from squishing */
     }
 
-    .dataTables_filter input {
-        padding-right: 35px !important;
+    .compo-wagon img {
+        display: block;
+        width: auto;            /* Maintain aspect ratio */
+        transition: transform 0.2s;
     }
+    .compo-wagon:hover img { transform: scale(1.05); z-index: 10; }
 
-    .search-help-content {
-        max-width: 500px;
-    }
-
-    .search-example {
-        background-color: #f8f9fa;
-        border: 1px solid #dee2e6;
-        border-radius: 0.25rem;
-        padding: 0.5rem;
-        margin: 0.25rem 0;
+    /* Coach Number (Below) */
+    .compo-coach-no {
+        font-size: 0.7rem;
+        color: #fff;
+        background: #444;
+        padding: 1px 5px;
+        border-radius: 4px;
+        margin-top: 5px;
         font-family: monospace;
-        font-size: 0.875rem;
     }
-    .search-help-content{
-        max-width: 800px;
+
+    /* Class Indicators (Above) */
+    .compo-class-bar {
+        display: flex;
+        gap: 2px;
+        margin-bottom: 5px;
+        height: 12px;
     }
+    .compo-class-dot {
+        font-size: 0.6rem;
+        padding: 0 4px;
+        border-radius: 2px;
+        color: #fff;
+        font-weight: bold;
+        line-height: 12px;
+    }
+
+    /* Class Colors */
+    .compo-class-dot.c-1st { background: #d4a017; }
+    .compo-class-dot.c-2nd { background: #2e7d32; }
+    .compo-class-dot.c-2nd-plus { background: #388e3c; }
+    .compo-class-dot.c-business { background: #6a1b9a; }
+    .compo-class-dot.c-dining { background: #c62828; }
+    .compo-class-dot.c-sleeper { background: #1565c0; }
+    .compo-class-dot.c-couchette { background: #0277bd; }
+    .compo-class-dot.c-service { background: #616161; }
+    
+    /* Misc */
+    .compo-trigger { cursor: pointer; color: #0d6efd; }
+    .compo-trigger:hover { text-decoration: underline; }
+    .compo-source{
+        font-size: 0.7rem;
+        color: #6c757d;
+        text-align: right;
+        margin-top: 6px;
+        padding: 4px 12px 0;
+        letter-spacing: 0.02em;
+    }
+
+    .compo-source a{
+        color: #495057;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.15s ease;
+    }
+
+    .compo-source a:hover,
+    .compo-source a:focus{
+        color: #212529;
+        text-decoration: none;
+    }
+
+    /* Trainset strip (MLG images) inside composition modal */
+    .ts-strip { gap: 2px; }
+    .ts-unit img { max-height: 70px; image-rendering: pixelated; display: block; }
+    .ts-nom { font-size: 0.6rem; color: #ccc; text-align: center; max-width: 90px;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0; }
+
+    /* Trainset picker in edit/new forms */
+    .ts-pick-wrap { position: relative; display: inline-block; width: 100%; }
+    .ts-pick-list { position: absolute; z-index: 999; left: 0; right: 0; top: 100%;
+                    background: #fff; border: 1px solid #aaa; border-radius: 4px;
+                    max-height: 180px; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,.15); }
+    .ts-pick-item { padding: 6px 10px; cursor: pointer; font-size: 0.9rem; }
+    .ts-pick-item:hover { background: #f0f0f0; }
+</style>
+
 </style>
 <div class="modal fade" id="smartSearchHelpModal" tabindex="-1" role="dialog" aria-labelledby="smartSearchHelpModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
@@ -263,10 +343,97 @@
     </div>
 </div>
 
+<div class="modal fade" id="compositionModal" tabindex="-1" aria-labelledby="compositionModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">
+                    <i class="fas fa-train me-2"></i>
+                    <span id="compositionModalTitle">Train Composition</span>
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body" style="background-color: #f8f9fa;">
+                <!-- Content injected via JS -->
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+
 <script src="{{ url_for('static', filename='js/util.js') }}"></script>
 <script type="text/javascript">
 const checkedTrips = [];
 const checkedTripData = {};
+
+var _trainsetNames = new Set();
+$.getJSON('/api/trainsets').done(function(rows) {
+    rows.forEach(function(r) { _trainsetNames.add(r.name); });
+});
+
+function _isValidMaterial(mat) {
+    if (!mat) return false;
+    try {
+        var arr = JSON.parse(mat);
+        return Array.isArray(arr) && arr.length > 0;
+    } catch(e) {}
+    return _trainsetNames.has(mat);
+}
+
+function openCompositionModal(trainName, dateStr, materialType) {
+    $('#compositionModalTitle').text(trainName + (dateStr ? ` (${dateStr})` : ''));
+    var $modalBody = $('#compositionModal .modal-body');
+    $modalBody.html(`
+        <div class="d-flex justify-content-center align-items-center py-5">
+            <div class="spinner-border text-primary me-2" role="status"></div>
+            <span>Loading composition...</span>
+        </div>
+    `);
+    $('#compositionModal').modal('show');
+
+    if (materialType) {
+        // JSON one-off composition
+        try {
+            var units = JSON.parse(materialType);
+            if (Array.isArray(units)) { _renderTrainset($modalBody, units, null); return; }
+        } catch(e) {}
+        // Named trainset
+        $.getJSON('/api/trainsets/by-name', { name: materialType })
+            .done(function(ts) { _renderTrainset($modalBody, ts.units, ts.name); })
+            .fail(function()   { $modalBody.html('<div class="alert alert-warning">No composition data found.</div>'); });
+    } else {
+        $modalBody.html('<div class="alert alert-warning">No composition data found.</div>');
+    }
+}
+
+function _renderTrainset($modalBody, units, setName) {
+    var wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
+    var strip = $('<div class="compo-strip ts-strip"></div>');
+    (units || []).forEach(function(u) {
+        if (!u.image) return;
+        var side = u._side || 'L';
+        var base = u.image.replace(/_[LR]$/, '');
+        var src  = wagonsBase + '/' + base + (side === 'R' ? '_R' : '_L') + '.gif';
+        var fb   = wagonsBase + '/' + u.image + '.gif';
+        var wagon = $('<div class="compo-wagon ts-unit"></div>');
+        wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
+        wagon.append(`<img src="${src}" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='${fb}';}else{this.style.display='none';}" title="${u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
+        wagon.append(`<span class="compo-coach-no ts-nom">${u.nom || ''}</span>`);
+        strip.append(wagon);
+    });
+    if (!strip.children().length) {
+        $modalBody.html('<div class="alert alert-warning">Trainset has no units.</div>');
+        return;
+    }
+    var container = $('<div class="compo-container"></div>').append(strip);
+    $modalBody.empty().append(container);
+    if (setName) $modalBody.append(`<div class="compo-source">Trainset: ${setName}</div>`);
+    container.find('[data-toggle="tooltip"]').tooltip();
+}
+
 
 function toggleTypeFilter() {
     const switchState = document.getElementById('filterTypeSwitch').checked;
@@ -287,6 +454,7 @@ function processHiddenData(rowIdx, columns){
     var ellipsedStation = isEllipsisActive(tableObject.cell(rowIdx, 1).node()) || isEllipsisActive(tableObject.cell(rowIdx, 2).node())
     var isAir = ["air", "helicopter"].includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
     var isFerry = $(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText == "ferry";
+    var isTrain = TRAIN_TYPES.includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
     var data = $.map( columns, function ( col, i ) {
         if (col.title == "{{tags}}" && col.data != ""){
             tag_list = JSON.parse(col.data).map(tag => tag.tag_id);
@@ -487,6 +655,28 @@ function renderDuration(data, type, row) {
     return data;
 }
 
+function renderLineName(data, type, row) {
+    if (type === 'display' && data) {
+        // Only show for trains
+        if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
+            var mat      = row.material_type || '';
+            var dateStr  = row.start_date || '';
+            var safeName = data.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            var safeMat  = mat.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            var btn = _isValidMaterial(mat) ? `
+                    <a href="javascript:void(0);"
+                       onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}')"
+                       class="text-decoration-none ms-2"
+                       title="View Composition">
+                       <i class="fas fa-train"></i>
+                    </a>` : '';
+            return `<span>${data}${btn}</span>`;
+        }
+    }
+    return data;
+}
+
+
 function renderLength(data, type, row) {
     if (type === 'display') {
         if (data == 0) return "";
@@ -625,11 +815,63 @@ function renderMaterialType(data, type, row){
 
 var table = $('#tripRows');
 
+    const SEARCH_PREFIXES = {
+        'type:': {{ trip_column_names.index("type") }},
+        'from:': {{ trip_column_names.index("origin_station") }},
+        'to:': {{ trip_column_names.index("destination_station") }},
+        'date:': {{ trip_column_names.index("start_datetime") }},
+        'operator:': {{ trip_column_names.index("operator") }},
+        'line:': {{ trip_column_names.index("line_name") }},
+        'country:': {{ trip_column_names.index("countries") }},
+        'visibility:': {{ trip_column_names.index("visibility") }},
+        'material:': {{ trip_column_names.index("material_type") }},
+        'reg:': {{ trip_column_names.index("reg") }},
+        'notes:': {{ trip_column_names.index("notes") }}
+    };
+
+    function parseSmartSearch(searchValue) {
+        const columnFilters = {};
+        let globalSearch = '';
+        const terms = searchValue.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+        terms.forEach(term => {
+            let matched = false;
+            for (const [prefix, columnIndex] of Object.entries(SEARCH_PREFIXES)) {
+                if (term.toLowerCase().startsWith(prefix)) {
+                    let value = term.substring(prefix.length);
+                    let isExact = false;
+                    if (value) {
+                        if (value.startsWith("'") && value.endsWith("'") && value.length > 1) {
+                            value = value.slice(1, -1);
+                            isExact = true;
+                        } else if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
+                            value = value.slice(1, -1);
+                            isExact = false;
+                        }
+                        columnFilters[columnIndex] = { value, isExact };
+                        matched = true;
+                        break;
+                    }
+                }
+            }
+            if (!matched) {
+                let cleanTerm = term;
+                if ((term.startsWith('"') && term.endsWith('"')) ||
+                    (term.startsWith("'") && term.endsWith("'"))) {
+                    cleanTerm = term.slice(1, -1);
+                }
+                globalSearch += (globalSearch ? ' ' : '') + cleanTerm;
+            }
+        });
+        return { columnFilters, globalSearch };
+    }
+
     var scroll = new URLSearchParams(window.location.search).get('scroll') === 'true'
+    var initialSearch = new URLSearchParams(window.location.search).get('search') || '';
     var tableObject = $('#dataTable').DataTable({
     processing: true,
     serverSide: true,
     pageJump:true,
+    searchDelay: 1000,
     scrollY: scroll == true ? $(window).height() - 300 : null,
     scroller: scroll,
     dom: '<"toolbar">lfrtip',
@@ -678,7 +920,7 @@ var table = $('#tripRows');
             orderable: true
         },
         { data: 'operator', render: renderOperators },
-        { data: 'line_name' },
+        {data: 'line_name',{% if is_alpha %} render: renderLineName,{% endif %}},
         { data: 'countries', render: renderFlags },
         {% if not isPublic %}
         { data: 'visibility', render: renderVisibility },
@@ -704,6 +946,7 @@ var table = $('#tripRows');
     ],
     rowId: 'id',
     stateSave: false,
+    search: { search: initialSearch },
     language: {
         info: "{{dtInfo}}",
         paginate: {
@@ -757,6 +1000,16 @@ var table = $('#tripRows');
     resetObjects();
     updateSelectionMessage();
     addPageJumpInput();
+
+    // Sync search value to URL
+    var searchVal = tableObject.search();
+    var url = new URL(window.location);
+    if (searchVal) {
+        url.searchParams.set('search', searchVal);
+    } else {
+        url.searchParams.delete('search');
+    }
+    history.replaceState({}, '', url);
 }).on('select', function(e, dt, type, indexes) {
     var selectedRows = tableObject.rows(indexes).data().toArray();
     selectedRows.forEach(function(row) {
@@ -781,7 +1034,7 @@ var table = $('#tripRows');
     }
     updateSelectionMessage();
 });
-{% if hasUncommonTrips and not isPublic%}
+{% if hasPrivateTrips and not isPublic%}
  // Add the switch to the custom toolbar
     $("div.toolbar").html(`
         <div class="toolbar d-flex justify-content-center justify-content-md-start">
@@ -1197,71 +1450,6 @@ $('#submitBtn').on('click', function() {
         return null;
     }
 
-    const SEARCH_PREFIXES = {
-        'type:': 0,
-        'from:': 1,
-        'to:': 2,
-        'date:': 3,
-        'operator:': 9,
-        'line:': 10,
-        'country:': 11,
-        'visibility:': 12,
-        'material:': 14,
-        'reg:': 15,
-        'notes:': 17
-    };
-
-    // Parse search query for prefixes
-    function parseSmartSearch(searchValue) {
-        const columnFilters = {};
-        let globalSearch = '';
-        
-        // Split by spaces but keep quoted strings together
-        // This regex handles both double quotes (") and single quotes (')
-        const terms = searchValue.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
-        
-        terms.forEach(term => {
-            let matched = false;
-            
-            // Check for prefix matches
-            for (const [prefix, columnIndex] of Object.entries(SEARCH_PREFIXES)) {
-                if (term.toLowerCase().startsWith(prefix)) {
-                    let value = term.substring(prefix.length);
-                    let isExact = false;
-
-                    if (value) {
-                        // Single quotes = exact match
-                        if (value.startsWith("'") && value.endsWith("'") && value.length > 1) {
-                            value = value.slice(1, -1); // Remove quotes
-                            isExact = true;
-                        }
-                        // Double quotes = partial match with spaces
-                        else if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
-                            value = value.slice(1, -1); // Remove quotes
-                            isExact = false; // Partial match
-                        }
-
-                        columnFilters[columnIndex] = { value, isExact };
-                        matched = true;
-                        break;
-                    }
-                }
-            }
-            
-            // If no prefix matched, add to global search
-            if (!matched) {
-                // Handle quotes in global search too
-                let cleanTerm = term;
-                if ((term.startsWith('"') && term.endsWith('"')) || 
-                    (term.startsWith("'") && term.endsWith("'"))) {
-                    cleanTerm = term.slice(1, -1);
-                }
-                globalSearch += (globalSearch ? ' ' : '') + cleanTerm;
-            }
-        });
-        
-        return { columnFilters, globalSearch };
-    }
     // Initialize the switch based on the cookie state
    $(document).ready(function () {
         const filterSwitch = document.getElementById('filterTypeSwitch');
@@ -1309,6 +1497,33 @@ $('#submitBtn').on('click', function() {
                     $(this).val(''); // Clear input after jumping
                 });
         }
+    }
+
+    const TRAIN_TYPES = ['train', 'metro', 'tram'];
+
+    const CLASS_LABELS = {
+        '1st': '1st', '2nd': '2nd', '2nd-plus': '2+', 'business': 'Biz',
+        'dining': 'Din', 'sleeper': 'Slp', 'couchette': 'Cch', 'service': 'Svc'
+    };
+
+    function fetchComposition(triggerId, trainName, dateStr) {
+        var container = $(`#compo-result-${triggerId}`);
+        if (container.is(':visible')) {
+            container.slideToggle(200);
+            return;
+        }
+        if (container.data('loaded')) {
+            container.slideToggle(200);
+            return;
+        }
+
+        container.html('<div class="compo-loading"><i class="fas fa-spinner fa-spin"></i> Loading composition…</div>').slideDown(200);
+
+        var params = { train: trainName };
+        if (dateStr) params.date = dateStr;
+
+        container.html('<div class="compo-error">No composition data found.</div>');
+        container.data('loaded', true);
     }
 </script>
 

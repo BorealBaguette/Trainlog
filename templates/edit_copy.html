@@ -96,6 +96,12 @@
         padding-left: 8px;
         padding-right: 8px;
     }
+    .ts-pick-wrap { position: relative; }
+    .ts-pick-list { position: absolute; z-index: 999; left: 0; right: 0; top: 100%;
+                    background: #fff; border: 1px solid #aaa; border-radius: 4px;
+                    max-height: 180px; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,.15); }
+    .ts-pick-item { padding: 6px 10px; cursor: pointer; font-size: 0.9rem; }
+    .ts-pick-item:hover { background: #f0f0f0; }
 </style>
 
 <!-- GPX Import Modal -->
@@ -296,6 +302,15 @@
             <label for="material_type">{{material_type}}</label>
             <input type="text" name="material_type" id="material_type" placeholder="{{material_type}}"
                 value="{{tripMaterialType}}">
+            {% if tripType in ('train', 'metro', 'tram') and is_alpha %}
+            <div class="ts-pick-wrap">
+                <div class="d-flex gap-1 mb-1">
+                    <button type="button" class="btn btn-sm btn-outline-secondary flex-fill" onclick="toggleTsPicker()">🚆 {{tsbPickTrainset}}</button>
+                    <button type="button" class="btn btn-sm btn-outline-primary flex-fill" onclick="openTsbModal()">🔧 {{tsbBuildTrainset}}</button>
+                </div>
+                <div id="ts-pick-list" class="ts-pick-list" style="display:none"></div>
+            </div>
+            {% endif %}
             <label for="reg">{{reg}}</label>
             <input type="text" name="reg" id="reg" placeholder="{{reg}}" value="{{tripReg}}">
             <label for="seat">{{seat}}</label>
@@ -1562,6 +1577,35 @@
         }
     });
 
+  {% if tripType in ('train', 'metro', 'tram') %}
+  function toggleTsPicker() {
+    var $list = $('#ts-pick-list');
+    if ($list.is(':visible')) { $list.hide(); return; }
+    if ($list.data('loaded')) { $list.show(); return; }
+    $list.html('<div class="p-2 text-muted" style="font-size:.85rem">Loading…</div>').show();
+    $.getJSON('/api/trainsets')
+      .done(function(sets) {
+        $list.empty();
+        if (!sets.length) {
+          $list.html('<div class="p-2 text-muted" style="font-size:.85rem">No saved trainsets</div>');
+          return;
+        }
+        sets.forEach(function(ts) {
+          $('<div class="ts-pick-item"></div>').text(ts.name).on('click', function() {
+            $('#material_type').val(ts.name);
+            $list.hide();
+          }).appendTo($list);
+        });
+        $list.data('loaded', true);
+      })
+      .fail(function() { $list.html('<div class="p-2 text-danger" style="font-size:.85rem">Failed to load</div>'); });
+  }
+  {% endif %}
+
 </script>
+
+{% if tripType in ('train', 'metro', 'tram') and is_alpha %}
+{% include "includes/trainset_builder_modal.html" %}
+{% endif %}
 
 {% endblock %}
