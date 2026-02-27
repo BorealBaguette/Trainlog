@@ -11,6 +11,7 @@ from flask import g, request
 
 logger = logging.getLogger("flask_matomo2")
 
+
 class Matomo:
     """The Matomo object provides the central interface for interacting with Matomo.
 

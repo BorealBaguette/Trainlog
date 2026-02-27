@@ -1,15 +1,17 @@
 # src/api/finance.py - Fixed routes with proper separation
 import csv
-from datetime import datetime, date
-from flask import Blueprint, render_template, request, redirect, url_for, flash, session
+from datetime import date, datetime
+from io import StringIO
 
-from src.finance import SimpleFinanceService, get_finances
-from src.utils import owner_required, getUser, lang
-from py.currency import get_exchange_rate
 from dateutil.relativedelta import relativedelta
+from flask import Blueprint, flash, redirect, render_template, request, session, url_for
 
+from py.currency import get_exchange_rate
+from src.finance import SimpleFinanceService
+from src.utils import getUser, lang, owner_required
 
-finance_blueprint = Blueprint('finance', __name__, url_prefix='/admin')
+finance_blueprint = Blueprint("finance", __name__, url_prefix="/admin")
+
 
 @finance_blueprint.route("/finances")
 @owner_required
@@ -18,33 +20,41 @@ def finances():
     try:
         # Get outstanding Stripe info for display
         outstanding_info = SimpleFinanceService.get_stripe_outstanding_balance()
-        
+
         # Use the enhanced calculation that includes outstanding revenue
         monthly_data = SimpleFinanceService.calculate_monthly_data_with_outstanding()
-        
+
         # Get raw expenses for classification (same as before)
         expenses = SimpleFinanceService.get_all_expenses()
-        
+
         # Sort months and prepare data
         sorted_months = sorted(monthly_data.keys())
-        
+
         labels = sorted_months
-        revenue_data_points = [monthly_data[month]["revenue"] for month in sorted_months]
+        revenue_data_points = [
+            monthly_data[month]["revenue"] for month in sorted_months
+        ]
         hosting_spending_data_points = [0] * len(sorted_months)
         translation_spending_data_points = [0] * len(sorted_months)
         api_subscription_spending_data_points = [0] * len(sorted_months)
-        api_topup_spending_data_points = [0] * len(sorted_months)  # Kept for compatibility
+        api_topup_spending_data_points = [0] * len(
+            sorted_months
+        )  # Kept for compatibility
         profit_data_points = [monthly_data[month]["profit"] for month in sorted_months]
-        
+
         # Classify expenses (same logic as before)
         for expense in expenses:
             amount_eur = expense["amount"]
             if expense["currency"] != "EUR":
-                conv_date = expense["expense_date"] if not expense["is_recurring"] else expense["start_date"]
+                conv_date = (
+                    expense["expense_date"]
+                    if not expense["is_recurring"]
+                    else expense["start_date"]
+                )
                 amount_eur = get_exchange_rate(
                     float(expense["amount"]), expense["currency"], "EUR", conv_date
                 )
-            
+
             # Determine months impacted
             months = []
             if expense["is_recurring"] and expense["is_active"]:
@@ -56,7 +66,7 @@ def finances():
                     current_date += relativedelta(months=1)
             else:
                 months.append(expense["expense_date"].strftime("%Y-%m"))
-            
+
             # Classify
             name_lower = expense["name"].lower()
             if "translation" in name_lower:
@@ -66,13 +76,15 @@ def finances():
             elif "api" in name_lower:
                 target = api_subscription_spending_data_points
             else:
-                target = hosting_spending_data_points  # Default to hosting for compatibility
-            
+                target = (
+                    hosting_spending_data_points  # Default to hosting for compatibility
+                )
+
             for m in months:
                 if m in sorted_months:
                     idx = sorted_months.index(m)
                     target[idx] -= float(amount_eur)  # Negative for spending
-        
+
         total_spending_data_points = [
             h + t + a + api_topup
             for h, t, a, api_topup in zip(
@@ -82,17 +94,21 @@ def finances():
                 api_topup_spending_data_points,
             )
         ]
-        
+
         totals = {
             "revenue": round(sum(revenue_data_points)),
             "hosting_spending": round(sum(hosting_spending_data_points)),
             "translation_spending": round(sum(translation_spending_data_points)),
-            "api_subscription_spending": round(sum(api_subscription_spending_data_points)),
+            "api_subscription_spending": round(
+                sum(api_subscription_spending_data_points)
+            ),
             "api_topup_spending": round(sum(api_topup_spending_data_points)),
-            "total_spending": round(-sum(total_spending_data_points)),  # convert back to positive
+            "total_spending": round(
+                -sum(total_spending_data_points)
+            ),  # convert back to positive
             "profit": round(sum(profit_data_points)),
         }
-        
+
         return render_template(
             "admin/finances.html",
             labels=labels,
@@ -114,6 +130,7 @@ def finances():
         flash(f"Error loading financial data: {str(e)}", "error")
         return render_template("admin/error.html", error=str(e))
 
+
 @finance_blueprint.route("/finances/manage")
 @owner_required
 def manage():
@@ -122,11 +139,11 @@ def manage():
         expenses = SimpleFinanceService.get_all_expenses()
         revenues = SimpleFinanceService.get_all_revenue()
         outstanding_info = SimpleFinanceService.get_stripe_outstanding_balance()
-        
+
         # Separate recurring and one-time expenses
-        recurring_expenses = [e for e in expenses if e['is_recurring']]
-        one_time_expenses = [e for e in expenses if not e['is_recurring']]
-        
+        recurring_expenses = [e for e in expenses if e["is_recurring"]]
+        one_time_expenses = [e for e in expenses if not e["is_recurring"]]
+
         return render_template(
             "admin/manage_finances.html",
             recurring_expenses=recurring_expenses,
@@ -142,6 +159,7 @@ def manage():
         flash(f"Error loading management page: {str(e)}", "error")
         return render_template("admin/error.html", error=str(e))
 
+
 # Add a new route to get outstanding info via AJAX (optional)
 @finance_blueprint.route("/finances/outstanding", methods=["GET"])
 @owner_required
@@ -149,15 +167,10 @@ def get_outstanding():
     """API endpoint to get current outstanding Stripe balance"""
     try:
         outstanding_info = SimpleFinanceService.get_stripe_outstanding_balance()
-        return {
-            "success": True,
-            "data": outstanding_info
-        }
+        return {"success": True, "data": outstanding_info}
     except Exception as e:
-        return {
-            "success": False,
-            "error": str(e)
-        }, 500
+        return {"success": False, "error": str(e)}, 500
+
 
 @finance_blueprint.route("/finances/add-recurring", methods=["POST"])
 @owner_required
@@ -167,22 +180,29 @@ def add_recurring():
         name = request.form.get("name", "").strip()
         amount = float(request.form.get("amount"))
         currency = request.form.get("currency", "EUR")
-        start_date = datetime.strptime(request.form.get("start_date"), "%Y-%m-%d").date()
+        start_date = datetime.strptime(
+            request.form.get("start_date"), "%Y-%m-%d"
+        ).date()
         end_date = None
         if request.form.get("end_date"):
-            end_date = datetime.strptime(request.form.get("end_date"), "%Y-%m-%d").date()
-        
+            end_date = datetime.strptime(
+                request.form.get("end_date"), "%Y-%m-%d"
+            ).date()
+
         if not name or amount <= 0:
             flash("Name and positive amount required", "error")
             return redirect(url_for("finance.manage"))
-        
-        expense_id = SimpleFinanceService.add_recurring_expense(name, amount, currency, start_date, end_date)
+
+        expense_id = SimpleFinanceService.add_recurring_expense(
+            name, amount, currency, start_date, end_date
+        )
         flash(f"Added recurring expense: {name} (#{expense_id})", "success")
-        
+
     except Exception as e:
         flash(f"Error adding expense: {str(e)}", "error")
-    
+
     return redirect(url_for("finance.manage"))
+
 
 @finance_blueprint.route("/finances/add-onetime", methods=["POST"])
 @owner_required
@@ -192,19 +212,24 @@ def add_onetime():
         name = request.form.get("name", "").strip()
         amount = float(request.form.get("amount"))
         currency = request.form.get("currency", "EUR")
-        expense_date = datetime.strptime(request.form.get("expense_date"), "%Y-%m-%d").date()
-        
+        expense_date = datetime.strptime(
+            request.form.get("expense_date"), "%Y-%m-%d"
+        ).date()
+
         if not name or amount <= 0:
             flash("Name and positive amount required", "error")
             return redirect(url_for("finance.manage"))
-        
-        expense_id = SimpleFinanceService.add_one_time_expense(name, amount, currency, expense_date)
+
+        expense_id = SimpleFinanceService.add_one_time_expense(
+            name, amount, currency, expense_date
+        )
         flash(f"Added one-time expense: {name} (#{expense_id})", "success")
-        
+
     except Exception as e:
         flash(f"Error adding expense: {str(e)}", "error")
-    
+
     return redirect(url_for("finance.manage"))
+
 
 @finance_blueprint.route("/finances/add-revenue", methods=["POST"])
 @owner_required
@@ -214,19 +239,24 @@ def add_revenue():
         name = request.form.get("name", "").strip()
         amount = float(request.form.get("amount"))
         currency = request.form.get("currency", "EUR")
-        revenue_date = datetime.strptime(request.form.get("revenue_date"), "%Y-%m-%d").date()
-        
+        revenue_date = datetime.strptime(
+            request.form.get("revenue_date"), "%Y-%m-%d"
+        ).date()
+
         if not name or amount <= 0:
             flash("Name and positive amount required", "error")
             return redirect(url_for("finance.manage"))
-        
-        revenue_id = SimpleFinanceService.add_revenue(name, amount, currency, revenue_date)
+
+        revenue_id = SimpleFinanceService.add_revenue(
+            name, amount, currency, revenue_date
+        )
         flash(f"Added revenue: {name} (#{revenue_id})", "success")
-        
+
     except Exception as e:
         flash(f"Error adding revenue: {str(e)}", "error")
-    
+
     return redirect(url_for("finance.manage"))
+
 
 @finance_blueprint.route("/finances/toggle/<int:expense_id>", methods=["POST"])
 @owner_required
@@ -235,14 +265,15 @@ def toggle_expense(expense_id):
     try:
         result = SimpleFinanceService.toggle_recurring_expense(expense_id)
         if result:
-            status = "activated" if result['is_active'] else "deactivated"
+            status = "activated" if result["is_active"] else "deactivated"
             flash(f"Expense '{result['name']}' {status}", "success")
         else:
             flash("Expense not found or not recurring", "error")
     except Exception as e:
         flash(f"Error toggling expense: {str(e)}", "error")
-    
+
     return redirect(url_for("finance.manage"))
+
 
 @finance_blueprint.route("/finances/delete-expense/<int:expense_id>", methods=["POST"])
 @owner_required
@@ -256,8 +287,9 @@ def delete_expense(expense_id):
             flash("Expense not found", "error")
     except Exception as e:
         flash(f"Error deleting expense: {str(e)}", "error")
-    
+
     return redirect(url_for("finance.manage"))
+
 
 @finance_blueprint.route("/finances/delete-revenue/<int:revenue_id>", methods=["POST"])
 @owner_required
@@ -271,8 +303,9 @@ def delete_revenue(revenue_id):
             flash("Revenue not found", "error")
     except Exception as e:
         flash(f"Error deleting revenue: {str(e)}", "error")
-    
+
     return redirect(url_for("finance.manage"))
+
 
 @finance_blueprint.route("/finances/sync-stripe", methods=["POST"])
 @owner_required
@@ -280,30 +313,35 @@ def sync_stripe():
     """Sync Buy Me a Coffee data with duplicate prevention and amount tracking"""
     try:
         result = SimpleFinanceService.sync_stripe_revenue()
-        
+
         if "error" in result:
             flash(f"Stripe sync error: {result['error']}", "error")
         else:
             message_parts = []
             if result["added"] > 0:
-                amount_str = f" ({result.get('total_amount_added', 0):.2f}€)" if 'total_amount_added' in result else ""
+                amount_str = (
+                    f" ({result.get('total_amount_added', 0):.2f}€)"
+                    if "total_amount_added" in result
+                    else ""
+                )
                 message_parts.append(f"Added {result['added']} new entries{amount_str}")
             if result["skipped"] > 0:
                 message_parts.append(f"{result['skipped']} already imported")
-            
+
             if result["added"] == 0 and result["skipped"] == 0:
                 flash("No Stripe data found to sync", "warning")
             else:
                 total_msg = f" (Total fetched: {result['total_fetched']})"
-                flash(f"Stripe sync completed: {', '.join(message_parts)}{total_msg}", "success")
-        
+                flash(
+                    f"Stripe sync completed: {', '.join(message_parts)}{total_msg}",
+                    "success",
+                )
+
     except Exception as e:
         flash(f"Error syncing Stripe data: {str(e)}", "error")
-    
+
     return redirect(url_for("finance.manage"))
 
-    import csv
-from io import StringIO
 
 @finance_blueprint.route("/finances/ingest-csv", methods=["POST"])
 @owner_required
@@ -366,9 +404,12 @@ def ingest_csv():
             else:
                 skipped_count += 1
 
-        flash(f"CSV ingestion complete: {added_count} added, {skipped_count} skipped", "success")
+        flash(
+            f"CSV ingestion complete: {added_count} added, {skipped_count} skipped",
+            "success",
+        )
     except Exception as e:
-        raise(e)
+        raise (e)
         flash(f"Error ingesting CSV: {str(e)}", "error")
 
     return redirect(url_for("finance.manage"))

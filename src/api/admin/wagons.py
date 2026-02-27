@@ -8,14 +8,30 @@ from src.utils import admin_required
 
 wagons_admin_blueprint = Blueprint("admin_wagons", __name__)
 
-_EDITABLE_FIELDS = {"nom", "titre1", "titre2", "epo", "source", "notes",
-                    "image_type", "typeligne", "image"}
+_EDITABLE_FIELDS = {
+    "nom",
+    "titre1",
+    "titre2",
+    "epo",
+    "source",
+    "notes",
+    "image_type",
+    "typeligne",
+    "image",
+}
 _VALID_IMAGE_TYPES = {"plain", "sides", "sides_L", "sides_R"}
-_COL_MAP = {0: "name", 1: "nom", 2: "titre1", 3: "titre2",
-            4: "epo", 5: "image_type", 6: "image"}
+_COL_MAP = {
+    0: "name",
+    1: "nom",
+    2: "titre1",
+    3: "titre2",
+    4: "epo",
+    5: "image_type",
+    6: "image",
+}
 
-WAGONS_ROOT   = Path("static/images/wagons").resolve()
-CUSTOM_FOLDER = "images/custom"          # relative to WAGONS_ROOT, stored in DB
+WAGONS_ROOT = Path("static/images/wagons").resolve()
+CUSTOM_FOLDER = "images/custom"  # relative to WAGONS_ROOT, stored in DB
 
 
 def _sanitize_name(nom: str) -> str:
@@ -45,7 +61,7 @@ def _save_gif(f, rel_path: str) -> None:
     if header[:6] not in (b"GIF87a", b"GIF89a"):
         raise ValueError("not a valid GIF file")
     target = (WAGONS_ROOT / rel_path).resolve()
-    target.relative_to(WAGONS_ROOT)          # path-traversal guard
+    target.relative_to(WAGONS_ROOT)  # path-traversal guard
     target.parent.mkdir(parents=True, exist_ok=True)
     f.save(str(target))
 
@@ -53,9 +69,9 @@ def _save_gif(f, rel_path: str) -> None:
 @wagons_admin_blueprint.route("", methods=["GET"])
 @admin_required
 def list_wagons():
-    draw   = request.args.get("draw",   1,   type=int)
-    start  = request.args.get("start",  0,   type=int)
-    length = request.args.get("length", 25,  type=int)
+    draw = request.args.get("draw", 1, type=int)
+    start = request.args.get("start", 0, type=int)
+    length = request.args.get("length", 25, type=int)
     search = request.args.get("search[value]", "").strip()
 
     order_col = _COL_MAP.get(request.args.get("order[0][column]", 0, type=int), "nom")
@@ -65,21 +81,25 @@ def list_wagons():
         total = pg.execute("SELECT COUNT(*) FROM wagons").scalar()
 
         if search:
-            like     = f"%{search}%"
-            where    = ("WHERE nom ILIKE :like OR titre1 ILIKE :like "
-                        "OR titre2 ILIKE :like OR notes ILIKE :like "
-                        "OR name ILIKE :like OR image ILIKE :like")
+            like = f"%{search}%"
+            where = (
+                "WHERE nom ILIKE :like OR titre1 ILIKE :like "
+                "OR titre2 ILIKE :like OR notes ILIKE :like "
+                "OR name ILIKE :like OR image ILIKE :like"
+            )
             filtered = pg.execute(
                 f"SELECT COUNT(*) FROM wagons {where}", {"like": like}
             ).scalar()
-            qparams  = {"like": like, "limit": length, "offset": start}
+            qparams = {"like": like, "limit": length, "offset": start}
         else:
-            where    = ""
+            where = ""
             filtered = total
-            qparams  = {"limit": length, "offset": start}
+            qparams = {"limit": length, "offset": start}
 
-        data = [dict(r) for r in pg.execute(
-            f"""
+        data = [
+            dict(r)
+            for r in pg.execute(
+                f"""
             SELECT name, nom, titre1, titre2, epo, image, notes,
                    source, typeligne, image_type
             FROM wagons
@@ -87,11 +107,13 @@ def list_wagons():
             ORDER BY {order_col} {order_dir} NULLS LAST
             LIMIT :limit OFFSET :offset
             """,
-            qparams,
-        )]
+                qparams,
+            )
+        ]
 
-    return jsonify({"draw": draw, "recordsTotal": total,
-                    "recordsFiltered": filtered, "data": data})
+    return jsonify(
+        {"draw": draw, "recordsTotal": total, "recordsFiltered": filtered, "data": data}
+    )
 
 
 @wagons_admin_blueprint.route("<string:wname>/<field>", methods=["PUT"])
@@ -106,7 +128,9 @@ def update_wagon_field(wname: str, field: str):
         return jsonify({"error": "invalid image_type"}), 400
 
     with pg_session() as pg:
-        if not pg.execute("SELECT 1 FROM wagons WHERE name = :n", {"n": wname}).fetchone():
+        if not pg.execute(
+            "SELECT 1 FROM wagons WHERE name = :n", {"n": wname}
+        ).fetchone():
             return jsonify({"error": "not found"}), 404
         pg.execute(
             f"UPDATE wagons SET {field} = :value WHERE name = :n",
@@ -123,7 +147,7 @@ def upload_wagon_image(wname: str):
     Form fields: file (required), side ('', 'L', or 'R').
     """
     side = request.form.get("side", "").strip().upper()
-    f    = request.files.get("file")
+    f = request.files.get("file")
     if not f:
         return jsonify({"error": "file required"}), 400
 
@@ -138,9 +162,13 @@ def upload_wagon_image(wname: str):
     if not image_path:
         return jsonify({"error": "wagon has no image path — set one first"}), 400
 
-    rel = f"{image_path}_L.gif" if side == "L" else \
-          f"{image_path}_R.gif" if side == "R" else \
-          f"{image_path}.gif"
+    rel = (
+        f"{image_path}_L.gif"
+        if side == "L"
+        else f"{image_path}_R.gif"
+        if side == "R"
+        else f"{image_path}.gif"
+    )
 
     try:
         _save_gif(f, rel)
@@ -154,11 +182,11 @@ def upload_wagon_image(wname: str):
 @admin_required
 def create_wagon():
     """Create a wagon from multipart form data (image upload included)."""
-    nom        = (request.form.get("nom")        or "").strip()
-    titre1     = (request.form.get("titre1")     or "").strip()
-    titre2     = (request.form.get("titre2")     or "").strip()
-    epo        = (request.form.get("epo")        or "").strip()
-    notes      = (request.form.get("notes")      or "").strip()
+    nom = (request.form.get("nom") or "").strip()
+    titre1 = (request.form.get("titre1") or "").strip()
+    titre2 = (request.form.get("titre2") or "").strip()
+    epo = (request.form.get("epo") or "").strip()
+    notes = (request.form.get("notes") or "").strip()
     image_type = (request.form.get("image_type") or "sides").strip()
 
     if not nom:
@@ -202,10 +230,14 @@ def create_wagon():
                     :notes, :image_type)
             """,
             {
-                "titre1": titre1 or None, "titre2": titre2 or None,
-                "nom": nom, "epo": epo or None,
-                "image": image_path, "name": name,
-                "notes": notes or None, "image_type": image_type,
+                "titre1": titre1 or None,
+                "titre2": titre2 or None,
+                "nom": nom,
+                "epo": epo or None,
+                "image": image_path,
+                "name": name,
+                "notes": notes or None,
+                "image_type": image_type,
             },
         )
 
@@ -216,7 +248,9 @@ def create_wagon():
 @admin_required
 def delete_wagon(wname: str):
     with pg_session() as pg:
-        if not pg.execute("SELECT 1 FROM wagons WHERE name = :n", {"n": wname}).fetchone():
+        if not pg.execute(
+            "SELECT 1 FROM wagons WHERE name = :n", {"n": wname}
+        ).fetchone():
             return jsonify({"error": "not found"}), 404
         pg.execute("DELETE FROM wagons WHERE name = :n", {"n": wname})
 

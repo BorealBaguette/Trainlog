@@ -1,11 +1,19 @@
 import json
 
-from flask import jsonify, request, render_template, Blueprint, session, redirect, url_for
+from flask import (
+    Blueprint,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    session,
+    url_for,
+)
 
 from src.pg import pg_session
 from src.utils import has_current_trip, lang
 
-trainset_blueprint = Blueprint('trainset', __name__)
+trainset_blueprint = Blueprint("trainset", __name__)
 
 
 def _session_user():
@@ -15,13 +23,13 @@ def _session_user():
     return username, is_admin
 
 
-@trainset_blueprint.route('/trainset-builder')
+@trainset_blueprint.route("/trainset-builder")
 def trainset_builder():
     username, is_admin = _session_user()
     if not username:
         return redirect(url_for("login", next=request.path))
     return render_template(
-        'trainset.html',
+        "trainset.html",
         nav="bootstrap/navigation.html",
         username=username,
         title="Trainset Builder",
@@ -31,20 +39,20 @@ def trainset_builder():
     )
 
 
-@trainset_blueprint.route('/api/wagons/search')
+@trainset_blueprint.route("/api/wagons/search")
 def search_wagons():
     """Autocomplete search across nom, titre1, titre2, notes."""
     username, _ = _session_user()
     if not username:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
-    q     = request.args.get('q', '').strip()
-    limit = min(int(request.args.get('limit', 20)), 100)
+    q = request.args.get("q", "").strip()
+    limit = min(int(request.args.get("limit", 20)), 100)
     if not q:
         return jsonify([])
 
-    like   = f'%{q}%'
-    starts = f'{q}%'
+    like = f"%{q}%"
+    starts = f"{q}%"
 
     with pg_session() as pg:
         result = pg.execute(
@@ -64,15 +72,15 @@ def search_wagons():
     return jsonify(rows)
 
 
-@trainset_blueprint.route('/api/trainsets', methods=['GET'])
+@trainset_blueprint.route("/api/trainsets", methods=["GET"])
 def list_trainsets():
     """List trainsets visible to the current user:
-       - public (is_admin=true) sets are visible to everyone
-       - personal (is_admin=false) sets are only visible to their creator
+    - public (is_admin=true) sets are visible to everyone
+    - personal (is_admin=false) sets are only visible to their creator
     """
     username, _ = _session_user()
     if not username:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
     with pg_session() as pg:
         result = pg.execute(
@@ -89,18 +97,18 @@ def list_trainsets():
     return jsonify(rows)
 
 
-@trainset_blueprint.route('/api/trainsets', methods=['POST'])
+@trainset_blueprint.route("/api/trainsets", methods=["POST"])
 def create_trainset():
     """Create a new trainset. Only admins may create public (is_admin=true) sets."""
     username, is_admin = _session_user()
     if not username:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
-    data            = request.get_json()
-    name            = data.get('name', 'Unnamed trainset').strip()
-    requested_admin = bool(data.get('is_admin'))
-    set_is_admin    = requested_admin and is_admin
-    units           = _slim_units(data.get('units', []))
+    data = request.get_json()
+    name = data.get("name", "Unnamed trainset").strip()
+    requested_admin = bool(data.get("is_admin"))
+    set_is_admin = requested_admin and is_admin
+    units = _slim_units(data.get("units", []))
 
     with pg_session() as pg:
         result = pg.execute(
@@ -110,26 +118,28 @@ def create_trainset():
             RETURNING id
             """,
             {
-                "name":       name,
-                "username":   username,
-                "is_admin":   set_is_admin,
+                "name": name,
+                "username": username,
+                "is_admin": set_is_admin,
                 "units_json": json.dumps(units),
             },
         )
         trainset_id = result.scalar()
 
-    return jsonify({'id': trainset_id, 'name': name, 'is_admin': int(set_is_admin)}), 201
+    return jsonify(
+        {"id": trainset_id, "name": name, "is_admin": int(set_is_admin)}
+    ), 201
 
 
-@trainset_blueprint.route('/api/trainsets/by-name')
+@trainset_blueprint.route("/api/trainsets/by-name")
 def get_trainset_by_name():
     username, _ = _session_user()
     if not username:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
-    name = request.args.get('name', '').strip()
+    name = request.args.get("name", "").strip()
     if not name:
-        return jsonify({'error': 'name required'}), 400
+        return jsonify({"error": "name required"}), 400
 
     with pg_session() as pg:
         result = pg.execute(
@@ -143,19 +153,19 @@ def get_trainset_by_name():
         )
         row = result.fetchone()
         if not row:
-            return jsonify({'error': 'Not found'}), 404
+            return jsonify({"error": "Not found"}), 404
         d = dict(row)
-        slim_units = json.loads(d.pop('units_json') or '[]')
-        d['units'] = _enrich_units(pg, slim_units)
+        slim_units = json.loads(d.pop("units_json") or "[]")
+        d["units"] = _enrich_units(pg, slim_units)
 
     return jsonify(d)
 
 
-@trainset_blueprint.route('/api/trainsets/<int:tid>', methods=['GET'])
+@trainset_blueprint.route("/api/trainsets/<int:tid>", methods=["GET"])
 def get_trainset(tid):
     username, _ = _session_user()
     if not username:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
     with pg_session() as pg:
         result = pg.execute(
@@ -168,27 +178,27 @@ def get_trainset(tid):
         )
         row = result.fetchone()
         if not row:
-            return jsonify({'error': 'Not found'}), 404
+            return jsonify({"error": "Not found"}), 404
         d = dict(row)
-        if not d['is_admin'] and d['username'] != username:
-            return jsonify({'error': 'Forbidden'}), 403
-        slim_units = json.loads(d.pop('units_json') or '[]')
-        d['units'] = _enrich_units(pg, slim_units)
+        if not d["is_admin"] and d["username"] != username:
+            return jsonify({"error": "Forbidden"}), 403
+        slim_units = json.loads(d.pop("units_json") or "[]")
+        d["units"] = _enrich_units(pg, slim_units)
 
     return jsonify(d)
 
 
-@trainset_blueprint.route('/api/trainsets/<int:tid>', methods=['PUT'])
+@trainset_blueprint.route("/api/trainsets/<int:tid>", methods=["PUT"])
 def update_trainset(tid):
     """Update name and units. Only the owner may edit personal sets;
-       only admins may edit public sets."""
+    only admins may edit public sets."""
     username, is_admin = _session_user()
     if not username:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
-    data  = request.get_json()
-    name  = data.get('name', 'Unnamed').strip()
-    units = _slim_units(data.get('units', []))
+    data = request.get_json()
+    name = data.get("name", "Unnamed").strip()
+    units = _slim_units(data.get("units", []))
 
     with pg_session() as pg:
         result = pg.execute(
@@ -197,11 +207,11 @@ def update_trainset(tid):
         )
         row = result.fetchone()
         if not row:
-            return jsonify({'error': 'Not found'}), 404
-        if row['is_admin'] and not is_admin:
-            return jsonify({'error': 'Only admins can edit public trainsets'}), 403
-        if not row['is_admin'] and row['username'] != username:
-            return jsonify({'error': 'Forbidden'}), 403
+            return jsonify({"error": "Not found"}), 404
+        if row["is_admin"] and not is_admin:
+            return jsonify({"error": "Only admins can edit public trainsets"}), 403
+        if not row["is_admin"] and row["username"] != username:
+            return jsonify({"error": "Forbidden"}), 403
         pg.execute(
             """
             UPDATE trainsets
@@ -211,15 +221,15 @@ def update_trainset(tid):
             {"name": name, "units_json": json.dumps(units), "id": tid},
         )
 
-    return jsonify({'id': tid, 'name': name})
+    return jsonify({"id": tid, "name": name})
 
 
-@trainset_blueprint.route('/api/trainsets/<int:tid>', methods=['DELETE'])
+@trainset_blueprint.route("/api/trainsets/<int:tid>", methods=["DELETE"])
 def delete_trainset(tid):
     """Delete a trainset. Same ownership rules as update."""
     username, is_admin = _session_user()
     if not username:
-        return jsonify({'error': 'Unauthorized'}), 401
+        return jsonify({"error": "Unauthorized"}), 401
 
     with pg_session() as pg:
         result = pg.execute(
@@ -228,21 +238,24 @@ def delete_trainset(tid):
         )
         row = result.fetchone()
         if not row:
-            return jsonify({'error': 'Not found'}), 404
-        if row['is_admin'] and not is_admin:
-            return jsonify({'error': 'Only admins can delete public trainsets'}), 403
-        if not row['is_admin'] and row['username'] != username:
-            return jsonify({'error': 'Forbidden'}), 403
+            return jsonify({"error": "Not found"}), 404
+        if row["is_admin"] and not is_admin:
+            return jsonify({"error": "Only admins can delete public trainsets"}), 403
+        if not row["is_admin"] and row["username"] != username:
+            return jsonify({"error": "Forbidden"}), 403
         pg.execute("DELETE FROM trainsets WHERE id = :id", {"id": tid})
 
-    return jsonify({'deleted': tid})
+    return jsonify({"deleted": tid})
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+
 def _slim_units(units):
     """Keep only wagon name and flip-side — all other data lives in the wagons table."""
-    return [{'name': u['name'], '_side': u.get('_side', 'L')} for u in units if 'name' in u]
+    return [
+        {"name": u["name"], "_side": u.get("_side", "L")} for u in units if "name" in u
+    ]
 
 
 def _enrich_units(pg, slim_units):
@@ -251,11 +264,11 @@ def _enrich_units(pg, slim_units):
     for u in slim_units:
         result = pg.execute(
             "SELECT titre1, titre2, nom, epo, image, name, notes, image_type FROM wagons WHERE name = :name",
-            {"name": u['name']},
+            {"name": u["name"]},
         )
         wagon = result.fetchone()
         if wagon:
-            unit          = dict(wagon)
-            unit['_side'] = u.get('_side', 'L')
+            unit = dict(wagon)
+            unit["_side"] = u.get("_side", "L")
             enriched.append(unit)
     return enriched

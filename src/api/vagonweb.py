@@ -15,13 +15,13 @@ Register the blueprint for the API:
     GET /api/composition?train=RJ+85&format=visual
 """
 
-import re
 import json
 import posixpath
+import re
 from datetime import date as Date
 
 import requests
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, jsonify, request
 
 BASE = "https://www.vagonweb.cz/razeni"
 IMG_BASE = "https://www.vagonweb.cz"
@@ -41,7 +41,9 @@ CLASS_MAP = {
     "tab-sluz": "service",
 }
 
-CLASS_REGEX = re.compile(r"class='(tab-(?:" + "|".join(k.split("-", 1)[1] for k in CLASS_MAP) + "))'")
+CLASS_REGEX = re.compile(
+    r"class='(tab-(?:" + "|".join(k.split("-", 1)[1] for k in CLASS_MAP) + "))'"
+)
 
 
 def resolve_train(train: str, year: int) -> dict:
@@ -71,7 +73,9 @@ def resolve_train(train: str, year: int) -> dict:
     }
 
 
-def get_composition(train: str, date: str | None = None, year: int | None = None) -> list[dict]:
+def get_composition(
+    train: str, date: str | None = None, year: int | None = None
+) -> list[dict]:
     if year is None:
         year = int(date[:4]) if date else Date.today().year
 
@@ -102,6 +106,7 @@ def get_composition(train: str, date: str | None = None, year: int | None = None
 
 
 # ── Internals ────────────────────────────────────────────────────────────────
+
 
 def _post(url, data):
     resp = requests.post(url, data=data, headers=HEADERS, timeout=15)
@@ -155,7 +160,9 @@ def _parse_wagons(html: str) -> list[dict]:
             wagon["coach_no"] = cn.group(1)
 
         lbl = []
-        op = re.search(r">([A-ZÖÜČŽŠa-zöüčžš]{2,6})</span>\s*<span class=tab-radam>", cell)
+        op = re.search(
+            r">([A-ZÖÜČŽŠa-zöüčžš]{2,6})</span>\s*<span class=tab-radam>", cell
+        )
         if op:
             lbl.append(op.group(1))
         typ = re.search(r"<span class=tab-radam>([^<]+)<sup>", cell)
@@ -191,8 +198,14 @@ def api_composition():
             year=int(request.args["year"]) if "year" in request.args else None,
         )
         if request.args.get("format") == "visual":
-            imgs = "".join(f'<img src="{w["img_url"]}" height="{w["height"]}">' for w in wagons)
-            return f'<div style="display:flex;align-items:flex-end">{imgs}</div>', 200, {"Content-Type": "text/html"}
+            imgs = "".join(
+                f'<img src="{w["img_url"]}" height="{w["height"]}">' for w in wagons
+            )
+            return (
+                f'<div style="display:flex;align-items:flex-end">{imgs}</div>',
+                200,
+                {"Content-Type": "text/html"},
+            )
         return jsonify(wagons)
     except ValueError as e:
         return jsonify({"error": str(e)}), 404
