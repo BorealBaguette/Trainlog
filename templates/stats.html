@@ -123,7 +123,11 @@
         trips: {
             label: '{{trips}}',
             suffix: 'Trips',
-            formatValue: (value) => new Intl.NumberFormat(LANG).format(value) + ' {{trips}}',
+            formatValue: (value) => {
+                const formatted = new Intl.NumberFormat(LANG).format(value);
+                const tripKey = value === 1 ? '{{singularTrip}}' : '{{trips}}';
+                return formatted + ' ' + tripKey;
+            },
             enabled: true
         },
         km: {
