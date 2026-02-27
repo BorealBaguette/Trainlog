@@ -3,8 +3,8 @@ import math
 import os
 import time
 import unicodedata
-from urllib.request import urlopen
 from datetime import datetime, timezone
+from urllib.request import urlopen
 
 import pycountry
 import yaml
@@ -84,7 +84,7 @@ def get_all_countries():
         country.alpha_2: get_flag_emoji(country.alpha_2)
         for country in pycountry.countries
     }
-    country_dict['XK'] = get_flag_emoji("XK")
+    country_dict["XK"] = get_flag_emoji("XK")
     return country_dict
 
 
@@ -234,21 +234,25 @@ def getCountriesFromPath(path, type, routing_details=None, powerType=None):
         countries[start_country] = total_distance / 2
         countries[end_country] = countries.get(end_country, 0) + total_distance / 2
         return json.dumps(countries)
-   
+
     # Determine power type (auto, electric, or thermic)
     # If powerType is provided, use it; otherwise use routing_details
     if powerType:
         power_type = powerType
     else:
-        power_type = routing_details.get("powerType", "auto") if routing_details else "auto"
-    
+        power_type = (
+            routing_details.get("powerType", "auto") if routing_details else "auto"
+        )
+
     # Check if we should use electrification data for trains
-    use_electrification = (
-        type == "train" and
-        (powerType is not None or  # Force electrification tracking if powerType is set
-         (routing_details and (power_type != "auto" or "electrified" in routing_details)))
+    use_electrification = type == "train" and (
+        powerType is not None  # Force electrification tracking if powerType is set
+        or (
+            routing_details
+            and (power_type != "auto" or "electrified" in routing_details)
+        )
     )
-   
+
     # Create electrification lookup for train routes (only used when power_type is "auto")
     electrification_map = {}
     if use_electrification and power_type == "auto" and routing_details:
@@ -256,10 +260,10 @@ def getCountriesFromPath(path, type, routing_details=None, powerType=None):
             start_idx, end_idx, elec_type = elec_segment
             for i in range(start_idx, end_idx):
                 electrification_map[i] = elec_type
-   
+
     for index in range(1, len(path)):
         segment_distance = getDistance(path[index - 1], path[index])
-       
+
         # Determine electrification status for this segment
         is_electrified = False
         if use_electrification:
@@ -270,7 +274,7 @@ def getCountriesFromPath(path, type, routing_details=None, powerType=None):
             elif power_type == "auto" and index - 1 in electrification_map:
                 elec_status = electrification_map[index - 1]
                 is_electrified = elec_status in ["contact_line", "rail", "yes"]
-       
+
         if type == "ferry" and segment_distance > 10:
             num_fake_points = int(segment_distance / 10)
             interpolated_points = interpolate_points(
@@ -296,9 +300,11 @@ def getCountriesFromPath(path, type, routing_details=None, powerType=None):
                     countries[country] = {"elec": 0, "nonelec": 0}
                 else:
                     countries[country] = 0
-           
-            segment_country_distance = (segment_distance * count) / len(interpolated_points)
-           
+
+            segment_country_distance = (segment_distance * count) / len(
+                interpolated_points
+            )
+
             if use_electrification:
                 if is_electrified:
                     countries[country]["elec"] += segment_country_distance
@@ -309,7 +315,7 @@ def getCountriesFromPath(path, type, routing_details=None, powerType=None):
                     countries[country] = segment_country_distance
                 else:
                     countries[country] += segment_country_distance
-   
+
     if countries == {}:
         country_data = getCountryFromCoordinates(lat=path[0]["lat"], lng=path[0]["lng"])
         country = country_data["countryCode"] if country_data else "UN"
@@ -317,8 +323,8 @@ def getCountriesFromPath(path, type, routing_details=None, powerType=None):
             countries = {country: {"elec": 0, "nonelec": 0}}
         else:
             countries = {country: 0}
-    
-    # Assume that if over 95% is of one type, the rest is probably OSM not properly tagged. 
+
+    # Assume that if over 95% is of one type, the rest is probably OSM not properly tagged.
     if use_electrification:
         for country in countries:
             if isinstance(countries[country], dict):
@@ -331,9 +337,10 @@ def getCountriesFromPath(path, type, routing_details=None, powerType=None):
                     elif elec_percentage < 0.05:
                         # Assign 100% to non-electrified
                         countries[country] = {"elec": 0, "nonelec": total}
-    
+
     print(countries)
     return json.dumps(countries)
+
 
 # Helper function to parse the routing details
 def parseRoutingDetails(routing_response):

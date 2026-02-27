@@ -4,8 +4,8 @@ from flask import make_response
 
 # Import these from wherever they currently live in your project
 # Adjust imports to match your structure.
-from py.utils import getCountryFromCoordinates          # example
-from src.graphhopper import convert_graphhopper_to_osrm     # example
+from py.utils import getCountryFromCoordinates  # example
+from src.graphhopper import convert_graphhopper_to_osrm  # example
 
 
 def forward_routing_core(routingType, path, flask_request):
@@ -20,8 +20,14 @@ def forward_routing_core(routingType, path, flask_request):
     return_code = None
 
     if routingType == "train":
-        use_new_router = flask_request.args.get("use_new_router", "false").lower() == "true"
-        base = "http://train-gh.srv.trainlog.me" if use_new_router else "http://train.srv.trainlog.me"
+        use_new_router = (
+            flask_request.args.get("use_new_router", "false").lower() == "true"
+        )
+        base = (
+            "http://train-gh.srv.trainlog.me"
+            if use_new_router
+            else "http://train.srv.trainlog.me"
+        )
 
     elif routingType == "ferry":
         base = "http://ferry.srv.trainlog.me"
@@ -52,7 +58,54 @@ def forward_routing_core(routingType, path, flask_request):
 
         routing_groups = [
             {
-                "countries": {"AL", "AD", "AT", "PT", "BE", "BA", "BG", "HR", "CY", "CZ", "DK", "EE", "FO", "FI", "FR", "DE", "GR", "GG", "JE", "HU", "IS", "IE", "GB", "IM", "IT", "XK", "LV", "LI", "LT", "LU", "MK", "MT", "MD", "MC", "ME", "NL", "NO", "PL", "PT", "RO", "RS", "SK", "SI", "ES", "SE", "CH"},
+                "countries": {
+                    "AL",
+                    "AD",
+                    "AT",
+                    "PT",
+                    "BE",
+                    "BA",
+                    "BG",
+                    "HR",
+                    "CY",
+                    "CZ",
+                    "DK",
+                    "EE",
+                    "FO",
+                    "FI",
+                    "FR",
+                    "DE",
+                    "GR",
+                    "GG",
+                    "JE",
+                    "HU",
+                    "IS",
+                    "IE",
+                    "GB",
+                    "IM",
+                    "IT",
+                    "XK",
+                    "LV",
+                    "LI",
+                    "LT",
+                    "LU",
+                    "MK",
+                    "MT",
+                    "MD",
+                    "MC",
+                    "ME",
+                    "NL",
+                    "NO",
+                    "PL",
+                    "PT",
+                    "RO",
+                    "RS",
+                    "SK",
+                    "SI",
+                    "ES",
+                    "SE",
+                    "CH",
+                },
                 "router": routers["trainlog"],
             },
             {
@@ -69,7 +122,9 @@ def forward_routing_core(routingType, path, flask_request):
         countries = []
         for wp in coord_pairs:
             try:
-                countries.append(getCountryFromCoordinates(wp["lat"], wp["lng"])["countryCode"])
+                countries.append(
+                    getCountryFromCoordinates(wp["lat"], wp["lng"])["countryCode"]
+                )
             except Exception:
                 countries.append("UN")
 
@@ -86,12 +141,14 @@ def forward_routing_core(routingType, path, flask_request):
         return make_response({"error": f"Unsupported routingType: {routingType}"}, 400)
 
     # Build args from incoming request
-    args = flask_request.query_string.decode("utf-8") if flask_request.query_string else ""
+    args = (
+        flask_request.query_string.decode("utf-8") if flask_request.query_string else ""
+    )
     # remove use_new_router=true from forwarded query string
     args = (
         args.replace("&use_new_router=true", "")
-            .replace("use_new_router=true&", "")
-            .replace("use_new_router=true", "")
+        .replace("use_new_router=true&", "")
+        .replace("use_new_router=true", "")
     ).strip("&")
 
     def build_url(base_url):
@@ -131,7 +188,7 @@ def forward_routing_core(routingType, path, flask_request):
                 raise Exception("Router responded with NoRoute")
 
             return make_response(data, return_code)
-        except Exception as e:
+        except Exception:
             fallback_url = build_url(routers_fallback_base)
             return make_response(requests.get(fallback_url).json(), 235)
 
