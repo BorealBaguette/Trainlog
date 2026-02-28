@@ -49,7 +49,7 @@ def search_wagons():
     with pg_session() as pg:
         result = pg.execute(
             """
-            SELECT source, titre1, titre2, nom, epo, datmaj, image, name, notes, typeligne
+            SELECT source, titre1, titre2, nom, epo, datmaj, image, name, notes, typeligne, image_type
             FROM wagons
             WHERE nom ILIKE :like OR titre1 ILIKE :like OR titre2 ILIKE :like OR notes ILIKE :like
             ORDER BY
@@ -250,7 +250,7 @@ def _enrich_units(pg, slim_units):
     enriched = []
     for u in slim_units:
         result = pg.execute(
-            "SELECT titre1, titre2, nom, epo, image, name, notes FROM wagons WHERE name = :name",
+            "SELECT titre1, titre2, nom, epo, image, name, notes, image_type FROM wagons WHERE name = :name",
             {"name": u['name']},
         )
         wagon = result.fetchone()

@@ -140,7 +140,7 @@ from py.utils import (
     validate_png_file,
     time_ago
 )
-from src.api.admin import admin_blueprint, operators_api_blueprint
+from src.api.admin import admin_blueprint, operators_api_blueprint, wagons_admin_blueprint
 from src.api.feature_requests import feature_requests_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
@@ -150,6 +150,7 @@ from src.api.wrapped import wrapped_blueprint
 from src.api.stats import stats_blueprint, fetch_stats, get_distinct_stat_years
 from src.api.ai import ai_blueprint
 from src.api.trainset import trainset_blueprint
+from src.api.vagonweb import vagonweb_blueprint
 from src.consts import DbNames, TripTypes
 from src.pg import setup_db
 from src.suspicious_activity import (
@@ -211,6 +212,7 @@ app.url_map.strict_slashes = False
 app.register_blueprint(admin_blueprint, url_prefix="/admin")
 
 app.register_blueprint(operators_api_blueprint, url_prefix="/api/admin/operators")
+app.register_blueprint(wagons_admin_blueprint, url_prefix="/api/admin/wagons")
 app.register_blueprint(feature_requests_blueprint)
 app.register_blueprint(finance_blueprint)
 app.register_blueprint(news_blueprint)
@@ -219,6 +221,7 @@ app.register_blueprint(stats_blueprint)
 app.register_blueprint(wrapped_blueprint)
 app.register_blueprint(ai_blueprint)
 app.register_blueprint(trainset_blueprint)
+app.register_blueprint(vagonweb_blueprint)
 
 app.config["CACHE_TYPE"] = "SimpleCache"
 app.config["CACHE_DEFAULT_TIMEOUT"] = 864000

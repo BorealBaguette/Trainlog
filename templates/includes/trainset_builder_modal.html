@@ -87,7 +87,7 @@
         /* thumbnail */
         if (w.image) {
           var thumb = document.createElement('img');
-          thumb.src = _imgSrc(w.image, 'L');
+          thumb.src = _imgSrc(w.image, 'L', w.image_type);
           thumb.style.cssText = 'height:28px;width:auto;flex-shrink:0;object-fit:contain';
           thumb.onerror = function () { this.remove(); };
           btn.appendChild(thumb);
@@ -137,7 +137,8 @@
 
   /* ── unit management ── */
   function _addUnit(wagon) {
-    _units.push(Object.assign({}, wagon, { _uid: ++_uid, _side: 'L' }));
+    var defaultSide = wagon.image_type === 'sides_R' ? 'R' : 'L';
+    _units.push(Object.assign({}, wagon, { _uid: ++_uid, _side: defaultSide }));
     _render();
   }
 
@@ -152,10 +153,10 @@
   };
 
   /* ── render strip ── */
-  function _imgSrc(image, side) {
+  function _imgSrc(image, side, imageType) {
     if (!image) return '';
-    var base = image.replace(/_[LR]$/, '');
-    return WAGONS + '/' + base + (side === 'R' ? '_R' : '_L') + '.gif';
+    if (imageType === 'sides') return WAGONS + '/' + image + (side === 'R' ? '_R' : '_L') + '.gif';
+    return WAGONS + '/' + image + '.gif';
   }
 
   function _render() {
@@ -168,7 +169,7 @@
       card.className = 'tsb-unit';
 
       var img = document.createElement('img');
-      img.src = _imgSrc(u.image, u._side);
+      img.src = _imgSrc(u.image, u._side, u.image_type);
       img.title = u.nom || '';
       img.onerror = function () { this.style.display = 'none'; };
       card.appendChild(img);
@@ -181,13 +182,16 @@
       var btns = document.createElement('div');
       btns.className = 'd-flex justify-content-center gap-1 mt-1';
 
-      var flip = document.createElement('button');
-      flip.type = 'button';
-      flip.className = 'btn btn-outline-secondary p-0';
-      flip.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
-      flip.title = _i18n.flip;
-      flip.textContent = '↔';
-      flip.onclick = (function (uid) { return function () { tsbFlip(uid); }; })(u._uid);
+      if (u.image_type === 'sides') {
+        var flip = document.createElement('button');
+        flip.type = 'button';
+        flip.className = 'btn btn-outline-secondary p-0';
+        flip.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
+        flip.title = _i18n.flip;
+        flip.textContent = '↔';
+        flip.onclick = (function (uid) { return function () { tsbFlip(uid); }; })(u._uid);
+        btns.appendChild(flip);
+      }
 
       var rm = document.createElement('button');
       rm.type = 'button';
@@ -197,7 +201,6 @@
       rm.textContent = '×';
       rm.onclick = (function (uid) { return function () { tsbRemove(uid); }; })(u._uid);
 
-      btns.appendChild(flip);
       btns.appendChild(rm);
       card.appendChild(btns);
       strip.appendChild(card);
@@ -211,7 +214,7 @@
   /* ── actions ── */
   window.tsbUseOnce = function () {
     var json = JSON.stringify(_units.map(function (u) {
-      return { name: u.name, image: u.image, nom: u.nom, _side: u._side };
+      return { name: u.name, image: u.image, nom: u.nom, _side: u._side, image_type: u.image_type };
     }));
     document.getElementById('material_type').value = json;
     $('#tsbModal').modal('hide');
