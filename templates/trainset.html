@@ -737,7 +737,7 @@ function renderAc() {
   if (!acItems.length) { closeAc(); return; }
   acList.innerHTML = acItems.map((w, i) => {
     const thumb = w.image
-      ? `<img src="${smartImgSrc(w.image, 'L')}" onerror="${smartImgOnerror(w.image)}" alt="${esc(w.nom)}">`
+      ? `<img src="${smartImgSrc(w.image, 'L', w.image_type)}" onerror="${smartImgOnerror()}" alt="${esc(w.nom)}">`
       : `<span class="ac-thumb-none">🚃</span>`;
     return `
     <div class="ac-item" data-i="${i}">
@@ -771,15 +771,14 @@ window.addEventListener('resize', () => {
 });
 
 // ── SMART IMAGE ──
-function smartImgSrc(imagePath, side = 'L') {
+const WAGONS_URL = `{{url_for("static", filename="images/wagons")}}`;
+function smartImgSrc(imagePath, side = 'L', imageType = 'sides') {
   if (!imagePath) return '';
-  const base = imagePath.replace(/_[LR]$/, '');
-  return `{{url_for("static", filename="images/wagons")}}/${base}${side === 'R' ? '_R' : '_L'}.gif`;
+  if (imageType === 'sides') return `${WAGONS_URL}/${imagePath}${side === 'R' ? '_R' : '_L'}.gif`;
+  return `${WAGONS_URL}/${imagePath}.gif`;
 }
-function smartImgOnerror(imagePath) {
-  if (!imagePath) return '';
-  const base = `{{url_for("static", filename="images/wagons")}}/${imagePath}.gif`;
-  return `if(!this.dataset.fb){this.dataset.fb='1';this.src='${base}';}else{this.replaceWith(Object.assign(document.createElement('span'),{className:'no-img',textContent:'🚃'}));}`;
+function smartImgOnerror() {
+  return `this.replaceWith(Object.assign(document.createElement('span'),{className:'no-img',textContent:'🚃'}))`;
 }
 
 // ── PERMISSIONS ──
@@ -804,7 +803,8 @@ function updateSaveState() {
 
 function addUnit(wagon) {
   if (!currentTs) newTrainset(i18n.modalNewTitle, false);
-  currentTs.units.push({ ...wagon, _uid: Date.now() + Math.random() });
+  const defaultSide = wagon.image_type === 'sides_R' ? 'R' : 'L';
+  currentTs.units.push({ ...wagon, _uid: Date.now() + Math.random(), _side: defaultSide });
   renderStrip();
   if (acList.classList.contains('open')) positionAcList();
   setStatus(i18n.added + ': ' + wagon.nom);
@@ -848,12 +848,13 @@ function renderStrip() {
     el.dataset.uid = u._uid;
     const side = u._side || 'L';
     el.dataset.side = side;
-    const imgSrc = u.image ? smartImgSrc(u.image, side) : '';
-    const imgErr = u.image ? smartImgOnerror(u.image) : '';
+    const imgSrc  = u.image ? smartImgSrc(u.image, side, u.image_type) : '';
+    const imgErr  = u.image ? smartImgOnerror() : '';
+    const canFlip = u.image_type === 'sides';
     el.innerHTML = `
       <div class="unit-number">#${i + 1}</div>
       <div class="unit-controls">
-        <button class="uc-btn flip" title="${i18n.flipSide} (${side})" data-action="flip">◄►</button>
+        ${canFlip ? `<button class="uc-btn flip" title="${i18n.flipSide} (${side})" data-action="flip">◄►</button>` : ''}
         <button class="uc-btn" title="${i18n.info}" data-action="info">ℹ</button>
         <button class="uc-btn" title="${i18n.deleteTitle}" data-action="del">✕</button>
       </div>
@@ -865,7 +866,7 @@ function renderStrip() {
         <div class="unit-sub">${esc(u.titre1 || '')}${u.epo ? ' · Ep.' + u.epo : ''}${side === 'R' ? ' · ►' : ''}</div>
       </div>
     `;
-    el.querySelector('[data-action=flip]').addEventListener('click', e => { e.stopPropagation(); flipUnit(u._uid); });
+    el.querySelector('[data-action=flip]')?.addEventListener('click', e => { e.stopPropagation(); flipUnit(u._uid); });
     el.querySelector('[data-action=del]').addEventListener('click', e => { e.stopPropagation(); removeUnit(u._uid); });
     el.querySelector('[data-action=info]').addEventListener('click', e => { e.stopPropagation(); showDetail(u); });
     el.addEventListener('dragstart', e => { dragSrcIdx = i; el.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
@@ -916,12 +917,8 @@ function showDetail(u) {
   document.getElementById('dpNotes').textContent = u.notes || '—';
   const img = document.getElementById('dpImg');
   if (u.image) {
-    img.dataset.fb = '';
-    img.src = smartImgSrc(u.image);
-    img.onerror = function() {
-      if (!this.dataset.fb) { this.dataset.fb = '1'; this.src = `{{url_for("static", filename="images/wagons")}}/${u.image}.gif`; }
-      else { this.style.display = 'none'; }
-    };
+    img.src = smartImgSrc(u.image, u._side || 'L', u.image_type);
+    img.onerror = function() { this.style.display = 'none'; };
     img.style.display = 'block';
   } else { img.style.display = 'none'; }
   document.getElementById('detailPanel').classList.add('open');

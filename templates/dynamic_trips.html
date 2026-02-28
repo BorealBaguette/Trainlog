@@ -415,12 +415,13 @@ function _renderTrainset($modalBody, units, setName) {
     (units || []).forEach(function(u) {
         if (!u.image) return;
         var side = u._side || 'L';
-        var base = u.image.replace(/_[LR]$/, '');
-        var src  = wagonsBase + '/' + base + (side === 'R' ? '_R' : '_L') + '.gif';
-        var fb   = wagonsBase + '/' + u.image + '.gif';
+        var itype = u.image_type;
+        var src;
+        if (itype === 'sides') src = wagonsBase + '/' + u.image + (side === 'R' ? '_R' : '_L') + '.gif';
+        else                   src = wagonsBase + '/' + u.image + '.gif';
         var wagon = $('<div class="compo-wagon ts-unit"></div>');
         wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
-        wagon.append(`<img src="${src}" onerror="if(!this.dataset.fb){this.dataset.fb='1';this.src='${fb}';}else{this.style.display='none';}" title="${u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
+        wagon.append(`<img src="${src}" onerror="this.style.display='none';" title="${u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
         wagon.append(`<span class="compo-coach-no ts-nom">${u.nom || ''}</span>`);
         strip.append(wagon);
     });
