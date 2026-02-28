@@ -4,9 +4,10 @@ from flask import Blueprint, render_template, request, session
 
 from py.utils import get_flag_emoji
 from src.suspicious_activity import list_denied_logins, list_suspicious_activity
-from src.utils import getUser, has_current_trip, lang, owner_required
+from src.utils import admin_required, getUser, has_current_trip, lang, owner_required
 
 from .operators import operators_api_blueprint
+from .wagons import wagons_admin_blueprint
 
 logger = logging.getLogger(__name__)
 
@@ -65,7 +66,21 @@ def suspicious_activity():
     )
 
 
+@admin_blueprint.route("/wagons")
+@admin_required
+def wagons_admin():
+    return render_template(
+        "admin/wagons.html",
+        nav="bootstrap/navigation.html",
+        username=getUser(),
+        isCurrent=has_current_trip(),
+        **session["userinfo"],
+        **lang[session["userinfo"]["lang"]],
+    )
+
+
 __all__ = [
     "admin_blueprint",
     "operators_api_blueprint",
+    "wagons_admin_blueprint",
 ]
