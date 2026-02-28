@@ -105,9 +105,9 @@ async function saveTrip(continueTrip=false) {
                 location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?prevDest=${newTrip["destinationStation"]}&prevEndDate=${newTrip["newTripEndDate"]}&prevEndTime=${newTrip["newTripEndTime"]}`;
             }
         },
-        error: function() {
+        error: function(xhr, status, error) {
             flutterBridge.loading(false);
-            flutterBridge.saveError(xhr.responseText || 'Save failed');
+            flutterBridge.saveError(error || 'Save failed');
             sidebar.setContent(saveErrorContent);
         }
     });

@@ -2323,6 +2323,7 @@ def routing(username):
 @login_required
 def air_routing(username, type):
     trip_data = None
+    from_app = request.args.get('fromApp') == 'true'
     if request.method == 'POST':
         trip_data = request.form.get('trip_data') or request.get_json()
         if isinstance(trip_data, dict):
@@ -2332,6 +2333,7 @@ def air_routing(username, type):
         type=type,
         username=username,
         trip_data=trip_data,
+        from_app=from_app,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -4039,9 +4041,13 @@ def saveFlight(username, type):
         airlineLogoProcess(newTrip)
         # TODO : Fix visibility for flights
         newTrip["visibility"] = "public"
-        saveTripToDb(
+        trip = saveTripToDb(
             username=username, newTrip=newTrip, newPath=newPath, trip_type=type
         )
+        if request.form["fromApp"] == "true":
+            return jsonify({
+                "newTrip": trip.to_dict(),
+            }), 200
 
     return ""
 
