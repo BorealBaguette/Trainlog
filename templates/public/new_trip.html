@@ -219,6 +219,17 @@
   color: #28a745;
 }
 
+.events .delay-time,
+.events .early-time {
+  padding: 0;
+  position: static;
+}
+
+.events .delay-time::before,
+.events .early-time::before {
+  display: none;
+}
+
 .events time {
   text-align: right;
   min-width: 10ch;
@@ -517,12 +528,14 @@ function buildItinerary(trips, prices) {
         var dayChangeTrip = false;
         var dayChangeIntertrip = false;
         let changeTime = 0;
-        
+        let actualChangeTime = 0;
+
         if (trip != trips[trips.length - 1]) {
             changeTime = timeDifference(
                 trip.trip.utc_filtered_end_datetime,
                 trips[index + 1].trip.utc_filtered_start_datetime
             );
+            actualChangeTime = changeTime + (trips[index + 1].trip.departure_delay || 0) - (trip.trip.arrival_delay || 0);
             var previousDay = new Date(trip.trip.end_datetime).toISOString().slice(0, 10);
             var currentDay = new Date(trip.trip.start_datetime).toISOString().slice(0, 10);
             if (currentDay != previousDay) {
@@ -719,7 +732,17 @@ function buildItinerary(trips, prices) {
                 ).append('<br>').append(function() {
                     if (trip != trips[trips.length - 1]) {
                         if (changeTime <= 43200) {
-                            let changeTimeText = changeTime != 0 ? '<br>' + secondsToDhm(changeTime, "{{langId}}") : "";
+                            let changeTimeText;
+                            if (changeTime != 0) {
+                              if (actualChangeTime !== changeTime) {
+                                var ctClass = actualChangeTime < changeTime ? 'delay-time' : 'early-time';
+                                changeTimeText = '<br><s>' + secondsToDhm(changeTime, "{{langId}}") + '</s> <span class="' + ctClass + '">' + secondsToDhm(actualChangeTime, "{{langId}}") + '</span>';
+                              } else {
+                                changeTimeText = '<br>' + secondsToDhm(changeTime, "{{langId}}");
+                              }
+                            } else {
+                              changeTimeText = "";
+                            }
                             if (trip.trip.destination_station == trips[index + 1].trip.origin_station) {
                                 return "{{trainChange}}" + changeTimeText;
                             } else {

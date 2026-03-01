@@ -68,6 +68,17 @@
   color: #28a745;
 }
 
+.events .delay-time,
+.events .early-time {
+  padding: 0;
+  position: static;
+}
+
+.events .delay-time::before,
+.events .early-time::before {
+  display: none;
+}
+
 .events time {
   text-align: right;
   min-width: 10ch;
@@ -281,6 +292,7 @@ if (prices.total_carbon != 0){
         trip.trip.utc_filtered_end_datetime,
         trips[index + 1].trip.utc_filtered_start_datetime
       );
+      actualChangeTime = changeTime + (trips[index + 1].trip.departure_delay || 0) - (trip.trip.arrival_delay || 0);
       var previousDay = new Date(trip.trip.end_datetime).toISOString().slice(0, 10)
       var currentDay = new Date(trip.trip.start_datetime).toISOString().slice(0, 10)
       if (currentDay != previousDay)
@@ -288,7 +300,7 @@ if (prices.total_carbon != 0){
         dayChangeTrip = true;
       }
       }
-    else{changetime = 0}
+    else{changetime = 0; actualChangeTime = 0;}
     if(index>0){
       precedingChangeTime = timeDifference(
         trips[index - 1].trip.utc_filtered_end_datetime,
@@ -486,7 +498,12 @@ if (operatorContents.length) {
           if(trip != trips[trips.length -1]){
             if(changeTime <= 43200){
               if(changeTime != 0){
-                changeTimeText = '<br>'+secondsToDhm(changeTime, "{{langId}}");
+                if (actualChangeTime !== changeTime) {
+                  var ctClass = actualChangeTime < changeTime ? 'delay-time' : 'early-time';
+                  changeTimeText = '<br><s>' + secondsToDhm(changeTime, "{{langId}}") + '</s> <span class="' + ctClass + '">' + secondsToDhm(actualChangeTime, "{{langId}}") + '</span>';
+                } else {
+                  changeTimeText = '<br>'+secondsToDhm(changeTime, "{{langId}}");
+                }
               }
               else{
                 changeTimeText = "";
