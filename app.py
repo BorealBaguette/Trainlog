@@ -2354,7 +2354,6 @@ def routing(username):
         from_app=from_app,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
-        title=lang[session["userinfo"]["lang"]]["routeTrip"],
     )
 
 @app.route("/u/<username>/air_routing/<type>", methods=['GET', 'POST'])
@@ -2375,7 +2374,6 @@ def air_routing(username, type):
         from_app=from_app,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
-        title=lang[session["userinfo"]["lang"]]["routeTrip"],
     )
 
 
@@ -3620,7 +3618,6 @@ def render_public_trip_page(
         colorblind = colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
-        title=lang[session["userinfo"]["lang"]]["sharedLink"],
     )
 
 
@@ -3672,7 +3669,6 @@ def multi_trip(tripIds):
         tripIds=tripIds,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
-        title=lang[session["userinfo"]["lang"]]["sharedLink"],
     )
 
 
@@ -5942,39 +5938,47 @@ def toggle_role(uid, role, action):
 @login_required
 def user_settings(username):
     """
-    User settings
+    User settings page
     """
     user = User.query.filter_by(username=username).first()
+    if not user:
+        abort(404)
 
+    # Handle POST updates
     if request.method == "POST":
         params = {}
-
-        params["share_level"] = request.form["share_level"]
+        params["share_level"] = int(request.form.get("share_level", 0))
         params["leaderboard"] = "leaderboard" in request.form
         params["friend_search"] = "friend_search" in request.form
         params["appear_on_global"] = "appear_on_global" in request.form
+        params["legacyMenu"] = "legacyMenu" in request.form
         params["colorblind"] = "colorblind" in request.form
-        params["lang"] = request.form["lang"]
-        params["user_currency"] = request.form["user_currency"]
-        params["default_landing"] = request.form["default_landing"]
-        params["tileserver"] = request.form["tileserver"]
+        params["lang"] = request.form.get("lang", user.lang)
+        params["user_currency"] = request.form.get("user_currency", user.user_currency)
+        params["default_landing"] = request.form.get("default_landing", user.default_landing)
+        params["tileserver"] = request.form.get("tileserver", user.tileserver)
         params["globe"] = "globe" in request.form
 
-        for param in params:
-            if getattr(user, param) != params[param]:
-                setattr(user, param, params[param])
+        for param, value in params.items():
+            if getattr(user, param) != value:
+                setattr(user, param, value)
                 if param == "lang":
-                    changeLang(params[param], session)
+                    changeLang(value, session)
 
         authDb.session.commit()
 
+    # Prepare template context
     langs = getLangDropdown(user)
 
     share_level = user.share_level
     leaderboard_checked = "checked" if user.leaderboard else ""
     friend_search_checked = "checked" if user.friend_search else ""
     appear_on_global_checked = "checked" if user.appear_on_global else ""
+    legacy_menu_checked = "checked" if user.legacyMenu else ""
     colorblind_checked = "checked" if user.colorblind else ""
+
+    # BOOLEAN flag for template (defaults to new menu if unset)
+    legacyMenu = getattr(user, "legacyMenu", False)
 
     return render_template(
         "user_settings.html",
@@ -5986,11 +5990,13 @@ def user_settings(username):
         leaderboard_checked=leaderboard_checked,
         friend_search_checked=friend_search_checked,
         appear_on_global_checked=appear_on_global_checked,
+        legacy_menu_checked=legacy_menu_checked,  # form checkbox state
         colorblind_checked=colorblind_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
         user_globe=user.globe,
+        legacyMenu=legacyMenu,  # boolean for navbar/template logic
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -6011,6 +6017,7 @@ def user_settings_app(username):
             "leaderboard", 
             "friend_search", 
             "appear_on_global", 
+            "legacy_menu",
             "colorblind",
             "user_currency"
         }
@@ -6040,6 +6047,7 @@ def user_settings_app(username):
         "leaderboard": user.leaderboard,
         "friend_search": user.friend_search,
         "appear_on_global": user.appear_on_global,
+        "legacy_menu": user.legacyMenu,
         "colorblind": user.colorblind,
         "user_currency": user.user_currency,
     }), 200

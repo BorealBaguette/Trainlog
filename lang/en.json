@@ -833,6 +833,6 @@
     "tsbNoResults": "No results", 
     "routeTrip" : "Trip Routing", 
     "sharedLink" : "Shared Trip",
-    "legacyMenu" : "Use legacy menu design", 
+    "legacy_menu" : "Use legacy menu design", 
     "colorblindMode" : "Colourblind Mode"
 }
