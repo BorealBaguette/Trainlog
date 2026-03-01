@@ -1,11 +1,10 @@
-{# ===== Dynamic Class Switching ===== #}
-{% set navClass = 'legacy-navbar navbar-expand-lg navbar-light bg-light' if legacyMenu else 'navbar navbar-expand-lg navbar-light bg-light' %}
-{% set navCollapseClass = 'collapse legacy-navbar-collapse' if legacyMenu else 'collapse navbar-collapse' %}
-{% set navUlClass = 'legacy-navbar-nav mr-auto' if legacyMenu else 'navbar-nav mr-auto' %}
-{% set navUlRightClass = 'legacy-navbar-nav ms-auto' if legacyMenu else 'navbar-nav ms-auto' %}
-{% set navLinkClass = 'legacy-nav-link' if legacyMenu else 'nav-link' %}
-{% set dropdownMenuClass = 'legacy-dropdown-menu' if legacyMenu else 'dropdown-menu' %}
-{% set dropdownItemClass = 'legacy-dropdown-item' if legacyMenu else 'dropdown-item' %}
+{% set navClass = 'legacy-navbar navbar navbar-expand-xl navbar-light bg-light' if legacyMenu else 'navbar navbar-expand-xl navbar-light bg-light' %}
+{% set navCollapseClass = 'collapse legacy-navbar-collapse navbar-collapse' if legacyMenu else 'collapse navbar-collapse' %}
+{% set navUlClass = 'legacy-navbar-nav navbar-nav mr-auto' if legacyMenu else 'navbar-nav mr-auto' %}
+{% set navUlRightClass = 'legacy-navbar-nav navbar-nav ms-auto' if legacyMenu else 'navbar-nav ms-auto' %}
+{% set navLinkClass = 'legacy-nav-link nav-link' if legacyMenu else 'nav-link' %}
+{% set dropdownMenuClass = 'legacy-dropdown-menu dropdown-menu' if legacyMenu else 'dropdown-menu' %}
+{% set dropdownItemClass = 'legacy-dropdown-item dropdown-item' if legacyMenu else 'dropdown-item' %}
 
 <nav class="{{ navClass }}">
   <div class="container-fluid">
