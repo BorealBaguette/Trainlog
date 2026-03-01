@@ -320,6 +320,7 @@ def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date
         for f in flights:
             orig_icao = f.get("orig_icao")
             dest_icao = f.get("dest_icao")
+            diverted_icao = f.get("destination_icao_actual")
             takeoff_str = f.get("datetime_takeoff")
             first_seen_str = f.get("first_seen")
             landing_str = f.get("datetime_landed")
@@ -348,8 +349,30 @@ def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date
                             else:
                                 f["datetime_takeoff_local"] = local_departure.isoformat()
                                 f["_used_first_seen_for_takeoff"] = True  # Optional flag for debugging
+
+                            if diverted_icao and (landing_str or last_seen_str):
+                                cursor.execute(
+                                    "SELECT latitude, longitude FROM airports WHERE ident = :icao",
+                                    {"icao": diverted_icao},
+                                )
+                                dest_coords = cursor.fetchone()
+                                if dest_coords:
+                                    # Use landing time if available, otherwise fall back to last_seen
+                                    arrival_str = landing_str if landing_str else last_seen_str
+                                    utc_landing = datetime.fromisoformat(
+                                        arrival_str.replace("Z", "+00:00")
+                                    )
+                                    local_landing = getLocalDatetime(
+                                        dest_coords[0], dest_coords[1], utc_landing
+                                    )
+                                    f["datetime_landed_local"] = (
+                                        local_landing.isoformat()
+                                    )
+                                    # Optional flag for debugging
+                                    if not landing_str:
+                                        f["_used_last_seen_for_landing"] = True
                             
-                            if dest_icao and (landing_str or last_seen_str):
+                            elif dest_icao and (landing_str or last_seen_str):
                                 cursor.execute(
                                     "SELECT latitude, longitude FROM airports WHERE ident = :icao",
                                     {"icao": dest_icao},
@@ -649,6 +672,8 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train"):
         newTrip["seat"] = ""
     if "material_type" not in newTrip.keys():
         newTrip["material_type"] = ""
+    if "material_type_advanced" not in newTrip.keys():
+        newTrip["material_type_advanced"] = ""
     if "waypoints" not in newTrip.keys():
         newTrip["waypoints"] = ""
     if "notes" not in newTrip.keys():
@@ -707,6 +732,7 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train"):
         type=sanitize_param(trip_type),
         seat=sanitize_param(newTrip["seat"]),
         material_type=sanitize_param(newTrip["material_type"]),
+        material_type_advanced=sanitize_param(newTrip["material_type_advanced"]),
         reg=sanitize_param(newTrip["reg"]),
         waypoints=sanitize_param(newTrip["waypoints"]),
         notes=sanitize_param(newTrip["notes"]),
@@ -716,7 +742,9 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train"):
         ticket_id=sanitize_param(newTrip["ticket_id"]),
         is_project=start_datetime == 1 or end_datetime == 1,
         path=newPath,
-        visibility=sanitize_param(newTrip.get("visibility", get_default_trip_visibility(trip_type)))
+        visibility=sanitize_param(newTrip.get("visibility", get_default_trip_visibility(trip_type))),
+        departure_delay=sanitize_param(newTrip.get("departure_delay")),
+        arrival_delay=sanitize_param(newTrip.get("arrival_delay")),
     )
 
     create_trip(trip)
@@ -2308,6 +2336,7 @@ def new_flight(username):
 @login_required
 def routing(username):
     trip_data = None
+    from_app = request.args.get('fromApp') == 'true'
     if request.method == 'POST':
         trip_data = request.form.get('trip_data') or request.get_json()
         if isinstance(trip_data, dict):
@@ -2322,6 +2351,7 @@ def routing(username):
         username=username,
         trip_data=trip_data,
         colorblind=colorblind,
+        from_app=from_app,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -2330,6 +2360,7 @@ def routing(username):
 @login_required
 def air_routing(username, type):
     trip_data = None
+    from_app = request.args.get('fromApp') == 'true'
     if request.method == 'POST':
         trip_data = request.form.get('trip_data') or request.get_json()
         if isinstance(trip_data, dict):
@@ -2340,6 +2371,7 @@ def air_routing(username, type):
         type=type,
         username=username,
         trip_data=trip_data,
+        from_app=from_app,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -4076,9 +4108,13 @@ def saveFlight(username, type):
         airlineLogoProcess(newTrip)
         # TODO : Fix visibility for flights
         newTrip["visibility"] = "public"
-        saveTripToDb(
+        trip = saveTripToDb(
             username=username, newTrip=newTrip, newPath=newPath, trip_type=type
         )
+        if request.form["fromApp"] == "true":
+            return jsonify({
+                "newTrip": trip.to_dict(),
+            }), 200
 
     return ""
 
@@ -4180,6 +4216,7 @@ def get_trip(trip_id):
         type=sanitize_param(trip["type"]),
         seat=sanitize_param(trip["seat"]),
         material_type=sanitize_param(trip["material_type"]),
+        material_type_advanced=sanitize_param(trip.get("material_type_advanced")),
         reg=sanitize_param(trip["reg"]),
         waypoints=sanitize_param(trip["waypoints"]),
         notes=sanitize_param(trip["notes"]),
@@ -4189,6 +4226,8 @@ def get_trip(trip_id):
         ticket_id=sanitize_param(trip["ticket_id"]),
         is_project=trip["start_datetime"] == 1 or trip["end_datetime"] == 1,
         path=path,
+        departure_delay=trip.get("departure_delay"),
+        arrival_delay=trip.get("arrival_delay"),
     )
 
 
@@ -4267,6 +4306,7 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         type=original_trip.type,
         seat=sanitize_param(formData["seat"]),
         material_type=sanitize_param(formData["material_type"]),
+        material_type_advanced=sanitize_param(formData.get("material_type_advanced")),
         reg=sanitize_param(formData["reg"]),
         waypoints=sanitize_param(formData.get("waypoints", original_trip.waypoints)),
         notes=sanitize_param(formData["notes"]),
@@ -4280,7 +4320,9 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         ticket_id=sanitize_param(formData.get("ticket_id")),
         is_project=start_datetime == 1 or end_datetime == 1,
         path=path,
-        visibility=visibility if visibility != "" else None
+        visibility=visibility if visibility != "" else None,
+        departure_delay=sanitize_param(formData.get("departure_delay")),
+        arrival_delay=sanitize_param(formData.get("arrival_delay")),
     )
 
     return trip
@@ -5507,6 +5549,7 @@ def mergeTrips(username, tripIds):
     newTrip["reg"] = ""
     newTrip["seat"] = ""
     newTrip["material_type"] = ""
+    newTrip["material_type_advanced"] = ""
     newTrip["waypoints"] = ""
     newTrip["notes"] = ""
     newTrip["onlyDateDuration"] = ""
@@ -6071,6 +6114,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     tripLineName = trip["line_name"]
     tripVisibility = trip["visibility"]
     tripMaterialType = trip["material_type"]
+    tripMaterialTypeAdvanced = trip["material_type_advanced"] if trip["material_type_advanced"] else ""
     tripSeat = trip["seat"]
     tripReg = trip["reg"]
     tripType = trip["type"]
@@ -6114,6 +6158,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         tripHours = lang[session["userinfo"]["lang"]]["hours"]
         tripMinutes = lang[session["userinfo"]["lang"]]["minutes"]
 
+    tripDepartureDelay = int(trip["departure_delay"] / 60) if trip["departure_delay"] is not None else ""
+    tripArrivalDelay = int(trip["arrival_delay"] / 60) if trip["arrival_delay"] is not None else ""
     return render_template(
         "edit_copy.html",
         title=lang[session["userinfo"]["lang"]][edit_copy_type],
@@ -6136,6 +6182,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         tripLineName=tripLineName or "",
         tripVisibility=tripVisibility or "",
         tripMaterialType=tripMaterialType or "",
+        tripMaterialTypeAdvanced=tripMaterialTypeAdvanced or "",
         tripSeat=tripSeat or "",
         tripReg=tripReg or "",
         tripPrice=tripPrice or "",
@@ -6146,6 +6193,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         wplist=wplist,
         tripNotes=tripNotes or "",
         colorblind=colorblind,
+        tripDepartureDelay=tripDepartureDelay,
+        tripArrivalDelay=tripArrivalDelay,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -6452,6 +6501,7 @@ def processMFR24(username):
             trip.last_modified = now
             trip.seat = sanitize_param(newTrip["seat"])
             trip.material_type = sanitize_param(newTrip["material_type"])
+            trip.material_type_advanced = sanitize_param(newTrip.get("material_type_advanced"))
             trip.reg = sanitize_param(newTrip["reg"])
             trip.waypoints = None
             trip.notes = sanitize_param(newTrip["notes"])
@@ -6486,6 +6536,7 @@ def processMFR24(username):
                 type="air",
                 seat=sanitize_param(newTrip["seat"]),
                 material_type=sanitize_param(newTrip["material_type"]),
+                material_type_advanced=sanitize_param(newTrip.get("material_type_advanced")),
                 reg=sanitize_param(newTrip["reg"]),
                 waypoints=None,
                 notes=sanitize_param(newTrip["notes"]),
@@ -6495,6 +6546,8 @@ def processMFR24(username):
                 ticket_id=None,
                 is_project=options["start_datetime"] == 1 or end_datetime == 1,
                 path=newPath,
+                departure_delay=sanitize_param(newTrip.get("departure_delay")),
+                arrival_delay=sanitize_param(newTrip.get("arrival_delay")),
             )
             create_trip(trip)
 
@@ -6798,6 +6851,7 @@ def importAll(username):
         line_name=sanitize_param(dataDict["line_name"]),
         type=sanitize_param(dataDict["type"]),
         material_type=sanitize_param(dataDict["material_type"]),
+        material_type_advanced=sanitize_param(dataDict.get("material_type_advanced")),
         seat=sanitize_param(dataDict["seat"]),
         reg=sanitize_param(dataDict["reg"]),
         waypoints=sanitize_param(dataDict["waypoints"]),
@@ -6809,6 +6863,8 @@ def importAll(username):
         is_project=dataDict["start_datetime"] == 1 or dataDict["end_datetime"] == 1,
         visibility=visibility,
         path=path,
+        departure_delay=sanitize_param(dataDict.get("departure_delay")),
+        arrival_delay=sanitize_param(dataDict.get("arrival_delay")),
     )
 
     try:
@@ -8083,11 +8139,10 @@ def visited_squares(username):
 @public_required
 def visited_squares_data(username):
     """Fetch the GeoJSON data for the visited squares."""
-    geojson_data, land_percentage, air_percentage = generate_visited_squares_geojson(
-        username
-    )  # This is the updated function
+    geojson_data, grid_geojson, land_percentage, air_percentage = generate_visited_squares_geojson(username)
     response = {
         "geojson": geojson_data,
+        "grid_geojson": grid_geojson,
         "land_percentage": land_percentage,
         "air_percentage": air_percentage,
     }
@@ -8239,30 +8294,57 @@ def generate_visited_squares_geojson(username):
         )
     mainConn.commit()
 
-    features = []
+    # --- VISITED FEATURES ---
+    visited_features = []
     for square, status in visited_squares.items():
         lat, lon = square
         feature = {
             "type": "Feature",
             "geometry": {
                 "type": "Polygon",
-                "coordinates": [
-                    [
+                "coordinates": [[
+                    [lon, lat],
+                    [lon + 1, lat],
+                    [lon + 1, lat + 1],
+                    [lon, lat + 1],
+                    [lon, lat],
+                ]],
+            },
+            "properties": {"status": status},
+        }
+        visited_features.append(feature)
+
+    visited_geojson = {
+        "type": "FeatureCollection",
+        "features": visited_features
+    }
+
+    # --- FULL GRID FEATURES (ALL WORLD SQUARES) ---
+    grid_features = []
+
+    for lat in range(-90, 90):
+        for lon in range(-180, 180):
+            grid_features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [[
                         [lon, lat],
                         [lon + 1, lat],
                         [lon + 1, lat + 1],
                         [lon, lat + 1],
                         [lon, lat],
-                    ]
-                ],
-            },
-            "properties": {"status": status},
-        }
-        features.append(feature)
+                    ]],
+                },
+                "properties": {}
+            })
 
-    geojson_data = {"type": "FeatureCollection", "features": features}
-    return geojson_data, land_percentage, air_percentage
+    grid_geojson = {
+        "type": "FeatureCollection",
+        "features": grid_features
+    }
 
+    return visited_geojson, grid_geojson, land_percentage, air_percentage
 
 @app.route("/tile/<style>/<x>/<y>/<z>/")
 @app.route("/tile/<style>/<x>/<y>/<z>/<r>")

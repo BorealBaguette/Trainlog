@@ -10,8 +10,28 @@
     <div id="sidebar-content">
     </div>
 </div>
+{% if from_app %}
+<style>
+  div.leaflet-control-container { display: none !important; }
+  nav.navbar { display: none !important; }
+</style>
+{% endif %}
 
 <script>
+// ─── Flutter bridge (for app) ───────────────────────────────────────────────
+window.flutterBridge = {
+  _send(event, payload) {
+    if (!window.flutter_inappwebview) return;
+    window.flutter_inappwebview.callHandler('routingEvent',  { event, ...payload });
+  },
+  loading(isLoading)          { this._send('loading',        { isLoading }); },
+  routeInfo(text, distanceM, durationS) {
+                                this._send('routeInfo',      { text, distanceM, durationS }); },
+  routingError(message)       { this._send('routingError',   { message }); },
+  saveTripDone(ok, trip)      { this._send('saveTripDone',   { ok, trip }); },
+  saveError(message)          { this._send('saveError',      { message }); },
+};
+// ─── End Flutter bridge (for app) ───────────────────────────────────────────
 
 let currentPolyline = null;
 let useFR24 = true;
@@ -29,8 +49,10 @@ if (!newTrip && id) {
 
 if (!newTrip) {
     document.getElementById('sidebar-content').innerHTML = '<h4>Error: No trip data provided</h4>';
+    flutterBridge.routingError("No trip data provided");
     throw new Error('No trip data');
 }
+var fromApp = !!getGetParams().get("fromApp");
 
 console.log(newTrip);
 console.log(newTrip);
@@ -55,9 +77,13 @@ const sidebar = L.control.sidebar('sidebar', {
 let origMarker = L.marker(origCoord, { icon: markerIconStart, draggable: false }).addTo(map);
 let destMarker = L.marker(destCoord, { icon: markerIconEnd, draggable: false }).addTo(map);
 
-map.fitBounds(L.latLngBounds([origCoord, destCoord]), {
-    padding: [200, 200]
-});
+if(fromApp) {
+    map.fitBounds(L.latLngBounds([origCoord, destCoord]));
+} else {
+    map.fitBounds(L.latLngBounds([origCoord, destCoord]), {
+        padding: [200, 200]
+    });
+}
 
 async function updateRoute() {
     if (currentPolyline) {
@@ -143,7 +169,11 @@ function updateSidebar(isFr24Active) {
     const time = secondsToDhm(durationRaw, "{{langId}}");
 
     let content = `<h4>${origLabel} to ${destLabel}</h4>`;
-    content += `<p><i>${km} km, ${time}</i></p>`;
+    var distanceAndTimeText = `<p><i>${km} km, ${time}</i></p>`;
+    content += distanceAndTimeText;
+
+    flutterBridge.routeInfo(distanceAndTimeText, kmRaw, durationRaw);
+    flutterBridge.loading(false);
 
     if (newTrip.fr24_id) {
         content += `<p><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></p>`;
@@ -167,6 +197,7 @@ destMarker.on('dragend', () => {
 });
 
 function showLoadingSidebar(message = "Loading flight path...") {
+    flutterBridge.loading(true);
     sidebar.setContent(`
         <h4>${message}</h4>
         <div class="spinner-container">
@@ -180,6 +211,7 @@ function showLoadingSidebar(message = "Loading flight path...") {
 
 
 async function saveTrip() {
+    flutterBridge.loading(true);
     sidebar.setContent('<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>');
 
     let pathToSave;
@@ -204,10 +236,23 @@ async function saveTrip() {
         url: '{{url_for("saveFlight", username=username, type=type)}}',
         data: {
             newTrip: JSON.stringify(newTrip),
-            jsonPath: JSON.stringify(pathToSave)
+            jsonPath: JSON.stringify(pathToSave),
+            fromApp: fromApp
         },
-        success: () => location.href = "{{ url_for('landing') }}",
-        error: () => sidebar.setContent("<h4>{{saveError}}</h4><p>{{saveErrorDetails}}</p><p><button onclick='location.reload()'>{{retry}}</button></p>")
+        success: function (res) {
+            if (fromApp) {
+                flutterBridge.loading(false);
+                flutterBridge.saveTripDone(true, res);
+                return;
+            }
+
+            location.href = "{{ url_for('landing') }}";
+        },
+        error: function (xhr, status, error) {
+            flutterBridge.loading(false);
+            flutterBridge.saveError(error || 'Save failed');
+            sidebar.setContent("<h4>{{saveError}}</h4><p>{{saveErrorDetails}}</p><p><button onclick='location.reload()'>{{retry}}</button></p>")
+        }
     });
 }
 

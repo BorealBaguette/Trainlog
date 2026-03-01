@@ -6,6 +6,15 @@ const startIconUrl = window.colorblindMode
 const endIconUrl = window.colorblindMode
     ? '/static/images/icons/marker-icon-2x-orange.png'
     : '/static/images/icons/marker-icon-2x-red.png';
+// routing.js — safe fallback if not defined by the page
+window.flutterBridge = window.flutterBridge || {
+  _send()      {},
+  loading()    {},
+  routeInfo()  {},
+  routingError(){},
+  saveTripDone(){},
+  saveError()  {},
+};
 
 var markerIconStart = L.icon({
     iconUrl: startIconUrl,
@@ -247,7 +256,7 @@ window.removeWaypoint = function(index) {
 };
 
 function routing(map, showSidebar=true, type){
-
+  flutterBridge.loading(true);
   sidebar = L.control.sidebar('sidebar', {
       closeButton: true,
       position: 'right',
@@ -425,11 +434,17 @@ function routing(map, showSidebar=true, type){
         content += `<p><small>${texts.fineTuneNote}</small></p>`;
       }
       
-      var km = mToKm(this._selectedRoute.summary.totalDistance);
-      var m = Math.floor(this._selectedRoute.summary.totalDistance);
-      var time = secondsToDhm(this._selectedRoute.summary.totalTime, "en");
+      var distanceM = this._selectedRoute.summary.totalDistance;
+      var durationS = this._selectedRoute.summary.totalTime;
+      var km = mToKm(distanceM);
+      var m = Math.floor(distanceM);
+      var time = secondsToDhm(durationS, "en");     
       
-      content += `<p><i>${texts.distanceTime.replace("{km}", km).replace("{time}", time)}</i></p>`;
+      var formattedData = `${texts.distanceTime.replace("{km}", km).replace("{time}", time)}`;
+      content += `<p><i>${formattedData}</i></p>`;
+
+      flutterBridge.routeInfo(formattedData, distanceM, durationS);
+      flutterBridge.loading(false);
     
       if(geojson){
         content += `<p><button id="downloadGeoJSON" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></p>`;
@@ -477,6 +492,8 @@ function routing(map, showSidebar=true, type){
             </label>
           </div>
         ` + errorContent;
+        flutterBridge.routingError('Routing failed');
+        flutterBridge.loading(false);
       }
       
       sidebar.setContent(errorContentWithToggle);

@@ -28,6 +28,24 @@
     .compo-container::-webkit-scrollbar-thumb { background: #4a4a6a; border-radius: 5px; border: 2px solid #121220; }
     .compo-container::-webkit-scrollbar-thumb:hover { background: #6a6a8a; }
 
+    /* Inline (child row) trainset scroll wrapper */
+    .trainset-inline-scroll { display: block; overflow-x: auto; overflow-y: hidden; margin-top: 4px; padding-bottom: 16px; }
+    .trainset-inline-scroll .compo-strip { min-width: unset; }
+    /* Wagon labels on light background */
+    .ts-nom-inline { color: #444 !important; background: rgba(0,0,0,0.07) !important; }
+    /* Inline trainset: label + scroller side by side */
+    .ts-inline-wrapper { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
+    .ts-inline-wrapper .trainset-inline-scroll { margin-top: 0; }
+    .ts-inline-label { flex: 0 0 auto; max-width: 120px; font-size: 0.82em; line-height: 1.4; color: #555; }
+    .ts-inline-personal { display: block; font-style: italic; }
+    .ts-inline-saved { display: block; font-weight: 600; }
+    /* Small screens: names above, strip below spanning full width */
+    @media (max-width: 767px) {
+        .ts-inline-wrapper { flex-direction: column; align-items: flex-start; gap: 4px; }
+        .ts-inline-label { max-width: none; }
+        .ts-inline-wrapper .trainset-inline-scroll { max-width: calc(100vw - 24px) !important; }
+    }
+
     /* 2. The Train Strip (The long content) */
     .compo-strip {
         display: inline-flex;   /* Aligns wagons in a row */
@@ -436,6 +454,41 @@ function _renderTrainset($modalBody, units, setName) {
 }
 
 
+function _renderTrainsetInline(rowId, units, labels) {
+    var $container = $('#trainsetInline' + rowId);
+    if (!$container.length) return;
+    var wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
+    var strip = $('<div class="compo-strip ts-strip"></div>');
+    (units || []).forEach(function(u) {
+        if (!u.image) return;
+        var side = u._side || 'L';
+        var itype = u.image_type;
+        var src;
+        if (itype === 'sides') src = wagonsBase + '/' + u.image + (side === 'R' ? '_R' : '_L') + '.gif';
+        else                   src = wagonsBase + '/' + u.image + '.gif';
+        var wagon = $('<div class="compo-wagon ts-unit"></div>');
+        wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
+        wagon.append(`<img src="${src}" onerror="this.style.display='none';" title="${u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
+        wagon.append(`<span class="compo-coach-no ts-nom ts-nom-inline">${u.nom || ''}</span>`);
+        strip.append(wagon);
+    });
+    if (!strip.children().length) { $container.remove(); return; }
+    var tableW = $('#dataTable').width() || $(window).width();
+    labels = labels || {};
+    var labelHtml = '';
+    if (labels.personal) labelHtml += `<span class="ts-inline-personal">${labels.personal}</span>`;
+    if (labels.saved && labels.saved !== labels.personal) labelHtml += `<span class="ts-inline-saved">${labels.saved}</span>`;
+    if (labelHtml) {
+        var $label = $('<div class="ts-inline-label"></div>').html(labelHtml);
+        var $scroller = $('<div class="trainset-inline-scroll"></div>')
+            .css('max-width', (tableW - 160 - 130) + 'px').append(strip);
+        $container.addClass('ts-inline-wrapper').append($label).append($scroller);
+    } else {
+        $container.addClass('trainset-inline-scroll').css('max-width', (tableW - 160) + 'px').append(strip);
+    }
+    $container.find('[data-toggle="tooltip"]').tooltip();
+}
+
 function toggleTypeFilter() {
     const switchState = document.getElementById('filterTypeSwitch').checked;
     setCookie('filterTypeSwitch', switchState, 7);
@@ -597,6 +650,43 @@ function processHiddenData(rowIdx, columns){
                 col.data = `<span id=airframe${rowIdx} >${full_name}</span>`
             }
         }
+        if (col.title == "{{material_type}}" && isTrain) {
+            var rowData = tableObject.row(rowIdx).data();
+            var rawAdv = rowData.material_type_advanced || '';
+            var rawMat = rowData.material_type || '';
+            var primary = rawAdv || rawMat;
+            if (primary) {
+                var isValid = _isValidMaterial(primary);
+                var formatted;
+                if (isValid) {
+                    formatted = '';
+                } else {
+                    // No images — show full text fallback
+                    formatted = rawAdv && rawMat ? rawMat + ' <span style="color:#888;font-size:.9em">' + _formatTrainsetStr(rawAdv) + '</span>'
+                                                 : _formatTrainsetStr(primary);
+                }
+                if (isValid) {
+                    formatted += `<div id="trainsetInline${rowIdx}"></div>`;
+                    (function(rowId, mat, personal) {
+                        setTimeout(function() {
+                            var labels = {};
+                            if (personal) labels.personal = personal;
+                            try {
+                                var units = JSON.parse(mat);
+                                if (Array.isArray(units)) { _renderTrainsetInline(rowId, units, labels); return; }
+                            } catch(e) {}
+                            $.getJSON('/api/trainsets/by-name', { name: mat })
+                                .done(function(ts) {
+                                    if (ts.name && ts.name !== labels.personal) labels.saved = ts.name;
+                                    _renderTrainsetInline(rowId, ts.units, labels);
+                                })
+                                .fail(function() { $('#trainsetInline' + rowId).remove(); });
+                        }, 0);
+                    })(rowIdx, primary, rawMat !== primary ? rawMat : null);
+                }
+                col.data = formatted;
+            }
+        }
         if (col.title != ""){
             return (col.hidden || ([1,2].includes(col.columnIndex) && ellipsedStation)) && col.data != ""?
             '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'">'+
@@ -656,13 +746,35 @@ function renderDuration(data, type, row) {
     return data;
 }
 
+function renderDelayBadge(delaySecs) {
+    if (delaySecs === null || delaySecs === undefined || delaySecs === '') return '';
+    const minutes = Math.round(delaySecs / 60);
+    const sign = minutes > 0 ? '+' : '';
+    const cls = minutes > 0 ? 'delay-late' : minutes < 0 ? 'delay-early' : 'delay-ontime';
+    return ` <span class="delay-badge ${cls}">${sign}${minutes}'</span>`;
+}
+
+function renderStartTime(data, type, row) {
+    if (type === 'display') {
+        return data + renderDelayBadge(row.departure_delay);
+    }
+    return data;
+}
+
+function renderEndTime(data, type, row) {
+    if (type === 'display') {
+        return data + renderDelayBadge(row.arrival_delay);
+    }
+    return data;
+}
+
 function renderLineName(data, type, row) {
-    if (type === 'display' && data) {
+    if (type === 'display') {
         // Only show for trains
         if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
-            var mat      = row.material_type || '';
+            var mat      = row.material_type_advanced || row.material_type || '';
             var dateStr  = row.start_date || '';
-            var safeName = data.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            var safeName = (data || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
             var safeMat  = mat.replace(/'/g, "\\'").replace(/"/g, '&quot;');
             var btn = _isValidMaterial(mat) ? `
                     <a href="javascript:void(0);"
@@ -671,7 +783,7 @@ function renderLineName(data, type, row) {
                        title="View Composition">
                        <i class="fas fa-train"></i>
                     </a>` : '';
-            return `<span>${data}${btn}</span>`;
+            if (data || btn) return `<span>${data || ''}${btn}</span>`;
         }
     }
     return data;
@@ -808,8 +920,35 @@ function renderPrices(data, type, row) {
         return `${formattedTicketInfo ? formattedTicketInfo.prop('outerHTML') : ''} ${formattedPrice ? formattedPrice.prop('outerHTML') : ''}`;
     }
 
+function _formatTrainsetStr(mat) {
+    try {
+        var units = JSON.parse(mat);
+        if (Array.isArray(units) && units.length > 0) {
+            var result = [], i = 0;
+            while (i < units.length) {
+                var name = units[i].nom || units[i].name || '?';
+                var count = 1;
+                while (i + count < units.length && (units[i + count].nom || units[i + count].name || '?') === name) count++;
+                result.push(count > 1 ? count + '\xd7 ' + name : name);
+                i += count;
+            }
+            return result.join(' + ');
+        }
+    } catch(e) {}
+    return mat;
+}
+
 function renderMaterialType(data, type, row){
-    return row.model ? `[[${row.material_type}]] ${row.manufacturer} ${row.model}` : row.material_type
+    if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
+        var adv = row.material_type_advanced || '';
+        var mat = row.material_type || '';
+        if (adv && mat) return mat + ' <span style="color:#888;font-size:.9em">' + _formatTrainsetStr(adv) + '</span>';
+        if (adv) return _formatTrainsetStr(adv);
+        return mat;
+    }
+    if (!row.material_type) return '';
+    if (row.model) return `[[${row.material_type}]] ${row.manufacturer} ${row.model}`;
+    return row.material_type;
 }
 
 
@@ -910,8 +1049,8 @@ var table = $('#tripRows');
         { data: 'origin_station', render: renderStation },
         { data: 'destination_station', render: renderStation },
         { data: 'start_date' },
-        { data: 'start_time' },
-        { data: 'end_time' },
+        { data: 'start_time', render: renderStartTime },
+        { data: 'end_time', render: renderEndTime },
         { data: 'trip_duration', render: renderDuration },
         { data: 'trip_length', render: renderLength },
         {

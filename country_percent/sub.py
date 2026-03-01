@@ -1,4 +1,5 @@
 import json
+import sys
 
 import geopandas as gpd
 import osm2geojson
@@ -57,10 +58,10 @@ def clip_to_state(train_lines_gdf, state_boundary_geojson):
 
 def process(country_code):
     train_lines_gdf = gpd.read_file(
-        f"country_percent/countries/processed/{country_code.lower()}.geojson"
+        f"countries/processed/{country_code.lower()}.geojson"
     )
     for subdivision in get_subdivisions(country_code):
-        sub_path = f"country_percent/countries/processed/{subdivision}.geojson"
+        sub_path = f"countries/processed/{subdivision}.geojson"
         print(f"Process subdivision {subdivision}")
         subdivision_boundary = get_subdivision_boundary(subdivision)
         clipped_lines = clip_to_state(train_lines_gdf, subdivision_boundary)
@@ -79,4 +80,4 @@ def process(country_code):
                 print(f"Saved final file {subdivision}.geojson")
 
 
-process("DE")
+process(sys.argv[1])

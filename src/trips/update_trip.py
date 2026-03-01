@@ -48,6 +48,7 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
                 "last_modified": trip.last_modified,
                 "trip_type": trip.type,
                 "material_type": trip.material_type,
+                "material_type_advanced": trip.material_type_advanced,
                 "seat": trip.seat,
                 "reg": trip.reg,
                 "waypoints": trip.waypoints,
@@ -58,6 +59,8 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
                 "purchase_date": trip.purchasing_date,
                 "carbon": trip.carbon,
                 "visibility": trip.visibility if trip.visibility != "" else None,
+                "departure_delay": trip.departure_delay,
+                "arrival_delay": trip.arrival_delay,
             },
         )
 
@@ -130,6 +133,7 @@ def _update_trip_in_sqlite(
         "operator": formData["operator"],
         "line_name": formData["lineName"],
         "material_type": formData["material_type"],
+        "material_type_advanced": formData.get("material_type_advanced"),
         "reg": formData["reg"],
         "seat": formData["seat"],
         "notes": formData["notes"],
@@ -139,6 +143,8 @@ def _update_trip_in_sqlite(
         "ticket_id": formData.get("ticket_id"),
         "purchasing_date": formData.get("purchasing_date") if formData["price"] != "" else None,
         "visibility": visibility if visibility != "" else None,
+        "departure_delay": formData.get("departure_delay") or None,
+        "arrival_delay": formData.get("arrival_delay") or None,
     }
 
     if updateCreated:

@@ -31,24 +31,26 @@ function formatDT(iso) {
   };
 }
 
+function daysDifference(d0, d1) {
+  let diff = new Date(d1).setHours(12) - new Date(d0).setHours(12);
+  return Math.round(diff/8.64e7);
+}
+
 function getPopupContent(tripObj) {
   const trip        = tripObj.trip || {};
   const username    = tripObj.username || "-";
   const origin      = trip.origin_station || "-";
   const destination = trip.destination_station || "-";
   const { date: startDate, time: startTime } = formatDT(trip.start_datetime);
-  const { time: endTime } = formatDT(trip.end_datetime);
+  const { date: endDate, time: endTime } = formatDT(trip.end_datetime);
+  const days_diff = daysDifference(trip.start_datetime, trip.end_datetime);
+  const days_diff_string = days_diff > 0 ? ` (+${days_diff})` : '';
   const profile_url = `/public/${username}`;
   const lineName    = trip.line_name;
 
   const lineNameHTML = lineName
     ? `<div><strong>Line:</strong>${lineName}</div>`
     : '';
-
-// Operator content (logos or plain text)
-console.log('trip.multi_operators:', trip.multi_operators);
-console.log('trip.logo_url:', trip.logo_url);
-console.log('trip.operator:', trip.operator);
 
 let operatorContents = [];
 
@@ -124,7 +126,7 @@ let infoHTML = `
       <div><strong>From:</strong> ${origin}</div>
       <div><strong>To:</strong> ${destination}</div>
       <div><strong>Date:</strong> ${startDate}</div>
-      <div><strong>Time:</strong> ${startTime} – ${endTime}</div>
+      <div><strong>Time:</strong> ${startTime} – ${endTime}${days_diff_string}</div>
       ${trip.line_name ? `<div><strong>Line:</strong> ${trip.line_name}</div>` : ''}
     </div>
   </div>

@@ -64,7 +64,8 @@ FilteredTrips AS (
           remove_diacritics(LOWER(Subquery.type)) LIKE remove_diacritics(LOWER(:search)) OR
           remove_diacritics(LOWER(Subquery.notes)) LIKE remove_diacritics(LOWER(:search)) OR
           remove_diacritics(LOWER(Subquery.reg)) LIKE remove_diacritics(LOWER(:search)) OR
-          remove_diacritics(LOWER(material_type)) LIKE remove_diacritics(LOWER(:search)) OR 
+          remove_diacritics(LOWER(material_type)) LIKE remove_diacritics(LOWER(:search)) OR
+          remove_diacritics(LOWER(COALESCE(material_type_advanced, ''))) LIKE remove_diacritics(LOWER(:search)) OR
           remove_diacritics(LOWER(airliners.iata)) LIKE remove_diacritics(LOWER(:search)) OR 
           remove_diacritics(LOWER(airliners.manufacturer)) LIKE remove_diacritics(LOWER(:search)) OR 
           remove_diacritics(LOWER(airliners.model)) LIKE remove_diacritics(LOWER(:search)) OR 

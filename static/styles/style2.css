@@ -272,6 +272,17 @@ td .operatorLogo{
   white-space: nowrap;
 }
 
+.delay-badge {
+  font-size: 0.75em;
+  font-weight: 600;
+  padding: 1px 4px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+.delay-badge.delay-late  { color: #c0392b; }
+.delay-badge.delay-early { color: #27ae60; }
+.delay-badge.delay-ontime{ color: #7f8c8d; }
+
 #tripRows td div.duration.est:before{
   content:"\A";
   width:5px;

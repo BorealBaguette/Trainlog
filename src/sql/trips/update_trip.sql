@@ -16,6 +16,7 @@ UPDATE trips SET
     last_modified = :last_modified,
     trip_type = :trip_type,
     material_type = :material_type,
+    material_type_advanced = :material_type_advanced,
     seat = :seat,
     reg = :reg,
     waypoints = :waypoints,
@@ -25,5 +26,7 @@ UPDATE trips SET
     ticket_id = :ticket_id,
     purchase_date = :purchase_date,
     carbon = :carbon,
-    visibility = :visibility
+    visibility = :visibility,
+    departure_delay = :departure_delay,
+    arrival_delay = :arrival_delay
 WHERE trip_id = :trip_id

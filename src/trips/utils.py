@@ -107,6 +107,8 @@ def compare_trip(trip_id: int):
         sqlite_trip["trip_type"] = sqlite_trip["type"]
         if sqlite_trip["material_type"] == "":
             sqlite_trip["material_type"] = None
+        if sqlite_trip.get("material_type_advanced") == "":
+            sqlite_trip["material_type_advanced"] = None
         if sqlite_trip["seat"] == "":
             sqlite_trip["seat"] = None
         if sqlite_trip["reg"] == "":
@@ -142,6 +144,7 @@ def compare_trip(trip_id: int):
         ensure_values_equal(sqlite_trip, pg_trip, "last_modified")
         ensure_values_equal(sqlite_trip, pg_trip, "trip_type")
         ensure_values_equal(sqlite_trip, pg_trip, "material_type")
+        ensure_values_equal(sqlite_trip, pg_trip, "material_type_advanced")
         ensure_values_equal(sqlite_trip, pg_trip, "seat")
         ensure_values_equal(sqlite_trip, pg_trip, "reg")
         ensure_values_equal(sqlite_trip, pg_trip, "waypoints")
@@ -150,6 +153,8 @@ def compare_trip(trip_id: int):
         ensure_values_equal(sqlite_trip, pg_trip, "currency")
         ensure_values_equal(sqlite_trip, pg_trip, "ticket_id")
         ensure_values_equal(sqlite_trip, pg_trip, "purchase_date")
+        ensure_values_equal(sqlite_trip, pg_trip, "departure_delay")
+        ensure_values_equal(sqlite_trip, pg_trip, "arrival_delay")
     except Exception as e:
         logger.exception(e)
         trace = traceback.format_exc().replace("\n", "<br>")

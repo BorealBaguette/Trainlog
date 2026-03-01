@@ -31,6 +31,7 @@
                   <a class="dropdown-item" href="{{ url_for('stations') }}"><i class="fa-solid fa-globe"></i> Stations</a>
                   <a class="dropdown-item" href="{{ url_for('editCountriesList') }}"><i class="bi bi-flag"></i> Coverage edit</a>
                   <a class="dropdown-item" href="{{ url_for('show_operators') }}"><i class="bi bi-images"></i> Operators</a>
+                  <a class="dropdown-item" href="{{ url_for('admin.wagons_admin') }}"><i class="fa-solid fa-trailer"></i> Wagons</a>
                   <a class="dropdown-item" href="{{ url_for('airliners') }}"><i class="bi bi-airplane"></i></i> Airliners</a>
               </div>
           </li>
@@ -183,7 +184,7 @@
           <a class="dropdown-item" href="{{ url_for('user_bounds', username=username) }}"><i class="fa-solid fa-arrows-to-circle"></i> {{ travel_bounds_header }}</a>
           <a class="dropdown-item" href="{{ url_for('friends', username=username) }}"><i class="bi bi-people"></i>{{friendsIcon | safe}} {{friends}}</a>
           {% if is_alpha %}
-          <div class="dropdown-divider"></div>
+          <a class="dropdown-item" href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i>{{tsBuilderTitle}}</a>
           <!-- Automated Routers Section -->
           <h6 class="dropdown-header">{{automatedRouters}}</h6>
             <a class="dropdown-item" href="{{ url_for('new_auto', username=username, type='here') }}"><i class="fa-solid fa-caret-down"></i> Autorouting (Here)α</a>

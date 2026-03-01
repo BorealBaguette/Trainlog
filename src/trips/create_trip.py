@@ -40,6 +40,7 @@ def create_trip(trip: Trip, pg_session=None):
                 "last_modified": trip.last_modified,
                 "trip_type": trip.type,
                 "material_type": trip.material_type,
+                "material_type_advanced": trip.material_type_advanced,
                 "seat": trip.seat,
                 "reg": trip.reg,
                 "waypoints": trip.waypoints,
@@ -50,6 +51,8 @@ def create_trip(trip: Trip, pg_session=None):
                 "purchase_date": trip.purchasing_date,
                 "carbon": trip.carbon,
                 "visibility": trip.visibility,
+                "departure_delay": trip.departure_delay,
+                "arrival_delay": trip.arrival_delay,
             },
         )
 
@@ -80,6 +83,7 @@ def _create_trip_in_sqlite(trip: Trip):
                         'line_name',
                         'type',
                         'material_type',
+                        'material_type_advanced',
                         'seat',
                         'reg',
                         'waypoints',
@@ -88,9 +92,11 @@ def _create_trip_in_sqlite(trip: Trip):
                         'currency',
                         'purchasing_date',
                         'ticket_id',
-                        'visibility')
+                        'visibility',
+                        'departure_delay',
+                        'arrival_delay')
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING uid; \
+                            ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING uid; \
                     """
     if trip.start_datetime is None:
         start_datetime = 1 if trip.is_project else -1
@@ -125,6 +131,7 @@ def _create_trip_in_sqlite(trip: Trip):
                     trip.line_name,
                     trip.type,
                     trip.material_type,
+                    trip.material_type_advanced,
                     trip.seat,
                     trip.reg,
                     trip.waypoints,
@@ -134,6 +141,8 @@ def _create_trip_in_sqlite(trip: Trip):
                     trip.purchasing_date,
                     trip.ticket_id,
                     trip.visibility,
+                    trip.departure_delay,
+                    trip.arrival_delay,
                 ),
             )
             # Retrieve the trip_id directly from the INSERT statement
