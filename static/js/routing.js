@@ -1,3 +1,11 @@
+// Determine which marker icons to use
+const startIconUrl = window.colorblindMode
+    ? '/static/images/icons/marker-icon-2x-purple.png'
+    : '/static/images/icons/marker-icon-2x-green.png';
+
+const endIconUrl = window.colorblindMode
+    ? '/static/images/icons/marker-icon-2x-orange.png'
+    : '/static/images/icons/marker-icon-2x-red.png';
 // routing.js — safe fallback if not defined by the page
 window.flutterBridge = window.flutterBridge || {
   _send()      {},
@@ -9,21 +17,21 @@ window.flutterBridge = window.flutterBridge || {
 };
 
 var markerIconStart = L.icon({
-	iconUrl: '/static/images/icons/marker-icon-2x-green.png',
-	iconRetinaUrl: '/static/images/icons/marker-icon-2x-green.png',
-	iconSize:    [25, 41],
-	iconAnchor:  [12, 41],
-	popupAnchor: [1, -34],
-	tooltipAnchor: [16, -28],
+    iconUrl: startIconUrl,
+    iconRetinaUrl: startIconUrl,
+    iconSize:    [25, 41],
+    iconAnchor:  [12, 41],
+    popupAnchor: [1, -34],
+    tooltipAnchor: [16, -28],
 });
 
 var markerIconEnd = L.icon({
-	iconUrl: '/static/images/icons/marker-icon-2x-red.png',
-	iconRetinaUrl: '/static/images/icons/marker-icon-2x-red.png',
-	iconSize:    [25, 41],
-	iconAnchor:  [12, 41],
-	popupAnchor: [1, -34],
-	tooltipAnchor: [16, -28],
+    iconUrl: endIconUrl,
+    iconRetinaUrl: endIconUrl,
+    iconSize:    [25, 41],
+    iconAnchor:  [12, 41],
+    popupAnchor: [1, -34],
+    tooltipAnchor: [16, -28],
 });
 
 var urlParams = new URLSearchParams(window.location.search);

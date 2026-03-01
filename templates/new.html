@@ -102,7 +102,6 @@
         <label for="notes" class="sr-only">{{notes}}</label>
         <input type="text" name="notes" id="notes" placeholder="{{notes}}">
 
-        {% if is_alpha %}
         <fieldset class="fieldset-time non_poi">
           <legend><span class="legend">{{delays}}</span></legend>
           <label class="sr-only" for="departureDelayMinutes">{{departureDelay}}</label>
@@ -110,7 +109,6 @@
           <label class="sr-only" for="arrivalDelayMinutes">{{arrivalDelay}}</label>
           <input type="number" step="1" id="arrivalDelayMinutes" name="arrivalDelayMinutes" placeholder="{{arrival}}"/>
         </fieldset>
-        {% endif %}
 
         <!-- Price Details Subgroup -->
         <fieldset class="fieldset-fixed fieldset-price">

@@ -1095,7 +1095,7 @@ function showTripPopup(e) {
         .setHTML(popupContent)
         .addTo(map);
 }
-
+const colorblindMode = {{ 'true' if colorblind else 'false' }};
 // Create custom markers
 function createCustomMarker(coordinates, type, popupText) {
     const el = document.createElement('div');
@@ -1105,17 +1105,26 @@ function createCustomMarker(coordinates, type, popupText) {
     let anchorY = 41; // Default anchor for bottom-pointed markers
     switch(type) {
         case 'green':
-            el.style.backgroundImage = "url('{{ url_for('static',filename='images/icons/marker-icon-2x-green.png') }}')";
+            el.style.backgroundImage = window.colorblindMode === 'true'
+                ? "url('{{ url_for('static',filename='images/icons/marker-icon-2x-purple.png') }}')"
+                : "url('{{ url_for('static',filename='images/icons/marker-icon-2x-green.png') }}')";
             el.style.width = '25px';
             el.style.height = '41px';
             break;
+
         case 'red':
-            el.style.backgroundImage = "url('{{ url_for('static',filename='images/icons/marker-icon-2x-red.png') }}')";
+            el.style.backgroundImage = window.colorblindMode === 'true'
+                ? "url('{{ url_for('static',filename='images/icons/marker-icon-2x-orange.png') }}')"
+                : "url('{{ url_for('static',filename='images/icons/marker-icon-2x-red.png') }}')";
             el.style.width = '25px';
             el.style.height = '41px';
             break;
+
         case 'red-green':
-            el.style.backgroundImage = "url('{{ url_for('static',filename='images/icons/marker-icon-2x-redGreen.png') }}')";
+            // Example: keep as-is or optionally create a colorblind-friendly variant
+            el.style.backgroundImage = window.colorblindMode === 'true'
+                ? "url('{{ url_for('static',filename='images/icons/marker-icon-2x-purpleOrange.png') }}')"
+                : "url('{{ url_for('static',filename='images/icons/marker-icon-2x-redGreen.png') }}')";
             el.style.width = '46px';
             el.style.height = '41px';
             break;
