@@ -185,6 +185,7 @@ def init_main(path):
         ("last_modified", "DATETIME"),
         ("type", "VARCHAR(100) DEFAULT 'train'"),
         ("material_type", "VARCHAR(100)"),
+        ("material_type_advanced", "TEXT"),
         ("seat", "VARCHAR(100)"),
         ("reg", "TEXT"),
         ("waypoints", "TEXT"),
@@ -194,6 +195,8 @@ def init_main(path):
         ("currency", "TEXT"),
         ("purchasing_date", "DATETIME"),
         ("visibility", "TEXT"),
+        ("departure_delay", "INTEGER"),
+        ("arrival_delay", "INTEGER"),
     ]
     manual_stations_columns = [
         ("uid", "INTEGER NOT NULL UNIQUE"),

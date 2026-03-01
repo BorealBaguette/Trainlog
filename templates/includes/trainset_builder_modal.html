@@ -55,6 +55,23 @@
   /* ── open ── */
   window.openTsbModal = function () {
     _units = [];
+    var val = document.getElementById('material_type_advanced').value;
+    try {
+      var saved = JSON.parse(val);
+      if (Array.isArray(saved)) {
+        saved.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
+      }
+    } catch(e) {
+      // val might be a trainset name — fetch its units from the API
+      if (val) {
+        fetch('/api/trainsets/resolve?value=' + encodeURIComponent(val))
+          .then(function(r) { return r.json(); })
+          .then(function(units) {
+            units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
+            _render();
+          });
+      }
+    }
     document.getElementById('tsb-q').value = '';
     document.getElementById('tsb-results').innerHTML = '';
     document.getElementById('tsb-save-row').classList.add('d-none');
@@ -127,8 +144,6 @@
 
         btn.onclick = function () {
           _addUnit(w);
-          el.innerHTML = '';
-          document.getElementById('tsb-q').value = '';
         };
         el.appendChild(btn);
       });
@@ -216,7 +231,7 @@
     var json = JSON.stringify(_units.map(function (u) {
       return { name: u.name, image: u.image, nom: u.nom, _side: u._side, image_type: u.image_type };
     }));
-    document.getElementById('material_type').value = json;
+    document.getElementById('material_type_advanced').value = json;
     $('#tsbModal').modal('hide');
   };
 
@@ -236,7 +251,7 @@
       contentType: 'application/json',
       data: JSON.stringify({ name: name, units: units }),
       success: function (data) {
-        document.getElementById('material_type').value = data.name;
+        document.getElementById('material_type_advanced').value = data.name;
         $('#tsbModal').modal('hide');
       },
       error: function (xhr) {

@@ -18,6 +18,7 @@ INSERT INTO trips (
     last_modified,
     trip_type,
     material_type,
+    material_type_advanced,
     seat,
     reg,
     waypoints,
@@ -27,7 +28,9 @@ INSERT INTO trips (
     ticket_id,
     purchase_date,
     carbon,
-    visibility
+    visibility,
+    departure_delay,
+    arrival_delay
 )
 VALUES (
     :trip_id,
@@ -49,6 +52,7 @@ VALUES (
     :last_modified,
     :trip_type,
     :material_type,
+    :material_type_advanced,
     :seat,
     :reg,
     :waypoints,
@@ -58,6 +62,8 @@ VALUES (
     :ticket_id,
     :purchase_date,
     :carbon,
-    :visibility
+    :visibility,
+    :departure_delay,
+    :arrival_delay
 )
 RETURNING trip_id

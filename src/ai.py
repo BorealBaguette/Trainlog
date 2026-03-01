@@ -561,7 +561,7 @@ def create_trip_from_parsed(user, parsed_trip, purchase_date=None, source="ai"):
         operator=parsed_trip.get("operator"), line_name=parsed_trip.get("line_name"), created=now, last_modified=now,
         type=trip_type, price=parsed_trip.get("price"), currency=parsed_trip.get("currency"), purchasing_date=purchase_date,
         ticket_id=None, is_project=False, path=path, countries=countries, seat=parsed_trip.get("seat"),
-        material_type=material_type, reg=None, waypoints=None, notes=build_notes(parsed_trip, user.lang, source), visibility=get_default_trip_visibility(trip_type)
+        material_type=material_type, material_type_advanced=None, reg=None, waypoints=None, notes=build_notes(parsed_trip, user.lang, source), visibility=get_default_trip_visibility(trip_type)
     )
     
     create_trip(trip)

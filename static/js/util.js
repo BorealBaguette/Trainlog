@@ -359,6 +359,17 @@ function processFormDates(form){
   form["newTripEnd"] = form["newTripEndDate"] + "T" + form["newTripEndTime"];
   form["newTripStart"] = form["newTripStartDate"] + "T" + form["newTripStartTime"];
 
+  if (isNumber(form["departureDelayMinutes"]) && form["departureDelayMinutes"] !== "") {
+    form["departure_delay"] = Number(form["departureDelayMinutes"]) * 60;
+  } else {
+    form["departure_delay"] = "";
+  }
+  if (isNumber(form["arrivalDelayMinutes"]) && form["arrivalDelayMinutes"] !== "") {
+    form["arrival_delay"] = Number(form["arrivalDelayMinutes"]) * 60;
+  } else {
+    form["arrival_delay"] = "";
+  }
+
   return form
 }
 
