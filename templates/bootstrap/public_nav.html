@@ -1,55 +1,109 @@
-<nav class="navbar navbar-expand-lg navbar-light bg-light">
+{# ===== Dynamic Class Switching ===== #}
+{% set navClass = 'legacy-navbar navbar-expand-lg navbar-light bg-light' if legacyMenu else 'navbar navbar-expand-lg navbar-light bg-light' %}
+{% set navCollapseClass = 'collapse legacy-navbar-collapse' if legacyMenu else 'collapse navbar-collapse' %}
+{% set navUlClass = 'legacy-navbar-nav mr-auto' if legacyMenu else 'navbar-nav mr-auto' %}
+{% set navUlRightClass = 'legacy-navbar-nav ms-auto' if legacyMenu else 'navbar-nav ms-auto' %}
+{% set navLinkClass = 'legacy-nav-link' if legacyMenu else 'nav-link' %}
+{% set dropdownMenuClass = 'legacy-dropdown-menu' if legacyMenu else 'dropdown-menu' %}
+{% set dropdownItemClass = 'legacy-dropdown-item' if legacyMenu else 'dropdown-item' %}
+
+<nav class="{{ navClass }}">
   <div class="container-fluid">
+
     <a class="navbar-brand" href="{{ url_for('login') }}">
-      <img src="{{ url_for('static',filename='images/logo_square.png') }}" width="30" height="30" alt="">
+      <img src="{{ url_for('static',filename='images/logo_square.png') }}"
+           width="30"
+           height="30"
+           alt="">
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
+
+    <button class="navbar-toggler"
+            type="button"
+            data-bs-toggle="collapse"
+            data-bs-target="#navbarNavDropdown"
+            aria-controls="navbarNavDropdown"
+            aria-expanded="false"
+            aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
-    <div class="collapse navbar-collapse" id="navbarNavDropdown">
-      <ul class="navbar-nav mr-auto">
+
+    <div class="{{ navCollapseClass }}" id="navbarNavDropdown">
+
+      <ul class="{{ navUlClass }}">
         <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('public', username=username) }}"><i class="bi bi-map"></i> {{username.title()}}</a>
+          <a class="{{ navLinkClass }}"
+             href="{{ url_for('public', username=username) }}">
+            <i class="bi bi-map"></i> {{username.title()}}
+          </a>
         </li>
+
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" id="navbarDropdownMenuLink" data-bs-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+          <a class="{{ navLinkClass }} dropdown-toggle"
+             href="#"
+             data-bs-toggle="dropdown"
+             aria-expanded="false">
             <i class="bi bi-card-list"></i> {{trips}}
           </a>
-          <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
-            <a class="dropdown-item" href="{{ url_for('public_trips', time='trips', username=username) }}"><i class="bi bi-clock"></i> {{past}}</a>
-            <a class="dropdown-item" href="{{ url_for('public_trips', time='projects', username=username) }}"><i class="bi bi-clock-history"></i> {{Projects}}</a>
+
+          <div class="{{ dropdownMenuClass }}">
+            <a class="{{ dropdownItemClass }}"
+               href="{{ url_for('public_trips', time='trips', username=username) }}">
+              <i class="bi bi-clock"></i> {{past}}
+            </a>
+
+            <a class="{{ dropdownItemClass }}"
+               href="{{ url_for('public_trips', time='projects', username=username) }}">
+              <i class="bi bi-clock-history"></i> {{Projects}}
+            </a>
           </div>
         </li>
+
         <li class="nav-item dropdown">
-        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-          <i class="bi bi-bar-chart-line"></i> {{ stats }}
-        </a>
-        <ul class="dropdown-menu">
+          <a class="{{ navLinkClass }} dropdown-toggle"
+             href="#"
+             data-bs-toggle="dropdown"
+             aria-expanded="false">
+            <i class="bi bi-bar-chart-line"></i> {{ stats }}
+          </a>
+
+          <ul class="{{ dropdownMenuClass }}">
             <li>
-              <a class="dropdown-item" href="{{ url_for('public_stats', username=username, tripType='combined') }}">
-                <i></i> {{ all }}
+              <a class="{{ dropdownItemClass }}"
+                 href="{{ url_for('public_stats', username=username, tripType='combined') }}">
+                {{ all }}
               </a>
             </li>
-          {% for type, data in distinctTypes.items() %}
+
+            {% for type, data in distinctTypes.items() %}
             <li>
-              <a class="dropdown-item" href="{{ url_for('public_stats', username=username, tripType=type) }}">
+              <a class="{{ dropdownItemClass }}"
+                 href="{{ url_for('public_stats', username=username, tripType=type) }}">
                 <i class="{{ data.icon }}"></i> {{ data.label }}
               </a>
             </li>
-          {% endfor %}
-        </ul>
-      </li>
-      </ul>  
-      <ul class="navbar-nav ms-auto">
+            {% endfor %}
+          </ul>
+        </li>
+      </ul>
+
+      <ul class="{{ navUlRightClass }}">
         {% if username == "demo" %}
         <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('signup') }}"><i class="bi bi-person-plus"></i> {{signup}}</a>
-        </li>		
-        {%endif%}
+          <a class="{{ navLinkClass }}"
+             href="{{ url_for('signup') }}">
+            <i class="bi bi-person-plus"></i> {{signup}}
+          </a>
+        </li>
+        {% endif %}
+
         <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('login') }}"><i class="bi bi-power"></i> {{exit}}</a>
-        </li>			
-      </ul>		
+          <a class="{{ navLinkClass }}"
+             href="{{ url_for('login') }}">
+            <i class="bi bi-power"></i> {{exit}}
+          </a>
+        </li>
+      </ul>
+
     </div>
   </div>
 </nav>
@@ -57,18 +111,20 @@
 <script type="text/javascript">
    $(function(){
       var current = location.pathname;
-      $('.navbar li a').each(function(){
+      var navbarSelector = {{ "'\.legacy-navbar'" if legacyMenu else "'\.navbar'" }};
+
+      $(navbarSelector + ' li a').each(function(){
             if($(this).attr('href') == current){
               $(this).addClass('active');
             }
             else if ($(this).hasClass("dropdown-toggle")){
-              $(this).parent().children("div").children("a").each(function(){
+              $(this).parent().children("div, ul").children("a").each(function(){
                 if($(this).attr('href') == current){
                   $(this).addClass('active');
-                  $(this).parent().parent().addClass('active');
+                  $(this).closest('.nav-item').addClass('active');
                 }
               });
             }
-          })
+      });
     });
 </script>

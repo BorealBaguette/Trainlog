@@ -133,6 +133,39 @@
   position: absolute;
 }
 
+.legacy-navbar {
+  z-index: 2000;
+  box-shadow: 0px 1px 5px grey;
+}
+
+.legacy-navbar-nav > li > .legacy-dropdown-menu { 
+  width: 230px; 
+}
+
+.legacy-navbar-collapse {
+  z-index: 1001;
+}
+
+.legacy-navbar-nav .legacy-nav-link {
+  display: flex; 
+  align-items: center; 
+  gap: 0.5rem; 
+  white-space: nowrap; 
+}
+
+.legacy-navbar-nav .legacy-nav-link i {
+  display: inline-block; 
+  line-height: 1; 
+}
+
+/* Optional: Adjust dropdown items similarly if needed */
+.legacy-dropdown-item {
+  display: flex; 
+  align-items: center; 
+  gap: 0.5rem; 
+  white-space: nowrap; 
+}
+
 .incoming-request-number {
   color: red;
   position: relative; 
@@ -140,7 +173,6 @@
   font-size: 80%;
 }
 
-/* Highlight current trip in navbar */
 .tripCurrent {
   display: none;
 }
@@ -148,7 +180,6 @@
 .tripCurrent i {
   animation: blinker 1.5s linear infinite;
 }
-
 
 @keyframes blinker {
   50% {

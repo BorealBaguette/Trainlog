@@ -832,6 +832,7 @@
     "tsbSaveAndUse": "Save & use",
     "tsbNoResults": "No results", 
     "routeTrip" : "Trip Routing", 
-    "sharedLink" : "Shared Trip", 
+    "sharedLink" : "Shared Trip",
+    "legacyMenu" : "Use legacy menu design", 
     "colorblindMode" : "Colourblind Mode"
 }
