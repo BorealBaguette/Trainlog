@@ -40,9 +40,16 @@
       </div>
       <div class="form-check form-switch">
         <input class="form-check-input" type="checkbox" id="appear_on_global" name="appear_on_global" {{
-          appear_on_global_checked }} />
+          appear_on_global_checked}} />
         <label class="form-check-label" for="appear_on_global">
-          {{ appearOnGlobalText|replace("{global_live_map}", url_for('live_map'))|safe }}
+          {{appearOnGlobalText|replace("{global_live_map}", url_for('live_map'))|safe }}
+        </label>
+      </div>
+      <div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="legacyMenu" name="legacyMenu"
+            {{legacyMenu_checked}} />
+        <label class="form-check-label" for="legacyMenu">
+            {{legacyMenu|safe }}
         </label>
       </div>
       <div class="form-check form-switch">

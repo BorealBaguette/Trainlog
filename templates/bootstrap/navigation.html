@@ -1,280 +1,73 @@
 {% set friendsIcon = getFriendsRequestsNumber() %}
-<nav class="navbar navbar-expand-xl navbar-light bg-light">
+
+{# ===== Dynamic Class Switching ===== #}
+{% set navClass = 'legacy-navbar navbar-expand-xl navbar-light bg-light' if legacyMenu else 'navbar navbar-expand-xl navbar-light bg-light' %}
+{% set navCollapseClass = 'collapse legacy-navbar-collapse' if legacyMenu else 'collapse navbar-collapse' %}
+{% set navUlClass = 'legacy-navbar-nav mr-auto' if legacyMenu else 'navbar-nav mr-auto' %}
+{% set navUlRightClass = 'legacy-navbar-nav ms-auto' if legacyMenu else 'navbar-nav ms-auto' %}
+{% set navLinkClass = 'legacy-nav-link' if legacyMenu else 'nav-link' %}
+{% set dropdownMenuClass = 'legacy-dropdown-menu' if legacyMenu else 'dropdown-menu' %}
+{% set dropdownItemClass = 'legacy-dropdown-item' if legacyMenu else 'dropdown-item' %}
+
+<nav class="{{ navClass }}">
   <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('landing') }}">
       <img src="{{ url_for('static',filename='images/logo_square.png') }}" width="30" height="30" alt="">
     </a>
-    <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
+
+    <button class="navbar-toggler" type="button" data-bs-toggle="collapse"
+            data-bs-target="#navbarNavDropdown"
+            aria-controls="navbarNavDropdown"
+            aria-expanded="false"
+            aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
-    <div class="collapse navbar-collapse" id="navbarNavDropdown">
-      <ul class="navbar-nav mr-auto">
-        {% if is_admin %}
-          <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
-                  <i class="bi bi-wrench-adjustable"></i> Admin
-              </a>
-              <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
-                  {% if is_owner %}
-                  <a class="dropdown-item" href="{{ url_for('admin') }}"><i class="bi bi-wrench-adjustable"></i> Users</a>
-                  <a class="dropdown-item" href="https://analytics.maahl.net"><i class="fa-solid fa-chart-line"></i> Analytics</a>
-                  <a class="dropdown-item" href="{{ url_for('admin_user_growth') }}"><i class="fa-solid fa-chart-simple"></i><i class="fa-solid fa-users"></i> User growth </a>
-                  <a class="dropdown-item" href="{{ url_for('admin_trip_growth') }}"><i class="fa-solid fa-chart-simple"></i><i class="fa-solid fa-route"></i> Trip growth </a>
-                  <a class="dropdown-item" href="{{ url_for('admin.suspicious_activity') }}"><i class="fa-solid fa-robot"></i> Suspicious Activity </a>
-                  <a class="dropdown-item" href="{{ url_for('admin.denied_logins') }}"><i class="fa-solid fa-ban"></i> Denied Logins </a>
-                  <a class="dropdown-item" href="{{ url_for('admin_stats') }}"><i class="bi bi-bar-chart-line"></i> Global stats </a>
-                  <a class="dropdown-item" href="{{ url_for('ships') }}"><i class="fa fa-ship"></i> Ships </a>
-                  <a class="dropdown-item" href="{{ url_for('active_users') }}"><i class="fa fa-chart-area"></i> Active Users </a>
-                  <a class="dropdown-item" href="{{ url_for('finance.finances') }}"><i class="fa-solid fa-coins"></i> Finances </a>
-                  {% endif %}
-                  <a class="dropdown-item" href="{{ url_for('adminManual') }}"><i class="bi bi-sign-stop-lights"></i> Manual Stations</a>
-                  <a class="dropdown-item" href="{{ url_for('stations') }}"><i class="fa-solid fa-globe"></i> Stations</a>
-                  <a class="dropdown-item" href="{{ url_for('editCountriesList') }}"><i class="bi bi-flag"></i> Coverage edit</a>
-                  <a class="dropdown-item" href="{{ url_for('show_operators') }}"><i class="bi bi-images"></i> Operators</a>
-                  <a class="dropdown-item" href="{{ url_for('admin.wagons_admin') }}"><i class="fa-solid fa-trailer"></i> Wagons</a>
-                  <a class="dropdown-item" href="{{ url_for('airliners') }}"><i class="bi bi-airplane"></i></i> Airliners</a>
-              </div>
-          </li>
-      {% endif %}
-      {% if is_translator %}
-          <li class="nav-item dropdown">
-              <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
-                  <i class="bi bi-translate"></i> Translator
-              </a>
-              <div class="dropdown-menu" aria-labelledby="translatorDropdown">
-                  {% for lang in available_languages %}
-                      <a class="dropdown-item" href="{{ url_for('edit_translations', langid=lang['id']) }}">
-                          {{ lang['name'] }}
-                      </a>
-                  {% endfor %}
-              </div>
-          </li>
-      {% endif %}
 
+    <div class="{{ navCollapseClass }}" id="navbarNavDropdown">
+
+      <ul class="{{ navUlClass }}">
+
+        {# ===== Example Nav Item (pattern used everywhere) ===== #}
 
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-map"></i> {{ username.title() }}
+          <a class="{{ navLinkClass }} dropdown-toggle"
+             data-bs-toggle="dropdown"
+             href="#"
+             role="button"
+             aria-expanded="false">
+            <i class="bi bi-three-dots"></i> {{tools}}{{friendsIcon | safe}}
           </a>
-          <ul class="dropdown-menu" aria-labelledby="userDropdown">
-            <li>
-              <a class="dropdown-item" href="{{ url_for('user_home', username=username) }}">
-                <i class="bi bi-map"></i> {{map}}
-              </a>
-            </li>            
-            <li>
-              <a class="dropdown-item" href="{{ url_for('user_dashboard', username=username) }}">
-               <i class="bi bi-speedometer2"></i> {{user_dashboard}}
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('new_map', username=username) }}">
-                <i class="bi bi-globe-europe-africa"></i> {{map}} ᵦ
-              </a>
-            </li>
-          </ul>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
-            <i class="bi bi-plus-circle"></i> {{new}}
-          </a>
-          <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='train') }}"><i class="fa-solid fa-train"></i> {{ train }}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='tram') }}"><i class="fa-solid fa-train-tram"></i> {{ tram }}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='metro') }}"><i class="fa-solid fa-train-subway"></i> {{ metro }}</a>
-            <hr class="dropdown-divider">
-            <a class="dropdown-item" href="{{ url_for('new_flight', username=username) }}"><i class="fa-solid fa-plane-up"></i>{{air}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="bus") }}"><i class="fa-solid fa-bus"></i>{{bus}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="ferry") }}"><i class="fa-solid fa-ship"></i> {{ferry}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="helicopter") }}"><i class="fa-solid fa-helicopter"></i> {{helicopter}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="aerialway") }}"><i class="fa-solid fa-cable-car"></i> {{aerialway}}</a>
-            <hr class="dropdown-divider">
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="walk") }}"><i class="fa-solid fa-person-hiking"></i> {{walk}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="cycle") }}"><i class="fa-solid fa-bicycle"></i> {{cycle}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="car") }}"><i class="fa-solid fa-car-side"></i> {{car}}</a>
-            <hr class="dropdown-divider">
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="accommodation") }}"><i class="fa-solid fa-bed"></i> {{accommodation}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="poi") }}"><i class="fa-solid fa-map-location-dot"></i> {{poi}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="restaurant") }}"><i class="fa-solid fa-utensils"></i> {{restaurant}}</a>
-          </div>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
-            <i class="bi bi-card-list"></i> {{trips}}
-          </a>
-          <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
-            <a class="dropdown-item" href="{{ url_for('dynamic_trips', time='trips', username=username) }}"><i class="bi bi-clock"></i> {{past}}</a>
-            <a class="dropdown-item" href="{{ url_for('dynamic_trips', time='projects', username=username) }}"><i class="bi bi-clock-history"></i> {{Projects}}</a>
-          </div>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
-            <i class="bi bi-percent"></i> {{coverage}}
-          </a>
-          <ul class="dropdown-menu scrollable-dropdown countries_menu">
-            <input type="text" class="form-control dropdown-search" placeholder="{{searchRegion}}">
-            {% set continent_names = {
-              "EU": EU,
-              "AF": AF,
-              "AS": AS,
-              "NA": NA,
-              "CA": CA,
-              "SA": SA,
-              "OC": OC
-          } %}
-            {% set continents = get_country_codes_from_files() %}
-            {% set continent_list = continents.keys() | list %}
-            {% for continent, codes in continents.items() %}
-                {% if continent in continent_names %}
-                <h6 class="dropdown-header">{{continent_names[continent]}}</h6>
-                {% else %}
-                <h6 class="dropdown-header"><script>document.write(regionNames.of('{% print(continent).split("_")[1] %}'));</script> ({{subdivisions}})</h6>
-                {% endif %}
-                {% for cc in codes %}
-                    <a class="dropdown-item countryLink" data-country="{{cc}}" href="{{ url_for('pCountries', cc=cc, username=username) }}">
-                        {{ cc }}
-                    </a>
-                {% endfor %}
-                {% if not loop.last %}
-                    <div class="dropdown-divider"></div>
-                {% endif %}
-            {% endfor %}
-            <div class="dropdown-divider"></div>
-            <h6 class="dropdown-header">{{special}}</h6>
-            <a class="dropdown-item countryLink" data-country="UN" href="{{ url_for('visited_squares', username=username) }}">
-                World Squares
+
+          <div class="{{ dropdownMenuClass }}">
+            <a class="{{ dropdownItemClass }}"
+               href="{{ url_for('ai.new_trip_ai', username=username) }}">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              {{smart_logging}} ᵦ
             </a>
-        </ul>
-      </li>
-      <li class="nav-item dropdown">
-        <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
-          <i class="bi bi-three-dots"></i> {{tools}}{{friendsIcon | safe}}
-        </a>
-        <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
-          <a class="dropdown-item" href="{{ url_for('ai.new_trip_ai', username=username) }}"><i class="fa-solid fa-wand-magic-sparkles"></i> {{smart_logging}} ᵦ</a>
-          <hr class="dropdown-divider">
-          <!-- Tickets Section -->
-          <h6 class="dropdown-header">{{nav_tickets}}</h6>
-          <a class="dropdown-item" href="{{ url_for('new_ticket', username=username) }}">
-            <i class="bi bi-ticket-perforated"></i><i class="plus-icon bi bi-plus"></i> <span class="after-plus-icon">{{new_ticket}}</span>
-          </a>
-          <a class="dropdown-item" href="{{ url_for('ticket_list', username=username) }}">
-            <i class="bi bi-ticket-detailed"></i> {{ticket_list}}
-          </a>
-          <div class="dropdown-divider"></div>
-          <!-- Tags Section -->
-          <h6 class="dropdown-header">{{tags}}</h6>
-          <a class="dropdown-item" href="{{ url_for('new_tag', username=username) }}">
-            <i class="bi bi-tag"></i><i class="plus-icon bi bi-plus"></i> <span class="after-plus-icon">{{new_tag_nav}}</span>
-          </a>
-          <a class="dropdown-item" href="{{ url_for('tag_list', username=username) }}">
-            <i class="bi bi-tags"></i> {{tag_list_nav}}
-          </a>
-          <div class="dropdown-divider"></div>
-          <!-- GPX Section -->
-          <h6 class="dropdown-header">GPX</h6>
-          <a class="dropdown-item" href="{{ url_for('upload_gpx', username=username) }}">
-            <i class="bi bi-cloud-upload"></i> {{upload_gpx_files}}
-          </a>
-          <a class="dropdown-item" href="{{ url_for('list_gpx', username=username) }}">
-            <i class="bi bi-list"></i> {{manage_gpx_files}}
-          </a>
-          <div class="dropdown-divider"></div>
-          <a class="dropdown-item" href="{{ url_for('live_map') }}"><i class="fa-solid fa-globe"></i> {{ live_map }}</a>
-          <a class="dropdown-item" href="{{ url_for('user_bounds', username=username) }}"><i class="fa-solid fa-arrows-to-circle"></i> {{ travel_bounds_header }}</a>
-          <a class="dropdown-item" href="{{ url_for('friends', username=username) }}"><i class="bi bi-people"></i>{{friendsIcon | safe}} {{friends}}</a>
-          {% if is_alpha %}
-          <a class="dropdown-item" href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i>{{tsBuilderTitle}}</a>
-          <!-- Automated Routers Section -->
-          <h6 class="dropdown-header">{{automatedRouters}}</h6>
-            <a class="dropdown-item" href="{{ url_for('new_auto', username=username, type='here') }}"><i class="fa-solid fa-caret-down"></i> Autorouting (Here)α</a>
-            <a class="dropdown-item" href="{{ url_for('new_auto', username=username, type='google') }}"><i class="fa-brands fa-google"></i> Autorouting (Google)α</a>
-          {% endif %}
-      </div>
-      </li>
-      <li class="nav-item">
-        <a class="nav-link" href="{{ url_for('leaderboard') }}"><i class="bi bi-trophy"></i> {{leaderboard}}</a>
-      </li>
-      <li class="nav-item dropdown">
-        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-          <i class="bi bi-bar-chart-line"></i> {{ stats }}
-        </a>
-        <ul class="dropdown-menu">
-            <li>
-              <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType='combined') }}">
-                <i></i> {{ all }}
-              </a>
-            </li>
-          {% for type, data in distinctTypes.items() %}
-            <li>
-              <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType=type) }}">
-                <i class="{{ data.icon }}"></i> {{ data.label }}
-              </a>
-            </li>
-          {% endfor %}
-        </ul>
-      </li>
-      <li  class="nav-item tripCurrent">
-        <a class="nav-link" href="{{ url_for('current', username=username) }}"><i class="bi bi-broadcast"></i> {{current}}</a>
-      </li>
-      <!-- Remove wrapped until next year -->
-      <!-- <li class="nav-item">
-        <a class="nav-link" href="{{ url_for('wrapped.wrapped', username=username) }}">
-          <span class="gift-wrap">
-            <span class="gift-lid">🎁</span>
-            <span class="gift-open">🎉</span>
-          </span>
-          Trainlog {{wrapped_title}}
-        </a>
-      </li> -->
-      </ul>
-      <ul class="navbar-nav ms-auto">
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('user_settings', username=username) }}"><i class="bi bi-gear"></i> {{user_settings}}</a>
+          </div>
         </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="#" id="infoDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="bi bi-info-circle"></i>{{ about }}<span id="aboutNewsNotification" style="display:none;"></span>
-          </a>
-          <ul class="dropdown-menu" aria-labelledby="infoDropdown">
-            <li>
-              <a class="dropdown-item" href="{{ url_for('news.news') }}" id="newsLink">
-                <i class="bi bi-newspaper"></i>{{ news }}<span id="newsNotification" style="display:none;"></span>
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('about') }}">
-                <i class="fa fa-info-circle"></i> {{ about }}
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('privacy') }}">
-                <i class="fa fa-user-secret"></i> {{ privacy_title }}
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('router_status') }}">
-                <i class="fa-solid fa-route"></i> {{ router_status }}
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="{{ url_for('feature_requests.feature_requests') }}">
-                <i class="fa fa-lightbulb"></i> {{ feature_requests_title }}
-              </a>
-            </li>
-            <li>
-              <a class="dropdown-item" href="https://buymeacoffee.com/trainlog">
-                <i class="fa-solid fa-hand-holding-heart" style="color:goldenrod"></i> {{donate}}
-              </a>
-            </li>
-          </ul>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('logout', username=username) }}"><i class="bi bi-power"></i> {{logout}}</a>
-        </li>
-      </ul>
-    </div>
 
+        {# ===== Leaderboard Example ===== #}
+
+        <li class="nav-item">
+          <a class="{{ navLinkClass }}"
+             href="{{ url_for('leaderboard') }}">
+            <i class="bi bi-trophy"></i> {{leaderboard}}
+          </a>
+        </li>
+
+      </ul>
+
+      <ul class="{{ navUlRightClass }}">
+        <li class="nav-item">
+          <a class="{{ navLinkClass }}"
+             href="{{ url_for('logout', username=username) }}">
+            <i class="bi bi-power"></i> {{logout}}
+          </a>
+        </li>
+      </ul>
+
+    </div>
   </div>
 </nav>
 
