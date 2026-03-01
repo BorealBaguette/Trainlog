@@ -60,6 +60,28 @@
   display: none; /* Initially hidden, shown when there's carbon data */
 }
 
+.delay-time {
+  color: #dc3545;
+}
+
+.early-time {
+  color: #28a745;
+}
+
+.events time {
+  text-align: right;
+  min-width: 10ch;
+}
+
+.events time span {
+  padding: 0;
+  position: static;
+}
+
+.events time span::before {
+  display: none;
+}
+
 .carbon {
   color: #28a745; /* Green color for sustainability */
 }
@@ -121,6 +143,19 @@ var redGreenIcon = new L.Icon({
   shadowSize: [41, 41]
 });
 
+
+function addDelayToTime(timeStr, delaySeconds) {
+  if (!timeStr || !delaySeconds) return timeStr;
+  var suffixMatch = timeStr.match(/\(\+(\d+)\)/);
+  var origExtraDays = suffixMatch ? parseInt(suffixMatch[1]) : 0;
+  var baseTime = timeStr.replace(/\(\+\d+\)/, '').trim();
+  var parts = baseTime.split(':');
+  var totalMinutes = parseInt(parts[0]) * 60 + parseInt(parts[1]) + Math.round(delaySeconds / 60);
+  var extraDays = origExtraDays + Math.floor(totalMinutes / (24 * 60));
+  var newMinutes = ((totalMinutes % 60) + 60) % 60;
+  var newHours = ((Math.floor(totalMinutes / 60) % 24) + 24) % 24;
+  return String(newHours).padStart(2, '0') + ':' + String(newMinutes).padStart(2, '0') + (extraDays > 0 ? '(+' + extraDays + ')' : '');
+}
 
 function buildItinerary(trips, prices){
   var total_trips_per_type = {};
@@ -335,17 +370,41 @@ if (operatorContents.length) {
     operatorDisplay = $("<div>").append( trip.trip.operator != "" ?  lineOrNot : null);
       
       if(dayChangeTrip){
-        endTimeDisplay = $("<div>").append($('<div>').addClass('arrow_box').append($('<div>').addClass("dayChange").append((capitalizeFirstLetter(new Date(trip.trip.end_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)))))).append(trip.trip.end_time.replace("(+1)", "").padStart(10, '\xa0'));
+        var endBase = trip.trip.end_time.replace(/\(\+\d+\)/, '').trim();
+        var endAppend;
+        if (trip.trip.arrival_delay) {
+          var actualEnd = addDelayToTime(trip.trip.end_time, trip.trip.arrival_delay);
+          var actualEndBase = actualEnd.replace(/\(\+\d+\)/, '').trim();
+          var arrClass = trip.trip.arrival_delay > 0 ? 'delay-time' : 'early-time';
+          endAppend = '<s>' + endBase + '</s><br><span class="' + arrClass + '">' + actualEndBase + '</span>';
+        } else {
+          endAppend = endBase.padStart(10, '\xa0');
+        }
+        endTimeDisplay = $("<div>").append($('<div>').addClass('arrow_box').append($('<div>').addClass("dayChange").append((capitalizeFirstLetter(new Date(trip.trip.end_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)))))).append(endAppend);
       }
       else{
-        endTimeDisplay = trip.trip.end_time.padStart(10, '\xa0');
-      } 
-      
+        if (trip.trip.arrival_delay) {
+          var actualEnd = addDelayToTime(trip.trip.end_time, trip.trip.arrival_delay);
+          var arrClass = trip.trip.arrival_delay > 0 ? 'delay-time' : 'early-time';
+          endTimeDisplay = '<s>' + trip.trip.end_time + '</s><br><span class="' + arrClass + '">' + actualEnd + '</span>';
+        } else {
+          endTimeDisplay = trip.trip.end_time.padStart(10, '\xa0');
+        }
+      }
+
+      var startTimeContent;
+      if (trip.trip.departure_delay) {
+        var actualStart = addDelayToTime(trip.trip.start_time, trip.trip.departure_delay);
+        var depClass = trip.trip.departure_delay > 0 ? 'delay-time' : 'early-time';
+        startTimeContent = '<s>' + trip.trip.start_time + '</s><br><span class="' + depClass + '">' + actualStart + '</span>';
+      } else {
+        startTimeContent = trip.trip.start_time.padStart(10, '\xa0');
+      }
       if(dayChangeIntertrip){
-        startTimeDisplay = capitalizeFirstLetter(new Date(trip.trip.start_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)).padStart(10, '\xa0') + "<br>" + trip.trip.start_time.padStart(10, '\xa0');
+        startTimeDisplay = capitalizeFirstLetter(new Date(trip.trip.start_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)).padStart(10, '\xa0') + "<br>" + startTimeContent;
       }
       else{
-        startTimeDisplay = trip.trip.start_time.padStart(10, '\xa0');
+        startTimeDisplay = startTimeContent;
       }
 
       
@@ -379,6 +438,17 @@ if (operatorContents.length) {
 {% endif %}
 
     var formattedCarbon = createCarbonInfo(trip.trip.carbon_footprint, trip.trip.trip_length, "{{langId}}");
+
+    var actualDuration = trip.trip.trip_duration[1] + (trip.trip.arrival_delay || 0) - (trip.trip.departure_delay || 0);
+    var kmPart = trip.trip.trip_length > 0 ? " - " + mToKm(trip.trip.trip_length) + "km" : "";
+    var durationDisplay;
+    if (actualDuration !== trip.trip.trip_duration[1]) {
+      var durationClass = actualDuration > trip.trip.trip_duration[1] ? 'delay-time' : 'early-time';
+      durationDisplay = '<s>' + secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + '</s> <span class="' + durationClass + '">' + secondsToDhm(actualDuration, "{{langId}}") + '</span>' + kmPart;
+    } else {
+      durationDisplay = secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + kmPart;
+    }
+
     $('#itinerary').append(
   $('<li>').append(
     $('<time>').addClass(trip.trip.type).attr("datetime", trip.trip.start_time).html(startTimeDisplay)
@@ -386,7 +456,7 @@ if (operatorContents.length) {
     $('<span>').attr("class", trip.trip.type).append(
       $('<strong>').text(trip.trip.origin_station)
     ).append('<br>').append(operatorDisplay).append(
-      $("<div>").attr("class", "duration "+trip.trip.trip_duration[0]).append($('<div>').text(secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + (trip.trip.trip_length > 0 ? " - " + mToKm(trip.trip.trip_length) + "km" : "")))
+      $("<div>").attr("class", "duration "+trip.trip.trip_duration[0]).append($('<div>').html(durationDisplay))
     ).append('<br>').append(
       {% if 'price' in request.args and 'carbon' in request.args %}
         $("<div>").append($('<div>').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? ' ' : '') + (formattedCarbon || '')))
@@ -649,6 +719,17 @@ $.post({
     var trips = data[0];
     var prices = data[1];
     trips.reverse();
+    trips.sort(function(a, b) {
+      var getKey = function(t) {
+        try {
+          var dt = t.trip.utc_filtered_start_datetime;
+          if (!dt) return 0;
+          var ts = new Date(dt + 'Z').getTime();
+          return isNaN(ts) ? 0 : ts + (t.trip.departure_delay || 0) * 1000;
+        } catch(e) { return 0; }
+      };
+      return getKey(a) - getKey(b);
+    });
     buildItinerary(trips, prices);
     placePolylines(trips);
     $('.futurePolyline').show();

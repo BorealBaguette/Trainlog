@@ -3649,7 +3649,7 @@ def public_trip_new(tripIds=None, tagId=None, ticketId=None):
         user_obj = User.query.filter_by(username=username).first()
         colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
     return render_public_trip_page(
-        tripIds, tagId, ticketId, template="public/new_trip.html", colorblind=colorblind
+        tripIds, tagId, ticketId, template="public/new_trip.html"
     )
 
 

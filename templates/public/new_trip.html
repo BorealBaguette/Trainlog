@@ -210,6 +210,28 @@
 .currency{
     padding-top: 3.5px;
 }
+
+.delay-time {
+  color: #dc3545;
+}
+
+.early-time {
+  color: #28a745;
+}
+
+.events time {
+  text-align: right;
+  min-width: 10ch;
+}
+
+.events time span {
+  padding: 0;
+  position: static;
+}
+
+.events time span::before {
+  display: none;
+}
 </style>
 
 <div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>
@@ -285,6 +307,19 @@ let sidebarOpen = false;
 const dateOptions = { timeZone: 'UTC', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
 const dateOptionsShort = { month: 'short', day: 'numeric' };
 
+function addDelayToTime(timeStr, delaySeconds) {
+  if (!timeStr || !delaySeconds) return timeStr;
+  var suffixMatch = timeStr.match(/\(\+(\d+)\)/);
+  var origExtraDays = suffixMatch ? parseInt(suffixMatch[1]) : 0;
+  var baseTime = timeStr.replace(/\(\+\d+\)/, '').trim();
+  var parts = baseTime.split(':');
+  var totalMinutes = parseInt(parts[0]) * 60 + parseInt(parts[1]) + Math.round(delaySeconds / 60);
+  var extraDays = origExtraDays + Math.floor(totalMinutes / (24 * 60));
+  var newMinutes = ((totalMinutes % 60) + 60) % 60;
+  var newHours = ((Math.floor(totalMinutes / 60) % 24) + 24) % 24;
+  return String(newHours).padStart(2, '0') + ':' + String(newMinutes).padStart(2, '0') + (extraDays > 0 ? '(+' + extraDays + ')' : '');
+}
+
 function createCarbonInfo(carbonFootprint, tripLength, langId) {
   if (!carbonFootprint || carbonFootprint <= 0) {
     return null;
@@ -337,7 +372,18 @@ async function initializeMapAndTrips() {
     var trips = response[0];
     var prices = response[1];
     trips.reverse();
-    
+    trips.sort(function(a, b) {
+      var getKey = function(t) {
+        try {
+          var dt = t.trip.utc_filtered_start_datetime;
+          if (!dt) return 0;
+          var ts = new Date(dt + 'Z').getTime();
+          return isNaN(ts) ? 0 : ts + (t.trip.departure_delay || 0) * 1000;
+        } catch(e) { return 0; }
+      };
+      return getKey(a) - getKey(b);
+    });
+
     // Get center from first trip's first coordinate
     const firstCoord = [trips[0].path[0][1], trips[0].path[0][0]];
     
@@ -558,15 +604,39 @@ function buildItinerary(trips, prices) {
 
         let endTimeDisplay, startTimeDisplay;
         if (dayChangeTrip) {
-            endTimeDisplay = $("<div>").append($('<div>').addClass('arrow_box').append($('<div>').addClass("dayChange").append((capitalizeFirstLetter(new Date(trip.trip.end_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)))))).append(trip.trip.end_time.replace("(+1)", "").padStart(10, '\xa0'));
+          var endBase = trip.trip.end_time.replace(/\(\+\d+\)/, '').trim();
+          var endAppend;
+          if (trip.trip.arrival_delay) {
+            var actualEnd = addDelayToTime(trip.trip.end_time, trip.trip.arrival_delay);
+            var actualEndBase = actualEnd.replace(/\(\+\d+\)/, '').trim();
+            var arrClass = trip.trip.arrival_delay > 0 ? 'delay-time' : 'early-time';
+            endAppend = '<s>' + endBase + '</s><br><span class="' + arrClass + '">' + actualEndBase + '</span>';
+          } else {
+            endAppend = endBase.padStart(10, '\xa0');
+          }
+          endTimeDisplay = $("<div>").append($('<div>').addClass('arrow_box').append($('<div>').addClass("dayChange").append((capitalizeFirstLetter(new Date(trip.trip.end_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)))))).append(endAppend);
         } else {
+          if (trip.trip.arrival_delay) {
+            var actualEnd = addDelayToTime(trip.trip.end_time, trip.trip.arrival_delay);
+            var arrClass = trip.trip.arrival_delay > 0 ? 'delay-time' : 'early-time';
+            endTimeDisplay = '<s>' + trip.trip.end_time + '</s><br><span class="' + arrClass + '">' + actualEnd + '</span>';
+          } else {
             endTimeDisplay = trip.trip.end_time.padStart(10, '\xa0');
+          }
         }
 
-        if (dayChangeIntertrip) {
-            startTimeDisplay = capitalizeFirstLetter(new Date(trip.trip.start_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)).padStart(10, '\xa0') + "<br>" + trip.trip.start_time.padStart(10, '\xa0');
+        var startTimeContent;
+        if (trip.trip.departure_delay) {
+          var actualStart = addDelayToTime(trip.trip.start_time, trip.trip.departure_delay);
+          var depClass = trip.trip.departure_delay > 0 ? 'delay-time' : 'early-time';
+          startTimeContent = '<s>' + trip.trip.start_time + '</s><br><span class="' + depClass + '">' + actualStart + '</span>';
         } else {
-            startTimeDisplay = trip.trip.start_time.padStart(10, '\xa0');
+          startTimeContent = trip.trip.start_time.padStart(10, '\xa0');
+        }
+        if (dayChangeIntertrip) {
+            startTimeDisplay = capitalizeFirstLetter(new Date(trip.trip.start_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)).padStart(10, '\xa0') + "<br>" + startTimeContent;
+        } else {
+            startTimeDisplay = startTimeContent;
         }
 
 {% if 'price' in request.args %}              
@@ -603,6 +673,16 @@ function buildItinerary(trips, prices) {
         var formattedCarbon = createCarbonInfo(trip.trip.carbon_footprint, trip.trip.trip_length, "{{langId}}");
 {% endif %}
 
+        var actualDuration = trip.trip.trip_duration[1] + (trip.trip.arrival_delay || 0) - (trip.trip.departure_delay || 0);
+        var kmPart = trip.trip.trip_length > 0 ? " - " + mToKm(trip.trip.trip_length) + "km" : "";
+        var durationDisplay;
+        if (actualDuration !== trip.trip.trip_duration[1]) {
+          var durationClass = actualDuration > trip.trip.trip_duration[1] ? 'delay-time' : 'early-time';
+          durationDisplay = '<s>' + secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + '</s> <span class="' + durationClass + '">' + secondsToDhm(actualDuration, "{{langId}}") + '</span>' + kmPart;
+        } else {
+          durationDisplay = secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + kmPart;
+        }
+
         // Append to itinerary
         $('#itinerary').append(
             $('<li>').append(
@@ -611,7 +691,7 @@ function buildItinerary(trips, prices) {
                 $('<span>').attr("class", trip.trip.type).append(
                     $('<strong>').text(trip.trip.origin_station)
                 ).append('<br>').append(operatorDisplay).append(
-                    $("<div>").attr("class", "duration " + trip.trip.trip_duration[0]).append($('<div>').text(secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + (trip.trip.trip_length > 0 ? " - " + mToKm(trip.trip.trip_length) + "km" : "")))
+                    $("<div>").attr("class", "duration " + trip.trip.trip_duration[0]).append($('<div>').html(durationDisplay))
                 ).append('<br>').append(
                     {% if 'price' in request.args and 'carbon' in request.args %} // Modified conditional
                         $("<div>").append($('<div>').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? ' ' : '') + (formattedCarbon || '')))
