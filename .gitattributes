@@ -1,3 +1,4 @@
 *.geojson filter=lfs diff=lfs merge=lfs -text
 static/js/lib/** linguist-vendored
 static/styles/lib/** linguist-vendored
+.geojson filter=lfs diff=lfs merge=lfs -text
