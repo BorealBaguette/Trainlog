@@ -331,6 +331,13 @@ function addDelayToTime(timeStr, delaySeconds) {
   return String(newHours).padStart(2, '0') + ':' + String(newMinutes).padStart(2, '0') + (extraDays > 0 ? '(+' + extraDays + ')' : '');
 }
 
+function getActualTripDuration(trip) {
+  return Math.max(
+    0,
+    trip.trip_duration[1] + (trip.arrival_delay || 0) - (trip.departure_delay || 0)
+  );
+}
+
 function createCarbonInfo(carbonFootprint, tripLength, langId) {
   if (!carbonFootprint || carbonFootprint <= 0) {
     return null;
@@ -451,20 +458,21 @@ function buildItinerary(trips, prices) {
                 if (tripType === "helicopter") {
                     tripType = "air";
                 }
+                var actualDuration = getActualTripDuration(trip.trip);
                 total_trips += 1;
                 total_length += trip.trip.trip_length;
-                total_duration += trip.trip.trip_duration[1];
+                total_duration += actualDuration;
                 total_carbon += trip.trip.carbon_footprint || 0; // Added
 
                 if (tripType in total_trips_per_type) {
                     total_trips_per_type[tripType] = total_trips_per_type[tripType] + 1;
                     total_length_per_type[tripType] = total_length_per_type[tripType] + trip.trip.trip_length;
-                    total_duration_per_type[tripType] = total_duration_per_type[tripType] + trip.trip.trip_duration[1];
+                    total_duration_per_type[tripType] = total_duration_per_type[tripType] + actualDuration;
                     total_carbon_per_type[tripType] = (total_carbon_per_type[tripType] || 0) + (trip.trip.carbon_footprint || 0); // Added
                 } else {
                     total_trips_per_type[tripType] = 1;
                     total_length_per_type[tripType] = trip.trip.trip_length;
-                    total_duration_per_type[tripType] = trip.trip.trip_duration[1];
+                    total_duration_per_type[tripType] = actualDuration;
                     total_carbon_per_type[tripType] = trip.trip.carbon_footprint || 0; // Added
                 }
             }
@@ -686,7 +694,7 @@ function buildItinerary(trips, prices) {
         var formattedCarbon = createCarbonInfo(trip.trip.carbon_footprint, trip.trip.trip_length, "{{langId}}");
 {% endif %}
 
-        var actualDuration = trip.trip.trip_duration[1] + (trip.trip.arrival_delay || 0) - (trip.trip.departure_delay || 0);
+        var actualDuration = getActualTripDuration(trip.trip);
         var kmPart = trip.trip.trip_length > 0 ? " - " + mToKm(trip.trip.trip_length) + "km" : "";
         var durationDisplay;
         if (actualDuration !== trip.trip.trip_duration[1]) {
