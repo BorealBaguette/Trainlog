@@ -515,7 +515,7 @@
     "privacy_section_contact_content": "Jos sinulla on kysymyksiä tai huolenaiheita yksityisyydestäsi tai tästä käytännöstä, ota meihin yhteyttä osoitteessa: <a href=\"mailto:admin@trainlog.me\">admin@trainlog.me</a>.",
     "use_routing": "Käytä reititystä",
     "routing_tooltip": "Käsittele GPX-tiedosto reititystyökalun kautta käyttämällä jokaista GPS-lukemaa reittipisteenä.",
-    "appearOnGlobalText": "Näy <a href='{global_live_map}'>globaalissa live-kartassa</a> (vain julkiset matkat)",
+    "appearOnGlobalText": "Näy <a href='{global_live_map}'>julkisessa live-kartassa</a> (vain julkiset matkat)",
     "router_status": "Reitittimen tila",
     "live_map": "Live-kartta",
     "tilesetLabel": "Taustakartta",
