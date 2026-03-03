@@ -8850,8 +8850,15 @@ def get_current_trips_data(public_only=True):
         cursor.execute("""
             SELECT *
             FROM trip
-            WHERE utc_start_datetime <= dateTime() AND utc_end_datetime >= dateTime()
-            AND (visibility = 'public' OR (visibility IS NULL AND type not in ('poi', 'accommodation', 'restaurant', 'walk', 'cycle', 'car')))
+            WHERE datetime(
+                    utc_start_datetime,
+                    printf('%+d seconds', COALESCE(departure_delay, 0))
+                  ) <= datetime('now')
+              AND datetime(
+                    utc_end_datetime,
+                    printf('%+d seconds', COALESCE(arrival_delay, 0))
+                  ) >= datetime('now')
+              AND (visibility = 'public' OR (visibility IS NULL AND type NOT IN ('poi', 'accommodation', 'restaurant', 'walk', 'cycle', 'car')))
         """)
         trips = cursor.fetchall()
     
