@@ -687,6 +687,44 @@ function processHiddenData(rowIdx, columns){
                 col.data = formatted;
             }
         }
+        if (col.title == "{{tripStartTime}}" || col.title == "{{tripEndTime}}" || col.title == "{{tripDuration}}" || col.title == "{{tripSpeed}}") {
+            var rowData = tableObject.row(rowIdx).data();
+            if (col.title == "{{tripStartTime}}" && rowData.departure_delay) {
+                const cls = rowData.departure_delay > 0 ? 'delay-late' : 'delay-early';
+                const actual = addSecsToDisplayTime(rowData.start_time, rowData.departure_delay);
+                col.data = `<span class="planned-value">${rowData.start_time}</span> <span class="${cls}">${actual}</span>`;
+                col.hidden = true;
+            }
+            if (col.title == "{{tripEndTime}}" && rowData.arrival_delay) {
+                const cls = rowData.arrival_delay > 0 ? 'delay-late' : 'delay-early';
+                const actual = addSecsToDisplayTime(rowData.end_time, rowData.arrival_delay);
+                col.data = `<span class="planned-value">${rowData.end_time}</span> <span class="${cls}">${actual}</span>`;
+                col.hidden = true;
+            }
+            if (col.title == "{{tripDuration}}") {
+                const scheduled = rowData.trip_duration[1];
+                const actual = scheduled + (rowData.arrival_delay || 0) - (rowData.departure_delay || 0);
+                if (actual !== scheduled) {
+                    const scheduledStr = secondsToDhm(scheduled, "{{langId}}");
+                    const actualStr = secondsToDhm(actual, "{{langId}}");
+                    const delaySecs = actual - scheduled;
+                    const cls = delaySecs > 0 ? 'delay-late' : 'delay-early';
+                    col.data = `<div class="duration ${rowData.trip_duration[0]}"><span class="planned-value">${scheduledStr}</span> <span class="${cls}">${actualStr}</span></div>`;
+                    col.hidden = true;
+                }
+            }
+            if (col.title == "{{tripSpeed}}" && rowData.trip_length > 0) {
+                const scheduledDur = rowData.trip_duration[1];
+                const actualDur = scheduledDur + (rowData.arrival_delay || 0) - (rowData.departure_delay || 0);
+                if (actualDur !== scheduledDur) {
+                    const scheduledSpeed = Math.round((rowData.trip_length / scheduledDur) * 3.6);
+                    const actualSpeed = Math.round((rowData.trip_length / actualDur) * 3.6);
+                    const cls = actualDur > scheduledDur ? 'delay-late' : 'delay-early';
+                    col.data = `<span class="planned-value">${scheduledSpeed}\xa0km/h</span> <span class="${cls}">${actualSpeed}\xa0km/h</span>`;
+                    col.hidden = true;
+                }
+            }
+        }
         if (col.title != ""){
             return (col.hidden || ([1,2].includes(col.columnIndex) && ellipsedStation)) && col.data != ""?
             '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'">'+
@@ -741,7 +779,13 @@ function renderStation(data, type, row) {
 
 function renderDuration(data, type, row) {
     if (type === 'display') {
-        return `<div class="duration ${row.trip_duration[0]}">${secondsToDhm(row.trip_duration[1], "{{langId}}")}</div>`;
+        const scheduled = row.trip_duration[1];
+        const actual = scheduled + (row.arrival_delay || 0) - (row.departure_delay || 0);
+        let inner = secondsToDhm(scheduled, "{{langId}}");
+        if (actual !== scheduled) {
+            inner += renderDelayBadge(actual - scheduled);
+        }
+        return `<div class="duration ${row.trip_duration[0]}">${inner}</div>`;
     }
     return data;
 }
@@ -754,16 +798,37 @@ function renderDelayBadge(delaySecs) {
     return ` <span class="delay-badge ${cls}">${sign}${minutes}'</span>`;
 }
 
+function addSecsToDisplayTime(timeStr, secs) {
+    if (!secs) return timeStr;
+    var dayOffset = 0;
+    var baseTime = timeStr.replace(/\(\+(\d+)\)/, function(m, d) { dayOffset = parseInt(d); return ''; }).trim();
+    var parts = baseTime.split(':');
+    if (parts.length < 2) return timeStr;
+    var totalMins = parseInt(parts[0]) * 60 + parseInt(parts[1]) + Math.round(secs / 60);
+    dayOffset += Math.floor(totalMins / (24 * 60));
+    totalMins = ((totalMins % (24 * 60)) + 24 * 60) % (24 * 60);
+    var h = Math.floor(totalMins / 60), m = totalMins % 60;
+    var result = (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m;
+    if (dayOffset > 0) result += '(+' + dayOffset + ')';
+    return result;
+}
+
 function renderStartTime(data, type, row) {
     if (type === 'display') {
-        return data + renderDelayBadge(row.departure_delay);
+        if (row.departure_delay) {
+            return data + renderDelayBadge(row.departure_delay);
+        }
+        return data;
     }
     return data;
 }
 
 function renderEndTime(data, type, row) {
     if (type === 'display') {
-        return data + renderDelayBadge(row.arrival_delay);
+        if (row.arrival_delay) {
+            return data + renderDelayBadge(row.arrival_delay);
+        }
+        return data;
     }
     return data;
 }
@@ -811,8 +876,18 @@ function renderSpeed(data, type, row) {
     if (type === 'display') {
         if(row.trip_length==0) return "";
         else{
-            let speed = (row.trip_length / row.trip_duration[1]) * 3.6;
-            return `${Math.round(speed)}\xa0km/h`;
+            const scheduledDur = row.trip_duration[1];
+            const speed = Math.round((row.trip_length / scheduledDur) * 3.6);
+            const hasDelay = row.departure_delay || row.arrival_delay;
+            if (hasDelay) {
+                const actualDur = scheduledDur + (row.arrival_delay || 0) - (row.departure_delay || 0);
+                const actualSpeed = Math.round((row.trip_length / actualDur) * 3.6);
+                const diff = actualSpeed - speed;
+                const sign = diff > 0 ? '+' : '';
+                const cls = diff < 0 ? 'delay-late' : 'delay-early';
+                return `${speed}\xa0km/h <span class="delay-badge ${cls}">${sign}${diff}</span>`;
+            }
+            return `${speed}\xa0km/h`;
         }
     }
     return data;
@@ -1258,9 +1333,12 @@ $('.deleteButton').off('click').on('click', function() {
         if ($(this.node()).hasClass("even") || $(this.node()).hasClass("odd")){
             var hasHidden = false;
             var controlElement;
+            var rowData = this.data();
+            // Delay data appears in sub-table even when columns aren't hidden by responsive
+            var hasDelaySubtable = rowData && (rowData.departure_delay || rowData.arrival_delay);
             $(this.node()).children().each(
                 function(index, element){
-                    if ($(element).hasClass("dtr-control"))  
+                    if ($(element).hasClass("dtr-control"))
                     {
                       controlElement = $(element)
                     }
@@ -1269,11 +1347,11 @@ $('.deleteButton').off('click').on('click', function() {
                             hasHidden = true;
                         }
                     }
-                    
+
                 }
             );
 
-            if(!hasHidden) {
+            if(!hasHidden && !hasDelaySubtable) {
                 controlElement.addClass("noHidden");
             }
         }
