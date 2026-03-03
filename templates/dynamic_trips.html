@@ -1325,7 +1325,7 @@ var table = $('#tripRows');
 });
 
 (function() {
-    var $btn = $('<label>{{sortTitle}} : <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
+    var $btn = $('<label>{{sortTitle}}: <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
     $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($btn);
     updateSortButton();
 })();
