@@ -5662,6 +5662,28 @@ trip_column_names = [
     "notes"
 ]
 
+SORT_FIELD_EXPRS = {
+    "temporal":              "temporal",
+    "start_time":            "start_time",
+    "departure_delay":       "COALESCE(departure_delay, 0)",
+    "end_datetime":          "end_datetime",
+    "end_time":              "end_time",
+    "actual_arrival":        "datetime(utc_filtered_end_datetime, COALESCE(arrival_delay, 0) || ' seconds')",
+    "arrival_delay":         "COALESCE(arrival_delay, 0)",
+    "added_duration":        "COALESCE(arrival_delay, 0) - COALESCE(departure_delay, 0)",
+    "trip_duration_seconds": "trip_duration_seconds",
+    "actual_duration":       "trip_duration_seconds + COALESCE(arrival_delay, 0) - COALESCE(departure_delay, 0)",
+    "trip_length":           "trip_length",
+    "trip_speed":            "trip_speed",
+    "actual_speed":          "trip_length / (trip_duration_seconds + COALESCE(arrival_delay, 0) - COALESCE(departure_delay, 0))",
+    "origin_station":        "LOWER(CASE WHEN unicode(origin_station) BETWEEN 127462 AND 127487 THEN SUBSTR(origin_station, 4) ELSE origin_station END)",
+    "destination_station":   "LOWER(CASE WHEN unicode(destination_station) BETWEEN 127462 AND 127487 THEN SUBSTR(destination_station, 4) ELSE destination_station END)",
+    "type":                  "LOWER(type)",
+    "operator":              "LOWER(operator)",
+    "line_name":             "LOWER(line_name)",
+    "price":                 "price",
+}
+
 def get_trips_api_internal(username, is_public=False):
     # Retrieve parameters from DataTables request
     start = request.form.get("start", type=int, default=0)
@@ -5682,6 +5704,12 @@ def get_trips_api_internal(username, is_public=False):
         if 0 <= sort_column < len(trip_column_names)
         else "default_column_name"
     )
+
+    # Custom sort field from sort modal (overrides column-based sort)
+    custom_sort_field = request.form.get("sort_field")
+    if custom_sort_field and custom_sort_field in SORT_FIELD_EXPRS:
+        sort_column_name = SORT_FIELD_EXPRS[custom_sort_field]
+        sort_direction = request.form.get("sort_dir", sort_direction)
 
     # Handle column-specific searches
     column_searches = {}
@@ -5809,12 +5837,34 @@ def get_trips_api_internal(username, is_public=False):
     count_query = base_count_query
     
     # Add sorting to data query
-    if sort_column_name != "start_datetime":
-        data_query = base_data_query + f" ORDER BY {sort_column_name} {sort_direction} LIMIT :limit OFFSET :offset"
+    if sort_column_name == "temporal":
+        data_query = base_data_query + f" ORDER BY utc_filtered_start_datetime = 1 {sort_direction}, datetime(utc_filtered_start_datetime, COALESCE(departure_delay, 0) || ' seconds') {sort_direction}, uid {sort_direction} LIMIT :limit OFFSET :offset"
+    elif sort_column_name == "end_datetime":
+        data_query = base_data_query + f" ORDER BY utc_filtered_end_datetime = 1 {sort_direction}, utc_filtered_end_datetime {sort_direction}, uid {sort_direction} LIMIT :limit OFFSET :offset"
+    elif sort_column_name == "price":
+        ticket_share_sql = "(SELECT t.price / NULLIF(COUNT(t2.ticket_id), 0) FROM tickets t LEFT JOIN trip t2 ON t.uid = t2.ticket_id WHERE t.uid = ticket_id GROUP BY t.uid)"
+        ticket_currency_sql = "(SELECT t.currency FROM tickets t WHERE t.uid = ticket_id)"
+        ticket_date_sql = "(SELECT t.purchasing_date FROM tickets t WHERE t.uid = ticket_id)"
+        price_expr = (
+            f"CASE WHEN price IS NULL AND ticket_id IS NULL THEN NULL "
+            f"ELSE COALESCE(price_to_eur(price, currency, purchasing_date), 0)"
+            f"   + COALESCE(price_to_eur({ticket_share_sql}, {ticket_currency_sql}, {ticket_date_sql}), 0) "
+            f"END"
+        )
+        data_query = base_data_query + f" ORDER BY {price_expr} {sort_direction} NULLS LAST LIMIT :limit OFFSET :offset"
     else:
-        data_query = base_data_query + f" ORDER BY utc_filtered_start_datetime = 1 {sort_direction}, utc_filtered_start_datetime {sort_direction}, uid {sort_direction} LIMIT :limit OFFSET :offset"
+        data_query = base_data_query + f" ORDER BY {sort_column_name} {sort_direction} LIMIT :limit OFFSET :offset"
+
+    def price_to_eur(price, currency, date):
+        if price is None or currency is None or date is None:
+            return None
+        try:
+            return get_exchange_rate(price=price, base_currency=currency, target_currency="EUR", date=date)
+        except Exception:
+            return None
 
     mainConn.create_function("remove_diacritics", 1, remove_diacritics)
+    mainConn.create_function("price_to_eur", 3, price_to_eur)
 
     # Ensure the sort direction is safe
     if sort_direction not in ["asc", "desc"]:

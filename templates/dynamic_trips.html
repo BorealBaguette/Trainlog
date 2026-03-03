@@ -7,6 +7,8 @@
     /* --- General UI --- */
     .ui-front { z-index: 9999999 !important; }
 
+        #dataTable_wrapper { min-height: 600px; }
+
     /* --- Composition Modal Styles --- */
     
     /* 1. The Scrollable Window (Dark Box) */
@@ -147,6 +149,53 @@
                     max-height: 180px; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,.15); }
     .ts-pick-item { padding: 6px 10px; cursor: pointer; font-size: 0.9rem; }
     .ts-pick-item:hover { background: #f0f0f0; }
+
+    th[data-sort-field] {
+        position: relative;
+        padding-right: 20px;
+
+        cursor: pointer !important;
+        user-select: none;
+        white-space: nowrap;
+    }
+
+    th[data-sort-field]:hover {
+        background: rgba(0,0,0,0.05);
+    }
+
+    /* Common styling */
+    th[data-sort-field]::before,
+    th[data-sort-field]::after {
+        position: absolute;
+        right: 6px;
+        font-size: 0.65em;
+        opacity: 0.3;
+        line-height: 1;
+    }
+
+    /* Center around middle */
+    th[data-sort-field]::before {
+        content: '▲';
+        top: 47%;
+        transform: translateY(-70%);
+    }
+
+    th[data-sort-field]::after {
+        content: '▼';
+        top: 53%;
+        transform: translateY(-30%);
+    }
+
+    /* Active states */
+    th[data-sort-field].th-sort-asc::before {
+        opacity: 0.9;
+    }
+
+    th[data-sort-field].th-sort-desc::after {
+        opacity: 0.9;
+    }
+
+    
 </style>
 
 </style>
@@ -237,28 +286,28 @@
     <table id="dataTable" class="display responsive" style="width:100%">
         <thead>
             <tr>
-                <th data-priority="100001">Type</th>
-                <th class="all">{{originStation}}</th>
-                <th class="all">{{destinationStation}}</th>
-                <th class="all">{{tripStartDate}}</th>
-                <th>{{tripStartTime}}</th>
-                <th>{{tripEndTime}}</th>
-                <th>{{tripDuration}}</th>
-                <th>{{tripLength}}</th>
-                <th>{{tripSpeed}}</th>
-                <th>{{operator}}</th>
-                <th>{{lineName}}</th>
+                <th data-orderable="false" data-priority="100001" data-sort-field="type">Type</th>
+                <th data-orderable="false" class="all" data-sort-field="origin_station">{{originStation}}</th>
+                <th data-orderable="false" class="all" data-sort-field="destination_station">{{destinationStation}}</th>
+                <th data-orderable="false" class="all" data-sort-field="temporal">{{tripStartDate}}</th>
+                <th data-orderable="false" data-sort-field="start_time">{{tripStartTime}}</th>
+                <th data-orderable="false" data-sort-field="end_time">{{tripEndTime}}</th>
+                <th data-orderable="false" data-sort-field="trip_duration_seconds">{{tripDuration}}</th>
+                <th data-orderable="false" data-sort-field="trip_length">{{tripLength}}</th>
+                <th data-orderable="false" data-sort-field="trip_speed">{{tripSpeed}}</th>
+                <th data-orderable="false" data-sort-field="operator">{{operator}}</th>
+                <th data-orderable="false" data-sort-field="line_name">{{lineName}}</th>
                 <th>{{crossedCountries}}</th>
                 {% if not isPublic %}
                 <th>{{visibility}}</th>
-                <th data-orderable="false">{{price}}</th>
+                <th data-orderable="false" data-sort-field="price">{{price}}</th>
                 {% endif %}
-                <th class="none">{{material_type}}</th>
-                <th class="none">{{reg}}</th>
-                <th class="none">{{seat}}</th>
-                <th class="none">{{notes}}</th>
-                <th class="none">{{tags}}</th>
-                <th data-priority="1" data-orderable="false"></th>
+                <th data-orderable="false" class="none">{{material_type}}</th>
+                <th data-orderable="false" class="none">{{reg}}</th>
+                <th data-orderable="false" class="none">{{seat}}</th>
+                <th data-orderable="false" class="none">{{notes}}</th>
+                <th data-orderable="false" class="none">{{tags}}</th>
+                <th data-orderable="false" data-priority="1" data-orderable="false"></th>
             </tr>
         </thead>
         <tbody id="tripRows">
@@ -358,6 +407,23 @@
         <button type="button" class="btn btn-primary" id="submitBtn">{{ submit }}</button>
         </div>
     </div>
+    </div>
+</div>
+
+<div class="modal fade" id="sortModal" tabindex="-1" aria-hidden="true" style="padding-top: 56px">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-sort me-2"></i>{{sortTitle}}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div id="sortColumnList"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="clearSortBtn">{{tsClearBtn}}</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -1082,6 +1148,8 @@ var table = $('#tripRows');
 
     var scroll = new URLSearchParams(window.location.search).get('scroll') === 'true'
     var initialSearch = new URLSearchParams(window.location.search).get('search') || '';
+    var isPast = {{ (not projects)|lower }};
+    var customSort = { field: 'temporal', dir: isPast ? 'desc' : 'asc', label: '{{tripStartTime}}' };
     var tableObject = $('#dataTable').DataTable({
     processing: true,
     serverSide: true,
@@ -1089,7 +1157,8 @@ var table = $('#tripRows');
     searchDelay: 1000,
     scrollY: scroll == true ? $(window).height() - 300 : null,
     scroller: scroll,
-    dom: '<"toolbar">lfrtip',
+    dom: '<"dt-controls d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mb-2"lf>rtip',
+    columnDefs: [{ orderable: false, targets: '_all' }],
     ajax: {
         url: '{{ url_for("get_trips_api" if not isPublic else "get_trips_api_public", username=username, projects=projects) }}',
         "type": "POST",
@@ -1116,9 +1185,12 @@ var table = $('#tripRows');
                     }
                 });
             }
+            if (customSort.field) {
+                d.sort_field = customSort.field;
+                d.sort_dir = customSort.dir;
+            }
         }
     },
-    // ... rest of your existing configuration stays the same
     columns: [
         { data: 'type', render: renderType },
         { data: 'origin_station', render: renderStation },
@@ -1132,7 +1204,7 @@ var table = $('#tripRows');
             data: null,
             render: renderSpeed,
             defaultContent: "N/A",
-            orderable: true
+            orderable: false
         },
         { data: 'operator', render: renderOperators },
         {data: 'line_name',{% if is_alpha %} render: renderLineName,{% endif %}},
@@ -1189,7 +1261,9 @@ var table = $('#tripRows');
         style: 'multi+shift',
         selector: 'td:not(:nth-child(2)):not(:last-child):not(:first-child)'
     },
-    initComplete: function(){addPageJumpInput();},
+    initComplete: function(){
+        addPageJumpInput();
+    },
     rowId: function(a) {
         return a.id;
     },
@@ -1249,17 +1323,117 @@ var table = $('#tripRows');
     }
     updateSelectionMessage();
 });
+
+(function() {
+    var $btn = $('<label>{{sortTitle}} : <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
+    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($btn);
+    updateSortButton();
+})();
+
 {% if hasPrivateTrips and not isPublic%}
- // Add the switch to the custom toolbar
-    $("div.toolbar").html(`
-        <div class="toolbar d-flex justify-content-center justify-content-md-start">
-            <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="filterTypeSwitch" onchange="toggleTypeFilter()">
-                <label class="form-check-label" for="filterTypeSwitch">{{showPlaces}}</label>
-            </div>
-        </div>
-    `);
+    var $switch = $(`<div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="filterTypeSwitch" onchange="toggleTypeFilter()">
+        <label class="form-check-label" for="filterTypeSwitch">{{showPlaces}}</label>
+    </div>`);
+    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($switch);
 {% endif %}
+
+// Sort modal
+const sortGroups = [
+    { group: '{{tripStartTime}}', items: [
+        { label: '{{tripStartTime}}',        field: 'temporal' },
+        { label: '{{sortPlannedDeparture}}', field: 'start_time' },
+        { label: '{{sortDepartureDelay}}',   field: 'departure_delay' },
+    ]},
+    { group: '{{tripEndTime}}', items: [
+        { label: '{{tripEndTime}}',          field: 'actual_arrival' },
+        { label: '{{sortPlannedArrival}}',   field: 'end_time' },
+        { label: '{{sortArrivalDelay}}',     field: 'arrival_delay' },
+    ]},
+    { group: '{{singularTrip}}', items: [
+        { label: '{{sortPlannedDuration}}',  field: 'trip_duration_seconds' },
+        { label: '{{sortActualDuration}}',   field: 'actual_duration' },
+        { label: '{{sortAddedDuration}}',    field: 'added_duration' },
+        { label: '{{sortDistance}}',         field: 'trip_length' },
+        { label: '{{sortPlannedSpeed}}',     field: 'trip_speed' },
+        { label: '{{sortActualSpeed}}',      field: 'actual_speed' },
+    ]},
+    { group: '{{others}}', items: [
+        { label: '{{tOrigin}}',      field: 'origin_station' },
+        { label: '{{tDestination}}', field: 'destination_station' },
+        { label: '{{sortType}}',     field: 'type' },
+        { label: '{{operator}}',     field: 'operator' },
+        { label: '{{lineName}}',     field: 'line_name' },
+        { label: '{{sortPrice}}',    field: 'price' },
+    ]},
+];
+
+$('#sortModal').on('show.bs.modal', function() {
+    const list = $('#sortColumnList');
+    list.empty();
+
+    sortGroups.forEach(function(group) {
+        list.append(`<div class="px-3 pt-2 pb-1 text-muted small fw-bold text-uppercase">${group.group}</div>`);
+        group.items.forEach(function(item) {
+            const ascActive = (item.field === customSort.field && customSort.dir === 'asc') ? ' btn-secondary active' : '';
+            const descActive = (item.field === customSort.field && customSort.dir === 'desc') ? ' btn-secondary active' : '';
+            list.append(`<div class="sort-opt-row d-flex align-items-center justify-content-between px-3 py-2 border-bottom" data-field="${item.field}" data-label="${item.label}">
+                <span>${item.label}</span>
+                <div class="btn-group btn-group-sm">
+                    <button class="btn btn-outline-secondary mb-0 sort-dir-btn${ascActive}" data-dir="asc">▲</button>
+                    <button class="btn btn-outline-secondary mb-0 sort-dir-btn${descActive}" data-dir="desc">▼</button>
+                </div>
+            </div>`);
+        });
+    });
+
+    list.find('.sort-dir-btn').on('click', function() {
+        const row = $(this).closest('.sort-opt-row');
+        customSort.field = row.data('field');
+        customSort.dir = $(this).data('dir');
+        customSort.label = row.data('label');
+        updateSortButton();
+        tableObject.draw();
+        $('#sortModal').modal('hide');
+    });
+});
+
+$('#clearSortBtn').on('click', function() {
+    customSort.field = null;
+    customSort.dir = 'asc';
+    customSort.label = null;
+    updateSortButton();
+    tableObject.draw();
+    $('#sortModal').modal('hide');
+});
+
+function updateSortButton() {
+    const label = customSort.label ? `${customSort.label}` : `{{sortTitle}}`;
+    $('#sortTriggerBtn').html(label).toggleClass('sort-asc', customSort.dir === 'asc').toggleClass('sort-desc', customSort.dir === 'desc');
+    updateHeaderIndicators();
+}
+
+function updateHeaderIndicators() {
+    $('th[data-sort-field]').removeClass('th-sort-asc th-sort-desc');
+    if (customSort.field) {
+        $('th[data-sort-field="' + customSort.field + '"]')
+            .addClass(customSort.dir === 'asc' ? 'th-sort-asc' : 'th-sort-desc');
+    }
+}
+
+// Header click → custom sort
+$(document).on('click', 'th[data-sort-field]', function() {
+    const field = $(this).data('sort-field');
+    if (customSort.field === field) {
+        customSort.dir = customSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+        customSort.field = field;
+        customSort.dir = 'asc';
+        customSort.label = $(this).text().trim();
+    }
+    updateSortButton();
+    tableObject.draw();
+});
 
 function deselectAll(){
     tableObject.rows( { selected: true }).deselect();
@@ -1674,18 +1848,17 @@ $('#submitBtn').on('click', function() {
         if (filterSwitch) {
             const savedState = (typeof getCookie === 'function' && getCookie('filterTypeSwitch') === 'true');
             filterSwitch.checked = savedState;
-            toggleTypeFilter();
         }
 
         setTimeout(function() {
             var searchContainer = $('.dataTables_filter');
             if (searchContainer.length && !searchContainer.find('.search-help-icon').length) {
-                searchContainer.css('position', 'relative');
-                var helpIcon = $('<i class="fas fa-info-circle search-help-icon" data-bs-toggle="modal" data-bs-target="#smartSearchHelpModal"></i>');
-                searchContainer.append(helpIcon);
-
-                // Adjust input padding
-                searchContainer.find('input').css('padding-right', '35px');
+                var $input = searchContainer.find('input');
+                var $wrapper = $('<span style="display:inline-flex;align-items:center;gap:1px;"></span>');
+                $input.after($wrapper);
+                $wrapper.append($input);
+                var helpIcon = $('<i class="fas fa-info-circle search-help-icon" data-bs-toggle="modal" data-bs-target="#smartSearchHelpModal" style="cursor:pointer;"></i>');
+                $wrapper.append(helpIcon);
             }
         }, 100);
     });
