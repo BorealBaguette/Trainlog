@@ -457,8 +457,15 @@
       </div>
       <div class="modal-body">
         <div class="mb-3">
-          <label class="form-label">{{shiftTimes}} (min)</label>
-          <input type="number" class="form-control" id="massEditTimeShift" style="width:9rem" placeholder="0" />
+          <label class="form-label">{{shiftTimes}}</label>
+          <div class="d-flex align-items-center gap-2">
+            <input type="number" class="form-control" id="massEditShiftDays" style="width:5rem" placeholder="0" />
+            <span class="text-muted small">{{wrapped_days}}</span>
+            <input type="number" class="form-control" id="massEditShiftHours" style="width:5rem" placeholder="0" />
+            <span class="text-muted small">{{hours}}</span>
+            <input type="number" class="form-control" id="massEditShiftMinutes" style="width:5rem" placeholder="0" />
+            <span class="text-muted small">min</span>
+          </div>
         </div>
         <hr class="my-2" />
         <div class="mb-3">
@@ -1549,8 +1556,9 @@ $(document).on('click', 'th[data-sort-field]', function() {
 });
 
 function deselectAll(){
-    tableObject.rows( { selected: true }).deselect();
-    checkedTrips = [];
+    tableObject.rows().deselect();
+    checkedTrips.splice(0);
+    Object.keys(checkedTripData).forEach(function(k) { delete checkedTripData[k]; });
     hideMultilink();
     updateSelectionMessage();
 }
@@ -1794,7 +1802,9 @@ function openMassEdit() {
     tsbWrap.style.display = allRail ? 'flex' : 'none';
 
     // Reset shift + delay fields
-    document.getElementById('massEditTimeShift').value = '';
+    document.getElementById('massEditShiftDays').value = '';
+    document.getElementById('massEditShiftHours').value = '';
+    document.getElementById('massEditShiftMinutes').value = '';
     document.getElementById('massEditDepDelay').value = '';
     document.getElementById('massEditArrDelay').value = '';
 
@@ -1864,7 +1874,10 @@ function submitMassEdit() {
     if (!isNaN(depDelayMin)) fields['departure_delay'] = Math.round(depDelayMin * 60) || null;
     if (!isNaN(arrDelayMin)) fields['arrival_delay'] = Math.round(arrDelayMin * 60) || null;
 
-    const timeShift = parseInt(document.getElementById('massEditTimeShift').value, 10) || 0;
+    const shiftDays = parseInt(document.getElementById('massEditShiftDays').value, 10) || 0;
+    const shiftHours = parseInt(document.getElementById('massEditShiftHours').value, 10) || 0;
+    const shiftMinutes = parseInt(document.getElementById('massEditShiftMinutes').value, 10) || 0;
+    const timeShift = shiftDays * 1440 + shiftHours * 60 + shiftMinutes;
 
     if (Object.keys(fields).length === 0 && !timeShift) {
         $('#massEditModal').modal('hide');
@@ -1887,6 +1900,7 @@ function submitMassEdit() {
         if (data.success) {
             tableObject.ajax.reload();
             $('#massEditModal').modal('hide');
+            deselectAll();
         } else {
             alert(data.error || 'Error');
         }
