@@ -200,7 +200,7 @@ from src.paths import Path
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
-from src.photon import photonInstances
+from src.photon import photonInstances, photonRequest
 from src.routing import forward_routing_core
 
 app = Flask(__name__)
@@ -8653,21 +8653,11 @@ def trainloglogger(username):
 @login_required
 def get_bounds(username):
     def get_location(lat, lon):
-        args = f"lon={lon}&lat={lat}"
-        timeout = 10
-        en = "lang=en"
-        
-        responseJson = None
-        for url in photonInstances.values():
-            try:
-                resp = requests.get(f"{url}/reverse?{args}&{en}", timeout=timeout)
-                resp.raise_for_status()
-                responseJson = resp.json()
-                if responseJson.get("features") is not None:
-                    break
-            except Exception:
-                continue
-        
+        responseJson = photonRequest(
+            "/reverse",
+            {"lon": lon, "lat": lat, "lang": "en"},
+        )
+
         if responseJson is not None and responseJson["features"] is not None:
             properties = {}
             if responseJson["features"] != []:
