@@ -4660,26 +4660,15 @@ def placeAutocomplete():
 
 @app.route("/stationAutocomplete")
 def stationAutocomplete():
-    args = request.query_string.decode("utf-8")
-    timeout = 2
-    en = "lang=en"
-    
     # Check if this is a reverse geocoding request
-    params = request.args
+    params = request.args.to_dict(flat=False)
     is_reverse = params.get("lat") and params.get("lon")
     endpoint = "/reverse" if is_reverse else "/api"
-    
-    responseJson = None
-    for url in photonInstances.values():
-        try:
-            resp = requests.get(f"{url}{endpoint}?{args}&{en}", timeout=timeout)
-            resp.raise_for_status()
-            responseJson = resp.json()
-            if responseJson.get("features") is not None:
-                break
-        except Exception:
-            continue
-    
+
+    params.setdefault("lang", ["en"])
+
+    responseJson = photonRequest(endpoint, params=params, timeout=2)
+
     if responseJson is None:
         return "Photon Error", 500
     
