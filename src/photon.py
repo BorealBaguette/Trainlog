@@ -1,4 +1,8 @@
 import requests
+import logging
+
+
+logger = logging.getLogger(__name__)
 
 photonInstances = {
     "trainlog": "https://photon.srv.trainlog.me",
@@ -22,6 +26,7 @@ def photonRequest(endpoint, params, *, timeout=5):
                 instance, endpoint, params, timeout=timeout
             )
             return response_json
-        except Exception:
+        except Exception as e:
+            logger.debug(f"Photon request failed: {e}")
             continue
     return None
