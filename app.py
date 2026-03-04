@@ -199,6 +199,7 @@ from src.paths import Path
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
+from src.photon import photonInstances
 from src.routing import forward_routing_core
 
 app = Flask(__name__)
@@ -4656,12 +4657,6 @@ def placeAutocomplete():
     response_json = {"features": features}
     return jsonify(response_json)
 
-
-photonInstances = {
-    "trainlog": "http://photon.srv.trainlog.me",
-    "chiel": "https://photon.chiel.uk",
-    "komoot": "https://photon.komoot.io",
-}
 
 @app.route("/stationAutocomplete")
 def stationAutocomplete():
