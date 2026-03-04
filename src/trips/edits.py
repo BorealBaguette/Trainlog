@@ -1,4 +1,5 @@
 from flask import abort
+from sqlalchemy import text
 
 from src.consts import TripTypes
 from src.pg import pg_session
@@ -11,6 +12,23 @@ from src.sql.trips import (
 from src.utils import mainConn, managed_cursor
 
 from .utils import compare_trip
+
+ALLOWED_BULK_EDIT_FIELDS = frozenset(
+    [
+        "operator",
+        "line_name",
+        "reg",
+        "seat",
+        "notes",
+        "visibility",
+        "origin_station",
+        "destination_station",
+        "material_type",
+        "material_type_advanced",
+        "departure_delay",
+        "arrival_delay",
+    ]
+)
 
 
 def attach_ticket_to_trips(username, ticket_id, trip_ids):
@@ -120,6 +138,100 @@ def _update_trip_type_in_sqlite(trip_id, new_type: TripTypes):
             {"newType": new_type.value, "tripId": trip_id},
         )
     mainConn.commit()
+
+
+def bulk_edit_trips(
+    username, trip_ids, fields: dict, notes_append: bool = False, time_offset_minutes: int = 0
+):
+    safe_fields = {k: v for k, v in fields.items() if k in ALLOWED_BULK_EDIT_FIELDS}
+    if not safe_fields and not time_offset_minutes:
+        return False, "No valid fields to update"
+
+    try:
+        placeholders = ", ".join(["?"] * len(trip_ids))
+
+        with managed_cursor(mainConn) as cursor:
+            cursor.execute(
+                f"SELECT COUNT(*) as c FROM trip WHERE username = ? AND uid IN ({placeholders})",
+                [username] + trip_ids,
+            )
+            if cursor.fetchone()["c"] != len(trip_ids):
+                abort(401)
+
+            if safe_fields:
+                set_parts = []
+                params = []
+                for col, val in safe_fields.items():
+                    if col == "notes" and notes_append:
+                        set_parts.append(
+                            "notes = CASE WHEN (notes IS NULL OR notes = '') THEN ? ELSE notes || char(10) || ? END"
+                        )
+                        params.extend([val, val])
+                    else:
+                        set_parts.append(f"{col} = ?")
+                        params.append(val if val != "" else None)
+
+                params.extend([username] + trip_ids)
+                cursor.execute(
+                    f"UPDATE trip SET {', '.join(set_parts)} WHERE username = ? AND uid IN ({placeholders})",
+                    params,
+                )
+
+            if time_offset_minutes:
+                modifier = f"{'+' if time_offset_minutes >= 0 else ''}{time_offset_minutes} minutes"
+                cursor.execute(
+                    f"""UPDATE trip SET
+                        start_datetime = datetime(start_datetime, ?),
+                        end_datetime = datetime(end_datetime, ?),
+                        utc_start_datetime = CASE WHEN utc_start_datetime IS NOT NULL
+                            THEN datetime(utc_start_datetime, ?) ELSE NULL END,
+                        utc_end_datetime = CASE WHEN utc_end_datetime IS NOT NULL
+                            THEN datetime(utc_end_datetime, ?) ELSE NULL END
+                    WHERE username = ? AND uid IN ({placeholders})""",
+                    [modifier, modifier, modifier, modifier, username] + trip_ids,
+                )
+
+        with pg_session() as pg:
+            for trip_id in trip_ids:
+                if safe_fields:
+                    pg_set_parts = []
+                    pg_params = {"trip_id": int(trip_id)}
+                    for col, val in safe_fields.items():
+                        if col == "notes" and notes_append:
+                            pg_set_parts.append(
+                                "notes = CASE WHEN (notes IS NULL OR notes = '') THEN :notes ELSE notes || chr(10) || :notes END"
+                            )
+                            pg_params["notes"] = val
+                        else:
+                            pg_set_parts.append(f"{col} = :{col}")
+                            pg_params[col] = val if val != "" else None
+                    pg.execute(
+                        text(f"UPDATE trips SET {', '.join(pg_set_parts)} WHERE trip_id = :trip_id"),
+                        pg_params,
+                    )
+
+                if time_offset_minutes:
+                    offset_secs = time_offset_minutes * 60
+                    pg.execute(
+                        text("""UPDATE trips SET
+                            start_datetime = start_datetime + :offset * interval '1 second',
+                            end_datetime = end_datetime + :offset * interval '1 second',
+                            utc_start_datetime = CASE WHEN utc_start_datetime IS NOT NULL
+                                THEN utc_start_datetime + :offset * interval '1 second' ELSE NULL END,
+                            utc_end_datetime = CASE WHEN utc_end_datetime IS NOT NULL
+                                THEN utc_end_datetime + :offset * interval '1 second' ELSE NULL END
+                        WHERE trip_id = :trip_id"""),
+                        {"offset": offset_secs, "trip_id": int(trip_id)},
+                    )
+
+        for trip_id in trip_ids:
+            compare_trip(trip_id)
+
+        mainConn.commit()
+        return True, None
+    except Exception as e:
+        mainConn.rollback()
+        return False, str(e)
 
 
 def delete_ticket_from_db(username, ticket_id):

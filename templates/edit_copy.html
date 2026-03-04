@@ -244,9 +244,7 @@
                     <select id="originCountry" class="custom-select-flag" name="originCountry">
                         {% for code, emoji in country_list.items() %}
                         <option value="{{ emoji }}" data-code="{{ code }}" {% if origin.startswith(emoji) %}selected{%
-                            endif %}>
-                            {{ emoji }}
-                        </option>
+                            endif %}>{{ emoji }} {{ code }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -264,9 +262,7 @@
                     <select id="destinationCountry" class="custom-select-flag" name="destinationCountry">
                         {% for code, emoji in country_list.items() %}
                         <option value="{{ emoji }}" data-code="{{ code }}" {% if destination.startswith(emoji)
-                            %}selected{% endif %}>
-                            {{ emoji }}
-                        </option>
+                            %}selected{% endif %}>{{ emoji }} {{ code }}</option>
                         {% endfor %}
                     </select>
                 </div>

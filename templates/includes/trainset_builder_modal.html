@@ -55,7 +55,9 @@
   /* ── open ── */
   window.openTsbModal = function () {
     _units = [];
-    var val = document.getElementById('material_type_advanced').value;
+    var sourceId = window._tsbAdvTarget || 'material_type_advanced';
+    var sourceEl = document.getElementById(sourceId);
+    var val = sourceEl ? sourceEl.value : '';
     try {
       var saved = JSON.parse(val);
       if (Array.isArray(saved)) {
@@ -227,12 +229,22 @@
   }
 
   /* ── actions ── */
+  function _tsbWriteAndClose(value) {
+    var targetId = window._tsbAdvTarget || 'material_type_advanced';
+    document.getElementById(targetId).value = value;
+    if (typeof window._tsbAdvCallback === 'function') {
+      window._tsbAdvCallback(value);
+    }
+    window._tsbAdvTarget = null;
+    window._tsbAdvCallback = null;
+    $('#tsbModal').modal('hide');
+  }
+
   window.tsbUseOnce = function () {
     var json = JSON.stringify(_units.map(function (u) {
       return { name: u.name, image: u.image, nom: u.nom, _side: u._side, image_type: u.image_type };
     }));
-    document.getElementById('material_type_advanced').value = json;
-    $('#tsbModal').modal('hide');
+    _tsbWriteAndClose(json);
   };
 
   window.tsbToggleSave = function () {
@@ -250,10 +262,7 @@
       url: '/api/trainsets', method: 'POST',
       contentType: 'application/json',
       data: JSON.stringify({ name: name, units: units }),
-      success: function (data) {
-        document.getElementById('material_type_advanced').value = data.name;
-        $('#tsbModal').modal('hide');
-      },
+      success: function (data) { _tsbWriteAndClose(data.name); },
       error: function (xhr) {
         var msg = _i18n.saveFailed;
         try { msg = JSON.parse(xhr.responseText).error || msg; } catch (e) {}

@@ -3,6 +3,7 @@ from .delete_trip import delete_trip
 from .duplicate_trip import duplicate_trip
 from .edits import (
     attach_ticket_to_trips,
+    bulk_edit_trips,
     change_trips_visibility,
     delete_ticket_from_db,
     update_trip_type,
@@ -17,6 +18,7 @@ __all__ = [
     delete_trip.__name__,
     duplicate_trip.__name__,
     attach_ticket_to_trips.__name__,
+    bulk_edit_trips.__name__,
     change_trips_visibility.__name__,
     update_trip.__name__,
     delete_ticket_from_db.__name__,

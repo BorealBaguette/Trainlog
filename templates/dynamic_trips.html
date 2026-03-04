@@ -275,6 +275,7 @@
             {% if not isPublic %}
             <li class="dropdown-item"><a onclick="mergeTrips();"><i class="fa-solid fa-code-merge"></i>  {{mergeTrips}}</a></li>
             <li class="dropdown-item"><a onclick="$('#changeVisibilityModal').modal('show');"><i class="fa-solid fa-eye"></i>  {{bulk_change_visibility}}</a></li>
+            <li class="dropdown-item"><a onclick="openMassEdit();"><i class="fa-solid fa-pen-to-square"></i>  {{massEdit}}</a></li>
             <hr class="dropdown-divider">
             <li class="dropdown-item"><a onclick="multiDelete();"><i class="fa-solid fa-trash-can" style="color:#c72020;" aria-hidden="true"></i>  {{delete}}</a></li>
             {% endif %}
@@ -447,6 +448,118 @@
     </div>
 </div>
 
+<div class="modal fade" id="massEditModal" tabindex="-1" aria-hidden="true" style="padding-top: 56px">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-pen-to-square me-2"></i><span id="massEditTitle">{{massEdit}}</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">{{shiftTimes}} (min)</label>
+          <input type="number" class="form-control" id="massEditTimeShift" style="width:9rem" placeholder="0" />
+        </div>
+        <hr class="my-2" />
+        <div class="mb-3">
+          <label class="form-label">{{originStation}}</label>
+          <div class="d-flex align-items-center gap-2">
+            <div class="flagDropdownWrapper">
+              <select id="massEditOriginCountry" class="custom-select-flag">
+                {% for code, emoji in country_list.items() %}
+                <option value="{{ emoji }}" data-code="{{ code }}">{{ emoji }} {{ code }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <input type="text" class="form-control" id="massEditOriginStation" placeholder="{{originStationName}}" />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{destinationStation}}</label>
+          <div class="d-flex align-items-center gap-2">
+            <div class="flagDropdownWrapper">
+              <select id="massEditDestCountry" class="custom-select-flag">
+                {% for code, emoji in country_list.items() %}
+                <option value="{{ emoji }}" data-code="{{ code }}">{{ emoji }} {{ code }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <input type="text" class="form-control" id="massEditDestStation" placeholder="{{destinationStationName}}" />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{operator}}</label>
+          <input type="text" class="form-control mass-edit-field" data-field="operator" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{lineName}}</label>
+          <input type="text" class="form-control mass-edit-field" data-field="line_name" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{material_type}}</label>
+          <input type="text" class="form-control mass-edit-field" data-field="material_type" id="massEditMaterialType" />
+          <input type="hidden" id="massEditMaterialTypeAdvanced" />
+          <div id="massEditTsbWrap" style="display:none; margin-top:0.4rem; align-items:center; gap:0.5rem; flex-wrap:wrap">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openMassEditTsb()">
+              <i class="fas fa-wrench"></i> {{tsbBuildTrainset}}
+            </button>
+            <span id="massEditTsbLabel" style="font-size:.875rem; color:#666;"></span>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{reg}}</label>
+          <input type="text" class="form-control mass-edit-field" data-field="reg" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{seat}}</label>
+          <input type="text" class="form-control mass-edit-field" data-field="seat" />
+        </div>
+        <div class="mb-3 row g-2 align-items-end">
+          <div class="col">
+            <label class="form-label">{{departureDelay}}</label>
+            <input type="number" step="any" class="form-control" id="massEditDepDelay" placeholder="0" />
+          </div>
+          <div class="col">
+            <label class="form-label">{{arrivalDelay}}</label>
+            <input type="number" step="any" class="form-control" id="massEditArrDelay" placeholder="0" />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{notes}}</label>
+          <textarea class="form-control mass-edit-field" data-field="notes" rows="2"></textarea>
+          <div class="mt-1" id="massEditNotesMode">
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="massEditNotesMode" id="massEditNotesReplace" value="replace" checked>
+              <label class="form-check-label" for="massEditNotesReplace">{{notesReplace}}</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="massEditNotesMode" id="massEditNotesAppend" value="append">
+              <label class="form-check-label" for="massEditNotesAppend">{{notesAppend}}</label>
+            </div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{visibility}}</label>
+          <select class="form-select mass-edit-field" data-field="visibility">
+            <option value="">—</option>
+            <option value="public">{{visibility_public}}</option>
+            <option value="friends">{{visibility_friends}}</option>
+            <option value="private">{{visibility_private}}</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{cancel}}</button>
+        <button type="button" class="btn btn-primary" id="massEditSubmit" onclick="submitMassEdit()">
+          <span id="massEditSubmitLabel">{{submit}}</span>
+          <span id="massEditSpinner" class="spinner-border spinner-border-sm" role="status" style="display:none"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% include "includes/trainset_builder_modal.html" %}
 
 <script src="{{ url_for('static', filename='js/util.js') }}"></script>
 <script type="text/javascript">
@@ -1611,6 +1724,178 @@ function deleteTrip(tripId){
     if (confirm(confirmText)) {
         processDelete(tripId);
     }   
+}
+
+const massEditDirtyFields = new Set();
+
+function _massEditPrefillStation(countrySelId, stationInputId, trips, field) {
+    const values = new Set(trips.map(function(t) { return t[field] ?? ''; }));
+    const stationInput = document.getElementById(stationInputId);
+    const countrySel = document.getElementById(countrySelId);
+    if (values.size === 1) {
+        const full = [...values][0];
+        const spaceIdx = full.indexOf(' ');
+        if (spaceIdx > 0) {
+            countrySel.value = full.slice(0, spaceIdx);
+            stationInput.value = full.slice(spaceIdx + 1);
+        } else {
+            stationInput.value = full;
+        }
+        stationInput.placeholder = '';
+    } else {
+        stationInput.value = '';
+        stationInput.placeholder = '{{multipleValues}}';
+    }
+}
+
+function openMassEdit() {
+    massEditDirtyFields.clear();
+    const trips = Object.values(checkedTripData);
+    const n = trips.length;
+
+    document.getElementById('massEditTitle').textContent = `{{massEdit}} (${n})`;
+
+    // Standard fields
+    document.querySelectorAll('#massEditModal .mass-edit-field').forEach(function(input) {
+        const field = input.dataset.field;
+        const values = new Set(trips.map(function(t) { return t[field] ?? ''; }));
+        input.dataset.dirty = '';
+        if (values.size === 1) {
+            if (input.tagName === 'SELECT') {
+                input.value = [...values][0];
+            } else {
+                input.value = [...values][0];
+                input.placeholder = '';
+            }
+            input.classList.remove('text-muted');
+        } else {
+            if (input.tagName !== 'SELECT') {
+                input.value = '';
+                input.placeholder = '{{multipleValues}}';
+            } else {
+                input.value = '';
+            }
+        }
+    });
+
+    // Station fields
+    _massEditPrefillStation('massEditOriginCountry', 'massEditOriginStation', trips, 'origin_station');
+    _massEditPrefillStation('massEditDestCountry', 'massEditDestStation', trips, 'destination_station');
+
+    // material_type_advanced: reset hidden field and label
+    document.getElementById('massEditMaterialTypeAdvanced').value = '';
+    document.getElementById('massEditTsbLabel').textContent = '';
+
+    // Show TSB button only when all trips are rail types
+    const allRail = trips.every(function(t) {
+        return typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(t.type);
+    });
+    const tsbWrap = document.getElementById('massEditTsbWrap');
+    tsbWrap.style.display = allRail ? 'flex' : 'none';
+
+    // Reset shift + delay fields
+    document.getElementById('massEditTimeShift').value = '';
+    document.getElementById('massEditDepDelay').value = '';
+    document.getElementById('massEditArrDelay').value = '';
+
+    // Reset notes mode to replace
+    document.getElementById('massEditNotesReplace').checked = true;
+
+    $('#massEditModal').modal('show');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('#massEditModal .mass-edit-field').forEach(function(input) {
+        input.addEventListener('input', function() { massEditDirtyFields.add(input.dataset.field); });
+        input.addEventListener('change', function() { massEditDirtyFields.add(input.dataset.field); });
+    });
+
+    // Populate country names in flag dropdowns
+    updateCountryNames(document.getElementById('massEditOriginCountry'));
+    updateCountryNames(document.getElementById('massEditDestCountry'));
+
+    // Station dirty tracking
+    ['massEditOriginCountry', 'massEditOriginStation'].forEach(function(id) {
+        document.getElementById(id).addEventListener('input', function() { massEditDirtyFields.add('origin_station'); });
+        document.getElementById(id).addEventListener('change', function() { massEditDirtyFields.add('origin_station'); });
+    });
+    ['massEditDestCountry', 'massEditDestStation'].forEach(function(id) {
+        document.getElementById(id).addEventListener('input', function() { massEditDirtyFields.add('destination_station'); });
+        document.getElementById(id).addEventListener('change', function() { massEditDirtyFields.add('destination_station'); });
+    });
+});
+
+function openMassEditTsb() {
+    window._tsbAdvTarget = 'massEditMaterialTypeAdvanced';
+    window._tsbAdvCallback = function(value) {
+        massEditDirtyFields.add('material_type_advanced');
+        var label = '';
+        try {
+            var units = JSON.parse(value);
+            if (Array.isArray(units)) label = units.map(function(u) { return u.nom || u.name; }).join(' + ');
+        } catch (e) { label = value; }
+        document.getElementById('massEditTsbLabel').textContent = label;
+    };
+    openTsbModal();
+}
+
+function submitMassEdit() {
+    const fields = {};
+    massEditDirtyFields.forEach(function(fieldName) {
+        if (fieldName === 'origin_station') {
+            const emoji = document.getElementById('massEditOriginCountry').value;
+            const name = document.getElementById('massEditOriginStation').value.trim();
+            if (name) fields['origin_station'] = emoji + ' ' + name;
+        } else if (fieldName === 'destination_station') {
+            const emoji = document.getElementById('massEditDestCountry').value;
+            const name = document.getElementById('massEditDestStation').value.trim();
+            if (name) fields['destination_station'] = emoji + ' ' + name;
+        } else if (fieldName === 'material_type_advanced') {
+            fields['material_type_advanced'] = document.getElementById('massEditMaterialTypeAdvanced').value || null;
+        } else {
+            const input = document.querySelector('#massEditModal [data-field="' + fieldName + '"]');
+            if (input) fields[fieldName] = input.value;
+        }
+    });
+
+    // Delay fields (convert minutes → seconds)
+    const depDelayMin = parseFloat(document.getElementById('massEditDepDelay').value);
+    const arrDelayMin = parseFloat(document.getElementById('massEditArrDelay').value);
+    if (!isNaN(depDelayMin)) fields['departure_delay'] = Math.round(depDelayMin * 60) || null;
+    if (!isNaN(arrDelayMin)) fields['arrival_delay'] = Math.round(arrDelayMin * 60) || null;
+
+    const timeShift = parseInt(document.getElementById('massEditTimeShift').value, 10) || 0;
+
+    if (Object.keys(fields).length === 0 && !timeShift) {
+        $('#massEditModal').modal('hide');
+        return;
+    }
+
+    const notesAppend = document.getElementById('massEditNotesAppend').checked;
+
+    document.getElementById('massEditSubmit').disabled = true;
+    document.getElementById('massEditSubmitLabel').style.display = 'none';
+    document.getElementById('massEditSpinner').style.display = '';
+
+    fetch('{{ url_for("bulkEditTrips", username=username) }}', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ trip_ids: checkedTrips, fields: fields, notes_append: notesAppend, time_offset_minutes: timeShift })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            tableObject.ajax.reload();
+            $('#massEditModal').modal('hide');
+        } else {
+            alert(data.error || 'Error');
+        }
+    })
+    .finally(function() {
+        document.getElementById('massEditSubmit').disabled = false;
+        document.getElementById('massEditSubmitLabel').style.display = '';
+        document.getElementById('massEditSpinner').style.display = 'none';
+    });
 }
 
 function multiDelete(){

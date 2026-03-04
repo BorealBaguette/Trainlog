@@ -191,6 +191,7 @@ from src.trips import (
     delete_trip,
     update_trip_type,
     attach_ticket_to_trips,
+    bulk_edit_trips,
     change_trips_visibility,
     delete_ticket_from_db,
     get_current_trip_id,
@@ -2304,6 +2305,31 @@ def bulkChangeVisibility(username):
     else:
         logger.exception(error)
         return jsonify({"error": "An error occured while changing the visibility"}), 500
+
+
+@app.route("/u/<username>/bulkEditTrips", methods=["POST"])
+@login_required
+def bulkEditTrips(username):
+    data = request.get_json()
+    if not data or "trip_ids" not in data or "fields" not in data:
+        return jsonify({"error": "Missing parameters"}), 400
+
+    trip_ids = data["trip_ids"]
+    fields = data.get("fields", {})
+    notes_append = data.get("notes_append", False)
+    time_offset_minutes = int(data.get("time_offset_minutes", 0) or 0)
+
+    if not trip_ids or not isinstance(trip_ids, list):
+        return jsonify({"error": "Invalid trip_ids"}), 400
+
+    success, error = bulk_edit_trips(username, trip_ids, fields, notes_append, time_offset_minutes)
+
+    if success:
+        return jsonify({"success": 1}), 200
+    else:
+        logger.exception(error)
+        return jsonify({"error": "An error occurred while editing trips"}), 500
+
 
 @app.route("/u/<username>/toggle_ticket_active/<ticket_id>")
 @login_required
@@ -6141,7 +6167,8 @@ def dynamic_trips(username, time=None):
         isPublic=False,
         projects=projects,
         trip_column_names=trip_column_names,
-                **lang[session["userinfo"]["lang"]],
+        country_list=get_all_countries(),
+        **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -6167,7 +6194,8 @@ def public_trips(username, time=None):
         isPublic=True,
         projects=projects,
         trip_column_names=trip_column_names,
-                **lang[session["userinfo"]["lang"]],
+        country_list=get_all_countries(),
+        **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
