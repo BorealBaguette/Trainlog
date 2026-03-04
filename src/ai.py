@@ -13,6 +13,7 @@ from src.trips import Trip, create_trip
 from src.routing import forward_routing_core
 from src.utils import get_default_trip_visibility, pathConn, managed_cursor
 from src.pg import pg_session
+from src.photon import photonRequest
 import re
 
 logger = logging.getLogger(__name__)
@@ -143,41 +144,37 @@ def geocode_station(query, trip_type="train", fallback_coords=None, city_fallbac
         params = [("q", q), ("limit", 1), ("lang", "en")]
         for tag in osm_tags.get(trip_type, []):
             params.append(("osm_tag", tag))
-        
-        for url in ["http://photon.srv.trainlog.me", "https://photon.chiel.uk/api", "https://photon.komoot.io/api"]:
-            try:
-                resp = requests.get(url, params=params, timeout=10)
-                resp.raise_for_status()
-                data = resp.json()
-                
-                if data.get("features"):
-                    feat = data["features"][0]
-                    props = feat["properties"]
-                    lng, lat = feat["geometry"]["coordinates"]
-                    
-                    # Validate against AI coords if provided
-                    if fallback_coords:
-                        dist = getDistance(
-                            {"lat": lat, "lng": lng},
-                            {"lat": fallback_coords[0], "lng": fallback_coords[1]}
-                        )
-                        if dist > 50:
-                            logger.debug(f"Geocode result for '{q}' too far ({dist:.0f}km), skipping")
-                            continue
-                    
-                    country_code = props.get("countrycode", "")
-                    if not country_code or country_code in ["CN", "FI"]:
-                        country = getCountryFromCoordinates(lat, lng)
-                        country_code = country.get("countryCode", "")
-                    
-                    name = props.get("name", query)
-                    city = props.get("city")
-                    if city and city.lower() not in name.lower():
-                        name = f"{city} - {name}"
-                    
-                    return {"name": name, "lat": lat, "lng": lng, "country_code": country_code}
-            except Exception as e:
-                logger.debug(f"Geocoding {url} failed: {e}")
+
+        data = photonRequest("/api", params, timeout=10)
+
+        if data and data.get("features"):
+            feat = data["features"][0]
+            props = feat["properties"]
+            lng, lat = feat["geometry"]["coordinates"]
+
+            # Validate against AI coords if provided
+            if fallback_coords:
+                dist = getDistance(
+                    {"lat": lat, "lng": lng},
+                    {"lat": fallback_coords[0], "lng": fallback_coords[1]}
+                )
+                if dist > 50:
+                    logger.debug(
+                        f"Geocode result for '{q}' too far ({dist:.0f}km), skipping"
+                    )
+                    continue
+
+            country_code = props.get("countrycode", "")
+            if not country_code or country_code in ["CN", "FI"]:
+                country = getCountryFromCoordinates(lat, lng)
+                country_code = country.get("countryCode", "")
+
+            name = props.get("name", query)
+            city = props.get("city")
+            if city and city.lower() not in name.lower():
+                name = f"{city} - {name}"
+
+            return {"name": name, "lat": lat, "lng": lng, "country_code": country_code}
     
     # Try past trips before AI fallback
     past_coords = get_coords_from_past_trips(query, trip_type)
