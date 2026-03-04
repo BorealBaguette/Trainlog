@@ -7,7 +7,7 @@
     /* --- General UI --- */
     .ui-front { z-index: 9999999 !important; }
 
-        #dataTable_wrapper { min-height: 600px; }
+    #dataTable_wrapper { min-height: 600px; }
 
     /* --- Composition Modal Styles --- */
     
@@ -1163,7 +1163,7 @@ var table = $('#tripRows');
         url: '{{ url_for("get_trips_api" if not isPublic else "get_trips_api_public", username=username, projects=projects) }}',
         "type": "POST",
         "data": function(d) {
-            d.filterTypes = $('#filterTypeSwitch').is(':checked') ? 0 : 1;
+            d.filterTypes = (getCookie('filterTypeSwitch') === 'true') ? 0 : 1;
             
             // Parse smart search
             const searchValue = d.search.value || '';
