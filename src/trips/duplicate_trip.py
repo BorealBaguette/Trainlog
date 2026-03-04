@@ -48,6 +48,10 @@ def _duplicate_trip_in_sqlite(trip_id):
             insert_query = f"INSERT INTO trip ({columns_str}) VALUES ({placeholders})"
             cursor.execute(insert_query, row_to_duplicate)
             new_trip_id = cursor.lastrowid
+            cursor.execute(
+                "UPDATE trip SET departure_delay = NULL, arrival_delay = NULL WHERE uid = ?",
+                (new_trip_id,),
+            )
     with managed_cursor(pathConn) as cursor:
         cursor.execute("select path from paths where trip_id = ?", (trip_id,))
         path_to_duplicate = cursor.fetchone()["path"]

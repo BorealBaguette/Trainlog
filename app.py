@@ -6250,8 +6250,12 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         tripHours = lang[session["userinfo"]["lang"]]["hours"]
         tripMinutes = lang[session["userinfo"]["lang"]]["minutes"]
 
-    tripDepartureDelay = int(trip["departure_delay"] / 60) if trip["departure_delay"] is not None else ""
-    tripArrivalDelay = int(trip["arrival_delay"] / 60) if trip["arrival_delay"] is not None else ""
+    if edit_copy_type == "copy":
+        tripDepartureDelay = ""
+        tripArrivalDelay = ""
+    else:
+        tripDepartureDelay = int(trip["departure_delay"] / 60) if trip["departure_delay"] is not None else ""
+        tripArrivalDelay = int(trip["arrival_delay"] / 60) if trip["arrival_delay"] is not None else ""
     return render_template(
         "edit_copy.html",
         title=lang[session["userinfo"]["lang"]][edit_copy_type],
