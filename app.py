@@ -200,7 +200,7 @@ from src.paths import Path
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
-from src.photon import photonInstances, photonRequest
+from src.photon import photonInstances, photonRequest, photonRequestSingle
 from src.routing import forward_routing_core
 
 app = Flask(__name__)
@@ -4584,38 +4584,31 @@ def router_status_single():
         return jsonify({"status": "DOWN", "message": str(e)})
 
 
-@app.route("/photon_status")
-def router_status_photon():
-    url = request.args.get("url")
-    if not url:
-        return jsonify({"status": "ERROR", "message": "Missing url"}), 400
+@app.route("/photon_status/<instance>")
+def router_status_photon(instance):
+    if instance not in photonInstances:
+        return jsonify({"status": "ERROR", "message": "Unknown instance"}), 400
     try:
-        resp = requests.get(f"{url}/status", timeout=3)
-        if resp.status_code == 200:
-            data = resp.json()
-            # Extract and prettify import_date
-            import_date = data.get("import_date")
-            if import_date:
-                # Photon format: "2025-05-18T06:35:14Z"
-                try:
-                    dt = datetime.strptime(import_date, "%Y-%m-%dT%H:%M:%SZ")
-                    pretty = dt.strftime("%Y-%m-%d %H:%M UTC")
-                except Exception:
-                    pretty = import_date.replace("T", " ").replace("Z", " UTC")
-            else:
-                pretty = None
-            # Include the human date as 'last_updated'
-            return jsonify(
-                {
-                    "status": data.get("status", "UNKNOWN"),
-                    "import_date": import_date,
-                    "last_updated": pretty,
-                }
-            )
+        data = photonRequestSingle(instance, "/status", params={}, timeout=3)
+        # Extract and prettify import_date
+        import_date = data.get("import_date")
+        if import_date:
+            # Photon format: "2025-05-18T06:35:14Z"
+            try:
+                dt = datetime.strptime(import_date, "%Y-%m-%dT%H:%M:%SZ")
+                pretty = dt.strftime("%Y-%m-%d %H:%M UTC")
+            except Exception:
+                pretty = import_date.replace("T", " ").replace("Z", " UTC")
         else:
-            return jsonify(
-                {"status": "DOWN", "message": f"HTTP {resp.status_code}"}
-            ), resp.status_code
+            pretty = None
+        # Include the human date as 'last_updated'
+        return jsonify(
+            {
+                "status": data.get("status", "UNKNOWN"),
+                "import_date": import_date,
+                "last_updated": pretty,
+            }
+        )
     except Exception as e:
         return jsonify({"status": "DOWN", "message": str(e)}), 500
 
