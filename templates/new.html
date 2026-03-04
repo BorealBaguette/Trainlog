@@ -102,13 +102,6 @@
         <label for="notes" class="sr-only">{{notes}}</label>
         <input type="text" name="notes" id="notes" placeholder="{{notes}}">
 
-        <fieldset class="fieldset-time non_poi">
-          <legend><span class="legend">{{delays}}</span></legend>
-          <label class="sr-only" for="departureDelayMinutes">{{departureDelay}}</label>
-          <input type="number" step="1" id="departureDelayMinutes" name="departureDelayMinutes" placeholder="{{departure}}"/>
-          <label class="sr-only" for="arrivalDelayMinutes">{{arrivalDelay}}</label>
-          <input type="number" step="1" id="arrivalDelayMinutes" name="arrivalDelayMinutes" placeholder="{{arrival}}"/>
-        </fieldset>
 
         <!-- Price Details Subgroup -->
         <fieldset class="fieldset-fixed fieldset-price">
@@ -218,24 +211,61 @@
       <group id="dates">
         <fieldset class="fieldset-datetime">
           <legend>
-            <span class="legend">{{ newTripStart if vehicle_type not in  ('accommodation', 'poi', 'restaurant') else checkIn }}</span>
+            <span class="legend">{{ newTripStart if vehicle_type not in ('accommodation', 'poi', 'restaurant') else checkIn }}<span class="delay-planned-suffix" style="display:none"> ({{plannedFuture}})</span></span>
           </legend>
           <label class="sr-only" for="newTripStartDate">{{ date }}</label>
           <input type="date" name="newTripStartDate" id="newTripStartDate" placeholder=" "/>
-          <label class="sr-only" for="newTripStartDate">{{ time }}</label>
-          <input type="time" name="newTripStartTime" id="newTripStartTime" placeholder=" "/>    
+          <label class="sr-only" for="newTripStartTime">{{ time }}</label>
+          <input type="time" name="newTripStartTime" id="newTripStartTime" placeholder=" "/>
         </fieldset>
 
         <fieldset class="fieldset-datetime">
           <legend>
-            <span class="legend">{{newTripEnd if vehicle_type not in  ('accommodation', 'poi', 'restaurant') else checkOut}}</span>
+            <span class="legend">{{newTripEnd if vehicle_type not in ('accommodation', 'poi', 'restaurant') else checkOut}}<span class="delay-planned-suffix" style="display:none"> ({{plannedFuture}})</span></span>
           </legend>
           <label class="sr-only" for="newTripEndDate">{{ date }}</label>
           <input type="date" name="newTripEndDate" id="newTripEndDate" placeholder=" "/>
-          <label class="sr-only" for="newTripEndDate">{{ time }}</label>
+          <label class="sr-only" for="newTripEndTime">{{ time }}</label>
           <input type="time" name="newTripEndTime" id="newTripEndTime" placeholder=" " />
         </fieldset>
       </group>
+
+      <span id="delayToggleWrapper" class="non_poi" style="display:inline-flex; align-items:center; gap:0.3rem">
+        <input type="checkbox" id="delayToggle" />
+        <label for="delayToggle" class="checkboxLabel">{{delaysToggle}}</label>
+      </span>
+      <span id="delayModeSwitchWrapper" class="non_poi" style="display:none; margin-left:1.5rem">
+        <span style="display:inline-flex; align-items:center; gap:0.3rem">
+          <input type="checkbox" id="delayModeSwitch" />
+          <label for="delayModeSwitch" class="checkboxLabel">{{delayDateMode}}</label>
+        </span>
+      </span>
+
+      <div id="depActualGroup" class="non_poi" style="display:none; margin-top:0.6rem">
+        <fieldset class="fieldset-datetime">
+          <legend><span class="legend">{{ newTripStart if vehicle_type not in ('accommodation', 'poi', 'restaurant') else checkIn }} ({{delayActual}})</span></legend>
+          <label class="sr-only" for="depActualDate">{{ date }}</label>
+          <input type="date" id="depActualDate" placeholder=" " />
+          <label class="sr-only" for="depActualTime">{{ time }}</label>
+          <input type="time" id="depActualTime" placeholder=" " />
+        </fieldset>
+      </div>
+      <div id="arrActualGroup" class="non_poi" style="display:none">
+        <fieldset class="fieldset-datetime">
+          <legend><span class="legend">{{newTripEnd if vehicle_type not in ('accommodation', 'poi', 'restaurant') else checkOut}} ({{delayActual}})</span></legend>
+          <label class="sr-only" for="arrActualDate">{{ date }}</label>
+          <input type="date" id="arrActualDate" placeholder=" " />
+          <label class="sr-only" for="arrActualTime">{{ time }}</label>
+          <input type="time" id="arrActualTime" placeholder=" " />
+        </fieldset>
+      </div>
+      <fieldset class="fieldset-time non_poi" id="delayMinutesInputs" style="display:none">
+        <legend><span class="legend">{{delays}}</span></legend>
+        <label class="sr-only" for="departureDelayMinutes">{{departureDelay}}</label>
+        <input type="number" step="any" id="departureDelayMinutes" name="departureDelayMinutes" placeholder="{{departure}}"/>
+        <label class="sr-only" for="arrivalDelayMinutes">{{arrivalDelay}}</label>
+        <input type="number" step="any" id="arrivalDelayMinutes" name="arrivalDelayMinutes" placeholder="{{arrival}}"/>
+      </fieldset>
 
       <button id=submit type="submit" onclick="toRouting($('form').serializeArray(), '{{vehicle_type}}' == 'helicopter' ? airRoutingURL : routingURL, '{{vehicle_type}}');">{{submit}}</button>
     </form>
@@ -469,6 +499,116 @@
       .fail(function() { $list.html('<div class="p-2 text-danger" style="font-size:.85rem">Failed to load</div>'); });
   }
   {% endif %}
+
+  // Delay section controls
+  (function() {
+    if ($('#delayToggle').is(':hidden')) return;
+    var delayDateMode = Cookies.get('delayDateMode') === 'true';
+    $('#delayModeSwitch').prop('checked', delayDateMode);
+
+    // Single source of truth: delay in seconds (null = not set)
+    var depDelaySec = null, arrDelaySec = null;
+
+    function fillActual(plannedDateId, plannedTimeId, actualDateId, actualTimeId, seconds) {
+      if (seconds === null) return;
+      var pd = document.getElementById(plannedDateId).value;
+      var pt = document.getElementById(plannedTimeId).value;
+      if (!pd || !pt) return;
+      var actual = new Date(new Date(pd + 'T' + pt).getTime() + seconds * 1000);
+      document.getElementById(actualDateId).value = actual.toISOString().slice(0, 10);
+      document.getElementById(actualTimeId).value = actual.toTimeString().slice(0, 5);
+    }
+
+    function fillMinutes(minutesInputId, seconds) {
+      document.getElementById(minutesInputId).value = seconds !== null ? seconds / 60 : '';
+    }
+
+    function setDatetimeMode(on) {
+      if (on) {
+        $('#delayMinutesInputs').hide();
+        $('#depActualGroup, #arrActualGroup').show();
+        $('.delay-planned-suffix').show();
+        fillActual('newTripStartDate', 'newTripStartTime', 'depActualDate', 'depActualTime', depDelaySec);
+        fillActual('newTripEndDate', 'newTripEndTime', 'arrActualDate', 'arrActualTime', arrDelaySec);
+      } else {
+        $('#delayMinutesInputs').show();
+        $('#depActualGroup, #arrActualGroup').hide();
+        $('.delay-planned-suffix').hide();
+        fillMinutes('departureDelayMinutes', depDelaySec);
+        fillMinutes('arrivalDelayMinutes', arrDelaySec);
+      }
+    }
+
+    $('#delayToggle').on('change', function() {
+      if ($(this).is(':checked')) {
+        $('#delayModeSwitchWrapper').css('display', 'inline-flex');
+        setDatetimeMode($('#delayModeSwitch').is(':checked'));
+      } else {
+        $('#delayModeSwitchWrapper').hide();
+        $('#delayMinutesInputs').hide();
+        $('#depActualGroup, #arrActualGroup').hide();
+        $('.delay-planned-suffix').hide();
+      }
+    });
+
+    $('#delayModeSwitch').on('change', function() {
+      var dateMode = $(this).is(':checked');
+      Cookies.set('delayDateMode', dateMode, { expires: 365 });
+      if ($('#delayToggle').is(':checked')) setDatetimeMode(dateMode);
+    });
+
+    $('#departureDelayMinutes').on('input', function() {
+      var v = parseFloat(this.value);
+      depDelaySec = isNaN(v) ? null : v * 60;
+    });
+    $('#arrivalDelayMinutes').on('input', function() {
+      var v = parseFloat(this.value);
+      arrDelaySec = isNaN(v) ? null : v * 60;
+    });
+
+    function updateFromActual(plannedDateId, plannedTimeId, actualDateId, actualTimeId, minutesInputId, isArr) {
+      var pd = document.getElementById(plannedDateId).value;
+      var pt = document.getElementById(plannedTimeId).value;
+      var ad = document.getElementById(actualDateId).value;
+      var at = document.getElementById(actualTimeId).value;
+      var sec = (pd && pt && ad && at) ? (new Date(ad + 'T' + at) - new Date(pd + 'T' + pt)) / 1000 : null;
+      if (isArr) arrDelaySec = sec; else depDelaySec = sec;
+      document.getElementById(minutesInputId).value = sec !== null ? sec / 60 : '';
+    }
+
+    ['depActualDate', 'depActualTime', 'newTripStartDate', 'newTripStartTime'].forEach(function(id) {
+      document.getElementById(id).addEventListener('change', function() {
+        if ($('#depActualGroup').is(':visible'))
+          updateFromActual('newTripStartDate', 'newTripStartTime', 'depActualDate', 'depActualTime', 'departureDelayMinutes', false);
+      });
+    });
+    ['arrActualDate', 'arrActualTime', 'newTripEndDate', 'newTripEndTime'].forEach(function(id) {
+      document.getElementById(id).addEventListener('change', function() {
+        if ($('#arrActualGroup').is(':visible'))
+          updateFromActual('newTripEndDate', 'newTripEndTime', 'arrActualDate', 'arrActualTime', 'arrivalDelayMinutes', true);
+      });
+    });
+
+    $('form').on('submit', function() {
+      if (!$('#delayToggle').is(':checked'))
+        $('#departureDelayMinutes, #arrivalDelayMinutes').val('');
+    });
+
+    // Hide delays when precision is not precise dates
+    function updateDelayAvailability() {
+      var isPrecise = $('#radioPreciseDates').is(':checked');
+      $('#delayToggleWrapper').css('display', isPrecise ? 'inline-flex' : 'none');
+      if (!isPrecise && $('#delayToggle').is(':checked')) {
+        $('#delayToggle').prop('checked', false);
+        $('#delayModeSwitchWrapper').hide();
+        $('#delayMinutesInputs').hide();
+        $('#depActualGroup, #arrActualGroup').hide();
+        $('.delay-planned-suffix').hide();
+      }
+    }
+    updateDelayAvailability();
+    $('input[name="precision"]').on('change', updateDelayAvailability);
+  })();
 </script>
 
 {% if vehicle_type in ('train', 'metro', 'tram') and is_alpha %}
