@@ -71,7 +71,7 @@ function renderPhotonStatus() {
       </div>
     `);
 
-    fetch(`/photon_status?url=${encodeURIComponent(inst_url)}`)
+    fetch(`/photon_status/${encodeURIComponent(inst_name)}`)
       .then(r => r.json())
       .then(data => {
         const badgeClass = data.status && data.status.toLowerCase() === "ok" ? "badge-success" : "badge-danger";

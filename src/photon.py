@@ -1,6 +1,6 @@
-import requests
 import logging
 
+import requests
 
 logger = logging.getLogger(__name__)
 
@@ -12,7 +12,7 @@ photonInstances = {
 
 
 def photonRequestSingle(instance, endpoint, params, *, timeout=5):
-    _, url = instance
+    url = photonInstances[instance]
     endpoint = endpoint.lstrip("/")
     resp = requests.get(f"{url}/{endpoint}", params=params, timeout=timeout)
     resp.raise_for_status()
@@ -20,7 +20,7 @@ def photonRequestSingle(instance, endpoint, params, *, timeout=5):
 
 
 def photonRequest(endpoint, params, *, timeout=5):
-    for instance in photonInstances.items():
+    for instance in photonInstances.keys():
         try:
             response_json = photonRequestSingle(
                 instance, endpoint, params, timeout=timeout
