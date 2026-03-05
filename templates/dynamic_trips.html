@@ -506,14 +506,12 @@
           <label class="form-label">{{material_type}}</label>
           <input type="text" class="form-control mass-edit-field" data-field="material_type" id="massEditMaterialType" />
           <input type="hidden" id="massEditMaterialTypeAdvanced" />
-          {% if is_alpha %}
           <div id="massEditTsbWrap" style="display:none; margin-top:0.4rem; align-items:center; gap:0.5rem; flex-wrap:wrap">
             <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openMassEditTsb()">
               <i class="fas fa-wrench"></i> {{tsbBuildTrainset}}
             </button>
             <span id="massEditTsbLabel" style="font-size:.875rem; color:#666;"></span>
           </div>
-          {% endif %}
         </div>
         <div class="mb-3">
           <label class="form-label">{{reg}}</label>
@@ -1798,7 +1796,7 @@ function openMassEdit() {
 
     // Show TSB button only when all trips are rail types
     const allRail = trips.every(function(t) {
-        return typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(t.type);
+        return typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(t.type) && {{is_alpha|lower%}};
     });
     const tsbWrap = document.getElementById('massEditTsbWrap');
     tsbWrap.style.display = allRail ? 'flex' : 'none';
