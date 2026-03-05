@@ -15,19 +15,29 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body pb-2">
+        <div class="text-muted" style="font-size:.7rem; font-weight:600; text-transform:uppercase;
+             letter-spacing:.05em; margin-bottom:4px">{{tsbBuildSection}}</div>
         <input type="text" id="tsb-q" class="form-control form-control-sm mb-1"
                placeholder="{{tsSearchWagons}}" autocomplete="off">
         <div id="tsb-results" class="list-group mb-2" style="max-height:160px;overflow-y:auto"></div>
         <hr class="my-2">
+        <div id="tsb-ref-badge" style="display:none; font-size:.75rem; color:#0d6efd;
+             margin-bottom:4px; align-items:center; gap:4px">
+          <i class="fas fa-link"></i>
+          <span id="tsb-ref-name"></span>
+          <button type="button" onclick="tsbBreakRef()" style="border:0; background:none;
+                  cursor:pointer; color:#999; font-size:.9rem; line-height:1; padding:0"
+                  title="Edit / break reference">✎</button>
+        </div>
         <div id="tsb-strip" class="d-flex flex-wrap gap-2 py-1" style="min-height:60px">
           <span id="tsb-empty" class="text-muted fst-italic small m-auto">{{tsEmptyHint}}</span>
         </div>
       </div>
       <div class="modal-footer flex-wrap gap-2 py-2">
-        <!-- Save name row, hidden until "Save & use" is clicked -->
+        <!-- Save name row, hidden until "Save & apply" is clicked -->
         <div id="tsb-save-row" class="input-group input-group-sm me-auto d-none" style="max-width:260px">
           <input type="text" id="tsb-save-name" class="form-control" placeholder="{{tsTrainsetNamePlaceholder}}">
-          <button type="button" class="btn btn-success" onclick="tsbConfirmSave()">{{tsSaveBtn}}</button>
+          <button type="button" class="btn btn-success btn-sm" onclick="tsbConfirmSave()">{{tsSaveBtn}}</button>
         </div>
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{cancel}}</button>
         <button type="button" class="btn btn-outline-primary btn-sm" id="tsb-use-btn"
@@ -41,20 +51,25 @@
 
 <script>
 (function () {
-  var _units   = [];
-  var _uid     = 0;
-  var _timer   = null;
-  var WAGONS   = '{{ url_for("static", filename="images/wagons") }}';
-  var _i18n    = {
+  var _units        = [];
+  var _uid          = 0;
+  var _timer        = null;
+  var WAGONS        = '{{ url_for("static", filename="images/wagons") }}';
+  var _i18n         = {
     noResults:  '{{tsbNoResults}}',
     flip:       '{{tsFlipSide}}',
     remove:     '{{remove}}',
-    saveFailed: '{{tsSaveFailed}}'
+    saveFailed: '{{tsSaveFailed}}',
+    public:     '{{tsPubBadge}}'
   };
+  var _adminSets    = [];
+  var _personalSets = [];
+  var _refName      = null; // set when strip is loaded as a reference (not for editing)
 
   /* ── open ── */
   window.openTsbModal = function () {
     _units = [];
+    _refName = null;
     var sourceId = window._tsbAdvTarget || 'material_type_advanced';
     var sourceEl = document.getElementById(sourceId);
     var val = sourceEl ? sourceEl.value : '';
@@ -64,8 +79,9 @@
         saved.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
       }
     } catch(e) {
-      // val might be a trainset name — fetch its units from the API
+      // val is a trainset name — load in reference mode
       if (val) {
+        _refName = val;
         fetch('/api/trainsets/resolve?value=' + encodeURIComponent(val))
           .then(function(r) { return r.json(); })
           .then(function(units) {
@@ -79,7 +95,34 @@
     document.getElementById('tsb-save-row').classList.add('d-none');
     document.getElementById('tsb-save-name').value = '';
     _render();
+    _fetchSets();
     $('#tsbModal').modal('show');
+  };
+
+  /* ── fetch saved sets (for search) ── */
+  function _fetchSets() {
+    $.getJSON('/api/trainsets', function(sets) {
+      _personalSets = sets.filter(function(ts) { return !ts.is_admin; });
+      _adminSets    = sets.filter(function(ts) { return ts.is_admin; });
+    });
+  }
+
+  function _loadSavedIntoStrip(name) {
+    fetch('/api/trainsets/resolve?value=' + encodeURIComponent(name))
+      .then(function(r) { return r.json(); })
+      .then(function(units) {
+        _refName = name;
+        _units = [];
+        units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
+        _render();
+        document.getElementById('tsb-q').value = '';
+        document.getElementById('tsb-results').innerHTML = '';
+      });
+  }
+
+  window.tsbBreakRef = function() {
+    _refName = null;
+    _render();
   };
 
   /* ── search ── */
@@ -94,7 +137,38 @@
     $.getJSON('/api/wagons/search', { q: q, limit: 12 }, function (rows) {
       var el = document.getElementById('tsb-results');
       el.innerHTML = '';
-      if (!rows.length) {
+
+      // Prepend matching trainsets
+      var ql = q.toLowerCase();
+      var matchingSets = _personalSets.concat(_adminSets).filter(function(ts) {
+        return ts.name.toLowerCase().indexOf(ql) !== -1;
+      });
+      matchingSets.forEach(function(ts) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'list-group-item list-group-item-action py-1 px-2 d-flex align-items-center gap-2';
+        btn.style.background = ts.is_admin ? '#f0f4ff' : '#f5fff5';
+        var icon = document.createElement('i');
+        icon.className = 'fas fa-train';
+        icon.style.cssText = 'font-size:.75rem;color:#6c757d;flex-shrink:0';
+        btn.appendChild(icon);
+        var label = document.createElement('span');
+        label.style.fontSize = '.8rem';
+        label.className = 'flex-fill text-truncate';
+        label.textContent = ts.name;
+        btn.appendChild(label);
+        if (ts.is_admin) {
+          var badge = document.createElement('span');
+          badge.className = 'badge bg-primary ms-auto';
+          badge.style.fontSize = '.6rem';
+          badge.textContent = _i18n.public;
+          btn.appendChild(badge);
+        }
+        btn.onclick = (function(tsName) { return function() { _loadSavedIntoStrip(tsName); }; })(ts.name);
+        el.appendChild(btn);
+      });
+
+      if (!rows.length && !matchingSets.length) {
         el.innerHTML = '<div class="list-group-item small text-muted py-1">' + _i18n.noResults + '</div>';
         return;
       }
@@ -154,6 +228,7 @@
 
   /* ── unit management ── */
   function _addUnit(wagon) {
+    _refName = null; // adding a wagon breaks the reference
     var defaultSide = wagon.image_type === 'sides_R' ? 'R' : 'L';
     _units.push(Object.assign({}, wagon, { _uid: ++_uid, _side: defaultSide }));
     _render();
@@ -161,10 +236,11 @@
 
   window.tsbFlip = function (uid) {
     var u = _units.find(function (u) { return u._uid === uid; });
-    if (u) { u._side = u._side === 'L' ? 'R' : 'L'; _render(); }
+    if (u) { _refName = null; u._side = u._side === 'L' ? 'R' : 'L'; _render(); }
   };
 
   window.tsbRemove = function (uid) {
+    _refName = null;
     _units = _units.filter(function (u) { return u._uid !== uid; });
     _render();
   };
@@ -181,6 +257,15 @@
     strip.querySelectorAll('.tsb-unit').forEach(function (el) { el.remove(); });
     document.getElementById('tsb-empty').style.display = _units.length ? 'none' : '';
 
+    // Reference badge
+    var badge = document.getElementById('tsb-ref-badge');
+    if (_refName) {
+      document.getElementById('tsb-ref-name').textContent = _refName;
+      badge.style.display = 'flex';
+    } else {
+      badge.style.display = 'none';
+    }
+
     _units.forEach(function (u) {
       var card = document.createElement('div');
       card.className = 'tsb-unit';
@@ -196,30 +281,33 @@
       nom.textContent = u.nom || '?';
       card.appendChild(nom);
 
-      var btns = document.createElement('div');
-      btns.className = 'd-flex justify-content-center gap-1 mt-1';
+      if (!_refName) {
+        var btns = document.createElement('div');
+        btns.className = 'd-flex justify-content-center gap-1 mt-1';
 
-      if (u.image_type === 'sides') {
-        var flip = document.createElement('button');
-        flip.type = 'button';
-        flip.className = 'btn btn-outline-secondary p-0';
-        flip.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
-        flip.title = _i18n.flip;
-        flip.textContent = '↔';
-        flip.onclick = (function (uid) { return function () { tsbFlip(uid); }; })(u._uid);
-        btns.appendChild(flip);
+        if (u.image_type === 'sides') {
+          var flip = document.createElement('button');
+          flip.type = 'button';
+          flip.className = 'btn btn-outline-secondary p-0';
+          flip.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
+          flip.title = _i18n.flip;
+          flip.textContent = '↔';
+          flip.onclick = (function (uid) { return function () { tsbFlip(uid); }; })(u._uid);
+          btns.appendChild(flip);
+        }
+
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'btn btn-outline-danger p-0';
+        rm.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
+        rm.title = _i18n.remove;
+        rm.textContent = '×';
+        rm.onclick = (function (uid) { return function () { tsbRemove(uid); }; })(u._uid);
+
+        btns.appendChild(rm);
+        card.appendChild(btns);
       }
 
-      var rm = document.createElement('button');
-      rm.type = 'button';
-      rm.className = 'btn btn-outline-danger p-0';
-      rm.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
-      rm.title = _i18n.remove;
-      rm.textContent = '×';
-      rm.onclick = (function (uid) { return function () { tsbRemove(uid); }; })(u._uid);
-
-      btns.appendChild(rm);
-      card.appendChild(btns);
       strip.appendChild(card);
     });
 
@@ -241,6 +329,10 @@
   }
 
   window.tsbUseOnce = function () {
+    if (_refName) {
+      _tsbWriteAndClose(_refName);
+      return;
+    }
     var json = JSON.stringify(_units.map(function (u) {
       return { name: u.name, image: u.image, nom: u.nom, _side: u._side, image_type: u.image_type };
     }));

@@ -4,7 +4,7 @@ import shlex
 from flask import jsonify, request, render_template, Blueprint, session, redirect, url_for
 
 from src.pg import pg_session
-from src.utils import has_current_trip, lang
+from src.utils import has_current_trip, lang, mainConn, managed_cursor
 
 trainset_blueprint = Blueprint('trainset', __name__)
 
@@ -222,7 +222,7 @@ def update_trainset(tid):
 
     with pg_session() as pg:
         result = pg.execute(
-            "SELECT username, is_admin::int AS is_admin FROM trainsets WHERE id = :id",
+            "SELECT username, is_admin::int AS is_admin, name AS old_name FROM trainsets WHERE id = :id",
             {"id": tid},
         )
         row = result.fetchone()
@@ -232,6 +232,7 @@ def update_trainset(tid):
             return jsonify({'error': 'Only admins can edit public trainsets'}), 403
         if not row['is_admin'] and row['username'] != username:
             return jsonify({'error': 'Forbidden'}), 403
+        old_name = row['old_name']
         pg.execute(
             """
             UPDATE trainsets
@@ -240,6 +241,28 @@ def update_trainset(tid):
             """,
             {"name": name, "units_json": json.dumps(units), "id": tid},
         )
+        if name != old_name:
+            if row['is_admin']:
+                pg.execute(
+                    "UPDATE trips SET material_type_advanced = :new WHERE material_type_advanced = :old",
+                    {"new": name, "old": old_name},
+                )
+                with managed_cursor(mainConn) as cursor:
+                    cursor.execute(
+                        "UPDATE trip SET material_type_advanced = :new WHERE material_type_advanced = :old",
+                        {"new": name, "old": old_name},
+                    )
+            else:
+                pg.execute(
+                    "UPDATE trips SET material_type_advanced = :new WHERE username = :user AND material_type_advanced = :old",
+                    {"new": name, "old": old_name, "user": username},
+                )
+                with managed_cursor(mainConn) as cursor:
+                    cursor.execute(
+                        "UPDATE trip SET material_type_advanced = :new WHERE username = :user AND material_type_advanced = :old",
+                        {"new": name, "old": old_name, "user": username},
+                    )
+            mainConn.commit()
 
     return jsonify({'id': tid, 'name': name})
 

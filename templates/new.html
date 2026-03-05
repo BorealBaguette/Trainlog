@@ -4,14 +4,8 @@
 {% include "bootstrap/navigation.html"%}
 
 <style>
-    .ts-pick-wrap { position: relative; }
-    .ts-pick-list { position: absolute; z-index: 999; left: 0; right: 0; top: 100%;
-                    background: #fff; border: 1px solid #aaa; border-radius: 4px;
-                    max-height: 180px; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,.15); }
-    .ts-pick-item { padding: 6px 10px; cursor: pointer; font-size: 0.9rem; }
-    .ts-pick-item:hover { background: #f0f0f0; }
     .ts-btn { padding: 6px 16px; border: 0; background-color: #f3f3f3;
-              cursor: pointer; flex: 1; font-size: 0.875rem; line-height: 1.4; }
+              cursor: pointer; font-size: 0.875rem; line-height: 1.4; }
     .ts-btn:hover { background-color: #e8e8e8; }
 </style>
 
@@ -87,12 +81,8 @@
                 <button type="button" onclick="clearMaterialTypeJson()" style="border:0; background:none; cursor:pointer; padding:0; color:#999; font-size:1.1rem; line-height:1; flex-shrink:0" title="Clear">×</button>
             </div>
         </div>
-        <div class="ts-pick-wrap non_poi">
-            <div style="display:flex; gap:8px; margin-bottom:1rem">
-                <button type="button" class="ts-btn" onclick="toggleTsPicker()"><i class="fas fa-train"></i> {{tsbPickTrainset}}</button>
-                <button type="button" class="ts-btn" onclick="openTsbModal()"><i class="fas fa-wrench"></i> {{tsbBuildTrainset}}</button>
-            </div>
-            <div id="ts-pick-list" class="ts-pick-list" style="display:none"></div>
+        <div class="non_poi" style="margin-bottom:1rem">
+            <button type="button" class="ts-btn" style="width:100%" onclick="openTsbModal()"><i class="fas fa-train"></i> {{tsbPickTrainset}}</button>
         </div>
         {% endif %}
         <label for="reg" class="sr-only">{{reg}}</label>
@@ -475,29 +465,6 @@
   }
   updateMaterialTypeDisplay();
   $(document).on('hidden.bs.modal', '#tsbModal', updateMaterialTypeDisplay);
-  function toggleTsPicker() {
-    var $list = $('#ts-pick-list');
-    if ($list.is(':visible')) { $list.hide(); return; }
-    if ($list.data('loaded')) { $list.show(); return; }
-    $list.html('<div class="p-2 text-muted" style="font-size:.85rem">Loading…</div>').show();
-    $.getJSON('/api/trainsets')
-      .done(function(sets) {
-        $list.empty();
-        if (!sets.length) {
-          $list.html('<div class="p-2 text-muted" style="font-size:.85rem">No saved trainsets</div>');
-          return;
-        }
-        sets.forEach(function(ts) {
-          $('<div class="ts-pick-item"></div>').text(ts.name).on('click', function() {
-            $('#material_type_advanced').val(ts.name);
-            updateMaterialTypeDisplay();
-            $list.hide();
-          }).appendTo($list);
-        });
-        $list.data('loaded', true);
-      })
-      .fail(function() { $list.html('<div class="p-2 text-danger" style="font-size:.85rem">Failed to load</div>'); });
-  }
   {% endif %}
 
   // Delay section controls
