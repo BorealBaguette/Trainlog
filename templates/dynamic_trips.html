@@ -1001,20 +1001,14 @@ function addSecsToDisplayTime(timeStr, secs) {
 
 function renderStartTime(data, type, row) {
     if (type === 'display') {
-        if (row.departure_delay) {
-            return data + renderDelayBadge(row.departure_delay);
-        }
-        return data;
+        return data + renderDelayBadge(row.departure_delay);
     }
     return data;
 }
 
 function renderEndTime(data, type, row) {
     if (type === 'display') {
-        if (row.arrival_delay) {
-            return data + renderDelayBadge(row.arrival_delay);
-        }
-        return data;
+        return data + renderDelayBadge(row.arrival_delay);
     }
     return data;
 }
