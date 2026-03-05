@@ -265,19 +265,19 @@
     <div class="btn-group dropup">
         <button type="button" class="btn btn-lg dropdown-toggle btn-secondary multiDropdown" data-bs-toggle="dropdown" aria-expanded="false"></button>
         <ul class="dropdown-menu" style="min-width: 12rem;">
-            <li class="dropdown-item" ><a onclick="exportSelected();"><i class="fa-solid fa-file-export"></i>  {{export}}</a></li>
+            <li class="dropdown-item" onclick="exportSelected();"><i class="fa-solid fa-file-export"></i>  {{export}}</li>
             {% if not isPublic %}
-            <li class="dropdown-item"><a onclick="$('#ticketSearchModal').modal('show');"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</a></li>
-            <li class="dropdown-item tagSearchLink" style="display:none;"><a onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags"></i>  {{manage_tags}}</a></li>
+            <li class="dropdown-item" onclick="$('#ticketSearchModal').modal('show');"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</li>
+            <li class="dropdown-item tagSearchLink" style="display:none;" onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags"></i>  {{manage_tags}}</li>
             {% endif %}
-            <li class="dropdown-item"><a onclick="exportGpx();"> <i class="fa-solid fa-route"></i>  {{exportGpx}}</a></li>
-            <li class="dropdown-item"><a onclick="exportGeojson();"><i class="fa-solid fa-draw-polygon"></i>  {{exportGeojson}}</a></li>
+            <li class="dropdown-item" onclick="exportGpx();"><i class="fa-solid fa-route"></i>  {{exportGpx}}</li>
+            <li class="dropdown-item" onclick="exportGeojson();"><i class="fa-solid fa-draw-polygon"></i>  {{exportGeojson}}</li>
             {% if not isPublic %}
-            <li class="dropdown-item"><a onclick="mergeTrips();"><i class="fa-solid fa-code-merge"></i>  {{mergeTrips}}</a></li>
-            <li class="dropdown-item"><a onclick="$('#changeVisibilityModal').modal('show');"><i class="fa-solid fa-eye"></i>  {{bulk_change_visibility}}</a></li>
-            <li class="dropdown-item"><a onclick="openMassEdit();"><i class="fa-solid fa-pen-to-square"></i>  {{massEdit}}</a></li>
+            <li class="dropdown-item" onclick="mergeTrips();"><i class="fa-solid fa-code-merge"></i>  {{mergeTrips}}</li>
+            <li class="dropdown-item" onclick="$('#changeVisibilityModal').modal('show');"><i class="fa-solid fa-eye"></i>  {{bulk_change_visibility}}</li>
+            <li class="dropdown-item" onclick="openMassEdit();"><i class="fa-solid fa-pen-to-square"></i>  {{massEdit}}</li>
             <hr class="dropdown-divider">
-            <li class="dropdown-item"><a onclick="multiDelete();"><i class="fa-solid fa-trash-can" style="color:#c72020;" aria-hidden="true"></i>  {{delete}}</a></li>
+            <li class="dropdown-item" onclick="multiDelete();"><i class="fa-solid fa-trash-can" style="color:#c72020;" aria-hidden="true"></i>  {{delete}}</li>
             {% endif %}
         </ul>
     </div>
