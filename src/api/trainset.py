@@ -4,7 +4,7 @@ import shlex
 from flask import jsonify, request, render_template, Blueprint, session, redirect, url_for
 
 from src.pg import pg_session
-from src.utils import has_current_trip, lang, mainConn, managed_cursor
+from src.utils import has_current_trip, lang, mainConn, managed_cursor, get_user_id
 
 trainset_blueprint = Blueprint('trainset', __name__)
 
@@ -254,8 +254,8 @@ def update_trainset(tid):
                     )
             else:
                 pg.execute(
-                    "UPDATE trips SET material_type_advanced = :new WHERE username = :user AND material_type_advanced = :old",
-                    {"new": name, "old": old_name, "user": username},
+                    "UPDATE trips SET material_type_advanced = :new WHERE user_id = :user AND material_type_advanced = :old",
+                    {"new": name, "old": old_name, "user": get_user_id(username)},
                 )
                 with managed_cursor(mainConn) as cursor:
                     cursor.execute(
