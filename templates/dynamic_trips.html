@@ -275,7 +275,7 @@
             {% if not isPublic %}
             <li class="dropdown-item"><a onclick="mergeTrips();"><i class="fa-solid fa-code-merge"></i>  {{mergeTrips}}</a></li>
             <li class="dropdown-item"><a onclick="$('#changeVisibilityModal').modal('show');"><i class="fa-solid fa-eye"></i>  {{bulk_change_visibility}}</a></li>
-            {% if is_alpha %}<li class="dropdown-item"><a onclick="openMassEdit();"><i class="fa-solid fa-pen-to-square"></i>  {{massEdit}}</a></li>{% endif %}
+            <li class="dropdown-item"><a onclick="openMassEdit();"><i class="fa-solid fa-pen-to-square"></i>  {{massEdit}}</a></li>
             <hr class="dropdown-divider">
             <li class="dropdown-item"><a onclick="multiDelete();"><i class="fa-solid fa-trash-can" style="color:#c72020;" aria-hidden="true"></i>  {{delete}}</a></li>
             {% endif %}
