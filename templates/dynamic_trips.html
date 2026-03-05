@@ -1796,7 +1796,7 @@ function openMassEdit() {
 
     // Show TSB button only when all trips are rail types
     const allRail = trips.every(function(t) {
-        return typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(t.type) && {{is_alpha|lower%}};
+        return typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(t.type) && {{is_alpha|lower}};
     });
     const tsbWrap = document.getElementById('massEditTsbWrap');
     tsbWrap.style.display = allRail ? 'flex' : 'none';
