@@ -158,9 +158,9 @@
             <a class="{{ dropdownItemClass }}" href="{{ url_for('live_map') }}"><i class="fa-solid fa-globe"></i> {{ live_map }}</a>
             <a class="{{ dropdownItemClass }}" href="{{ url_for('user_bounds', username=username) }}"><i class="fa-solid fa-arrows-to-circle"></i> {{ travel_bounds_header }}</a>
             <a class="{{ dropdownItemClass }}" href="{{ url_for('friends', username=username) }}"><i class="bi bi-people"></i>{{ friendsIcon | safe }} {{ friends }}</a>
-
-            {% if is_alpha %}
+            
             <a class="{{ dropdownItemClass }}" href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i>{{ tsBuilderTitle }}</a>
+            {% if is_alpha %}
             <h6 class="dropdown-header">{{ automatedRouters }}</h6>
             <a class="{{ dropdownItemClass }}" href="{{ url_for('new_auto', username=username, type='here') }}"><i class="fa-solid fa-caret-down"></i> Autorouting (Here)α</a>
             <a class="{{ dropdownItemClass }}" href="{{ url_for('new_auto', username=username, type='google') }}"><i class="fa-brands fa-google"></i> Autorouting (Google)α</a>
