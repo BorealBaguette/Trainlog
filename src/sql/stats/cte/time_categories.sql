@@ -1,14 +1,14 @@
 SELECT *,
 CASE
   WHEN is_project = false
-    AND (filtered_datetime IS NULL OR NOW() > filtered_datetime)
+    AND (filtered_datetime IS NULL OR NOW() > actual_datetime)
   THEN 1 ELSE 0
 END AS is_past,  -- both definite and indefinite past
 
 CASE
   WHEN is_project = false
     AND filtered_datetime IS NOT NULL
-    AND NOW() <= filtered_datetime
+    AND NOW() <= actual_datetime
   THEN 1 ELSE 0
 END AS is_planned_future,  -- definite future
 

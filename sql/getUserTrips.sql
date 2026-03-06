@@ -1,10 +1,13 @@
 WITH UTC_Filtered AS (
     SELECT *, 
-    CASE
-        WHEN utc_start_datetime IS NOT NULL
-        THEN utc_start_datetime
-        ELSE start_datetime 
-    END AS 'utc_filtered_start_datetime'
+        COALESCE(utc_start_datetime, start_datetime) AS utc_filtered_start_datetime,
+        COALESCE(
+            datetime(
+                utc_start_datetime,
+                printf('%+d seconds', COALESCE(departure_delay, 0))
+            ),
+            start_datetime
+        ) AS actual_start_datetime
     FROM trip
 )
 
@@ -12,7 +15,7 @@ SELECT *,
 CASE
 	WHEN  
 		(
-			julianday('now') > julianday(utc_filtered_start_datetime) 
+			julianday('now') > julianday(actual_start_datetime) 
 			OR utc_filtered_start_datetime = -1
 		)
 		AND utc_filtered_start_datetime != 1
@@ -20,7 +23,7 @@ CASE
 	ELSE 0
 END AS 'past',
 CASE
-	WHEN julianday('now') <= julianday(utc_filtered_start_datetime)
+	WHEN julianday('now') <= julianday(actual_start_datetime)
 	THEN 1
 	ELSE 0 
 END AS 'plannedFuture',

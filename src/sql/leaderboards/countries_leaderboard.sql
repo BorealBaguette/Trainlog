@@ -1,24 +1,27 @@
 -- Get countries visited by each user for the leaderboard
 WITH utc_filtered AS (
     SELECT *,
-        CASE
-            WHEN utc_start_datetime IS NOT NULL
-            THEN utc_start_datetime
-            ELSE start_datetime 
-        END AS utc_filtered_start_datetime
+        COALESCE(
+            utc_start_datetime,
+            start_datetime
+        ) AS utc_filtered_start_datetime,
+        COALESCE(
+            utc_start_datetime + COALESCE(departure_delay, 0) * INTERVAL '1 second',
+            start_datetime
+        ) AS actual_start_datetime
     FROM trips
 ),
 counted AS (
     SELECT *, 
         CASE
-            WHEN (NOW() > utc_filtered_start_datetime 
+            WHEN (NOW() > actual_start_datetime 
                 OR utc_filtered_start_datetime IS NULL)
                 AND NOT is_project
             THEN 1
             ELSE 0
         END AS past,
         CASE
-            WHEN NOW() <= utc_filtered_start_datetime
+            WHEN NOW() <= actual_start_datetime
                 AND NOT is_project
             THEN 1
             ELSE 0 

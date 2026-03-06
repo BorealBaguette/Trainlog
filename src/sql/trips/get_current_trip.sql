@@ -1,11 +1,17 @@
-WITH UTC_Filtered AS (
-    SELECT t.*,
-    COALESCE(t.utc_start_datetime, t.start_datetime) AS utc_filtered_start_datetime,
-    COALESCE(t.utc_end_datetime, t.end_datetime) AS utc_filtered_end_datetime
-    FROM trips t
+WITH utc_filtered AS (
+    SELECT *,
+        COALESCE(
+            utc_start_datetime + COALESCE(departure_delay, 0) * INTERVAL '1 second',
+            start_datetime
+        ) AS actual_start_datetime,
+        COALESCE(
+            utc_end_datetime + COALESCE(arrival_delay, 0) * INTERVAL '1 second',
+            end_datetime
+        ) AS actual_end_datetime
+    FROM trips
 )
 
 SELECT trip_id
-FROM UTC_Filtered
+FROM utc_filtered
 WHERE user_id = :user_id
-AND NOW() BETWEEN utc_filtered_start_datetime AND utc_filtered_end_datetime
+AND NOW() BETWEEN actual_start_datetime AND actual_end_datetime
