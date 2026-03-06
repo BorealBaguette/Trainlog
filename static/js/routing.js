@@ -96,7 +96,7 @@ var routeDetails = null;
 
 // Track freehand segments (from waypoint i to i+1)
 var freehandSegments = new Set();
-var freehandLines = [];
+var freehandLines = []; // transparent click-intercept polylines for freehand sections
 
 function downloadCurrentRouteAsGeoJSON(distance) {
   var routeCoordinates = currentRoute.map(function(point) {
@@ -133,9 +133,9 @@ function recomputeRoute() {
     excludelist.push('highspeed');
     }
     if (excludelist.length) {
-    control.options.router.options.requestParameters = {exclude: excludelist.join(',')};
+    window.baseRouter.options.requestParameters = {exclude: excludelist.join(',')};
     } else {
-    delete control.options.router.options.requestParameters;
+    delete window.baseRouter.options.requestParameters;
     }
     control.route();
 }
@@ -224,25 +224,26 @@ function switchRouter() {
     delete newTrip["details"];
   }
   
-  // Update the router to pass the new_router parameter through our backend
+  // Update the underlying OSRM router (baseRouter) directly — the control's router is
+  // a freehand wrapper with no .options of its own.
   var routerUrl = `${window.location.origin}/forwardRouting/${type}/route/v1`;
-  control.options.router.options.serviceUrl = routerUrl;
-  
+  window.baseRouter.options.serviceUrl = routerUrl;
+
   // Preserve existing parameters (like exclude from recomputeRoute)
-  var currentParams = control.options.router.options.requestParameters || {};
-  
+  var currentParams = window.baseRouter.options.requestParameters || {};
+
   // Update the use_new_router parameter
   if (useNewRouter) {
     currentParams.use_new_router = 'true';
   } else {
     delete currentParams.use_new_router;
   }
-  
+
   // Only set requestParameters if there are any parameters to set
   if (Object.keys(currentParams).length > 0) {
-    control.options.router.options.requestParameters = currentParams;
+    window.baseRouter.options.requestParameters = currentParams;
   } else {
-    delete control.options.router.options.requestParameters;
+    delete window.baseRouter.options.requestParameters;
   }
   
   // Recompute the route with the new router
@@ -253,19 +254,17 @@ window.removeWaypoint = function(index) {
   // Close any open popups
   map.closePopup();
   
-  // Update freehand segments when removing waypoint
-  var newFreehandSegments = new Set();
+  // Update freehand segments in place (reassigning would break createCustomRouter's closure).
+  var toAdjust = [];
   freehandSegments.forEach(function(segIndex) {
-    if (segIndex < index) {
-      // Segments before the removed waypoint stay the same
-      newFreehandSegments.add(segIndex);
-    } else if (segIndex > index) {
-      // Segments after the removed waypoint shift down by 1
-      newFreehandSegments.add(segIndex - 1);
-    }
-    // segIndex === index gets removed (segment FROM the removed waypoint)
+    if (segIndex >= index) toAdjust.push(segIndex);
   });
-  freehandSegments = newFreehandSegments;
+  toAdjust.forEach(function(segIndex) {
+    freehandSegments.delete(segIndex);
+    if (segIndex > index) {
+      freehandSegments.add(segIndex - 1); // shift down; segIndex === index is simply removed
+    }
+  });
   
   // Find the plan instance and remove the waypoint
   if (window.currentPlan) {
@@ -352,12 +351,10 @@ window.removeFreehandOverlay = function(element) {
 function createCustomRouter(baseRouter, freehandSegments) {
   return {
     route: function(waypoints, callback, context, options) {
-      // Clear previous freehand lines
-      freehandLines.forEach(function(line) {
-        map.removeLayer(line);
-      });
+      // Clear previous freehand click-intercept layers
+      freehandLines.forEach(function(line) { map.removeLayer(line); });
       freehandLines = [];
-      
+
       // If no waypoints or only one, return early
       if (!waypoints || waypoints.length < 2) {
         callback.call(context, null, [{
@@ -436,23 +433,34 @@ function createCustomRouter(baseRouter, freehandSegments) {
           var start = segment.waypoints[0].latLng;
           var end = segment.waypoints[1].latLng;
           
-          // Draw orange dashed line for freehand segments
-          var freehandLine = L.polyline([start, end], {
-            color: '#ff8800',
-            weight: 4,
-            opacity: 0.8,
-            dashArray: '10, 10',
-            interactive: false  // Prevent clicks on freehand lines
+          // Transparent hit area — intercepts clicks so LRM's own proportional
+          // mapping (which gets the wrong index for short freehand sections) never fires.
+          // Coordinates are initially set to marker positions; combineRoutes will
+          // update them to the actual snapped route endpoints (B_snapped → C_snapped).
+          var hitArea = L.polyline([start, end], {
+            weight: 12,
+            opacity: 0,
+            interactive: true
           }).addTo(map);
-          freehandLines.push(freehandLine);
-          
+          freehandLines.push(hitArea);
+          var _wpStartIdx = waypoints.indexOf(segment.waypoints[0]);
+          (function(wpStartIdx, ha) {
+            ha.on('click', function(e) {
+              L.DomEvent.stopPropagation(e);
+              if (window.currentPlan) {
+                window.currentPlan.spliceWaypoints(wpStartIdx + 1, 0, L.Routing.waypoint(e.latlng));
+              }
+            });
+          })(_wpStartIdx, hitArea);
+
           var distance = start.distanceTo(end);
-          
+
           allRoutes[segmentIndex] = {
             coordinates: [
               {lat: start.lat, lng: start.lng},
               {lat: end.lat, lng: end.lng}
             ],
+            _hitArea: hitArea,
             instructions: [{
               type: 'Straight',
               text: 'Freehand segment',
@@ -518,37 +526,62 @@ function combineRoutes(routes, waypoints, callback, context) {
   
   routes.forEach(function(route, idx) {
     if (route && route.coordinates) {
-      // Avoid duplicating connection points between segments
-      if (combinedCoordinates.length > 0 && route.coordinates.length > 0) {
-        var lastCoord = combinedCoordinates[combinedCoordinates.length - 1];
-        var firstCoord = route.coordinates[0];
-        // Check if coordinates are very close (within ~1 meter)
-        if (Math.abs(lastCoord.lat - firstCoord.lat) < 0.00001 && 
-            Math.abs(lastCoord.lng - firstCoord.lng) < 0.00001) {
-          // Skip the first coordinate of this route to avoid duplication
-          combinedCoordinates = combinedCoordinates.concat(route.coordinates.slice(1));
-        } else {
-          combinedCoordinates = combinedCoordinates.concat(route.coordinates);
-        }
-      } else {
-        combinedCoordinates = combinedCoordinates.concat(route.coordinates);
-      }
-      
       totalDistance += route.summary.totalDistance;
-      
       if (!route.isFreehand) {
         totalTime += route.summary.totalTime;
       }
-      
-      // Add instructions
-      if (route.instructions && route.instructions.length > 0) {
-        var instructionsToAdd = route.instructions.map(function(instruction) {
-          return {
-            ...instruction,
-            index: instruction.index + combinedCoordinates.length - route.coordinates.length
-          };
-        });
-        combinedInstructions = combinedInstructions.concat(instructionsToAdd);
+
+      if (route.isFreehand) {
+        // Draw straight line from the last snapped route coordinate to the first
+        // coordinate of the next routed segment, bypassing the marker positions.
+        // This avoids the LRM snap-line zigzag (B_snapped→B_marker→C_marker→C_snapped).
+        var nextRoute = null;
+        for (var j = idx + 1; j < routes.length; j++) {
+          if (routes[j] && !routes[j].isFreehand) { nextRoute = routes[j]; break; }
+        }
+        var freeEnd = nextRoute && nextRoute.coordinates.length > 0
+          ? nextRoute.coordinates[0]
+          : route.coordinates[route.coordinates.length - 1]; // last freehand WP if no next route
+
+        if (freeEnd) {
+          var freeStart = combinedCoordinates.length > 0
+            ? combinedCoordinates[combinedCoordinates.length - 1]
+            : route.coordinates[0];
+          combinedCoordinates.push(freeEnd);
+
+          // Update hit area to cover the actual snapped span
+          if (route._hitArea) {
+            route._hitArea.setLatLngs([
+              L.latLng(freeStart.lat, freeStart.lng),
+              L.latLng(freeEnd.lat, freeEnd.lng)
+            ]);
+          }
+        }
+      } else {
+        // Avoid duplicating connection points between segments
+        if (combinedCoordinates.length > 0 && route.coordinates.length > 0) {
+          var lastCoord = combinedCoordinates[combinedCoordinates.length - 1];
+          var firstCoord = route.coordinates[0];
+          if (Math.abs(lastCoord.lat - firstCoord.lat) < 0.00001 &&
+              Math.abs(lastCoord.lng - firstCoord.lng) < 0.00001) {
+            combinedCoordinates = combinedCoordinates.concat(route.coordinates.slice(1));
+          } else {
+            combinedCoordinates = combinedCoordinates.concat(route.coordinates);
+          }
+        } else {
+          combinedCoordinates = combinedCoordinates.concat(route.coordinates);
+        }
+
+        // Add instructions
+        if (route.instructions && route.instructions.length > 0) {
+          var instructionsToAdd = route.instructions.map(function(instruction) {
+            return {
+              ...instruction,
+              index: instruction.index + combinedCoordinates.length - route.coordinates.length
+            };
+          });
+          combinedInstructions = combinedInstructions.concat(instructionsToAdd);
+        }
       }
     }
   });
@@ -581,6 +614,7 @@ function combineRoutes(routes, waypoints, callback, context) {
 
 function routing(map, showSidebar=true, type){
   flutterBridge.loading(true);
+
   sidebar = L.control.sidebar('sidebar', {
       closeButton: true,
       position: 'right',
@@ -749,6 +783,27 @@ function routing(map, showSidebar=true, type){
     });
     window.currentPlan = plan;
 
+    // Intercept spliceWaypoints to keep freehandSegments indices in sync.
+    // removeWaypoint() already adjusts freehandSegments before calling splice,
+    // so we only need to handle pure insertions (remove === 0).
+    var _origSplice = plan.spliceWaypoints.bind(plan);
+    plan.spliceWaypoints = function(index, remove) {
+      var added = Array.prototype.slice.call(arguments, 2);
+      if (remove === 0 && added.length > 0) {
+        // Mutate the existing Set in place — createCustomRouter captured this
+        // object by reference, so a reassignment would break its closure.
+        var toShift = [];
+        freehandSegments.forEach(function(seg) {
+          if (seg >= index) toShift.push(seg);
+        });
+        toShift.forEach(function(seg) {
+          freehandSegments.delete(seg);
+          freehandSegments.add(seg + added.length);
+        });
+      }
+      return _origSplice.apply(plan, arguments);
+    };
+
     if (window.innerWidth > 600){
       var autoPan = true;
     }
@@ -765,6 +820,7 @@ function routing(map, showSidebar=true, type){
     }
 
     var baseRouter = L.Routing.osrmv1({serviceUrl: routerurl, profile: profile, useHints: false});
+    window.baseRouter = baseRouter;
     var customRouter = createCustomRouter(baseRouter, freehandSegments);
 
     var control = L.Routing.control({
@@ -884,6 +940,14 @@ function routing(map, showSidebar=true, type){
       
       sidebar.setContent(errorContentWithToggle);
     }).addTo(map);
+
+    // After LRM draws the route line, bring freehand hit areas to the SVG front
+    // so they sit on top of the route line and capture clicks first.
+    control.on('routesfound', function() {
+      setTimeout(function() {
+        freehandLines.forEach(function(l) { l.bringToFront(); });
+      }, 0);
+    });
 
     // Store control globally: window.control for switchRouter, window.currentControl for toggleFreehand
     window.control = control;
