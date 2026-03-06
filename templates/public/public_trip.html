@@ -541,8 +541,10 @@ function calculatePosition(trip) {
     const currentTime = new Date().getTime(); // Get current time in ms
     const tripStartTime = new Date(trip.trip.utc_filtered_start_datetime + 'Z').getTime(); // Trip start time in ms
     const tripEndTime = new Date(trip.trip.utc_filtered_end_datetime + 'Z').getTime(); // Trip end time in ms
-    const totalTripDuration = tripEndTime - tripStartTime;
-    const elapsedTime = currentTime - tripStartTime;
+    const depDelay = (trip.trip.departure_delay || 0) * 1000; // Convert departure delay to ms
+    const arrDelay = (trip.trip.arrival_delay || 0) * 1000; // Convert arrival delay to ms
+    const totalTripDuration = tripEndTime + arrDelay - tripStartTime - depDelay;
+    const elapsedTime = currentTime - tripStartTime - depDelay;
 
     // Calculate progress as a percentage
     const progress = elapsedTime / totalTripDuration;
