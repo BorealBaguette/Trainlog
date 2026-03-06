@@ -29,7 +29,10 @@ METRIC_TO_DB_COLUMN = {
 
 
 def _safe_get(d, key, default=0):
-    return d.get(key, default) if isinstance(d, dict) else default
+    retval = d.get(key, default) if isinstance(d, dict) else default
+    if retval is None:
+        return default
+    return retval
 
 
 def get_stats_countries(pg, user_id, trip_type, year=None):
