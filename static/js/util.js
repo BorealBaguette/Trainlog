@@ -753,6 +753,13 @@ function computeTimeStatus(data) {
     let end = typeof trip.utc_filtered_end_datetime === 'string' ? moment.utc(trip.utc_filtered_end_datetime) : null;
     let now = moment.utc();  // Current UTC time
 
+    if (start && trip.departure_delay) {
+        start = start.add(trip.departure_delay, 'seconds');
+    }
+    if (end && trip.arrival_delay) {
+        end = end.add(trip.arrival_delay, 'seconds');
+    }
+
     if (start && end && now.isBetween(start, end, undefined, '[]')) {
         // Current date is between start and end (inclusive)
         data.time = 'current';
