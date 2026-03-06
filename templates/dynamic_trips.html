@@ -1796,7 +1796,7 @@ function openMassEdit() {
 
     // Show TSB button only when all trips are rail types
     const allRail = trips.every(function(t) {
-        return typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(t.type) && {{is_alpha|lower}};
+        return typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(t.type);
     });
     const tsbWrap = document.getElementById('massEditTsbWrap');
     tsbWrap.style.display = allRail ? 'flex' : 'none';
@@ -1843,7 +1843,10 @@ function openMassEditTsb() {
         try {
             var units = JSON.parse(value);
             if (Array.isArray(units)) label = units.map(function(u) { return u.nom || u.name; }).join(' + ');
-        } catch (e) { label = value; }
+        } catch (e) {
+            label = value;
+            _trainsetNames.add(value); // keep cache current so the icon renders after table reload
+        }
         document.getElementById('massEditTsbLabel').textContent = label;
     };
     openTsbModal();

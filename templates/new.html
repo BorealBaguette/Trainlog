@@ -73,7 +73,7 @@
         <label for="material_type" class="sr-only">{{material_type}}</label>
         <input type="text" class="non_poi" name="material_type" id="material_type" placeholder="{{material_type}}">
         <input type="hidden" name="material_type_advanced" id="material_type_advanced">
-        {% if vehicle_type in ('train', 'metro', 'tram') and is_alpha %}
+        {% if vehicle_type in ('train', 'metro', 'tram') %}
         <div id="ts-active-display" class="non_poi" style="display:none; margin-bottom:1rem">
             <div style="display:flex; align-items:center; gap:8px; padding:6px 12px; background:#f3f3f3; font-size:0.875rem">
                 <i class="fas fa-train" style="color:#666; flex-shrink:0"></i>
@@ -426,7 +426,7 @@
     });
   }
 
-  {% if is_alpha %}
+ 
   function formatTrainset(units) {
     var result = [];
     var i = 0;
@@ -465,7 +465,7 @@
   }
   updateMaterialTypeDisplay();
   $(document).on('hidden.bs.modal', '#tsbModal', updateMaterialTypeDisplay);
-  {% endif %}
+
 
   // Delay section controls
   (function() {
@@ -578,7 +578,7 @@
   })();
 </script>
 
-{% if vehicle_type in ('train', 'metro', 'tram') and is_alpha %}
+{% if vehicle_type in ('train', 'metro', 'tram') %}
 {% include "includes/trainset_builder_modal.html" %}
 {% endif %}
 

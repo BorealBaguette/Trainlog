@@ -296,7 +296,7 @@
                 value="{{tripMaterialType}}">
             <input type="hidden" name="material_type_advanced" id="material_type_advanced"
                 value="{{tripMaterialTypeAdvanced}}">
-            {% if tripType in ('train', 'metro', 'tram') and is_alpha %}
+            {% if tripType in ('train', 'metro', 'tram') %}
             <div id="ts-active-display" style="display:none; margin-bottom:1rem">
                 <div style="display:flex; align-items:center; gap:8px; padding:6px 12px; background:#f3f3f3; font-size:0.875rem">
                     <i class="fas fa-train" style="color:#666; flex-shrink:0"></i>
@@ -1784,7 +1784,7 @@
 
 </script>
 
-{% if tripType in ('train', 'metro', 'tram') and is_alpha %}
+{% if tripType in ('train', 'metro', 'tram') %}
 {% include "includes/trainset_builder_modal.html" %}
 {% endif %}
 
