@@ -482,7 +482,7 @@
       var pt = document.getElementById(plannedTimeId).value;
       if (!pd || !pt) return;
       var actual = new Date(new Date(pd + 'T' + pt).getTime() + seconds * 1000);
-      document.getElementById(actualDateId).value = actual.toISOString().slice(0, 10);
+      document.getElementById(actualDateId).value = actual.toTimezonedISOString().slice(0, 10);
       document.getElementById(actualTimeId).value = actual.toTimeString().slice(0, 5);
     }
 

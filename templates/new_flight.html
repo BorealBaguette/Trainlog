@@ -763,9 +763,9 @@ async function processFlightLeg(flight) {
     const startLocal = new Date(flight.datetime_takeoff_local);
     const endLocal = new Date(flight.datetime_landed_local);
     
-    $('#newTripStartDate').val(startLocal.toISOString().split('T')[0]);
+    $('#newTripStartDate').val(startLocal.toTimezonedISOString().split('T')[0]);
     $('#newTripStartTime').val(startLocal.toTimeString().slice(0, 5));
-    $('#newTripEndDate').val(endLocal.toISOString().split('T')[0]);
+    $('#newTripEndDate').val(endLocal.toTimezonedISOString().split('T')[0]);
     $('#newTripEndTime').val(endLocal.toTimeString().slice(0, 5));
     $('#radioPreciseDates').prop('checked', true);
   }
@@ -836,9 +836,9 @@ async function processFlightLegWithData(flight, processedData) {
 
   // Use pre-fetched local times (already parsed)
   if (processedData.departureLocal && processedData.arrivalLocal) {
-    $('#newTripStartDate').val(processedData.departureLocal.toISOString().split('T')[0]);
+    $('#newTripStartDate').val(processedData.departureLocal.toTimezonedISOString().split('T')[0]);
     $('#newTripStartTime').val(processedData.departureLocal.toTimeString().slice(0, 5));
-    $('#newTripEndDate').val(processedData.arrivalLocal.toISOString().split('T')[0]);
+    $('#newTripEndDate').val(processedData.arrivalLocal.toTimezonedISOString().split('T')[0]);
     $('#newTripEndTime').val(processedData.arrivalLocal.toTimeString().slice(0, 5));
     $('#radioPreciseDates').prop('checked', true);
   }
@@ -907,9 +907,9 @@ async function processFlightLegWithData(flight, processedData) {
 
   // Use pre-fetched local times
   if (processedData.departureLocal && processedData.arrivalLocal) {
-    $('#newTripStartDate').val(processedData.departureLocal.toISOString().split('T')[0]);
+    $('#newTripStartDate').val(processedData.departureLocal.toTimezonedISOString().split('T')[0]);
     $('#newTripStartTime').val(processedData.departureLocal.toTimeString().slice(0, 5));
-    $('#newTripEndDate').val(processedData.arrivalLocal.toISOString().split('T')[0]);
+    $('#newTripEndDate').val(processedData.arrivalLocal.toTimezonedISOString().split('T')[0]);
     $('#newTripEndTime').val(processedData.arrivalLocal.toTimeString().slice(0, 5));
     $('#radioPreciseDates').prop('checked', true);
   }
