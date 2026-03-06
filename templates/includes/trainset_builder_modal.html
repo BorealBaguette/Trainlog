@@ -5,6 +5,9 @@
   .tsb-unit img { max-height:38px; max-width:76px; display:block; margin:0 auto 2px; }
   .tsb-unit .tsb-nom { display:block; overflow:hidden; text-overflow:ellipsis;
                        white-space:nowrap; width:100%; }
+  .tsb-unit[draggable="true"] { cursor: grab; }
+  .tsb-unit.tsb-drag-over-left  { border-left: 3px solid #0d6efd; }
+  .tsb-unit.tsb-drag-over-right { border-right: 3px solid #0d6efd; }
 </style>
 
 <div class="modal fade" id="tsbModal" tabindex="-1" aria-hidden="true">
@@ -65,6 +68,7 @@
   var _adminSets    = [];
   var _personalSets = [];
   var _refName      = null; // set when strip is loaded as a reference (not for editing)
+  var _dragUid      = null;
 
   /* ── open ── */
   window.openTsbModal = function () {
@@ -282,6 +286,41 @@
       card.appendChild(nom);
 
       if (!_refName) {
+        card.draggable = true;
+        card.addEventListener('dragstart', (function(uid, c) { return function(e) {
+          _dragUid = uid;
+          e.dataTransfer.effectAllowed = 'move';
+          setTimeout(function() { c.style.opacity = '0.4'; }, 0);
+        }; })(u._uid, card));
+        card.addEventListener('dragend', function() {
+          card.style.opacity = '';
+          strip.querySelectorAll('.tsb-unit').forEach(function(el) {
+            el.classList.remove('tsb-drag-over-left', 'tsb-drag-over-right');
+          });
+        });
+        card.addEventListener('dragover', (function(c) { return function(e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          strip.querySelectorAll('.tsb-unit').forEach(function(el) {
+            el.classList.remove('tsb-drag-over-left', 'tsb-drag-over-right');
+          });
+          var rect = c.getBoundingClientRect();
+          c.classList.add(e.clientX < rect.left + rect.width / 2 ? 'tsb-drag-over-left' : 'tsb-drag-over-right');
+        }; })(card));
+        card.addEventListener('drop', (function(uid, c) { return function(e) {
+          e.preventDefault();
+          if (_dragUid === uid) return;
+          var fromIdx = _units.findIndex(function(x) { return x._uid === _dragUid; });
+          var toIdx   = _units.findIndex(function(x) { return x._uid === uid; });
+          if (fromIdx === -1 || toIdx === -1) return;
+          var rect = c.getBoundingClientRect();
+          var insertAfter = e.clientX >= rect.left + rect.width / 2;
+          var moved = _units.splice(fromIdx, 1)[0];
+          toIdx = _units.findIndex(function(x) { return x._uid === uid; });
+          _units.splice(insertAfter ? toIdx + 1 : toIdx, 0, moved);
+          _render();
+        }; })(u._uid, card));
+
         var btns = document.createElement('div');
         btns.className = 'd-flex justify-content-center gap-1 mt-1';
 
