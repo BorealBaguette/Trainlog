@@ -1277,11 +1277,11 @@
                 document.getElementById('radioPreciseDates').checked = true;
 
                 // Fill start date and time
-                document.getElementById('newTripStartDate').value = takeoffDate.toISOString().slice(0, 10);
+                document.getElementById('newTripStartDate').value = takeoffDate.toTimezonedISOString().slice(0, 10);
                 document.getElementById('newTripStartTime').value = takeoffDate.toTimeString().slice(0, 5);
 
                 // Fill end date and time
-                document.getElementById('newTripEndDate').value = landedDate.toISOString().slice(0, 10);
+                document.getElementById('newTripEndDate').value = landedDate.toTimezonedISOString().slice(0, 10);
                 document.getElementById('newTripEndTime').value = landedDate.toTimeString().slice(0, 5);
 
                 // Calculate and fill trip duration (following air routing pattern)
@@ -1576,8 +1576,8 @@
         var newEndDate = new Date(today);
         newEndDate.setDate(today.getDate() + dayDifference);
 
-        var formattedNewStartDate = newStartDate.toISOString().slice(0, 10);
-        var formattedNewEndDate = newEndDate.toISOString().slice(0, 10);
+        var formattedNewStartDate = newStartDate.toTimezonedISOString().slice(0, 10);
+        var formattedNewEndDate = newEndDate.toTimezonedISOString().slice(0, 10);
 
         $("#newTripStartDate").val(formattedNewStartDate);
         $("#newTripEndDate").val(formattedNewEndDate);
@@ -1678,7 +1678,7 @@
       var pt = document.getElementById(plannedTimeId).value;
       if (!pd || !pt) return;
       var actual = new Date(new Date(pd + 'T' + pt).getTime() + seconds * 1000);
-      document.getElementById(actualDateId).value = actual.toISOString().slice(0, 10);
+      document.getElementById(actualDateId).value = actual.toTimezonedISOString().slice(0, 10);
       document.getElementById(actualTimeId).value = actual.toTimeString().slice(0, 5);
     }
 

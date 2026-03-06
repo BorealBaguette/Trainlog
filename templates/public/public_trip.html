@@ -301,8 +301,8 @@ if (prices.total_carbon != 0){
         trips[index + 1].trip.utc_filtered_start_datetime
       );
       actualChangeTime = changeTime + (trips[index + 1].trip.departure_delay || 0) - (trip.trip.arrival_delay || 0);
-      var previousDay = new Date(trip.trip.end_datetime).toISOString().slice(0, 10)
-      var currentDay = new Date(trip.trip.start_datetime).toISOString().slice(0, 10)
+      var previousDay = new Date(trip.trip.end_datetime).toTimezonedISOString().slice(0, 10)
+      var currentDay = new Date(trip.trip.start_datetime).toTimezonedISOString().slice(0, 10)
       if (currentDay != previousDay)
       {
         dayChangeTrip = true;
@@ -316,8 +316,8 @@ if (prices.total_carbon != 0){
         
       );
 
-      var previousDay = new Date(trips[index-1].trip.end_datetime).toISOString().slice(0, 10)
-      var currentDay = new Date(trip.trip.start_datetime).toISOString().slice(0, 10)
+      var previousDay = new Date(trips[index-1].trip.end_datetime).toTimezonedISOString().slice(0, 10)
+      var currentDay = new Date(trip.trip.start_datetime).toTimezonedISOString().slice(0, 10)
       if (currentDay != previousDay && precedingChangeTime <= 43200)
       {
         dayChangeIntertrip = true;

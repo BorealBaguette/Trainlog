@@ -1190,3 +1190,8 @@ function showLoading() {
 function hideLoading() {
     document.getElementById('loadingScreen').style.display = 'none';
 }
+
+// date.toISOString() returns the date in UTC, we want to return it in local time but in the same format
+Date.prototype.toTimezonedISOString = function() {
+  return new Date(this.getTime() - (this.getTimezoneOffset() * 60000)).toISOString()
+}
