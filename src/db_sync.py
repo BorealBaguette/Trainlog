@@ -34,6 +34,7 @@ def sync_db_from_sqlite():
     with pg_session() as pg:
         sync_trips_from_sqlite(pg)
         sync_operators_from_sqlite(pg)
+        sync_users_from_sqlite(pg)
 
 
 def trip_to_csv(trip: Trip):
@@ -302,3 +303,82 @@ def sync_operators_from_sqlite(pg_session=None):
         )
 
     logger.info("Finished migrating operators from sqlite to pg!")
+
+
+def _insert_user_into_pg(pg_session, user):
+    pg_session.execute(
+        "INSERT INTO users (uid, username, email, pass_hash, lang, share_level, leaderboard, creation_date, last_login, admin, alpha, translator, user_currency, friend_search, colorblind, reset_token, default_landing, appear_on_global, tileserver, globe, premium)"
+        "VALUES (:uid, :username, :email, :pass_hash, :lang, :share_level, :leaderboard, :creation_date, :last_login, :admin, :alpha, :translator, :user_currency, :friend_search, :colorblind, :reset_token, :default_landing, :appear_on_global, :tileserver, :globe, :premium)",
+        {
+            "uid": user["uid"],
+            "username": user["username"],
+            "email": user["email"],
+            "pass_hash": user["pass_hash"],
+            "lang": user["lang"],
+            "share_level": user["share_level"],
+            "leaderboard": True if user["leaderboard"] else False,
+            "creation_date": user["creation_date"],
+            "last_login": user["last_login"],
+            "admin": True if user["admin"] else False,
+            "alpha": True if user["alpha"] else False,
+            "translator": True if user["translator"] else False,
+            "user_currency": user["user_currency"],
+            "friend_search": True if user["friend_search"] else False,
+            "colorblind": True
+            if "colorblind" in user and user["colorblind"]
+            else False,
+            "reset_token": user["reset_token"],
+            "default_landing": user["default_landing"],
+            "appear_on_global": True if user["appear_on_global"] else False,
+            "tileserver": user["tileserver"],
+            "globe": True if user["globe"] else False,
+            "premium": True if user["premium"] else False,
+        },
+    )
+
+
+def _insert_friendship_into_pg(pg_session, friendship):
+    pg_session.execute(
+        "INSERT INTO friendship (id, user_id, friend_id, created_at, accepted) VALUES (:id, :user_id, :friend_id, :created_at, :accepted)",
+        {
+            "id": friendship["id"],
+            "user_id": friendship["user_id"],
+            "friend_id": friendship["friend_id"],
+            "created_at": friendship["created_at"],
+            "accepted": friendship["accepted"],
+        },
+    )
+
+
+def sync_users_from_sqlite(pg_session=None):
+    logger.info("Step 1/2: Syncing users from SQLite to PostgreSQL...")
+
+    with managed_cursor(authConn) as auth_cursor:
+        auth_cursor.execute("SELECT count(*) FROM user")
+        num_users = auth_cursor.fetchone()[0]
+        logger.info(f"Syncing {num_users} users from SQLite to PostgreSQL")
+        all_friendship = auth_cursor.execute(
+            "SELECT * FROM user ORDER BY uid"
+        ).fetchall()
+
+    with get_or_create_pg_session(pg_session) as pg:
+        pg.execute("DELETE FROM users;")
+        for i, row in enumerate(all_friendship):
+            _insert_user_into_pg(pg, row)
+
+    logger.info("Step 2/2: Syncing friendship from SQLite to PostgreSQL...")
+
+    with managed_cursor(authConn) as auth_cursor:
+        auth_cursor.execute("SELECT count(*) FROM friendship")
+        num_friends = auth_cursor.fetchone()[0]
+        logger.info(
+            f"Syncing {num_friends} friendship entries from SQLite to PostgreSQL"
+        )
+        all_friendship = auth_cursor.execute(
+            "SELECT * FROM friendship ORDER BY id"
+        ).fetchall()
+
+    with get_or_create_pg_session(pg_session) as pg:
+        pg.execute("DELETE FROM friendship;")
+        for i, row in enumerate(all_friendship):
+            _insert_friendship_into_pg(pg, row)

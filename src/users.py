@@ -6,10 +6,11 @@ authDb = SQLAlchemy()
 
 
 class User(authDb.Model):
+    __tablename__ = "users"
     uid = authDb.Column(authDb.Integer, primary_key=True)
     username = authDb.Column(authDb.String(100), unique=True, nullable=False)
     email = authDb.Column(authDb.String(100), unique=True, nullable=False)
-    pass_hash = authDb.Column(authDb.String(100), nullable=False)
+    pass_hash = authDb.Column(authDb.String(200), nullable=False)
     lang = authDb.Column(authDb.String(2), nullable=False, default="en")
     share_level = authDb.Column(authDb.Integer, nullable=False, default=0)
     leaderboard = authDb.Column(authDb.Boolean, nullable=False, default=False)
@@ -64,10 +65,10 @@ class Friendship(authDb.Model):
     __tablename__ = "friendship"
     id = authDb.Column(authDb.Integer, primary_key=True)
     user_id = authDb.Column(
-        authDb.Integer, authDb.ForeignKey("user.uid"), nullable=False
+        authDb.Integer, authDb.ForeignKey("users.uid"), nullable=False
     )
     friend_id = authDb.Column(
-        authDb.Integer, authDb.ForeignKey("user.uid"), nullable=False
+        authDb.Integer, authDb.ForeignKey("users.uid"), nullable=False
     )
     created_at = authDb.Column(
         authDb.DateTime, nullable=False, default=datetime.now(UTC)
