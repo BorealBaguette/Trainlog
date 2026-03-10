@@ -625,8 +625,8 @@ function _renderTrainset($modalBody, units, setName) {
         else                   src = wagonsBase + '/' + u.image + '.gif';
         var wagon = $('<div class="compo-wagon ts-unit"></div>');
         wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
-        wagon.append(`<img src="${src}" onerror="this.style.display='none';" title="${u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
-        wagon.append(`<span class="compo-coach-no ts-nom">${u.nom || ''}</span>`);
+        wagon.append(`<img src="${src}" onerror="this.style.display='none';" title="${u.label || u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
+        wagon.append(`<span class="compo-coach-no ts-nom">${u.label || u.nom || ''}</span>`);
         strip.append(wagon);
     });
     if (!strip.children().length) {
@@ -654,8 +654,8 @@ function _renderTrainsetInline(rowId, units, labels) {
         else                   src = wagonsBase + '/' + u.image + '.gif';
         var wagon = $('<div class="compo-wagon ts-unit"></div>');
         wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
-        wagon.append(`<img src="${src}" onerror="this.style.display='none';" title="${u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
-        wagon.append(`<span class="compo-coach-no ts-nom ts-nom-inline">${u.nom || ''}</span>`);
+        wagon.append(`<img src="${src}" onerror="this.style.display='none';" title="${u.label || u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
+        wagon.append(`<span class="compo-coach-no ts-nom ts-nom-inline">${u.label || u.nom || ''}</span>`);
         strip.append(wagon);
     });
     if (!strip.children().length) { $container.remove(); return; }
@@ -1187,9 +1187,9 @@ function _formatTrainsetStr(mat) {
         if (Array.isArray(units) && units.length > 0) {
             var result = [], i = 0;
             while (i < units.length) {
-                var name = units[i].nom || units[i].name || '?';
+                var name = units[i].label || units[i].nom || units[i].name || '?';
                 var count = 1;
-                while (i + count < units.length && (units[i + count].nom || units[i + count].name || '?') === name) count++;
+                while (i + count < units.length && (units[i + count].label || units[i + count].nom || units[i + count].name || '?') === name) count++;
                 result.push(count > 1 ? count + '\xd7 ' + name : name);
                 i += count;
             }
@@ -1842,7 +1842,7 @@ function openMassEditTsb() {
         var label = '';
         try {
             var units = JSON.parse(value);
-            if (Array.isArray(units)) label = units.map(function(u) { return u.nom || u.name; }).join(' + ');
+            if (Array.isArray(units)) label = units.map(function(u) { return u.label || u.nom || u.name; }).join(' + ');
         } catch (e) {
             label = value;
             _trainsetNames.add(value); // keep cache current so the icon renders after table reload

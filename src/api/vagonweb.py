@@ -444,22 +444,22 @@ def import_from_url(url: str, admin_username: str) -> dict:
             result = pg.execute(
                 """
                 INSERT INTO wagons
-                    (name, nom, titre1, titre2, epo, source, image, image_type, notes)
+                    (name, label, category, subcategory, era, source, image, image_type, notes)
                 VALUES
-                    (:name, :nom, :titre1, :titre2, :epo, :source, :image, :image_type, :notes)
+                    (:name, :label, :category, :subcategory, :era, :source, :image, :image_type, :notes)
                 ON CONFLICT (name) DO NOTHING
                 RETURNING name
                 """,
                 {
-                    "name":       name,
-                    "nom":        nom,
-                    "titre1":     titre1,
-                    "titre2":     titre2,
-                    "epo":        "6",
-                    "source":     "VagonWeb",
-                    "image":      image_field,
-                    "image_type": image_type,
-                    "notes":      notes,
+                    "name":        name,
+                    "label":       nom,
+                    "category":    titre1,
+                    "subcategory": titre2,
+                    "era":         "6",
+                    "source":      "VagonWeb",
+                    "image":       image_field,
+                    "image_type":  image_type,
+                    "notes":       notes,
                 },
             )
             if result.fetchone():

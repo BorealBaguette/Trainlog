@@ -150,7 +150,9 @@ def setup_db():
             apply_migration(session, m)
         load_base_data(session, "airliners")
         load_base_data(session, "wagons")
-    
+
+    _migrate_sqlite_nom_to_label()
+
     # Dispose the engine used during setup - workers will create their own
     global pg_session_engine
     if pg_session_engine is not None:
@@ -250,3 +252,55 @@ def load_base_data(pg, table_name):
             )
 
     logger.info(f"Base data loaded successfully for {table_name}!")
+
+
+def _migrate_sqlite_nom_to_label():
+    """Rename 'nom' -> 'label' in inline JSON compositions stored in the SQLite trip table.
+
+    This is the SQLite counterpart of the DO block in migration 0020.
+    It is idempotent: rows that already use 'label' (or have no 'nom') are skipped.
+    """
+    import json
+    import sqlite3
+
+    from src.consts import DbNames
+
+    db_path = DbNames.MAIN_DB.value
+    if not os.path.exists(db_path):
+        logger.info("SQLite main.db not found, skipping nom→label migration")
+        return
+
+    conn = sqlite3.connect(db_path)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            "SELECT uid, material_type_advanced FROM trip "
+            "WHERE material_type_advanced IS NOT NULL AND material_type_advanced LIKE '[%'"
+        ).fetchall()
+
+        updated = 0
+        for row in rows:
+            try:
+                units = json.loads(row["material_type_advanced"])
+                if not isinstance(units, list):
+                    continue
+                new_units, changed = [], False
+                for u in units:
+                    if "nom" in u and "label" not in u:
+                        u = dict(u)
+                        u["label"] = u.pop("nom")
+                        changed = True
+                    new_units.append(u)
+                if changed:
+                    conn.execute(
+                        "UPDATE trip SET material_type_advanced = ? WHERE uid = ?",
+                        (json.dumps(new_units), row["uid"]),
+                    )
+                    updated += 1
+            except (json.JSONDecodeError, TypeError, KeyError):
+                continue
+
+        conn.commit()
+        logger.info(f"SQLite: renamed 'nom' -> 'label' in {updated} trip composition(s)")
+    finally:
+        conn.close()

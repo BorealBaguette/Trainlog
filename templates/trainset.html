@@ -737,15 +737,15 @@ function renderAc() {
   if (!acItems.length) { closeAc(); return; }
   acList.innerHTML = acItems.map((w, i) => {
     const thumb = w.image
-      ? `<img src="${smartImgSrc(w.image, 'L', w.image_type)}" onerror="${smartImgOnerror()}" alt="${esc(w.nom)}">`
+      ? `<img src="${smartImgSrc(w.image, 'L', w.image_type)}" onerror="${smartImgOnerror()}" alt="${esc(w.label)}">`
       : `<span class="ac-thumb-none">🚃</span>`;
     return `
     <div class="ac-item" data-i="${i}">
       <div class="ac-thumb">${thumb}</div>
       <div class="ac-text">
-        <div class="ac-nom">${esc(w.nom)}</div>
-        <div class="ac-cat">${esc(w.titre1)}${w.titre2 ? ' › ' + esc(w.titre2) : ''}</div>
-        ${w.epo ? `<span class="ac-epo">Ep. ${esc(w.epo)}</span>` : ''}
+        <div class="ac-nom">${esc(w.label)}</div>
+        <div class="ac-cat">${esc(w.category)}${w.subcategory ? ' › ' + esc(w.subcategory) : ''}</div>
+        ${w.era ? `<span class="ac-epo">Ep. ${esc(w.era)}</span>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -775,6 +775,8 @@ const WAGONS_URL = `{{url_for("static", filename="images/wagons")}}`;
 function smartImgSrc(imagePath, side = 'L', imageType = 'sides') {
   if (!imagePath) return '';
   if (imageType === 'sides') return `${WAGONS_URL}/${imagePath}${side === 'R' ? '_R' : '_L'}.gif`;
+  if (imageType === 'sides_L') return `${WAGONS_URL}/${imagePath}_L.gif`;
+  if (imageType === 'sides_R') return `${WAGONS_URL}/${imagePath}_R.gif`;
   return `${WAGONS_URL}/${imagePath}.gif`;
 }
 function smartImgOnerror() {
@@ -807,7 +809,7 @@ function addUnit(wagon) {
   currentTs.units.push({ ...wagon, _uid: Date.now() + Math.random(), _side: defaultSide });
   renderStrip();
   if (acList.classList.contains('open')) positionAcList();
-  setStatus(i18n.added + ': ' + wagon.nom);
+  setStatus(i18n.added + ': ' + wagon.label);
 }
 
 function flipUnit(uid) {
@@ -859,11 +861,11 @@ function renderStrip() {
         <button class="uc-btn" title="${i18n.deleteTitle}" data-action="del">✕</button>
       </div>
       <div class="unit-img">
-        ${imgSrc ? `<img src="${esc(imgSrc)}" alt="${esc(u.nom)}" onerror="${imgErr}">` : '<span class="no-img">🚃</span>'}
+        ${imgSrc ? `<img src="${esc(imgSrc)}" alt="${esc(u.label)}" onerror="${imgErr}">` : '<span class="no-img">🚃</span>'}
       </div>
       <div class="unit-info">
-        <div class="unit-nom">${esc(u.nom)}</div>
-        <div class="unit-sub">${esc(u.titre1 || '')}${u.epo ? ' · Ep.' + u.epo : ''}${side === 'R' ? ' · ►' : ''}</div>
+        <div class="unit-nom">${esc(u.label)}</div>
+        <div class="unit-sub">${esc(u.category || '')}${u.era ? ' · Ep.' + u.era : ''}${side === 'R' ? ' · ►' : ''}</div>
       </div>
     `;
     el.querySelector('[data-action=flip]')?.addEventListener('click', e => { e.stopPropagation(); flipUnit(u._uid); });
@@ -911,9 +913,9 @@ function positionRails() {
 // ── DETAIL PANEL ──
 
 function showDetail(u) {
-  document.getElementById('dpNom').textContent = u.nom;
-  document.getElementById('dpCat').textContent = [u.titre1, u.titre2].filter(Boolean).join(' › ') || '—';
-  document.getElementById('dpEpo').textContent = u.epo || '—';
+  document.getElementById('dpNom').textContent = u.label;
+  document.getElementById('dpCat').textContent = [u.category, u.subcategory].filter(Boolean).join(' › ') || '—';
+  document.getElementById('dpEpo').textContent = u.era || '—';
   document.getElementById('dpNotes').textContent = u.notes || '—';
   const img = document.getElementById('dpImg');
   if (u.image) {

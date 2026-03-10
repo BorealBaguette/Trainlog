@@ -431,9 +431,9 @@
     var result = [];
     var i = 0;
     while (i < units.length) {
-      var name = units[i].nom || units[i].name || '?';
+      var name = units[i].label || units[i].name || '?';
       var count = 1;
-      while (i + count < units.length && (units[i + count].nom || units[i + count].name || '?') === name) count++;
+      while (i + count < units.length && (units[i + count].label || units[i + count].name || '?') === name) count++;
       result.push(count > 1 ? count + '\xd7 ' + name : name);
       i += count;
     }

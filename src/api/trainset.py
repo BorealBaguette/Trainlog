@@ -34,7 +34,7 @@ def trainset_builder():
 
 @trainset_blueprint.route('/api/wagons/search')
 def search_wagons():
-    """Autocomplete search across nom, titre1, titre2, notes.
+    """Autocomplete search across label, category, subcategory, notes.
     Supports multi-term AND search across fields. Quoted phrases are kept together.
     """
     username, _ = _session_user()
@@ -61,7 +61,7 @@ def search_wagons():
         return jsonify([])
 
     # Build: AND over terms, OR over fields
-    fields = ["nom", "titre1", "titre2", "notes"]
+    fields = ["label", "category", "subcategory", "notes"]
     params = {"limit": limit, "q_like": f"%{q}%"}  # for ranking only
     where_parts = []
 
@@ -77,13 +77,13 @@ def search_wagons():
     params["q_starts"] = f"{q}%"
 
     sql = f"""
-        SELECT source, titre1, titre2, nom, epo, datmaj, image, name, notes, typeligne, image_type
+        SELECT source, category, subcategory, label, era, updated_on, image, name, notes, line_type, image_type
         FROM wagons
         WHERE {where_sql}
         ORDER BY
-            CASE WHEN nom ILIKE :q_starts THEN 0 ELSE 1 END,
-            CASE WHEN nom ILIKE :q_like THEN 0 ELSE 1 END,
-            nom
+            CASE WHEN label ILIKE :q_starts THEN 0 ELSE 1 END,
+            CASE WHEN label ILIKE :q_like THEN 0 ELSE 1 END,
+            label
         LIMIT :limit
     """
 
@@ -344,7 +344,7 @@ def _enrich_units(pg, slim_units):
     enriched = []
     for u in slim_units:
         result = pg.execute(
-            "SELECT titre1, titre2, nom, epo, image, name, notes, image_type FROM wagons WHERE name = :name",
+            "SELECT category, subcategory, label, era, image, name, notes, image_type FROM wagons WHERE name = :name",
             {"name": u['name']},
         )
         wagon = result.fetchone()

@@ -8,19 +8,20 @@ from src.utils import admin_required
 
 wagons_admin_blueprint = Blueprint("admin_wagons", __name__)
 
-_EDITABLE_FIELDS = {"nom", "titre1", "titre2", "epo", "source", "notes",
-                    "image_type", "typeligne", "image"}
+_EDITABLE_FIELDS = {"label", "category", "subcategory", "era", "source", "notes",
+                    "image_type", "line_type", "image", "author", "license",
+                    "gauge", "updated_on"}
 _VALID_IMAGE_TYPES = {"plain", "sides", "sides_L", "sides_R"}
-_COL_MAP = {0: "name", 1: "nom", 2: "titre1", 3: "titre2",
-            4: "epo", 5: "image_type", 6: "image"}
+_COL_MAP = {0: "name", 1: "label", 2: "category", 3: "subcategory",
+            4: "era", 5: "image_type", 6: "image"}
 
 WAGONS_ROOT   = Path("static/images/wagons").resolve()
 CUSTOM_FOLDER = "images/custom"          # relative to WAGONS_ROOT, stored in DB
 
 
-def _sanitize_name(nom: str) -> str:
-    """Convert a display name into a safe filename/PK component."""
-    return re.sub(r"[^\w.-]+", "_", nom).strip("_") or "wagon"
+def _sanitize_name(label: str) -> str:
+    """Convert a display label into a safe filename/PK component."""
+    return re.sub(r"[^\w.-]+", "_", label).strip("_") or "wagon"
 
 
 def _unique_name(pg, base: str) -> str:
@@ -58,7 +59,7 @@ def list_wagons():
     length = request.args.get("length", 25,  type=int)
     search = request.args.get("search[value]", "").strip()
 
-    order_col = _COL_MAP.get(request.args.get("order[0][column]", 0, type=int), "nom")
+    order_col = _COL_MAP.get(request.args.get("order[0][column]", 0, type=int), "label")
     order_dir = "ASC" if request.args.get("order[0][dir]", "asc") == "asc" else "DESC"
 
     with pg_session() as pg:
@@ -66,8 +67,8 @@ def list_wagons():
 
         if search:
             like     = f"%{search}%"
-            where    = ("WHERE nom ILIKE :like OR titre1 ILIKE :like "
-                        "OR titre2 ILIKE :like OR notes ILIKE :like "
+            where    = ("WHERE label ILIKE :like OR category ILIKE :like "
+                        "OR subcategory ILIKE :like OR notes ILIKE :like "
                         "OR name ILIKE :like OR image ILIKE :like")
             filtered = pg.execute(
                 f"SELECT COUNT(*) FROM wagons {where}", {"like": like}
@@ -80,8 +81,8 @@ def list_wagons():
 
         data = [dict(r) for r in pg.execute(
             f"""
-            SELECT name, nom, titre1, titre2, epo, image, notes,
-                   source, typeligne, image_type
+            SELECT name, label, category, subcategory, era, image, notes,
+                   source, line_type, image_type, author, license, gauge
             FROM wagons
             {where}
             ORDER BY {order_col} {order_dir} NULLS LAST
@@ -92,6 +93,43 @@ def list_wagons():
 
     return jsonify({"draw": draw, "recordsTotal": total,
                     "recordsFiltered": filtered, "data": data})
+
+
+@wagons_admin_blueprint.route("<string:wname>", methods=["PUT"])
+@admin_required
+def update_wagon(wname: str):
+    """Bulk-update any editable fields from a JSON body."""
+    data = request.get_json(silent=True) or {}
+    updates = {k: v for k, v in data.items() if k in _EDITABLE_FIELDS}
+    if not updates:
+        return jsonify({"error": "no valid fields"}), 400
+
+    if "image_type" in updates and updates["image_type"] not in _VALID_IMAGE_TYPES:
+        return jsonify({"error": "invalid image_type"}), 400
+
+    if "gauge" in updates:
+        g = updates["gauge"]
+        if g == "" or g is None:
+            updates["gauge"] = None
+        else:
+            try:
+                updates["gauge"] = int(g)
+            except (ValueError, TypeError):
+                return jsonify({"error": "gauge must be an integer"}), 400
+
+    # Coerce empty strings → NULL for text fields
+    for k, v in updates.items():
+        if k != "gauge" and isinstance(v, str) and v.strip() == "":
+            updates[k] = None
+
+    with pg_session() as pg:
+        if not pg.execute("SELECT 1 FROM wagons WHERE name = :n", {"n": wname}).fetchone():
+            return jsonify({"error": "not found"}), 404
+        sets = ", ".join(f"{k} = :{k}" for k in updates)
+        updates["_name"] = wname
+        pg.execute(f"UPDATE wagons SET {sets} WHERE name = :_name", updates)
+
+    return "", 204
 
 
 @wagons_admin_blueprint.route("<string:wname>/<field>", methods=["PUT"])
@@ -154,21 +192,31 @@ def upload_wagon_image(wname: str):
 @admin_required
 def create_wagon():
     """Create a wagon from multipart form data (image upload included)."""
-    nom        = (request.form.get("nom")        or "").strip()
-    titre1     = (request.form.get("titre1")     or "").strip()
-    titre2     = (request.form.get("titre2")     or "").strip()
-    epo        = (request.form.get("epo")        or "").strip()
-    notes      = (request.form.get("notes")      or "").strip()
-    image_type = (request.form.get("image_type") or "sides").strip()
+    label      = (request.form.get("label")      or "").strip()
+    category   = (request.form.get("category")   or "").strip()
+    subcategory= (request.form.get("subcategory") or "").strip()
+    era        = (request.form.get("era")         or "").strip()
+    notes      = (request.form.get("notes")       or "").strip()
+    author     = (request.form.get("author")      or "").strip()
+    license_   = (request.form.get("license")     or "").strip()
+    gauge_str  = (request.form.get("gauge")       or "").strip()
+    image_type = (request.form.get("image_type")  or "sides").strip()
 
-    if not nom:
-        return jsonify({"error": "nom is required"}), 400
+    if not label:
+        return jsonify({"error": "label is required"}), 400
     if image_type not in _VALID_IMAGE_TYPES:
         return jsonify({"error": "invalid image_type"}), 400
 
+    gauge = None
+    if gauge_str:
+        try:
+            gauge = int(gauge_str)
+        except ValueError:
+            return jsonify({"error": "gauge must be an integer"}), 400
+
     # Auto-derive a unique PK / image base path
     with pg_session() as pg:
-        name = _unique_name(pg, _sanitize_name(nom))
+        name = _unique_name(pg, _sanitize_name(label))
 
     image_path = f"{CUSTOM_FOLDER}/{name}"
 
@@ -196,20 +244,27 @@ def create_wagon():
     with pg_session() as pg:
         pg.execute(
             """
-            INSERT INTO wagons (titre1, titre2, nom, epo, image, name,
-                                notes, image_type)
-            VALUES (:titre1, :titre2, :nom, :epo, :image, :name,
-                    :notes, :image_type)
+            INSERT INTO wagons (category, subcategory, label, era, image, name,
+                                notes, image_type, author, license, gauge)
+            VALUES (:category, :subcategory, :label, :era, :image, :name,
+                    :notes, :image_type, :author, :license, :gauge)
             """,
             {
-                "titre1": titre1 or None, "titre2": titre2 or None,
-                "nom": nom, "epo": epo or None,
-                "image": image_path, "name": name,
-                "notes": notes or None, "image_type": image_type,
+                "category":    category or None,
+                "subcategory": subcategory or None,
+                "label":       label,
+                "era":         era or None,
+                "image":       image_path,
+                "name":        name,
+                "notes":       notes or None,
+                "image_type":  image_type,
+                "author":      author or None,
+                "license":     license_ or None,
+                "gauge":       gauge,
             },
         )
 
-    return jsonify({"name": name, "nom": nom}), 201
+    return jsonify({"name": name, "label": label}), 201
 
 
 @wagons_admin_blueprint.route("<string:wname>", methods=["DELETE"])

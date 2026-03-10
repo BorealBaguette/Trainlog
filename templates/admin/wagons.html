@@ -7,19 +7,6 @@
     height: 38px; max-width: 90px; object-fit: contain;
     cursor: zoom-in;
   }
-  .itype-select {
-    border: none; background: transparent; appearance: none;
-    -webkit-appearance: none; padding: 0;
-    font-size: inherit; font-family: inherit; color: inherit; cursor: pointer;
-  }
-  .itype-select:hover { text-decoration: underline; }
-  .editable {
-    display: inline-block;
-    min-width: 60px; min-height: 1.3em;
-    padding: 1px 3px; border-radius: 2px; cursor: text;
-  }
-  .editable:empty::before { content: '—'; color: #adb5bd; pointer-events: none; }
-  .editable:focus { outline: 1px dashed #0d6efd; background: #f0f6ff; }
 </style>
 
 <div class="container-fluid px-4">
@@ -37,10 +24,10 @@
     <thead>
       <tr>
         <th data-priority="3">Name (key)</th>
-        <th data-priority="1">Nom</th>
-        <th data-priority="4">Titre 1</th>
-        <th data-priority="5">Titre 2</th>
-        <th data-priority="6">Épo</th>
+        <th data-priority="1">Label</th>
+        <th data-priority="4">Category</th>
+        <th data-priority="5">Subcategory</th>
+        <th data-priority="6">Era</th>
         <th data-priority="2">Type</th>
         <th data-priority="2" data-orderable="false">Image</th>
         <th data-priority="1" data-orderable="false">Actions</th>
@@ -84,22 +71,22 @@
         <form id="addForm" enctype="multipart/form-data">
           <div class="row g-2 mb-2">
             <div class="col-md-4">
-              <label class="form-label fw-semibold">Nom <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" name="nom" required>
+              <label class="form-label fw-semibold">Label <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="label" required placeholder="e.g. TGV Duplex">
             </div>
             <div class="col-md-4">
-              <label class="form-label fw-semibold">Titre 1</label>
-              <input type="text" class="form-control" name="titre1">
+              <label class="form-label fw-semibold">Category</label>
+              <input type="text" class="form-control" name="category" placeholder="e.g. High-speed trains">
             </div>
             <div class="col-md-4">
-              <label class="form-label fw-semibold">Titre 2</label>
-              <input type="text" class="form-control" name="titre2">
+              <label class="form-label fw-semibold">Subcategory</label>
+              <input type="text" class="form-control" name="subcategory" placeholder="e.g. TGV Duplex">
             </div>
           </div>
-          <div class="row g-2 mb-3">
+          <div class="row g-2 mb-2">
             <div class="col-md-2">
-              <label class="form-label fw-semibold">Époque</label>
-              <input type="text" class="form-control" name="epo" placeholder="e.g. 5,6">
+              <label class="form-label fw-semibold">Era</label>
+              <input type="text" class="form-control" name="era" placeholder="e.g. 5,6">
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Image type</label>
@@ -109,6 +96,20 @@
                 <option value="sides_L">Sides L only</option>
                 <option value="sides_R">Sides R only</option>
               </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Gauge (mm)</label>
+              <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Author</label>
+              <input type="text" class="form-control" name="author" placeholder="e.g. J. Martin">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">License</label>
+              <input type="text" class="form-control" name="license" placeholder="e.g. CC BY-NC-SA 3.0">
             </div>
           </div>
 
@@ -120,13 +121,91 @@
 
           <div>
             <label class="form-label fw-semibold">Notes</label>
-            <textarea class="form-control" name="notes" rows="2"></textarea>
+            <textarea class="form-control" name="notes" rows="2" placeholder="e.g. SNCF livery, delivered 1997"></textarea>
           </div>
         </form>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button class="btn btn-primary" onclick="submitAdd()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════ Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-pencil me-2"></i>Edit — <span id="editModalTitle"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editForm">
+          <div class="row g-2 mb-2">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Label</label>
+              <input type="text" class="form-control" name="label" placeholder="e.g. TGV Duplex">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Category</label>
+              <input type="text" class="form-control" name="category" placeholder="e.g. High-speed trains">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Subcategory</label>
+              <input type="text" class="form-control" name="subcategory" placeholder="e.g. TGV Duplex">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Era</label>
+              <input type="text" class="form-control" name="era" placeholder="e.g. 5,6">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Image type</label>
+              <select class="form-select" name="image_type">
+                <option value="plain">Plain</option>
+                <option value="sides">Sides (L+R)</option>
+                <option value="sides_L">Sides L only</option>
+                <option value="sides_R">Sides R only</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Line type</label>
+              <input type="text" class="form-control" name="line_type" placeholder="e.g. 1">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Gauge (mm)</label>
+              <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Author</label>
+              <input type="text" class="form-control" name="author" placeholder="e.g. J. Martin">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">License</label>
+              <input type="text" class="form-control" name="license" placeholder="e.g. CC BY-NC-SA 3.0">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Source</label>
+              <input type="text" class="form-control" name="source" placeholder="e.g. MLG Traffic">
+            </div>
+          </div>
+          <div>
+            <label class="form-label fw-semibold">Notes</label>
+            <textarea class="form-control" name="notes" rows="3" placeholder="e.g. SNCF livery, delivered 1997"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="submitEdit()">Save</button>
       </div>
     </div>
   </div>
@@ -155,40 +234,14 @@
 </div>
 
 
-<!-- ══════════════════════════════════ Detail Modal -->
-<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header py-2">
-        <h6 class="modal-title mb-0" id="detailTitle">Wagon details</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-2">
-          <span class="fw-semibold small">Source: </span>
-          <span id="detailSource" class="font-monospace small text-break"></span>
-        </div>
-        <div class="mb-2">
-          <span class="fw-semibold small">Typeligne: </span>
-          <span id="detailTypeligne" class="small"></span>
-        </div>
-        <div>
-          <span class="fw-semibold small">Notes: </span>
-          <div id="detailNotes" class="small mt-1" style="white-space:pre-wrap"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-
 <script defer>
 const WAGONS_URL = '{{ url_for("static", filename="images/wagons") }}';
 const API        = '/api/admin/wagons';
 
 function imgSrc(image, itype) {
   if (!image) return '';
-  if (itype === 'sides') return `${WAGONS_URL}/${image}_L.gif`;
+  if (itype === 'sides' || itype === 'sides_L') return `${WAGONS_URL}/${image}_L.gif`;
+  if (itype === 'sides_R') return `${WAGONS_URL}/${image}_R.gif`;
   return `${WAGONS_URL}/${image}.gif`;
 }
 function esc(s) {
@@ -208,20 +261,12 @@ const table = $('#wagonsTable').DataTable({
     })
   },
   columns: [
-    { data: 'name',  orderable: true,  render: (d, t) => t === 'display' ? `<span class="font-monospace small">${esc(d)}</span>` : (d||'') },
-    { data: 'nom',   orderable: true,  render: (d, t, row) => t === 'display' ? editable(row.name, 'nom',    d) : (d||'') },
-    { data: 'titre1',orderable: true,  render: (d, t, row) => t === 'display' ? editable(row.name, 'titre1', d) : (d||'') },
-    { data: 'titre2',orderable: true,  render: (d, t, row) => t === 'display' ? editable(row.name, 'titre2', d) : (d||'') },
-    { data: 'epo',   orderable: true,  render: (d, t, row) => t === 'display' ? editable(row.name, 'epo',    d) : (d||'') },
-    {
-      data: 'image_type', orderable: false,
-      render(d, t, row) {
-        if (t !== 'display') return d||'';
-        const opts = ['plain','sides','sides_L','sides_R']
-          .map(v => `<option value="${v}"${v===d?' selected':''}>${v}</option>`).join('');
-        return `<select class="itype-select" data-name="${esc(row.name)}">${opts}</select>`;
-      }
-    },
+    { data: 'name',        orderable: true,  render: (d, t) => t === 'display' ? `<span class="font-monospace small">${esc(d)}</span>` : (d||'') },
+    { data: 'label',       orderable: true,  render: (d) => esc(d) },
+    { data: 'category',    orderable: true,  render: (d) => esc(d) },
+    { data: 'subcategory', orderable: true,  render: (d) => esc(d) },
+    { data: 'era',         orderable: true,  render: (d) => esc(d) },
+    { data: 'image_type',  orderable: false, render: (d) => `<span class="badge bg-secondary text-white">${esc(d)}</span>` },
     {
       data: 'image', orderable: false,
       render(d, t, row) {
@@ -237,18 +282,14 @@ const table = $('#wagonsTable').DataTable({
       data: null, orderable: false,
       render(d, t, row) {
         if (t !== 'display') return '';
-        return `<button class="btn btn-outline-secondary btn-sm me-1 detail-btn" data-name="${esc(row.name)}" title="Details"><i class="fas fa-info-circle"></i></button>
-                <button class="btn btn-danger btn-sm delete-btn" data-name="${esc(row.name)}" data-nom="${esc(row.nom)}" title="Delete"><i class="fa-regular fa-trash-can"></i></button>`;
+        return `<button class="btn btn-outline-primary btn-sm me-1 edit-btn" data-name="${esc(row.name)}" title="Edit"><i class="fas fa-pencil"></i></button>
+                <button class="btn btn-danger btn-sm delete-btn" data-name="${esc(row.name)}" data-label="${esc(row.label)}" title="Delete"><i class="fa-regular fa-trash-can"></i></button>`;
       }
     }
   ],
   order: [[1, 'asc']], pageLength: 25, lengthMenu: [[25,50,100],[25,50,100]],
   language: { processing: '<i class="fas fa-spinner fa-spin"></i> Loading…' },
 });
-
-function editable(name, field, d) {
-  return `<span contenteditable="true" class="editable" data-name="${esc(name)}" data-field="${field}">${esc(d)}</span>`;
-}
 
 /* ── row cache ──────────────────────────────────────────────────── */
 const _cache = {};
@@ -259,30 +300,9 @@ table.on('xhr', () => {
 
 /* ── event delegation ───────────────────────────────────────────── */
 $('#wagonsTable')
-  .on('blur', '.editable', function () {
-    const val = this.textContent.replace(/\s+/g, ' ').trim();
-    this.textContent = val;
-    updateFieldVal(this.dataset.name, this.dataset.field, val);
-  })
-  .on('keydown', '.editable', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
-  })
-  .on('change', '.itype-select', function () {
-    updateFieldVal(this.dataset.name, 'image_type', this.value);
-  })
-  .on('click', '.img-cell',    function () { openImgModal(this.dataset.name); })
-  .on('click', '.detail-btn',  function () { showDetail(this.dataset.name); })
-  .on('click', '.delete-btn',  function () { deleteWagon(this.dataset.name, this.dataset.nom); });
-
-/* ── field update ───────────────────────────────────────────────── */
-function updateFieldVal(wname, field, val) {
-  fetch(`${API}/${encodeURIComponent(wname)}/${field}`, {
-    method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: val
-  }).then(res => {
-    if (!res.ok) res.text().then(t => toast(`Error: ${t}`, 'danger'));
-    else toast(`${field} updated`);
-  }).catch(err => toast(`Error: ${err}`, 'danger'));
-}
+  .on('click', '.img-cell',   function () { openImgModal(this.dataset.name); })
+  .on('click', '.edit-btn',   function () { openEditModal(this.dataset.name); })
+  .on('click', '.delete-btn', function () { deleteWagon(this.dataset.name, this.dataset.label); });
 
 /* ── add modal ──────────────────────────────────────────────────── */
 function renderAddUpload(itype) {
@@ -310,10 +330,8 @@ function renderAddUpload(itype) {
 document.getElementById('addImageType').addEventListener('change', function () {
   renderAddUpload(this.value);
 });
-// initialise on page load
 renderAddUpload('sides');
 
-// reset upload section when modal is opened
 document.getElementById('addModal').addEventListener('show.bs.modal', function () {
   document.getElementById('addForm').reset();
   renderAddUpload('sides');
@@ -330,13 +348,56 @@ function submitAdd() {
     .then(j => {
       $('#addModal').modal('hide');
       table.ajax.reload();
-      toast(`Wagon "${j.nom}" added`);
+      toast(`Wagon "${j.label}" added`);
     })
     .catch(err => toast(`Error: ${err}`, 'danger'));
 }
 
 document.getElementById('addForm').addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submitAdd(); }
+});
+
+/* ── edit modal ─────────────────────────────────────────────────── */
+let _editWagon = null;
+const _editFields = ['label','category','subcategory','era','image_type','line_type',
+                     'gauge','author','license','source','notes'];
+
+function openEditModal(wname) {
+  const r = _cache[wname];
+  if (!r) return;
+  _editWagon = r;
+  document.getElementById('editModalTitle').textContent = r.label || wname;
+  const f = document.getElementById('editForm');
+  _editFields.forEach(field => {
+    const el = f.elements[field];
+    if (!el) return;
+    el.value = r[field] != null ? r[field] : '';
+  });
+  $('#editModal').modal('show');
+}
+
+function submitEdit() {
+  if (!_editWagon) return;
+  const f = document.getElementById('editForm');
+  const data = {};
+  _editFields.forEach(field => {
+    const el = f.elements[field];
+    if (el) data[field] = el.value;
+  });
+  fetch(`${API}/${encodeURIComponent(_editWagon.name)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(res => {
+    if (!res.ok) return res.json().then(j => { throw new Error(j.error || res.status); });
+    $('#editModal').modal('hide');
+    table.ajax.reload(null, false);
+    toast('Wagon updated');
+  }).catch(err => toast(`Error: ${err}`, 'danger'));
+}
+
+document.getElementById('editForm').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submitEdit(); }
 });
 
 /* ── image modal ────────────────────────────────────────────────── */
@@ -347,9 +408,8 @@ function openImgModal(wname) {
   if (!r) return;
   _imgWagon = r;
 
-  document.getElementById('imgModalTitle').textContent = `Image — ${r.nom || wname}`;
+  document.getElementById('imgModalTitle').textContent = `Image — ${r.label || wname}`;
 
-  // Full-size preview
   const preview = document.getElementById('imgPreview');
   const onErr   = `this.replaceWith(Object.assign(document.createElement('span'),{className:'text-muted small fst-italic',textContent:'(not found on disk)'}))`;
   if (r.image_type === 'sides' && r.image) {
@@ -367,7 +427,6 @@ function openImgModal(wname) {
       : `<span class="text-muted fst-italic">No image set</span>`;
   }
 
-  // Replace section
   const section = document.getElementById('imgUploadSection');
   if (r.image_type === 'sides') {
     section.innerHTML = `
@@ -389,11 +448,11 @@ function openImgModal(wname) {
         </div>
       </div>`;
   } else {
-    const label = r.image_type === 'sides_L' ? 'L view' : r.image_type === 'sides_R' ? 'R view' : 'Image';
+    const lbl = r.image_type === 'sides_L' ? 'L view' : r.image_type === 'sides_R' ? 'R view' : 'Image';
     section.innerHTML = `
       <p class="small fw-semibold mb-2">Replace image file</p>
       <div class="input-group input-group-sm">
-        <label class="input-group-text">${label}</label>
+        <label class="input-group-text">${lbl}</label>
         <input type="file" id="filePlain" class="form-control" accept=".gif,image/gif">
         <button class="btn btn-outline-secondary" onclick="uploadFile('')">Upload</button>
       </div>`;
@@ -420,7 +479,6 @@ function uploadFile(side) {
     .then(j => {
       toast(`Saved: ${j.saved}`);
       document.getElementById(inputId).value = '';
-      // Cache-bust and reload preview images
       document.getElementById('imgPreview').querySelectorAll('img').forEach(img => {
         img.src = img.src.split('?')[0] + '?t=' + Date.now();
       });
@@ -430,26 +488,15 @@ function uploadFile(side) {
 }
 
 /* ── delete ─────────────────────────────────────────────────────── */
-function deleteWagon(wname, nom) {
-  if (!confirm(`Delete wagon "${nom}" (${wname})?`)) return;
+function deleteWagon(wname, label) {
+  if (!confirm(`Delete wagon "${label}" (${wname})?`)) return;
   fetch(`${API}/${encodeURIComponent(wname)}`, { method: 'DELETE' })
     .then(res => {
       if (!res.ok) return res.text().then(t => { throw new Error(t); });
       table.ajax.reload();
-      toast(`Wagon "${nom}" deleted`);
+      toast(`Wagon "${label}" deleted`);
     })
     .catch(err => toast(`Error: ${err}`, 'danger'));
-}
-
-/* ── detail modal ───────────────────────────────────────────────── */
-function showDetail(wname) {
-  const r = _cache[wname];
-  if (!r) return;
-  document.getElementById('detailTitle').textContent     = r.nom || wname;
-  document.getElementById('detailSource').textContent    = r.source    || '—';
-  document.getElementById('detailTypeligne').textContent = r.typeligne || '—';
-  document.getElementById('detailNotes').textContent     = r.notes     || '—';
-  $('#detailModal').modal('show');
 }
 
 /* ── toast ──────────────────────────────────────────────────────── */

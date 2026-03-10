@@ -200,19 +200,19 @@
         var nomEl = document.createElement('strong');
         nomEl.className = 'text-truncate';
         nomEl.style.fontSize = '.8rem';
-        nomEl.textContent = w.nom || '?';
+        nomEl.textContent = w.label || '?';
         top.appendChild(nomEl);
 
-        if (w.epo) {
+        if (w.era) {
           var epo = document.createElement('span');
           epo.className = 'badge bg-secondary ms-1';
           epo.style.fontSize = '.6rem';
-          epo.textContent = w.epo;
+          epo.textContent = w.era;
           top.appendChild(epo);
         }
         info.appendChild(top);
 
-        var desc = [w.titre1, w.titre2].filter(Boolean).join(' · ');
+        var desc = [w.category, w.subcategory].filter(Boolean).join(' · ');
         if (desc) {
           var sub = document.createElement('div');
           sub.className = 'text-muted text-truncate';
@@ -253,6 +253,8 @@
   function _imgSrc(image, side, imageType) {
     if (!image) return '';
     if (imageType === 'sides') return WAGONS + '/' + image + (side === 'R' ? '_R' : '_L') + '.gif';
+    if (imageType === 'sides_L') return WAGONS + '/' + image + '_L.gif';
+    if (imageType === 'sides_R') return WAGONS + '/' + image + '_R.gif';
     return WAGONS + '/' + image + '.gif';
   }
 
@@ -276,13 +278,13 @@
 
       var img = document.createElement('img');
       img.src = _imgSrc(u.image, u._side, u.image_type);
-      img.title = u.nom || '';
+      img.title = u.label || '';
       img.onerror = function () { this.style.display = 'none'; };
       card.appendChild(img);
 
       var nom = document.createElement('span');
       nom.className = 'tsb-nom';
-      nom.textContent = u.nom || '?';
+      nom.textContent = u.label || '?';
       card.appendChild(nom);
 
       if (!_refName) {
@@ -373,7 +375,7 @@
       return;
     }
     var json = JSON.stringify(_units.map(function (u) {
-      return { name: u.name, image: u.image, nom: u.nom, _side: u._side, image_type: u.image_type };
+      return { name: u.name, image: u.image, label: u.label, _side: u._side, image_type: u.image_type };
     }));
     _tsbWriteAndClose(json);
   };
