@@ -9,139 +9,6 @@
 
     #dataTable_wrapper { min-height: 600px; }
 
-    /* --- Composition Modal Styles --- */
-    
-    /* 1. The Scrollable Window (Dark Box) */
-    .compo-container {
-        display: block;
-        width: 100%;
-        overflow-x: auto;       /* Force horizontal scroll */
-        overflow-y: hidden;     /* Hide vertical overflow */
-        background: #1a1a2e;    /* Dark Blue Background */
-        border-radius: 8px;
-        padding: 20px 10px;     /* Internal spacing */
-        box-shadow: inset 0 0 10px rgba(0,0,0,0.5); /* Depth effect */
-        text-align: left;       /* Default align left */
-    }
-
-    /* Scrollbar styling */
-    .compo-container::-webkit-scrollbar { height: 10px; }
-    .compo-container::-webkit-scrollbar-track { background: #121220; border-radius: 4px; }
-    .compo-container::-webkit-scrollbar-thumb { background: #4a4a6a; border-radius: 5px; border: 2px solid #121220; }
-    .compo-container::-webkit-scrollbar-thumb:hover { background: #6a6a8a; }
-
-    /* Inline (child row) trainset scroll wrapper */
-    .trainset-inline-scroll { display: block; overflow-x: auto; overflow-y: hidden; margin-top: 4px; padding-bottom: 16px; }
-    .trainset-inline-scroll .compo-strip { min-width: unset; }
-    /* Wagon labels on light background */
-    .ts-nom-inline { color: #444 !important; background: rgba(0,0,0,0.07) !important; }
-    /* Inline trainset: label + scroller side by side */
-    .ts-inline-wrapper { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-    .ts-inline-wrapper .trainset-inline-scroll { margin-top: 0; }
-    .ts-inline-label { flex: 0 0 auto; max-width: 120px; font-size: 0.82em; line-height: 1.4; color: #555; }
-    .ts-inline-personal { display: block; font-style: italic; }
-    .ts-inline-saved { display: block; font-weight: 600; }
-    /* Small screens: names above, strip below spanning full width */
-    @media (max-width: 767px) {
-        .ts-inline-wrapper { flex-direction: column; align-items: flex-start; gap: 4px; }
-        .ts-inline-label { max-width: none; }
-        .ts-inline-wrapper .trainset-inline-scroll { max-width: calc(100vw - 24px) !important; }
-    }
-
-    /* 2. The Train Strip (The long content) */
-    .compo-strip {
-        display: inline-flex;   /* Aligns wagons in a row */
-        align-items: flex-end;  /* Aligns wheels at the bottom */
-        gap: 0;                 /* Connect wagons */
-        min-width: 100%;        /* Ensure it takes full width */
-        width: max-content;     /* Allow it to grow infinitely */
-        padding: 0 10px;
-    }
-
-    /* 3. Individual Wagon */
-    .compo-wagon {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        position: relative;
-        flex-shrink: 0;         /* Prevent wagon from squishing */
-    }
-
-    .compo-wagon img {
-        display: block;
-        width: auto;            /* Maintain aspect ratio */
-        transition: transform 0.2s;
-    }
-    .compo-wagon:hover img { transform: scale(1.05); z-index: 10; }
-
-    /* Coach Number (Below) */
-    .compo-coach-no {
-        font-size: 0.7rem;
-        color: #fff;
-        background: #444;
-        padding: 1px 5px;
-        border-radius: 4px;
-        margin-top: 5px;
-        font-family: monospace;
-    }
-
-    /* Class Indicators (Above) */
-    .compo-class-bar {
-        display: flex;
-        gap: 2px;
-        margin-bottom: 5px;
-        height: 12px;
-    }
-    .compo-class-dot {
-        font-size: 0.6rem;
-        padding: 0 4px;
-        border-radius: 2px;
-        color: #fff;
-        font-weight: bold;
-        line-height: 12px;
-    }
-
-    /* Class Colors */
-    .compo-class-dot.c-1st { background: #d4a017; }
-    .compo-class-dot.c-2nd { background: #2e7d32; }
-    .compo-class-dot.c-2nd-plus { background: #388e3c; }
-    .compo-class-dot.c-business { background: #6a1b9a; }
-    .compo-class-dot.c-dining { background: #c62828; }
-    .compo-class-dot.c-sleeper { background: #1565c0; }
-    .compo-class-dot.c-couchette { background: #0277bd; }
-    .compo-class-dot.c-service { background: #616161; }
-    
-    /* Misc */
-    .compo-trigger { cursor: pointer; color: #0d6efd; }
-    .compo-trigger:hover { text-decoration: underline; }
-    .compo-source{
-        font-size: 0.7rem;
-        color: #6c757d;
-        text-align: right;
-        margin-top: 6px;
-        padding: 4px 12px 0;
-        letter-spacing: 0.02em;
-    }
-
-    .compo-source a{
-        color: #495057;
-        text-decoration: none;
-        font-weight: 500;
-        transition: color 0.15s ease;
-    }
-
-    .compo-source a:hover,
-    .compo-source a:focus{
-        color: #212529;
-        text-decoration: none;
-    }
-
-    /* Trainset strip (MLG images) inside composition modal */
-    .ts-strip { gap: 2px; }
-    .ts-unit img { max-height: 70px; image-rendering: pixelated; display: block; }
-    .ts-nom { font-size: 0.6rem; color: #ccc; text-align: center; max-width: 90px;
-              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0; }
-
     /* Trainset picker in edit/new forms */
     .ts-pick-wrap { position: relative; display: inline-block; width: 100%; }
     .ts-pick-list { position: absolute; z-index: 999; left: 0; right: 0; top: 100%;
@@ -195,10 +62,10 @@
         opacity: 0.9;
     }
 
-    
 </style>
 
-</style>
+{% include "includes/trainset_display.html" %}
+
 <div class="modal fade" id="smartSearchHelpModal" tabindex="-1" role="dialog" aria-labelledby="smartSearchHelpModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
@@ -599,81 +466,14 @@ function openCompositionModal(trainName, dateStr, materialType) {
     $('#compositionModal').modal('show');
 
     if (materialType) {
-        // JSON one-off composition
-        try {
-            var units = JSON.parse(materialType);
-            if (Array.isArray(units)) { _renderTrainset($modalBody, units, null); return; }
-        } catch(e) {}
-        // Named trainset
-        $.getJSON('/api/trainsets/by-name', { name: materialType })
-            .done(function(ts) { _renderTrainset($modalBody, ts.units, ts.name); })
-            .fail(function()   { $modalBody.html('<div class="alert alert-warning">No composition data found.</div>'); });
+        _resolveUnits(materialType)
+            .done(function(r) { _renderTrainset($modalBody, r.units, r.name); })
+            .fail(function()  { $modalBody.html('<div class="alert alert-warning">No composition data found.</div>'); });
     } else {
         $modalBody.html('<div class="alert alert-warning">No composition data found.</div>');
     }
 }
 
-function _renderTrainset($modalBody, units, setName) {
-    var wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
-    var strip = $('<div class="compo-strip ts-strip"></div>');
-    (units || []).forEach(function(u) {
-        if (!u.image) return;
-        var side = u._side || 'L';
-        var itype = u.image_type;
-        var src;
-        if (itype === 'sides') src = wagonsBase + '/' + u.image + (side === 'R' ? '_R' : '_L') + '.gif';
-        else                   src = wagonsBase + '/' + u.image + '.gif';
-        var wagon = $('<div class="compo-wagon ts-unit"></div>');
-        wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
-        wagon.append(`<img src="${src}" onerror="this.style.display='none';" title="${u.label || u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
-        wagon.append(`<span class="compo-coach-no ts-nom">${u.label || u.nom || ''}</span>`);
-        strip.append(wagon);
-    });
-    if (!strip.children().length) {
-        $modalBody.html('<div class="alert alert-warning">Trainset has no units.</div>');
-        return;
-    }
-    var container = $('<div class="compo-container"></div>').append(strip);
-    $modalBody.empty().append(container);
-    if (setName) $modalBody.append(`<div class="compo-source">Trainset: ${setName}</div>`);
-    container.find('[data-toggle="tooltip"]').tooltip();
-}
-
-
-function _renderTrainsetInline(rowId, units, labels) {
-    var $container = $('#trainsetInline' + rowId);
-    if (!$container.length) return;
-    var wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
-    var strip = $('<div class="compo-strip ts-strip"></div>');
-    (units || []).forEach(function(u) {
-        if (!u.image) return;
-        var side = u._side || 'L';
-        var itype = u.image_type;
-        var src;
-        if (itype === 'sides') src = wagonsBase + '/' + u.image + (side === 'R' ? '_R' : '_L') + '.gif';
-        else                   src = wagonsBase + '/' + u.image + '.gif';
-        var wagon = $('<div class="compo-wagon ts-unit"></div>');
-        wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
-        wagon.append(`<img src="${src}" onerror="this.style.display='none';" title="${u.label || u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
-        wagon.append(`<span class="compo-coach-no ts-nom ts-nom-inline">${u.label || u.nom || ''}</span>`);
-        strip.append(wagon);
-    });
-    if (!strip.children().length) { $container.remove(); return; }
-    var tableW = $('#dataTable').width() || $(window).width();
-    labels = labels || {};
-    var labelHtml = '';
-    if (labels.personal) labelHtml += `<span class="ts-inline-personal">${labels.personal}</span>`;
-    if (labels.saved && labels.saved !== labels.personal) labelHtml += `<span class="ts-inline-saved">${labels.saved}</span>`;
-    if (labelHtml) {
-        var $label = $('<div class="ts-inline-label"></div>').html(labelHtml);
-        var $scroller = $('<div class="trainset-inline-scroll"></div>')
-            .css('max-width', (tableW - 160 - 130) + 'px').append(strip);
-        $container.addClass('ts-inline-wrapper').append($label).append($scroller);
-    } else {
-        $container.addClass('trainset-inline-scroll').css('max-width', (tableW - 160) + 'px').append(strip);
-    }
-    $container.find('[data-toggle="tooltip"]').tooltip();
-}
 
 function toggleTypeFilter() {
     const switchState = document.getElementById('filterTypeSwitch').checked;
@@ -857,14 +657,10 @@ function processHiddenData(rowIdx, columns){
                         setTimeout(function() {
                             var labels = {};
                             if (personal) labels.personal = personal;
-                            try {
-                                var units = JSON.parse(mat);
-                                if (Array.isArray(units)) { _renderTrainsetInline(rowId, units, labels); return; }
-                            } catch(e) {}
-                            $.getJSON('/api/trainsets/by-name', { name: mat })
-                                .done(function(ts) {
-                                    if (ts.name && ts.name !== labels.personal) labels.saved = ts.name;
-                                    _renderTrainsetInline(rowId, ts.units, labels);
+                            _resolveUnits(mat)
+                                .done(function(r) {
+                                    if (r.name && r.name !== labels.personal) labels.saved = r.name;
+                                    _renderTrainsetInline(rowId, r.units, labels);
                                 })
                                 .fail(function() { $('#trainsetInline' + rowId).remove(); });
                         }, 0);

@@ -345,7 +345,7 @@ def _enrich_units(pg, slim_units):
     enriched = []
     for u in slim_units:
         result = pg.execute(
-            "SELECT category, subcategory, label, era, image, name, notes, image_type FROM wagons WHERE name = :name",
+            "SELECT category, subcategory, label, era, image, name, notes, image_type, author, license, source FROM wagons WHERE name = :name",
             {"name": u['name']},
         )
         wagon = result.fetchone()
