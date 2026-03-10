@@ -833,5 +833,6 @@
     "tsbNoResults": "結果がありません",
     "routeTrip" : "旅行ルート",
     "sharedLink" : "共有された旅行",
+    "legacy_menu" : "従来のメニューデザインを使用する",
     "colorblindMode" : "色覚モード"
 }

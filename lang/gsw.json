@@ -833,5 +833,6 @@
     "tsbNoResults": "Kei Resultat",
     "routeTrip" : "Routenplanung",
     "sharedLink" : "Geteilte Reise",
+    "legacy_menu" : "Legacy-Menüdesign verwenden",
     "colorblindMode" : "Farbenblindmodus"
 }

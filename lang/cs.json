@@ -833,5 +833,6 @@
     "tsbNoResults": "Žádné výsledky",
     "routeTrip" : "Plánování trasy",
     "sharedLink" : "Sdílený výlet",
+    "legacy_menu" : "Použít starý design menu",
     "colorblindMode" : "Režim pro barvoslepé"
 }

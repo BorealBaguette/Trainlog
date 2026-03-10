@@ -833,5 +833,6 @@
     "tsbNoResults": "Brak wyników",
     "routeTrip" : "Planowanie trasy",
     "sharedLink" : "Wspólna podróż",
+    "legacy_menu" : "Użyj starego wyglądu menu",
     "colorblindMode" : "Tryb dla daltonistów"
 }

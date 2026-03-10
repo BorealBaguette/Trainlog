@@ -833,5 +833,6 @@
     "tsbNoResults": "Ingen resultater",
     "routeTrip" : "Ruteplanlegging",
     "sharedLink" : "Delt tur",
+    "legacy_menu" : "Bruk gammelt menydesign",
     "colorblindMode" : "Fargeblindmodus"
 }

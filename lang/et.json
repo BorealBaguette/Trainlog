@@ -833,5 +833,6 @@
     "tsbNoResults": "Tulemusi pole",
     "routeTrip" : "Marsruudi planeerimine",
     "sharedLink" : "Jagatud reis",
+    "legacy_menu" : "Kasuta vana menüü kujundust",
     "colorblindMode" : "Värvipimeduse režiim"
 }

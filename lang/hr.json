@@ -833,5 +833,6 @@
     "tsbNoResults": "Nema rezultata",
     "routeTrip" : "Planiranje rute",
     "sharedLink" : "Dijeljeno putovanje",
+    "legacy_menu" : "Koristi stari dizajn izbornika",
     "colorblindMode" : "Način za daltonizam"
 }

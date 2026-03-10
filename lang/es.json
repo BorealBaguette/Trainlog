@@ -833,5 +833,6 @@
     "tsbNoResults": "Sin resultados",
     "routeTrip" : "Planificación de ruta",
     "sharedLink" : "Viaje compartido",
+    "legacy_menu" : "Usar diseño de menú clásico",
     "colorblindMode" : "Modo para daltónicos"
 }

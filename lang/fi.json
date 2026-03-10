@@ -833,5 +833,6 @@
     "tsbNoResults": "Ei tuloksia",
     "routeTrip" : "Reitin suunnittelu",
     "sharedLink" : "Jaettu matka",
+    "legacy_menu" : "Käytä vanhaa valikkomuotoilua",
     "colorblindMode" : "Värisokeustila"
 }

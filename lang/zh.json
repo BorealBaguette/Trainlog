@@ -833,5 +833,6 @@
     "tsbNoResults": "没有结果",
     "routeTrip" : "行程路线规划",
     "sharedLink" : "共享行程",
+    "legacy_menu" : "使用旧版菜单设计",
     "colorblindMode" : "色盲模式"
 }

@@ -833,5 +833,6 @@
     "tsbNoResults": "Ingen resultater",
     "routeTrip" : "Rejseruting",
     "sharedLink" : "Fælles tur",
+    "legacy_menu" : "Brug det gamle menudesign",
     "colorblindMode" : "Farveblind tilstand"
 }

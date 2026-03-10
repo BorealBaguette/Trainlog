@@ -398,6 +398,17 @@ def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date
                         pass
     return {"data": filtered}, 200
 
+@app.context_processor
+def inject_globals():
+    legacyMenu = False
+
+    if "userinfo" in session:
+        user_id = session["userinfo"].get("user_id")
+        if user_id:
+            user = User.query.get(user_id)
+            legacyMenu = getattr(user, "legacyMenu", False) if user else False
+
+    return {"legacyMenu": legacyMenu}
 
 @app.route("/api/u/<username>/flight_summary")
 @login_required
@@ -1103,8 +1114,7 @@ def new_auto(username):
         title="new_trip",
         vehicle_type="car",
         username=username,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
         currencyOptions=get_available_currencies(),
         user_currency=getLoggedUserCurrency(),
@@ -1248,8 +1258,7 @@ def new(username, vehicle_type):
         "new.html",
         title=new_trip,
         username=username,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
         vehicle_type=vehicle_type,
         newTrip=new_trip,
@@ -1277,8 +1286,7 @@ def new_tag(username):
         title=lang[session["userinfo"]["lang"]]["new_tag_nav"],
         suggested_colour=suggested_colour,
         username=username,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -1358,8 +1366,7 @@ def new_ticket(username):
         title=lang[session["userinfo"]["lang"]]["new_ticket"],
         country_list=get_all_countries(),
         username=username,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
         currencyOptions=get_available_currencies(),
         user_currency=getLoggedUserCurrency(),
@@ -1532,8 +1539,7 @@ def upload_gpx(username):
         "upload_gpx.html",
         title=lang[session["userinfo"]["lang"]]["upload_gpx_files"],
         username=username,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -1652,8 +1658,7 @@ def list_gpx(username):
         trip_types=trip_types,
         username=username,
         gpxList=gpx_files,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2138,8 +2143,7 @@ def ticket_list(username):
         username=username,
         country_list=get_all_countries(),
         currencyOptions=get_available_currencies(),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2198,8 +2202,7 @@ def tag_list(username):
         title=lang[session["userinfo"]["lang"]]["manage_tags"],
         tagsList=tags,
         username=username,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2335,8 +2338,7 @@ def new_flight(username):
         currencyOptions=get_available_currencies(),
         fr24_calls=fr24_calls,
         user_currency=getLoggedUserCurrency(),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2361,8 +2363,7 @@ def routing(username):
         trip_data=trip_data,
         colorblind=colorblind,
         from_app=from_app,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2382,8 +2383,7 @@ def air_routing(username, type):
         username=username,
         trip_data=trip_data,
         from_app=from_app,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2397,8 +2397,7 @@ def freehand(username):
         "freehand.html",
         username=username,
         colorblind=colorblind,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2412,8 +2411,7 @@ def ship_routing(username):
         "ship_routing.html",
         username=username,
         colorblind=colorblind,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2576,8 +2574,7 @@ def signup():
     return render_template(
         "signup.html",
         title=lang[session["userinfo"]["lang"]]["signup"],
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2734,8 +2731,7 @@ def login():
     return render_template(
         "login_form.html",
         title=lang[session["userinfo"]["lang"]]["login"],
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2754,8 +2750,7 @@ def user_home(username):
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id()),
         public=False,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2771,8 +2766,7 @@ def motis_search(username):
         title="Plan Journey",
         username=username,
         nav="bootstrap/navigation.html",
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2833,8 +2827,7 @@ def new_map(username):
         tileserver=user.tileserver,
         globe=user.globe,
         public=False,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -2878,8 +2871,7 @@ def countries(username, cc):
         nav=nav,
         cc=cc,
         isCurrent=has_current_trip(get_user_id(username)),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3000,8 +2992,7 @@ def editCountries(cc):
         nav="bootstrap/navigation.html",
         cc=cc,
         isCurrent=has_current_trip(get_user_id()),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3016,8 +3007,7 @@ def editCountriesList():
         username=getUser(),
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id()),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3210,8 +3200,7 @@ def about():
         nav="bootstrap/navigation.html",
         title=lang[session["userinfo"]["lang"]]["about"],
         translations=lang[session["userinfo"]["lang"]],
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3312,8 +3301,7 @@ def edit_translations(langid):
         en_translations=en_translations,
         saved_keys=session.get("saved_keys", []),
         username=getUser(),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3335,8 +3323,7 @@ def public(username):
         title=lang[session["userinfo"]["lang"]]["map"],
         username=username,
         public=True,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3363,8 +3350,7 @@ def public_new(username):
         public=True,
         tileserver=tileserver,
         globe=globe,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3641,8 +3627,7 @@ def render_public_trip_page(
         og=og,
         num_hidden_trips=num_hidden_trips,
         colorblind = colorblind,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3693,8 +3678,7 @@ def multi_trip(tripIds):
         "public/multi_trip.html",
         title=lang[session["userinfo"]["lang"]]["sharedLink"],
         tripIds=tripIds,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3872,8 +3856,7 @@ def current(username):
         title=lang[session["userinfo"]["lang"]]["current"],
         username=username,
         colorblind=colorblind,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3933,8 +3916,7 @@ def public_stats(username, tripType=None, year=None):
         tripType=tripType,
         publicDistinctTypes=types,
         distinctStatYears=distinctStatYears,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -3969,8 +3951,7 @@ def admin_stats(tripType=None, year=None):
         tripType=tripType,
         admin=True,
         distinctStatYears=distinctStatYears,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -4001,8 +3982,7 @@ def stats(username, tripType=None, year=None):
         logosList=listOperatorsLogos(),
         tripType=tripType,
         distinctStatYears=distinctStatYears,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -4446,8 +4426,7 @@ def here_route_display(
         trips_json=trips_json,
         username=username,
         colorblind=colorblind,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -4524,8 +4503,7 @@ def google_route_display(
         "here_routing.html",
         trips_json=trips_json,
         username=username,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -5923,8 +5901,7 @@ def admin():
         title="Admin",
         username=getUser(),
         langs=json.dumps(list(readLang().keys())),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -6030,8 +6007,7 @@ def user_settings(username):
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
         user_globe=user.globe,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -6115,8 +6091,7 @@ def dynamic_trips(username, time=None):
         isPublic=False,
         projects=projects,
         trip_column_names=trip_column_names,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -6142,8 +6117,7 @@ def public_trips(username, time=None):
         isPublic=True,
         projects=projects,
         trip_column_names=trip_column_names,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -6263,8 +6237,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         colorblind=colorblind,
         tripDepartureDelay=tripDepartureDelay,
         tripArrivalDelay=tripArrivalDelay,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -6796,8 +6769,7 @@ def timeline(username):
         residence_country_by_year=residence_country_by_year,
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id()),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -6815,8 +6787,7 @@ def p_timeline(username):
         residence_country_by_year=residence_country_by_year,
         nav="bootstrap/public_nav.html",
         isCurrent=has_current_trip(get_user_id()),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -6981,8 +6952,7 @@ def adminManual():
         username=getUser(),
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id()),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -7054,8 +7024,7 @@ def ships():
         shipList=shipList,
         username=getUser(),
         nav="bootstrap/navigation.html",
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -7135,8 +7104,7 @@ def airliners():
         username=getUser(),
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id()),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -7317,8 +7285,7 @@ def stations():
         username=get_user(),
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id()),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -7489,8 +7456,7 @@ def leaderboard(type):
         username=getUser(),
         title=lang[session["userinfo"]["lang"]]["leaderboard"],
         type=type,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -7538,8 +7504,7 @@ def password_reset_request():
     return render_template(
         "password_reset_request.html",
         title=lang[session["userinfo"]["lang"]]["resetPassword"],
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -7568,8 +7533,7 @@ def password_reset(token):
         "password_reset.html",
         title=lang[session["userinfo"]["lang"]]["enterNewPassword"],
         token=token,
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -7762,8 +7726,7 @@ def admin_trip_growth():
         username=getUser(),
         interval=interval_name[group_by],
         title="Trip Growth",
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -7922,8 +7885,7 @@ def admin_user_growth():
         username=getUser(),
         interval=interval_name[group_by],
         title="User growth",
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -7969,8 +7931,7 @@ def friends(username):
         current_friends=current_friends,
         username=username,
         title=lang[session["userinfo"]["lang"]]["friends"],
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -8212,8 +8173,7 @@ def visited_squares(username):
         username=username,
         nav=nav,
         **session["userinfo"],
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
     )
 
 
@@ -8273,8 +8233,7 @@ def active_users():
         average_growth=average_growth,
         username=getUser(),
         title="Active Users",
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -8535,8 +8494,7 @@ def show_operators():
         nav="bootstrap/navigation.html",
         username=getUser(),
         **session["userinfo"],
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
     )
 
 @app.route("/migrate-logos")
@@ -8610,8 +8568,7 @@ def trainloglogger(username):
         username=username,
         nav="bootstrap/navigation.html",
         **session["userinfo"],
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
     )
 
 
@@ -8771,8 +8728,7 @@ def user_bounds(username):
         title=lang[session["userinfo"]["lang"]]["travel_bounds_header"],
         username=username,
         translations=lang[session["userinfo"]["lang"]],
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -8792,8 +8748,7 @@ def router_status():
         latest_commit_hex_short=latest_commit_hex[:7],
         latest_commit_display=latest_commit_dt.strftime("%Y-%m-%d %H:%M UTC"),
         latest_commit_ago=time_ago(latest_commit_dt),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -8893,8 +8848,7 @@ def live_map():
         logosList=listOperatorsLogos(),
         translations=lang[session["userinfo"]["lang"]],
         api_endpoint=url_for("get_public_current_trips"),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
         title=lang[session["userinfo"]["lang"]]["live_map"],
     )
@@ -8912,8 +8866,7 @@ def admin_live_map():
         logosList=listOperatorsLogos(),
         translations=lang[session["userinfo"]["lang"]],
         api_endpoint=url_for("get_all_current_trips"),
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 
@@ -8989,8 +8942,7 @@ def user_dashboard(username):
         title=lang[session["userinfo"]["lang"]]["user_dashboard"],
         username=username,
         nav="bootstrap/navigation.html",
-        legacyMenu=legacyMenu,
-        **lang[session["userinfo"]["lang"]],
+                **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
 

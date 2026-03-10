@@ -833,5 +833,6 @@
     "tsbNoResults": "Sonuç yok",
     "routeTrip" : "Rota planlama",
     "sharedLink" : "Paylaşılan yolculuk",
+    "legacy_menu" : "Eski menü tasarımını kullan",
     "colorblindMode" : "Renk körü modu"
 }
