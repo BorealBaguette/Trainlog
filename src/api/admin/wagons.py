@@ -230,6 +230,20 @@ def create_wagon():
                     _save_gif(f, f"{image_path}_{side}.gif")
                 except ValueError as e:
                     errors.append(f"{key}: {e}")
+    elif image_type == "sides_L":
+        f = request.files.get("file")
+        if f and f.filename:
+            try:
+                _save_gif(f, f"{image_path}_L.gif")
+            except ValueError as e:
+                errors.append(f"file: {e}")
+    elif image_type == "sides_R":
+        f = request.files.get("file")
+        if f and f.filename:
+            try:
+                _save_gif(f, f"{image_path}_R.gif")
+            except ValueError as e:
+                errors.append(f"file: {e}")
     else:
         f = request.files.get("file")
         if f and f.filename:
