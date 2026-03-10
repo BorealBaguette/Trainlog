@@ -683,21 +683,21 @@
                     }
                     
                     // Update the router
-                    if (window.control) {
-                        var currentParams = window.control.options.router.options.requestParameters || {};
-                        
+                    if (window.control && window.baseRouter) {
+                        var currentParams = window.baseRouter.options.requestParameters || {};
+
                         if (useNewRouter) {
                             currentParams.use_new_router = 'true';
                         } else {
                             delete currentParams.use_new_router;
                         }
-                        
+
                         if (Object.keys(currentParams).length > 0) {
-                            window.control.options.router.options.requestParameters = currentParams;
+                            window.baseRouter.options.requestParameters = currentParams;
                         } else {
-                            delete window.control.options.router.options.requestParameters;
+                            delete window.baseRouter.options.requestParameters;
                         }
-                        
+
                         // Recompute the route
                         window.control.route();
                     }
