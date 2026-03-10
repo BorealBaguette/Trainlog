@@ -61,14 +61,15 @@ def search_wagons():
         return jsonify([])
 
     # Build: AND over terms, OR over fields
-    fields = ["label", "category", "subcategory", "notes"]
+    text_fields = ["label", "category", "subcategory", "notes", "era", "source", "author", "license", "name"]
     params = {"limit": limit, "q_like": f"%{q}%"}  # for ranking only
     where_parts = []
 
     for i, term in enumerate(terms):
         key = f"t{i}"
         params[key] = f"%{term}%"
-        where_parts.append("(" + " OR ".join([f"{f} ILIKE :{key}" for f in fields]) + ")")
+        exprs = [f"{f} ILIKE :{key}" for f in text_fields] + [f"gauge::text ILIKE :{key}"]
+        where_parts.append("(" + " OR ".join(exprs) + ")")
 
     where_sql = " AND ".join(where_parts)
 

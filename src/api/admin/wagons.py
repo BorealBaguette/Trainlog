@@ -1,4 +1,5 @@
 import re
+import shlex
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
@@ -66,14 +67,25 @@ def list_wagons():
         total = pg.execute("SELECT COUNT(*) FROM wagons").scalar()
 
         if search:
-            like     = f"%{search}%"
-            where    = ("WHERE label ILIKE :like OR category ILIKE :like "
-                        "OR subcategory ILIKE :like OR notes ILIKE :like "
-                        "OR name ILIKE :like OR image ILIKE :like")
+            try:
+                terms = [t.strip() for t in shlex.split(search) if t.strip()]
+            except ValueError:
+                terms = search.split()
+            # Text fields searched with ILIKE; gauge cast to text for numeric match
+            _text_fields = ["label", "category", "subcategory", "notes",
+                            "name", "image", "era", "source", "author", "license"]
+            _field_exprs = [f"{f} ILIKE :t{{i}}" for f in _text_fields] + \
+                           ["gauge::text ILIKE :t{i}"]
+            qparams = {"limit": length, "offset": start}
+            term_clauses = []
+            for i, term in enumerate(terms):
+                qparams[f"t{i}"] = f"%{term}%"
+                exprs = [e.format(i=i) for e in _field_exprs]
+                term_clauses.append("(" + " OR ".join(exprs) + ")")
+            where    = "WHERE " + " AND ".join(term_clauses)
             filtered = pg.execute(
-                f"SELECT COUNT(*) FROM wagons {where}", {"like": like}
+                f"SELECT COUNT(*) FROM wagons {where}", qparams
             ).scalar()
-            qparams  = {"like": like, "limit": length, "offset": start}
         else:
             where    = ""
             filtered = total
