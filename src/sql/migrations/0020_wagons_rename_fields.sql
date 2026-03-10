@@ -60,7 +60,7 @@ DECLARE
     updated_json TEXT;
 BEGIN
     FOR r IN
-        SELECT uid, material_type_advanced
+        SELECT trip_id, material_type_advanced
         FROM   trips
         WHERE  material_type_advanced IS NOT NULL
           AND  material_type_advanced LIKE '[%'
@@ -79,10 +79,10 @@ BEGIN
             IF updated_json IS NOT NULL THEN
                 UPDATE trips
                 SET    material_type_advanced = updated_json
-                WHERE  uid = r.uid;
+                WHERE  trip_id = r.trip_id;
             END IF;
         EXCEPTION WHEN OTHERS THEN
-            RAISE WARNING 'Skipping trip % (invalid JSON): %', r.uid, SQLERRM;
+            RAISE WARNING 'Skipping trip % (invalid JSON): %', r.trip_id, SQLERRM;
         END;
     END LOOP;
 END $$;
