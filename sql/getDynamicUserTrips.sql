@@ -45,7 +45,7 @@ FilteredTrips AS (
            END AS 'future',
            CASE 
                WHEN COUNT(tags_associations.tag_id) = 0 THEN NULL
-               ELSE json_group_array(json_object('tag_id', tags_associations.tag_id, 'name', tags.name))
+               ELSE json_group_array(DISTINCT json_object('tag_id', tags_associations.tag_id, 'name', tags.name))
            END AS tags
     FROM Subquery
     LEFT JOIN airliners ON Subquery.material_type = airliners.iata
