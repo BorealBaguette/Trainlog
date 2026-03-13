@@ -292,7 +292,7 @@ function renderTrips(trips) {
     if (t.operator) details.push(t.operator);
     if (t.line_name) details.push(t.line_name);
     if (t._distance) details.push(Math.round(t._distance / 1000) + ' km');
-    if (t.price && t.currency) details.push(t.price + ' ' + t.currency);
+    if (isNumber(t.price) && t.currency) details.push(t.price + ' ' + t.currency);
     if (t.seat) details.push('{{ l.get("seat", "Seat") }}: ' + t.seat);
     
     const failed = t._enrich_failed;

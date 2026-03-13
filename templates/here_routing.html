@@ -319,7 +319,7 @@ if (operatorContents.length) {
     var formattedTicketInfo = null;
     var formattedPrice = null;
 
-    if (trip.trip.ticket_price_in_user_currency){
+    if (isNumber(trip.trip.ticket_price_in_user_currency)){
       formattedTicketPrice = trip.trip.ticket + " - " + formatCurrency("{{langId}}",trip.trip.ticket_price_in_user_currency, trip.trip.user_currency);
       if (trip.trip.user_currency != trip.trip.ticket_currency){
         originalCurrency = formatCurrency("{{langId}}",trip.trip.ticket_price, trip.trip.ticket_currency);
@@ -329,7 +329,7 @@ if (operatorContents.length) {
       
     }
 
-    if(trip.trip.price_in_user_currency)
+    if (isNumber(trip.trip.price_in_user_currency))
     {
       formattedTripPrice = formatCurrency("{{langId}}",trip.trip.price_in_user_currency, trip.trip.user_currency);
       if (trip.trip.user_currency != trip.trip.currency){

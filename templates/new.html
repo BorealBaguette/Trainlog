@@ -380,7 +380,7 @@
   }
 
   $('#price').on('input', function() {
-      var priceDefined = $(this).val() > 0;
+      var priceDefined = isNumber($(this).val());
       
       if(priceDefined) {
           // Show currency and purchasing_date if price is defined

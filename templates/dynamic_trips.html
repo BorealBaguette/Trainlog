@@ -961,7 +961,7 @@ function renderPrices(data, type, row) {
             .append($('<span>').attr("style", "display:none;").text(row.ticket_price_in_user_currency))
             .append(`<span data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${formattedTicketPrice}"><i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i></span>`);
         }
-        if (row.price) {
+        if (isNumber(row.price)) {
             let formattedPriceText = formatCurrency("{{langId}}", row.price_in_user_currency, row.user_currency);
             if (row.user_currency != row.currency) {
                 let originalCurrency = formatCurrency("{{langId}}", row.price, row.currency);

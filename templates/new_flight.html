@@ -143,7 +143,7 @@
           </legend>
           
           <label for="price" id="price_label" class="sr-only">{{price}}</label>
-          <input type="number" step="any" name="price" id="price"  placeholder="{{price}}">
+          <input type="number" step="any" name="price" id="price" placeholder="{{price}}">
           
           <label for="currency" id="currency_label" class="sr-only">{{currency}}</label>  
           <select name="currency" id="currency">
@@ -277,7 +277,7 @@
   }
 
  $('#price').on('input', function() {
-      var priceDefined = $(this).val() > 0;
+      var priceDefined = isNumber($(this).val());
 
       if(priceDefined) {
           // Show currency and purchasing_date if price is defined

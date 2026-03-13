@@ -6244,7 +6244,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         tripMaterialTypeAdvanced=tripMaterialTypeAdvanced or "",
         tripSeat=tripSeat or "",
         tripReg=tripReg or "",
-        tripPrice=tripPrice or "",
+        tripPrice=tripPrice if tripPrice is not None else "",
         tripCurrency=tripCurrency or "",
         tripPurchasingDate=tripPurchasingDate or "",
         tripType=tripType,

@@ -667,7 +667,7 @@ function buildItinerary(trips, prices) {
         var formattedTripInfo = null;
         var formattedPrice = null;
         
-        if (trip.trip.ticket_price_in_user_currency) {
+        if (isNumber(trip.trip.ticket_price_in_user_currency)) {
             formattedTicketPrice = trip.trip.ticket + " - " + formatCurrency("{{langId}}", trip.trip.ticket_price_in_user_currency, trip.trip.user_currency);
             if (trip.trip.user_currency != trip.trip.ticket_currency) {
                 let originalCurrency = formatCurrency("{{langId}}", trip.trip.ticket_price, trip.trip.ticket_currency);
@@ -675,8 +675,7 @@ function buildItinerary(trips, prices) {
             }
             formattedTicketInfo = `<div class="popupInfo ticket_popupInfo" popupinfo_content="${formattedTicketPrice}"><i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i></div>`;
         }
-        
-        if (trip.trip.price_in_user_currency) {
+        if (isNumber(trip.trip.price_in_user_currency)) {
             formattedTripPrice = formatCurrency("{{langId}}", trip.trip.price_in_user_currency, trip.trip.user_currency);
             if (trip.trip.user_currency != trip.trip.currency) {
                 let originalCurrency = formatCurrency("{{langId}}", trip.trip.price, trip.trip.currency);
