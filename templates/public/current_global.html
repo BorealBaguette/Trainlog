@@ -251,6 +251,16 @@ function placePeg(position, tripObj){
 /* ───────────────────────────── main renderer ──────────────────────────── */
 let tripsLayerGroup = null;   // global reference so we can replace it
 
+function fitMapToTrips() {
+  if (tripsLayerGroup && tripsLayerGroup.getLayers().length) {
+    map.fitBounds(tripsLayerGroup.getBounds());
+  } else {
+    // Default bounds: [[southWestLat, southWestLng], [northEastLat, northEastLng]]
+    const defaultBounds = [[20, -130], [60, 30]]; // adjust these values as needed
+    map.fitBounds(defaultBounds);
+  }
+}
+
 function renderTrips(trips){
   if (tripsLayerGroup){
     map.removeLayer(tripsLayerGroup);   // 🔄 wipe previous layer set
@@ -286,14 +296,7 @@ function renderTrips(trips){
     tripsLayerGroup.addLayer(placePeg(pegPos, trip));
   });
 
-  if (trips.length) {
-        tripsLayerGroup.addTo(map);
-        map.fitBounds(tripsLayerGroup.getBounds());
-    } else {
-        // Default bounds: [[southWestLat, southWestLng], [northEastLat, northEastLng]]
-        const defaultBounds = [[20, -130], [60, 30]]; // adjust these values as needed
-        map.fitBounds(defaultBounds);
-    }
+  tripsLayerGroup.addTo(map);
   $('.spinner-container').hide();
 }
 
@@ -311,7 +314,8 @@ function loadTrips(){
   $.get(apiEndpoint, renderTrips);  // Use the dynamic endpoint
 }
 
-loadTrips();                    // first draw
-setInterval(loadTrips, 60000);  // refresh every minute
+loadTrips();                        // first draw
+fitMapToTrips();
+setInterval(loadTrips, 60000);      // refresh every minute (no fit)
 </script>
 {% endblock %}
