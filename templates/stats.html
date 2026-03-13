@@ -186,6 +186,21 @@
     var username = "{{username}}";
     var statYear = "{{statYear if statYear else ''}}";
     var yearDefined = "{{ 'true' if statYear is not none else 'false' }}";
+    var monthLabels = {
+        1: "{{month_1}}",
+        2: "{{month_2}}",
+        3: "{{month_3}}",
+        4: "{{month_4}}",
+        5: "{{month_5}}",
+        6: "{{month_6}}",
+        7: "{{month_7}}",
+        8: "{{month_8}}",
+        9: "{{month_9}}",
+        10: "{{month_10}}",
+        11: "{{month_11}}",
+        12: "{{month_12}}"
+    };
+
     var isCombinedMode = tripType === 'combined';
     
     var currentMetric = 'trips';
@@ -935,8 +950,8 @@
             title: { text: timeSeriesKey === "months" ? "{{month}}" : "{{year}}" },
             tooltip: commonTooltipConfig,
             xAxis: {
-                type: 'category',
-                data: timeSeriesData.map(item => timeSeriesKey === "months" ? item.month : item.year)
+                ...commonCatAxisOptions,
+                data: timeSeriesData.map(item => timeSeriesKey === "months" ? monthLabels[item.month] : item.year)
             },
             yAxis: timeSeriesValueAxisOptions,
             grid: yGridConfig,
@@ -1261,7 +1276,7 @@
                         catch(e) { return item.route; }
                     }
                     if (dataKey === 'years') return item.year;
-                    if (dataKey === 'months') return item.month;
+                    if (dataKey === 'months') return monthLabels[item.month];
                     return item.station;
                 })
             };
