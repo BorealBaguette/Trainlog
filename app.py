@@ -8733,11 +8733,16 @@ def get_bounds(username, year=None):
 @app.route("/u/<username>/bounds/<year>")
 @login_required
 def user_bounds(username, year=None):
+    distinctStatYears = get_distinct_stat_years(username, "combined")
+    if year is not None and year not in distinctStatYears:
+        return redirect(url_for("user_bounds", username=username))
+
     return render_template(
         "bounds.html",
         title=lang[session["userinfo"]["lang"]]["travel_bounds_header"],
         username=username,
         boundsYear=year,
+        distinctStatYears=distinctStatYears,
         translations=lang[session["userinfo"]["lang"]],
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
