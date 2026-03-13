@@ -164,8 +164,12 @@ function displayBoundsOnMap(data) {
 
 document.addEventListener("DOMContentLoaded", function() {
     const username = "{{ username }}";
+    const boundsYear = "{{ boundsYear or '' }}";
+    const boundsUrl = boundsYear
+        ? `/u/${username}/getBounds/${boundsYear}`
+        : `/u/${username}/getBounds`;
     
-    fetch(`/u/${username}/getBounds`)
+    fetch(boundsUrl)
         .then(r => r.json())
         .then(data => {
             document.getElementById("bounds-loading").style.display = "none";
