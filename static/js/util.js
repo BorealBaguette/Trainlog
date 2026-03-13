@@ -269,14 +269,9 @@ function mToKm(m) {
     }).format(value) + suffix;
 }
 function isNumber(num){
-  if (!isNaN(num) && num != "" && num != " ")
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  if (num === null || num === undefined) return false;
+  if (typeof num === 'string' && num.trim() === '') return false;
+  return !isNaN(num);
 }
 
 function strToArray (str, limit) {
