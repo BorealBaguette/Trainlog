@@ -250,6 +250,7 @@ function placePeg(position, tripObj){
 
 /* ───────────────────────────── main renderer ──────────────────────────── */
 let tripsLayerGroup = null;   // global reference so we can replace it
+let lastTripsSignature = null;
 
 function fitMapToTrips() {
   if (tripsLayerGroup && tripsLayerGroup.getLayers().length) {
@@ -311,11 +312,18 @@ var map = createMap({
 }, null);
 
 function loadTrips(){
-  $.get(apiEndpoint, renderTrips);  // Use the dynamic endpoint
+  $.get(apiEndpoint, function(trips) {  // Use the dynamic endpoint
+    const signature = JSON.stringify(trips);
+    renderTrips(trips);
+
+    if (signature !== lastTripsSignature) {
+      lastTripsSignature = signature;
+      fitMapToTrips();
+    }
+  });
 }
 
-loadTrips();                        // first draw
-fitMapToTrips();
-setInterval(loadTrips, 60000);      // refresh every minute (no fit)
+loadTrips();                        // first draw (fit happens after data arrives)
+setInterval(loadTrips, 60000);       // refresh every 5 seconds
 </script>
 {% endblock %}
