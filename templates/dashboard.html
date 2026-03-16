@@ -509,7 +509,7 @@
         </div>
         <div class="hero-stat">
           <div class="hero-stat-value" id="hero-countries">—</div>
-          <div class="hero-stat-label">{{ leaderboardCountry }}</div>
+          <div class="hero-stat-label">{{ crossedCountries }}</div>
         </div>
         <div class="hero-stat">
           <div class="hero-stat-value" id="hero-hours">—</div>
@@ -950,10 +950,10 @@ function renderYearCard(d) {
   if (isAllTime && _totalsData) {
     const h = Math.floor((_totalsData.total_duration_sec || 0) / 3600);
     if (h) yearRows.push(statRow("{{ hoursOnTrains }}", `${fmt(h)}h`));
-    if (_totalsData.country_count) yearRows.push(statRow("{{ leaderboardCountry }}", fmt(_totalsData.country_count)));
+    if (_totalsData.country_count) yearRows.push(statRow("{{ crossedCountries }}", fmt(_totalsData.country_count)));
   } else {
     if (d.duration_hours) yearRows.push(statRow("{{ hoursOnTrains }}", `${fmt(d.duration_hours)}h`));
-    if (d.country_count)  yearRows.push(statRow("{{ leaderboardCountry }}", fmt(d.country_count)));
+    if (d.country_count)  yearRows.push(statRow("{{ crossedCountries }}", fmt(d.country_count)));
     if (d.distance_comparisons && d.distance_comparisons.length) {
       const cmp = d.distance_comparisons[0];
       const val = cmp.times >= 1 ? `${cmp.times}× ${cmp.name} ${cmp.emoji}` : `${cmp.percent}% of ${cmp.name} ${cmp.emoji}`;
@@ -991,7 +991,7 @@ function renderHighlights(d, scope) {
       rows.push(subRow(r.name, `×${r.count}`)));
   }
   const flags = countryFlags(countries);
-  if (flags) rows.push(statRow("{{ leaderboardCountry }}", flags));
+  if (flags) rows.push(statRow("{{ crossedCountries }}", flags));
   document.getElementById("highlights-body").innerHTML = rows.length ? rows.join("") : emptyState("{{ noDataYet }}");
 }
 
