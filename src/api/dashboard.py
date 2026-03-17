@@ -530,7 +530,7 @@ def dashboard_year(username):
         top_countries_alltime = pg.execute(
             _countries_base
             + " AND COALESCE(utc_start_datetime, start_datetime) < NOW()"
-            " GROUP BY key ORDER BY km DESC LIMIT 5",
+            " GROUP BY key ORDER BY km DESC",
             p,
         ).fetchall()
 
@@ -538,7 +538,7 @@ def dashboard_year(username):
             _countries_base
             + " AND EXTRACT(YEAR FROM COALESCE(utc_start_datetime, start_datetime)) = :yr"
             " AND COALESCE(utc_start_datetime, start_datetime) <= :cutoff"
-            " GROUP BY key ORDER BY km DESC LIMIT 5",
+            " GROUP BY key ORDER BY km DESC",
             p,
         ).fetchall()
 

@@ -234,6 +234,16 @@
   .stat-label { font-size: 0.85rem; color: #374151; }
   .stat-value { font-weight: 600; font-size: 0.95rem; color: #111827; }
   .stat-sub  { font-size: 0.75rem; color: var(--text-muted); }
+  .stat-row-flags { align-items: flex-start; }
+  .country-flags {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.2rem 0.35rem;
+    line-height: 1.1;
+    font-size: 1rem;
+  }
+  .country-flag { display: inline-block; }
   .bar-row { padding: 0.4rem 0; border-bottom: 1px solid #f8fafc; }
   .bar-row:last-child { border-bottom: none; }
   .bar-row-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.2rem; }
@@ -799,8 +809,9 @@ function changeArrow(pct) {
   return `<span class="${cls}">${arrow}${Math.abs(pct)}%</span>`;
 }
 
-function statRow(label, value, sub) {
-  return `<div class="stat-row">
+function statRow(label, value, sub, cls) {
+  const className = cls ? `stat-row ${cls}` : "stat-row";
+  return `<div class="${className}">
     <div>
       <div class="stat-label">${label}</div>
       ${sub ? `<div class="stat-sub">${sub}</div>` : ""}
@@ -944,7 +955,9 @@ let _hlData  = null;   // last fetched dashboard_year response
 
 function countryFlags(list) {
   if (!list || !list.length) return null;
-  return list.map(c => processCountryCode(c.code).flag).join(" ");
+  return `<div class="country-flags">${
+    list.map(c => `<span class="country-flag">${processCountryCode(c.code).flag}</span>`).join("")
+  }</div>`;
 }
 
 function renderYearCard(d) {
@@ -1014,7 +1027,7 @@ function renderHighlights(d, scope) {
       rows.push(subRow(r.name, `×${r.count}`)));
   }
   const flags = countryFlags(countries);
-  if (flags) rows.push(statRow("{{ crossedCountries }}", flags));
+  if (flags) rows.push(statRow("{{ crossedCountries }}", flags, null, "stat-row-flags"));
   document.getElementById("highlights-body").innerHTML = rows.length ? rows.join("") : emptyState("{{ noDataYet }}");
 }
 
