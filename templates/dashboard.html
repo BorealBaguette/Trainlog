@@ -586,7 +586,7 @@
     </div>
 
     <!-- Friends activity -->
-    <div class="dash-row">
+    <div class="dash-row" id="friends-activity-row">
       <div class="dash-card">
         <div class="dash-card-header"><i class="bi bi-people"></i>{{ friendsActivity }}</div>
         <div class="dash-card-body" id="friends-body">
@@ -1296,6 +1296,11 @@ function friendSection(label, labelStyle, items) {
 fetch(`/u/${username}/dashboard_friends`)
   .then(r => r.json())
   .then(d => {
+    const row = document.getElementById("friends-activity-row");
+    if (d.has_friends === false) {
+      if (row) row.style.display = "none";
+      return;
+    }
     const el = document.getElementById("friends-body");
     let html = "";
 

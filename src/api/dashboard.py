@@ -1,15 +1,14 @@
 import logging
 import time
-from datetime import datetime, date
+from datetime import date, datetime
 
-from flask import Blueprint, jsonify, request, session
+from flask import Blueprint, jsonify, request
 
-from src.api.leaderboards import _getLeaderboardUsers
+from py.currency import get_exchange_rate
 from src.api.wrapped import get_wrapped_data
 from src.pg import pg_session
 from src.users import Friendship, User
 from src.utils import get_user_id, login_required, mainConn, managed_cursor
-from py.currency import get_exchange_rate
 
 logger = logging.getLogger(__name__)
 
@@ -201,7 +200,9 @@ def dashboard_friends(username):
     )
 
     if not friends:
-        return jsonify({"recent": [], "upcoming": [], "current": []})
+        return jsonify(
+            {"recent": [], "upcoming": [], "current": [], "has_friends": False}
+        )
 
     friend_ids = [f.uid for f in friends]
     friend_usernames = {f.uid: f.username for f in friends}
@@ -270,6 +271,7 @@ def dashboard_friends(username):
             "recent": [trip_dict(r) for r in recent_rows],
             "upcoming": [trip_dict(r) for r in upcoming_rows],
             "current": [trip_dict(r) for r in current_rows],
+            "has_friends": True,
         }
     )
 
@@ -284,7 +286,11 @@ def dashboard_leaderboard(username):
     except (ValueError, TypeError):
         year = None
 
-    year_filter = "AND EXTRACT(YEAR FROM COALESCE(utc_start_datetime, start_datetime)) = :yr" if year else ""
+    year_filter = (
+        "AND EXTRACT(YEAR FROM COALESCE(utc_start_datetime, start_datetime)) = :yr"
+        if year
+        else ""
+    )
     p = {"uid": user_id, "yr": year} if year else {"uid": user_id}
 
     with pg_session() as pg:
@@ -374,13 +380,17 @@ def dashboard_year(username):
     if cached is not None:
         return jsonify(cached)
 
-    is_current_year = (selected_year == current_year)
+    is_current_year = selected_year == current_year
     # For current year: cut off at today (YTD). For past years: include full year.
     if is_current_year:
         cutoff = datetime.now()
-        prev_cutoff = datetime(current_year - 1, datetime.now().month,
-                               datetime.now().day, datetime.now().hour,
-                               datetime.now().minute)
+        prev_cutoff = datetime(
+            current_year - 1,
+            datetime.now().month,
+            datetime.now().day,
+            datetime.now().hour,
+            datetime.now().minute,
+        )
     else:
         cutoff = datetime(selected_year, 12, 31, 23, 59, 59)
         prev_cutoff = datetime(selected_year - 1, 12, 31, 23, 59, 59)
@@ -411,7 +421,12 @@ def dashboard_year(username):
         )
     """
 
-    p = {"uid": user_id, "yr": selected_year, "cutoff": cutoff, "prev_cutoff": prev_cutoff}
+    p = {
+        "uid": user_id,
+        "yr": selected_year,
+        "cutoff": cutoff,
+        "prev_cutoff": prev_cutoff,
+    }
 
     with pg_session() as pg:
         # ── This year card ────────────────────────────────────────────────────
@@ -513,7 +528,8 @@ def dashboard_year(username):
               AND key != 'UN' AND length(key) = 2
         """
         top_countries_alltime = pg.execute(
-            _countries_base + " AND COALESCE(utc_start_datetime, start_datetime) < NOW()"
+            _countries_base
+            + " AND COALESCE(utc_start_datetime, start_datetime) < NOW()"
             " GROUP BY key ORDER BY km DESC LIMIT 5",
             p,
         ).fetchall()
@@ -561,8 +577,7 @@ def dashboard_year(username):
               AND ({_SPEED_EXPR}) > 0
         """
         fastest_alltime = pg.execute(
-            _fastest_base
-            + f" AND COALESCE(utc_start_datetime, start_datetime) < NOW()"
+            _fastest_base + f" AND COALESCE(utc_start_datetime, start_datetime) < NOW()"
             f" ORDER BY trip_length / ({_SPEED_EXPR}) DESC LIMIT 1",
             p,
         ).fetchone()
@@ -607,7 +622,7 @@ def dashboard_year(username):
         streak_ytd = pg.execute(
             _streak_cte.format(
                 date_filter="AND EXTRACT(YEAR FROM COALESCE(utc_start_datetime, start_datetime)) = :yr"
-                            " AND COALESCE(utc_start_datetime, start_datetime) <= :cutoff"
+                " AND COALESCE(utc_start_datetime, start_datetime) <= :cutoff"
             ),
             p,
         ).fetchone()
@@ -771,11 +786,11 @@ def dashboard_year(username):
         return d
 
     ticket_total_by_type = _group_ticket_rows(ticket_by_type_total_rows)
-    ticket_ytd_by_type   = _group_ticket_rows(ticket_by_type_ytd_rows)
+    ticket_ytd_by_type = _group_ticket_rows(ticket_by_type_ytd_rows)
 
     # {trip_type: amount} for alltime and ytd ticket shares
     ticket_shares_alltime_by_type = {}
-    ticket_shares_ytd_by_type     = {}
+    ticket_shares_ytd_by_type = {}
 
     all_ticket_ids = list(ticket_total_by_type.keys())
     if all_ticket_ids:
@@ -788,7 +803,7 @@ def dashboard_year(username):
             for row in cur.fetchall():
                 tid, tprice, tcurrency = row["uid"], row["price"], row["currency"]
                 type_counts_total = ticket_total_by_type.get(tid, {})
-                type_counts_ytd   = ticket_ytd_by_type.get(tid, {})
+                type_counts_ytd = ticket_ytd_by_type.get(tid, {})
                 total_trips = sum(type_counts_total.values()) or 1
                 converted_price = _to_user_currency(tprice, tcurrency)
                 per_trip = converted_price / total_trips
@@ -811,7 +826,11 @@ def dashboard_year(username):
         for ttype, share in ticket_by_type.items():
             by_type[ttype] = by_type.get(ttype, 0.0) + share
         grand_total = sum(by_type.values())
-        return {"total": round(grand_total, 2), "by_type": {k: round(v, 2) for k, v in by_type.items()}, "currency": user_currency}
+        return {
+            "total": round(grand_total, 2),
+            "by_type": {k: round(v, 2) for k, v in by_type.items()},
+            "currency": user_currency,
+        }
 
     # ── Build CO2 totals ──────────────────────────────────────────────────────
     def _build_co2(rows):
@@ -825,29 +844,35 @@ def dashboard_year(username):
     trips_change = pct_change(
         int(ytd_row.this_ytd_trips or 0), int(ytd_row.prev_ytd_trips or 0)
     )
-    km_change = pct_change(
-        int(ytd_row.this_ytd_km or 0), int(ytd_row.prev_ytd_km or 0)
-    )
+    km_change = pct_change(int(ytd_row.this_ytd_km or 0), int(ytd_row.prev_ytd_km or 0))
 
     def _longest(row):
         if not row:
             return None
-        return {"origin": row.origin_station, "destination": row.destination_station,
-                "km": int(row.trip_length / 1000)}
+        return {
+            "origin": row.origin_station,
+            "destination": row.destination_station,
+            "km": int(row.trip_length / 1000),
+        }
 
     def _fastest(row):
         if not row:
             return None
         speed = round((row.trip_length / 1000.0) / (row.duration_sec / 3600.0))
-        return {"origin": row.origin_station, "destination": row.destination_station,
-                "speed": speed}
+        return {
+            "origin": row.origin_station,
+            "destination": row.destination_station,
+            "speed": speed,
+        }
 
     def _streak(row):
         if not row or row.streak_length <= 1:
             return None
-        return {"days": int(row.streak_length),
-                "start": row.streak_start.isoformat(),
-                "end": row.streak_end.isoformat()}
+        return {
+            "days": int(row.streak_length),
+            "start": row.streak_start.isoformat(),
+            "end": row.streak_end.isoformat(),
+        }
 
     def _countries(rows):
         return [{"code": r.country_code, "km": int(r.km)} for r in rows]
@@ -863,33 +888,61 @@ def dashboard_year(username):
         "distance_comparisons": data.get("distance_comparisons", [])[:2],
         "duration_hours": data.get("duration_hours"),
         # Highlights
-        "top_operators_alltime": [{"name": r.operator, "trips": r.trips, "logo": _operator_logo(r.operator)} for r in top_ops_alltime],
-        "top_operators_ytd":     [{"name": r.operator, "trips": r.trips, "logo": _operator_logo(r.operator)} for r in top_ops_ytd],
-        "top_routes_alltime": [{"name": r.name, "count": r.count} for r in top_routes_alltime],
-        "top_routes_ytd":     [{"name": r.name, "count": r.count} for r in top_routes_ytd],
+        "top_operators_alltime": [
+            {"name": r.operator, "trips": r.trips, "logo": _operator_logo(r.operator)}
+            for r in top_ops_alltime
+        ],
+        "top_operators_ytd": [
+            {"name": r.operator, "trips": r.trips, "logo": _operator_logo(r.operator)}
+            for r in top_ops_ytd
+        ],
+        "top_routes_alltime": [
+            {"name": r.name, "count": r.count} for r in top_routes_alltime
+        ],
+        "top_routes_ytd": [{"name": r.name, "count": r.count} for r in top_routes_ytd],
         "top_countries_alltime": _countries(top_countries_alltime),
-        "top_countries_ytd":     _countries(top_countries_ytd),
+        "top_countries_ytd": _countries(top_countries_ytd),
         # Records
         "longest_trip_alltime": _longest(longest_alltime),
-        "longest_trip_ytd":     _longest(longest_ytd),
+        "longest_trip_ytd": _longest(longest_ytd),
         "fastest_trip_alltime": _fastest(fastest_alltime),
-        "fastest_trip_ytd":     _fastest(fastest_ytd),
+        "fastest_trip_ytd": _fastest(fastest_ytd),
         "streak_alltime": _streak(streak_alltime),
-        "streak_ytd":     _streak(streak_ytd),
+        "streak_ytd": _streak(streak_ytd),
         "percentile": {
             "km": round(float(percentile_row.km_percentile), 2),
             "trips": round(float(percentile_row.trips_percentile), 2),
             "total_users": int(percentile_row.total_users),
-        } if percentile_row and percentile_row.total_users > 1 else None,
+        }
+        if percentile_row and percentile_row.total_users > 1
+        else None,
         # Money
-        "money_alltime": _build_money(money_ind_alltime_rows, ticket_shares_alltime_by_type),
-        "money_ytd":     _build_money(money_ind_ytd_rows, ticket_shares_ytd_by_type),
+        "money_alltime": _build_money(
+            money_ind_alltime_rows, ticket_shares_alltime_by_type
+        ),
+        "money_ytd": _build_money(money_ind_ytd_rows, ticket_shares_ytd_by_type),
         # CO2
         "co2_alltime": _build_co2(co2_alltime_rows),
-        "co2_ytd":     _build_co2(co2_ytd_rows),
+        "co2_ytd": _build_co2(co2_ytd_rows),
         # Per-mode breakdown
-        "mode_alltime": [{"type": r.trip_type, "trips": int(r.trips), "km": round(float(r.km), 1), "sec": int(r.duration_sec)} for r in mode_alltime_rows],
-        "mode_ytd":     [{"type": r.trip_type, "trips": int(r.trips), "km": round(float(r.km), 1), "sec": int(r.duration_sec)} for r in mode_ytd_rows],
+        "mode_alltime": [
+            {
+                "type": r.trip_type,
+                "trips": int(r.trips),
+                "km": round(float(r.km), 1),
+                "sec": int(r.duration_sec),
+            }
+            for r in mode_alltime_rows
+        ],
+        "mode_ytd": [
+            {
+                "type": r.trip_type,
+                "trips": int(r.trips),
+                "km": round(float(r.km), 1),
+                "sec": int(r.duration_sec),
+            }
+            for r in mode_ytd_rows
+        ],
     }
 
     _cache_set(cache_key, result)
