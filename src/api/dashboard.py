@@ -461,11 +461,19 @@ def dashboard_year(username):
         # ── Top operators ─────────────────────────────────────────────────────
         top_ops_alltime = pg.execute(
             """
+            WITH ops AS (
+                SELECT TRIM(op) AS operator
+                FROM trips
+                CROSS JOIN LATERAL regexp_split_to_table(operator, '\\s*,\\s*') AS op
+                WHERE user_id = :uid
+                  AND operator IS NOT NULL
+                  AND TRIM(operator) != ''
+                  AND COALESCE(utc_start_datetime, start_datetime) < NOW()
+                  AND NOT is_project
+            )
             SELECT operator, COUNT(*) AS trips
-            FROM trips
-            WHERE user_id = :uid AND operator IS NOT NULL AND operator != ''
-              AND COALESCE(utc_start_datetime, start_datetime) < NOW()
-              AND NOT is_project
+            FROM ops
+            WHERE operator != ''
             GROUP BY operator ORDER BY trips DESC LIMIT 3
             """,
             p,
@@ -473,12 +481,20 @@ def dashboard_year(username):
 
         top_ops_ytd = pg.execute(
             """
+            WITH ops AS (
+                SELECT TRIM(op) AS operator
+                FROM trips
+                CROSS JOIN LATERAL regexp_split_to_table(operator, '\\s*,\\s*') AS op
+                WHERE user_id = :uid
+                  AND operator IS NOT NULL
+                  AND TRIM(operator) != ''
+                  AND EXTRACT(YEAR FROM COALESCE(utc_start_datetime, start_datetime)) = :yr
+                  AND COALESCE(utc_start_datetime, start_datetime) <= :cutoff
+                  AND NOT is_project
+            )
             SELECT operator, COUNT(*) AS trips
-            FROM trips
-            WHERE user_id = :uid AND operator IS NOT NULL AND operator != ''
-              AND EXTRACT(YEAR FROM COALESCE(utc_start_datetime, start_datetime)) = :yr
-              AND COALESCE(utc_start_datetime, start_datetime) <= :cutoff
-              AND NOT is_project
+            FROM ops
+            WHERE operator != ''
             GROUP BY operator ORDER BY trips DESC LIMIT 3
             """,
             p,
