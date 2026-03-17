@@ -125,7 +125,7 @@ def dashboard_trips(username):
             "start": r.start_datetime.isoformat() if r.start_datetime else None,
             "end": r.end_datetime.isoformat() if r.end_datetime else None,
             "operator": r.operator,
-            "km": int((r.trip_length or 0) / 1000),
+            "trip_length": r.trip_length,
             "type": r.trip_type,
         }
 

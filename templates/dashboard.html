@@ -927,18 +927,18 @@ fetch(`/u/${username}/dashboard_trips`)
       }).join("");
     }
 
-    // Recent (show today's trips first if any, then last 3 past)
+    // Recent (show today's trips first if any, then last 5 past; but at most 10 in total)
     const recEl = document.getElementById("recent-body");
     const todayItems = (d.today || []).map(t => {
       const badge = `<span class="countdown-badge" style="background:#f0fdf4;color:#059669;">{{ today }}</span>`
-        + (t.km ? `<div class="trip-km">${t.km} km</div>` : "");
+        + (t.trip_length ? `<div class="trip-km">${mToKm(t.trip_length)} km</div>` : "");
       return tripItem(t, badge);
     });
     const pastItems = (d.recent || []).map(t => {
-      const badge = `<div class="trip-date">${fmtDate(t.start)}</div><div class="trip-km">${t.km ? t.km + " km" : ""}</div>`;
+      const badge = `<div class="trip-date">${fmtDate(t.start)}</div>` + (t.trip_length ? `<div class="trip-km">${mToKm(t.trip_length)} km</div>` : "");
       return tripItem(t, badge);
     });
-    const combined = [...todayItems, ...pastItems];
+    const combined = [...todayItems, ...pastItems].slice(0, 10);
     recEl.innerHTML = combined.length ? combined.join("") : emptyState("{{ noRecentTrips }}");
   })
   .catch(() => {
