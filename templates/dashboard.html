@@ -1175,7 +1175,7 @@ function _applyYearScope() {
   document.querySelectorAll("#hl-scope-toggle button.rank-metric-btn").forEach(b => b.classList.remove("active"));
   _hlYearSel.classList.add("active");
   _hlYear = parseInt(_hlYearSel.value);
-  if (wasAllTime && _hlData) {
+  if (_hlData && _hlData.year === _hlYear) {
     renderYearCard(_hlData); renderHighlights(_hlData, _hlScope); renderRecords(_hlData, _hlScope);
     renderMoney(_hlData, _hlScope); renderCO2(_hlData, _hlScope); renderModeStats(_hlData, _hlScope); updateScopeLabels(_hlScope, _hlYear);
   } else {
