@@ -96,6 +96,17 @@
     text-transform: uppercase;
     letter-spacing: 0.4px;
   }
+  .dash-card-header-link,
+  .dash-card-header-link:hover,
+  .dash-card-header-link:focus,
+  .dash-card-header-link:active,
+  .dash-card-header-link:visited {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: inherit;
+    text-decoration: none;
+  }
   .dash-card-header i {
     font-size: 1rem;
     color: var(--primary-color);
@@ -546,7 +557,11 @@
     <div class="row dash-row g-3">
       <div class="col-md-6">
         <div class="dash-card">
-          <div class="dash-card-header"><i class="bi bi-clock-history"></i>{{ recentTrips }}</div>
+          <div class="dash-card-header">
+            <a class="dash-card-header-link" href="{{ url_for('dynamic_trips', time='trips', username=username) }}">
+              <i class="bi bi-clock-history"></i>{{ recentTrips }}
+            </a>
+          </div>
           <div class="dash-card-body" id="recent-body">
             <div class="skeleton skeleton-line medium"></div>
             <div class="skeleton skeleton-line short"></div>
@@ -556,7 +571,11 @@
       </div>
       <div class="col-md-6">
         <div class="dash-card">
-          <div class="dash-card-header"><i class="bi bi-calendar-event"></i>{{ upcomingTrips }}</div>
+          <div class="dash-card-header">
+            <a class="dash-card-header-link" href="{{ url_for('dynamic_trips', time='projects', username=username) }}">
+              <i class="bi bi-calendar-event"></i>{{ upcomingTrips }}
+            </a>
+          </div>
           <div class="dash-card-body" id="upcoming-body">
             <div class="skeleton skeleton-line medium"></div>
             <div class="skeleton skeleton-line short"></div>
@@ -695,7 +714,11 @@
     <!-- News -->
     <div class="dash-row">
       <div class="dash-card">
-        <div class="dash-card-header"><i class="bi bi-newspaper"></i>{{ news }}</div>
+        <div class="dash-card-header">
+          <a class="dash-card-header-link" href="{{ url_for('news.news') }}">
+            <i class="bi bi-newspaper"></i>{{ news }}
+          </a>
+        </div>
         <div class="dash-card-body" id="news-body">
           <div class="skeleton skeleton-line medium"></div>
           <div class="skeleton skeleton-line short"></div>
