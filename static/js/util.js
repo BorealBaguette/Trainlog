@@ -260,14 +260,14 @@ function mToKm(m) {
         }).format(value) + suffix;
     }
 
-    if (km >= 100) {
+    if (km >= 10) {
         return new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 0,
             maximumFractionDigits: 0
         }).format(km);
     }
 
-    if (km >= 10) {
+    if (km >= 1) {
         return new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 0,
             maximumFractionDigits: 1
