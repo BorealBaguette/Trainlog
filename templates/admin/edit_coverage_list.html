@@ -11,7 +11,7 @@
     <div class="container mb-3">
         <h1 class="mt-3">Country Completion Map</h1>
         
-        {% set continents = get_country_codes_from_files() %}
+        {% set continents = get_country_codes_from_files(immediate_only=True) %}
         {% set continent_names = {
             "EU": EU,
             "AF": AF,

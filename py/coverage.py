@@ -3,11 +3,11 @@ import os
 from glob import glob
 
 
-def has_coverage_file(cc):
+def has_coverage_file(cc, immediate_only=False):
     return has_coverage_file_immediate(cc)
 
 
-def get_coverage_geojson_dict(cc):
+def get_coverage_geojson_dict(cc, immediate_only=False):
     return get_coverage_geojson_dict_immediate(cc)
 
 

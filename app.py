@@ -529,7 +529,7 @@ def changeLang(langToSet, session=False):
     session["userinfo"]["lang"] = langToSet
 
 
-def get_country_codes_from_files():
+def get_country_codes_from_files(immediate_only=False):
     country_codes = {}
     path = "country_percent/countries/processed/"
 
@@ -572,20 +572,27 @@ def get_country_codes_from_files():
         for cc in country_codes
     }
 
+    def add_to_country_codes(name):
+        if "-" in name:
+            cc = name.split("-")[0].upper()
+            continent = "Region_" + cc
+            if not immediate_only:
+                add_to_country_codes(cc.lower()) # also add full country if subdivisions exist
+        else:
+            cc = name.upper()
+            continent = country_to_continent.get(cc, "Unknown")
+        if continent not in country_codes:
+            country_codes[continent] = []
+
+        if name not in country_codes[continent]:
+            country_codes[continent].append(name)
+
     # Iterate over all files in the directory to collect country codes
     for filename in os.listdir(path):
         if filename.endswith(".geojson"):
             # Extract country code from filename
             name = filename.replace(".geojson", "")
-            if "-" in name:
-                cc = name.split("-")[0].upper()
-                continent = "Region_" + cc
-            else:
-                cc = name.upper()
-                continent = country_to_continent.get(cc, "Unknown")
-            if continent not in country_codes:
-                country_codes[continent] = []
-            country_codes[continent].append(name)
+            add_to_country_codes(name)
 
     # Sort each list of country codes
     for continent, codes in country_codes.items():
@@ -2979,7 +2986,7 @@ def getCountryGeoJSON(username, cc):
 @admin_required
 def editCountries(cc):
     """ """
-    if not has_coverage_file(cc):
+    if not has_coverage_file(cc, immediate_only=True):
         abort(410)
 
     return render_template(
