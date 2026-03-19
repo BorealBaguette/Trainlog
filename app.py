@@ -77,6 +77,11 @@ logger = logging.getLogger(__name__)
 
 # Local Application/Library Specific Imports
 from py import geopip_country
+from py.coverage import (
+    get_coverage_file_path,
+    get_coverage_geojson_dict,
+    has_coverage_file,
+)
 from py.currency import get_available_currencies, get_exchange_rate
 from py.db_init import init_data, init_main
 from py.g_search import get_vessel_picture
@@ -2875,9 +2880,7 @@ def countries(username, cc):
         nav = "bootstrap/navigation.html"
     else:
         nav = "bootstrap/public_nav.html"
-    directory_path = "country_percent/countries/processed/"
-    file_path = os.path.join(directory_path, f"{cc}.geojson")
-    if not os.path.exists(file_path):
+    if not has_coverage_file(cc):
         abort(410)
 
     user_obj = User.query.filter_by(username=username).first()
@@ -2944,32 +2947,28 @@ def getCountryGeoJSON(username, cc):
         )
     )
 
-    directory_path = "country_percent/countries/processed/"
+    geojson_data = get_coverage_geojson_dict(cc)
+    # Initialize the total area
+    traveled_area = 0
 
-    file_path = os.path.join(directory_path, f"{cc}.geojson")
-    with open(file_path, "r") as file:
-        geojson_data = json.load(file)
-        # Initialize the total area
-        traveled_area = 0
+    for feature in geojson_data["features"]:
+        feature_id = feature["properties"].get("id")
+        feature_area = feature["properties"].get("area_m2", 0)
 
-        for feature in geojson_data["features"]:
-            feature_id = feature["properties"].get("id")
-            feature_area = feature["properties"].get("area_m2", 0)
+        if feature_id in exclude_ids:
+            feature["properties"]["traveled"] = True
+            traveled_area += feature_area
+        else:
+            feature["properties"]["traveled"] = False
 
-            if feature_id in exclude_ids:
-                feature["properties"]["traveled"] = True
-                traveled_area += feature_area
-            else:
-                feature["properties"]["traveled"] = False
-
-        # Compare total_area with the global total_area_m2
-        total_area = geojson_data["total_area_m2"]
-        percent = math.ceil(min((traveled_area / total_area) * 100, 100))
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute(
-                upsertPercent, {"username": username, "cc": cc, "percent": percent}
-            )
-        mainConn.commit()
+    # Compare total_area with the global total_area_m2
+    total_area = geojson_data["total_area_m2"]
+    percent = math.ceil(min((traveled_area / total_area) * 100, 100))
+    with managed_cursor(mainConn) as cursor:
+        cursor.execute(
+            upsertPercent, {"username": username, "cc": cc, "percent": percent}
+        )
+    mainConn.commit()
     end_time = datetime.now()  # End the timer
     render_time = end_time - start_time  # Calculate the difference
     print(render_time)
@@ -2980,9 +2979,7 @@ def getCountryGeoJSON(username, cc):
 @admin_required
 def editCountries(cc):
     """ """
-    directory_path = "country_percent/countries/processed/"
-    file_path = os.path.join(directory_path, f"{cc}.geojson")
-    if not os.path.exists(file_path):
+    if not has_coverage_file(cc):
         abort(410)
 
     return render_template(
@@ -3014,14 +3011,7 @@ def editCountriesList():
 
 @app.route("/getGeojson/<cc>", methods=["GET"])
 def get_full_geojson(cc):
-    directory_path = "country_percent/countries/processed/"
-
-    file_path = os.path.join(directory_path, f"{cc}.geojson")
-
-    with open(file_path, "r") as file:
-        geojson_data = json.load(file)
-
-    return jsonify(geojson_data)
+    return jsonify(get_coverage_geojson_dict(cc))
 
 
 @app.route("/processQueue/<cc>", methods=["POST"])
@@ -3033,12 +3023,8 @@ def process_queue(cc):
         if not operations or len(operations) == 0:
             return jsonify({"success": False, "message": "No operations to process"})
         
-        directory_path = "country_percent/countries/processed/"
-        file_path = os.path.join(directory_path, f"{cc}.geojson")
-        
         # Load the current GeoJSON data
-        with open(file_path, "r") as file:
-            geojson_data = json.load(file)
+        geojson_data = get_coverage_geojson_dict(cc)
         
         print(f"Processing {len(operations)} operations for {cc}")
         
