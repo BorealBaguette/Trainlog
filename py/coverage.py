@@ -3,16 +3,24 @@ import os
 from glob import glob
 
 
+def has_coverage_file(cc):
+    return has_coverage_file_immediate(cc)
+
+
+def get_coverage_geojson_dict(cc):
+    return get_coverage_geojson_dict_immediate(cc)
+
+
 def get_coverage_file_path(cc):
     directory_path = "country_percent/countries/processed/"
     return os.path.join(directory_path, f"{cc}.geojson")
 
 
-def has_coverage_file(cc):
+def has_coverage_file_immediate(cc):
     return os.path.exists(get_coverage_file_path(cc))
 
 
-def get_coverage_geojson_dict(cc):
+def get_coverage_geojson_dict_immediate(cc):
     with open(get_coverage_file_path(cc), "r") as file:
         return json.load(file)
 
@@ -21,6 +29,10 @@ def get_coverage_region_file_paths(cc):
     directory_path = "country_percent/countries/processed/"
     pattern = os.path.join(directory_path, f"{cc.upper()}-*.geojson")
     return sorted(glob(pattern))
+
+
+def has_coverage_file_from_regions(cc):
+    return len(get_coverage_region_file_paths(cc)) > 0
 
 
 def get_coverage_geojson_dict_from_regions(cc):
