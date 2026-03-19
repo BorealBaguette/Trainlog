@@ -4,11 +4,23 @@ from glob import glob
 
 
 def has_coverage_file(cc, immediate_only=False):
-    return has_coverage_file_immediate(cc)
+    if has_coverage_file_immediate(cc):
+        return True
+
+    if immediate_only:
+        return False
+
+    return has_coverage_file_from_regions(cc)
 
 
 def get_coverage_geojson_dict(cc, immediate_only=False):
-    return get_coverage_geojson_dict_immediate(cc)
+    if has_coverage_file_immediate(cc):
+        return get_coverage_geojson_dict_immediate(cc)
+
+    if immediate_only:
+        raise FileNotFoundError(f"No immediate coverage file found for {cc}")
+
+    return get_coverage_geojson_dict_from_regions(cc)
 
 
 def get_coverage_file_path(cc):

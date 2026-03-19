@@ -24,7 +24,7 @@ from __future__ import absolute_import, division, print_function, unicode_litera
 # THE SOFTWARE.
 from geopip._geopip import GeoPIP
 
-from py.coverage import get_coverage_file_path
+from py.coverage import get_coverage_geojson_dict
 
 __all__ = [
     "GeoPIP",
@@ -47,7 +47,7 @@ def instance(cc):  # noqa: E302
         return _INSTANCE[cc]
 
     # If not, create a new instance for this cc
-    _INSTANCE[cc] = GeoPIP(filename=get_coverage_file_path(cc))
+    _INSTANCE[cc] = GeoPIP(geojson_dict=get_coverage_geojson_dict(cc))
 
     return _INSTANCE[cc]
 
