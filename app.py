@@ -3031,7 +3031,8 @@ def process_queue(cc):
             return jsonify({"success": False, "message": "No operations to process"})
         
         # Load the current GeoJSON data
-        geojson_data = get_coverage_geojson_dict(cc)
+        file_path = get_coverage_file_path(cc)
+        geojson_data = get_coverage_geojson_dict(cc, immediate_only=True)
         
         print(f"Processing {len(operations)} operations for {cc}")
         

@@ -6,7 +6,7 @@ import geopandas as gpd
 import pycountry
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
-from py.coverage import get_coverage_file_path
+from py.coverage import get_coverage_geojson_dict
 
 regions = {
     "FR-ARA": "Auvergne-Rhône-Alpes",
@@ -340,11 +340,9 @@ def get_country_name(country_code):
 
 
 def generate_image(cc):
-    # Construct the file path
-    filepath = get_coverage_file_path(cc)
-
-    # Load the GeoJSON file into a GeoDataFrame
-    gdf = gpd.read_file(filepath)
+    # Load the (immediate or stitched) coverage GeoJSON into a GeoDataFrame
+    geojson_data = get_coverage_geojson_dict(cc)
+    gdf = gpd.GeoDataFrame.from_features(geojson_data["features"])
 
     # Calculate bounds of the GeoDataFrame to determine image size
     minx, miny, maxx, maxy = gdf.total_bounds

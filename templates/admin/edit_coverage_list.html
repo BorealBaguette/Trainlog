@@ -11,7 +11,8 @@
     <div class="container mb-3">
         <h1 class="mt-3">Country Completion Map</h1>
         
-        {% set continents = get_country_codes_from_files(immediate_only=True) %}
+        {% set continents = get_country_codes_from_files() %}
+        {% set continents_immediate = get_country_codes_from_files(immediate_only=True) %}
         {% set continent_names = {
             "EU": EU,
             "AF": AF,
@@ -29,7 +30,11 @@
                     {% if continents['EU'] %}
                         {% for cc in continents['EU'] %}
                             <li class="list-group-item">
-                                <a class="countryLink" data-country="{{ cc }}" href="{{ url_for('editCountries', cc=cc) }}">{{ cc }}</a>
+                                {% if cc in continents_immediate['EU'] %}
+                                    <a class="countryLink" data-country="{{ cc }}" href="{{ url_for('editCountries', cc=cc) }}">{{ cc }}</a>
+                                {% else %}
+                                    <span class="countryLink"  data-country="{{ cc }}">{{ cc }}</span> (regional maps only)
+                                {% endif %}
                             </li>
                         {% endfor %}
                     {% endif %}
@@ -44,7 +49,11 @@
                         <ul class="list-group">
                             {% for cc in codes %}
                                 <li class="list-group-item">
-                                    <a class="countryLink" data-country="{{ cc }}" href="{{ url_for('editCountries', cc=cc) }}">{{ cc }}</a>
+                                    {% if cc in continents_immediate.get(continent, []) %}
+                                        <a class="countryLink" data-country="{{ cc }}" href="{{ url_for('editCountries', cc=cc) }}">{{ cc }}</a>
+                                    {% else %}
+                                        <span class="countryLink" data-country="{{ cc }}">{{ cc }}</span> (regional maps only)
+                                    {% endif %}
                                 </li>
                             {% endfor %}
                         </ul>
