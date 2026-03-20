@@ -8,7 +8,7 @@ from py.utils import getCountryFromCoordinates          # example
 from src.graphhopper import convert_graphhopper_to_osrm     # example
 
 
-def forward_routing_core(routingType, path, flask_request):
+def forward_routing_core(routingType, path, flask_request, extra_args=None):
     # Normalize routing type
     if routingType in ("train", "tram", "metro"):
         routingType = "train"
@@ -85,8 +85,11 @@ def forward_routing_core(routingType, path, flask_request):
         # Optional: make unknown routing types explicit
         return make_response({"error": f"Unsupported routingType: {routingType}"}, 400)
 
-    # Build args from incoming request
-    args = flask_request.query_string.decode("utf-8") if flask_request.query_string else ""
+    # Build args from extra_args or incoming request
+    if extra_args is not None:
+        args = extra_args
+    else:
+        args = flask_request.query_string.decode("utf-8") if flask_request.query_string else ""
     # remove use_new_router=true from forwarded query string
     args = (
         args.replace("&use_new_router=true", "")

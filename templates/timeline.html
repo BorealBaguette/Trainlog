@@ -2,104 +2,768 @@
 {% block content %}
 {% include nav %}
 <style>
+  /* ── Timeline canvas ── */
+  #timeline-container {
+    position: relative;
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+    cursor: grab;
+    user-select: none;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.07);
+  }
+  #timeline-container:active { cursor: grabbing; }
+  #tl-hint {
+    text-align: center;
+    color: #adb5bd;
+    font-size: 11px;
+    padding: 3px 0 5px;
+    background: #fff;
+    border-top: 1px solid #f3f3f3;
+    letter-spacing: .02em;
+  }
+  .tl-tooltip {
+    position: fixed;
+    background: rgba(15,15,15,0.88);
+    color: #fff;
+    padding: 5px 12px;
+    border-radius: 8px;
+    font-size: 13px;
+    pointer-events: none;
+    display: none;
+    z-index: 9999;
+    white-space: nowrap;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  }
 
-    th {
-        color: #000;
-    }
+  /* ── Page chrome ── */
+  .tl-page-title {
+    font-size: 1.6rem;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    color: #212529;
+  }
+  .tl-page-title span.username { color: #0d6efd; }
 
+  /* ── Summary stat cards ── */
+  .tl-stat-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 14px 20px;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.07);
+    border-left: 4px solid #0d6efd;
+  }
+  .tl-stat-card .tl-stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: #0d6efd;
+    line-height: 1.1;
+  }
+  .tl-stat-card .tl-stat-label {
+    font-size: 0.78rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: .06em;
+  }
+
+  /* ── Table ── */
+  .tl-table-card {
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 8px rgba(0,0,0,0.07);
+    border: none;
+  }
+  .tl-table-card .card-header {
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    border: none;
+    padding: 12px 20px;
+    font-weight: 600;
+    letter-spacing: .02em;
+  }
+  .tl-table th {
+    color: #fff;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: .07em;
+    border-bottom: 2px solid #dee2e6;
+    padding: 10px 16px;
+  }
+  .tl-table td {
+    padding: 9px 16px;
+    vertical-align: middle;
+    border-color: #f0f0f0;
+  }
+  .tl-table tbody tr:last-child td { border-bottom: none; }
+  .tl-abroad-bar {
+    height: 6px;
+    border-radius: 3px;
+    background: #e9ecef;
+    overflow: hidden;
+    min-width: 80px;
+  }
+  .tl-abroad-bar-fill {
+    height: 100%;
+    border-radius: 3px;
+    background: linear-gradient(90deg, #0d6efd, #6ea8fe);
+  }
+  .tl-days-num {
+    font-weight: 600;
+    color: #212529;
+    font-variant-numeric: tabular-nums;
+  }
+  .tl-pct-label {
+    font-size: 0.75rem;
+    color: #6c757d;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    min-width: 36px;
+  }
 </style>
+
 <div class="container py-4">
 
-  <!-- Page Title -->
-  <h2 class="text-center mb-4">
-    <span class="me-2">🌍</span>Country Timeline for 
-    <span class="text-primary">{{ username }}</span>
-  </h2>
+  <!-- Title -->
+  <div class="text-center mb-4">
+    <p class="tl-page-title">🌍 Country Timeline for <span class="username">{{ username }}</span></p>
+  </div>
 
-  <!-- Timeline Container -->
-  <div id="timeline-container" class="border rounded p-3 bg-white mb-4" style="min-height: 300px;"></div>
+  <!-- Summary stat cards -->
+  {% if days_abroad_by_year %}
+  {% set total_abroad = days_abroad_by_year.values() | sum %}
+  {% set years_list   = days_abroad_by_year.keys()   | list %}
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="tl-stat-card" style="border-color:#0d6efd">
+        <div class="tl-stat-value">{{ years_list | length }}</div>
+        <div class="tl-stat-label">Years tracked</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="tl-stat-card" style="border-color:#198754">
+        <div class="tl-stat-value" style="color:#198754">{{ "%.0f"|format(total_abroad) }}</div>
+        <div class="tl-stat-label">Total days abroad</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="tl-stat-card" style="border-color:#fd7e14">
+        <div class="tl-stat-value" style="color:#fd7e14">{{ "%.0f"|format(total_abroad / (years_list | length)) }}</div>
+        <div class="tl-stat-label">Avg days / year</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="tl-stat-card" style="border-color:#6f42c1">
+        <div class="tl-stat-value" style="color:#6f42c1">{{ residence_country_by_year.values() | list | unique | list | length }}</div>
+        <div class="tl-stat-label">Countries of residence</div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
 
-  <!-- Days Spent Abroad Section -->
-  <div class="card shadow-sm">
-    <div class="card-header bg-primary text-white">
-      <i class="bi bi-table me-2"></i> Days Spent Abroad Per Year
+  <!-- Timeline canvas -->
+  <div id="timeline-container" class="mb-4"></div>
+
+  <!-- Days abroad table -->
+  {% if days_abroad_by_year %}
+  {% set max_days = days_abroad_by_year.values() | max %}
+  <div class="card tl-table-card">
+    <div class="card-header text-white">
+      <i class="bi bi-calendar3 me-2"></i> Days Spent Abroad Per Year
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
-        <table class="table table-hover mb-0">
-          <thead class="table-light" >
+        <table class="table tl-table table-hover mb-0">
+          <thead>
             <tr>
               <th scope="col">Year</th>
               <th scope="col">Residence</th>
-              <th scope="col">Days Abroad</th>
+              <th scope="col">Days abroad</th>
+              <th scope="col" style="width:35%"></th>
             </tr>
           </thead>
           <tbody>
             {% for year, days in days_abroad_by_year.items() %}
-              <tr>
-                <td class="fw-bold">{{ year }}</td>
-                <td class="fs-4">{{ residence_country_by_year[year] }}</td>
-                <td>{{ days }}</td>
-              </tr>
+            {% set pct = (days / 365 * 100) | round(1) %}
+            {% set pct_capped = [pct, 100] | min %}
+            <tr>
+              <td class="fw-semibold text-secondary">{{ year }}</td>
+              <td class="fs-5">
+                {% for flag in residence_flags_by_year.get(year, [residence_country_by_year[year]]) %}{{ flag }}{% if not loop.last %} {% endif %}{% endfor %}
+              </td>
+              <td class="tl-days-num">{{ days }}</td>
+              <td>
+                <div class="d-flex align-items-center gap-2">
+                  <div class="tl-abroad-bar flex-grow-1">
+                    <div class="tl-abroad-bar-fill" style="width:{{ pct_capped }}%"></div>
+                  </div>
+                  <span class="tl-pct-label">{{ pct }}%</span>
+                </div>
+              </td>
+            </tr>
             {% endfor %}
           </tbody>
         </table>
       </div>
     </div>
   </div>
+  {% endif %}
 
 </div>
 
-<!-- Vis.js Timeline Library -->
-<link
-  href="https://unpkg.com/vis-timeline@latest/styles/vis-timeline-graph2d.min.css"
-  rel="stylesheet"
-  type="text/css"
-/>
-<script
-  type="text/javascript"
-  src="https://unpkg.com/vis-timeline@latest/standalone/umd/vis-timeline-graph2d.min.js"
-></script>
+<div class="tl-tooltip" id="tl-tooltip"></div>
 
-<!-- Custom CSS for Vis.js (Optional) -->
-<style>
-  .vis-item {
-    border-radius: 4px !important;
-    border: 1px solid rgba(0, 0, 0, 0.2) !important;
-  }
-  .vis-item .vis-item-overflow {
-    overflow: visible !important; /* Prevent clipping of flag emojis */
-  }
-</style>
-
-<!-- Initialize Vis.js Timeline -->
 <script>
-  document.addEventListener("DOMContentLoaded", function() {
-    const timelineContainer = document.getElementById("timeline-container");
+document.addEventListener("DOMContentLoaded", function () {
+  const rawBlocks = [
+    {% for item in country_blocks %}
+    { flag: '{{ item.flag }}', start: '{{ item.start }}', end: '{{ item.end }}', color: '{{ item.color }}', borderColor: '{{ item.borderColor }}' },
+    {% endfor %}
+  ];
 
-    const items = [
-      {% for item in country_blocks %}
-        {
-          id: '{{ loop.index }}',
-          content: '<span style="font-size: 1.5rem;">{{ item.flag }}</span>',
-          start: '{{ item.start }}',
-          end: '{{ item.end }}',
-          style: 'background-color: {{ item.color }};'
-        },
-      {% endfor %}
-    ];
+  const rawResBlocks = [
+    {% for item in residence_blocks %}
+    { flag: '{{ item.flag }}', start: '{{ item.start }}', end: '{{ item.end }}', color: '{{ item.color }}', borderColor: '{{ item.borderColor }}' },
+    {% endfor %}
+  ];
 
-    const options = {
-      showCurrentTime: true,
-      stack: false,
-      horizontalScroll: true,
-      zoomKey: 'ctrlKey',
-      margin: { item: 10 },
-      minHeight: '200px'
-    };
+  const container = document.getElementById('timeline-container');
+  const tooltip   = document.getElementById('tl-tooltip');
 
-    const timeline = new vis.Timeline(timelineContainer, items, options);
+  if (!rawBlocks.length) {
+    container.innerHTML = '<p class="text-center text-muted py-5">No data yet.</p>';
+    return;
+  }
+
+  const blocks = rawBlocks.map(b => ({
+    ...b,
+    startMs: new Date(b.start).getTime(),
+    endMs:   new Date(b.end).getTime(),
+  }));
+
+  const resBlocks = rawResBlocks.map(b => ({
+    ...b,
+    startMs: new Date(b.start).getTime(),
+    endMs:   new Date(b.end).getTime(),
+  }));
+
+  // Layout constants
+  const dpr         = window.devicePixelRatio || 1;
+  const LABEL_H     = 70;   // floating label zone above ribbon
+  const RIBBON_H    = 50;   // main trip ribbon height
+  const RES_H       = 12;   // residence bar height
+  const RES_GAP     = 4;    // gap between main ribbon and residence bar
+  const AXIS_H      = 38;   // axis below residence bar
+  const TOTAL_H     = LABEL_H + RIBBON_H + RES_GAP + RES_H + AXIS_H;
+  const PAD         = 24;   // horizontal padding
+  const LABEL_R     = 15;   // radius of floating flag circles
+  const NARROW_PX   = 32;   // block narrower than this → label above
+
+  const minMs    = Math.min(...blocks.map(b => b.startMs));
+  const maxMs    = Math.max(...blocks.map(b => b.endMs));
+  const totalMs  = maxMs - minMs;
+
+  let W       = 0;
+  let pxPerMs = 0;
+  let panPx   = 0;
+
+  // Build canvas
+  const canvas = document.createElement('canvas');
+  container.appendChild(canvas);
+  const hint = document.createElement('div');
+  hint.id = 'tl-hint';
+  hint.textContent = 'Scroll / pinch to zoom  ·  drag to pan';
+  container.appendChild(hint);
+
+  // House icon pinned to the left of the residence bar
+  const resIcon = document.createElement('i');
+  resIcon.className = 'fa-solid fa-house';
+  resIcon.style.cssText = [
+    'position:absolute',
+    `top:${LABEL_H + RIBBON_H + RES_GAP + Math.round(RES_H / 2)}px`,
+    'left:4px',
+    'transform:translateY(-50%)',
+    'font-size:10px',
+    'color:#6c757d',
+    'pointer-events:none',
+    'line-height:0',
+    'display:block',
+    'width:0',
+    'overflow:visible',
+  ].join(';');
+  container.appendChild(resIcon);
+
+  const ctx = canvas.getContext('2d');
+  const nowMs = Date.now();
+
+  // Hatch pattern: diagonal white stripes for future portions
+  function makeHatch() {
+    const sz = 7;
+    const pc = document.createElement('canvas');
+    pc.width = sz; pc.height = sz;
+    const ptx = pc.getContext('2d');
+    ptx.strokeStyle = 'rgba(255,255,255,0.55)';
+    ptx.lineWidth = 2;
+    ptx.beginPath();
+    ptx.moveTo(0, sz); ptx.lineTo(sz, 0);
+    ptx.moveTo(-sz, sz); ptx.lineTo(0, 0);
+    ptx.moveTo(sz, sz * 2); ptx.lineTo(sz * 2, sz);
+    ptx.stroke();
+    return ctx.createPattern(pc, 'repeat');
+  }
+  const hatchPat = makeHatch();
+
+  function msToX(ms) {
+    return PAD + (ms - minMs) * pxPerMs + panPx;
+  }
+
+  function clampPan() {
+    const contentW  = totalMs * pxPerMs;
+    const visibleW  = W - PAD * 2;
+    if (contentW <= visibleW) {
+      panPx = (visibleW - contentW) / 2;
+    } else {
+      panPx = Math.min(0, Math.max(-(contentW - visibleW), panPx));
+    }
+  }
+
+  function roundRectPath(x, y, w, h, r) {
+    const p = new Path2D();
+    p.moveTo(x + r, y);
+    p.lineTo(x + w - r, y);
+    p.arcTo(x + w, y,     x + w, y + r,     r);
+    p.lineTo(x + w, y + h - r);
+    p.arcTo(x + w, y + h, x + w - r, y + h, r);
+    p.lineTo(x + r, y + h);
+    p.arcTo(x,     y + h, x,     y + h - r, r);
+    p.lineTo(x,     y + r);
+    p.arcTo(x,     y,     x + r, y,         r);
+    p.closePath();
+    return p;
+  }
+
+  function render() {
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, TOTAL_H);
+
+    const RY = LABEL_H; // ribbon top y
+
+    // Screen positions for all blocks
+    const sb = blocks.map(b => ({
+      ...b,
+      x1: msToX(b.startMs),
+      x2: msToX(b.endMs),
+      get w() { return this.x2 - this.x1; }
+    }));
+
+    // Visible blocks
+    const vis = sb.filter(b => b.x2 > PAD && b.x1 < W - PAD);
+
+    // ── Ribbon (clipped to rounded rect) ────────────────────────────
+    ctx.save();
+    ctx.clip(roundRectPath(PAD, RY, W - PAD * 2, RIBBON_H, 7));
+
+    // Fill entire ribbon grey as fallback
+    ctx.fillStyle = '#e9ecef';
+    ctx.fillRect(PAD, RY, W - PAD * 2, RIBBON_H);
+
+    const nowX = msToX(nowMs);
+    for (const b of sb) {
+      // Past portion — solid
+      const pastX2 = Math.min(b.x2, nowX);
+      if (pastX2 > b.x1) {
+        ctx.fillStyle = b.color;
+        ctx.fillRect(b.x1, RY, pastX2 - b.x1, RIBBON_H);
+      }
+      // Future portion — dimmed + hatched
+      const futX1 = Math.max(b.x1, nowX);
+      if (futX1 < b.x2) {
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = b.color;
+        ctx.fillRect(futX1, RY, b.x2 - futX1, RIBBON_H);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = hatchPat;
+        ctx.fillRect(futX1, RY, b.x2 - futX1, RIBBON_H);
+      }
+    }
+
+    // Separators between blocks — more visible when adjacent blocks share the same colour
+    for (let i = 1; i < sb.length; i++) {
+      const prev = sb[i - 1], curr = sb[i];
+      const sameColor = prev.color === curr.color;
+      ctx.save();
+      ctx.strokeStyle = sameColor ? curr.borderColor : 'rgba(255,255,255,0.35)';
+      ctx.lineWidth   = sameColor ? 2 : 1;
+      ctx.beginPath();
+      ctx.moveTo(curr.x1, RY);
+      ctx.lineTo(curr.x1, RY + RIBBON_H);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // "Today" line inside ribbon
+    if (nowX > PAD && nowX < W - PAD) {
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([3, 3]);
+      ctx.beginPath();
+      ctx.moveTo(nowX, RY);
+      ctx.lineTo(nowX, RY + RIBBON_H);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
+    ctx.restore();
+
+    // Ribbon border
+    ctx.strokeStyle = 'rgba(0,0,0,0.10)';
+    ctx.lineWidth = 1;
+    ctx.stroke(roundRectPath(PAD, RY, W - PAD * 2, RIBBON_H, 7));
+
+    // ── Wide block flags (inside ribbon) ────────────────────────────
+    const wide   = vis.filter(b => b.w >= NARROW_PX);
+    const narrow = vis.filter(b => b.w >  0 && b.w < NARROW_PX);
+
+    ctx.textAlign    = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.font         = '22px serif';
+
+    for (const b of wide) {
+      // Clamp center to stay inside ribbon
+      const bx1c = Math.max(b.x1, PAD);
+      const bx2c = Math.min(b.x2, W - PAD);
+      const cx   = (bx1c + bx2c) / 2;
+      const cy   = RY + RIBBON_H / 2;
+      // White pill + shadow so flag is always readable against the block colour
+      const pH = 28, pW = 38, pR = 8;
+      ctx.save();
+      ctx.shadowColor   = 'rgba(0,0,0,0.28)';
+      ctx.shadowBlur    = 7;
+      ctx.shadowOffsetY = 2;
+      ctx.fillStyle = '#fff';
+      ctx.fill(roundRectPath(cx - pW / 2, cy - pH / 2, pW, pH, pR));
+      ctx.restore();
+      ctx.font      = '20px serif';
+      ctx.fillText(b.flag, cx, cy);
+    }
+
+    // ── Narrow block labels (above ribbon) ──────────────────────────
+    // Ideal label x = block center; then push apart so circles don't overlap
+    const labeled = narrow.map(b => ({
+      ...b,
+      idealX: Math.max(PAD + LABEL_R, Math.min(W - PAD - LABEL_R,
+               (b.x1 + b.x2) / 2)),
+      labelX: Math.max(PAD + LABEL_R, Math.min(W - PAD - LABEL_R,
+               (b.x1 + b.x2) / 2)),
+    })).sort((a, b) => a.idealX - b.idealX);
+
+    for (let i = 1; i < labeled.length; i++) {
+      const gap = LABEL_R * 2 + 5;
+      if (labeled[i].labelX - labeled[i - 1].labelX < gap)
+        labeled[i].labelX = labeled[i - 1].labelX + gap;
+    }
+    for (const lb of labeled)
+      lb.labelX = Math.max(PAD + LABEL_R, Math.min(W - PAD - LABEL_R, lb.labelX));
+
+    const LY = LABEL_H - LABEL_R - 5; // label circle centre y
+
+    for (const lb of labeled) {
+      const bCX = Math.max(PAD + 1, Math.min(W - PAD - 1, (lb.x1 + lb.x2) / 2));
+
+      // Dashed connecting line  (label → ribbon top)
+      ctx.save();
+      ctx.strokeStyle = lb.borderColor;
+      ctx.lineWidth   = 1.5;
+      ctx.setLineDash([3, 2]);
+      ctx.beginPath();
+      ctx.moveTo(lb.labelX, LY + LABEL_R + 2);
+      ctx.lineTo(bCX, RY - 1);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+
+      // Tiny downward triangle at ribbon edge  (the "entonnoir" tip)
+      ctx.fillStyle = lb.borderColor;
+      ctx.beginPath();
+      ctx.moveTo(bCX - 4, RY - 1);
+      ctx.lineTo(bCX + 4, RY - 1);
+      ctx.lineTo(bCX,     RY + 6);
+      ctx.closePath();
+      ctx.fill();
+
+      // White circle with coloured border
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(lb.labelX, LY, LABEL_R, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = lb.borderColor;
+      ctx.lineWidth   = 2;
+      ctx.stroke();
+
+      // Flag emoji inside circle
+      ctx.font         = `${LABEL_R * 1.25}px serif`;
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(lb.flag, lb.labelX, LY);
+    }
+
+    // ── Residence bar ────────────────────────────────────────────────
+    const resY = RY + RIBBON_H + RES_GAP;
+    const resR = RES_H / 2;
+
+    ctx.save();
+    ctx.clip(roundRectPath(PAD, resY, W - PAD * 2, RES_H, resR));
+    ctx.fillStyle = '#e9ecef';
+    ctx.fillRect(PAD, resY, W - PAD * 2, RES_H);
+
+    for (const rb of resBlocks) {
+      const rx1 = msToX(rb.startMs);
+      const rx2 = msToX(rb.endMs);
+      // Past portion
+      const rpastX2 = Math.min(rx2, nowX);
+      if (rpastX2 > rx1) {
+        ctx.fillStyle = rb.color;
+        ctx.fillRect(rx1, resY, rpastX2 - rx1, RES_H);
+      }
+      // Future portion — dimmed + hatched
+      const rfutX1 = Math.max(rx1, nowX);
+      if (rfutX1 < rx2) {
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = rb.color;
+        ctx.fillRect(rfutX1, resY, rx2 - rfutX1, RES_H);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = hatchPat;
+        ctx.fillRect(rfutX1, resY, rx2 - rfutX1, RES_H);
+      }
+    }
+    // Extend last residence hatched to the right edge
+    if (resBlocks.length) {
+      const last = resBlocks[resBlocks.length - 1];
+      const extX1 = Math.max(msToX(last.startMs), nowX);
+      const extX2 = W - PAD;
+      if (extX2 > extX1) {
+        ctx.globalAlpha = 0.55;
+        ctx.fillStyle = last.color;
+        ctx.fillRect(extX1, resY, extX2 - extX1, RES_H);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = hatchPat;
+        ctx.fillRect(extX1, resY, extX2 - extX1, RES_H);
+      }
+    }
+
+    ctx.restore();
+
+    // Separators between residence blocks
+    for (let i = 1; i < resBlocks.length; i++) {
+      const prev = resBlocks[i - 1], curr = resBlocks[i];
+      const rx = msToX(curr.startMs);
+      if (rx < PAD || rx > W - PAD) continue;
+      ctx.save();
+      ctx.strokeStyle = prev.color === curr.color ? curr.borderColor : 'rgba(255,255,255,0.6)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(rx, resY);
+      ctx.lineTo(rx, resY + RES_H);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // Residence bar border
+    ctx.strokeStyle = 'rgba(0,0,0,0.08)';
+    ctx.lineWidth = 1;
+    ctx.stroke(roundRectPath(PAD, resY, W - PAD * 2, RES_H, resR));
+
+    // ── Year / month axis ────────────────────────────────────────────
+    drawAxis(resY + RES_H);
+  }
+
+  function drawAxis(y) {
+    const minYear    = new Date(minMs).getFullYear();
+    const maxYear    = new Date(maxMs).getFullYear() + 1;
+    const msPerYear  = 365.25 * 86400000;
+    const msPerMonth = 30.44  * 86400000;
+    const pxPerYear  = pxPerMs * msPerYear;
+
+    // Pick a year label step so labels (~34px wide) never crowd each other
+    const yearStep = pxPerYear >= 55 ? 1
+                   : pxPerYear >= 28 ? 2
+                   : pxPerYear >= 14 ? 5
+                   : pxPerYear >=  6 ? 10
+                   : 25;
+
+    // Baseline
+    ctx.strokeStyle = '#dee2e6';
+    ctx.lineWidth   = 1;
+    ctx.beginPath();
+    ctx.moveTo(PAD, y);
+    ctx.lineTo(W - PAD, y);
+    ctx.stroke();
+
+    // Year ticks + labels — only on multiples of yearStep, only inside the timeline
+    const LABEL_HALF = 18; // half-width of a 4-digit year label at 11px bold
+    for (let yr = minYear; yr <= maxYear; yr++) {
+      if (yr % yearStep !== 0) continue;
+      const x = msToX(new Date(yr, 0, 1).getTime());
+      if (x < PAD || x > W - PAD) continue;
+
+      ctx.strokeStyle = '#adb5bd';
+      ctx.lineWidth   = 1;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x, y + 8);
+      ctx.stroke();
+
+      // Clamp label so it never spills outside the padded area
+      const lx = Math.max(x, PAD + LABEL_HALF);
+      ctx.fillStyle    = '#495057';
+      ctx.font         = 'bold 11px sans-serif';
+      ctx.textAlign    = 'center';
+      ctx.textBaseline = 'top';
+      ctx.fillText(yr, lx, y + 10);
+    }
+
+    // Month ticks — only when a month is at least 14 px wide
+    if (pxPerMs * msPerMonth >= 14) {
+      const showNames = pxPerMs * msPerMonth >= 40;
+      for (let yr = minYear; yr <= maxYear; yr++) {
+        for (let mo = 1; mo < 12; mo++) {
+          const x = msToX(new Date(yr, mo, 1).getTime());
+          if (x < PAD || x > W - PAD) continue;
+          ctx.strokeStyle = '#dee2e6';
+          ctx.lineWidth   = 0.5;
+          ctx.beginPath();
+          ctx.moveTo(x, y);
+          ctx.lineTo(x, y + 4);
+          ctx.stroke();
+          if (showNames) {
+            const name = new Date(yr, mo, 1).toLocaleString('default', { month: 'short' });
+            ctx.fillStyle    = '#adb5bd';
+            ctx.font         = '9px sans-serif';
+            ctx.textAlign    = 'center';
+            ctx.textBaseline = 'top';
+            ctx.fillText(name, x, y + 10);
+          }
+        }
+      }
+    }
+  }
+
+  function resize() {
+    const rect = container.getBoundingClientRect();
+    W = Math.max(rect.width, 320);
+    canvas.width        = W * dpr;
+    canvas.height       = TOTAL_H * dpr;
+    canvas.style.width  = W + 'px';
+    canvas.style.height = TOTAL_H + 'px';
+    pxPerMs = (W - PAD * 2) / totalMs;
+    panPx   = 0;
+    render();
+  }
+
+  // ── Interactions ─────────────────────────────────────────────────
+
+  let dragging = false, dragX0 = 0, panX0 = 0;
+
+  canvas.addEventListener('mousedown', e => {
+    dragging = true; dragX0 = e.clientX; panX0 = panPx;
   });
+  window.addEventListener('mousemove', e => {
+    if (!dragging) return;
+    panPx = panX0 + (e.clientX - dragX0);
+    clampPan(); render();
+  });
+  window.addEventListener('mouseup', () => { dragging = false; });
+
+  canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const rect      = canvas.getBoundingClientRect();
+    const mouseX    = e.clientX - rect.left;
+    const anchorMs  = minMs + (mouseX - PAD - panPx) / pxPerMs;
+    const factor    = e.deltaY < 0 ? 1.2 : 1 / 1.2;
+    const minZoom   = (W - PAD * 2) / totalMs;
+    pxPerMs = Math.max(minZoom, Math.min(minZoom * 3000, pxPerMs * factor));
+    panPx   = mouseX - PAD - (anchorMs - minMs) * pxPerMs;
+    clampPan(); render();
+  }, { passive: false });
+
+  // Hover tooltip
+  canvas.addEventListener('mousemove', e => {
+    if (dragging) { tooltip.style.display = 'none'; return; }
+    const rect   = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+    const RY     = LABEL_H;
+    if (mouseY >= RY && mouseY <= RY + RIBBON_H) {
+      const ms  = minMs + (mouseX - PAD - panPx) / pxPerMs;
+      const hit = blocks.find(b => ms >= b.startMs && ms <= b.endMs);
+      if (hit) {
+        const fmt = { year: 'numeric', month: 'short', day: 'numeric' };
+        const s   = new Date(hit.startMs).toLocaleDateString(undefined, fmt);
+        const end = new Date(hit.endMs).toLocaleDateString(undefined, fmt);
+        const d   = Math.round((hit.endMs - hit.startMs) / 86400000);
+        tooltip.innerHTML      = `${hit.flag}&nbsp; ${s} → ${end}&nbsp; <b>${d}d</b>`;
+        tooltip.style.display  = 'block';
+        tooltip.style.left     = (e.clientX + 14) + 'px';
+        tooltip.style.top      = (e.clientY - 38) + 'px';
+        return;
+      }
+    }
+    tooltip.style.display = 'none';
+  });
+  canvas.addEventListener('mouseleave', () => { tooltip.style.display = 'none'; });
+
+  // ── Unified touch handler (pan + pinch-to-zoom) ─────────────────
+  let t0 = 0, pPan = 0;
+  let pinchD0 = 0, pinchPxPerMs0 = 0, pinchAnchorMs = 0, pinchMidX0 = 0;
+
+  canvas.addEventListener('touchstart', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    if (e.touches.length === 1) {
+      t0   = e.touches[0].clientX;
+      pPan = panPx;
+    } else if (e.touches.length === 2) {
+      const x1 = e.touches[0].clientX - rect.left;
+      const x2 = e.touches[1].clientX - rect.left;
+      pinchD0        = Math.abs(x1 - x2);
+      pinchPxPerMs0  = pxPerMs;
+      pinchMidX0     = (x1 + x2) / 2;
+      // Lock the time value at the midpoint — this stays fixed during the zoom
+      pinchAnchorMs  = minMs + (pinchMidX0 - PAD - panPx) / pxPerMs;
+    }
+  }, { passive: false });
+
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const rect    = canvas.getBoundingClientRect();
+    const minZoom = (W - PAD * 2) / totalMs;
+    if (e.touches.length === 1) {
+      panPx = pPan + (e.touches[0].clientX - t0);
+      clampPan(); render();
+    } else if (e.touches.length === 2) {
+      const x1  = e.touches[0].clientX - rect.left;
+      const x2  = e.touches[1].clientX - rect.left;
+      const d   = Math.abs(x1 - x2);
+      const mid = (x1 + x2) / 2;
+      // Scale around the pinch midpoint
+      pxPerMs = Math.max(minZoom, Math.min(minZoom * 3000,
+                  pinchPxPerMs0 * d / Math.max(pinchD0, 1)));
+      // Keep pinchAnchorMs fixed at the current midpoint position,
+      // and also apply any lateral translation of the midpoint
+      panPx = mid - PAD - (pinchAnchorMs - minMs) * pxPerMs;
+      clampPan(); render();
+    }
+  }, { passive: false });
+
+  // When a finger is lifted mid-gesture, re-anchor 1-finger pan so there's no jump
+  canvas.addEventListener('touchend', e => {
+    if (e.touches.length === 1) {
+      t0   = e.touches[0].clientX;
+      pPan = panPx;
+    }
+  }, { passive: true });
+
+  window.addEventListener('resize', resize);
+  resize();
+});
 </script>
 
 {% endblock %}
