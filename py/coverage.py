@@ -52,13 +52,14 @@ def get_coverage_geojson_dict_from_regions(cc):
     if not region_file_paths:
         raise FileNotFoundError(f"No region coverage files found for {cc}")
 
-    region_payloads = []
-    max_original_id = 0
     total_area_m2 = 0
     reference_crs = None
     first_payload = True
 
-    for file_path in region_file_paths:
+    offset = 10**6
+    merged_features = []
+
+    for file_index, file_path in enumerate(region_file_paths):
         with open(file_path, "r") as file:
             geojson_data = json.load(file)
 
@@ -73,27 +74,21 @@ def get_coverage_geojson_dict_from_regions(cc):
             raise ValueError(f"Mismatching crs in region files for {cc}")
 
         region_code = os.path.splitext(os.path.basename(file_path))[0]
-        region_payloads.append((region_code, geojson_data))
         total_area_m2 += geojson_data.get("total_area_m2", 0)
 
         for feature in geojson_data.get("features", []):
             properties = feature.get("properties", {})
-            feature_id = properties.get("id")
-            if not isinstance(feature_id, int):
-                raise ValueError(f"Invalid feature id in {file_path}: {feature_id!r}")
-            if feature_id > max_original_id:
-                max_original_id = feature_id
-
-    offset = 10 ** len(str(max_original_id))
-    merged_features = []
-
-    for source_index, (region_code, geojson_data) in enumerate(region_payloads):
-        for feature in geojson_data.get("features", []):
-            properties = feature.get("properties", {})
             original_id = properties["id"]
+            if not isinstance(original_id, int):
+                raise ValueError(f"Invalid feature id in {file_path}: {original_id!r}")
+            if original_id >= offset:
+                raise ValueError(
+                    f"Too large id in {file_path}: {original_id!r}. offset in get_coverage_geojson_dict_from_regions needs to be increased"
+                )
+
             properties["original_id"] = original_id
             properties["source_cc"] = region_code
-            properties["id"] = source_index * offset + original_id
+            properties["id"] = file_index * offset + original_id
             merged_features.append(feature)
 
     result = {
