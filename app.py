@@ -2262,6 +2262,12 @@ def delete_ticket(username, ticket_id):
         return jsonify({"error": "An error occurred while deleting the ticket"}), 500
 
 
+@app.route("/u/<username>/new/traewelling")
+@login_required
+def import_from_traewelling(username):
+    pass
+
+
 @app.route("/u/<username>/attachSelected")
 @login_required
 def attachSelected(username):
