@@ -23,9 +23,9 @@
 
       <group id="originStationManual" class="non_manual">
         <label for="originManualName" class="sr-only">{{originTerminalName}}</label>
-        <input type="text" class="" name="originManualName" id="originManualName" placeholder="{{originTerminalName}}" /> 
+        <input type="text" class="" name="originManualName" id="originManualName" placeholder="{{originTerminalName}}" />
         <label for="originManualLat" class="sr-only">Lat</label>
-        <input type="float" class="" name="originManualLat" id="originManualLat" placeholder="Lat" /> 
+        <input type="float" class="" name="originManualLat" id="originManualLat" placeholder="Lat" />
         <label for="originManualLng" class="sr-only">Lng</label>
         <input type="float" class="" name="originManualLng" id="originManualLng" placeholder="Lng" />
       </group>
@@ -39,9 +39,9 @@
       </group>
       <group id="destinationStationManual" class="non_poi" class="non_manual">
         <label for="destinationManualName" class="sr-only">{{destinationTerminalName}}</label>
-        <input type="text" class="" name="destinationManualName" id="destinationManualName" placeholder="{{destinationTerminalName}}"/> 
+        <input type="text" class="" name="destinationManualName" id="destinationManualName" placeholder="{{destinationTerminalName}}"/>
         <label for="destinationManualLat" class="sr-only">Lat</label>
-        <input type="float" class="" name="destinationManualLat" id="destinationManualLat" placeholder="Lat"/> 
+        <input type="float" class="" name="destinationManualLat" id="destinationManualLat" placeholder="Lat"/>
         <label for="destinationManualLng" class="sr-only">Lng</label>
         <input type="float" class="" name="destinationManualLng" id="destinationManualLng" placeholder="Lng"/>
       </group>
@@ -98,11 +98,11 @@
           <legend>
             <span class="legend">{{priceLabel}}</span>
           </legend>
-          
+
           <label for="price" id="price_label" class="sr-only">{{price}}</label>
           <input type="number" step="any" name="price" id="price" placeholder="{{price}}">
-          
-          <label for="currency" id="currency_label" class="sr-only">{{currency}}</label>  
+
+          <label for="currency" id="currency_label" class="sr-only">{{currency}}</label>
           <select name="currency" id="currency">
               {% for currency in currencyOptions %}
               <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}"
@@ -111,7 +111,7 @@
               </option>
               {% endfor %}
           </select>
-            
+
           <!-- Purchasing Date Picker, limited to today's date or earlier -->
           <label for="purchasing_date" id="purchasing_date_label" class="sr-only">{{purchasing_date}}</label>
           <input type="date" name="purchasing_date" id="purchasing_date" />
@@ -129,12 +129,12 @@
             <label class="btn btn-outline-secondary" for="powerAuto">
               <i class="fas fa-magic"></i> {{auto}}
             </label>
-            
+
             <input type="radio" class="btn-check" name="powerType" id="powerElectric" value="electric" autocomplete="off">
             <label class="btn btn-outline-secondary" for="powerElectric">
               <i class="fas fa-bolt"></i> {{electric}}
             </label>
-            
+
             <input type="radio" class="btn-check" name="powerType" id="powerThermic" value="thermic" autocomplete="off">
             <label class="btn btn-outline-secondary" for="powerThermic">
               <i class="fas fa-fire"></i> {{thermic}}
@@ -177,15 +177,15 @@
 
       <group id="unknownDates" class="inline-inputs non_poi">
         <div class="radio-group non_poi">
-          <input type="radio" id="past" value="past" name="unknownType"/> 
-          <label for="past" class="checkboxLabel">{{past}}</label> 
+          <input type="radio" id="past" value="past" name="unknownType"/>
+          <label for="past" class="checkboxLabel">{{past}}</label>
         </div>
         <div class="radio-group non_poi">
-          <input type="radio" id="future" value="future" name="unknownType"/>  
+          <input type="radio" id="future" value="future" name="unknownType"/>
           <label for="future" class="checkboxLabel">{{future}}</label>
         </div>
       </group>
-      
+
       <group id="manDuration" class="non_poi">
         <fieldset class="fieldset-time">
           <legend>
@@ -265,9 +265,9 @@
 <script>
 
   {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
- 
+
     $(".non_poi").hide();
-  
+
   {% endif %}
 
   manualCopyHandler();
@@ -280,7 +280,7 @@
   $.get('{{url_for("getManAndOps", username=username, station_type=vehicle_type)}}', function(manAndOps, status){
     Object.assign(globalStationDict, manAndOps.manualStations);
     Object.assign(visitedStations, manAndOps.visitedStations);
-  
+
     Object.keys(manAndOps.manualStations).forEach(function (station){
       manualStationsList.push({"label":station, "value":station, "manual":true})
     })
@@ -293,17 +293,40 @@
 
   let searchParams = new URLSearchParams(window.location.search);
   if (!searchParams.has('prevDest')){
-
     $("#newTripStartDate").val(getCurrentDate());
     $("#purchasing_date").val(getCurrentDate());
     $("#purchasing_date").attr({"max":getCurrentDate()});
     $("#onlyDate").val(getCurrentDate());
     $("#newTripStartTime").val(getCurrentTime());
-
-  }
-  else{
-    $("#newTripStartDate").val(searchParams.get('prevEndDate'));    
-    $("#newTripEndDate").val(searchParams.get('prevEndDate'));    
+  } else if (searchParams.has("manual")) {
+    if (searchParams.get('startDate')) $("#newTripStartDate").val(searchParams.get('startDate'));
+    if (searchParams.get('startTime')) $("#newTripStartTime").val(searchParams.get('startTime'));
+    if (searchParams.get('endDate')) $("#newTripEndDate").val(searchParams.get('endDate'));
+    if (searchParams.get('endTime')) $("#newTripEndTime").val(searchParams.get('endTime'));
+    if (searchParams.get('origin')) $("#originStation").val(searchParams.get('origin'));
+    if (searchParams.get('destination')) $("#destinationStation").val(searchParams.get('destination'));
+    if (searchParams.get('originManualName')) $("#originManualName").val(searchParams.get('originManualName'));
+    if (searchParams.get('originManualLat')) $("#originManualLat").val(searchParams.get('originManualLat'));
+    if (searchParams.get('originManualLng')) $("#originManualLng").val(searchParams.get('originManualLng'));
+    if (searchParams.get('destinationManualName')) $("#destinationManualName").val(searchParams.get('destinationManualName'));
+    if (searchParams.get('destinationManualLat')) $("#destinationManualLat").val(searchParams.get('destinationManualLat'));
+    if (searchParams.get('destinationManualLng')) $("#destinationManualLng").val(searchParams.get('destinationManualLng'));
+    if (searchParams.get('operator')) $("#operator").val(searchParams.get('operator'));
+    if (searchParams.get('lineName')) $("#lineName").val(searchParams.get('lineName'));
+    if (searchParams.get('material_type'));
+    if (searchParams.get('reg')) $("#reg").val(searchParams.get('reg'));
+    if (searchParams.get('seat')) $("#seat").val(searchParams.get('seat'));
+    if (searchParams.get('notes')) $("#notes").val(searchParams.get('notes'));
+    if (searchParams.get('price')) $("#price").val(searchParams.get('price'));
+    if (searchParams.get('currency')) $("#currency").val(searchParams.get('currency'));
+    if (searchParams.get('purchasing_date')) $("#purchasing_date").val(searchParams.get('purchasing_date'));
+    if (searchParams.get('precision')) $(`input[name="precision"][value="${searchParams.get('precision')}"]`).prop('checked', true);
+    if (searchParams.get('unknownType')) $(`input[name="unknownType"][value="${searchParams.get('unknownType')}"]`).prop('checked', true);
+    if (searchParams.get('departureDelayMinutes')) $("#departureDelayMinutes").val(searchParams.get('departureDelayMinutes'));
+    if (searchParams.get('arrivalDelayMinutes')) $("#arrivalDelayMinutes").val(searchParams.get('arrivalDelayMinutes'));
+  } else {
+    $("#newTripStartDate").val(searchParams.get('prevEndDate'));
+    $("#newTripEndDate").val(searchParams.get('prevEndDate'));
     $("#newTripStartTime").val(searchParams.get('prevEndTime'));
     $("#onlyDate").val(searchParams.get('prevEndDate'));
     coords = [searchParams.get('prevDest').split(',')[0],searchParams.get('prevDest').split(',')[1]];
@@ -319,7 +342,7 @@
       $("#purchasing_date").attr({"max":$("#newTripStartDate").val()});
     }
   }
-  
+
   $("#newTripStartDate").on("focusout", function() {
     if($("#newTripEndDate").val() < $(this).val())
     {
@@ -381,7 +404,7 @@
 
   $('#price').on('input', function() {
       var priceDefined = isNumber($(this).val());
-      
+
       if(priceDefined) {
           // Show currency and purchasing_date if price is defined
           $('#currency').show();
@@ -426,7 +449,7 @@
     });
   }
 
- 
+
   function formatTrainset(units) {
     var result = [];
     var i = 0;
