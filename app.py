@@ -2265,7 +2265,7 @@ def delete_ticket(username, ticket_id):
 @app.route("/u/<username>/new/traewelling")
 @login_required
 def import_from_traewelling(username):
-    pass
+    return render_template("traewelling_import.html", username=username)
 
 
 @app.route("/u/<username>/attachSelected")

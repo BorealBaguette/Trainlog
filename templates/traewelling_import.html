@@ -1,0 +1,151 @@
+{% extends "bootstrap/layout.html" %} {% block content %} {% include
+"bootstrap/navigation.html"%}
+
+<div class="container"
+    <h2>Import checkins from Traewelling</h2>
+
+    <label for="username">Traewelling Username:</label>
+        <input type="text" id="username" placeholder="..." />
+
+        <label for="apiToken">Traewelling API Token:</label>
+        <input type="password" id="apiToken" placeholder="***********" />
+
+        <button id="fetchBtn">Go!</button>
+
+        <div id="checkins"></div>
+</div>
+
+<script>
+    const usernameInput = document.getElementById("username");
+    const apiTokenInput = document.getElementById("apiToken");
+    const fetchBtn = document.getElementById("fetchBtn");
+    const checkinsContainer = document.getElementById("checkins");
+
+    const modeToType = {
+      train: "train",
+      tram: "tram",
+      metro: "metro",
+      suburban: "train",
+    };
+
+    fetchBtn.addEventListener("click", async () => {
+      const username = usernameInput.value.trim();
+      const token = apiTokenInput.value.trim();
+
+      if (!username || !token) {
+        alert("Please enter your Traewelling username and API token!");
+        return;
+      }
+
+      checkinsContainer.innerHTML = "<span>Fetching ...</span>";
+
+      try {
+        let allData = [];
+        let page = 0;
+        let hasMore = true;
+
+        while (hasMore) {
+          const url = `https://traewelling.de/api/v1/user/${encodeURIComponent(
+            username
+          )}/statuses?page=${page}`;
+          const res = await fetch(url, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: "application/json",
+            },
+          });
+
+          if (!res.ok) {
+            throw new Error(`HTTP ${res.status}: ${await res.text()}`);
+          }
+
+          const json = await res.json();
+          if (!Array.isArray(json.data)) {
+            throw new Error("Got invalid data from Traewelling ... :(");
+          }
+
+          allData = allData.concat(json.data);
+
+          const links = json.links ?? {};
+          hasMore = !!links.next;
+          page++;
+        }
+
+        renderCheckins(allData, username);
+      } catch (err) {
+        console.error(err);
+        alert("Error while fecthing checkins: " + err.message);
+      }
+    });
+
+    function renderCheckins(checkins, trainlogUsername) {
+      checkinsContainer.innerHTML = "";
+
+      if (checkins.length === 0) {
+        checkinsContainer.textContent = "You don't have any checkins in Traewelling :(";
+        return;
+      }
+
+      checkins.forEach((checkin) => {
+        const c = checkin.checkin;
+        const origin = c.origin;
+        const dest = c.destination;
+
+        const time = new Date(c.manualDeparture);
+        const date = time.toISOString().split("T")[0];
+        const timeStr = time.toISOString().split("T")[1].slice(0, 5);
+
+        const div = document.createElement("div");
+        div.className = "checkin";
+        div.innerHTML = `
+          <strong>${c.category} ${c.lineName}</strong><br/>
+          ${origin.name} → ${dest.name}<br/>
+          <small>${date} ${timeStr}</small>
+        `;
+
+        div.addEventListener("click", () => {
+          const type = modeToType[c.mode] || "train";
+
+          const params = new URLSearchParams();
+
+          params.set("manual", "true");
+
+          params.set("startDate", date);
+          params.set("startTime", timeStr);
+          params.set("endDate", date);
+          const arrivalTime = new Date(c.manualArrival).toISOString().split("T")[1].slice(0, 5);
+          params.set("endTime", arrivalTime);
+
+          params.set("origin", origin.name);
+          params.set("destination", dest.name);
+
+          params.set("originManualName", origin.name);
+          params.set("originManualLat", origin.latitude);
+          params.set("originManualLng", origin.longitude);
+          params.set("destinationManualName", dest.name);
+          params.set("destinationManualLat", dest.latitude);
+          params.set("destinationManualLng", dest.longitude);
+
+          params.set("operator", c.operator?.name || "");
+          params.set("lineName", c.lineName || "");
+
+          params.set("reg", "");
+          params.set("seat", "");
+          params.set("notes", checkin.body || "");
+          params.set("price", checkin.ticket?.price?.toString() || "");
+          params.set("currency", checkin.ticket?.currency || "");
+          params.set("purchasing_date", date);
+
+          params.set("departureDelayMinutes", c.origin?.isDepartureDelayed ? "10" : "0");
+          params.set("arrivalDelayMinutes", c.destination?.isArrivalDelayed ? "10" : "0");
+
+          const url = `https://trainlog.me/u/${trainlogUsername}/new/${type}?${params.toString()}`;
+          window.open(url, "_blank");
+        });
+
+        checkinsContainer.appendChild(div);
+      });
+    }
+  </script>
+
+{% endblock %}
