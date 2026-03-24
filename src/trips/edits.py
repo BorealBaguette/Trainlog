@@ -11,7 +11,13 @@ from src.sql.trips import (
 )
 from src.utils import mainConn, managed_cursor
 
+from .trip import _strip_tags
 from .utils import compare_trip
+
+STRIPPED_BULK_EDIT_FIELDS = frozenset([
+    "operator", "line_name", "reg", "seat", "notes",
+    "origin_station", "destination_station", "material_type",
+])
 
 ALLOWED_BULK_EDIT_FIELDS = frozenset(
     [
@@ -143,7 +149,11 @@ def _update_trip_type_in_sqlite(trip_id, new_type: TripTypes):
 def bulk_edit_trips(
     username, trip_ids, fields: dict, notes_append: bool = False, time_offset_minutes: int = 0
 ):
-    safe_fields = {k: v for k, v in fields.items() if k in ALLOWED_BULK_EDIT_FIELDS}
+    safe_fields = {
+        k: (_strip_tags(v) if k in STRIPPED_BULK_EDIT_FIELDS else v)
+        for k, v in fields.items()
+        if k in ALLOWED_BULK_EDIT_FIELDS
+    }
     if not safe_fields and not time_offset_minutes:
         return False, "No valid fields to update"
 

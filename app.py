@@ -2537,7 +2537,7 @@ def signup():
         elif not re.match(regex, email):
             flash(lang[session["userinfo"]["lang"]]["invalidEmail"])
             return redirect(url_for("signup"))
-        elif "@" in username or "." in username:
+        elif any(c in username for c in ('@', '.', '<', '>')):
             flash(lang[session["userinfo"]["lang"]]["usernameNoEmail"])
             return redirect(url_for("signup"))
         elif username in unauthorised_usernames:
@@ -8267,7 +8267,10 @@ def calculate_route():
 
 @app.route("/resize_image/<int:max_width>/<int:target_height>")
 def resize_image(max_width, target_height):
-    image_path = "static/" + request.args.get("image_path").replace("%26", "&")
+    static_dir = os.path.abspath("static")
+    image_path = os.path.abspath(os.path.join("static", request.args.get("image_path", "").replace("%26", "&")))
+    if not image_path.startswith(static_dir + os.sep):
+        return ("Forbidden", 403)
 
     # Create the resized images directory if it doesn't exist
     resized_dir = os.path.join("static/images/resized", f"{max_width}x{target_height}")

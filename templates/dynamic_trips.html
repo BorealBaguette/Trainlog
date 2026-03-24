@@ -819,8 +819,8 @@ function renderLineName(data, type, row) {
         if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
             var mat      = row.material_type_advanced || row.material_type || '';
             var dateStr  = row.start_date || '';
-            var safeName = (data || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            var safeMat  = mat.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            var safeName = (data || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            var safeMat  = mat.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
             var btn = _isValidMaterial(mat) ? `
                     <a href="javascript:void(0);"
                        onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}')"
@@ -828,7 +828,7 @@ function renderLineName(data, type, row) {
                        title="View Composition">
                        <i class="fas fa-train"></i>
                     </a>` : '';
-            if (data || btn) return `<span>${data || ''}${btn}</span>`;
+            if (data || btn) return `<span>${sanitize(data || '')}${btn}</span>`;
         }
     }
     return data;
@@ -912,7 +912,7 @@ function renderButton(data, type, row){
             <div class="modal-dialog modal-dialog-centered" role="document">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="${modalId}Label">${data.origin_station} - ${data.destination_station}</h5>
+                        <h5 class="modal-title" id="${modalId}Label">${sanitize(data.origin_station || '')} - ${sanitize(data.destination_station || '')}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
@@ -993,17 +993,22 @@ function _formatTrainsetStr(mat) {
     return mat;
 }
 
+function renderPlainText(data, type, row) {
+    if (type === 'display') return sanitize(data || '');
+    return data;
+}
+
 function renderMaterialType(data, type, row){
     if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
         var adv = row.material_type_advanced || '';
         var mat = row.material_type || '';
-        if (adv && mat) return mat + ' <span style="color:#888;font-size:.9em">' + _formatTrainsetStr(adv) + '</span>';
-        if (adv) return _formatTrainsetStr(adv);
-        return mat;
+        if (adv && mat) return sanitize(mat) + ' <span style="color:#888;font-size:.9em">' + sanitize(_formatTrainsetStr(adv)) + '</span>';
+        if (adv) return sanitize(_formatTrainsetStr(adv));
+        return sanitize(mat);
     }
     if (!row.material_type) return '';
-    if (row.model) return `[[${row.material_type}]] ${row.manufacturer} ${row.model}`;
-    return row.material_type;
+    if (row.model) return `[[${sanitize(row.material_type)}]] ${sanitize(row.manufacturer || '')} ${sanitize(row.model)}`;
+    return sanitize(row.material_type);
 }
 
 
@@ -1145,9 +1150,9 @@ var table = $('#tripRows');
             render: renderMaterialType,
             defaultContent: "",
         },
-        { data: 'reg' },
-        { data: 'seat' },
-        { data: 'notes' },
+        { data: 'reg', render: renderPlainText },
+        { data: 'seat', render: renderPlainText },
+        { data: 'notes', render: renderPlainText },
         { data: 'tags' },
         {
             data: null,
@@ -1944,7 +1949,7 @@ function displayAssociatedTags(tags) {
             .addClass('tag-blob')
             .css('background-color', tag.colour)
             .css('color', getTextColor(tag.colour))
-            .html(tag.name + icon) // Use .html to add the icon
+            .text(tag.name).append(icon) // Use .text for safety, then append icon HTML
             .on('click', function() {
                 if (allTripsHaveTag) {
                     detachTag(tag.uid);

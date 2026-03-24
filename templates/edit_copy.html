@@ -1451,7 +1451,14 @@
                 data: formData,
                 success: function (res) {
                     var nextUrl = new URLSearchParams(window.location.search).get('next');
+                    var nextAllowed = false;
                     if (nextUrl) {
+                        try {
+                            var resolved = new URL(nextUrl, window.location.origin);
+                            nextAllowed = resolved.origin === window.location.origin;
+                        } catch(e) {}
+                    }
+                    if (nextAllowed) {
                         location.href = nextUrl;
                     } else if (redirectToProjects) {
                         location.href = "{{ url_for('dynamic_trips', time='projects', username=username) }}";

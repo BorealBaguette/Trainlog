@@ -603,22 +603,18 @@ function buildItinerary(trips, prices) {
                 
             operatorContents.push(divElement);
         } else {
-            operatorContents.push(trip.trip.operator);
+            operatorContents.push(document.createTextNode(trip.trip.operator || ''));
         }
 
         let operatorLogoOrText;
         if (operatorContents.length) {
-            if (typeof operatorContents[0] === 'string') {
-                operatorLogoOrText = operatorContents.join(', ');
-            } else {
-                operatorLogoOrText = $('<div>').append(operatorContents);
-            }
+            operatorLogoOrText = $('<div>').append(operatorContents);
         }
 
-        let lineOrNot = trip.trip.line_name != "" ? 
-            (typeof operatorLogoOrText === 'object' ? 
-                operatorLogoOrText.append(" - " + trip.trip.line_name) : 
-                operatorLogoOrText + " - " + trip.trip.line_name) : 
+        let lineOrNot = trip.trip.line_name != "" ?
+            (typeof operatorLogoOrText === 'object' ?
+                operatorLogoOrText.append(document.createTextNode(" - " + trip.trip.line_name)) :
+                operatorLogoOrText) :
             operatorLogoOrText;
         
         let operatorDisplay = $("<div>").append(trip.trip.operator != "" ? lineOrNot : null);
@@ -1198,17 +1194,9 @@ if (numberedMarkers.length > 0) {
 // Show trip popup
 function showTripPopup(e) {
     const properties = e.features[0].properties;
-    
-    const popupContent = `
-        <div class="trip-popup">
-            <p>${properties.origin} - ${properties.destination}<br>
-            </p>
-        </div>
-    `;
-    
     new maplibregl.Popup({ offset: [0, -10] })
         .setLngLat(e.lngLat)
-        .setHTML(popupContent)
+        .setText(`${properties.origin} - ${properties.destination}`)
         .addTo(map);
 }
 const colorblindMode = {{ 'true' if colorblind else 'false' }};
@@ -1251,7 +1239,7 @@ function createCustomMarker(coordinates, type, popupText) {
             break;
     }
     
-    el.style.backgroundSize = 'cover';
+    el.style.backgroundSize = '100% 100%';
     el.style.cursor = 'pointer';
     
     // Create marker with proper anchor point (bottom center of the icon)
