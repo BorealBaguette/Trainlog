@@ -1,5 +1,7 @@
-{% extends "bootstrap/layout.html" %} {% block content %} {% include
-"bootstrap/navigation.html"%}
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include "bootstrap/navigation.html"%}
 
 <div class="container"
     <h2>Import checkins from Traewelling</h2>
@@ -21,11 +23,11 @@
     const fetchBtn = document.getElementById("fetchBtn");
     const checkinsContainer = document.getElementById("checkins");
 
-    const modeToType = {
-      train: "train",
-      tram: "tram",
-      metro: "metro",
-      suburban: "train",
+    const traewellingToTrainlogUrl = {
+      train: "{{ url_for('new', username=username, vehicle_type='train') }}",
+      tram: "{{ url_for('new', username=username, vehicle_type='tram') }}",
+      metro: "{{ url_for('new', username=username, vehicle_type='metro') }}",
+      suburban: "{{ url_for('new', username=username, vehicle_type='train') }}",
     };
 
     fetchBtn.addEventListener("click", async () => {
@@ -104,8 +106,6 @@
         `;
 
         div.addEventListener("click", () => {
-          const type = modeToType[c.mode] || "train";
-
           const params = new URLSearchParams();
 
           params.set("manual", "true");
@@ -139,7 +139,7 @@
           params.set("departureDelayMinutes", c.origin?.isDepartureDelayed ? "10" : "0");
           params.set("arrivalDelayMinutes", c.destination?.isArrivalDelayed ? "10" : "0");
 
-          const url = `https://trainlog.me/u/${trainlogUsername}/new/${type}?${params.toString()}`;
+          const url = `${traewellingToTrainlogUrl[c.mode]}?${params.toString()}`;
           window.open(url, "_blank");
         });
 

@@ -321,12 +321,16 @@
     if (searchParams.get('departureDelayMinutes')) $("#departureDelayMinutes").val(searchParams.get('departureDelayMinutes'));
     if (searchParams.get('arrivalDelayMinutes')) $("#arrivalDelayMinutes").val(searchParams.get('arrivalDelayMinutes'));
   else if (!searchParams.has('prevDest')){
+    console.log("no prev dest");
+  
     $("#newTripStartDate").val(getCurrentDate());
     $("#purchasing_date").val(getCurrentDate());
     $("#purchasing_date").attr({"max":getCurrentDate()});
     $("#onlyDate").val(getCurrentDate());
     $("#newTripStartTime").val(getCurrentTime());
   } else {
+    console.log("else");
+    
     $("#newTripStartDate").val(searchParams.get('prevEndDate'));
     $("#newTripEndDate").val(searchParams.get('prevEndDate'));
     $("#newTripStartTime").val(searchParams.get('prevEndTime'));
