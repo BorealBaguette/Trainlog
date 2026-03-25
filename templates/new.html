@@ -320,7 +320,7 @@
     if (searchParams.get('unknownType')) $(`input[name="unknownType"][value="${searchParams.get('unknownType')}"]`).prop('checked', true);
     if (searchParams.get('departureDelayMinutes')) $("#departureDelayMinutes").val(searchParams.get('departureDelayMinutes'));
     if (searchParams.get('arrivalDelayMinutes')) $("#arrivalDelayMinutes").val(searchParams.get('arrivalDelayMinutes'));
-  else if (!searchParams.has('prevDest')){
+  } else if (!searchParams.has('prevDest')){
     console.log("no prev dest");
   
     $("#newTripStartDate").val(getCurrentDate());
