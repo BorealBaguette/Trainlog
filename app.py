@@ -53,7 +53,6 @@ from flask import (
 from flask_caching import Cache
 from flask_compress import Compress
 from flaskext.autoversion import Autoversion
-from geopy.geocoders import Nominatim
 from PIL import Image
 from requests.adapters import HTTPAdapter, Retry
 from scgraph.geographs.marnet import marnet_geograph
@@ -153,7 +152,7 @@ from src.api.trainset import trainset_blueprint
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.consts import DbNames, TripTypes
-from src.pg import setup_db
+from src.pg import setup_db, pg_session
 from src.suspicious_activity import (
     check_denied_login,
     log_denied_login,
@@ -193,6 +192,8 @@ from src.trips import (
     update_trip_type,
     attach_ticket_to_trips,
     bulk_edit_trips,
+    bulk_change_type,
+    bulk_set_power_type,
     change_trips_visibility,
     delete_ticket_from_db,
     get_current_trip_id,
@@ -206,6 +207,7 @@ from src.routing import forward_routing_core
 
 app = Flask(__name__)
 start_email_listener(app)
+
 app.config['DEBUG'] = True
 Compress(app)
 app.autoversion = True
@@ -749,6 +751,8 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train"):
         visibility=sanitize_param(newTrip.get("visibility", get_default_trip_visibility(trip_type))),
         departure_delay=sanitize_param(newTrip.get("departure_delay")),
         arrival_delay=sanitize_param(newTrip.get("arrival_delay")),
+        power_type=newTrip.get("powerType"),
+        co2_override=float(newTrip["co2Override"]) if newTrip.get("co2Override") else None,
     )
 
     create_trip(trip)
@@ -1043,6 +1047,11 @@ def inject_distinct_types():
         "walk": "fa-solid fa-person-hiking",
         "cycle": "fa-solid fa-bicycle",
         "car": "fa-solid fa-car-side",
+        "scooter": "bi bi-scooter",
+        "funicular": "fa-solid fa-mountain",
+        "rail": "fa-solid fa-dumbbell",
+        "ski": "fa-solid fa-person-skiing",
+        "other": "fa-solid fa-circle-question",
     }
 
     # 5) Query, but fail soft if DB is locked (or anything else goes wrong)
@@ -1247,6 +1256,46 @@ def new(username, vehicle_type):
             "destinationAerialwayName"
         ]
 
+    elif vehicle_type == "funicular":
+        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+        new_trip = lang[session["userinfo"]["lang"]].get("newTripFunicular", "New Trip - Funicular")
+        origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
+        origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
+        destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
+        destination_terminal_name = lang[session["userinfo"]["lang"]][
+            "destinationStationName"
+        ]
+
+    elif vehicle_type == "rail":
+        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+        new_trip = lang[session["userinfo"]["lang"]].get("newTripRail", "New Trip - Rail")
+        origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
+        origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
+        destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
+        destination_terminal_name = lang[session["userinfo"]["lang"]][
+            "destinationStationName"
+        ]
+
+    elif vehicle_type == "scooter":
+        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+        new_trip = lang[session["userinfo"]["lang"]].get("newTripEScooter", "New Trip - E-Scooter")
+        origin_terminal = lang[session["userinfo"]["lang"]].get("originEScooter", lang[session["userinfo"]["lang"]]["originBike"])
+        origin_terminal_name = lang[session["userinfo"]["lang"]].get("originEScooterName", lang[session["userinfo"]["lang"]]["originBikeName"])
+        destination_terminal = lang[session["userinfo"]["lang"]].get("destinationEScooter", lang[session["userinfo"]["lang"]]["destinationBike"])
+        destination_terminal_name = lang[session["userinfo"]["lang"]].get(
+            "destinationEScooterName", lang[session["userinfo"]["lang"]]["destinationBikeName"]
+        )
+
+    elif vehicle_type == "ski":
+        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+        new_trip = lang[session["userinfo"]["lang"]].get("newTripSki", "New Trip - Ski")
+        origin_terminal = lang[session["userinfo"]["lang"]].get("originSki", lang[session["userinfo"]["lang"]]["originAerialway"])
+        origin_terminal_name = lang[session["userinfo"]["lang"]].get("originSkiName", lang[session["userinfo"]["lang"]]["originAerialwayName"])
+        destination_terminal = lang[session["userinfo"]["lang"]].get("destinationSki", lang[session["userinfo"]["lang"]]["destinationAerialway"])
+        destination_terminal_name = lang[session["userinfo"]["lang"]].get(
+            "destinationSkiName", lang[session["userinfo"]["lang"]]["destinationAerialwayName"]
+        )
+
     return render_template(
         "new.html",
         title=new_trip,
@@ -1367,21 +1416,15 @@ def new_ticket(username):
 
 
 def getAddressFromCoords(lat, lng):
-    geolocator = Nominatim(user_agent="Trainlog")
-    details = geolocator.reverse(
-        (lat, lng),
-        timeout=10,
-        addressdetails=True,  # Get detailed address components
-    ).raw["address"]
+    response_json = photonRequest("/reverse", {"lon": lng, "lat": lat, "lang": "en"})
 
-    # Extract specific parts of the address
-    country_code = details.get("country_code", "").upper()  # Get country code
-    city = details.get(
-        "city", details.get("town", details.get("village", ""))
-    )  # Get city/town/village
-    suburb = details.get(
-        "neighbourhood", details.get("suburb", "")
-    )  # Get suburb or neighborhood
+    if response_json is None or not response_json.get("features"):
+        return ""
+
+    props = response_json["features"][0]["properties"]
+    country_code = props.get("countrycode", "").upper()
+    city = props.get("city") or props.get("county") or ""
+    suburb = props.get("suburb") or props.get("district") or ""
 
     flag = get_flag_emoji(country_code)
     return f"{flag} {city}" + (f" - {suburb}" if suburb else "")
@@ -1528,11 +1571,32 @@ def handle_gpx_upload(username, source):
 @app.route("/u/<username>/upload_gpx")
 @login_required
 def upload_gpx(username):
+    user_lang = lang[session["userinfo"]["lang"]]
+    trip_types = {
+        "train": user_lang["train"],
+        "tram": user_lang["tram"],
+        "metro": user_lang["metro"],
+        "funicular": user_lang["funicular"],
+        "rail": user_lang["rail"],
+        "bus": user_lang["bus"],
+        "ferry": user_lang["ferry"],
+        "car": user_lang["car"],
+        "cycle": user_lang["cycle"],
+        "scooter": user_lang["scooter"],
+        "walk": user_lang["walk"],
+        "aerialway": user_lang["aerialway"],
+        "ski": user_lang["ski"],
+        "other": user_lang["other"],
+        "air": user_lang["air"],
+        "helicopter": user_lang["helicopter"],
+    }
     return render_template(
         "upload_gpx.html",
-        title=lang[session["userinfo"]["lang"]]["upload_gpx_files"],
+        title=user_lang["upload_gpx_files"],
         username=username,
-        **lang[session["userinfo"]["lang"]],
+        trip_types=trip_types,
+        l=user_lang,
+        **user_lang,
         **session["userinfo"],
     )
 
@@ -1634,12 +1698,17 @@ def list_gpx(username):
         "train": lang[session["userinfo"]["lang"]]["train"],
         "tram": lang[session["userinfo"]["lang"]]["tram"],
         "metro": lang[session["userinfo"]["lang"]]["metro"],
+        "funicular": lang[session["userinfo"]["lang"]]["funicular"],
+        "rail": lang[session["userinfo"]["lang"]]["rail"],
         "bus": lang[session["userinfo"]["lang"]]["bus"],
         "ferry": lang[session["userinfo"]["lang"]]["ferry"],
         "car": lang[session["userinfo"]["lang"]]["car"],
         "cycle": lang[session["userinfo"]["lang"]]["cycle"],
+        "scooter": lang[session["userinfo"]["lang"]]["scooter"],
         "walk": lang[session["userinfo"]["lang"]]["walk"],
         "aerialway": lang[session["userinfo"]["lang"]]["aerialway"],
+        "ski": lang[session["userinfo"]["lang"]]["ski"],
+        "other": lang[session["userinfo"]["lang"]]["other"],
         "air": lang[session["userinfo"]["lang"]]["air"],
         "helicopter": lang[session["userinfo"]["lang"]]["helicopter"],
     }
@@ -1795,7 +1864,7 @@ def saveTripFromGPX(username, gpx_id):
 
     # Process the route based on user preferences
     if use_routing and trip_type in [
-        "train", "metro", "tram", "ferry", "aerialway", "bus", "car", "walk", "cycle"
+        "train", "metro", "tram", "funicular", "rail", "ferry", "aerialway", "bus", "car", "walk", "cycle", "scooter"
     ]:
         # Use advanced GPS cleaning instead of basic routing
         print(f"Processing GPS route with {len(raw_waypoints)} points using smart routing...")
@@ -1925,6 +1994,515 @@ def previewSmartRouting(username, gpx_id, trip_type):
                          raw_waypoints=json.dumps(raw_waypoints),
                          cleaning_result=json.dumps(cleaning_result),
                          success=cleaning_result["success"])
+
+
+def parse_maprika_filename(filename):
+    """
+    Parse Maprika GPX filename format: @2026-01-17 08.40, Skiing @ Serre Chevalier opensnowmap.gpx
+    Returns: dict with 'date', 'time', 'name' or None if not Maprika format
+    """
+    import re
+    # Pattern: @YYYY-MM-DD HH.MM, Name.gpx
+    pattern = r'^@(\d{4}-\d{2}-\d{2})\s+(\d{2}\.\d{2}),\s+(.+)\.gpx$'
+    match = re.match(pattern, filename)
+    if match:
+        date_str = match.group(1)
+        time_str = match.group(2).replace('.', ':')  # Convert 08.40 to 08:40
+        name = match.group(3)
+        return {
+            'date': date_str,
+            'time': time_str,
+            'name': name,
+            'datetime': f"{date_str} {time_str}"
+        }
+    return None
+
+
+@app.route("/u/<username>/upload_gpx_advanced")
+@login_required
+def upload_gpx_advanced(username):
+    return redirect(url_for("upload_gpx", username=username))
+
+
+@app.route("/u/<username>/parse_gpx_advanced", methods=["POST"])
+@login_required
+def parse_gpx_advanced(username):
+    """Parse multiple GPX files and return trip data, including Maprika segments"""
+    files = request.files.getlist("files")
+
+    if not files:
+        return jsonify({"error": "No files uploaded"}), 400
+
+    trips = []
+
+    for file in files:
+        if not file.filename.endswith(".gpx"):
+            continue
+
+        try:
+            # Read file content
+            file_content = file.read()
+            file.seek(0)
+
+            # Parse Maprika filename if applicable
+            maprika_data = parse_maprika_filename(file.filename)
+
+            # Parse GPX content
+            gpx = gpxpy.parse(file)
+
+            # Collect all track points
+            all_points = []
+            if gpx.tracks:
+                for track in gpx.tracks:
+                    for segment in track.segments:
+                        all_points.extend(segment.points)
+
+            if not all_points:
+                continue
+
+            # Try to parse Maprika segments
+            maprika_segments = []
+            try:
+                root = ET.fromstring(file_content)
+                # Find maprika:log section
+                namespaces = {'maprika': 'http://www.maprika.com/gpx'}
+                log = root.find('.//maprika:log', namespaces)
+
+                if log is not None:
+                    for seg in log.findall('maprika:segment', namespaces):
+                        seg_type = int(seg.get('type', 0))
+                        seg_name = seg.get('name', '')
+                        start_time_unix = int(seg.get('startTime', 0))
+                        moving_time = int(seg.get('movingTime', 0))
+                        index_begin = int(seg.get('indexBegin', 0))
+                        index_end = int(seg.get('indexEnd', 0))
+
+                        # Map Maprika types to Trainlog types
+                        # 1=chairlift, 7=gondola, 8=bus, 9=ski lift
+                        # 3=easy run, 4=medium run, 5=difficult run
+                        # 2=unknown/walking, 6=break
+                        if seg_type in [1, 7, 9]:  # Lifts and gondolas
+                            trip_type = 'aerialway'
+                        elif seg_type == 8:  # Bus
+                            trip_type = 'bus'
+                        elif seg_type in [3, 4, 5]:  # Ski runs
+                            trip_type = 'ski'
+                        elif seg_type == 2:  # Unknown/walking
+                            trip_type = 'walk'
+                        elif seg_type == 6:  # Break
+                            continue  # Skip breaks
+                        else:
+                            trip_type = 'other'
+
+                        maprika_segments.append({
+                            'name': seg_name,
+                            'type': trip_type,
+                            'start_time_unix': start_time_unix,
+                            'duration': moving_time,
+                            'index_begin': index_begin,
+                            'index_end': index_end
+                        })
+            except Exception as e:
+                logger.info(f"No Maprika segments found in {file.filename}: {str(e)}")
+
+            # If Maprika segments found, create trips from segments
+            if maprika_segments:
+                for seg in maprika_segments:
+                    try:
+                        # Extract points for this segment
+                        seg_points = all_points[seg['index_begin']:seg['index_end'] + 1]
+
+                        if not seg_points or len(seg_points) < 2:
+                            continue
+
+                        # Calculate distance
+                        distance = 0
+                        for i in range(1, len(seg_points)):
+                            distance += getDistance(
+                                {"lat": seg_points[i - 1].latitude, "lng": seg_points[i - 1].longitude},
+                                {"lat": seg_points[i].latitude, "lng": seg_points[i].longitude},
+                            )
+
+                        # Get start and end points
+                        start_point = seg_points[0]
+                        end_point = seg_points[-1]
+
+                        # Geocode
+                        origin = getAddressFromCoords(lat=start_point.latitude, lng=start_point.longitude)
+                        destination = getAddressFromCoords(lat=end_point.latitude, lng=end_point.longitude)
+
+                        # Convert Unix timestamp to datetime
+                        from datetime import datetime
+                        start_datetime = datetime.fromtimestamp(seg['start_time_unix'], UTC)
+                        end_datetime = datetime.fromtimestamp(seg['start_time_unix'] + seg['duration'], UTC)
+
+                        # Convert to local time
+                        start_time_local = getLocalDatetime(start_point.latitude, start_point.longitude, start_datetime)
+                        end_time_local = getLocalDatetime(end_point.latitude, end_point.longitude, end_datetime)
+
+                        formatted_start_time = start_time_local.strftime("%Y-%m-%d %H:%M")
+                        formatted_end_time = end_time_local.strftime("%Y-%m-%d %H:%M")
+
+                        # Generate path
+                        path = [[point.latitude, point.longitude] for point in seg_points]
+
+                        # Build trip data
+                        trip_data = {
+                            'origin': origin,
+                            'destination': destination,
+                            'start_time': formatted_start_time,
+                            'end_time': formatted_end_time,
+                            'duration': seg['duration'],
+                            'distance': int(distance),
+                            'path': path,
+                            'maprika_name': seg['name'] or (maprika_data['name'] if maprika_data else None),
+                            'gpx_name': seg['name'],
+                            'notes': f"Segment from {file.filename}",
+                            'suggested_type': seg['type'],
+                            'filename': file.filename
+                        }
+
+                        trips.append(trip_data)
+                    except Exception as e:
+                        logger.error(f"Error processing segment in {file.filename}: {str(e)}")
+                        continue
+            else:
+                # No Maprika segments - treat as single trip (original behavior)
+                points = all_points
+                start_time = None
+                end_time = None
+                distance = 0
+
+                if points[0].time and points[-1].time:
+                    start_time = points[0].time
+                    end_time = points[-1].time
+
+                # Calculate distance
+                for i in range(1, len(points)):
+                    distance += getDistance(
+                        {"lat": points[i - 1].latitude, "lng": points[i - 1].longitude},
+                        {"lat": points[i].latitude, "lng": points[i].longitude},
+                    )
+
+                # Extract start and end points
+                start_point = points[0]
+                end_point = points[-1]
+
+                # Geocode
+                origin = getAddressFromCoords(lat=start_point.latitude, lng=start_point.longitude)
+                destination = getAddressFromCoords(lat=end_point.latitude, lng=end_point.longitude)
+
+                # Calculate duration
+                duration = 0
+                formatted_start_time = None
+                formatted_end_time = None
+
+                if start_time and end_time:
+                    duration = int((end_time - start_time).total_seconds())
+                    start_time_local = getLocalDatetime(start_point.latitude, start_point.longitude, start_time)
+                    end_time_local = getLocalDatetime(end_point.latitude, end_point.longitude, end_time)
+                    formatted_start_time = start_time_local.strftime("%Y-%m-%d %H:%M")
+                    formatted_end_time = end_time_local.strftime("%Y-%m-%d %H:%M")
+                elif maprika_data:
+                    formatted_start_time = maprika_data['datetime']
+
+                # Generate path
+                path = [[point.latitude, point.longitude] for point in points]
+
+                # Determine suggested trip type
+                suggested_type = "other"
+                if maprika_data and maprika_data['name']:
+                    name_lower = maprika_data['name'].lower()
+                    if 'ski' in name_lower or 'skiing' in name_lower:
+                        suggested_type = 'ski'
+                    elif 'cycle' in name_lower or 'bike' in name_lower:
+                        suggested_type = 'cycle'
+                    elif 'walk' in name_lower or 'hike' in name_lower:
+                        suggested_type = 'walk'
+
+                # Build trip data
+                trip_data = {
+                    'origin': origin,
+                    'destination': destination,
+                    'start_time': formatted_start_time,
+                    'end_time': formatted_end_time,
+                    'duration': duration,
+                    'distance': int(distance),
+                    'path': path,
+                    'maprika_name': maprika_data['name'] if maprika_data else None,
+                    'gpx_name': gpx.tracks[0].name if gpx.tracks else None,
+                    'notes': gpx.tracks[0].description if gpx.tracks and gpx.tracks[0].description else '',
+                    'suggested_type': suggested_type,
+                    'filename': file.filename
+                }
+
+                trips.append(trip_data)
+
+        except Exception as e:
+            logger.error(f"Error parsing {file.filename}: {str(e)}")
+            traceback.print_exc()
+            continue
+
+    return jsonify({"trips": trips}), 200
+
+
+@app.route("/u/<username>/parse_gpx_stream", methods=["POST"])
+@login_required
+def parse_gpx_stream(username):
+    """Stream GPX parsing progress using Server-Sent Events"""
+    files = request.files.getlist("files")
+
+    if not files:
+        return jsonify({"error": "No files uploaded"}), 400
+
+    # Read all file contents upfront before generator starts
+    file_data = []
+    for file in files:
+        if file.filename.endswith(".gpx"):
+            file_data.append({
+                'filename': file.filename,
+                'content': file.read()
+            })
+
+    def generate():
+        """Generator that yields trip data as SSE"""
+        all_trips = []
+        total_segments = 0
+        processed_segments = 0
+
+        # First pass: count total segments
+        for file_info in file_data:
+            try:
+                root = ET.fromstring(file_info['content'])
+                namespaces = {'maprika': 'http://www.maprika.com/gpx'}
+                log = root.find('.//maprika:log', namespaces)
+
+                if log is not None:
+                    segments = log.findall('maprika:segment', namespaces)
+                    # Don't count type 6 (breaks)
+                    total_segments += sum(1 for seg in segments if int(seg.get('type', 0)) != 6)
+                else:
+                    total_segments += 1  # Non-Maprika file = 1 trip
+            except:
+                pass
+
+        # Send total count
+        yield f"data: {json.dumps({'type': 'total', 'count': total_segments})}\n\n"
+
+        # Second pass: process and stream each segment
+        for file_info in file_data:
+            try:
+                from io import BytesIO
+                file_content = file_info['content']
+                filename = file_info['filename']
+
+                maprika_data = parse_maprika_filename(filename)
+                gpx = gpxpy.parse(BytesIO(file_content))
+
+                all_points = []
+                if gpx.tracks:
+                    for track in gpx.tracks:
+                        for segment in track.segments:
+                            all_points.extend(segment.points)
+
+                if not all_points:
+                    continue
+
+                # Parse Maprika segments
+                maprika_segments = []
+                try:
+                    root = ET.fromstring(file_content)
+                    namespaces = {'maprika': 'http://www.maprika.com/gpx'}
+                    log = root.find('.//maprika:log', namespaces)
+
+                    if log is not None:
+                        for seg in log.findall('maprika:segment', namespaces):
+                            seg_type = int(seg.get('type', 0))
+                            if seg_type == 6:  # Skip breaks
+                                continue
+
+                            seg_name = seg.get('name', '')
+                            start_time_unix = int(seg.get('startTime', 0))
+                            moving_time = int(seg.get('movingTime', 0))
+                            index_begin = int(seg.get('indexBegin', 0))
+                            index_end = int(seg.get('indexEnd', 0))
+
+                            if seg_type in [1, 7, 9]:
+                                trip_type = 'aerialway'
+                            elif seg_type == 8:
+                                trip_type = 'bus'
+                            elif seg_type in [3, 4, 5]:
+                                trip_type = 'ski'
+                            elif seg_type == 2:
+                                trip_type = 'walk'
+                            else:
+                                trip_type = 'other'
+
+                            maprika_segments.append({
+                                'name': seg_name,
+                                'type': trip_type,
+                                'start_time_unix': start_time_unix,
+                                'duration': moving_time,
+                                'index_begin': index_begin,
+                                'index_end': index_end
+                            })
+                except Exception as e:
+                    logger.info(f"No Maprika segments: {str(e)}")
+
+                # Process each segment and stream
+                if maprika_segments:
+                    for seg in maprika_segments:
+                        try:
+                            processed_segments += 1
+                            seg_points = all_points[seg['index_begin']:seg['index_end'] + 1]
+
+                            if not seg_points or len(seg_points) < 2:
+                                continue
+
+                            # Send progress update
+                            yield f"data: {json.dumps({'type': 'progress', 'current': processed_segments, 'total': total_segments, 'name': seg['name'] or 'Unknown'})}\n\n"
+
+                            # Calculate distance
+                            distance = 0
+                            for i in range(1, len(seg_points)):
+                                distance += getDistance(
+                                    {"lat": seg_points[i - 1].latitude, "lng": seg_points[i - 1].longitude},
+                                    {"lat": seg_points[i].latitude, "lng": seg_points[i].longitude},
+                                )
+
+                            start_point = seg_points[0]
+                            end_point = seg_points[-1]
+
+                            # Geocode (the slow part - but we're showing progress!)
+                            origin = getAddressFromCoords(lat=start_point.latitude, lng=start_point.longitude)
+                            destination = getAddressFromCoords(lat=end_point.latitude, lng=end_point.longitude)
+
+                            from datetime import datetime
+                            start_datetime = datetime.fromtimestamp(seg['start_time_unix'], UTC)
+                            end_datetime = datetime.fromtimestamp(seg['start_time_unix'] + seg['duration'], UTC)
+                            start_time_local = getLocalDatetime(start_point.latitude, start_point.longitude, start_datetime)
+                            end_time_local = getLocalDatetime(end_point.latitude, end_point.longitude, end_datetime)
+
+                            formatted_start_time = start_time_local.strftime("%Y-%m-%d %H:%M")
+                            formatted_end_time = end_time_local.strftime("%Y-%m-%d %H:%M")
+
+                            path = [[point.latitude, point.longitude] for point in seg_points]
+
+                            trip_data = {
+                                'origin': origin,
+                                'destination': destination,
+                                'start_time': formatted_start_time,
+                                'end_time': formatted_end_time,
+                                'duration': seg['duration'],
+                                'distance': int(distance),
+                                'path': path,
+                                'maprika_name': seg['name'] or (maprika_data['name'] if maprika_data else None),
+                                'gpx_name': seg['name'],
+                                'notes': f"Segment from {filename}",
+                                'suggested_type': seg['type'],
+                                'filename': filename
+                            }
+
+                            all_trips.append(trip_data)
+
+                            # Stream the completed trip
+                            yield f"data: {json.dumps({'type': 'trip', 'trip': trip_data})}\n\n"
+
+                        except Exception as e:
+                            logger.error(f"Error processing segment: {str(e)}")
+                            continue
+                else:
+                    # Process as single trip (non-Maprika)
+                    processed_segments += 1
+                    yield f"data: {json.dumps({'type': 'progress', 'current': processed_segments, 'total': total_segments, 'name': filename})}\n\n"
+                    # ... (similar processing for non-Maprika files)
+
+            except Exception as e:
+                logger.error(f"Error parsing {filename}: {str(e)}")
+                continue
+
+        # Send completion
+        yield f"data: {json.dumps({'type': 'done', 'count': len(all_trips)})}\n\n"
+
+    return app.response_class(generate(), mimetype='text/event-stream')
+
+
+@app.route("/u/<username>/save_gpx_advanced", methods=["POST"])
+@login_required
+def save_gpx_advanced(username):
+    """Save selected trips from batch GPX upload"""
+    data = request.get_json()
+    trips = data.get("trips", [])
+
+    if not trips:
+        return jsonify({"error": "No trips provided"}), 400
+
+    saved_count = 0
+
+    for trip in trips:
+        try:
+            trip_type = trip.get("type", "other")
+            origin = trip.get("origin")
+            destination = trip.get("destination")
+            start_time = trip.get("start_time")
+            end_time = trip.get("end_time")
+            duration = trip.get("duration", 0)
+            distance = trip.get("distance", 0)
+            path_raw = trip.get("path", [])
+            notes = trip.get("notes", "")
+
+            # Convert path from [[lat, lng], ...] to [{"lat": lat, "lng": lng}, ...]
+            path = [{"lat": point[0], "lng": point[1]} for point in path_raw]
+
+            # Add Maprika name to notes if present
+            if trip.get("maprika_name"):
+                notes = f"{trip['maprika_name']}\n{notes}".strip()
+
+            # Determine precision
+            precision = "preciseDates" if start_time else "unknown"
+
+            # Convert datetime format if needed
+            if start_time and start_time != -1:
+                start_time = start_time.replace(" ", "T")
+            else:
+                start_time = -1
+
+            if end_time and end_time != -1:
+                end_time = end_time.replace(" ", "T")
+            else:
+                end_time = -1
+
+            # Build trip structure
+            newTrip = {
+                "type": trip_type,
+                "originStation": [None, origin],
+                "destinationStation": [None, destination],
+                "newTripStart": start_time,
+                "newTripEnd": end_time,
+                "trip_length": distance,
+                "estimated_trip_duration": duration,
+                "operator": "",
+                "lineName": "",
+                "price": None,
+                "currency": None,
+                "purchasing_date": None,
+                "precision": precision,
+                "notes": notes,
+                "onlyDateDuration": "",
+                "unknownType": "past",
+                "waypoints": json.dumps([]),
+            }
+
+            # Save trip
+            saveTripToDb(username=username, newTrip=newTrip, newPath=path, trip_type=trip_type)
+            saved_count += 1
+
+        except Exception as e:
+            logger.error(f"Error saving trip: {str(e)}")
+            continue
+
+    return jsonify({"success": True, "count": saved_count}), 200
+
 
 @app.route("/u/<username>/submit_ticket", methods=["POST"])
 @login_required
@@ -2531,7 +3109,7 @@ def signup():
         elif not re.match(regex, email):
             flash(lang[session["userinfo"]["lang"]]["invalidEmail"])
             return redirect(url_for("signup"))
-        elif "@" in username or "." in username:
+        elif any(c in username for c in ('@', '.', '<', '>')):
             flash(lang[session["userinfo"]["lang"]]["usernameNoEmail"])
             return redirect(url_for("signup"))
         elif username in unauthorised_usernames:
@@ -2644,11 +3222,7 @@ def landing():
                 return redirect(
                     url_for("dynamic_trips", username=username, time="projects")
                 )
-            elif user.default_landing == "new_map":
-                return redirect(
-                    url_for("new_map", username=username)
-                )
-            else:  # Default to map
+            else:  # Default to map (includes legacy "map" and "new_map" values)
                 return redirect(url_for("user_home", username=username))
 
     # If the user is not logged in or is forcing the landing page
@@ -2763,6 +3337,27 @@ def user_home(username):
     Home page for validated users.
 
     """
+    user = User.query.filter_by(username=username).first()
+    return render_template(
+        "new_map.html",
+        title=lang[session["userinfo"]["lang"]]["map"],
+        username=username,
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id(username)),
+        tileserver=user.tileserver,
+        globe=user.globe,
+        public=False,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/u/<username>/leaflet")
+@login_required
+def user_home_leaflet(username):
+    """
+    Classic Leaflet map for validated users.
+    """
     return render_template(
         "map.html",
         title=lang[session["userinfo"]["lang"]]["map"],
@@ -2817,7 +3412,7 @@ def vector_style(language, style):
         file_contents = file_contents.replace(
             "{{mapPinUrl}}",
             url_for(
-                "static", filename="styles/vector_maps", _scheme="https", _external=True
+                "static", filename="styles/vector_maps", _scheme=request.scheme, _external=True
             ),
         )
         template_url = "https://tiles.trainlog.me/tile/streets-v2+landcover-v1.1+hillshade-v1/{x}/{y}/{z}/{language}"
@@ -3348,6 +3943,7 @@ def public(username):
     )
 
 
+@app.route("/public/<username>/map")
 @app.route("/public/<username>/new_map")
 @public_required
 def public_new(username):
@@ -3652,17 +4248,28 @@ def render_public_trip_page(
     )
 
 
-@app.route("/public/trip/<tripIds>")
-@app.route("/public/tag/<tagId>")
-@app.route("/public/ticket/<ticketId>")
-def public_trip(tripIds=None, tagId=None, ticketId=None):
+@app.route("/public/leaflet/trip/<tripIds>")
+@app.route("/public/leaflet/tag/<tagId>")
+@app.route("/public/leaflet/ticket/<ticketId>")
+def public_trip_leaflet(tripIds=None, tagId=None, ticketId=None):
     return render_public_trip_page(tripIds, tagId, ticketId)
 
 
 @app.route("/public/new/trip/<tripIds>")
 @app.route("/public/new/tag/<tagId>")
 @app.route("/public/new/ticket/<ticketId>")
-def public_trip_new(tripIds=None, tagId=None, ticketId=None):
+def public_trip_legacy(tripIds=None, tagId=None, ticketId=None):
+    if tripIds:
+        return redirect(url_for("public_trip", tripIds=tripIds), 301)
+    if tagId:
+        return redirect(url_for("public_trip", tagId=tagId), 301)
+    return redirect(url_for("public_trip", ticketId=request.view_args.get("ticketId")), 301)
+
+
+@app.route("/public/trip/<tripIds>")
+@app.route("/public/tag/<tagId>")
+@app.route("/public/ticket/<ticketId>")
+def public_trip(tripIds=None, tagId=None, ticketId=None):
     colorblind = False
     username = getUser()
     if username:
@@ -4316,12 +4923,19 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
 
     original_trip = get_trip(trip_id)
 
+    # powerType is inside the map modal which is outside the <form>, so serializeArray()
+    # won't capture it. Extract from the details JSON as fallback.
+    details_parsed = json.loads(formData["details"]) if formData.get("details") else None
+    power_type = formData.get("powerType") or (details_parsed.get("powerType") if details_parsed else None)
+    co2_override = sanitize_param(formData.get("co2Override"))
+
     if "estimated_trip_duration" in formData and "trip_length" in formData:
         countries = getCountriesFromPath(
             [
-                {"lat": coord[0], "lng": coord[1]} for coord in path], 
-                formData["type"], 
-                json.loads(formData.get("details")) if formData.get("details") is not None else None
+                {"lat": coord[0], "lng": coord[1]} for coord in path],
+                formData["type"],
+                details_parsed,
+                power_type,
         )
         estimated_trip_duration = sanitize_param(formData["estimated_trip_duration"])
         trip_length = sanitize_param(formData["trip_length"])
@@ -4374,6 +4988,8 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         visibility=visibility if visibility != "" else None,
         departure_delay=sanitize_param(formData.get("departure_delay")),
         arrival_delay=sanitize_param(formData.get("arrival_delay")),
+        power_type=power_type,
+        co2_override=co2_override,
     )
 
     return trip
@@ -5126,6 +5742,54 @@ def delete_user(uid):
     return ""
 
 
+@app.route("/admin/rename_user/<int:uid>", methods=["POST"])
+@owner_required
+def rename_user(uid):
+    data = request.get_json()
+    new_username = (data.get("new_username") or "").strip()
+
+    if not new_username:
+        return jsonify(success=False, error="Username cannot be empty"), 400
+
+    user = User.query.get(uid)
+    if not user:
+        return jsonify(success=False, error="User not found"), 404
+
+    if user.username == new_username:
+        return jsonify(success=False, error="New username is the same as current"), 400
+
+    if User.query.filter_by(username=new_username).first():
+        return jsonify(success=False, error="Username already taken"), 409
+
+    old_username = user.username
+    sqlite_tables = ["trip", "percents", "tickets", "tags", "gpx", "fr24_usage", "ai_usage"]
+
+    try:
+        with managed_cursor(mainConn) as cursor:
+            for table in sqlite_tables:
+                cursor.execute(
+                    f"UPDATE {table} SET username = :new WHERE username = :old",
+                    {"new": new_username, "old": old_username},
+                )
+
+        user.username = new_username
+        authDb.session.commit()
+
+        with pg_session() as pg:
+            pg.execute(
+                "UPDATE trainsets SET username = :new WHERE username = :old",
+                {"new": new_username, "old": old_username},
+            )
+            pg.commit()
+
+        mainConn.commit()
+    except Exception as e:
+        print(e)
+        return jsonify(success=False, error=str(e)), 500
+
+    return jsonify(success=True)
+
+
 def fetchTripsPaths(username, lastLocal, public):
     tripList = []
     now = datetime.now()
@@ -5302,6 +5966,14 @@ def processPublicTrips(tripIds):
             abort(401)
     tripIds = tripIds.split(",")
 
+    # Fetch stored carbon values from PG in one query
+    with pg_session() as pg:
+        pg_rows = pg.execute(
+            "SELECT trip_id, carbon FROM trips WHERE trip_id = ANY(:ids)",
+            {"ids": [int(t) for t in tripIds]},
+        ).fetchall()
+    pg_carbon = {row["trip_id"]: row["carbon"] for row in pg_rows}
+
     tripList = []
 
     formattedGetUserLines = getUserLines.format(
@@ -5375,9 +6047,13 @@ def processPublicTrips(tripIds):
             if trip["price_in_user_currency"] is not None:
                 total_price += trip["price_in_user_currency"]
 
-        # Calculate carbon footprint
+        # Use stored carbon from PG if available, otherwise recalculate (legacy trips)
+        stored_carbon = pg_carbon.get(trip["uid"])
         path_data = json.loads(paths[trip["uid"]]) if trip["uid"] in paths else []
-        trip_carbon = calculate_carbon_footprint_for_trip(trip, path_data)
+        if stored_carbon is not None:
+            trip_carbon = float(stored_carbon)
+        else:
+            trip_carbon = calculate_carbon_footprint_for_trip(trip, path_data)
         trip["carbon_footprint"] = round(trip_carbon, 6)
         
         # Add to totals
@@ -5463,6 +6139,51 @@ def changeTripType(username, tripType, tripIds):
     except Exception as e:
         logger.exception(e)
         return jsonify({"error": str(e)}), 500
+
+
+@app.route("/u/<username>/bulkChangeType", methods=["POST"])
+@login_required
+def bulkChangeType(username):
+    data = request.get_json()
+    if not data or "trip_ids" not in data or "new_type" not in data:
+        return jsonify({"error": "Missing parameters"}), 400
+    try:
+        new_type = TripTypes.from_str(data["new_type"])
+    except ValueError:
+        return jsonify({"error": "Invalid type"}), 400
+
+    trip_ids = data["trip_ids"]
+    # Validate all trips are in the same transformable group
+    with managed_cursor(mainConn) as cursor:
+        placeholders = ", ".join(["?"] * len(trip_ids))
+        cursor.execute(
+            f"SELECT DISTINCT type FROM trip WHERE username = ? AND uid IN ({placeholders})",
+            [username] + trip_ids,
+        )
+        current_types = [TripTypes.from_str(r["type"]) for r in cursor.fetchall()]
+    for ct in current_types:
+        if not TripTypes.can_transform(ct, new_type):
+            return jsonify({"error": f"Cannot change from '{ct}' to '{new_type}'"}), 400
+
+    success, error = bulk_change_type(username, trip_ids, new_type)
+    if success:
+        return jsonify({"success": 1}), 200
+    return jsonify({"error": error}), 500
+
+
+@app.route("/u/<username>/bulkSetPowerType", methods=["POST"])
+@login_required
+def bulkSetPowerType(username):
+    data = request.get_json()
+    if not data or "trip_ids" not in data or "power_type" not in data:
+        return jsonify({"error": "Missing parameters"}), 400
+    power_type = data["power_type"]
+    if power_type not in ("electric", "thermic", "manual", "auto"):
+        return jsonify({"error": "Invalid power_type"}), 400
+    success, error = bulk_set_power_type(username, data["trip_ids"], power_type)
+    if success:
+        return jsonify({"success": 1}), 200
+    return jsonify({"error": error}), 500
 
 
 @app.route("/u/<username>/merge/<tripIds>", methods=["GET", "POST"])
@@ -5912,6 +6633,27 @@ def get_trips_api_internal(username, is_public=False):
 
     # Format trips for display
     trip_list = [formatTrip(trip) for trip in trip_dicts]
+
+    # Attach carbon_footprint: prefer stored PG value, fall back to inline calculation
+    trip_ids = [trip["uid"] for trip in trip_list if trip.get("uid")]
+    if trip_ids:
+        try:
+            with pg_session() as pg:
+                pg_rows = pg.execute(
+                    "SELECT trip_id, carbon FROM trips WHERE trip_id = ANY(:ids)",
+                    {"ids": [int(tid) for tid in trip_ids]},
+                ).fetchall()
+            pg_carbon = {row["trip_id"]: row["carbon"] for row in pg_rows}
+        except Exception:
+            pg_carbon = {}
+        for trip in trip_list:
+            stored = pg_carbon.get(trip.get("uid"))
+            if stored is not None:
+                trip["carbon_footprint"] = round(float(stored), 6)
+            else:
+                trip["carbon_footprint"] = round(
+                    calculate_carbon_footprint_for_trip(trip, []), 6
+                )
 
     # Return the JSON for DataTables
     return jsonify(
@@ -6412,230 +7154,310 @@ def proxy_airlines():
     return jsonify([]), 200
 
 
+def _parse_mfr24_row(line, api_key):
+    """Parse one MFR24 CSV data line.
+
+    Returns (newTrip, newPath, display) on success, raises ValueError on failure.
+    All external calls (airport DB lookup, airline API) happen here so that the
+    subsequent save step is guaranteed to succeed.
+    """
+    data = line.split(",")
+    newTrip = {}
+    newPath = []
+
+    try:
+        newTrip["material_type"] = data[8].rsplit("(")[1].rsplit(")")[0]
+    except (IndexError, ValueError):
+        newTrip["material_type"] = ""
+    newTrip["seat"] = data[10].strip() if len(data) > 10 else ""
+    newTrip["reg"] = data[9].strip() if len(data) > 9 else ""
+    newTrip["notes"] = data[14].strip() if len(data) > 14 else ""
+    newTrip["price"] = newTrip["currency"] = newTrip["purchasing_date"] = None
+
+    date_str = data[0].strip()
+    dep_time = data[4].strip()
+    arr_time = data[5].strip()
+    dur_str = data[6].strip()
+
+    if "-" not in date_str:
+        date_str += "-01-01"
+        dep_time = arr_time = "00:00:01"
+        newTrip["precision"] = "onlyDate"
+        newTrip["onlyDate"] = date_str
+        try:
+            h, m, s = map(int, dur_str.split(":"))
+            newTrip["onlyDateDuration"] = h * 3600 + m * 60 + s
+        except (ValueError, AttributeError):
+            newTrip["onlyDateDuration"] = 0
+    else:
+        if dep_time == "00:00:00":
+            dep_time = arr_time = "00:00:01"
+            newTrip["precision"] = "onlyDate"
+            newTrip["onlyDate"] = date_str
+            try:
+                h, m, s = map(int, dur_str.split(":"))
+                newTrip["onlyDateDuration"] = h * 3600 + m * 60 + s
+            except (ValueError, AttributeError):
+                newTrip["onlyDateDuration"] = 0
+        else:
+            newTrip["newTripStart"] = (date_str + "T" + dep_time)[:16]
+            end_dt_str = (date_str + "T" + arr_time)[:16]
+            if (
+                datetime.strptime(arr_time, "%H:%M:%S")
+                - datetime.strptime(dep_time, "%H:%M:%S")
+                < timedelta(0)
+            ):
+                end_dt_str = datetime.strftime(
+                    datetime.strptime(end_dt_str, "%Y-%m-%dT%H:%M") + timedelta(days=1),
+                    "%Y-%m-%dT%H:%M",
+                )
+            newTrip["newTripEnd"] = end_dt_str
+            newTrip["precision"] = "preciseDates"
+
+    newTrip["lineName"] = data[1].strip()
+    origIata = data[2].rsplit("(")[-1].split("/")[0]
+    destIata = data[3].rsplit("(")[-1].split("/")[0]
+
+    try:
+        newTrip["estimated_trip_duration"] = (
+            datetime.strptime(dur_str, "%H:%M:%S") - datetime(1900, 1, 1)
+        ).total_seconds()
+    except ValueError:
+        newTrip["estimated_trip_duration"] = 0
+
+    for iata, key in ((origIata, "originStation"), (destIata, "destinationStation")):
+        with managed_cursor(mainConn) as cursor:
+            row = cursor.execute(
+                "SELECT * FROM airports WHERE iata = :searchPattern",
+                {"searchPattern": iata},
+            ).fetchone()
+        if row is None:
+            raise ValueError(f"Airport not found: {iata}")
+        airport = dict(row)
+        newTrip[key] = [
+            [airport["latitude"], airport["longitude"]],
+            "{} {} ({})".format(flag(airport["iso_country"]), airport["name"], airport["iata"]),
+        ]
+        newPath.append({"lat": airport["latitude"], "lng": airport["longitude"]})
+
+    raw_airline = data[7].strip('"')
+    airline_name = raw_airline.rsplit(" ", 1)[0]
+    icao = raw_airline.rsplit("/", 1)[1].replace(")", "") if "/" in raw_airline else ""
+
+    s = requests.Session()
+    s.mount("https://", HTTPAdapter(max_retries=Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])))
+    api_url = "https://api.api-ninjas.com/v1/airlines?icao={}".format(icao)
+    response = s.get(api_url, headers={"X-Api-Key": api_key}, timeout=10)
+
+    if response.status_code == requests.codes.ok and response.json():
+        operatorAPI = response.json()[0]
+        newTrip["operator"] = operatorAPI["name"]
+        if "logo_url" in operatorAPI:
+            newTrip["operatorLogoURL"] = operatorAPI["logo_url"]
+    else:
+        newTrip["operator"] = airline_name
+
+    newTrip["trip_length"] = getDistance(newPath[0], newPath[1])
+    newTrip["unknownType"] = "past"
+    newTrip["waypoints"] = json.dumps([])
+
+    display = {
+        "origin": newTrip["originStation"][1],
+        "destination": newTrip["destinationStation"][1],
+        "type": "plane",
+        "date": date_str,
+        "distance": str(round(newTrip["trip_length"] / 1000, 1)) + " km",
+        "operator": newTrip.get("operator", ""),
+        "line_name": newTrip["lineName"],
+    }
+    return newTrip, newPath, display
+
+
+def _save_mfr24_trip(username, newTrip, newPath):
+    """Persist a pre-parsed MFR24 trip.  All data is already resolved so this
+    only touches the local DB and is guaranteed not to call external services."""
+    options = {
+        "orig": newTrip["originStation"][1],
+        "dest": newTrip["destinationStation"][1],
+        "username": username,
+    }
+    if newTrip["precision"] != "onlyDate":
+        options["start_datetime"] = datetime.strftime(
+            datetime.strptime(newTrip["newTripStart"], "%Y-%m-%dT%H:%M"),
+            "%Y-%m-%d %H:%M:%S",
+        )
+        options["end_datetime"] = datetime.strftime(
+            datetime.strptime(newTrip["newTripEnd"], "%Y-%m-%dT%H:%M"),
+            "%Y-%m-%d %H:%M:%S",
+        )
+    else:
+        options["start_datetime"] = options["end_datetime"] = datetime.strftime(
+            datetime.strptime(newTrip["onlyDate"], "%Y-%m-%d") + timedelta(seconds=1),
+            "%Y-%m-%d %H:%M:%S",
+        )
+
+    limits = [
+        {"lat": newPath[0]["lat"], "lng": newPath[0]["lng"]},
+        {"lat": newPath[-1]["lat"], "lng": newPath[-1]["lng"]},
+    ]
+    manual_trip_duration, start_datetime, end_datetime, utc_start_datetime, utc_end_datetime = (
+        processDates(newTrip, limits)
+    )
+    countries = getCountriesFromPath(newPath, "air")
+    now = datetime.now()
+
+    with managed_cursor(mainConn) as cursor:
+        sqlite_trip = cursor.execute(getDuplicate, options).fetchone()
+
+    if sqlite_trip is not None:
+        trip = get_trip(sqlite_trip["uid"])
+        # _update_trip_in_sqlite (called by update_trip) reads snake_case keys from formData
+        newTrip["origin_station"] = newTrip["originStation"][1]
+        newTrip["destination_station"] = newTrip["destinationStation"][1]
+        newTrip["type"] = "air"
+        trip.origin_station = sanitize_param(newTrip["originStation"][1])
+        trip.destination_station = sanitize_param(newTrip["destinationStation"][1])
+        trip.start_datetime = start_datetime
+        trip.utc_start_datetime = utc_start_datetime
+        trip.end_datetime = end_datetime
+        trip.utc_end_datetime = utc_end_datetime
+        trip.trip_length = sanitize_param(newTrip["trip_length"])
+        trip.estimated_trip_duration = sanitize_param(newTrip["estimated_trip_duration"])
+        trip.manual_trip_duration = manual_trip_duration
+        trip.operator = sanitize_param(newTrip["operator"])
+        trip.countries = sanitize_param(countries)
+        trip.line_name = sanitize_param(newTrip["lineName"])
+        trip.last_modified = now
+        trip.seat = sanitize_param(newTrip["seat"])
+        trip.material_type = sanitize_param(newTrip["material_type"])
+        trip.material_type_advanced = sanitize_param(newTrip.get("material_type_advanced"))
+        trip.reg = sanitize_param(newTrip["reg"])
+        trip.waypoints = None
+        trip.notes = sanitize_param(newTrip["notes"])
+        trip.price = sanitize_param(newTrip["price"])
+        trip.currency = sanitize_param(newTrip["currency"])
+        trip.purchasing_date = sanitize_param(newTrip["purchasing_date"])
+        trip.ticket_id = None
+        trip.is_project = options["start_datetime"] == 1 or end_datetime == 1
+        trip.path = newPath
+        update_trip(trip.trip_id, trip, newTrip)
+    else:
+        trip = Trip(
+            username=username,
+            user_id=get_user_id(username),
+            origin_station=sanitize_param(newTrip["originStation"][1]),
+            destination_station=sanitize_param(newTrip["destinationStation"][1]),
+            start_datetime=start_datetime,
+            utc_start_datetime=utc_start_datetime,
+            end_datetime=end_datetime,
+            utc_end_datetime=utc_end_datetime,
+            trip_length=sanitize_param(newTrip["trip_length"]),
+            estimated_trip_duration=sanitize_param(newTrip["estimated_trip_duration"]),
+            manual_trip_duration=manual_trip_duration,
+            operator=sanitize_param(newTrip["operator"]),
+            countries=sanitize_param(countries),
+            line_name=sanitize_param(newTrip["lineName"]),
+            created=now,
+            last_modified=now,
+            type="air",
+            seat=sanitize_param(newTrip["seat"]),
+            material_type=sanitize_param(newTrip["material_type"]),
+            material_type_advanced=sanitize_param(newTrip.get("material_type_advanced")),
+            reg=sanitize_param(newTrip["reg"]),
+            waypoints=None,
+            notes=sanitize_param(newTrip["notes"]),
+            price=sanitize_param(newTrip["price"]),
+            currency=sanitize_param(newTrip["currency"]),
+            purchasing_date=sanitize_param(newTrip["purchasing_date"]),
+            ticket_id=None,
+            is_project=options["start_datetime"] == 1 or end_datetime == 1,
+            path=newPath,
+            departure_delay=sanitize_param(newTrip.get("departure_delay")),
+            arrival_delay=sanitize_param(newTrip.get("arrival_delay")),
+        )
+        create_trip(trip)
+
+    airlineLogoProcess(newTrip)
+
+
+@app.route("/u/<username>/parseMFR24", methods=["POST"])
+@login_required
+def parse_mfr24(username):
+    """Stream MFR24 CSV parsing progress via Server-Sent Events.
+
+    Events:
+      {"type": "total",    "count": N}
+      {"type": "progress", "current": i, "total": N}
+      {"type": "result",   "result": {ok, display, save_data?, error?}}
+      {"type": "done"}
+    """
+    file = request.files.get("file")
+    if not file:
+        return jsonify({"error": "No file provided"}), 400
+
+    content = file.read().decode("utf-8", errors="replace")
+    data_lines = [l for l in content.splitlines()[2:] if l.strip()]  # skip 2 header rows
+    api_key = load_config().get("api_ninjas", {}).get("api_key", "")
+
+    def generate():
+        total = len(data_lines)
+        yield f"data: {json.dumps({'type': 'total', 'count': total})}\n\n"
+
+        for i, line in enumerate(data_lines):
+            yield f"data: {json.dumps({'type': 'progress', 'current': i + 1, 'total': total})}\n\n"
+            try:
+                newTrip, newPath, display = _parse_mfr24_row(line, api_key)
+                result = {
+                    "ok": True,
+                    "display": display,
+                    "save_data": {"newTrip": newTrip, "newPath": newPath},
+                }
+            except Exception as e:
+                parts = line.split(",")
+                result = {
+                    "ok": False,
+                    "error": str(e),
+                    "display": {
+                        "origin":      parts[2].strip() if len(parts) > 2 else "?",
+                        "destination": parts[3].strip() if len(parts) > 3 else "?",
+                        "type":        "plane",
+                        "date":        parts[0].strip() if parts else "?",
+                        "distance":    "",
+                        "operator":    "",
+                        "line_name":   parts[1].strip() if len(parts) > 1 else "",
+                    },
+                }
+            yield f"data: {json.dumps({'type': 'result', 'result': result})}\n\n"
+
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return app.response_class(generate(), mimetype="text/event-stream")
+
+
+@app.route("/u/<username>/saveParsedMFR24", methods=["POST"])
+@login_required
+def save_parsed_mfr24(username):
+    """Save pre-parsed MFR24 trips (returned by parseMFR24) to the database."""
+    data = request.get_json()
+    trips = data.get("trips", [])
+    saved = 0
+    for t in trips:
+        try:
+            _save_mfr24_trip(username, t["newTrip"], t["newPath"])
+            saved += 1
+        except Exception as e:
+            logger.error(f"Error saving parsed MFR24 trip: {e}")
+    return jsonify({"saved": saved})
+
+
 @app.route("/u/<username>/processMFR24", methods=["POST"])
 @login_required
 def processMFR24(username):
-    newTrip = {}
-    newPath = []
-    if request.form != {}:
-        data = list(request.form.to_dict().items())[0][0].split(",")
-
-        newTrip["material_type"] = data[8].rsplit("(")[1].rsplit(")")[0]
-        newTrip["seat"] = data[10]
-        newTrip["reg"] = data[9]
-        newTrip["notes"] = data[14]
-        newTrip["price"] = newTrip["currency"] = newTrip["purchasing_date"] = None
-
-        if "-" not in data[0]:
-            # data[0] contains only a year
-            data[0] = data[0] + "-01-01"  # Set to January 1st of that year
-            data[4] = data[5] = "00:00:01"  # Set time to 00:00:01
-            newTrip["precision"] = "onlyDate"
-            newTrip["onlyDate"] = data[0]
-            try:
-                # Handle estimated trip duration if available
-                hours, minutes, seconds = map(int, data[6].split(":"))
-                newTrip["onlyDateDuration"] = hours * 3600 + minutes * 60 + seconds
-            except (IndexError, ValueError):
-                # Default duration if data[6] is missing or invalid
-                newTrip["onlyDateDuration"] = 0
-        else:
-            # Existing code to handle full dates
-            if data[4] == "00:00:00":
-                data[4] = data[5] = "00:00:01"
-                newTrip["precision"] = "onlyDate"
-                newTrip["onlyDate"] = data[0]
-                try:
-                    hours, minutes, seconds = map(int, data[6].split(":"))
-                    newTrip["onlyDateDuration"] = hours * 3600 + minutes * 60 + seconds
-                except (IndexError, ValueError):
-                    newTrip["onlyDateDuration"] = 0
-            else:
-                newTrip["newTripStart"] = (data[0] + "T" + data[4])[0:16]
-                end_datetime = (data[0] + "T" + data[5])[0:16]
-                if datetime.strptime(data[5], "%H:%M:%S") - datetime.strptime(
-                    data[4], "%H:%M:%S"
-                ) < timedelta(0):
-                    end_datetime = datetime.strftime(
-                        datetime.strptime(end_datetime, "%Y-%m-%dT%H:%M")
-                        + timedelta(days=1),
-                        "%Y-%m-%dT%H:%M",
-                    )
-                newTrip["newTripEnd"] = end_datetime
-                newTrip["precision"] = "preciseDates"
-
-        newTrip["lineName"] = data[1]
-        origIata = data[2].rsplit("(")[-1].split("/")[0]
-        destIata = data[3].rsplit("(")[-1].split("/")[0]
-
-        timedeltaObj = datetime.strptime(data[6], "%H:%M:%S") - datetime(1900, 1, 1)
-        newTrip["estimated_trip_duration"] = timedeltaObj.total_seconds()
-
-        for iata, index in (
-            (origIata, "originStation"),
-            (destIata, "destinationStation"),
-        ):
-            with managed_cursor(mainConn) as cursor:
-                airport = dict(
-                    cursor.execute(
-                        " SELECT * FROM airports WHERE iata = :searchPattern",
-                        {"searchPattern": iata},
-                    ).fetchone()
-                )
-            newTrip[index] = [
-                [airport["latitude"], airport["longitude"]],
-                "{} {} ({})".format(
-                    flag(airport["iso_country"]), airport["name"], airport["iata"]
-                ),
-            ]
-            newPath.append({"lat": airport["latitude"], "lng": airport["longitude"]})
-
-        airline = data[7].strip('"').rsplit(" ", 1)[0]
-        icao = data[7].strip('"').rsplit("/", 1)[1].replace(")", "")
-
-        s = requests.Session()
-        retries = Retry(total=5, backoff_factor=1, status_forcelist=[502, 503, 504])
-        s.mount("https://", HTTPAdapter(max_retries=retries))
-
-        api_ninjas_config = load_config().get("api_ninjas", {})
-        api_key = api_ninjas_config.get("api_key", "")
-        api_url = "https://api.api-ninjas.com/v1/airlines?icao={}".format(icao)
-        response = s.get(api_url, headers={"X-Api-Key": api_key})
-
-        if response.status_code == requests.codes.ok:
-            if response.json() != []:
-                operatorAPI = response.json()[0]
-                newTrip["operator"] = operatorAPI["name"]
-                if "logo_url" in operatorAPI.keys():
-                    newTrip["operatorLogoURL"] = operatorAPI["logo_url"]
-            else:
-                newTrip["operator"] = airline
-        else:
-            newTrip["operator"] = airline
-
-        newTrip["trip_length"] = getDistance(newPath[0], newPath[1])
-
-        options = {
-            "orig": newTrip["originStation"][1],
-            "dest": newTrip["destinationStation"][1],
-            "username": username,
-        }
-
-        if newTrip["precision"] != "onlyDate":
-            options["start_datetime"] = datetime.strftime(
-                datetime.strptime(newTrip["newTripStart"], "%Y-%m-%dT%H:%M"),
-                "%Y-%m-%d %H:%M:%S",
-            )
-            options["end_datetime"] = datetime.strftime(
-                datetime.strptime(newTrip["newTripEnd"], "%Y-%m-%dT%H:%M"),
-                "%Y-%m-%d %H:%M:%S",
-            )
-        else:
-            options["start_datetime"] = options["end_datetime"] = datetime.strftime(
-                datetime.strptime(newTrip["onlyDate"], "%Y-%m-%d")
-                + timedelta(seconds=1),
-                "%Y-%m-%d %H:%M:%S",
-            )
-
-        limits = [
-            {
-                "lat": newPath[0]["lat"],
-                "lng": newPath[0]["lng"],
-            },
-            {
-                "lat": newPath[-1]["lat"],
-                "lng": newPath[-1]["lng"],
-            },
-        ]
-        (
-            manual_trip_duration,
-            start_datetime,
-            end_datetime,
-            utc_start_datetime,
-            utc_end_datetime,
-        ) = processDates(newTrip, limits)
-        countries = getCountriesFromPath(newPath, "air")
-        now = datetime.now()
-
-        with managed_cursor(mainConn) as cursor:
-            sqlite_trip = cursor.execute(getDuplicate, options).fetchone()
-
-        if sqlite_trip is not None:
-            trip = get_trip(sqlite_trip["uid"])
-
-            newTrip["origin_station"] = newTrip["originStation"][1]
-            newTrip["destination_station"] = newTrip["destinationStation"][1]
-            newTrip["type"] = "air"
-
-            trip.origin_station = sanitize_param(newTrip["originStation"][1])
-            trip.destination_station = sanitize_param(newTrip["destinationStation"][1])
-            trip.start_datetime = start_datetime
-            trip.utc_start_datetime = utc_start_datetime
-            trip.end_datetime = end_datetime
-            trip.utc_end_datetime = utc_end_datetime
-            trip.trip_length = sanitize_param(newTrip["trip_length"])
-            trip.estimated_trip_duration = sanitize_param(
-                newTrip["estimated_trip_duration"]
-            )
-            trip.manual_trip_duration = manual_trip_duration
-            trip.operator = sanitize_param(newTrip["operator"])
-            trip.countries = sanitize_param(countries)
-            trip.line_name = (sanitize_param(newTrip["lineName"]),)
-            trip.last_modified = now
-            trip.seat = sanitize_param(newTrip["seat"])
-            trip.material_type = sanitize_param(newTrip["material_type"])
-            trip.material_type_advanced = sanitize_param(newTrip.get("material_type_advanced"))
-            trip.reg = sanitize_param(newTrip["reg"])
-            trip.waypoints = None
-            trip.notes = sanitize_param(newTrip["notes"])
-            trip.price = sanitize_param(newTrip["price"])
-            trip.currency = sanitize_param(newTrip["currency"])
-            trip.purchasing_date = sanitize_param(newTrip["purchasing_date"])
-            trip.ticket_id = None
-            trip.is_project = options["start_datetime"] == 1 or end_datetime == 1
-            trip.path = newPath
-
-            update_trip(trip.trip_id, trip, newTrip)
-        else:
-            trip = Trip(
-                username=username,
-                user_id=get_user_id(username),
-                origin_station=sanitize_param(newTrip["originStation"][1]),
-                destination_station=sanitize_param(newTrip["destinationStation"][1]),
-                start_datetime=start_datetime,
-                utc_start_datetime=utc_start_datetime,
-                end_datetime=end_datetime,
-                utc_end_datetime=utc_end_datetime,
-                trip_length=sanitize_param(newTrip["trip_length"]),
-                estimated_trip_duration=sanitize_param(
-                    newTrip["estimated_trip_duration"]
-                ),
-                manual_trip_duration=manual_trip_duration,
-                operator=sanitize_param(newTrip["operator"]),
-                countries=sanitize_param(countries),
-                line_name=sanitize_param(newTrip["lineName"]),
-                created=now,
-                last_modified=now,
-                type="air",
-                seat=sanitize_param(newTrip["seat"]),
-                material_type=sanitize_param(newTrip["material_type"]),
-                material_type_advanced=sanitize_param(newTrip.get("material_type_advanced")),
-                reg=sanitize_param(newTrip["reg"]),
-                waypoints=None,
-                notes=sanitize_param(newTrip["notes"]),
-                price=sanitize_param(newTrip["price"]),
-                currency=sanitize_param(newTrip["currency"]),
-                purchasing_date=sanitize_param(newTrip["purchasing_date"]),
-                ticket_id=None,
-                is_project=options["start_datetime"] == 1 or end_datetime == 1,
-                path=newPath,
-                departure_delay=sanitize_param(newTrip.get("departure_delay")),
-                arrival_delay=sanitize_param(newTrip.get("arrival_delay")),
-            )
-            create_trip(trip)
-
-        airlineLogoProcess(newTrip)
-
+    if request.form:
+        line = list(request.form.to_dict().items())[0][0]
+        api_key = load_config().get("api_ninjas", {}).get("api_key", "")
+        newTrip, newPath, _ = _parse_mfr24_row(line, api_key)
+        _save_mfr24_trip(username, newTrip, newPath)
     return ""
 
 
@@ -6684,9 +7506,12 @@ def getTimelineData(username):
     flag_set = set()
     trip_data = []
 
+    MAX_YEAR = 2100
     for row in trips:
         start_datetime = datetime.fromisoformat(row["utc_filtered_start_datetime"])
         end_datetime = datetime.fromisoformat(row["utc_filtered_end_datetime"])
+        if start_datetime.year > MAX_YEAR or end_datetime.year > MAX_YEAR:
+            continue
         origin_flag = row["origin_station"][:2]
         dest_flag = row["destination_station"][:2]
         flag_set.update([origin_flag, dest_flag])
@@ -6974,12 +7799,16 @@ def importAll(username):
 
     data = unquote(list(request.form.to_dict().items())[0][0])
 
-    csvfile = StringIO(data)
-    reader = csv.DictReader(csvfile)
-    preprocessed_rows = (
-        {k: (v if v != "" else None) for k, v in row.items()} for row in reader
-    )
-    dataDict = list(preprocessed_rows)[0]
+    csv.field_size_limit(10 * 1024 * 1024)  # 10 MB — accommodates long polyline paths
+    try:
+        csvfile = StringIO(data)
+        reader = csv.DictReader(csvfile)
+        preprocessed_rows = (
+            {k: (v if v != "" else None) for k, v in row.items()} for row in reader
+        )
+        dataDict = list(preprocessed_rows)[0]
+    except Exception as e:
+        return jsonify({"error": str(e)}), 422
 
     now = datetime.now()
 
@@ -7001,8 +7830,6 @@ def importAll(username):
     dataDict["user_id"] = user_id
     dataDict["ticket_id"] = ""
     # Remove path from main dict
-    from pprint import pprint
-    pprint(dataDict)
     if dataDict.get("path"):
         rawPath = dataDict.pop("path")
 
@@ -8219,7 +9046,10 @@ def requestFriend(username, friendId):
 
 
 def getFriendsRequestsNumber():
-    user_id = User.query.filter_by(username=getUser()).first().uid
+    user = User.query.filter_by(username=getUser()).first()
+    if user is None:
+        return ""
+    user_id = user.uid
     incoming_requests = (
         authDb.session.query(User.uid, User.username)
         .join(Friendship, User.uid == Friendship.user_id)
@@ -8278,7 +9108,10 @@ def calculate_route():
 
 @app.route("/resize_image/<int:max_width>/<int:target_height>")
 def resize_image(max_width, target_height):
-    image_path = "static/" + request.args.get("image_path").replace("%26", "&")
+    static_dir = os.path.abspath("static")
+    image_path = os.path.abspath(os.path.join("static", request.args.get("image_path", "").replace("%26", "&")))
+    if not image_path.startswith(static_dir + os.sep):
+        return ("Forbidden", 403)
 
     # Create the resized images directory if it doesn't exist
     resized_dir = os.path.join("static/images/resized", f"{max_width}x{target_height}")
@@ -9022,16 +9855,41 @@ def live_map():
     """
     Shows the global map of all public users currently traveling
     """
+    username = getUser()
+    user = User.query.filter_by(username=username).first() if username else None
     return render_template(
         "public/current_global.html",
-        username=getUser(),
+        username=username,
         logosList=listOperatorsLogos(),
         translations=lang[session["userinfo"]["lang"]],
         api_endpoint=url_for("get_public_current_trips"),
+        tileserver=user.tileserver if user else "osm",
+        globe=user.globe if user else False,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
         title=lang[session["userinfo"]["lang"]]["live_map"],
     )
+
+@app.route("/new_live_map")
+def new_live_map():
+    """
+    MapLibre version of the live map (alongside the classic Leaflet one)
+    """
+    username = getUser()
+    user = User.query.filter_by(username=username).first() if username else None
+    return render_template(
+        "public/current_global_maplibre.html",
+        username=username,
+        logosList=listOperatorsLogos(),
+        translations=lang[session["userinfo"]["lang"]],
+        api_endpoint=url_for("get_public_current_trips"),
+        tileserver=user.tileserver if user else "osm",
+        globe=user.globe if user else False,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+        title=lang[session["userinfo"]["lang"]]["live_map"],
+    )
+
 
 @app.route("/admin/live_map")
 @owner_required
@@ -9039,13 +9897,17 @@ def admin_live_map():
     """
     Shows the global map of ALL users currently traveling (admin/owner access)
     """
+    username = getUser()
+    user = User.query.filter_by(username=username).first() if username else None
     return render_template(
-        "public/current_global.html",  # Same template
+        "public/current_global.html",
         title=f"Admin {lang[session['userinfo']['lang']]['live_map']}",
-        username=getUser(),
+        username=username,
         logosList=listOperatorsLogos(),
         translations=lang[session["userinfo"]["lang"]],
         api_endpoint=url_for("get_all_current_trips"),
+        tileserver=user.tileserver if user else "osm",
+        globe=user.globe if user else False,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

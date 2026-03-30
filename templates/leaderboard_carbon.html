@@ -42,12 +42,14 @@ showLoading();
 $.get('{{url_for("getLeaderboardUsers", type="carbon")}}', function(users, status){
 
     function generateLink(username, highlighted=false) {
+        const safe = sanitize(username);
+        const encoded = encodeURIComponent(username);
         if (users.non_public_users.includes(username)) {
-            return `${username}`;
+            return safe;
         } else if (highlighted) {
-            return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+            return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${encoded}">${safe}</a>`;
         } else {
-            return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+            return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${encoded}">${safe}</a>`;
         }
     }
 
@@ -78,11 +80,6 @@ $.get('{{url_for("getLeaderboardUsers", type="carbon")}}', function(users, statu
         }
     }
 
-    function formatKm(valueMeters) {
-        const km = mToKm(valueMeters);
-        return { display: Math.round(km).toLocaleString() + ' km', tooltip: `${km.toLocaleString(undefined, { maximumFractionDigits: 3 })} km` };
-    }
-
     function withTooltip(text, title) {
         return `<span data-bs-toggle="tooltip" data-bs-placement="top" title="${title}">${text}</span>`;
     }
@@ -92,7 +89,6 @@ $.get('{{url_for("getLeaderboardUsers", type="carbon")}}', function(users, statu
 
         const highlighted = user.username === '{{ username }}';
 
-        const kmFmt = formatKm(user.total_distance);
         const massFmt = formatMass(user.total_carbon);
         const perKmFmt = formatPerKm(user.carbon_per_km);
 
@@ -102,7 +98,7 @@ $.get('{{url_for("getLeaderboardUsers", type="carbon")}}', function(users, statu
                 .append($('<td>'))
                 .append($('<td>').html(generateLink(user.username, highlighted)))
                 .append($('<td>').attr('data-sort', user.trips).text((user.trips || 0).toLocaleString()))
-                .append($('<td>').attr('data-sort', mToKm(user.total_distance)).html(withTooltip(kmFmt.display, kmFmt.tooltip)))
+                .append($('<td>').attr('data-sort', user.total_distance).text(mToKm(user.total_distance) + ' km'))
                 .append($('<td>').attr('data-sort', user.total_carbon).html(withTooltip(massFmt.display, massFmt.tooltip)))
                 .append($('<td>').attr('data-sort', user.carbon_per_km).html(withTooltip(perKmFmt.display, perKmFmt.tooltip)))
                 .append(

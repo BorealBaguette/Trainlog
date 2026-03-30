@@ -9,16 +9,25 @@ const MapConfig = {
         { id: 'bus', icon: 'fa-bus', color: '#9f4bbb' },
         { id: 'car', icon: 'fa-car-side', color: '#a68fcd' },
         { id: 'cycle', icon: 'fa-bicycle', color: '#6e211a' },
+        { id: 'scooter', icon: 'bi-scooter', iconClass: 'bi', color: '#00d084' },
+        { id: 'funicular', icon: 'fa-mountain', color: '#6495ed' },
+        { id: 'rail', icon: 'fa-dumbbell', color: '#7ec8ff' },
+        { id: 'ski', icon: 'fa-person-skiing', color: '#b8e6f0' },
         { id: 'walk', icon: 'fa-person-hiking', color: '#e88c00' },
         { id: 'air', icon: 'fa-plane', color: '#40b91f' },
         { id: 'ferry', icon: 'fa-ship', color: '#1e1e7c' },
-        { id: 'aerialway', icon: 'fa-cable-car', color: '#afcf3b' }
+        { id: 'aerialway', icon: 'fa-cable-car', color: '#afcf3b' },
+        { id: 'other', icon: 'fa-circle-question', color: '#000000' }
     ],
     jawgAllowedLangs: ["de", "en", "es", "fr", "it", "ja", "ko", "nl", "ru", "zh"],
     vectorStylePaths: {
         "jawg-streets-v2":'/getVectorStyle/{language}/jawg-streets.json',
         "jawg-lagoon-v2":'/getVectorStyle/{language}/jawg-lagoon.json',
-        "trainlog-lagoon-v2":'/getVectorStyle/{language}/trainlog-lagoon.json'
+        "trainlog-lagoon-v2":'/getVectorStyle/{language}/trainlog-lagoon.json',
+        "dark-train":       '/getVectorStyle/{language}/trainlog-dark.json',
+        "ofm-liberty": 'https://tiles.openfreemap.org/styles/liberty',
+        "ofm-bright": 'https://tiles.openfreemap.org/styles/bright',
+        "ofm-positron": 'https://tiles.openfreemap.org/styles/positron'
     }
 };
 
@@ -37,7 +46,10 @@ async function initializeMapLibre(options = {}) {
     let mapStyle;
 
     // Handle different tile server types
-    if (isVectorTileServer(tileserver) || styleUrl) {
+    if (tileserver === 'none') {
+        mapStyle = { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#f8f9fa' } }] };
+        if (useGlobe) mapStyle.projection = { type: 'globe' };
+    } else if (isVectorTileServer(tileserver) || styleUrl) {
         // Load vector style
         const url = styleUrl || getVectorStyleUrl(tileserver, userLanguage);
         try {
@@ -81,7 +93,11 @@ function isVectorTileServer(tileserver) {
     const vectorServers = [
         'jawg-streets-v2',
         'jawg-lagoon-v2',
-        'trainlog-lagoon-v2'
+        'trainlog-lagoon-v2',
+        'dark-train',
+        'ofm-liberty',
+        'ofm-bright',
+        'ofm-positron'
     ];
     return vectorServers.includes(tileserver);
 }

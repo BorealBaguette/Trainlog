@@ -1,6 +1,7 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
 <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<link rel="stylesheet" href="{{ url_for('static',filename='styles/new_map.css') }}">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
 <style>
 /* Additional styles for MapLibre version */
@@ -302,6 +303,39 @@
 
 <div id="map" class="mapIndiv">
 </div>
+
+<div class="legend-control">
+    <button class="legend-toggle" onclick="toggleLegend()">
+        <i class="fas fa-info-circle"></i>
+    </button>
+    <div class="legend-content" id="legendContent">
+        <div class="legend-header">
+            <span class="legend-title">{{legendTitle}}</span>
+            <button class="legend-close" onclick="toggleLegend()">&times;</button>
+        </div>
+        <div class="legend-items">
+            <div class="legend-item"><div class="legend-line" style="background-color: #52b0fe;"></div><span><i class="fa-solid fa-train"></i> {{train}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #a2d7ff;"></div><span><i class="fa-solid fa-train-tram"></i> {{tram}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #004595;"></div><span><i class="fa-solid fa-train-subway"></i> {{metro}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #a68fcd;"></div><span><i class="fa-solid fa-car-side"></i> {{car}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #e88c00;"></div><span><i class="fa-solid fa-person-hiking"></i> {{walk}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #6e211a;"></div><span><i class="fa-solid fa-bicycle"></i> {{cycle}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #40b91f;"></div><span><i class="fa-solid fa-plane"></i> {{air}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #9f4bbb;"></div><span><i class="fa-solid fa-bus"></i> {{bus}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #1e1e7c;"></div><span><i class="fa-solid fa-ship"></i> {{ferry}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #afcf3b;"></div><span><i class="fa-solid fa-cable-car"></i> {{aerialway}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #00d084;"></div><span><i class="bi bi-scooter"></i> {{scooter}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #6495ed;"></div><span><i class="fa-solid fa-mountain"></i> {{funicular}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #7ec8ff;"></div><span><i class="fa-solid fa-dumbbell"></i> {{rail}}</span></div>
+            <div class="legend-item"><div class="legend-line" style="background-color: #b8e6f0;"></div><span><i class="fa-solid fa-person-skiing"></i> {{ski}}</span></div>
+            <div class="legend-separator"></div>
+            <div class="legend-item"><div class="legend-line future" style="background-color: rgba(255,255,255,0.5);"></div><span>{{future}}</span></div>
+            <div class="legend-item"><div class="legend-line planned-future"></div><span>{{project}}</span></div>
+            <div class="legend-item"><div class="legend-line current"></div><span>{{current}}</span></div>
+        </div>
+    </div>
+</div>
+
 <div id="snackbar">{{copyLink}}</div>
 
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
@@ -371,6 +405,10 @@ const transportTypeText = {
     "cycle": "{{cycle}}",
     "walk": "{{walk}}",
     "aerialway": '{{aerialway}}',
+    "scooter": '{{scooter}}',
+    "funicular": '{{funicular}}',
+    "rail": '{{rail}}',
+    "ski": '{{ski}}'
 };
 
 // Initialize map
@@ -513,7 +551,7 @@ function buildItinerary(trips, prices) {
         $(".kmModeProportion").css("grid-template-columns", sortArray.map(x => total_length_per_type[x.key].toString() + "fr").join(" "));
         $(".timeModeProportion").css("grid-template-columns", sortArray.map(x => total_duration_per_type[x.key].toString() + "fr").join(" "));
         if (total_carbon > 0) {
-            $(".carbonProportion").css("grid-template-columns", sortArray.map(x => (total_carbon_per_type[x.key] || 0).toString() + "fr").join(" "));
+            $(".carbonProportion").css("grid-template-columns", sortArray.map(x => ((total_carbon_per_type[x.key] || 0) * 1000).toString() + "fr").join(" "));
         }
 
         $(".modeProportionIcon.trip").attr("title", `{{totalTrips}}: ${total_trips}`);
@@ -603,22 +641,18 @@ function buildItinerary(trips, prices) {
                 
             operatorContents.push(divElement);
         } else {
-            operatorContents.push(trip.trip.operator);
+            operatorContents.push(document.createTextNode(trip.trip.operator || ''));
         }
 
         let operatorLogoOrText;
         if (operatorContents.length) {
-            if (typeof operatorContents[0] === 'string') {
-                operatorLogoOrText = operatorContents.join(', ');
-            } else {
-                operatorLogoOrText = $('<div>').append(operatorContents);
-            }
+            operatorLogoOrText = $('<div>').append(operatorContents);
         }
 
-        let lineOrNot = trip.trip.line_name != "" ? 
-            (typeof operatorLogoOrText === 'object' ? 
-                operatorLogoOrText.append(" - " + trip.trip.line_name) : 
-                operatorLogoOrText + " - " + trip.trip.line_name) : 
+        let lineOrNot = trip.trip.line_name != "" ?
+            (typeof operatorLogoOrText === 'object' ?
+                operatorLogoOrText.append(document.createTextNode(" - " + trip.trip.line_name)) :
+                operatorLogoOrText) :
             operatorLogoOrText;
         
         let operatorDisplay = $("<div>").append(trip.trip.operator != "" ? lineOrNot : null);
@@ -1198,17 +1232,9 @@ if (numberedMarkers.length > 0) {
 // Show trip popup
 function showTripPopup(e) {
     const properties = e.features[0].properties;
-    
-    const popupContent = `
-        <div class="trip-popup">
-            <p>${properties.origin} - ${properties.destination}<br>
-            </p>
-        </div>
-    `;
-    
     new maplibregl.Popup({ offset: [0, -10] })
         .setLngLat(e.lngLat)
-        .setHTML(popupContent)
+        .setText(`${properties.origin} - ${properties.destination}`)
         .addTo(map);
 }
 const colorblindMode = {{ 'true' if colorblind else 'false' }};
@@ -1251,7 +1277,7 @@ function createCustomMarker(coordinates, type, popupText) {
             break;
     }
     
-    el.style.backgroundSize = 'cover';
+    el.style.backgroundSize = '100% 100%';
     el.style.cursor = 'pointer';
     
     // Create marker with proper anchor point (bottom center of the icon)
@@ -1391,5 +1417,9 @@ window.addEventListener('resize', () => {
         });
     }
 });
+
+function toggleLegend() {
+    document.getElementById('legendContent').classList.toggle('show');
+}
 </script>
 {% endblock %}

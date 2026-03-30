@@ -26,7 +26,6 @@ logger = logging.getLogger(__name__)
 def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
     with pg_session() as pg:
         _update_trip_in_sqlite(formData, trip.last_modified, trip_id, updateCreated)
-        print(trip.carbon)
         pg.execute(
             update_trip_query(),
             {
@@ -151,12 +150,13 @@ def _update_trip_in_sqlite(
         updateData["created"] = datetime.datetime.now()
 
     if "estimated_trip_duration" in formData and "trip_length" in formData:
+        details_parsed = json.loads(formData["details"]) if formData.get("details") else None
+        power_type = formData.get("powerType") or (details_parsed.get("powerType") if details_parsed else None)
         updateData["countries"] = getCountriesFromPath(
             [{"lat": coord[0], "lng": coord[1]} for coord in path],
             formData["type"],
-            json.loads(formData.get("details"))
-            if formData.get("details") is not None
-            else None,
+            details_parsed,
+            power_type,
         )
         updateData["estimated_trip_duration"] = formData["estimated_trip_duration"]
         updateData["trip_length"] = formData["trip_length"]

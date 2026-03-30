@@ -745,6 +745,10 @@ const countriesBaseUrl = "{{ url_for('countries', username=username, cc='__CC__'
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
+
 function fmt(n) {
   if (n == null) return "—";
   return n.toLocaleString();
@@ -827,8 +831,8 @@ function tripItem(trip, right) {
   return `<${tag}${href} class="trip-item" style="text-decoration:none;color:inherit;">
     <div class="trip-icon"><i class="${icon}"></i></div>
     <div style="flex:1; min-width:0">
-      <div class="trip-route">${trip.origin || "?"} → ${trip.destination || "?"}</div>
-      <div class="trip-meta">${trip.operator || ""}</div>
+      <div class="trip-route">${esc(trip.origin) || "?"} → ${esc(trip.destination) || "?"}</div>
+      <div class="trip-meta">${esc(trip.operator)}</div>
     </div>
     <div class="trip-right">${right}</div>
   </${tag}>`;
@@ -1009,8 +1013,8 @@ function renderHighlights(d, scope) {
   const countries = scope === "alltime" ? d.top_countries_alltime : d.top_countries_ytd;
   const rows = [];
   const opVal = op => op.logo
-    ? `<img src="/static/${op.logo}" style="height:1.4rem;max-width:5rem;object-fit:contain;vertical-align:middle;" title="${op.name}" onerror="this.replaceWith(document.createTextNode('${op.name.replace(/'/g,"\\'")}'))">`
-    : op.name;
+    ? `<img src="/static/${esc(op.logo)}" style="height:1.4rem;max-width:5rem;object-fit:contain;vertical-align:middle;" title="${esc(op.name)}" onerror="this.replaceWith(document.createTextNode(this.title))">`
+    : esc(op.name);
   const subRow = (label, value, sub) =>
     `<div class="stat-row" style="padding-left:1.1rem;">
       <div><div class="stat-label" style="color:var(--text-muted);">${label}</div>${sub ? `<div class="stat-sub">${sub}</div>` : ""}</div>
@@ -1024,7 +1028,7 @@ function renderHighlights(d, scope) {
   if (routes && routes.length) {
     rows.push(statRow("{{ topRoute }}", ""));
     routes.slice(0, 3).forEach(r =>
-      rows.push(subRow(r.name, `×${r.count}`)));
+      rows.push(subRow(esc(r.name), `×${r.count}`)));
   }
   const flags = countryFlags(countries);
   if (flags) rows.push(statRow("{{ crossedCountries }}", flags, null, "stat-row-flags"));
@@ -1036,8 +1040,8 @@ function renderRecords(d, scope) {
   const fastest = scope === "alltime" ? d.fastest_trip_alltime : d.fastest_trip_ytd;
   const streak  = scope === "alltime" ? d.streak_alltime       : d.streak_ytd;
   const rows = [];
-  if (longest) rows.push(statRow("{{ longestTrip }}", `${fmt(longest.km)} km`, `${longest.origin} → ${longest.destination}`));
-  if (fastest) rows.push(statRow("{{ fastestTrip }}", `${fmt(fastest.speed)} km/h`, `${fastest.origin} → ${fastest.destination}`));
+  if (longest) rows.push(statRow("{{ longestTrip }}", `${fmt(longest.km)} km`, `${esc(longest.origin)} → ${esc(longest.destination)}`));
+  if (fastest) rows.push(statRow("{{ fastestTrip }}", `${fmt(fastest.speed)} km/h`, `${esc(fastest.origin)} → ${esc(fastest.destination)}`));
   if (streak && streak.days > 1) rows.push(statRow("{{ longestStreak }}", `${streak.days} {{ days }}`, `${fmtDate(streak.start)} – ${fmtDate(streak.end)}`));
   if (scope !== "alltime" && d.percentile) rows.push(statRow("{{ percentileKm }}", `{{ top }} ${Math.round(100 - d.percentile.km)}%`, `{{ outOf }} ${fmt(d.percentile.total_users)} {{ users }}`));
   document.getElementById("records-body").innerHTML = rows.length ? rows.join("") : emptyState("{{ noDataYet }}");
@@ -1293,9 +1297,9 @@ function friendItem(t, right) {
   return `<${tag}${href} class="friend-item" style="text-decoration:none;color:inherit;">
     <div class="trip-icon"><i class="${icon}"></i></div>
     <div style="flex:1;min-width:0">
-      <div><span class="friend-username" style="background:${usernameColor(t.username).bg};color:${usernameColor(t.username).color};"><i class="fa-solid fa-user" style="font-size:0.6rem;margin-right:3px;opacity:0.8;"></i>${t.username}</span></div>
-      <div class="trip-route">${t.origin || "?"} → ${t.destination || "?"}</div>
-      <div class="trip-meta">${t.operator || ""}${t.km ? " · " + fmt(t.km) + " km" : ""}</div>
+      <div><span class="friend-username" style="background:${usernameColor(t.username).bg};color:${usernameColor(t.username).color};"><i class="fa-solid fa-user" style="font-size:0.6rem;margin-right:3px;opacity:0.8;"></i>${esc(t.username)}</span></div>
+      <div class="trip-route">${esc(t.origin) || "?"} → ${esc(t.destination) || "?"}</div>
+      <div class="trip-meta">${esc(t.operator)}${t.km ? " · " + fmt(t.km) + " km" : ""}</div>
     </div>
     ${right ? `<div class="trip-right">${right}</div>` : ""}
   </${tag}>`;

@@ -76,12 +76,14 @@
   .tl-table-card .card-header {
     background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
     border: none;
+    border-bottom: 2px solid rgba(255,255,255,0.25);
     padding: 12px 20px;
     font-weight: 600;
     letter-spacing: .02em;
   }
+
   .tl-table th {
-    color: #fff;
+    color: #0a58ca;
     font-size: 0.78rem;
     text-transform: uppercase;
     letter-spacing: .07em;
@@ -124,7 +126,7 @@
 
   <!-- Title -->
   <div class="text-center mb-4">
-    <p class="tl-page-title">🌍 Country Timeline for <span class="username">{{ username }}</span></p>
+    <p class="tl-page-title">{{ tl_title }} <span class="username">{{ username }}</span></p>
   </div>
 
   <!-- Summary stat cards -->
@@ -135,25 +137,25 @@
     <div class="col-6 col-md-3">
       <div class="tl-stat-card" style="border-color:#0d6efd">
         <div class="tl-stat-value">{{ years_list | length }}</div>
-        <div class="tl-stat-label">Years tracked</div>
+        <div class="tl-stat-label">{{ tl_years_tracked }}</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="tl-stat-card" style="border-color:#198754">
         <div class="tl-stat-value" style="color:#198754">{{ "%.0f"|format(total_abroad) }}</div>
-        <div class="tl-stat-label">Total days abroad</div>
+        <div class="tl-stat-label">{{ tl_total_days_abroad }}</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="tl-stat-card" style="border-color:#fd7e14">
         <div class="tl-stat-value" style="color:#fd7e14">{{ "%.0f"|format(total_abroad / (years_list | length)) }}</div>
-        <div class="tl-stat-label">Avg days / year</div>
+        <div class="tl-stat-label">{{ tl_avg_days_per_year }}</div>
       </div>
     </div>
     <div class="col-6 col-md-3">
       <div class="tl-stat-card" style="border-color:#6f42c1">
         <div class="tl-stat-value" style="color:#6f42c1">{{ residence_country_by_year.values() | list | unique | list | length }}</div>
-        <div class="tl-stat-label">Countries of residence</div>
+        <div class="tl-stat-label">{{ tl_countries_of_residence }}</div>
       </div>
     </div>
   </div>
@@ -167,17 +169,17 @@
   {% set max_days = days_abroad_by_year.values() | max %}
   <div class="card tl-table-card">
     <div class="card-header text-white">
-      <i class="bi bi-calendar3 me-2"></i> Days Spent Abroad Per Year
+      <i class="bi bi-calendar3 me-2"></i> {{ tl_days_abroad_per_year_title }}
     </div>
     <div class="card-body p-0">
       <div class="table-responsive">
         <table class="table tl-table table-hover mb-0">
           <thead>
             <tr>
-              <th scope="col">Year</th>
-              <th scope="col">Residence</th>
-              <th scope="col">Days abroad</th>
-              <th scope="col" style="width:35%"></th>
+              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ year }}</th>
+              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ tl_residence }}</th>
+              <th scope="col" style="background-color:#f0f4ff !important; color:#0a58ca !important">{{ tl_days_abroad_col }}</th>
+              <th scope="col" style="background-color:#f0f4ff !important; width:35%"></th>
             </tr>
           </thead>
           <tbody>
@@ -229,7 +231,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const tooltip   = document.getElementById('tl-tooltip');
 
   if (!rawBlocks.length) {
-    container.innerHTML = '<p class="text-center text-muted py-5">No data yet.</p>';
+    container.innerHTML = '<p class="text-center text-muted py-5">{{ noDataYet }}</p>';
     return;
   }
 
@@ -270,7 +272,7 @@ document.addEventListener("DOMContentLoaded", function () {
   container.appendChild(canvas);
   const hint = document.createElement('div');
   hint.id = 'tl-hint';
-  hint.textContent = 'Scroll / pinch to zoom  ·  drag to pan';
+  hint.textContent = '{{ tl_scroll_hint }}';
   container.appendChild(hint);
 
   // House icon pinned to the left of the residence bar

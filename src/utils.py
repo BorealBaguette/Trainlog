@@ -521,7 +521,11 @@ def get_default_trip_visibility(x):
             return "private"
         case "cycle":
             return "private"
+        case "scooter":
+            return "private"
         case "ferry":
+            return "public"
+        case "funicular":
             return "public"
         case "helicopter":
             return "public"
@@ -529,7 +533,11 @@ def get_default_trip_visibility(x):
             return "public"
         case "poi":
             return "private"
+        case "rail":
+            return "public"
         case "restaurant":
+            return "private"
+        case "ski":
             return "private"
         case "train":
             return "public"

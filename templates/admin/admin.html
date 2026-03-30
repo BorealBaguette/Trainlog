@@ -75,6 +75,26 @@
     </table>
 </div>
 
+<div class="modal fade" id="renameModal" tabindex="-1" role="dialog" aria-labelledby="renameModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="renameModalLabel">Rename User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Current username: <strong id="renameCurrentUsername"></strong></p>
+                <input type="text" class="form-control" id="renameNewUsername" placeholder="New username">
+                <div id="renameError" class="text-danger mt-2" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" id="renameConfirmBtn">Rename</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="langModal" tabindex="-1" role="dialog" aria-labelledby="langModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered modal-lg" role="document">
         <div class="modal-content">
@@ -262,12 +282,12 @@
                     return `${adminBtn} ${alphaBtn} ${translatorBtn} ${premiumBtn}`;
                 }
             },
-            { 
+            {
                 data: null,
                 searchable: false,
                 orderable: false,
                 render: function(data, type, row) {
-                    return `<button class="btn btn-danger deleteButton" data-uid="${row.uid}" data-username="${row.username}">Delete</button>`;
+                    return `<button class="btn btn-warning renameButton me-1" data-uid="${row.uid}" data-username="${row.username}">Rename</button><button class="btn btn-danger deleteButton" data-uid="${row.uid}" data-username="${row.username}">Delete</button>`;
                 }
             }
         ],
@@ -330,6 +350,16 @@
             location.href = $(this).data('url');
         });
 
+        $('#admin tbody').off('click', '.renameButton').on('click', '.renameButton', function() {
+            const uid = $(this).data('uid');
+            const username = $(this).data('username');
+            $('#renameCurrentUsername').text(username);
+            $('#renameNewUsername').val('');
+            $('#renameError').hide().text('');
+            $('#renameConfirmBtn').data('uid', uid);
+            $('#renameModal').modal('show');
+        });
+
         $('#admin tbody').off('click', '.deleteButton').on('click', '.deleteButton', function() {
             const uid = $(this).data('uid');
             const username = $(this).data('username');
@@ -362,6 +392,29 @@
 
         $('[data-toggle="tooltip"]').tooltip();
     }
+
+    $('#renameConfirmBtn').on('click', function() {
+        const uid = $(this).data('uid');
+        const newUsername = $('#renameNewUsername').val().trim();
+        if (!newUsername) {
+            $('#renameError').text('Username cannot be empty').show();
+            return;
+        }
+        $.ajax({
+            url: "{{ url_for('rename_user', uid=0) }}".replace(0, uid),
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ new_username: newUsername }),
+            success: function() {
+                $('#renameModal').modal('hide');
+                dataTable.ajax.reload();
+            },
+            error: function(xhr) {
+                const msg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Rename failed';
+                $('#renameError').text(msg).show();
+            }
+        });
+    });
 
     $('#showInactiveUsers').on('change', function() {
         showInactive = this.checked;

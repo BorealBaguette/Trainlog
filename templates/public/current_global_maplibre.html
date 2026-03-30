@@ -1,0 +1,309 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<link href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet">
+
+<style>
+  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
+
+  .delay-time { color: #dc3545; }
+  .early-time  { color: #28a745; }
+
+</style>
+
+<div class="spinner-container">
+  <div class="lds-spinner">
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/util.js') }}"></script>
+
+<script>
+var logosList   = {{ logosList | safe }};
+var apiEndpoint = "{{ api_endpoint }}";
+
+/* ── datetime helpers ────────────────────────────────────────────────────── */
+function formatDT(iso) {
+  if (!iso) return { date: '-', time: '-' };
+  const d = new Date(iso);
+  return {
+    date: d.toLocaleDateString(),
+    time: d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  };
+}
+function daysDifference(d0, d1) {
+  return Math.round((new Date(d1).setHours(12) - new Date(d0).setHours(12)) / 86400000);
+}
+function addDelayToISO(iso, delaySec) {
+  if (!iso) return iso;
+  const d = new Date(iso);
+  d.setSeconds(d.getSeconds() + Number(delaySec || 0));
+  return d.toISOString();
+}
+function formatDayDiff(iso, startDT) {
+  const diff = daysDifference(startDT, iso);
+  return diff > 0 ? ` (+${diff})` : diff < 0 ? ` (${diff})` : '';
+}
+function withDelayDisplay(iso, delaySec, startDT) {
+  const scheduled = formatDT(iso).time + formatDayDiff(iso, startDT);
+  const delay = Number(delaySec || 0);
+  if (!delay) return scheduled;
+  const actualISO = addDelayToISO(iso, delay);
+  const actual = formatDT(actualISO).time + formatDayDiff(actualISO, startDT);
+  const cls = delay > 0 ? 'delay-time' : 'early-time';
+  return `<s>${scheduled}</s> <span class="${cls}">${actual}</span>`;
+}
+
+/* ── trip helpers ────────────────────────────────────────────────────────── */
+function getTypeColor(type) {
+  const t = MapLibreUtils.MapConfig.transportTypes.find(t => t.id === type);
+  return t ? t.color : '#888888';
+}
+
+
+function calculateProgress(tripObj) {
+  const t = tripObj.trip;
+  const now   = Date.now();
+  const start = new Date(t.utc_start_datetime + 'Z').getTime() + Number(t.departure_delay || 0) * 1000;
+  const end   = new Date(t.utc_end_datetime   + 'Z').getTime() + Number(t.arrival_delay   || 0) * 1000;
+  if (isNaN(start) || isNaN(end) || end <= start) return 0;
+  return Math.min(Math.max((now - start) / (end - start), 0), 1);
+}
+
+function getPopupContent(tripObj) {
+  const trip        = tripObj.trip || {};
+  const origin      = trip.origin_station || '-';
+  const destination = trip.destination_station || '-';
+  const { date: startDate } = formatDT(trip.start_datetime);
+  const startTime   = withDelayDisplay(trip.start_datetime, trip.departure_delay, trip.start_datetime);
+  const endTime     = withDelayDisplay(trip.end_datetime,   trip.arrival_delay,   trip.start_datetime);
+  const profileUrl  = `/public/${tripObj.username}`;
+
+  let operatorParts = [];
+  if (trip.multi_operators) {
+    trip.multi_operators.forEach(op => {
+      operatorParts.push(op.logo_url
+        ? `<img src="/static/${op.logo_url}" alt="${op.operator_name}" style="max-height:40px;max-width:120px;object-fit:contain;">`
+        : `<span>${op.operator_name}</span>`);
+    });
+  } else if (trip.logo_url) {
+    operatorParts.push(`<img src="/static/${trip.logo_url}" alt="${trip.operator || ''}" style="max-height:40px;max-width:120px;object-fit:contain;">`);
+  } else if (trip.operator) {
+    String(trip.operator).split(',').map(s => s.trim()).forEach(op => {
+      operatorParts.push(logosList[op]
+        ? `<img src="/static/${logosList[op]}" alt="${op}" style="max-height:40px;max-width:120px;object-fit:contain;">`
+        : `<span>${op}</span>`);
+    });
+  }
+
+  const logoHTML = operatorParts.length
+    ? `<div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:8px;">${operatorParts.join('')}</div>`
+    : '';
+
+  return `
+    <div style="font-family:Century Gothic,sans-serif;min-width:200px;">
+      <div style="font-weight:bold;font-size:1.05em;margin-bottom:6px;">
+        <a href="${profileUrl}" target="_blank" style="text-decoration:none;color:inherit;">${tripObj.username}</a>
+      </div>
+      <div style="font-size:0.9em;color:#333;line-height:1.7;">
+        <div><strong>From:</strong> ${origin}</div>
+        <div><strong>To:</strong> ${destination}</div>
+        <div><strong>Date:</strong> ${startDate}</div>
+        <div><strong>Time:</strong> ${startTime} – ${endTime}</div>
+        ${trip.line_name ? `<div><strong>Line:</strong> ${trip.line_name}</div>` : ''}
+      </div>
+      ${logoHTML}
+    </div>`;
+}
+
+/* ── dash animation ──────────────────────────────────────────────────────── */
+// Cycles through dash-array phases to create a "moving dashes" effect
+const DASH_SEQ = [
+  [0,4,3],[0.5,4,2.5],[1,4,2],[1.5,4,1.5],[2,4,1],
+  [2.5,4,0.5],[3,4,0],[0,0.5,3,3.5],[0,1,3,3],
+  [0,1.5,3,2.5],[0,2,3,2],[0,2.5,3,1.5],[0,3,3,1],
+  [0,3.5,3,0.5],[0,4,3,0]
+];
+let dashStep = 0;
+
+function animateDashes(ts) {
+  const step = Math.floor(ts / 50) % DASH_SEQ.length;
+  if (step !== dashStep) {
+    dashStep = step;
+    try { map.setPaintProperty('live-future', 'line-dasharray', DASH_SEQ[step]); } catch (_) {}
+  }
+  requestAnimationFrame(animateDashes);
+}
+
+/* ── map state ───────────────────────────────────────────────────────────── */
+let map;
+let markers       = [];
+let lastSignature = null;
+let firstLoad     = true;
+
+const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
+
+/* ── rendering ───────────────────────────────────────────────────────────── */
+function renderTrips(trips) {
+  markers.forEach(m => m.remove());
+  markers = [];
+
+  const staticFeatures = [];
+  const futureFeatures = [];
+
+  trips.forEach(tripObj => {
+    const { trip, path } = tripObj;
+    const type     = (trip.type === 'helicopter') ? 'air' : trip.type;
+    const color    = getTypeColor(type);
+    const progress = calculateProgress(tripObj);
+
+    // API returns [[lat, lng], ...]; MapLibre needs [[lng, lat], ...]
+    let coords = path.map(([lat, lng]) => [lng, lat]);
+
+    // Great-circle line for air routes
+    if (type === 'air' && coords.length === 2) {
+      coords = MapLibreUtils.createGeodesicLine(coords[0], coords[1]);
+    }
+
+    if (coords.length < 2) return;
+
+    // Full path (static coloured line)
+    staticFeatures.push({
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: coords },
+      properties: { color, tripData: JSON.stringify(tripObj) }
+    });
+
+    // Future segment (animated white dashes overlay)
+    const fromIdx = Math.floor(progress * coords.length);
+    const future  = coords.slice(Math.max(0, fromIdx));
+    if (future.length >= 2 && progress < 1) {
+      futureFeatures.push({
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: future },
+        properties: {}
+      });
+    }
+
+    // Current-position pin marker
+    const pegIdx           = Math.min(Math.floor(progress * (coords.length - 1)), coords.length - 1);
+    const [pegLng, pegLat] = coords[pegIdx];
+
+    const popup = new maplibregl.Popup({ offset: 25, maxWidth: '460px' })
+      .setHTML(getPopupContent(tripObj));
+
+    markers.push(
+      new maplibregl.Marker({ color })
+        .setLngLat([pegLng, pegLat])
+        .setPopup(popup)
+        .addTo(map)
+    );
+  });
+
+  map.getSource('live-static').setData({ type: 'FeatureCollection', features: staticFeatures });
+  map.getSource('live-future').setData({ type: 'FeatureCollection', features: futureFeatures });
+
+  document.querySelector('.spinner-container').style.display = 'none';
+}
+
+function fitToTrips() {
+  if (!markers.length) return;
+  const bounds = new maplibregl.LngLatBounds();
+  markers.forEach(m => bounds.extend(m.getLngLat()));
+  map.fitBounds(bounds, { padding: 80, maxZoom: 10 });
+}
+
+/* ── data loading ────────────────────────────────────────────────────────── */
+function loadTrips() {
+  fetch(apiEndpoint)
+    .then(r => r.json())
+    .then(trips => {
+      const sig = JSON.stringify(trips);
+      renderTrips(trips);
+      if (sig !== lastSignature) {
+        lastSignature = sig;
+        if (firstLoad) { fitToTrips(); firstLoad = false; }
+      }
+    })
+    .catch(console.error);
+}
+
+/* ── initialise ──────────────────────────────────────────────────────────── */
+MapLibreUtils.initializeMapLibre({
+  container: 'map',
+  tileserver: '{{ tileserver }}',
+  useGlobe:   {{ 'true' if globe else 'false' }},
+  center:     [10, 50],
+  zoom:       4,
+}).then(m => {
+  map = m;
+  map.once('load', () => {
+    map.addSource('live-static', { type: 'geojson', data: emptyFC() });
+    map.addSource('live-future', { type: 'geojson', data: emptyFC() });
+
+    // Shadow layer (matches style from buildTripLayers in maplibre-utils.js)
+    map.addLayer({
+      id: 'live-shadow',
+      type: 'line',
+      source: 'live-static',
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color':   '#000000',
+        'line-width':   5,
+        'line-opacity': 0.8,
+        'line-blur':    0.5
+      }
+    });
+
+    // Coloured trip lines
+    map.addLayer({
+      id: 'live-static',
+      type: 'line',
+      source: 'live-static',
+      layout: { 'line-join': 'round', 'line-cap': 'round' },
+      paint: {
+        'line-color':   ['coalesce', ['get', 'color'], '#888888'],
+        'line-width':   3,
+        'line-opacity': 0.85
+      }
+    });
+
+    // Animated white dashes over the remaining path
+    map.addLayer({
+      id: 'live-future',
+      type: 'line',
+      source: 'live-future',
+      layout: { 'line-join': 'round', 'line-cap': 'butt' },
+      paint: {
+        'line-color':      '#ffffff',
+        'line-width':      3,
+        'line-opacity':    0.9,
+        'line-dasharray':  DASH_SEQ[0]
+      }
+    });
+
+    // Click on a trip line to open popup
+    map.on('click', 'live-static', e => {
+      const tripObj = JSON.parse(e.features[0].properties.tripData);
+      new maplibregl.Popup({ maxWidth: '460px' })
+        .setLngLat(e.lngLat)
+        .setHTML(getPopupContent(tripObj))
+        .addTo(map);
+    });
+    map.on('mouseenter', 'live-static', () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'live-static', () => { map.getCanvas().style.cursor = ''; });
+
+    requestAnimationFrame(animateDashes);
+    loadTrips();
+    setInterval(loadTrips, 60000);
+  });
+});
+</script>
+
+{% endblock %}

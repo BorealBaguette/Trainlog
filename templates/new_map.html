@@ -98,6 +98,22 @@
                 <div class="legend-line" style="background-color: #afcf3b;"></div>
                 <span><i class="fa-solid fa-cable-car"></i> {{ aerialway }}</span>
             </div>
+            <div class="legend-item">
+                <div class="legend-line" style="background-color: #00d084;"></div>
+                <span><i class="bi bi-scooter"></i> {{ scooter }}</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line" style="background-color: #6495ed;"></div>
+                <span><i class="fa-solid fa-mountain"></i> {{ funicular }}</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line" style="background-color: #7ec8ff;"></div>
+                <span><i class="fa-solid fa-dumbbell"></i> {{ rail }}</span>
+            </div>
+            <div class="legend-item">
+                <div class="legend-line" style="background-color: #b8e6f0;"></div>
+                <span><i class="fa-solid fa-person-skiing"></i> {{ ski }}</span>
+            </div>
             <div class="legend-separator"></div>
             <div class="legend-item">
                 <div class="legend-line future" style="background-color: rgba(255, 255, 255, 0.5);"></div>
@@ -152,7 +168,11 @@ const transportTypeLabels = {
     walk: '{{ walk }}',
     air: '{{ air }}',
     ferry: '{{ ferry }}',
-    aerialway: '{{ aerialway }}'
+    aerialway: '{{ aerialway }}',
+    scooter: '{{ scooter }}',
+    funicular: '{{ funicular }}',
+    rail: '{{ rail }}',
+    ski: '{{ ski }}'
 };
 
 // Initialize map
@@ -200,7 +220,7 @@ function initializeTransportFilters() {
         filterItem.innerHTML = `
             <input type="checkbox" id="${type.id}Filter" checked onchange="toggleTransportType('${type.id}')">
             <span class="filter-icon" style="color: ${type.color};">
-                <i class="fa-solid ${type.icon}"></i>
+                <i class="${type.iconClass || 'fa-solid'} ${type.icon}"></i>
             </span>
             <span class="filter-label">${transportTypeLabels[type.id]}</span>
         `;
@@ -378,7 +398,7 @@ function showPopup(e) {
     const coordinates = e.lngLat;
 
     const isOwner = location.href === "{{ url_for('user_home', username=username, _external=True) }}";
-    const tripUrl = "{{ url_for('public_trip_new', tripIds='TRIP_ID') }}".replace('TRIP_ID', properties.id);
+    const tripUrl = "{{ url_for('public_trip', tripIds='TRIP_ID') }}".replace('TRIP_ID', properties.id);
     const editUrl = "{{ url_for('edit_copy_trip', username=username, edit_copy_type='edit', tripId='TRIP_ID') }}".replace('TRIP_ID', properties.id);
 
     const popupContent = `

@@ -287,6 +287,38 @@
     // Sync modal toggle with main toggle
     $('#useRoutingToggle').on('change', function() {
       $('#modalRoutingToggle').prop('checked', $(this).prop('checked'));
+      updateTripTypeButtons();
+    });
+
+    // Define which types support routing
+    const routableTypes = ['train', 'metro', 'tram', 'funicular', 'rail', 'ferry', 'aerialway', 'bus', 'car', 'walk', 'cycle', 'scooter'];
+
+    // Function to enable/disable trip type buttons based on routing toggle
+    function updateTripTypeButtons() {
+      const useRouting = $('#modalRoutingToggle').prop('checked');
+
+      $('.trip-type-button').each(function() {
+        const tripType = $(this).data('type');
+        const isRoutable = routableTypes.includes(tripType);
+
+        if (useRouting && !isRoutable) {
+          // Disable non-routable types when routing is enabled
+          $(this).prop('disabled', true).addClass('disabled').css('opacity', '0.5');
+        } else {
+          // Enable all types when routing is disabled
+          $(this).prop('disabled', false).removeClass('disabled').css('opacity', '1');
+        }
+      });
+    }
+
+    // Handle modal routing toggle changes
+    $('#modalRoutingToggle').on('change', function() {
+      updateTripTypeButtons();
+    });
+
+    // Initialize button states when modal is shown
+    $('#tripTypeModal').on('show.bs.modal', function() {
+      updateTripTypeButtons();
     });
 
     // Regex for validating "YYYY-MM-DD HH:MM"

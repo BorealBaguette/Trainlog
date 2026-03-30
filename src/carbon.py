@@ -62,14 +62,40 @@ def get_grid_intensity_for_country_year(country_code, year):
     # Fallback to 445g default if country not present
     return 445.0
 
+def get_weighted_grid_intensity(countries, start_datetime=None):
+    """Distance-weighted average grid intensity (g CO2/kWh) across countries."""
+    year = get_year_from_datetime(start_datetime) if start_datetime is not None else 2024
+    if not countries:
+        return get_grid_intensity_for_country_year('default', year)
+    if isinstance(countries, str):
+        try:
+            countries = json.loads(countries)
+        except Exception:
+            return get_grid_intensity_for_country_year('default', year)
+    total_m = 0.0
+    weighted_sum = 0.0
+    for cc, value in countries.items():
+        dist_m = (value.get('elec', 0) + value.get('nonelec', 0)) if isinstance(value, dict) else (value or 0)
+        weighted_sum += dist_m * get_grid_intensity_for_country_year(cc, year)
+        total_m += dist_m
+    if total_m == 0:
+        return get_grid_intensity_for_country_year('default', year)
+    return weighted_sum / total_m
+
 GRID_INTENSITY_DF = load_grid_intensity_df()
 TRAIN_FACTORS = load_train_emissions()
 FLIGHT_CATEGORIES, AIRCRAFT_CATEGORY_CO2 = load_aircraft_emissions()
 
 # Constants for train energy consumption and emissions
-ELECTRIC_TRAIN_KWH_PER_KM = 0.04  # kWh per passenger-km for electric trains
+ELECTRIC_TRAIN_KWH_PER_KM = 0.04    # kWh per passenger-km for electric trains
 DIESEL_TRAIN_LITERS_PER_KM = 0.015  # liters per passenger-km for diesel trains
-DIESEL_CO2_KG_PER_LITER = 2.65  # kg CO2 per liter of diesel
+DIESEL_CO2_KG_PER_LITER = 2.65      # kg CO2 per liter of diesel
+
+# Constants for other electric vehicles
+ELECTRIC_CAR_KWH_PER_KM = 0.20     # kWh per km for electric car (vehicle level, 1 passenger)
+ELECTRIC_BUS_KWH_PER_KM = 0.043    # kWh per passenger-km for electric bus (~1.3 kWh/km / 30 pax)
+ELECTRIC_CYCLE_KWH_PER_KM = 0.010  # kWh per km for e-bike
+ELECTRIC_SCOOTER_KWH_PER_KM = 0.025  # kWh per km for electric kick scooter
 
 EMISSION_FACTORS = {
     'bus': {'construction': 4.42, 'fuel': 25.0, 'infrastructure': 0.7},
@@ -84,9 +110,16 @@ EMISSION_FACTORS = {
     },
     'ferry': {'combustion': 80.0, 'services': 30.0, 'construction': 11.0},
     'cycle': {'construction': 2.0, 'human_fuel': 0.1},
+    'electric_cycle': {'construction': 6.0, 'infrastructure': 0.0},  # ~500 Wh battery / 15,000 km lifetime
+    'scooter': {'construction': 1.0, 'human_fuel': 0.05},
+    'electric_scooter': {'construction': 5.0, 'infrastructure': 0.0},  # small battery, short lifetime
+    'electric_car': {'construction': 60.0, 'infrastructure': 0.7},  # battery ~100 kg CO₂/kWh over 200,000 km
+    'electric_bus': {'construction': 9.0, 'infrastructure': 0.7},   # ~300 kWh battery / 500,000 km / 30 pax
     'walk': {'human_fuel': 0.2},
     'metro': {'construction': 0.8, 'infrastructure': 3.5},
     'tram': {'construction': 1.0, 'infrastructure': 4.0},
+    'funicular': {'construction': 1.0, 'infrastructure': 4.0},
+    'rail': {'construction': 1.5, 'infrastructure': 6.5},
     'aerialway': {'construction': 1.0, 'infrastructure': 4.0}
 }
 
@@ -244,9 +277,24 @@ def calculate_car_emissions(distance_km, passengers=1):
         total += distance_km * g['fuel'] * g['additional_passenger_factor'] * (passengers - 1)
     return (total / passengers) / 1000
 
-def calculate_ferry_emissions(distance_km):
+FERRY_COMBUSTION_FACTORS = {
+    'thermic': 80.0,  # g/passenger-km, diesel/HFO average
+    'electric':  0.0, # direct combustion = 0; grid electricity handled separately
+}
+ELECTRIC_FERRY_KWH_PER_KM = 0.1  # kWh per passenger-km for electric ferry
+
+def calculate_ferry_emissions(distance_km, power_type='thermic', co2_override=None, countries=None, start_datetime=None):
     g = EMISSION_FACTORS['ferry']
-    return distance_km * (g['combustion'] + g['services'] + g['construction']) / 1000
+    base = (g['services'] + g['construction'])  # fixed components in g/km
+    if co2_override is not None:
+        # User-supplied full figure (g/passenger-km) replaces combustion+services+construction
+        return distance_km * co2_override / 1000
+    if power_type == 'electric':
+        grid_intensity = get_weighted_grid_intensity(countries, start_datetime)
+        electricity = distance_km * ELECTRIC_FERRY_KWH_PER_KM * grid_intensity
+        return (electricity + distance_km * base) / 1000
+    combustion = FERRY_COMBUSTION_FACTORS.get(power_type, FERRY_COMBUSTION_FACTORS['thermic'])
+    return distance_km * (combustion + base) / 1000
 
 def calculate_cycle_emissions(distance_km):
     g = EMISSION_FACTORS['cycle']
@@ -256,27 +304,70 @@ def calculate_walk_emissions(distance_km):
     g = EMISSION_FACTORS['walk']
     return distance_km * g['human_fuel'] / 1000
 
+def calculate_scooter_emissions(distance_km, power_type='manual', countries=None, start_datetime=None):
+    if power_type == 'electric':
+        g = EMISSION_FACTORS['electric_scooter']
+        grid_intensity = get_weighted_grid_intensity(countries, start_datetime)
+        electricity = distance_km * ELECTRIC_SCOOTER_KWH_PER_KM * grid_intensity
+        return (electricity + distance_km * (g['construction'] + g['infrastructure'])) / 1000
+    g = EMISSION_FACTORS['scooter']
+    return distance_km * (g['construction'] + g['human_fuel']) / 1000
+
+def calculate_electric_cycle_emissions(distance_km, countries=None, start_datetime=None):
+    g = EMISSION_FACTORS['electric_cycle']
+    grid_intensity = get_weighted_grid_intensity(countries, start_datetime)
+    electricity = distance_km * ELECTRIC_CYCLE_KWH_PER_KM * grid_intensity
+    return (electricity + distance_km * g['construction']) / 1000
+
+def calculate_electric_bus_emissions(distance_km, countries=None, start_datetime=None):
+    g = EMISSION_FACTORS['electric_bus']
+    grid_intensity = get_weighted_grid_intensity(countries, start_datetime)
+    electricity = distance_km * ELECTRIC_BUS_KWH_PER_KM * grid_intensity
+    return (electricity + distance_km * (g['construction'] + g['infrastructure'])) / 1000
+
+def calculate_electric_car_emissions(distance_km, passengers=1, countries=None, start_datetime=None):
+    g = EMISSION_FACTORS['electric_car']
+    grid_intensity = get_weighted_grid_intensity(countries, start_datetime)
+    electricity = distance_km * ELECTRIC_CAR_KWH_PER_KM * grid_intensity
+    total = electricity + distance_km * (g['construction'] + g['infrastructure'])
+    return (total / passengers) / 1000
+
 def calculate_carbon_footprint_for_trip(trip, path):
     t = trip.get('type', '').lower()
-    if t not in ['train','bus','air','helicopter','ferry','cycle','walk','metro','tram','aerialway','car']:
-        return 0
     if t == 'helicopter': t = 'air'
     distance_km = float(trip.get("trip_length", 0))/1000
     if distance_km == 0: return 0
+    power_type = trip.get('power_type') or trip.get('powerType') or ''
+    countries = trip.get('countries')
+    start_datetime = trip.get('start_datetime')
+
     if t == 'air':
         return calculate_air_emissions(distance_km, len(path), trip.get('material_type',''))
-    if t in ['train']:
-        return calculate_rail_emissions(distance_km, trip.get('countries'), 'train', trip.get("start_datetime"), force_electric=False)
-    if t in ['metro','tram','aerialway']:
-        return calculate_rail_emissions(distance_km, trip.get('countries'), t, trip.get("start_datetime"), force_electric=True)
+    if t == 'train':
+        force_electric = (power_type == 'electric')
+        return calculate_rail_emissions(distance_km, countries, 'train', start_datetime, force_electric=force_electric)
+    if t in ('metro', 'tram', 'aerialway', 'funicular'):
+        return calculate_rail_emissions(distance_km, countries, t, start_datetime, force_electric=True)
+    if t == 'rail':
+        force_electric = (power_type == 'electric')
+        return calculate_rail_emissions(distance_km, countries, 'rail', start_datetime, force_electric=force_electric)
     if t == 'bus':
+        if power_type == 'electric':
+            return calculate_electric_bus_emissions(distance_km, countries, start_datetime)
         return calculate_bus_emissions(distance_km)
     if t == 'car':
+        if power_type == 'electric':
+            return calculate_electric_car_emissions(distance_km, trip.get('passengers', 1), countries, start_datetime)
         return calculate_car_emissions(distance_km, trip.get('passengers', 1))
     if t == 'ferry':
-        return calculate_ferry_emissions(distance_km)
+        return calculate_ferry_emissions(distance_km, power_type or 'thermic', trip.get('co2_override'), countries, start_datetime)
     if t == 'cycle':
+        if power_type == 'electric':
+            return calculate_electric_cycle_emissions(distance_km, countries, start_datetime)
         return calculate_cycle_emissions(distance_km)
-    if t == 'walk':
+    if t == 'scooter':
+        return calculate_scooter_emissions(distance_km, power_type or 'manual', countries, start_datetime)
+    if t in ('walk', 'ski'):
         return calculate_walk_emissions(distance_km)
+    # other, poi, accommodation, restaurant, etc. → no meaningful carbon figure
     return 0

@@ -149,7 +149,7 @@ def setup_db():
         for m in migrations:
             apply_migration(session, m)
         load_base_data(session, "airliners")
-        load_base_data(session, "wagons")
+        load_base_data(session, "wagons", upsert=True)
 
     _migrate_sqlite_nom_to_label()
 
@@ -215,43 +215,96 @@ def db_exists():
         return pg.execute(sql.db_exists()).scalar()
 
 
-def load_base_data(pg, table_name):
+def load_base_data(pg, table_name, upsert=False):
     """
-    Load base data from CSV files into the database using COPY.
-    Only loads data if the table is empty.
-    
+    Load base data from a CSV into the database.
+
+    The CSV mtime is stored in meta.base_data.  If the file has not changed
+    since the last load the function returns immediately.  When the file is
+    newer (or has never been loaded before):
+
+    - upsert=True  : copies into a temp table, then inserts only rows whose
+                     PRIMARY KEY is not already present (ON CONFLICT DO NOTHING).
+                     Use this for tables that have a natural PK in the CSV
+                     (e.g. wagons.name) so existing rows are never touched.
+    - upsert=False : only loads when the table is empty (original behaviour),
+                     which is safe for tables without a unique constraint.
+
     Args:
         pg: PostgreSQL session
-        table_name: Name of the table to load data into (also the CSV filename without extension)
+        table_name: Name of the table (also the CSV filename without extension)
+        upsert: If True, insert only new rows; otherwise load only into empty table.
     """
-    # Check if table already has data
-    result = pg.execute(f"SELECT COUNT(*) FROM {table_name}").scalar()
-    
-    if result > 0:
-        logger.info(f"{table_name} table already contains {result} rows, skipping base data load")
-        return
-    
-    logger.info(f"Loading base data for {table_name}...")
-    
     csv_path = os.path.abspath(f"base_data/{table_name}.csv")
-    
+
     if not os.path.exists(csv_path):
         logger.error(f"Base data file not found: {csv_path}")
         raise FileNotFoundError(f"Base data file not found: {csv_path}")
-    
-    # Use raw connection for COPY command
-    raw_conn = pg.connection().connection
-    with raw_conn.cursor() as cursor:
-        with open(csv_path, 'r') as f:
-            # Read the header to build an explicit column list so SERIAL/identity
-            # columns (not present in the CSV) are handled transparently.
-            columns = ', '.join(c.strip() for c in next(f).strip().split(','))
-            cursor.copy_expert(
-                f"COPY {table_name} ({columns}) FROM STDIN WITH (FORMAT CSV, NULL '')",
-                f
-            )
 
-    logger.info(f"Base data loaded successfully for {table_name}!")
+    csv_mtime = os.path.getmtime(csv_path)
+
+    # Check stored mtime in meta.base_data
+    stored = pg.execute(
+        "SELECT csv_mtime FROM meta.base_data WHERE table_name = :t",
+        {"t": table_name},
+    ).fetchone()
+
+    if stored is not None and stored[0] >= csv_mtime:
+        logger.info(f"{table_name}: CSV unchanged (mtime match), skipping load")
+        return
+
+    if not upsert:
+        row_count = pg.execute(f"SELECT COUNT(*) FROM {table_name}").scalar()
+        if row_count > 0:
+            logger.info(
+                f"{table_name} table already contains {row_count} rows and CSV mtime "
+                "changed, but upsert=False — skipping. Re-run with an empty table to reload."
+            )
+            return
+
+    logger.info(f"Loading base data for {table_name} (upsert={upsert})...")
+
+    raw_conn = pg.connection().connection
+    with open(csv_path, "r") as f:
+        columns = ", ".join(c.strip() for c in next(f).strip().split(","))
+        with raw_conn.cursor() as cursor:
+            if upsert:
+                tmp = f"_load_{table_name}"
+                cursor.execute(
+                    f"CREATE TEMP TABLE {tmp} (LIKE {table_name}) ON COMMIT DROP"
+                )
+                cursor.copy_expert(
+                    f"COPY {tmp} ({columns}) FROM STDIN WITH (FORMAT CSV, NULL '')",
+                    f,
+                )
+                cursor.execute(
+                    f"INSERT INTO {table_name} ({columns})"
+                    f" SELECT {columns} FROM {tmp}"
+                    f" ON CONFLICT DO NOTHING"
+                )
+                cursor.execute(f"SELECT COUNT(*) FROM {tmp}")
+                total_in_csv = cursor.fetchone()[0]
+                logger.info(
+                    f"Base data for {table_name}: {total_in_csv} rows in CSV, new ones inserted."
+                )
+            else:
+                cursor.copy_expert(
+                    f"COPY {table_name} ({columns}) FROM STDIN WITH (FORMAT CSV, NULL '')",
+                    f,
+                )
+                logger.info(f"Base data loaded successfully for {table_name}!")
+
+    # Update the stored mtime
+    pg.execute(
+        """
+        INSERT INTO meta.base_data (table_name, csv_mtime, loaded_at)
+        VALUES (:t, :m, NOW())
+        ON CONFLICT (table_name) DO UPDATE
+            SET csv_mtime = EXCLUDED.csv_mtime,
+                loaded_at = EXCLUDED.loaded_at
+        """,
+        {"t": table_name, "m": csv_mtime},
+    )
 
 
 def _migrate_sqlite_nom_to_label():

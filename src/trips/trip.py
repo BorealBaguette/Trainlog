@@ -1,10 +1,19 @@
 import datetime
 import json
+import re
 from enum import Enum
 
 from src.carbon import calculate_carbon_footprint_for_trip
 from src.paths import Path
 from src.utils import get_username, managed_cursor, pathConn
+
+
+def _strip_tags(value):
+    """Strip HTML tags (e.g. <script>, <img onerror=...>) from a string.
+    Lone < or > not forming a complete tag (e.g. '<3') are preserved."""
+    if isinstance(value, str):
+        return re.sub(r'<[^>]+>', '', value)
+    return value
 
 
 class Trip:
@@ -43,31 +52,33 @@ class Trip:
         visibility=None,
         departure_delay=None,
         arrival_delay=None,
+        power_type=None,
+        co2_override=None,
     ):
         self.trip_id = trip_id
         self.username = username
         self.user_id = user_id
-        self.origin_station = origin_station
-        self.destination_station = destination_station
+        self.origin_station = _strip_tags(origin_station)
+        self.destination_station = _strip_tags(destination_station)
         self.start_datetime = start_datetime
         self.end_datetime = end_datetime
         self.trip_length = trip_length
         self.estimated_trip_duration = estimated_trip_duration
         self.manual_trip_duration = manual_trip_duration
-        self.operator = operator
+        self.operator = _strip_tags(operator)
         self.countries = countries
         self.utc_start_datetime = utc_start_datetime
         self.utc_end_datetime = utc_end_datetime
         self.created = created
         self.last_modified = last_modified
-        self.line_name = line_name
+        self.line_name = _strip_tags(line_name)
         self.type = type
-        self.material_type = material_type
+        self.material_type = _strip_tags(material_type)
         self.material_type_advanced = material_type_advanced
-        self.seat = seat
-        self.reg = reg
+        self.seat = _strip_tags(seat)
+        self.reg = _strip_tags(reg)
         self.waypoints = waypoints
-        self.notes = notes
+        self.notes = _strip_tags(notes)
         self.price = price
         self.currency = currency
         self.purchasing_date = purchasing_date
@@ -76,6 +87,8 @@ class Trip:
         self.departure_delay = departure_delay
         self.arrival_delay = arrival_delay
         self.path = path
+        self.power_type = power_type
+        self.co2_override = co2_override
         self.carbon = (
             calculate_carbon_footprint_for_trip(vars(self), path) if path else None
         )

@@ -20,11 +20,16 @@ class TripTypes(str, Enum):
     BUS = "bus"
     CAR = "car"
     CYCLE = "cycle"
+    SCOOTER = "scooter"
     FERRY = "ferry"
+    FUNICULAR = "funicular"
     HELICOPTER = "helicopter"
     METRO = "metro"
+    OTHER = "other"
     POI = "poi"
+    RAIL = "rail"
     RESTAURANT = "restaurant"
+    SKI = "ski"
     TRAIN = "train"
     TRAM = "tram"
     WALK = "walk"
@@ -37,13 +42,15 @@ class TripTypes(str, Enum):
         """
         groups = [
             (cls.ACCOMODATION, cls.POI, cls.RESTAURANT),
-            (cls.AERIAL_WAY,),
+            (cls.AERIAL_WAY),
             (cls.AIR, cls.HELICOPTER),
             (cls.BUS, cls.CAR),
-            (cls.CYCLE,),
+            (cls.CYCLE, cls.SCOOTER),
             (cls.FERRY,),
-            (cls.METRO, cls.TRAIN, cls.TRAM),
+            (cls.METRO, cls.TRAIN, cls.TRAM, cls.FUNICULAR, cls.RAIL),
+            (cls.SKI,),
             (cls.WALK,),
+            (cls.OTHER,),
         ]
         for group in groups:
             if origin_type in group and target_type in group:

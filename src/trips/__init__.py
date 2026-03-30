@@ -4,6 +4,8 @@ from .duplicate_trip import duplicate_trip
 from .edits import (
     attach_ticket_to_trips,
     bulk_edit_trips,
+    bulk_change_type,
+    bulk_set_power_type,
     change_trips_visibility,
     delete_ticket_from_db,
     update_trip_type,

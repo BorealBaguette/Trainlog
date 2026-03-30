@@ -10,8 +10,10 @@ from src.graphhopper import convert_graphhopper_to_osrm     # example
 
 def forward_routing_core(routingType, path, flask_request, extra_args=None):
     # Normalize routing type
-    if routingType in ("train", "tram", "metro"):
+    if routingType in ("train", "tram", "metro", "funicular", "rail"):
         routingType = "train"
+    elif routingType == "scooter":
+        routingType = "cycle"
 
     radiuses = None
     use_new_router = False  # defined for all paths
@@ -21,10 +23,10 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
 
     if routingType == "train":
         use_new_router = flask_request.args.get("use_new_router", "false").lower() == "true"
-        base = "http://train-gh.srv.trainlog.me" if use_new_router else "http://train.srv.trainlog.me"
+        base = "https://train-gh.srv.trainlog.me" if use_new_router else "https://train.srv.trainlog.me"
 
     elif routingType == "ferry":
-        base = "http://ferry.srv.trainlog.me"
+        base = "https://ferry.srv.trainlog.me"
         coord_pairs = [
             {"lng": float(coord.split(",")[0]), "lat": float(coord.split(",")[1])}
             for coord in path.replace("route/v1/ferry/", "").split(";")
@@ -32,7 +34,10 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
         radiuses = ";".join(["10000"] * len(coord_pairs))
 
     elif routingType == "aerialway":
-        base = "http://aerialway.srv.trainlog.me"
+        base = "https://aerialway.srv.trainlog.me"
+        
+    elif routingType == "ski":
+        base = "https://ski.srv.trainlog.me"
 
     elif routingType == "car":
         base = "https://routing.openstreetmap.de/routed-car"
@@ -45,7 +50,7 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
 
     elif routingType == "bus":
         routers = {
-            "trainlog": ("http://bus.srv.trainlog.me", 231),
+            "trainlog": ("https://bus.srv.trainlog.me", 231),
             "jkimb": ("https://busrouter.jkimball.dev", 233),
             "fallback": ("https://routing.openstreetmap.de/routed-car", 234),
         }

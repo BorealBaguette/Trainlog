@@ -7,8 +7,13 @@
   --ferry: rgb(30, 30, 124);
   --car: rgb(166, 143, 205);
   --cycle: rgb(110, 33, 26);
+  --scooter: rgb(0, 208, 132);
+  --funicular: rgb(100, 149, 237);
+  --rail: rgb(126, 200, 255);
+  --ski: rgb(184, 230, 240);
   --walk: rgb(232, 140, 0);
   --aerialway: rgb(175, 207, 59);
+  --other: rgb(0, 0, 0);
 
   --poi: rgb(0, 0, 0);
   --restaurant: rgb(0, 0, 0);
@@ -1195,8 +1200,33 @@ html, body {
 }
 
 /* Aerialway polylines */
-.aerialwayPolyline { 
+.aerialwayPolyline {
   stroke: var(--aerialway);
+}
+
+/* Rail-based polylines */
+.funicularPolyline {
+  stroke: var(--funicular);
+}
+
+.railPolyline {
+  stroke: var(--rail);
+}
+
+/* Personal mobility polylines */
+.scooterPolyline {
+  stroke: var(--scooter);
+  stroke-dasharray: 10, 12;
+}
+
+.skiPolyline {
+  stroke: var(--ski);
+  stroke-dasharray: 1, 12;
+}
+
+/* Other/miscellaneous polylines */
+.otherPolyline {
+  stroke: var(--other);
 }
 
 /* Future and past states */
@@ -1225,6 +1255,18 @@ html, body {
   stroke-dasharray: 1, 25;
   stroke: var(--future);
 }
+
+.scooterPolyline.plannedFuturePolyline {
+  stroke-dasharray: 10, 34;
+  stroke: var(--future);
+}
+
+.skiPolyline.plannedFuturePolyline {
+  stroke-dasharray: 1, 25;
+  stroke: var(--future);
+}
+
+
 
 .currentPolyline { 
   animation: blink-live 1.5s cubic-bezier(0, 0.2, 0.8, 1) infinite;

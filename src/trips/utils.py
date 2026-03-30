@@ -171,7 +171,6 @@ def compare_trip(trip_id: int):
         logger.error(msg)
 
         if "127.0.0.1" not in request.url and "localhost" not in request.url:
-            msg = ""
             sendOwnerEmail("Error : " + str(e), msg)
 
 

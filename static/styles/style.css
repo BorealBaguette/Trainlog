@@ -543,8 +543,28 @@ nav .current{
   background-image: url("../images/icons/trip_logos/ferry.png");
 }
 
-.events time.aerialway::after { 
+.events time.aerialway::after {
   background-image: url("../images/icons/trip_logos/aerialway.png");
+}
+
+.events time.funicular::after {
+  background-image: url("../images/icons/trip_logos/funicular.png");
+}
+
+.events time.rail::after {
+  background-image: url("../images/icons/trip_logos/rail.png");
+}
+
+.events time.scooter::after {
+  background-image: url("../images/icons/trip_logos/scooter.png");
+}
+
+.events time.ski::after {
+  background-image: url("../images/icons/trip_logos/ski.png");
+}
+
+.events time.other::after {
+  background-image: url("../images/icons/trip_logos/other.png");
 }
 
 .events span {
@@ -603,6 +623,21 @@ nav .current{
 }
 .events li:not(:last-child) .helicopter::before {
   border-left: 4px var(--air) dashed;
+}
+.events li:not(:last-child) .funicular::before {
+  border-left: 4px var(--funicular) solid;
+}
+.events li:not(:last-child) .rail::before {
+  border-left: 4px var(--rail) solid;
+}
+.events li:not(:last-child) .scooter::before {
+  border-left: 4px var(--scooter) dashed;
+}
+.events li:not(:last-child) .ski::before {
+  border-left: 4px var(--ski) dotted;
+}
+.events li:not(:last-child) .other::before {
+  border-left: 4px var(--other) solid;
 }
 
 .events li:not(:last-child) .trainChange::before {
@@ -773,6 +808,26 @@ nav .current{
 
  .percent_bar.aerialway{
   background-color: var(--aerialway);
+ }
+
+ .percent_bar.funicular{
+  background-color: var(--funicular);
+ }
+
+ .percent_bar.rail{
+  background-color: var(--rail);
+ }
+
+ .percent_bar.scooter{
+  background-color: var(--scooter);
+ }
+
+ .percent_bar.ski{
+  background-color: var(--ski);
+ }
+
+ .percent_bar.other{
+  background-color: var(--other);
  }
 
 .leaflet-sidebar {

@@ -129,6 +129,10 @@ function buildItinerary(trips, prices){
     "cycle" : "{{cycle}}",
     "walk" : "{{walk}}",
     "aerialway": '{{aerialway}}',
+    "scooter": '{{scooter}}',
+    "funicular": '{{funicular}}',
+    "rail": '{{rail}}',
+    "ski": '{{ski}}',
   }
 
 {% if 'price' in request.args %}              
@@ -633,6 +637,10 @@ var map = createMap({
     bus: '{{bus}}',
     ferry: '{{ferry}}',
     aerialway: '{{aerialway}}',
+    scooter: '{{scooter}}',
+    funicular: '{{funicular}}',
+    rail: '{{rail}}',
+    ski: '{{ski}}',
     future: '{{future}}',
     current: '{{current}}',
     project: '{{project}}'

@@ -2,10 +2,9 @@
 {% block content %}
 
 {% include "bootstrap/navigation.html" %}
+{% include "includes/trip_cards.html" %}
 <style>
-  .form-control {
-      width: 100%; /* Ensures that each form control takes up the full width of its parent column */
-  }
+  .form-control { width: 100%; }
   #progress-bar {
     height: 20px;
     background: linear-gradient(to right, #007bff, #0056b3);
@@ -13,12 +12,26 @@
     border-radius: 10px;
     transition: width 0.3s ease;
   }
-  #progress-label {
-    font-size: 14px;
-    font-weight: bold;
+  #progress-label { font-size: 14px; font-weight: bold; }
+  #dropZone.dragover {
+    border-color: #0d6efd !important;
+    background: #e7f1ff !important;
+    transform: scale(1.01);
   }
+  .file-item {
+    display: inline-flex;
+    align-items: center;
+    background: #e9ecef;
+    padding: 0.375rem 0.75rem;
+    border-radius: 0.375rem;
+    margin: 0.25rem;
+    font-size: 0.875em;
+  }
+  .file-item .remove { cursor: pointer; margin-left: 0.5rem; color: #dc3545; font-weight: bold; }
+  .file-item .remove:hover { color: #bb2d3b; }
 </style>
 
+<!-- Simple upload progress overlay -->
 <div id="progress-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 9999; justify-content: center; align-items: center;">
   <div id="progress-container" style="width: 100%; max-width: 400px; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);">
     <div id="progress-bar"></div>
@@ -28,28 +41,107 @@
 
 <div class="container mt-4">
   <div class="row">
-    <div class="col-md-6 offset-md-3">
-      <h2 class="mb-3 text-center">{{ upload_gpx_files }}</h2>
-      <form id="uploadGPXForm" action="{{ url_for('upload_gpx', username=username) }}" method="post" enctype="multipart/form-data" autocomplete="off">
+    <div class="col-md-10 offset-md-1">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2 class="mb-0">{{ upload_gpx_files }}</h2>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" id="maprikaToggle">
+          <label class="form-check-label fw-semibold" for="maprikaToggle">Maprika</label>
+        </div>
+      </div>
 
-        <div class="form-group mb-3">
-          <label for="gpx_files">{{ select_gpx_files }} :</label>
-          <input type="file" class="form-control" id="gpx_files" name="gpx_files" accept=".gpx" multiple required>
-          <small class="form-text text-muted">{{ gpx_file_help_text }}</small>
+      <!-- Simple upload section (default) -->
+      <div id="simpleSection">
+        <form id="uploadGPXForm" action="{{ url_for('upload_gpx', username=username) }}" method="post" enctype="multipart/form-data" autocomplete="off">
+          <div class="mb-4">
+            <label for="gpx_files" class="form-label fw-semibold">{{ select_gpx_files }}</label>
+            <input type="file" class="form-control" id="gpx_files" name="gpx_files" accept=".gpx" multiple required>
+            <small class="text-muted">{{ gpx_file_help_text }}</small>
+          </div>
+          <div class="mb-4">
+            <label for="notes" class="form-label fw-semibold">{{ notes }}</label>
+            <textarea class="form-control" id="notes" name="notes" placeholder="{{ additional_notes }}"></textarea>
+          </div>
+          <button type="button" id="submit-btn" class="btn btn-primary btn-lg w-100"><i class="bi bi-upload me-2"></i>{{ upload_gpx_files }}</button>
+        </form>
+      </div>
+
+      <!-- Maprika section -->
+      <div id="maprikaSection" class="d-none">
+        <div id="uploadSection">
+          <form id="uploadForm" enctype="multipart/form-data">
+            <div class="mb-4">
+              <label class="form-label fw-semibold">{{ select_gpx_files }}</label>
+              <div id="dropZone" class="border border-2 border-dashed rounded-3 p-4 text-center bg-light" style="cursor:pointer; transition: all 0.2s;">
+                <div id="dropText">
+                  <i class="bi bi-cloud-upload fs-1 text-secondary mb-2"></i>
+                  <p class="mb-1">{{ l.get("drop_gpx_files", "Drop GPX files here or click to browse") }}</p>
+                  <small class="text-muted">{{ l.get("gpx_only", "GPX files only (supports Maprika format)") }}</small>
+                </div>
+                <div id="fileList" class="mt-3"></div>
+              </div>
+              <input type="file" id="fileInput" name="files" multiple accept=".gpx" class="d-none">
+            </div>
+            <button type="submit" class="btn btn-primary btn-lg w-100" id="uploadBtn">
+              <span id="uploadBtnText"><i class="bi bi-upload me-2"></i>{{ upload_gpx_files }}</span>
+              <span id="uploadBtnSpinner" class="spinner-border spinner-border-sm d-none"></span>
+            </button>
+          </form>
         </div>
 
-        <div class="form-group mb-3">
-          <label for="notes">{{ notes }} :</label>
-          <textarea class="form-control" id="notes" name="notes" placeholder="{{ additional_notes }}"></textarea>
+        <div id="progressSection" class="d-none">
+          <div class="card">
+            <div class="card-body text-center">
+              <div class="spinner-border text-primary mb-3" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+              <h5 id="progressText">Processing...</h5>
+              <div class="progress mt-3" style="height: 25px;">
+                <div id="progressBar" class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%">0%</div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        <button type="button" id="submit-btn" class="btn btn-primary w-100">{{ submit }}</button>
-      </form>
+        <div id="previewSection" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <h4 class="mb-0">{{ l.get("trips_found", "Trips found") }}: <span id="tripCount">0</span></h4>
+            <button class="btn btn-sm btn-outline-secondary" id="backBtn">
+              <i class="bi bi-arrow-left me-1"></i>{{ l.get("back", "Back") }}
+            </button>
+          </div>
+          <div id="tripsList" class="mb-3"></div>
+          <div class="d-flex gap-2">
+            <button class="btn btn-success btn-lg flex-grow-1" id="saveBtn">
+              <span id="saveBtnText"><i class="bi bi-check-circle me-2"></i>{{ l.get("save_selected", "Save selected") }}</span>
+              <span id="saveBtnSpinner" class="spinner-border spinner-border-sm d-none"></span>
+            </button>
+            <button class="btn btn-outline-danger btn-lg" id="cancelBtn">{{ l.get("cancel", "Cancel") }}</button>
+          </div>
+        </div>
+
+        <div id="resultSection" class="mt-4 d-none">
+          <div class="alert" id="resultAlert"></div>
+        </div>
+      </div>
+
     </div>
   </div>
 </div>
 
 <script>
+// Toggle between simple and Maprika modes
+$('#maprikaToggle').on('change', function() {
+  if (this.checked) {
+    $('#simpleSection').addClass('d-none');
+    $('#maprikaSection').removeClass('d-none');
+  } else {
+    $('#maprikaSection').addClass('d-none');
+    $('#simpleSection').removeClass('d-none');
+  }
+});
+
+// ---- Simple upload ----
 $(document).ready(function () {
     const fileInput = document.getElementById('gpx_files');
     const progressOverlay = document.getElementById('progress-overlay');
@@ -66,7 +158,7 @@ $(document).ready(function () {
 
       progressOverlay.style.display = 'flex';
       const totalFiles = files.length;
-      let allSuccessful = true; 
+      let allSuccessful = true;
 
       for (let i = 0; i < totalFiles; i++) {
         const formData = new FormData();
@@ -98,11 +190,247 @@ $(document).ready(function () {
       if (allSuccessful) {
         window.location.href = "{{ url_for('list_gpx', username=username) }}";
       } else {
-        alert("{{ processing_error_message }}"); // Show a generic error message
+        alert("{{ processing_error_message }}");
       }
     });
-    });
+});
 
+// ---- Maprika upload ----
+const URLS = {
+  parseStream: "{{ url_for('parse_gpx_stream', username=username) }}",
+  save: "{{ url_for('save_gpx_advanced', username=username) }}",
+};
+
+let tripsData = [];
+let selectedFiles = [];
+
+const dropZone = document.getElementById('dropZone');
+const maprikaFileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', () => maprikaFileInput.click());
+dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  addFiles(e.dataTransfer.files);
+});
+maprikaFileInput.addEventListener('change', () => addFiles(maprikaFileInput.files));
+
+function addFiles(files) {
+  for (const f of files) {
+    if (f.name.endsWith('.gpx') && !selectedFiles.some(s => s.name === f.name && s.size === f.size)) {
+      selectedFiles.push(f);
+    }
+  }
+  renderFileList();
+}
+
+function renderFileList() {
+  const list = document.getElementById('fileList');
+  if (!selectedFiles.length) {
+    list.innerHTML = '';
+    return;
+  }
+  list.innerHTML = selectedFiles.map((f, i) =>
+    `<span class="file-item"><i class="bi bi-file-earmark me-1"></i>${f.name} <span class="remove" data-idx="${i}">&times;</span></span>`
+  ).join('');
+}
+
+$('#fileList').on('click', '.remove', function() {
+  selectedFiles.splice($(this).data('idx'), 1);
+  renderFileList();
+});
+
+$('#uploadForm').on('submit', function(e) {
+  e.preventDefault();
+
+  if (!selectedFiles.length) {
+    showResult('warning', '{{ l.get("select_files", "Please select at least one file") }}');
+    return;
+  }
+
+  $('#uploadSection').addClass('d-none');
+  $('#progressSection').removeClass('d-none');
+  $('#progressText').text('{{ l.get("processing_starting", "Starting...") }}');
+  $('#progressBar').css('width', '0%').text('0%');
+
+  const allTrips = [];
+  let totalSegments = 0;
+
+  const formData = new FormData();
+  selectedFiles.forEach(f => formData.append('files', f));
+
+  $.ajax({
+    url: URLS.parseStream,
+    type: 'POST',
+    data: formData,
+    processData: false,
+    contentType: false,
+    xhr: function() {
+      const xhr = new XMLHttpRequest();
+      let buffer = '';
+
+      xhr.onprogress = function() {
+        const text = xhr.responseText;
+        const newData = text.substring(buffer.length);
+        buffer = text;
+
+        const lines = newData.split('\n');
+        for (let line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.substring(6));
+
+              if (data.type === 'total') {
+                totalSegments = data.count;
+                $('#progressText').text('{{ l.get("processing_found_trips", "Found {count} trips to process...") }}'.replace('{count}', totalSegments));
+              } else if (data.type === 'progress') {
+                const progress = Math.round((data.current / totalSegments) * 100);
+                $('#progressText').text('{{ l.get("processing_trip_progress", "Processing trip {current}/{total}: {name}") }}'.replace('{current}', data.current).replace('{total}', totalSegments).replace('{name}', data.name));
+                $('#progressBar').css('width', progress + '%').text(progress + '%');
+              } else if (data.type === 'trip') {
+                allTrips.push(data.trip);
+              } else if (data.type === 'done') {
+                setTimeout(() => {
+                  $('#progressSection').addClass('d-none');
+                  if (allTrips.length > 0) {
+                    tripsData = allTrips;
+                    renderTrips(tripsData);
+                    $('#previewSection').removeClass('d-none');
+                    $('#tripCount').text(tripsData.length);
+                  } else {
+                    $('#uploadSection').removeClass('d-none');
+                    showResult('danger', '{{ l.get("no_trips_found", "No trips found") }}');
+                  }
+                }, 300);
+              }
+            } catch (e) {
+              console.error('Error parsing SSE:', e);
+            }
+          }
+        }
+      };
+
+      return xhr;
+    },
+    error: function(xhr) {
+      $('#progressSection').addClass('d-none');
+      $('#uploadSection').removeClass('d-none');
+      showResult('danger', xhr.responseJSON?.error || '{{ l.get("error_generic", "An error occurred") }}');
+    }
+  });
+});
+
+const tripTypes = {{ trip_types|tojson }};
+
+function renderTrips(trips) {
+  // Normalise GPX trip format to the shared display format
+  const normalised = trips.map(function(t) {
+    return {
+      display: {
+        origin:    t.origin || '?',
+        destination: t.destination || '?',
+        type:      t.suggested_type || '',
+        date:      t.start_time || '',
+        distance:  t.distance ? (Math.round(t.distance / 100) / 10) + ' km' : '',
+        duration:  t.duration || 0,
+        line_name: t.maprika_name ? '<i class="bi bi-tag me-1"></i>' + t.maprika_name : '',
+        notes: t.notes || '',
+      },
+      _original: t,
+    };
+  });
+  renderTripCards(normalised, 'tripsList', {
+    showTypeSelect: true,
+    tripTypes: tripTypes,
+  });
+}
+
+$(document).on('click', '.trip-card', function(e) {
+  if ($(e.target).is('.trip-checkbox') || $(e.target).is('.trip-type-select')) return;
+  const $card = $(this);
+  const $cb = $card.find('.trip-checkbox');
+  $cb.prop('checked', !$cb.prop('checked'));
+  $card.toggleClass('selected', $cb.prop('checked'));
+});
+
+$(document).on('change', '.trip-checkbox', function() {
+  $(this).closest('.trip-card').toggleClass('selected', this.checked);
+});
+
+$(document).on('change', '.trip-type-select', function() {
+  const idx = $(this).data('index');
+  tripsData[idx].type = $(this).val();
+});
+
+function resetForm() {
+  selectedFiles = [];
+  tripsData = [];
+  renderFileList();
+  $('#uploadForm')[0].reset();
+  $('#previewSection').addClass('d-none');
+  $('#uploadSection').removeClass('d-none');
+}
+
+$('#backBtn, #cancelBtn').on('click', function() {
+  resetForm();
+});
+
+$('#saveBtn').on('click', async function() {
+  const selected = [];
+  $('.trip-checkbox:checked').each(function() {
+    const idx = $(this).closest('.trip-card').data('index');
+    const tripData = {...tripsData[idx]};
+    tripData.type = $('.trip-type-select[data-index="' + idx + '"]').val();
+    selected.push(tripData);
+  });
+
+  if (!selected.length) {
+    showResult('warning', '{{ l.get("select_at_least_one", "Select at least one trip") }}');
+    return;
+  }
+
+  $('#previewSection').addClass('d-none');
+  $('#progressSection').removeClass('d-none');
+  $('#progressText').text('{{ l.get("processing_starting", "Starting...") }}');
+  $('#progressBar').css('width', '0%').text('0%');
+
+  let savedCount = 0;
+  const totalTrips = selected.length;
+
+  for (let i = 0; i < selected.length; i++) {
+    const trip = selected[i];
+    const progress = Math.round(((i + 1) / totalTrips) * 100);
+
+    $('#progressText').text('{{ l.get("saving_trip_progress", "Saving trip {current} of {total}...") }}'.replace('{current}', i + 1).replace('{total}', totalTrips));
+    $('#progressBar').css('width', progress + '%').text(progress + '%');
+
+    try {
+      await $.ajax({
+        url: URLS.save,
+        type: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ trips: [trip] })
+      });
+      savedCount++;
+    } catch (error) {
+      console.error('Error saving trip:', error);
+    }
+  }
+
+  $('#progressSection').addClass('d-none');
+  showResult('success', `<strong>${savedCount} {{ l.get("trips_saved", "trip(s) saved") }}</strong>`);
+
+  setTimeout(function() {
+    window.location.href = "{{ url_for('dynamic_trips', username=username, time='trips') }}";
+  }, 1500);
+});
+
+function showResult(type, message) {
+  $('#resultSection').removeClass('d-none');
+  $('#resultAlert').removeClass('alert-success alert-danger alert-warning').addClass('alert-' + type).html(message);
+}
 </script>
 
 {% endblock %}

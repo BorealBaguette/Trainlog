@@ -417,10 +417,10 @@ function getTooltipFromStationNew(station){
     
     content =  `
       <span class="stationName">
-        <span class="flag" data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${CountryName}">
+        <span class="flag" data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${sanitize(CountryName)}">
           ${newflag}
         </span>
-          ${stationName}
+          ${sanitize(stationName)}
       </span>
     `;
     return content
@@ -431,7 +431,7 @@ function getTooltipFromStationNew(station){
     
 }
 
-function getFlagEmojiListNew(countriesString){
+function getFlagEmojiListNew(countriesString, tripType){
   var flagList = "\u00A0";
   var countriesDict = JSON.parse(countriesString);
   var countriesList = Object.keys(countriesDict);
@@ -456,7 +456,8 @@ function getFlagEmojiListNew(countriesString){
             parts.push(`⚡${mToKm(countryData.elec)}km`);
           }
           if (countryData.nonelec) {
-            parts.push(`🛢️${mToKm(countryData.nonelec)}km`);
+            var nonelecIcon = (tripType === 'cycle' || tripType === 'scooter') ? '🦵' : '🛢️';
+            parts.push(`${nonelecIcon}${mToKm(countryData.nonelec)}km`);
           }
           title = `${CountryName} - ${parts.join(' ')}`;
         }
@@ -692,9 +693,8 @@ function sanitize(string) {
     '>': '&gt;',
     '"': '&quot;',
     "'": '&#x27;',
-    "/": '&#x2F;',
   };
-  const reg = /[&<>"'/]/ig;
+  const reg = /[&<>"']/ig;
   return string.replace(reg, (match)=>(map[match]));
 }
 
@@ -960,8 +960,8 @@ function fetchTickets(url, none_text, ticket_id=null) {
             const optionText = `
               <span class="d-flex align-items-center">
                 <i class="bi bi-ticket-perforated me-2"></i>
-                <span>${ticket.name}</span>
-                <span class="ms-auto">${ticket.price} ${ticket.currency} (${ticket.purchasing_date})</span>
+                <span>${sanitize(String(ticket.name || ''))}</span>
+                <span class="ms-auto">${sanitize(String(ticket.price || ''))} ${sanitize(String(ticket.currency || ''))} (${sanitize(String(ticket.purchasing_date || ''))})</span>
               </span>
             `;
             option.innerHTML = optionText;
@@ -1081,11 +1081,11 @@ function renderOperators(data, type, row) {
 
     // Show logo if available
     if (row.logo_url) {
-        return `<img title="" data-toggle="tooltip" data-placement="top" class="operatorLogo" src="/static/${row.logo_url}" data-bs-original-title="${row.operator}" aria-label="${row.operator}">`;
+        return `<img title="" data-toggle="tooltip" data-placement="top" class="operatorLogo" src="/static/${sanitize(row.logo_url)}" data-bs-original-title="${sanitize(row.operator)}" aria-label="${sanitize(row.operator)}">`;
     }
 
     // Fallback to operator name
-    return row.operator;
+    return sanitize(row.operator || '');
 }
 
 // Function to calculate CO2 per kilometer

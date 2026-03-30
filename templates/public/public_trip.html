@@ -121,6 +121,10 @@ const dateOptions = { timeZone: 'UTC', weekday: 'long', year: 'numeric', month: 
 const dateOptionsShort = { month: 'short', day: 'numeric' };
 const colorblindMode = {{ 'true' if colorblind else 'false' }};
 
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
+
 var greenIcon = new L.Icon({
   iconUrl: colorblindMode
     ? "{{ url_for('static', filename='images/icons/marker-icon-2x-purple.png') }}"
@@ -198,6 +202,10 @@ function buildItinerary(trips, prices){
     "cycle" : "{{cycle}}",
     "walk" : "{{walk}}",
     "aerialway": '{{aerialway}}',
+    "scooter": '{{scooter}}',
+    "funicular": '{{funicular}}',
+    "rail": '{{rail}}',
+    "ski": '{{ski}}',
   }
 
 {% if 'price' in request.args %}              
@@ -279,7 +287,7 @@ if (prices.total_carbon != 0){
     $(".kmModeProportion").css("grid-template-columns", sortArray.map(x => total_length_per_type[x.key].toString() + "fr").join(" "));
     $(".timeModeProportion").css("grid-template-columns", sortArray.map(x => total_duration_per_type[x.key].toString() + "fr").join(" "));
     if (total_carbon > 0) {
-      $(".carbonProportion").css("grid-template-columns", sortArray.map(x => (total_carbon_per_type[x.key] || 0).toString() + "fr").join(" "));
+      $(".carbonProportion").css("grid-template-columns", sortArray.map(x => ((total_carbon_per_type[x.key] || 0) * 1000).toString() + "fr").join(" "));
     }
 
     $(".modeProportionIcon.trip").attr("title", `{{totalTrips}}: ${total_trips}`);
@@ -370,7 +378,7 @@ else if (trip.trip.logo_url) {
         
     operatorContents.push(divElement);
 } else {
-    operatorContents.push(trip.trip.operator);
+    operatorContents.push(document.createTextNode(trip.trip.operator || ''));
 }
 
 // Join the contents together (either as a single div for images, or as a comma-separated string for operator names)
@@ -386,7 +394,7 @@ if (operatorContents.length) {
 }
 
     
-      lineOrNot = trip.trip.line_name != "" ? (typeof operatorLogoOrText === 'object' ? operatorLogoOrText.append(" - " + trip.trip.line_name) : operatorLogoOrText + " - " + trip.trip.line_name) : operatorLogoOrText
+      lineOrNot = trip.trip.line_name != "" ? (typeof operatorLogoOrText === 'object' ? operatorLogoOrText.append(document.createTextNode(" - " + trip.trip.line_name)) : operatorLogoOrText + " - " + esc(trip.trip.line_name)) : operatorLogoOrText
     operatorDisplay = $("<div>").append( trip.trip.operator != "" ?  lineOrNot : null);
       
       if(dayChangeTrip){
@@ -532,8 +540,8 @@ if (operatorContents.length) {
 }
 
 function getPopupContent(uid, origin_station, destination_station, start_date, start_time, end_time){
-  var popupContent = "<p>" + origin_station + " - " + destination_station + "<br>";
-  popupContent += start_date + " : " + start_time + " - " + end_time + "</p>";
+  var popupContent = "<p>" + esc(origin_station) + " - " + esc(destination_station) + "<br>";
+  popupContent += esc(start_date) + " : " + esc(start_time) + " - " + esc(end_time) + "</p>";
   return popupContent
 }
 
@@ -591,13 +599,13 @@ function placePolylines(trips) {
       
       // Add numbered markers at the start and end of trips
       if (index != 0) {
-        group.addLayer(L.marker(trip.path[0], {icon: new L.NumberedDivIcon({number: markerIndex})}).bindPopup(trip.trip.origin_station));
+        group.addLayer(L.marker(trip.path[0], {icon: new L.NumberedDivIcon({number: markerIndex})}).bindPopup(esc(trip.trip.origin_station)));
         markerIndex++;
       }
-      
+
       if (index != 0 && index < trips.length - 1) {
         if (trips[index + 1].trip.origin_station != trips[index].trip.destination_station) {
-          group.addLayer(L.marker(trip.path[trip.path.length - 1], {icon: new L.NumberedDivIcon({number: markerIndex})}).bindPopup(trip.trip.destination_station));
+          group.addLayer(L.marker(trip.path[trip.path.length - 1], {icon: new L.NumberedDivIcon({number: markerIndex})}).bindPopup(esc(trip.trip.destination_station)));
           markerIndex++;
         }
       }
@@ -652,10 +660,10 @@ function placePolylines(trips) {
     {% if collection_voyage != 'collection'%}
     // Handle first and last station markers
     if (trips[0].trip.origin_station != trips[trips.length - 1].trip.destination_station) {
-      group.addLayer(L.marker(trips[0].path[0], {icon: greenIcon}).bindPopup(trips[0].trip.origin_station));
-      group.addLayer(L.marker(trips[trips.length - 1].path[trips[trips.length - 1].path.length-1], {icon: redIcon}).bindPopup(trips[trips.length - 1].trip.destination_station));
+      group.addLayer(L.marker(trips[0].path[0], {icon: greenIcon}).bindPopup(esc(trips[0].trip.origin_station)));
+      group.addLayer(L.marker(trips[trips.length - 1].path[trips[trips.length - 1].path.length-1], {icon: redIcon}).bindPopup(esc(trips[trips.length - 1].trip.destination_station)));
     } else {
-      group.addLayer(L.marker(trips[0].path[0], {icon: redGreenIcon}).bindPopup(trips[0].trip.origin_station));
+      group.addLayer(L.marker(trips[0].path[0], {icon: redGreenIcon}).bindPopup(esc(trips[0].trip.origin_station)));
     }
     {% endif %}
 
@@ -711,6 +719,10 @@ var map = createMap({
     bus: '{{bus}}',
     ferry: '{{ferry}}',
     aerialway: '{{aerialway}}',
+    scooter: '{{scooter}}',
+    funicular: '{{funicular}}',
+    rail: '{{rail}}',
+    ski: '{{ski}}',
     future: '{{future}}',
     current: '{{current}}',
     project: '{{project}}'

@@ -169,10 +169,11 @@
                 <th data-orderable="false" data-sort-field="trip_speed">{{tripSpeed}}</th>
                 <th data-orderable="false" data-sort-field="operator">{{operator}}</th>
                 <th data-orderable="false" data-sort-field="line_name">{{lineName}}</th>
-                <th>{{crossedCountries}}</th>
+                <th title="{{crossedCountries}}"><i class="fas fa-globe"></i></th>
+                <th data-orderable="false" title="{{co2Emissions}}"><i class="fas fa-leaf"></i></th>
                 {% if not isPublic %}
-                <th>{{visibility}}</th>
-                <th data-orderable="false" data-sort-field="price">{{price}}</th>
+                <th title="{{visibility}}"><i class="fas fa-eye"></i></th>
+                <th data-orderable="false" data-sort-field="price" title="{{price}}"><i class="fas fa-coins"></i></th>
                 {% endif %}
                 <th data-orderable="false" class="none">{{material_type}}</th>
                 <th data-orderable="false" class="none">{{reg}}</th>
@@ -425,6 +426,27 @@
             <option value="private">{{visibility_private}}</option>
           </select>
         </div>
+        <div id="massEditTypeSection" style="display:none">
+          <hr class="my-2" />
+          <div class="mb-3">
+            <label class="form-label">{{changeType}}</label>
+            <select class="form-select" id="massEditNewType">
+              <option value="">—</option>
+            </select>
+          </div>
+        </div>
+        <div id="massEditPowerSection" style="display:none">
+          <hr class="my-2" />
+          <div class="mb-3">
+            <label class="form-label">{{powerType}}</label>
+            <select class="form-select" id="massEditPowerType">
+              <option value="">—</option>
+              <option value="electric">{{electric}}</option>
+              <option value="thermic">{{thermic}}</option>
+              <option value="manual">{{manual}}</option>
+            </select>
+          </div>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{cancel}}</button>
@@ -486,6 +508,8 @@ function toggleTypeFilter() {
 }
 
 function isEllipsisActive(el){
+  if (!el) return false;
+  if (el.scrollWidth > el.clientWidth) return true;
   const styles = getComputedStyle(el);
   const widthEl = parseFloat(styles.width);
   const ctx = document.createElement('canvas').getContext('2d');
@@ -495,7 +519,6 @@ function isEllipsisActive(el){
 }
 
 function processHiddenData(rowIdx, columns){
-    var ellipsedStation = isEllipsisActive(tableObject.cell(rowIdx, 1).node()) || isEllipsisActive(tableObject.cell(rowIdx, 2).node())
     var isAir = ["air", "helicopter"].includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
     var isFerry = $(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText == "ferry";
     var isTrain = TRAIN_TYPES.includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
@@ -712,10 +735,30 @@ function processHiddenData(rowIdx, columns){
             }
         }
         if (col.title != ""){
-            return (col.hidden || ([1,2].includes(col.columnIndex) && ellipsedStation)) && col.data != ""?
+            var thAttrTitle = $($('#dataTable thead th').get(col.columnIndex)).attr('title');
+            var label = thAttrTitle || col.title;
+            // For icon-only columns, pair each icon with its tooltip text, one line per item
+            var displayData = col.data;
+            if (thAttrTitle) {
+                var $cell = $('<div>').html(col.data);
+                var pairs = [];
+                $cell.children().each(function() {
+                    var $el = $(this);
+                    var text = $el.attr('title') || $el.attr('data-bs-original-title') || '';
+                    if (text) pairs.push($el.prop('outerHTML') + ' <span class="text-muted small">' + text + '</span>');
+                });
+                if (!pairs.length) {
+                    // Single element (no children), try the root
+                    var rootText = $cell.find('[title]').first().attr('title')
+                                || $cell.find('[data-bs-original-title]').first().attr('data-bs-original-title') || '';
+                    if (rootText) pairs.push(col.data + ' <span class="text-muted small">' + rootText + '</span>');
+                }
+                if (pairs.length) displayData = pairs.join('<br>');
+            }
+            return (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node())) && col.data != ""?
             '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'">'+
-                '<td><strong>'+col.title+':</strong>'+'</td> '+
-                '<td>'+col.data+'</td>'+
+                '<td><strong>'+label+':</strong>'+'</td> '+
+                '<td>'+displayData+'</td>'+
             '</tr>' :
             '';
         }
@@ -819,8 +862,8 @@ function renderLineName(data, type, row) {
         if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
             var mat      = row.material_type_advanced || row.material_type || '';
             var dateStr  = row.start_date || '';
-            var safeName = (data || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            var safeMat  = mat.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            var safeName = (data || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            var safeMat  = mat.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
             var btn = _isValidMaterial(mat) ? `
                     <a href="javascript:void(0);"
                        onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}')"
@@ -828,7 +871,7 @@ function renderLineName(data, type, row) {
                        title="View Composition">
                        <i class="fas fa-train"></i>
                     </a>` : '';
-            if (data || btn) return `<span>${data || ''}${btn}</span>`;
+            if (data || btn) return `<span>${sanitize(data || '')}${btn}</span>`;
         }
     }
     return data;
@@ -873,9 +916,18 @@ function renderSpeed(data, type, row) {
     return data;
 }
 
+function renderCarbon(data, type, row) {
+    if (type !== 'display') return data || 0;
+    if (!data || data <= 0) return '';
+    const co2PerKm = calculateCO2PerKm(data, row.trip_length);
+    const color = getCarbonColor(co2PerKm);
+    const tooltip = `${formatCarbonFootprint(data)} (${formatCO2PerKm(co2PerKm)})`;
+    return `<span data-toggle="tooltip" data-placement="top" title="${tooltip}" style="cursor:context-menu; color:${color};"><i class="fas fa-leaf"></i></span>`;
+}
+
 function renderFlags(data, type, row) {
     if (type === 'display') {
-        return getFlagEmojiListNew(data);
+        return getFlagEmojiListNew(data, row.type);
     }
     return data;
 }
@@ -912,7 +964,7 @@ function renderButton(data, type, row){
             <div class="modal-dialog modal-dialog-centered" role="document">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="${modalId}Label">${data.origin_station} - ${data.destination_station}</h5>
+                        <h5 class="modal-title" id="${modalId}Label">${sanitize(data.origin_station || '')} - ${sanitize(data.destination_station || '')}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
@@ -993,17 +1045,22 @@ function _formatTrainsetStr(mat) {
     return mat;
 }
 
+function renderPlainText(data, type, row) {
+    if (type === 'display') return sanitize(data || '');
+    return data;
+}
+
 function renderMaterialType(data, type, row){
     if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
         var adv = row.material_type_advanced || '';
         var mat = row.material_type || '';
-        if (adv && mat) return mat + ' <span style="color:#888;font-size:.9em">' + _formatTrainsetStr(adv) + '</span>';
-        if (adv) return _formatTrainsetStr(adv);
-        return mat;
+        if (adv && mat) return sanitize(mat) + ' <span style="color:#888;font-size:.9em">' + sanitize(_formatTrainsetStr(adv)) + '</span>';
+        if (adv) return sanitize(_formatTrainsetStr(adv));
+        return sanitize(mat);
     }
     if (!row.material_type) return '';
-    if (row.model) return `[[${row.material_type}]] ${row.manufacturer} ${row.model}`;
-    return row.material_type;
+    if (row.model) return `[[${sanitize(row.material_type)}]] ${sanitize(row.manufacturer || '')} ${sanitize(row.model)}`;
+    return sanitize(row.material_type);
 }
 
 
@@ -1132,6 +1189,12 @@ var table = $('#tripRows');
         { data: 'operator', render: renderOperators },
         {data: 'line_name',{% if is_alpha %} render: renderLineName,{% endif %}},
         { data: 'countries', render: renderFlags },
+        {
+            data: 'carbon_footprint',
+            render: renderCarbon,
+            defaultContent: "",
+            orderable: false
+        },
         {% if not isPublic %}
         { data: 'visibility', render: renderVisibility },
         {
@@ -1145,9 +1208,9 @@ var table = $('#tripRows');
             render: renderMaterialType,
             defaultContent: "",
         },
-        { data: 'reg' },
-        { data: 'seat' },
-        { data: 'notes' },
+        { data: 'reg', render: renderPlainText },
+        { data: 'seat', render: renderPlainText },
+        { data: 'notes', render: renderPlainText },
         { data: 'tags' },
         {
             data: null,
@@ -1649,6 +1712,80 @@ function openMassEdit() {
     // Reset notes mode to replace
     document.getElementById('massEditNotesReplace').checked = true;
 
+    // Type groups (must match Python TripTypes.can_transform groups)
+    const TYPE_GROUPS = [
+        ['accomodation', 'poi', 'restaurant'],
+        ['air', 'helicopter'],
+        ['bus', 'car'],
+        ['cycle', 'scooter'],
+        ['ferry'],
+        ['metro', 'train', 'tram', 'funicular', 'rail'],
+        ['ski'],
+        ['walk'],
+        ['other'],
+    ];
+    // Power-type-capable types
+    const POWER_TYPE_RULES = {
+        train:   ['electric', 'thermic'],
+        rail:    ['electric', 'thermic'],
+        bus:     ['electric', 'thermic'],
+        car:     ['electric', 'thermic'],
+        ferry:   ['electric', 'thermic'],
+        cycle:   ['electric', 'manual'],
+        scooter: ['electric', 'manual']
+    };
+    const tripTypes = trips.map(t => t.type);
+    const uniqueTypes = [...new Set(tripTypes)];
+    const group = TYPE_GROUPS.find(g => uniqueTypes.every(t => g.includes(t)));
+    const typeSection = document.getElementById('massEditTypeSection');
+    const newTypeSelect = document.getElementById('massEditNewType');
+    newTypeSelect.innerHTML = '<option value="">—</option>';
+    if (group && group.length > 1) {
+        const currentType = uniqueTypes.length === 1 ? uniqueTypes[0] : null;
+        group.filter(t => t !== currentType).forEach(function(t) {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.textContent = (window.TYPE_LABELS && window.TYPE_LABELS[t]) || t;
+            newTypeSelect.appendChild(opt);
+        });
+        typeSection.style.display = '';
+    } else {
+        typeSection.style.display = 'none';
+    }
+
+    // Power type section: show if all trips are power-type-capable
+    const powerSection = document.getElementById('massEditPowerSection');
+    const powerTypeSelect = document.getElementById('massEditPowerType');
+    powerTypeSelect.innerHTML = '<option value="">—</option>';
+
+    const allowedPowerSets = uniqueTypes.map(t => POWER_TYPE_RULES[t]).filter(Boolean);
+    const allPowerCapable = allowedPowerSets.length === uniqueTypes.length;
+
+    if (allPowerCapable) {
+        // Keep only power types allowed by all selected trip types
+        const commonPowerTypes = allowedPowerSets.reduce((acc, arr) =>
+            acc.filter(v => arr.includes(v))
+        );
+
+        if (commonPowerTypes.length > 0) {
+            commonPowerTypes.forEach(function(pt) {
+                const opt = document.createElement('option');
+                opt.value = pt;
+                opt.textContent = {
+                    electric: '{{electric}}',
+                    thermic: '{{thermic}}',
+                    manual: '{{manual}}'
+                }[pt] || pt;
+                powerTypeSelect.appendChild(opt);
+            });
+            powerSection.style.display = '';
+        } else {
+            powerSection.style.display = 'none';
+        }
+    } else {
+        powerSection.style.display = 'none';
+    }
+
     $('#massEditModal').modal('show');
 }
 
@@ -1720,7 +1857,10 @@ function submitMassEdit() {
     const shiftMinutes = parseInt(document.getElementById('massEditShiftMinutes').value, 10) || 0;
     const timeShift = shiftDays * 1440 + shiftHours * 60 + shiftMinutes;
 
-    if (Object.keys(fields).length === 0 && !timeShift) {
+    const newType = document.getElementById('massEditNewType').value;
+    const newPowerType = document.getElementById('massEditPowerType').value;
+
+    if (Object.keys(fields).length === 0 && !timeShift && !newType && !newPowerType) {
         $('#massEditModal').modal('hide');
         return;
     }
@@ -1731,19 +1871,41 @@ function submitMassEdit() {
     document.getElementById('massEditSubmitLabel').style.display = 'none';
     document.getElementById('massEditSpinner').style.display = '';
 
-    fetch('{{ url_for("bulkEditTrips", username=username) }}', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ trip_ids: checkedTrips, fields: fields, notes_append: notesAppend, time_offset_minutes: timeShift })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.success) {
+    const requests = [];
+
+    if (Object.keys(fields).length > 0 || timeShift) {
+        requests.push(fetch('{{ url_for("bulkEditTrips", username=username) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trip_ids: checkedTrips, fields: fields, notes_append: notesAppend, time_offset_minutes: timeShift })
+        }).then(r => r.json()));
+    }
+
+    if (newType) {
+        requests.push(fetch('{{ url_for("bulkChangeType", username=username) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trip_ids: checkedTrips, new_type: newType })
+        }).then(r => r.json()));
+    }
+
+    if (newPowerType) {
+        requests.push(fetch('{{ url_for("bulkSetPowerType", username=username) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trip_ids: checkedTrips, power_type: newPowerType })
+        }).then(r => r.json()));
+    }
+
+    Promise.all(requests)
+    .then(function(results) {
+        const failed = results.find(d => !d.success);
+        if (failed) {
+            alert(failed.error || 'Error');
+        } else {
             tableObject.ajax.reload();
             $('#massEditModal').modal('hide');
             deselectAll();
-        } else {
-            alert(data.error || 'Error');
         }
     })
     .finally(function() {
@@ -1944,7 +2106,7 @@ function displayAssociatedTags(tags) {
             .addClass('tag-blob')
             .css('background-color', tag.colour)
             .css('color', getTextColor(tag.colour))
-            .html(tag.name + icon) // Use .html to add the icon
+            .text(tag.name).append(icon) // Use .text for safety, then append icon HTML
             .on('click', function() {
                 if (allTripsHaveTag) {
                     detachTag(tag.uid);
@@ -2031,6 +2193,14 @@ $('#submitBtn').on('click', function() {
     }
 
     const TRAIN_TYPES = ['train', 'metro', 'tram'];
+
+    window.TYPE_LABELS = {
+        train: '{{train}}', tram: '{{tram}}', metro: '{{metro}}', rail: '{{rail}}',
+        funicular: '{{funicular}}', bus: '{{bus}}', car: '{{car}}', ferry: '{{ferry}}',
+        air: '{{air}}', helicopter: '{{helicopter}}', walk: '{{walk}}', cycle: '{{cycle}}',
+        scooter: '{{scooter}}', ski: '{{ski}}', aerialway: '{{aerialway}}',
+        accomodation: '{{accommodation}}', poi: '{{poi}}', restaurant: '{{restaurant}}', other: '{{other}}'
+    };
 
     const CLASS_LABELS = {
         '1st': '1st', '2nd': '2nd', '2nd-plus': '2+', 'business': 'Biz',
