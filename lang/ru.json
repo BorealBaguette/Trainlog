@@ -614,6 +614,7 @@
     "feature_requests_downvoters": "Проголосовавшие против",
     "feature_requests_no_votes": "Пока нет голосов",
     "feature_requests_error_loading": "Ошибка загрузки списка голосующих",
+    "feature_requests_vote_error": "Vote failed. Please try again.",
     "user_dashboard": "Панель пользователя",
     "feature_requests_edit_title": "Редактировать запрос функции",
     "update": "Обновить",

@@ -614,6 +614,7 @@
     "feature_requests_downvoters": "Osoby głosujące na nie",
     "feature_requests_no_votes": "Jeszcze brak głosów",
     "feature_requests_error_loading": "Błąd podczas ładowania głosujących",
+    "feature_requests_vote_error": "Vote failed. Please try again.",
     "user_dashboard": "Panel użytkownika",
     "feature_requests_edit_title": "Edytuj sugestię",
     "update": "Aktualizuj",

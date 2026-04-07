@@ -48,31 +48,35 @@
               <h6 class="card-subtitle mb-3 text-muted">{{ feature_requests_voting if feature_requests_voting is defined else 'Voting' }}</h6>
 
               {% if logged_in_user and not is_owner and username %}
-                <form method="POST" action="{{ url_for('feature_requests.vote_feature_request', username=username) }}" class="mb-2">
-                  <input type="hidden" name="request_id" value="{{ request.id }}">
-                  <input type="hidden" name="vote_type" value="upvote">
-                  <button type="submit" class="btn btn-lg w-100 {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }}">
-                    <i class="fa-solid fa-chevron-up"></i>
-                  </button>
-                </form>
+                <button type="button"
+                        class="btn btn-lg w-100 {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }} mb-2"
+                        data-vote-button
+                        data-request-id="{{ request.id }}"
+                        data-vote-type="upvote"
+                        data-vote-url="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
+                  <i class="fa-solid fa-chevron-up"></i>
+                </button>
               {% else %}
                 <div class="btn btn-lg w-100 btn-outline-success disabled mb-2">
                   <i class="fa-solid fa-chevron-up"></i>
                 </div>
               {% endif %}
 
-              <div class="fs-2 fw-bold text-{{ 'success' if request.score > 0 else 'danger' if request.score < 0 else 'muted' }} my-3">
+              <div class="fs-2 fw-bold text-{{ 'success' if request.score > 0 else 'danger' if request.score < 0 else 'muted' }} my-3"
+                   data-vote-score
+                   data-request-id="{{ request.id }}">
                 {{ request.score }}
               </div>
 
               {% if logged_in_user and not is_owner and username %}
-                <form method="POST" action="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
-                  <input type="hidden" name="request_id" value="{{ request.id }}">
-                  <input type="hidden" name="vote_type" value="downvote">
-                  <button type="submit" class="btn btn-lg w-100 {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }}">
-                    <i class="fa-solid fa-chevron-down"></i>
-                  </button>
-                </form>
+                <button type="button"
+                        class="btn btn-lg w-100 {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }}"
+                        data-vote-button
+                        data-request-id="{{ request.id }}"
+                        data-vote-type="downvote"
+                        data-vote-url="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
+                  <i class="fa-solid fa-chevron-down"></i>
+                </button>
               {% else %}
                 <div class="btn btn-lg w-100 btn-outline-danger disabled">
                   <i class="fa-solid fa-chevron-down"></i>
@@ -85,7 +89,8 @@
                   <span class="text-success">
                     <i class="fa-solid fa-chevron-up"></i>
                     <span onclick="showVoters({{ request.id }})" style="cursor: pointer; text-decoration: underline;">
-                      {{ request.upvotes }} {{ feature_requests_votes_positive if feature_requests_votes_positive is defined else 'upvotes' }}
+                      <span data-vote-up data-request-id="{{ request.id }}">{{ request.upvotes }}</span>
+                      {{ feature_requests_votes_positive if feature_requests_votes_positive is defined else 'upvotes' }}
                     </span>
                   </span>
                 </div>
@@ -93,7 +98,8 @@
                   <span class="text-danger">
                     <i class="fa-solid fa-chevron-down"></i>
                     <span onclick="showVoters({{ request.id }})" style="cursor: pointer; text-decoration: underline;">
-                      {{ request.downvotes }} {{ feature_requests_votes_negative if feature_requests_votes_negative is defined else 'downvotes' }}
+                      <span data-vote-down data-request-id="{{ request.id }}">{{ request.downvotes }}</span>
+                      {{ feature_requests_votes_negative if feature_requests_votes_negative is defined else 'downvotes' }}
                     </span>
                   </span>
                 </div>
@@ -475,6 +481,108 @@ function showVoters(requestId) {
       document.getElementById('votersContent').innerHTML = '<p class="text-danger">{{ feature_requests_error_loading }}</p>';
     });
 }
+
+const VOTE_ERROR_MESSAGE = '{{ feature_requests_vote_error if feature_requests_vote_error is defined else "Vote failed. Please try again." }}';
+
+function updateVoteUI(payload) {
+  const requestId = String(payload.request_id);
+  const scoreEl = document.querySelector(`[data-vote-score][data-request-id="${requestId}"]`);
+  const upEl = document.querySelector(`[data-vote-up][data-request-id="${requestId}"]`);
+  const downEl = document.querySelector(`[data-vote-down][data-request-id="${requestId}"]`);
+  const upBtn = document.querySelector(`[data-vote-button][data-request-id="${requestId}"][data-vote-type="upvote"]`);
+  const downBtn = document.querySelector(`[data-vote-button][data-request-id="${requestId}"][data-vote-type="downvote"]`);
+
+  if (scoreEl) {
+    scoreEl.textContent = payload.score;
+    scoreEl.classList.remove('text-success', 'text-danger', 'text-muted');
+    if (payload.score > 0) {
+      scoreEl.classList.add('text-success');
+    } else if (payload.score < 0) {
+      scoreEl.classList.add('text-danger');
+    } else {
+      scoreEl.classList.add('text-muted');
+    }
+  }
+
+  if (upEl) upEl.textContent = payload.upvotes;
+  if (downEl) downEl.textContent = payload.downvotes;
+
+  if (upBtn && downBtn) {
+    const userVote = payload.user_vote;
+    upBtn.classList.remove('btn-success', 'btn-outline-success');
+    downBtn.classList.remove('btn-danger', 'btn-outline-danger');
+    upBtn.classList.add(userVote === 1 ? 'btn-success' : 'btn-outline-success');
+    downBtn.classList.add(userVote === -1 ? 'btn-danger' : 'btn-outline-danger');
+  }
+}
+
+function setVoteLoading(requestId, isLoading, activeButton = null) {
+  const buttons = document.querySelectorAll(`[data-vote-button][data-request-id="${requestId}"]`);
+  buttons.forEach(button => {
+    if (!button.dataset.voteOriginalHtml) {
+      button.dataset.voteOriginalHtml = button.innerHTML;
+    }
+    if (isLoading) {
+      button.disabled = true;
+      button.classList.add('disabled');
+    } else {
+      button.disabled = false;
+      button.classList.remove('disabled');
+      button.innerHTML = button.dataset.voteOriginalHtml;
+    }
+  });
+
+  if (isLoading && activeButton) {
+    activeButton.dataset.voteLoading = 'true';
+    activeButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+  } else if (activeButton) {
+    activeButton.dataset.voteLoading = 'false';
+  }
+}
+
+function handleVoteClick(event) {
+  const button = event.currentTarget;
+  if (button.dataset.voteLoading === 'true') {
+    return;
+  }
+  const requestId = button.dataset.requestId;
+  const voteType = button.dataset.voteType;
+  const voteUrl = button.dataset.voteUrl;
+  if (!requestId || !voteType || !voteUrl) {
+    alert(VOTE_ERROR_MESSAGE);
+    return;
+  }
+
+  setVoteLoading(requestId, true, button);
+
+  const formData = new FormData();
+  formData.append('request_id', requestId);
+  formData.append('vote_type', voteType);
+
+  fetch(voteUrl, {
+    method: 'POST',
+    body: formData,
+    headers: { 'X-Requested-With': 'XMLHttpRequest' }
+  })
+    .then(async response => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || 'Vote failed');
+      }
+      return data;
+    })
+    .then(updateVoteUI)
+    .catch(() => {
+      alert(VOTE_ERROR_MESSAGE);
+    })
+    .finally(() => {
+      setVoteLoading(requestId, false, button);
+    });
+}
+
+document.querySelectorAll('[data-vote-button]').forEach(button => {
+  button.addEventListener('click', handleVoteClick);
+});
 
 // Reset forms when modals are hidden
 document.getElementById('editModal').addEventListener('hidden.bs.modal', function () {

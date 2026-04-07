@@ -284,7 +284,7 @@ def vote_feature_request(username):
     """Handle upvote/downvote for feature requests"""
     # Prevent owner from voting
     if session["userinfo"]["is_owner"]:
-        return redirect(url_for("feature_requests.feature_requests"))
+        return jsonify({"error": "Not authorized"}), 403
 
     request_id = request.form.get("request_id")
     vote_type = request.form.get("vote_type")
@@ -293,17 +293,17 @@ def vote_feature_request(username):
     # Validate inputs
     if not request_id or not vote_type:
         logger.error(f"Missing request_id ({request_id}) or vote_type ({vote_type})")
-        return redirect(url_for("feature_requests.feature_requests"))
+        return jsonify({"error": "Missing request_id or vote_type"}), 400
 
     try:
         request_id = int(request_id)
     except (ValueError, TypeError):
         logger.error(f"Invalid request_id: {request_id}")
-        return redirect(url_for("feature_requests.feature_requests"))
+        return jsonify({"error": "Invalid request_id"}), 400
 
     if vote_type not in ["upvote", "downvote"]:
         logger.error(f"Invalid vote_type: {vote_type}")
-        return redirect(url_for("feature_requests.feature_requests"))
+        return jsonify({"error": "Invalid vote_type"}), 400
 
     with pg_session() as pg:
         # Check if user has already voted on this request
@@ -344,14 +344,23 @@ def vote_feature_request(username):
         # Update vote counts in feature_requests table
         pg.execute(fr_sql.update_vote_counts(), {"request_id": request_id})
 
-    # Check if we came from single request page
-    referer = request.headers.get("Referer", "")
-    if f"/feature_requests/{request_id}" in referer:
-        return redirect(
-            url_for("feature_requests.single_feature_request", request_id=request_id)
-        )
+        updated = pg.execute(
+            fr_sql.get_single_feature_request_with_vote(),
+            {"request_id": request_id, "username": current_user},
+        ).fetchone()
 
-    return redirect(url_for("feature_requests.feature_requests"))
+    if not updated:
+        return jsonify({"error": "Request not found"}), 404
+
+    return jsonify(
+        {
+            "request_id": updated[0],
+            "upvotes": updated[6],
+            "downvotes": updated[7],
+            "score": updated[8],
+            "user_vote": updated[9] if len(updated) > 9 else 0,
+        }
+    )
 
 
 @feature_requests_blueprint.route("/feature_requests/<int:request_id>/voters")

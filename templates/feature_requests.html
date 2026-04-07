@@ -30,7 +30,7 @@
         <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#requestModal">
             <i class="fa-solid fa-plus"></i> {{ feature_requests_submit_button }}
         </button>
-    {% elif not logged_in_user %}
+    {% elif not logged_in_user or username == "public" %}
         <div class="alert alert-info mb-3">
             <i class="fa-solid fa-info-circle"></i> {{ feature_requests_login_prompt }}
         </div>
@@ -62,32 +62,36 @@
                     <div class="row">
                         <!-- Voting Section -->
                         <div class="col-md-1 col-2 text-center">
-                            {% if logged_in_user and not is_owner and username %}
-                                <form method="POST" action="{{ url_for('feature_requests.vote_feature_request', username=username) }}" class="d-inline">
-                                    <input type="hidden" name="request_id" value="{{ request.id }}">
-                                    <input type="hidden" name="vote_type" value="upvote">
-                                    <button type="submit" class="btn btn-sm {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }} mb-1">
-                                        <i class="fa-solid fa-chevron-up"></i>
-                                    </button>
-                                </form>
+                            {% if logged_in_user and not is_owner and username and username != "public" %}
+                                <button type="button"
+                                        class="btn btn-sm {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }} mb-1"
+                                        data-vote-button
+                                        data-request-id="{{ request.id }}"
+                                        data-vote-type="upvote"
+                                        data-vote-url="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
+                                    <i class="fa-solid fa-chevron-up"></i>
+                                </button>
                             {% else %}
                                 <div class="btn btn-sm btn-outline-success mb-1 disabled">
                                     <i class="fa-solid fa-chevron-up"></i>
                                 </div>
                             {% endif %}
                             
-                            <div class="fw-bold text-{{ 'success' if request.score > 0 else 'danger' if request.score < 0 else 'muted' }}">
+                            <div class="fw-bold text-{{ 'success' if request.score > 0 else 'danger' if request.score < 0 else 'muted' }}"
+                                 data-vote-score
+                                 data-request-id="{{ request.id }}">
                                 {{ request.score }}
                             </div>
                             
-                            {% if logged_in_user and not is_owner and username %}
-                                <form method="POST" action="{{ url_for('feature_requests.vote_feature_request', username=username) }}" class="d-inline">
-                                    <input type="hidden" name="request_id" value="{{ request.id }}">
-                                    <input type="hidden" name="vote_type" value="downvote">
-                                    <button type="submit" class="btn btn-sm {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }} mt-1">
-                                        <i class="fa-solid fa-chevron-down"></i>
-                                    </button>
-                                </form>
+                            {% if logged_in_user and not is_owner and username and username != "public" %}
+                                <button type="button"
+                                        class="btn btn-sm {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }} mt-1"
+                                        data-vote-button
+                                        data-request-id="{{ request.id }}"
+                                        data-vote-type="downvote"
+                                        data-vote-url="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </button>
                             {% else %}
                                 <div class="btn btn-sm btn-outline-danger mt-1 disabled">
                                     <i class="fa-solid fa-chevron-down"></i>
@@ -162,8 +166,10 @@
                             <div class="mt-2">
                                 <small class="text-muted">
                                     <span class="text-decoration-none" onclick="showVoters({{ request.id }})" style="cursor: pointer;">
-                                        <i class="fa-solid fa-chevron-up text-success"></i> {{ request.upvotes }} 
-                                        <i class="fa-solid fa-chevron-down text-danger ms-2"></i> {{ request.downvotes }}
+                                        <i class="fa-solid fa-chevron-up text-success"></i>
+                                        <span data-vote-up data-request-id="{{ request.id }}">{{ request.upvotes }}</span>
+                                        <i class="fa-solid fa-chevron-down text-danger ms-2"></i>
+                                        <span data-vote-down data-request-id="{{ request.id }}">{{ request.downvotes }}</span>
                                     </span>
                                     <a href="{{ url_for('feature_requests.single_feature_request', request_id=request.id) }}" class="ms-3 text-decoration-none">
                                         <i class="fa-solid fa-eye"></i> {{ feature_requests_view_details }}
@@ -464,6 +470,108 @@ function showVoters(requestId) {
             document.getElementById('votersContent').innerHTML = '<p class="text-danger">{{ feature_requests_error_loading }}</p>';
         });
 }
+
+const VOTE_ERROR_MESSAGE = '{{ feature_requests_vote_error if feature_requests_vote_error is defined else "Vote failed. Please try again." }}';
+
+function updateVoteUI(payload) {
+    const requestId = String(payload.request_id);
+    const scoreEl = document.querySelector(`[data-vote-score][data-request-id="${requestId}"]`);
+    const upEl = document.querySelector(`[data-vote-up][data-request-id="${requestId}"]`);
+    const downEl = document.querySelector(`[data-vote-down][data-request-id="${requestId}"]`);
+    const upBtn = document.querySelector(`[data-vote-button][data-request-id="${requestId}"][data-vote-type="upvote"]`);
+    const downBtn = document.querySelector(`[data-vote-button][data-request-id="${requestId}"][data-vote-type="downvote"]`);
+
+    if (scoreEl) {
+        scoreEl.textContent = payload.score;
+        scoreEl.classList.remove('text-success', 'text-danger', 'text-muted');
+        if (payload.score > 0) {
+            scoreEl.classList.add('text-success');
+        } else if (payload.score < 0) {
+            scoreEl.classList.add('text-danger');
+        } else {
+            scoreEl.classList.add('text-muted');
+        }
+    }
+
+    if (upEl) upEl.textContent = payload.upvotes;
+    if (downEl) downEl.textContent = payload.downvotes;
+
+    if (upBtn && downBtn) {
+        const userVote = payload.user_vote;
+        upBtn.classList.remove('btn-success', 'btn-outline-success');
+        downBtn.classList.remove('btn-danger', 'btn-outline-danger');
+        upBtn.classList.add(userVote === 1 ? 'btn-success' : 'btn-outline-success');
+        downBtn.classList.add(userVote === -1 ? 'btn-danger' : 'btn-outline-danger');
+    }
+}
+
+function setVoteLoading(requestId, isLoading, activeButton = null) {
+    const buttons = document.querySelectorAll(`[data-vote-button][data-request-id="${requestId}"]`);
+    buttons.forEach(button => {
+        if (!button.dataset.voteOriginalHtml) {
+            button.dataset.voteOriginalHtml = button.innerHTML;
+        }
+        if (isLoading) {
+            button.disabled = true;
+            button.classList.add('disabled');
+        } else {
+            button.disabled = false;
+            button.classList.remove('disabled');
+            button.innerHTML = button.dataset.voteOriginalHtml;
+        }
+    });
+
+    if (isLoading && activeButton) {
+        activeButton.dataset.voteLoading = 'true';
+        activeButton.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>';
+    } else if (activeButton) {
+        activeButton.dataset.voteLoading = 'false';
+    }
+}
+
+function handleVoteClick(event) {
+    const button = event.currentTarget;
+    if (button.dataset.voteLoading === 'true') {
+        return;
+    }
+    const requestId = button.dataset.requestId;
+    const voteType = button.dataset.voteType;
+    const voteUrl = button.dataset.voteUrl;
+    if (!requestId || !voteType || !voteUrl) {
+        alert('{{ feature_requests_vote_error}}');
+        return;
+    }
+
+    setVoteLoading(requestId, true, button);
+
+    const formData = new FormData();
+    formData.append('request_id', requestId);
+    formData.append('vote_type', voteType);
+
+    fetch(voteUrl, {
+        method: 'POST',
+        body: formData,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    })
+        .then(async response => {
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok) {
+                throw new Error(data.error || 'Vote failed');
+            }
+            return data;
+        })
+        .then(updateVoteUI)
+        .catch(() => {
+            alert('{{ feature_requests_vote_error}}');
+        })
+        .finally(() => {
+            setVoteLoading(requestId, false, button);
+        });
+}
+
+document.querySelectorAll('[data-vote-button]').forEach(button => {
+    button.addEventListener('click', handleVoteClick);
+});
 
 // Reset forms when modals are hidden
 document.getElementById('requestModal').addEventListener('hidden.bs.modal', function () {

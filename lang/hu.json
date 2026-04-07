@@ -614,6 +614,7 @@
     "feature_requests_downvoters": "Leértékelők",
     "feature_requests_no_votes": "Még nincs szavazat",
     "feature_requests_error_loading": "Hiba a szavazók betöltésekor",
+    "feature_requests_vote_error": "Vote failed. Please try again.",
     "user_dashboard": "Felhasználói irányítópult",
     "feature_requests_edit_title": "Funkciókérés szerkesztése",
     "update": "Frissítés",
