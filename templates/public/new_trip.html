@@ -1448,7 +1448,14 @@ function leave() {
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    initializeMapAndTrips();
+    initializeMapAndTrips().catch(err => {
+        const msg = err?.message || '';
+        if (msg.includes('webglcontextcreationerror') || msg.includes('Failed to initialize WebGL')) {
+            window.location.href = window.location.pathname.replace('/public/', '/public/leaflet/') + window.location.search;
+        } else {
+            console.error(err);
+        }
+    });
 });
 
 

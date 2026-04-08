@@ -69,10 +69,10 @@
         </div>
         <div class="col-md">
             <div class="chart-container position-relative">
-                <button class="btn btn-light btn-sm expand-button position-absolute top-0 end-0 m-2" onclick="expandChart('chart-years')" style="z-index: 1000;">
+                <button class="btn btn-light btn-sm expand-button position-absolute top-0 end-0 m-2" onclick="expandChart('chart-timeseries')" style="z-index: 1000;">
                     <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
                 </button>
-                <div id="chart-years" style="width: 100%; height: 400px;"></div>
+                <div id="chart-timeseries" style="width: 100%; height: 400px;"></div>
             </div>
         </div>
     </div>
@@ -186,6 +186,7 @@
     var username = "{{username}}";
     var statYear = "{{statYear if statYear else ''}}";
     var yearDefined = "{{ 'true' if statYear is not none else 'false' }}";
+
     var isCombinedMode = tripType === 'combined';
     
     var currentMetric = 'trips';
@@ -204,6 +205,17 @@
 
     function isMobile() {
         return getScreenSize() < 750;
+    }
+
+    function formatMonthLabel(monthNumber) {
+        const monthIndex = Number(monthNumber) - 1;
+        if (!Number.isInteger(monthIndex) || monthIndex < 0 || monthIndex > 11) {
+            return monthNumber;
+        }
+
+        return new Intl.DateTimeFormat(LANG, { month: 'long' }).format(
+            new Date(Date.UTC(2024, monthIndex, 1))
+        );
     }
 
     function calculateMaxValue(dataArray) {
@@ -370,6 +382,7 @@
             if (item.route) converted.route = item.route;
             if (item.station) converted.station = item.station;
             if (item.year !== undefined) converted.year = item.year;
+            if (item.month !== undefined) converted.month = item.month;
             if (item.tripType) converted.tripType = item.tripType;
             
             // Extract metric values (store raw numbers only)
@@ -412,7 +425,8 @@
             stations: (data.stations || []).map(convertItem).sort((a, b) => 
                 (b.past + b.plannedFuture + (b.future || 0)) - (a.past + a.plannedFuture + (a.future || 0))
             ),
-            years: (data.years || []).map(convertItem)
+            years: (data.years || []).map(convertItem),
+            months: (data.months || []).map(convertItem)
         };
     }
 
@@ -426,7 +440,8 @@
             material: {},
             routes: {},
             stations: {},
-            years: {}
+            years: {},
+            months: {}
         };
 
         // Merge data from all trip types
@@ -516,6 +531,20 @@
                 merged.years[key].tripTypes[tripType].plannedFuture += item.plannedFuture || 0;
                 merged.years[key].tripTypes[tripType].future += item.future || 0;
             });
+
+            // Merge months
+            (data.months || []).forEach(item => {
+                const key = item.month;
+                if (!merged.months[key]) {
+                    merged.months[key] = { month: key, tripTypes: {} };
+                }
+                if (!merged.months[key].tripTypes[tripType]) {
+                    merged.months[key].tripTypes[tripType] = { past: 0, plannedFuture: 0, future: 0 };
+                }
+                merged.months[key].tripTypes[tripType].past += item.past || 0;
+                merged.months[key].tripTypes[tripType].plannedFuture += item.plannedFuture || 0;
+                merged.months[key].tripTypes[tripType].future += item.future || 0;
+            });
         });
 
         // Convert objects to sorted arrays
@@ -533,7 +562,8 @@
             material: sortMergedData(merged.material),
             routes: sortMergedData(merged.routes),
             stations: sortMergedData(merged.stations),
-            years: Object.values(merged.years).sort((a, b) => a.year - b.year)
+            years: Object.values(merged.years).sort((a, b) => a.year - b.year),
+            months: Object.values(merged.months).sort((a, b) => a.month - b.month)
         };
     }
 
@@ -802,7 +832,8 @@
             routes: groupData(data.routes, 'route'),
             stations: groupData(data.stations, 'station'),
             material: groupData(data.material, 'material'),
-            years: data.years
+            years: data.years,
+            months: data.months
         };
 
         var truncateLabel = function(label) {
@@ -912,25 +943,25 @@
             series: createSeries(dataToUse.operators, getColor(tripType))
         });
 
-        // Years Chart
-        var yearsMax = calculateMaxValue(dataToUse.years);
-        var yearsValueAxisOptions = (currentMetric === 'duration')
-            ? getDurationAxisConfig(yearsMax, LANG)
+        var timeSeriesKey = yearDefined == "true" ? "months" : "years";
+        var timeSeriesData = dataToUse[timeSeriesKey] || [];
+        var timeSeriesMax = calculateMaxValue(timeSeriesData);
+        var timeSeriesValueAxisOptions = (currentMetric === 'duration')
+            ? getDurationAxisConfig(timeSeriesMax, LANG)
             : commonValAxisOptions;
 
-        // Years Chart
-        var yearsChart = echarts.init(document.getElementById('chart-years'));
-        chartsInstances['years'] = yearsChart;
-        yearsChart.setOption({
-            title: { text: "{{year}}" },
+        var timeSeriesChart = echarts.init(document.getElementById('chart-timeseries'));
+        chartsInstances[timeSeriesKey] = timeSeriesChart;
+        timeSeriesChart.setOption({
+            title: { text: timeSeriesKey === "months" ? "{{month}}" : "{{year}}" },
             tooltip: commonTooltipConfig,
             xAxis: {
-                type: 'category',
-                data: dataToUse.years.map(item => item.year)
+                ...commonCatAxisOptions,
+                data: timeSeriesData.map(item => timeSeriesKey === "months" ? formatMonthLabel(item.month) : item.year)
             },
-            yAxis: yearsValueAxisOptions,
+            yAxis: timeSeriesValueAxisOptions,
             grid: yGridConfig,
-            series: createSeries(dataToUse.years, getColor(tripType))
+            series: createSeries(timeSeriesData, getColor(tripType))
         });
 
 
@@ -1143,7 +1174,7 @@
             'chart-routes': 'routes',
             'chart-stations': 'stations',
             'chart-material': 'material',
-            'chart-years': 'years'
+            'chart-timeseries': yearDefined == "true" ? 'months' : 'years'
         };
         var dataKey = dataKeyMap[chartId];
         
@@ -1256,13 +1287,14 @@
                         catch(e) { return item.route; }
                     }
                     if (dataKey === 'years') return item.year;
+                    if (dataKey === 'months') return formatMonthLabel(item.month);
                     return item.station;
                 })
             };
             option.yAxis = valueAxisOptions;
             
             // Add horizontal slider for other charts
-            if (dataKey !== 'years') {
+            if (!['years', 'months'].includes(dataKey)) {
                 option.dataZoom = [
                     {
                         type: 'slider',

@@ -327,10 +327,9 @@
     position: relative;
   }
   .ts-option i:first-child { font-size: 1.3rem; color: #666; }
-  .ts-option:hover:not(.ts-orm-disabled) { border-color: #0d6efd; background: #f0f6ff; }
+  .ts-option:hover { border-color: #0d6efd; background: #f0f6ff; }
   .ts-option.ts-selected { border-color: #0d6efd; background: #e7f0ff; color: #0d6efd; }
   .ts-option.ts-selected i:first-child { color: #0d6efd; }
-  .ts-option.ts-orm-disabled { opacity: 0.4; cursor: not-allowed; }
   .ts-gem { position: absolute; top: 6px; right: 6px; font-size: 0.65rem !important; color: #00ced1 !important; }
 </style>
 
@@ -351,79 +350,90 @@
     option.text = `${emoji} ${option.text}`; // Prepend the emoji to the option text
   }
 
-  $(document).ready(function () {
+  // ---- Tileserver picker (defined at script scope so ORM handlers can access them) ----
+  const TS_META = {
+    'none':             { label: '{{ none_t }}',                  icon: 'fa-ban',              tab: 'ts-other' },
+    'osm':              { label: '{{ tileserver_default }}',     icon: 'fa-map',              tab: 'ts-general' },
+    'de':               { label: '{{ tileserver_de }}',          icon: 'fa-map',              tab: 'ts-general' },
+    'fr':               { label: '{{ tileserver_fr }}',          icon: 'fa-map',              tab: 'ts-general' },
+    'jawg-streets':     { label: '{{ tileserver_jawg_streets }}',icon: 'fa-road',             tab: 'ts-jawg' },
+    'jawg-light':       { label: '{{ tileserver_jawg_light }}',  icon: 'fa-sun',              tab: 'ts-jawg' },
+    'jawg-dark':        { label: '{{ tileserver_jawg_dark }}',   icon: 'fa-moon',             tab: 'ts-jawg' },
+    'jawg-sunny':       { label: '{{ tileserver_jawg_sunny }}',  icon: 'fa-cloud-sun',        tab: 'ts-jawg' },
+    'jawg-terrain':     { label: '{{ tileserver_jawg_terrain }}',icon: 'fa-mountain',         tab: 'ts-jawg' },
+    'jawg-lagoon':      { label: '{{ tileserver_jawg_lagoon }}', icon: 'fa-water',            tab: 'ts-jawg' },
+    'dark-train':       { label: 'Dark Train',                   icon: 'fa-moon',             tab: 'ts-ofm',  vector: true },
+    'jawg-streets-v2':  { label: 'Streets V2',                   icon: 'fa-road',             tab: 'ts-jawg', vector: true },
+    'jawg-lagoon-v2':   { label: 'Lagoon V2',                    icon: 'fa-water',            tab: 'ts-jawg', vector: true },
+    'ofm-liberty':      { label: 'Liberty',                      icon: 'fa-map-location-dot', tab: 'ts-ofm',  vector: true },
+    'ofm-bright':       { label: 'Bright',                       icon: 'fa-map',              tab: 'ts-ofm',  vector: true },
+    'ofm-positron':     { label: 'Positron',                     icon: 'fa-circle-dot',       tab: 'ts-ofm',  vector: true },
+  };
+
+  // Updates the picker UI only — does NOT touch #tileserver.val()
+  function updateTileserverPickerUI(value) {
+    const meta = TS_META[value] || { label: value, icon: 'fa-map' };
+    $('#tileserverPickerLabel').text(meta.label);
+    $('#tileserverPickerIcon').attr('class', 'fa-solid me-2 ' + meta.icon);
+    $('.ts-option').removeClass('ts-selected');
+    $(`.ts-option[data-value="${value}"]`).addClass('ts-selected');
+  }
+
+$(document).ready(function () {
     // Initial display based on the selected value
     updateDetails();
 
     // Event listener for when the select changes
     $('#share_level').on('change', updateDetails);
 
-    // ---- Tileserver picker ----
-    const TS_META = {
-      'none':             { label: '{{ none_t }}',                  icon: 'fa-ban',              tab: 'ts-other' },
-      'osm':              { label: '{{ tileserver_default }}',     icon: 'fa-map',              tab: 'ts-general' },
-      'de':               { label: '{{ tileserver_de }}',          icon: 'fa-map',              tab: 'ts-general' },
-      'fr':               { label: '{{ tileserver_fr }}',          icon: 'fa-map',              tab: 'ts-general' },
-      'jawg-streets':     { label: '{{ tileserver_jawg_streets }}',icon: 'fa-road',             tab: 'ts-jawg' },
-      'jawg-light':       { label: '{{ tileserver_jawg_light }}',  icon: 'fa-sun',              tab: 'ts-jawg' },
-      'jawg-dark':        { label: '{{ tileserver_jawg_dark }}',   icon: 'fa-moon',             tab: 'ts-jawg' },
-      'jawg-sunny':       { label: '{{ tileserver_jawg_sunny }}',  icon: 'fa-cloud-sun',        tab: 'ts-jawg' },
-      'jawg-terrain':     { label: '{{ tileserver_jawg_terrain }}',icon: 'fa-mountain',         tab: 'ts-jawg' },
-      'jawg-lagoon':      { label: '{{ tileserver_jawg_lagoon }}', icon: 'fa-water',            tab: 'ts-jawg' },
-      'dark-train':       { label: 'Dark Train',                     icon: 'fa-moon',             tab: 'ts-ofm',    vector: true },
-      'jawg-streets-v2':  { label: 'Streets V2',                   icon: 'fa-road',             tab: 'ts-jawg',   vector: true },
-      'jawg-lagoon-v2':   { label: 'Lagoon V2',                    icon: 'fa-water',            tab: 'ts-jawg',   vector: true },
-      'ofm-liberty':      { label: 'Liberty',                      icon: 'fa-map-location-dot', tab: 'ts-ofm',    vector: true },
-      'ofm-bright':       { label: 'Bright',                       icon: 'fa-map',              tab: 'ts-ofm',    vector: true },
-      'ofm-positron':     { label: 'Positron',                     icon: 'fa-circle-dot',       tab: 'ts-ofm',    vector: true },
-    };
-
-    function updateTileserverPicker(value) {
-      const meta = TS_META[value] || { label: value, icon: 'fa-map' };
-      $('#tileserver').val(value);
-      $('#tileserverPickerLabel').text(meta.label);
-      $('#tileserverPickerIcon').attr('class', 'fa-solid me-2 ' + meta.icon);
-      $('.ts-option').removeClass('ts-selected');
-      $(`.ts-option[data-value="${value}"]`).addClass('ts-selected');
-    }
-
-    function setOrmVectorDisabled(disabled) {
-      $('.ts-vector').toggleClass('ts-orm-disabled', disabled);
-    }
-
     $('#tileserverPickerBtn').on('click', function() {
-      const current = $('#tileserver').val();
-      const meta = TS_META[current];
-      if (meta) {
-        $(`#tileserverTabs button[data-bs-target="#${meta.tab}"]`).tab('show');
-      }
-      updateTileserverPicker(current);
+      // When ORM is active, highlight the base map in the picker
+      const baseMap = {% if is_premium %}$('#orm-enabled').is(':checked') ? ($('#tileserver').data('base-map') || 'osm') : $('#tileserver').val(){% else %}$('#tileserver').val(){% endif %};
+      const meta = TS_META[baseMap];
+      if (meta) $(`#tileserverTabs button[data-bs-target="#${meta.tab}"]`).tab('show');
+      updateTileserverPickerUI(baseMap);
       new bootstrap.Modal(document.getElementById('tileserverModal')).show();
     });
 
     $(document).on('click', '.ts-option', function() {
-      if ($(this).hasClass('ts-orm-disabled')) return;
       const value = $(this).data('value');
-      updateTileserverPicker(value);
+      updateTileserverPickerUI(value);
+      {% if is_premium %}
+      if ($('#orm-enabled').is(':checked')) {
+        $('#tileserver').data('base-map', value);
+        updateORMValue();
+      } else {
+        $('#tileserver').val(value);
+      }
+      {% else %}
+      $('#tileserver').val(value);
+      {% endif %}
       bootstrap.Modal.getInstance(document.getElementById('tileserverModal')).hide();
     });
 
-    // Init picker label
-    updateTileserverPicker('{{ user_tileserver }}');
-
+    // Init picker and tileserver value
     {% if is_premium %}
-    // On page load, check if current tileserver is an ORM map
     const currentTileserver = "{{ user_tileserver }}";
-    const ormMatch = currentTileserver.match(/^openrailwaymap-(.+)\.(.+)$/);
+    const ormRasterMatch = currentTileserver.match(/^openrailwaymap-(.+)\.(.+)$/);
+    const ormVectorMatch = currentTileserver.match(/^orm-vector-([^.]+)\.(.+)$/);
 
-    if (ormMatch) {
-        $('#orm-enabled').prop('checked', true);
-        $('#orm-type').val(ormMatch[1]);
-        updateTileserverPicker(ormMatch[2]);
-        $('#orm-options').show();
-        setOrmVectorDisabled(true);
-        $('#tileserver').data('base-map', ormMatch[2]);
+    if (ormRasterMatch) {
+      $('#orm-enabled').prop('checked', true);
+      $('#orm-type').val(ormRasterMatch[1]);
+      $('#tileserver').data('base-map', ormRasterMatch[2]);
+      updateTileserverPickerUI(ormRasterMatch[2]);
+      $('#orm-options').show();
+    } else if (ormVectorMatch) {
+      $('#orm-enabled').prop('checked', true);
+      $('#orm-type').val(ormVectorMatch[1]);
+      $('#tileserver').data('base-map', ormVectorMatch[2]);
+      updateTileserverPickerUI(ormVectorMatch[2]);
+      $('#orm-options').show();
+    } else {
+      updateTileserverPickerUI(currentTileserver);
     }
+    {% else %}
+    updateTileserverPickerUI('{{ user_tileserver }}');
     {% endif %}
   });
 
@@ -703,69 +713,32 @@
   }
 
   {% if is_premium %}
-    // Handle ORM checkbox and vector map compatibility
     $('#orm-enabled').on('change', function() {
-        const isChecked = $(this).is(':checked');
-
-        if (isChecked) {
-            // Store current base map, falling back if a vector style is active
-            const currentMap = $('#tileserver').val();
-            const isVector = TS_META[currentMap] && TS_META[currentMap].vector;
-            const baseMap = isVector ? 'osm' : currentMap;
-            if (isVector) updateTileserverPicker('osm');
-            $('#tileserver').data('base-map', baseMap);
-
+        if ($(this).is(':checked')) {
+            $('#tileserver').data('base-map', $('#tileserver').val());
             $('#orm-options').slideDown();
-            setOrmVectorDisabled(true);
             updateORMValue();
         } else {
             $('#orm-options').slideUp();
-            setOrmVectorDisabled(false);
-
-            // Restore the base map
             const baseMap = $('#tileserver').data('base-map') || 'osm';
-            updateTileserverPicker(baseMap);
+            $('#tileserver').val(baseMap);
+            updateTileserverPickerUI(baseMap);
         }
     });
 
-    // Update ORM value when type changes
     $('#orm-type').on('change', updateORMValue);
 
     function updateORMValue() {
-        if ($('#orm-enabled').is(':checked')) {
-            const ormType = $('#orm-type').val();
-            const baseMap = $('#tileserver').data('base-map') || $('#tileserver').val();
-            
-            // Only use raster maps as base
-            if (!baseMap.endsWith('-v2') && baseMap !== '') {
-                const combinedValue = `openrailwaymap-${ormType}.${baseMap}`;
-                // Create or update hidden input
-                if ($('#orm-combined-value').length === 0) {
-                    $('<input>').attr({
-                        type: 'hidden',
-                        id: 'orm-combined-value',
-                        name: 'tileserver',
-                        value: combinedValue
-                    }).appendTo('form');
-                } else {
-                    $('#orm-combined-value').val(combinedValue);
-                }
-            }
+        if (!$('#orm-enabled').is(':checked')) return;
+        const baseMap = $('#tileserver').data('base-map') || 'osm';
+        const isVector = !!(TS_META[baseMap] && TS_META[baseMap].vector);
+        const ormType = $('#orm-type').val() || 'standard';
+        if (isVector) {
+            $('#tileserver').val(`orm-vector-${ormType}.${baseMap}`);
         } else {
-            // Remove hidden input if ORM is disabled
-            $('#orm-combined-value').remove();
+            $('#tileserver').val(`openrailwaymap-${ormType}.${baseMap}`);
         }
     }
-
-    // Before form submission, set the correct value
-    $('form').on('submit', function(e) {
-        if ($('#orm-enabled').is(':checked')) {
-            const ormCombined = $('#orm-combined-value').val();
-            if (ormCombined) {
-                $('#tileserver').val(ormCombined);
-            }
-        }
-    });
   {% endif %}
 </script>
 {% endblock %}

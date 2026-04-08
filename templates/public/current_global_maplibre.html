@@ -303,6 +303,13 @@ MapLibreUtils.initializeMapLibre({
     loadTrips();
     setInterval(loadTrips, 60000);
   });
+}).catch(err => {
+  const msg = err?.message || '';
+  if (msg.includes('webglcontextcreationerror') || msg.includes('Failed to initialize WebGL')) {
+    window.location.href = '/live_map/leaflet' + window.location.search;
+  } else {
+    console.error(err);
+  }
 });
 </script>
 

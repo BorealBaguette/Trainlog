@@ -45,20 +45,31 @@ async function initializeMapLibre(options = {}) {
 
     let mapStyle;
 
+    // Parse orm-vector overlay
+    let ormVectorBase = null;
+    let ormVectorType = 'standard';
+    let effectiveTileserver = tileserver;
+    const ormVectorMatch = tileserver && tileserver.match(/^orm-vector-([^.]+)\.(.+)$/);
+    if (ormVectorMatch) {
+        ormVectorType = ormVectorMatch[1];
+        ormVectorBase = ormVectorMatch[2];
+        effectiveTileserver = ormVectorBase;
+    }
+
     // Handle different tile server types
-    if (tileserver === 'none') {
+    if (effectiveTileserver === 'none') {
         mapStyle = { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#f8f9fa' } }] };
         if (useGlobe) mapStyle.projection = { type: 'globe' };
-    } else if (isVectorTileServer(tileserver) || styleUrl) {
+    } else if (isVectorTileServer(effectiveTileserver) || styleUrl) {
         // Load vector style
-        const url = styleUrl || getVectorStyleUrl(tileserver, userLanguage);
+        const url = styleUrl || getVectorStyleUrl(effectiveTileserver, userLanguage);
         try {
             const response = await fetch(url);
             if (!response.ok) {
                 throw new Error(`Failed to load style: ${response.status}`);
             }
             mapStyle = await response.json();
-            
+
             // Add globe projection if requested
             if (useGlobe) {
                 mapStyle.projection = { type: 'globe' };
@@ -70,7 +81,7 @@ async function initializeMapLibre(options = {}) {
         }
     } else {
         // Use raster tiles
-        mapStyle = createRasterStyle(tileserver, userLanguage, useGlobe);
+        mapStyle = createRasterStyle(effectiveTileserver, userLanguage, useGlobe);
     }
 
     // Create map
@@ -81,6 +92,79 @@ async function initializeMapLibre(options = {}) {
         zoom: zoom,
         doubleClickZoom: false
     });
+
+    // Add a sentinel layer that trip layers will sit above
+    map.once('load', () => {
+        map.addLayer({ id: 'orm-sentinel', type: 'background', paint: { 'background-opacity': 0 } });
+    });
+
+    // Add OpenRailwayMap vector overlay after style loads
+    if (ormVectorBase) {
+        const ormTypeMap = {
+            standard:    'standard',
+            maxspeed:    'speed',
+            signals:     'signals',
+            electrified: 'electrification',
+            gauge:       'track',
+        };
+        const ormStyleName = ormTypeMap[ormVectorType] || 'standard';
+
+        map.once('load', async () => {
+            try {
+                const ormStyleResp = await fetch(`/getORMStyle/${ormStyleName}.json`);
+                const ormStyle = await ormStyleResp.json();
+
+                const skipSources = new Set(['dem', 'search', 'route', 'route_stops', 'openhistoricalmap']);
+                const addedSources = new Set();
+
+                // Fix sources: convert relative url/tiles to absolute tiles array
+                for (const [name, source] of Object.entries(ormStyle.sources)) {
+                    if (skipSources.has(name)) continue;
+                    try {
+                        const fixedSource = { ...source };
+                        if (fixedSource.url) {
+                            const path = fixedSource.url.startsWith('/') ? fixedSource.url : `/${fixedSource.url}`;
+                            fixedSource.tiles = [`https://openrailwaymap.app${path}/{z}/{x}/{y}`];
+                            delete fixedSource.url;
+                        } else if (fixedSource.tiles) {
+                            fixedSource.tiles = fixedSource.tiles.map(t =>
+                                t.startsWith('/') ? `https://openrailwaymap.app${t}/{z}/{x}/{y}` : t
+                            );
+                        } else {
+                            continue; // no tiles, skip
+                        }
+                        map.addSource(`orm_${name}`, fixedSource);
+                        addedSources.add(name);
+                    } catch (e) {
+                        console.warn(`[ORM] skipping source ${name}:`, e.message);
+                    }
+                }
+
+                // Add all ORM line layers before the sentinel (so trip data renders on top)
+                // Skip text/symbol/background layers — they cause gritty artifacts and CORS issues
+                const skipLayers = new Set(['hillshade', 'route', 'route_text', 'route_stops', 'search']);
+                const skipTypes = new Set(['symbol', 'background', 'raster']);
+                for (const layer of ormStyle.layers) {
+                    if (skipLayers.has(layer.id) || !layer.source) continue;
+                    if (skipSources.has(layer.source) || !addedSources.has(layer.source)) continue;
+                    if (skipTypes.has(layer.type)) continue;
+                    if (layer.id.includes('_casing') || layer.id.includes('_cover')) continue;
+                    try {
+                        const newLayer = { ...layer, source: `orm_${layer.source}` };
+                        // Strip layout.visibility expressions — unsupported by MapLibre, default to visible
+                        if (newLayer.layout?.visibility && typeof newLayer.layout.visibility !== 'string') {
+                            newLayer.layout = { ...newLayer.layout, visibility: 'visible' };
+                        }
+                        map.addLayer(newLayer, 'orm-sentinel');
+                    } catch (e) {
+                        console.warn(`[ORM] skipping layer ${layer.id}:`, e.message);
+                    }
+                }
+            } catch (e) {
+                console.error('[ORM] failed to load style:', e);
+            }
+        });
+    }
 
     // Add navigation controls
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
@@ -166,7 +250,12 @@ function getTileServerConfig(serverType, userLanguage) {
             } else if (serverType === 'thunderforest-transport') {
                 tileUrl = `https://tiles.trainlog.me/tile/${serverType}/{x}/{y}/{z}`;
                 attribution = '© Thunderforest, © OpenStreetMap contributors';
-            }else if (serverType && serverType.startsWith("openrailwaymap-")) {
+            } else if (serverType && serverType.startsWith("orm-vector-")) {
+                // Vector ORM is handled by initializeMapLibre; fall back to base raster
+                const m = serverType.match(/^orm-vector-([^.]+)\.(.+)$/);
+                serverType = (m ? m[2] : null) || "osm";
+                return getTileServerConfig(serverType, userLanguage);
+            } else if (serverType && serverType.startsWith("openrailwaymap-")) {
                 var baseStyle = "osm"; // default
                 if (serverType.includes(".")) {
                     var parts = serverType.split(".");

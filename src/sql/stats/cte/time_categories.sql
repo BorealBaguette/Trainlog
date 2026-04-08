@@ -17,13 +17,13 @@ CASE
   WHEN :user_id IS NULL THEN
     CASE
       WHEN COALESCE(
-        EXTRACT(EPOCH FROM (utc_end_datetime - utc_start_datetime)),
+        EXTRACT(EPOCH FROM (utc_end_datetime - utc_start_datetime)) - COALESCE(departure_delay, 0) + COALESCE(arrival_delay, 0),
         manual_trip_duration,
         estimated_trip_duration,
         0
       ) BETWEEN 0 AND (10 * 24 * 60 * 60)
       THEN COALESCE(
-        EXTRACT(EPOCH FROM (utc_end_datetime - utc_start_datetime)),
+        EXTRACT(EPOCH FROM (utc_end_datetime - utc_start_datetime)) - COALESCE(departure_delay, 0) + COALESCE(arrival_delay, 0),
         manual_trip_duration,
         estimated_trip_duration,
         0
@@ -32,7 +32,7 @@ CASE
     END
   ELSE
     COALESCE(
-      EXTRACT(EPOCH FROM (utc_end_datetime - utc_start_datetime)),
+      EXTRACT(EPOCH FROM (utc_end_datetime - utc_start_datetime)) - COALESCE(departure_delay, 0) + COALESCE(arrival_delay, 0),
       manual_trip_duration,
       estimated_trip_duration,
       0

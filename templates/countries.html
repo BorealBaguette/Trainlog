@@ -63,7 +63,7 @@
     fetch(`/u/{{username}}/countryGeoJSON/${cc}`)
       .then(response => {
         if (!response.ok) {
-          throw new Error('Network response was not ok');
+          throw new Error(`Network response was ${response.status}`);
         }
         return response.json();
       })
@@ -100,7 +100,7 @@
         $('.loading-screen').css('display', 'none');
       })
       .catch(error => {
-        alert('There was a problem with the fetch operation:', error.message);
+        alert(`There was a problem with the fetch operation:\n${error.message}`);
         $('.loading-screen').css('display', 'none');
          // also hide spinner in case of error
       });

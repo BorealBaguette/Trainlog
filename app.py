@@ -76,6 +76,11 @@ logger = logging.getLogger(__name__)
 
 # Local Application/Library Specific Imports
 from py import geopip_country
+from py.coverage import (
+    get_coverage_file_path,
+    get_coverage_geojson_dict,
+    has_coverage_file,
+)
 from py.currency import get_available_currencies, get_exchange_rate
 from py.db_init import init_data, init_main
 from py.g_search import get_vessel_picture
@@ -145,7 +150,7 @@ from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
 from src.api.finance import finance_blueprint
 from src.api.carbon import carbon_blueprint
-from src.api.wrapped import wrapped_blueprint
+from src.api.wrapped import wrapped_blueprint, DISTANCE_COMPARISONS, DURATION_COMPARISONS
 from src.api.stats import stats_blueprint, fetch_stats, get_distinct_stat_years
 from src.api.ai import ai_blueprint
 from src.api.trainset import trainset_blueprint
@@ -526,7 +531,7 @@ def changeLang(langToSet, session=False):
     session["userinfo"]["lang"] = langToSet
 
 
-def get_country_codes_from_files():
+def get_country_codes_from_files(immediate_only=False):
     country_codes = {}
     path = "country_percent/countries/processed/"
 
@@ -569,20 +574,27 @@ def get_country_codes_from_files():
         for cc in country_codes
     }
 
+    def add_to_country_codes(name):
+        if "-" in name:
+            cc = name.split("-")[0].upper()
+            continent = "Region_" + cc
+            if not immediate_only:
+                add_to_country_codes(cc.lower()) # also add full country if subdivisions exist
+        else:
+            cc = name.upper()
+            continent = country_to_continent.get(cc, "Unknown")
+        if continent not in country_codes:
+            country_codes[continent] = []
+
+        if name not in country_codes[continent]:
+            country_codes[continent].append(name)
+
     # Iterate over all files in the directory to collect country codes
     for filename in os.listdir(path):
         if filename.endswith(".geojson"):
             # Extract country code from filename
             name = filename.replace(".geojson", "")
-            if "-" in name:
-                cc = name.split("-")[0].upper()
-                continent = "Region_" + cc
-            else:
-                cc = name.upper()
-                continent = country_to_continent.get(cc, "Unknown")
-            if continent not in country_codes:
-                country_codes[continent] = []
-            country_codes[continent].append(name)
+            add_to_country_codes(name)
 
     # Sort each list of country codes
     for continent, codes in country_codes.items():
@@ -3425,6 +3437,15 @@ def vector_style(language, style):
     return jsonify(vectorStyle)
 
 
+@app.route("/getORMStyle/<style>.json")
+def orm_style(style):
+    allowed = {"standard", "speed", "signals", "electrification", "track", "operator"}
+    if style not in allowed:
+        return ("Not found", 404)
+    resp = requests.get(f"https://openrailwaymap.app/style/{style}.json", timeout=10)
+    return jsonify(resp.json())
+
+
 @app.route("/u/<username>/new_map")
 @login_required
 def new_map(username):
@@ -3470,9 +3491,7 @@ def countries(username, cc):
         nav = "bootstrap/navigation.html"
     else:
         nav = "bootstrap/public_nav.html"
-    directory_path = "country_percent/countries/processed/"
-    file_path = os.path.join(directory_path, f"{cc}.geojson")
-    if not os.path.exists(file_path):
+    if not has_coverage_file(cc):
         abort(410)
 
     user_obj = User.query.filter_by(username=username).first()
@@ -3539,32 +3558,28 @@ def getCountryGeoJSON(username, cc):
         )
     )
 
-    directory_path = "country_percent/countries/processed/"
+    geojson_data = get_coverage_geojson_dict(cc)
+    # Initialize the total area
+    traveled_area = 0
 
-    file_path = os.path.join(directory_path, f"{cc}.geojson")
-    with open(file_path, "r") as file:
-        geojson_data = json.load(file)
-        # Initialize the total area
-        traveled_area = 0
+    for feature in geojson_data["features"]:
+        feature_id = feature["properties"].get("id")
+        feature_area = feature["properties"].get("area_m2", 0)
 
-        for feature in geojson_data["features"]:
-            feature_id = feature["properties"].get("id")
-            feature_area = feature["properties"].get("area_m2", 0)
+        if feature_id in exclude_ids:
+            feature["properties"]["traveled"] = True
+            traveled_area += feature_area
+        else:
+            feature["properties"]["traveled"] = False
 
-            if feature_id in exclude_ids:
-                feature["properties"]["traveled"] = True
-                traveled_area += feature_area
-            else:
-                feature["properties"]["traveled"] = False
-
-        # Compare total_area with the global total_area_m2
-        total_area = geojson_data["total_area_m2"]
-        percent = math.ceil(min((traveled_area / total_area) * 100, 100))
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute(
-                upsertPercent, {"username": username, "cc": cc, "percent": percent}
-            )
-        mainConn.commit()
+    # Compare total_area with the global total_area_m2
+    total_area = geojson_data["total_area_m2"]
+    percent = math.ceil(min((traveled_area / total_area) * 100, 100))
+    with managed_cursor(mainConn) as cursor:
+        cursor.execute(
+            upsertPercent, {"username": username, "cc": cc, "percent": percent}
+        )
+    mainConn.commit()
     end_time = datetime.now()  # End the timer
     render_time = end_time - start_time  # Calculate the difference
     print(render_time)
@@ -3575,9 +3590,7 @@ def getCountryGeoJSON(username, cc):
 @admin_required
 def editCountries(cc):
     """ """
-    directory_path = "country_percent/countries/processed/"
-    file_path = os.path.join(directory_path, f"{cc}.geojson")
-    if not os.path.exists(file_path):
+    if not has_coverage_file(cc, immediate_only=True):
         abort(410)
 
     return render_template(
@@ -3609,14 +3622,7 @@ def editCountriesList():
 
 @app.route("/getGeojson/<cc>", methods=["GET"])
 def get_full_geojson(cc):
-    directory_path = "country_percent/countries/processed/"
-
-    file_path = os.path.join(directory_path, f"{cc}.geojson")
-
-    with open(file_path, "r") as file:
-        geojson_data = json.load(file)
-
-    return jsonify(geojson_data)
+    return jsonify(get_coverage_geojson_dict(cc))
 
 
 @app.route("/processQueue/<cc>", methods=["POST"])
@@ -3628,12 +3634,9 @@ def process_queue(cc):
         if not operations or len(operations) == 0:
             return jsonify({"success": False, "message": "No operations to process"})
         
-        directory_path = "country_percent/countries/processed/"
-        file_path = os.path.join(directory_path, f"{cc}.geojson")
-        
         # Load the current GeoJSON data
-        with open(file_path, "r") as file:
-            geojson_data = json.load(file)
+        file_path = get_coverage_file_path(cc)
+        geojson_data = get_coverage_geojson_dict(cc, immediate_only=True)
         
         print(f"Processing {len(operations)} operations for {cc}")
         
@@ -3910,7 +3913,29 @@ def edit_translations(langid):
 @public_required
 def public(username):
     """
-    Public home
+    Public home (MapLibre)
+    """
+    user = User.query.filter_by(username=username).first()
+    tileserver = user.tileserver if user else "default"
+    globe = user.globe if user else False
+    return render_template(
+        "new_map.html",
+        nav="bootstrap/public_nav.html",
+        title=lang[session["userinfo"]["lang"]]["map"],
+        username=username,
+        public=True,
+        tileserver=tileserver,
+        globe=globe,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/public/<username>/leaflet")
+@public_required
+def public_leaflet(username):
+    """
+    Public home (Leaflet fallback)
     """
     return render_template(
         "map.html",
@@ -7018,12 +7043,11 @@ def export(username):
                 "SELECT * FROM trip WHERE username = :username", {"username": username}
             )
         else:
-            query = "SELECT * FROM trip WHERE username = '{username}' AND uid IN ({requestedTrips})"
+            query = "SELECT * FROM trip WHERE username = ? AND uid IN ({requestedTrips})"
             formattedQuery = query.format(
-                username=username,
                 requestedTrips=", ".join(("?",) * len(requestedTrips.split(","))),
             )
-            cursor.execute(formattedQuery, requestedTrips.split(","))
+            cursor.execute(formattedQuery, [username] + requestedTrips.split(","))
         rows = cursor.fetchall()
         cw.writerow(
             [i[0] for i in cursor.description if i[0] != "ticket_id"] + ["path"]
@@ -7049,21 +7073,6 @@ def export(username):
             row = dict(row)
             row.pop("ticket_id")
             row["waypoints"] = json.dumps(row["waypoints"])
-            row["operator"] = (
-                row["operator"].replace(",", "&&")
-                if row["operator"] not in (None, "")
-                else row["operator"]
-            )
-            row["operator"] = (
-                urllib.parse.quote(row["operator"])
-                if row["operator"] not in (None, "")
-                else row["operator"]
-            )
-            row["line_name"] = (
-                urllib.parse.quote(row["line_name"])
-                if row["line_name"] not in (None, "")
-                else row["line_name"]
-            )
             rowP = list(row.values())
 
             rowP.append(polyline.encode(json.loads(paths[row["uid"]])))
@@ -7777,7 +7786,7 @@ def importAll(username):
     if getUser() not in (username, owner):
         abort(403)
 
-    data = unquote(list(request.form.to_dict().items())[0][0])
+    data = list(request.form.to_dict().items())[0][0]
 
     csv.field_size_limit(10 * 1024 * 1024)  # 10 MB — accommodates long polyline paths
     try:
@@ -7795,14 +7804,27 @@ def importAll(username):
     # Handle special cases
     if dataDict.get("uid"):
         dataDict.pop("uid")
+
+    # Legacy export compatibility: operator used URL-encoding in older CSVs.
+    if dataDict.get("operator") is not None:
+        dataDict["operator"] = unquote(dataDict["operator"])
+
+    # Legacy export compatibility: line_name used URL-encoding in older CSVs.
+    if dataDict.get("line_name") is not None:
+        dataDict["line_name"] = unquote(dataDict["line_name"])
+
     if dataDict.get("countries") is not None:
         dataDict["countries"] = (
             dataDict["countries"].replace(' "', ', "').replace(",,", ",")
         )
+
     if dataDict.get("waypoints") is not None:
         dataDict["waypoints"] = json.loads(dataDict["waypoints"])
+
+    # Legacy export compatibility: operator commas were encoded as "&&".
     if dataDict.get("operator") is not None:
         dataDict["operator"] = dataDict["operator"].replace("&&", ",")
+
     dataDict["created"] = now
     dataDict["last_modified"] = now
     dataDict["username"] = username
@@ -9833,12 +9855,12 @@ def get_all_current_trips():
 @app.route("/live_map")
 def live_map():
     """
-    Shows the global map of all public users currently traveling
+    Shows the global map of all public users currently traveling (MapLibre)
     """
     username = getUser()
     user = User.query.filter_by(username=username).first() if username else None
     return render_template(
-        "public/current_global.html",
+        "public/current_global_maplibre.html",
         username=username,
         logosList=listOperatorsLogos(),
         translations=lang[session["userinfo"]["lang"]],
@@ -9850,15 +9872,15 @@ def live_map():
         title=lang[session["userinfo"]["lang"]]["live_map"],
     )
 
-@app.route("/new_live_map")
-def new_live_map():
+@app.route("/live_map/leaflet")
+def live_map_leaflet():
     """
-    MapLibre version of the live map (alongside the classic Leaflet one)
+    Leaflet fallback for the live map
     """
     username = getUser()
     user = User.query.filter_by(username=username).first() if username else None
     return render_template(
-        "public/current_global_maplibre.html",
+        "public/current_global.html",
         username=username,
         logosList=listOperatorsLogos(),
         translations=lang[session["userinfo"]["lang"]],
@@ -9959,11 +9981,14 @@ def video(tripIds):
 @app.route("/u/<username>/dashboard")
 @login_required
 def user_dashboard(username):
+    import json
     return render_template(
         "dashboard.html",
         title=lang[session["userinfo"]["lang"]]["user_dashboard"],
         username=username,
         nav="bootstrap/navigation.html",
+        dist_comps_json=json.dumps(DISTANCE_COMPARISONS),
+        dur_comps_json=json.dumps(DURATION_COMPARISONS),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
