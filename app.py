@@ -7808,7 +7808,7 @@ def importAll(username):
     if getUser() not in (username, owner):
         abort(403)
 
-    data = unquote(list(request.form.to_dict().items())[0][0])
+    data = list(request.form.to_dict().items())[0][0]
 
     csv.field_size_limit(10 * 1024 * 1024)  # 10 MB — accommodates long polyline paths
     try:
@@ -7826,6 +7826,10 @@ def importAll(username):
     # Handle special cases
     if dataDict.get("uid"):
         dataDict.pop("uid")
+    if dataDict.get("operator") is not None:
+        dataDict["operator"] = unquote(dataDict["operator"])
+    if dataDict.get("line_name") is not None:
+        dataDict["line_name"] = unquote(dataDict["line_name"])
     if dataDict.get("countries") is not None:
         dataDict["countries"] = (
             dataDict["countries"].replace(' "', ', "').replace(",,", ",")
