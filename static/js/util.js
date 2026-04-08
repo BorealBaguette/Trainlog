@@ -250,24 +250,36 @@ function getGetParams(){
 function mToKm(m) {
     var km = m / 1000;
     var value, suffix;
-   
+
     if (km >= 1000000) {
         value = km / 1000000;
         suffix = 'M';
-    } else if (km > 1) {
-        return new Intl.NumberFormat().format(Math.round(km));
-    } else {
         return new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 0,
-            maximumFractionDigits: 2
+            maximumFractionDigits: 1
+        }).format(value) + suffix;
+    }
+
+    if (km >= 10) {
+        return new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
         }).format(km);
     }
-    
+
+    if (km >= 1) {
+        return new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 1
+        }).format(km);
+    }
+
     return new Intl.NumberFormat(undefined, {
         minimumFractionDigits: 0,
-        maximumFractionDigits: 1
-    }).format(value) + suffix;
+        maximumFractionDigits: 2
+    }).format(km);
 }
+
 function isNumber(num){
   if (num === null || num === undefined) return false;
   if (typeof num === 'string' && num.trim() === '') return false;
