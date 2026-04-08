@@ -7080,21 +7080,6 @@ def export(username):
             row = dict(row)
             row.pop("ticket_id")
             row["waypoints"] = json.dumps(row["waypoints"])
-            row["operator"] = (
-                row["operator"].replace(",", "&&")
-                if row["operator"] not in (None, "")
-                else row["operator"]
-            )
-            row["operator"] = (
-                urllib.parse.quote(row["operator"])
-                if row["operator"] not in (None, "")
-                else row["operator"]
-            )
-            row["line_name"] = (
-                urllib.parse.quote(row["line_name"])
-                if row["line_name"] not in (None, "")
-                else row["line_name"]
-            )
             rowP = list(row.values())
 
             rowP.append(polyline.encode(json.loads(paths[row["uid"]])))
@@ -7826,18 +7811,27 @@ def importAll(username):
     # Handle special cases
     if dataDict.get("uid"):
         dataDict.pop("uid")
+
+    # Legacy export compatibility: operator used URL-encoding in older CSVs.
     if dataDict.get("operator") is not None:
         dataDict["operator"] = unquote(dataDict["operator"])
+
+    # Legacy export compatibility: line_name used URL-encoding in older CSVs.
     if dataDict.get("line_name") is not None:
         dataDict["line_name"] = unquote(dataDict["line_name"])
+
     if dataDict.get("countries") is not None:
         dataDict["countries"] = (
             dataDict["countries"].replace(' "', ', "').replace(",,", ",")
         )
+
     if dataDict.get("waypoints") is not None:
         dataDict["waypoints"] = json.loads(dataDict["waypoints"])
+
+    # Legacy export compatibility: operator commas were encoded as "&&".
     if dataDict.get("operator") is not None:
         dataDict["operator"] = dataDict["operator"].replace("&&", ",")
+
     dataDict["created"] = now
     dataDict["last_modified"] = now
     dataDict["username"] = username
