@@ -47,7 +47,7 @@
 
               <h6 class="card-subtitle mb-3 text-muted">{{ feature_requests_voting if feature_requests_voting is defined else 'Voting' }}</h6>
 
-              {% if logged_in_user and not is_owner and username %}
+              {% if logged_in_user and not is_owner and username and username != "public" %}
                 <button type="button"
                         class="btn btn-lg w-100 {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }} mb-2"
                         data-vote-button
@@ -68,7 +68,7 @@
                 {{ request.score }}
               </div>
 
-              {% if logged_in_user and not is_owner and username %}
+              {% if logged_in_user and not is_owner and username and username != "public" %}
                 <button type="button"
                         class="btn btn-lg w-100 {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }}"
                         data-vote-button
@@ -128,7 +128,7 @@
                       </div>
                     </div>
 
-                    {% if logged_in_user and username and (is_owner or request.author_display == logged_in_user) %}
+                    {% if logged_in_user and username and username != "public" and (is_owner or request.author_display == logged_in_user) %}
                       <div class="btn-group">
                         <button type="button" class="btn btn-outline-secondary"
                                 onclick="editRequest({{ request.id }}, `{{ request.title|e }}`, `{{ request.description|e }}`)">
@@ -169,7 +169,7 @@
             <div class="card-body">
               
               <!-- Add Comment Form -->
-              {% if logged_in_user and username %}
+              {% if logged_in_user and username and username != "public" %}
               <form id="commentForm" class="mb-4">
                 <div class="mb-2">
                   <textarea class="form-control" id="commentContent" rows="3" 
