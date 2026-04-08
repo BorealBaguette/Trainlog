@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Modstemmer",
     "feature_requests_no_votes": "Ingen stemmer endnu",
     "feature_requests_error_loading": "Fejl ved indlæsning af vælgere",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Afstemningen mislykkedes. Prøv venligst igen.",
     "user_dashboard": "Brugerdashboard",
     "feature_requests_edit_title": "Rediger funktionsanmodning",
     "update": "Opdater",

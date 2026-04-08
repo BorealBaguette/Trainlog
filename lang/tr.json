@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Olumsuz oy verenler",
     "feature_requests_no_votes": "Henüz oy yok",
     "feature_requests_error_loading": "Oy verenleri yükleme hatası",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Oylama başarısız oldu. Lütfen tekrar deneyiniz.",
     "user_dashboard": "Kullanıcı Paneli",
     "feature_requests_edit_title": "Özellik Talebini Düzenle",
     "update": "Güncelle",

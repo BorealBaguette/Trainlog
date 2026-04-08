@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Vastu hääletajad",
     "feature_requests_no_votes": "Veel pole hääli",
     "feature_requests_error_loading": "Tõrge hääletajate laadimisel",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Hääletus ebaõnnestus. Palun proovi uuesti.",
     "user_dashboard": "Kasutajapaneel",
     "feature_requests_edit_title": "Funktsioonisoovi muutmine",
     "update": "Uuenda",

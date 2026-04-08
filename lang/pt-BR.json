@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Opositores",
     "feature_requests_no_votes": "Ainda sem votos",
     "feature_requests_error_loading": "Erro ao carregar eleitores",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "A votação falhou. Por favor, tente novamente.",
     "user_dashboard": "Painel do Usuário",
     "feature_requests_edit_title": "Editar Solicitação de Recurso",
     "update": "Atualizar",

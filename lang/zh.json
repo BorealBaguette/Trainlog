@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "点踩者",
     "feature_requests_no_votes": "还没有投票",
     "feature_requests_error_loading": "加载投票者时出错",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "投票失败。请重试。",
     "user_dashboard": "用户仪表板",
     "feature_requests_edit_title": "编辑功能请求",
     "update": "更新",

@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "반대 투표자",
     "feature_requests_no_votes": "아직 투표 없음",
     "feature_requests_error_loading": "투표자 로딩 오류",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "투표에 실패했습니다. 다시 시도해 보세요.",
     "user_dashboard": "사용자 대시보드",
     "feature_requests_edit_title": "기능 요청 편집",
     "update": "업데이트",

@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Vastaan",
     "feature_requests_no_votes": "Ei ääniä vielä",
     "feature_requests_error_loading": "Virhe äänestäjien lataamisessa",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Äänestys epäonnistui. Yritä uudelleen.",
     "user_dashboard": "Käyttäjän yleiskatsaus",
     "feature_requests_edit_title": "Muokkaa ominaisuuspyyntöä",
     "update": "Päivitä",

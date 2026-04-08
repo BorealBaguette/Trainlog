@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Votes négatifs",
     "feature_requests_no_votes": "Aucun vote pour le moment",
     "feature_requests_error_loading": "Erreur lors du chargement des votants",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Le vote a échoué. Veuillez essayer à nouveau.",
     "user_dashboard": "Tableau de bord utilisateur",
     "feature_requests_edit_title": "Modifier la demande de fonctionnalité",
     "update": "Mettre à jour",

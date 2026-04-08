@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Ті, хто проголосував проти",
     "feature_requests_no_votes": "Поки що немає голосів",
     "feature_requests_error_loading": "Помилка завантаження списку голосуючих",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Голосування не вдалося. Будь ласка, спробуйте ще раз.",
     "user_dashboard": "Панель користувача",
     "feature_requests_edit_title": "Редагувати запит на функцію",
     "update": "Оновити",

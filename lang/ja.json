@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "反対者",
     "feature_requests_no_votes": "まだ投票がありません",
     "feature_requests_error_loading": "投票者の読み込みエラー",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "投票に失敗しました。もう一度お試しください。",
     "user_dashboard": "ユーザーダッシュボード",
     "feature_requests_edit_title": "機能リクエストを編集する",
     "update": "更新",

@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Stemgerechtigden die tegen hebben gestemd",
     "feature_requests_no_votes": "Nog geen stemmen",
     "feature_requests_error_loading": "Fout bij laden van stemgerechtigden",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Stemmen mislukt. Probeer opnieuw.",
     "user_dashboard": "Gebruikersdashboard",
     "feature_requests_edit_title": "Functieverzoek bewerken",
     "update": "Bijwerken",

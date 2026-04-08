@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Glasači protiv",
     "feature_requests_no_votes": "Još nema glasova",
     "feature_requests_error_loading": "Pogreška pri učitavanju glasača",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Glasanje nije uspjelo. Molimo pokušajte ponovno.",
     "user_dashboard": "Korisnička nadzorna ploča",
     "feature_requests_edit_title": "Uredi zahtjev za značajku",
     "update": "Ažuriraj",

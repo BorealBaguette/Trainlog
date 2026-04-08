@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "De som har stemt ned",
     "feature_requests_no_votes": "Ingen stemmer ennå",
     "feature_requests_error_loading": "Feil ved lasting av velgere",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Avstemningen mislyktes. Vennligst prøv igjen.",
     "user_dashboard": "Brukerdashboard",
     "feature_requests_edit_title": "Rediger funksjonsforespørsel",
     "update": "Oppdater",

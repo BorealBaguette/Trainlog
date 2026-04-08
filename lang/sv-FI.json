@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Ogillare",
     "feature_requests_no_votes": "Inga röster än",
     "feature_requests_error_loading": "Fel vid inläsning av väljare",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Omröstningen misslyckades. Försök på nytt.",
     "user_dashboard": "Användarpanel",
     "feature_requests_edit_title": "Redigera funktionsbegäran",
     "update": "Uppdatera",

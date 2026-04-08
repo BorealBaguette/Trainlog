@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Hlasující proti",
     "feature_requests_no_votes": "Zatím žádné hlasy",
     "feature_requests_error_loading": "Chyba při načítání hlasujících",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "Hlasování se nezdařilo. Zkuste to znovu.",
     "user_dashboard": "Uživatelský panel",
     "feature_requests_edit_title": "Upravit požadavek na funkci",
     "update": "Aktualizovat",

@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Ablehner",
     "feature_requests_no_votes": "Noch keine Stimmen",
     "feature_requests_error_loading": "Fehler beim Laden der Wähler",
-    "feature_requests_vote_error": "Abstimmen fehlgeschlagen. Bitte versuchen Sie es erneut.",
+    "feature_requests_vote_error": "Abstimmung fehlgeschlagen. Bitte versuche es erneut.",
     "user_dashboard": "Benutzer-Dashboard",
     "feature_requests_edit_title": "Funktionsanfrage bearbeiten",
     "update": "Aktualisieren",

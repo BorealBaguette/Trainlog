@@ -615,7 +615,7 @@
     "feature_requests_downvoters": "Votantes negativos",
     "feature_requests_no_votes": "Sin votos aún",
     "feature_requests_error_loading": "Error al cargar votantes",
-    "feature_requests_vote_error": "Vote failed. Please try again.",
+    "feature_requests_vote_error": "La votación falló. Por favor intenta de nuevo.",
     "user_dashboard": "Panel de usuario",
     "feature_requests_edit_title": "Editar Solicitud de Función",
     "update": "Actualizar",
