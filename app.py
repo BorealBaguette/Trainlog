@@ -3775,6 +3775,9 @@ def process_queue(cc):
         # Write the updated data back to the file
         with open(file_path, "w") as file:
             json.dump(geojson_data, file)
+
+        # Remove the old data from cache
+        geopip_country.invalidate_cache(cc)
         
         print(f"Successfully processed {len(operations)} operations")
         return jsonify({
