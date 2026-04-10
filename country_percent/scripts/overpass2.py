@@ -8,9 +8,36 @@ import pyproj
 import requests
 from shapely.geometry import LineString, mapping, shape
 from shapely.ops import transform, unary_union
+import osm2geojson
 
 RAIL_WIDTH_BUFFER_M = 50
 
+def get_subdivision_boundary(iso_code):
+            query = f"""
+            [out:json];
+            relation["ISO3166-2"="{iso_code}"];
+            (._; >;);
+            out body;
+            """
+            url = "https://overpass.private.coffee/api/interpreter"
+            response = requests.get(url, params={"data": query})
+            if response.status_code == 200:
+                osm_json = response.json()
+                # Convert OSM JSON to GeoJSON using osm2geojson
+                geojson = osm2geojson.json2geojson(
+                    osm_json, filter_used_refs=True, log_level="ERROR"
+                )
+                return geojson
+            else:
+                print("Error fetching data:", response.status_code)
+                return None
+            
+def clip_to_state(train_lines_gdf, state_boundary_geojson):
+    state_gdf = gpd.GeoDataFrame.from_features(
+        state_boundary_geojson["features"], crs=train_lines_gdf.crs
+    )
+    clipped_lines = gpd.clip(train_lines_gdf, state_gdf)
+    return clipped_lines
 
 def merge_overlapping_polygons(features):
     print("Starting to merge overlapping polygons...")
@@ -104,7 +131,7 @@ def fetch_railway_geometry(iso_code,iso_spec):
         out skel qt;
         """
 
-        overpass_url = "http://overpass-api.de/api/interpreter"
+        overpass_url = "https://overpass.private.coffee/api/interpreter"
         response = requests.get(overpass_url, params={"data": overpass_query})
         
         if response.status_code == 200:
@@ -201,6 +228,24 @@ def fetch_railway_geometry(iso_code,iso_spec):
     with open(processed_path, "w") as f:
         json.dump(stripped_data, f)
     print(f"Railway geometry processing for {iso_code} completed!")
+
+    if iso_spec == 2:
+        train_lines_gdf = gpd.read_file(processed_path)
+        subdivision_boundary = get_subdivision_boundary(iso_code.upper())
+        clipped_lines = clip_to_state(train_lines_gdf, subdivision_boundary)
+        clipped_lines.to_file(processed_path, driver="GeoJSON")
+        print(f"Saved initial file {iso_code.upper()}.geojson")
+        with open(processed_path, "r") as file:
+            # update total area
+            data = json.load(file)
+            total_area = 0
+            for element in data["features"]:
+                total_area += element["properties"]["area_m2"]
+            # Add the total area to the JSON data
+            data["total_area_m2"] = total_area
+            with open(processed_path, "w") as file:
+                json.dump(data, file)
+                print(f"Saved final file {iso_code.upper()}.geojson")
 
 
 if __name__ == "__main__":
