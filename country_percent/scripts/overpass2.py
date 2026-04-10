@@ -92,11 +92,7 @@ def compute_area_in_m2(polygon):
 
 
 def fetch_railway_geometry(iso_code,iso_spec):
-    match iso_spec:
-        case 1:
-            print(f"Fetching railway geometry for country {iso_code} using ISO 3166-1")
-        case 2:
-            print(f"Fetching railway geometry for subdivision {iso_code} using ISO 3166-2")
+    print(f"Fetching railway geometry for {iso_code} using ISO 3166-{iso_spec}")
 
     def buffer_linestring(line_coords):
         line = LineString(line_coords)
