@@ -64,8 +64,12 @@ def compute_area_in_m2(polygon):
     return transform(project, polygon).area
 
 
-def fetch_railway_geometry(country_code):
-    print(f"Fetching railway geometry for country: {country_code}...")
+def fetch_railway_geometry(iso_code,iso_spec):
+    match iso_spec:
+        case 1:
+            print(f"Fetching railway geometry for country {iso_code} using ISO 3166-1")
+        case 2:
+            print(f"Fetching railway geometry for subdivision {iso_code} using ISO 3166-2")
 
     def buffer_linestring(line_coords):
         line = LineString(line_coords)
@@ -188,15 +192,27 @@ def fetch_railway_geometry(country_code):
     total_area_m2 = gdf_mercator["area_m2"].sum()
     stripped_data["total_area_m2"] = total_area_m2
 
-    print(f"Saving processed data for {country_code}...")
+    print(f"Saving processed data for {iso_code}...")
     with open(processed_path, "w") as f:
         json.dump(stripped_data, f)
-    print(f"Railway geometry processing for {country_code} completed!")
+    print(f"Railway geometry processing for {iso_code} completed!")
 
 
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Please provide a country's ISO code as a command-line argument.")
+    match sys.argv[1]:
+        case "1":
+            iso_spec = 1
+        case "2":
+            iso_spec = 2
+        case _:
+            print("Please provide a valid ISO 3166 part (1 for countries, 2 for subdivisions)")
+            sys.exit(1)
+    if iso_spec == 1 and len(sys.argv[2]) != 2:
+        print("Please provide a valid country's ISO code as an command-line argument.")
         sys.exit(1)
-    country_code = sys.argv[1]
-    fetch_railway_geometry(country_code)
+    if iso_spec == 2 and len(sys.argv[2]) != 5:
+        print ("Please provide a valid subdivision's ISO code as an command-line argument.")
+        sys.exit(1)
+
+    iso_code = sys.argv[2]
+    fetch_railway_geometry(iso_code,iso_spec)
