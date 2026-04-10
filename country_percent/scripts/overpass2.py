@@ -106,10 +106,15 @@ def fetch_railway_geometry(iso_code,iso_spec):
 
         overpass_url = "http://overpass-api.de/api/interpreter"
         response = requests.get(overpass_url, params={"data": overpass_query})
-        data = response.json()
-
-        with open(preprocessed_path, "w") as f:
-            json.dump(data, f)
+        
+        if response.status_code == 200:
+            data = response.json()
+            with open(preprocessed_path, "w") as f:
+                json.dump(data, f)
+        else:
+            print("Error fetching data:", response.status_code)
+            sys.exit(1)
+        
     else:
         print("Loading preprocessed data...")
         with open(preprocessed_path, "r") as f:
