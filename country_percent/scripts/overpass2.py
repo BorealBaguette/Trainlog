@@ -11,33 +11,36 @@ from shapely.ops import transform, unary_union
 import osm2geojson
 
 RAIL_WIDTH_BUFFER_M = 50
+URL = "https://overpass.private.coffee/api/interpreter"
+SUBDIVISION_QUERY = """
+[out:json];
+relation["ISO3166-2"="{iso_code}"];
+(._; >;);
+out body;
+"""
+GEOMETRY_QUERY = """
+[out:json];
+area["ISO3166-{iso_spec}"="{iso_code}"]->.searchArea;
+(
+    way["railway"="rail"](area.searchArea);
+    way["railway"="narrow_gauge"](area.searchArea);
+);
+out body;
+>;
+out skel qt;
+"""
 
-def get_subdivision_boundary(iso_code):
-            query = f"""
-            [out:json];
-            relation["ISO3166-2"="{iso_code}"];
-            (._; >;);
-            out body;
-            """
-            url = "https://overpass.private.coffee/api/interpreter"
-            response = requests.get(url, params={"data": query})
-            if response.status_code == 200:
-                osm_json = response.json()
-                # Convert OSM JSON to GeoJSON using osm2geojson
-                geojson = osm2geojson.json2geojson(
-                    osm_json, filter_used_refs=True, log_level="ERROR"
-                )
-                return geojson
-            else:
-                print("Error fetching data:", response.status_code)
-                return None
-            
-def clip_to_state(train_lines_gdf, state_boundary_geojson):
-    state_gdf = gpd.GeoDataFrame.from_features(
-        state_boundary_geojson["features"], crs=train_lines_gdf.crs
-    )
-    clipped_lines = gpd.clip(train_lines_gdf, state_gdf)
-    return clipped_lines
+def get_overpass_data(iso_code, query_template, iso_spec=None):
+    query = query_template.format(iso_code=iso_code,iso_spec=iso_spec)
+    r = requests.get(URL, params={"data": query})
+    match r.status_code:
+        case 200:
+            return r.json()
+        # case 504:
+        #   to do: retry downloading data
+        case _:
+            print(f"Error fetching data: {r.status_code} - {r.reason}")
+            sys.exit(1)
 
 def merge_overlapping_polygons(features):
     print("Starting to merge overlapping polygons...")
@@ -90,6 +93,20 @@ def compute_area_in_m2(polygon):
     ).transform
     return transform(project, polygon).area
 
+def get_subdivision_boundary(iso_code):
+    osm_json = get_overpass_data(iso_code,SUBDIVISION_QUERY)
+    # Convert OSM JSON to GeoJSON using osm2geojson
+    geojson = osm2geojson.json2geojson(
+        osm_json, filter_used_refs=True, log_level="ERROR"
+    )
+    return geojson
+            
+def clip_to_state(train_lines_gdf, state_boundary_geojson):
+    state_gdf = gpd.GeoDataFrame.from_features(
+        state_boundary_geojson["features"], crs=train_lines_gdf.crs
+    )
+    clipped_lines = gpd.clip(train_lines_gdf, state_gdf)
+    return clipped_lines
 
 def fetch_railway_geometry(iso_code,iso_spec):
     print(f"Fetching railway geometry for {iso_code} using ISO 3166-{iso_spec}")
@@ -114,30 +131,9 @@ def fetch_railway_geometry(iso_code,iso_spec):
     os.makedirs("countries/processed", exist_ok=True)
 
     if not os.path.exists(preprocessed_path):
-        print("Fetching data from Overpass...")
-        overpass_query = f"""
-        [out:json];
-        area["ISO3166-1"="{country_code}"]->.searchArea;
-        (
-            way["railway"="rail"](area.searchArea);
-            way["railway"="narrow_gauge"](area.searchArea);
-        );
-        out body;
-        >;
-        out skel qt;
-        """
-
-        overpass_url = "https://overpass.private.coffee/api/interpreter"
-        response = requests.get(overpass_url, params={"data": overpass_query})
-        
-        if response.status_code == 200:
-            data = response.json()
+            data = get_overpass_data(iso_code,GEOMETRY_QUERY,iso_spec)
             with open(preprocessed_path, "w") as f:
-                json.dump(data, f)
-        else:
-            print("Error fetching data:", response.status_code)
-            sys.exit(1)
-        
+                    json.dump(data, f)  
     else:
         print("Loading preprocessed data...")
         with open(preprocessed_path, "r") as f:
