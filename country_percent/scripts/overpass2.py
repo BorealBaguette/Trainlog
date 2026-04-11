@@ -6,9 +6,10 @@ import time
 import geopandas as gpd
 import pyproj
 import requests
+import osm2geojson
 from shapely.geometry import LineString, mapping, shape
 from shapely.ops import transform, unary_union
-import osm2geojson
+from simplify_geojson import process as simplify_geojson
 
 RAIL_WIDTH_BUFFER_M = 50
 URL = "https://overpass.private.coffee/api/interpreter"
@@ -108,7 +109,7 @@ def clip_to_state(train_lines_gdf, state_boundary_geojson):
     clipped_lines = gpd.clip(train_lines_gdf, state_gdf)
     return clipped_lines
 
-def clip_region(iso_spec,iso_code,processed_path):
+def clip_to_region(iso_spec,iso_code,processed_path):
     train_lines_gdf = gpd.read_file(processed_path)
     subdivision_boundary = get_subdivision_boundary(iso_code,iso_spec)
     clipped_lines = clip_to_state(train_lines_gdf, subdivision_boundary)
@@ -239,7 +240,8 @@ def fetch_railway_geometry(iso_code,iso_spec):
         json.dump(stripped_data, f)
     print(f"Railway geometry processing for {iso_code} completed!")
 
-    clip_region(iso_spec,iso_code,processed_path)
+    clip_to_region(iso_spec,iso_code,processed_path)
+    simplify_geojson(iso_code)
 
 if __name__ == "__main__":
     match sys.argv[1]:
