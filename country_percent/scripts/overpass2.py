@@ -108,6 +108,24 @@ def clip_to_state(train_lines_gdf, state_boundary_geojson):
     clipped_lines = gpd.clip(train_lines_gdf, state_gdf)
     return clipped_lines
 
+def clip_region(processed_path,iso_code):
+    train_lines_gdf = gpd.read_file(processed_path)
+    subdivision_boundary = get_subdivision_boundary(iso_code)
+    clipped_lines = clip_to_state(train_lines_gdf, subdivision_boundary)
+    clipped_lines.to_file(processed_path, driver="GeoJSON")
+    print(f"Saved initial file {iso_code}.geojson")
+    with open(processed_path, "r") as file:
+        # update total area
+        data = json.load(file)
+        total_area = 0
+        for element in data["features"]:
+            total_area += element["properties"]["area_m2"]
+        # Add the total area to the JSON data
+        data["total_area_m2"] = total_area
+        with open(processed_path, "w") as file:
+            json.dump(data, file)
+            print(f"Saved final file {iso_code}.geojson")
+
 def fetch_railway_geometry(iso_code,iso_spec):
     print(f"Fetching railway geometry for {iso_code} using ISO 3166-{iso_spec}")
 
@@ -222,23 +240,7 @@ def fetch_railway_geometry(iso_code,iso_spec):
     print(f"Railway geometry processing for {iso_code} completed!")
 
     if iso_spec == 2:
-        train_lines_gdf = gpd.read_file(processed_path)
-        subdivision_boundary = get_subdivision_boundary(iso_code)
-        clipped_lines = clip_to_state(train_lines_gdf, subdivision_boundary)
-        clipped_lines.to_file(processed_path, driver="GeoJSON")
-        print(f"Saved initial file {iso_code}.geojson")
-        with open(processed_path, "r") as file:
-            # update total area
-            data = json.load(file)
-            total_area = 0
-            for element in data["features"]:
-                total_area += element["properties"]["area_m2"]
-            # Add the total area to the JSON data
-            data["total_area_m2"] = total_area
-            with open(processed_path, "w") as file:
-                json.dump(data, file)
-                print(f"Saved final file {iso_code}.geojson")
-
+        clip_region(processed_path,iso_code)
 
 if __name__ == "__main__":
     match sys.argv[1]:
