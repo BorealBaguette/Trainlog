@@ -1,3 +1,22 @@
+"""
+Generate a coverage map for either a country or region by:
+1. Fetch railway geometry as json from OSM
+2. Convert to polygons
+3. Filter polygons to railways used by passenger trains
+4. Merge polygons with significant overlap
+5. Compute areas
+6. Save as .geojson
+7. Clip polygons on borders to the borders of the country or region
+8. Simplify the geojson using simplify_geojson
+
+Usage:
+    cd country_percent
+    python ./scripts/overpass2.py <iso_spec> <iso_code>
+
+<iso_spec> can be either 1 or 2 and stands for the ISO standard to use. 1 is for country codes, 2 is for region codes.
+<iso_code> is either 2 or 5 characters, depending on what you want to generate. For example: DE or DE-SH.
+"""
+
 import json
 import os
 import sys
@@ -87,7 +106,7 @@ def merge_overlapping_polygons(features):
 
 
 def compute_area_in_m2(polygon):
-    """Compute the area of a polygon in square meters."""
+    # Compute the area of a polygon in square meters
     project = pyproj.Transformer.from_proj(
         pyproj.Proj("EPSG:4326"),  # WGS84
         pyproj.Proj("EPSG:3857"),  # Web Mercator (meters)
