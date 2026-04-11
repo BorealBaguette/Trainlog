@@ -31,7 +31,7 @@ out skel qt;
 """
 
 def get_overpass_data(iso_code, query_template, iso_spec=None):
-    query = query_template.format(iso_code=iso_code,iso_spec=iso_spec)
+    query = query_template.format(iso_code=iso_code.upper(),iso_spec=iso_spec)
     r = requests.get(URL, params={"data": query})
     match r.status_code:
         case 200:
@@ -223,10 +223,10 @@ def fetch_railway_geometry(iso_code,iso_spec):
 
     if iso_spec == 2:
         train_lines_gdf = gpd.read_file(processed_path)
-        subdivision_boundary = get_subdivision_boundary(iso_code.upper())
+        subdivision_boundary = get_subdivision_boundary(iso_code)
         clipped_lines = clip_to_state(train_lines_gdf, subdivision_boundary)
         clipped_lines.to_file(processed_path, driver="GeoJSON")
-        print(f"Saved initial file {iso_code.upper()}.geojson")
+        print(f"Saved initial file {iso_code}.geojson")
         with open(processed_path, "r") as file:
             # update total area
             data = json.load(file)
@@ -237,24 +237,27 @@ def fetch_railway_geometry(iso_code,iso_spec):
             data["total_area_m2"] = total_area
             with open(processed_path, "w") as file:
                 json.dump(data, file)
-                print(f"Saved final file {iso_code.upper()}.geojson")
+                print(f"Saved final file {iso_code}.geojson")
 
 
 if __name__ == "__main__":
     match sys.argv[1]:
         case "1":
+            if len(sys.argv[2]) != 2:
+                print("Please provide a valid country's ISO code as an command-line argument.")
+                sys.exit(1)
+
             iso_spec = 1
+            iso_code = sys.argv[2].lower()
         case "2":
+            if len(sys.argv[2]) != 5:
+                print ("Please provide a valid subdivision's ISO code as an command-line argument.")
+                sys.exit(1)
+
             iso_spec = 2
+            iso_code = sys.argv[2].upper()
         case _:
             print("Please provide a valid ISO 3166 part (1 for countries, 2 for subdivisions)")
             sys.exit(1)
-    if iso_spec == 1 and len(sys.argv[2]) != 2:
-        print("Please provide a valid country's ISO code as an command-line argument.")
-        sys.exit(1)
-    if iso_spec == 2 and len(sys.argv[2]) != 5:
-        print ("Please provide a valid subdivision's ISO code as an command-line argument.")
-        sys.exit(1)
 
-    iso_code = sys.argv[2]
     fetch_railway_geometry(iso_code,iso_spec)
