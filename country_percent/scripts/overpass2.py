@@ -14,7 +14,7 @@ RAIL_WIDTH_BUFFER_M = 50
 URL = "https://overpass.private.coffee/api/interpreter"
 SUBDIVISION_QUERY = """
 [out:json];
-relation["ISO3166-2"="{iso_code}"];
+relation["ISO3166-{iso_spec}"="{iso_code}"];
 (._; >;);
 out body;
 """
@@ -30,7 +30,7 @@ out body;
 out skel qt;
 """
 
-def get_overpass_data(iso_code, query_template, iso_spec=None):
+def get_overpass_data(iso_spec,iso_code, query_template):
     query = query_template.format(iso_code=iso_code.upper(),iso_spec=iso_spec)
     r = requests.get(URL, params={"data": query})
     match r.status_code:
@@ -93,8 +93,8 @@ def compute_area_in_m2(polygon):
     ).transform
     return transform(project, polygon).area
 
-def get_subdivision_boundary(iso_code):
-    osm_json = get_overpass_data(iso_code,SUBDIVISION_QUERY)
+def get_subdivision_boundary(iso_code,iso_spec):
+    osm_json = get_overpass_data(iso_spec,iso_code,SUBDIVISION_QUERY)
     # Convert OSM JSON to GeoJSON using osm2geojson
     geojson = osm2geojson.json2geojson(
         osm_json, filter_used_refs=True, log_level="ERROR"
@@ -108,9 +108,9 @@ def clip_to_state(train_lines_gdf, state_boundary_geojson):
     clipped_lines = gpd.clip(train_lines_gdf, state_gdf)
     return clipped_lines
 
-def clip_region(processed_path,iso_code):
+def clip_region(iso_spec,iso_code,processed_path):
     train_lines_gdf = gpd.read_file(processed_path)
-    subdivision_boundary = get_subdivision_boundary(iso_code)
+    subdivision_boundary = get_subdivision_boundary(iso_code,iso_spec)
     clipped_lines = clip_to_state(train_lines_gdf, subdivision_boundary)
     clipped_lines.to_file(processed_path, driver="GeoJSON")
     print(f"Saved initial file {iso_code}.geojson")
@@ -149,7 +149,7 @@ def fetch_railway_geometry(iso_code,iso_spec):
     os.makedirs("countries/processed", exist_ok=True)
 
     if not os.path.exists(preprocessed_path):
-            data = get_overpass_data(iso_code,GEOMETRY_QUERY,iso_spec)
+            data = get_overpass_data(iso_spec,iso_code,GEOMETRY_QUERY)
             with open(preprocessed_path, "w") as f:
                     json.dump(data, f)  
     else:
@@ -239,8 +239,7 @@ def fetch_railway_geometry(iso_code,iso_spec):
         json.dump(stripped_data, f)
     print(f"Railway geometry processing for {iso_code} completed!")
 
-    if iso_spec == 2:
-        clip_region(processed_path,iso_code)
+    clip_region(iso_spec,iso_code,processed_path)
 
 if __name__ == "__main__":
     match sys.argv[1]:
