@@ -127,7 +127,7 @@ def clip_to_region(iso_spec,iso_code,processed_path):
             json.dump(data, file)
             print(f"Saved final file {iso_code}.geojson")
 
-def fetch_railway_geometry(iso_code,iso_spec):
+def process_railway_geometry(iso_code,iso_spec):
     print(f"Fetching railway geometry for {iso_code} using ISO 3166-{iso_spec}")
 
     def buffer_linestring(line_coords):
@@ -240,8 +240,13 @@ def fetch_railway_geometry(iso_code,iso_spec):
         json.dump(stripped_data, f)
     print(f"Railway geometry processing for {iso_code} completed!")
 
+    print("\nClip geojson to region boundary...")
     clip_to_region(iso_spec,iso_code,processed_path)
+
+    print("\nSimplify geojson...")
     simplify_geojson(iso_code)
+
+    print ("\nDone!")
 
 if __name__ == "__main__":
     match sys.argv[1]:
@@ -263,4 +268,4 @@ if __name__ == "__main__":
             print("Please provide a valid ISO 3166 part (1 for countries, 2 for subdivisions)")
             sys.exit(1)
 
-    fetch_railway_geometry(iso_code,iso_spec)
+    process_railway_geometry(iso_code,iso_spec)
