@@ -140,10 +140,11 @@ async function initializeMapLibre(options = {}) {
                     }
                 }
 
-                // Add all ORM line layers before the sentinel (so trip data renders on top)
+                // Add all ORM line layers below text labels but above base map geometry
                 // Skip text/symbol/background layers — they cause gritty artifacts and CORS issues
                 const skipLayers = new Set(['hillshade', 'route', 'route_text', 'route_stops', 'search']);
                 const skipTypes = new Set(['symbol', 'background', 'raster']);
+                const firstSymbolId = map.getStyle().layers.find(l => l.type === 'symbol')?.id || 'orm-sentinel';
                 for (const layer of ormStyle.layers) {
                     if (skipLayers.has(layer.id) || !layer.source) continue;
                     if (skipSources.has(layer.source) || !addedSources.has(layer.source)) continue;
@@ -155,7 +156,7 @@ async function initializeMapLibre(options = {}) {
                         if (newLayer.layout?.visibility && typeof newLayer.layout.visibility !== 'string') {
                             newLayer.layout = { ...newLayer.layout, visibility: 'visible' };
                         }
-                        map.addLayer(newLayer, 'orm-sentinel');
+                        map.addLayer(newLayer, firstSymbolId);
                     } catch (e) {
                         console.warn(`[ORM] skipping layer ${layer.id}:`, e.message);
                     }
