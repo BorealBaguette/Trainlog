@@ -615,6 +615,7 @@
     "feature_requests_downvoters": "Downvoters",
     "feature_requests_no_votes": "No votes yet",
     "feature_requests_error_loading": "Error loading voters",
+    "feature_requests_vote_error": "Vote failed. Please try again.",
     "user_dashboard": "User Dashboard",
     "feature_requests_edit_title": "Edit Feature Request",
     "update": "Update",
