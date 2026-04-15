@@ -11,10 +11,8 @@ Generate a coverage map for either a country or region by:
 
 Usage:
     cd country_percent
-    python ./scripts/overpass2.py <iso_spec> <iso_code>
-
-<iso_spec> can be either 1 or 2 and stands for the ISO standard to use. 1 is for country codes, 2 is for region codes.
-<iso_code> is either 2 or 5 characters, depending on what you want to generate. For example: DE or DE-SH.
+    python ./scripts/overpass2.py <iso_code>
+<iso_code> is the ISO3166 code for the region you want to generate. Can be either a country (ISO3166-1) or a subdivision (ISO3166-2)
 """
 
 import json
@@ -31,7 +29,8 @@ from shapely.ops import transform, unary_union
 from simplify_geojson import process as simplify_geojson
 
 RAIL_WIDTH_BUFFER_M = 50
-URL = "https://overpass.private.coffee/api/interpreter"
+OVERPASS_URL = "https://overpass.private.coffee/api/interpreter"
+ISO3166_URL = "https://iso3166-2-api.vercel.app/api/all"
 SUBDIVISION_QUERY = """
 [out:json];
 relation["ISO3166-{iso_spec}"="{iso_code}"];
@@ -52,7 +51,7 @@ out skel qt;
 
 def get_overpass_data(iso_spec,iso_code, query_template):
     query = query_template.format(iso_code=iso_code.upper(),iso_spec=iso_spec)
-    r = requests.get(URL, params={"data": query})
+    r = requests.get(OVERPASS_URL, params={"data": query})
     match r.status_code:
         case 200:
             return r.json()
@@ -268,23 +267,18 @@ def process_railway_geometry(iso_code,iso_spec):
     print ("\nDone!")
 
 if __name__ == "__main__":
-    match sys.argv[1]:
-        case "1":
-            if len(sys.argv[2]) != 2:
-                print("Please provide a valid country's ISO code as an command-line argument.")
-                sys.exit(1)
-
+    r = requests.get(ISO3166_URL)
+    for country, regions in r.json().items():
+        if sys.argv[1] == country:
             iso_spec = 1
-            iso_code = sys.argv[2].lower() # TODO: eventually change to upper
-        case "2":
-            if len(sys.argv[2]) != 5:
-                print ("Please provide a valid subdivision's ISO code as an command-line argument.")
-                sys.exit(1)
-
+            iso_code = sys.argv[1].lower() # TODO: eventually change to upper
+            break
+        if sys.argv[1] in regions:
             iso_spec = 2
-            iso_code = sys.argv[2].upper()
-        case _:
-            print("Please provide a valid ISO 3166 part (1 for countries, 2 for subdivisions)")
-            sys.exit(1)
+            iso_code = sys.argv[1].upper()
+            break
+    else:
+        print("Please provide a valid ISO3166 code (either ISO3166-1 or ISO3166-2)")
+        sys.exit(1)
 
     process_railway_geometry(iso_code,iso_spec)
