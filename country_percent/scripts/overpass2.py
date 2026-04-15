@@ -199,8 +199,6 @@ def buffer_linestring(line_coords):
                 )
                 feature = {
                     "type": "Feature",
-                    "id": element["id"],
-                    "properties": {},
                     "geometry": shape(buffered_geometry).__geo_interface__,
                 }
                 stripped_data["features"].append(feature)
