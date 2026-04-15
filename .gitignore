@@ -21,3 +21,4 @@ server.js
 venv/
 city_percent/*
 databases/cache/
+country_percent/countries/preprocessed/
