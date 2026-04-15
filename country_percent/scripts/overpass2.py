@@ -275,7 +275,7 @@ if __name__ == "__main__":
                 sys.exit(1)
 
             iso_spec = 1
-            iso_code = sys.argv[2].lower()
+            iso_code = sys.argv[2].lower() # TODO: eventually change to upper
         case "2":
             if len(sys.argv[2]) != 5:
                 print ("Please provide a valid subdivision's ISO code as an command-line argument.")
