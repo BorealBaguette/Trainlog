@@ -21,11 +21,10 @@ import sys
 import time
 
 import geopandas as gpd
-import pyproj
 import requests
 import osm2geojson
 from shapely.geometry import LineString, mapping, shape
-from shapely.ops import transform, unary_union
+from shapely.ops import unary_union
 from simplify_geojson import process as simplify_geojson
 
 RAIL_WIDTH_BUFFER_M = 50
@@ -103,15 +102,6 @@ def merge_overlapping_polygons(features):
     print("\nPolygon merging completed!")
     return [feature for i, feature in enumerate(features) if to_keep[i]]
 
-
-def compute_area_in_m2(polygon):
-    # Compute the area of a polygon in square meters
-    project = pyproj.Transformer.from_proj(
-        pyproj.Proj("EPSG:4326"),  # WGS84
-        pyproj.Proj("EPSG:3857"),  # Web Mercator (meters)
-    ).transform
-    return transform(project, polygon).area
-
 def get_subdivision_boundary(iso_code,iso_spec):
     osm_json = get_overpass_data(iso_spec,iso_code,SUBDIVISION_QUERY)
     # Convert OSM JSON to GeoJSON using osm2geojson
@@ -133,17 +123,6 @@ def clip_to_region(iso_spec,iso_code,processed_path):
     clipped_lines = clip_to_state(train_lines_gdf, subdivision_boundary)
     clipped_lines.to_file(processed_path, driver="GeoJSON")
     print(f"Saved initial file {iso_code}.geojson")
-    with open(processed_path, "r") as file:
-        # update total area
-        data = json.load(file)
-        total_area = 0
-        for element in data["features"]:
-            total_area += element["properties"]["area_m2"]
-        # Add the total area to the JSON data
-        data["total_area_m2"] = total_area
-        with open(processed_path, "w") as file:
-            json.dump(data, file)
-            print(f"Saved final file {iso_code}.geojson")
 
 def buffer_linestring(line_coords):
         line = LineString(line_coords)
@@ -216,37 +195,6 @@ def buffer_linestring(line_coords):
             )
 
     stripped_data["features"] = merge_overlapping_polygons(stripped_data["features"])
-
-    print("Calculating areas...")
-    total_area_m2 = 0
-    # Convert the features to a GeoDataFrame
-    geometries = [shape(feature["geometry"]) for feature in stripped_data["features"]]
-    gdf = gpd.GeoDataFrame(
-        stripped_data["features"], geometry=geometries, crs="EPSG:4326"
-    )
-
-    # Transform to Web Mercator for accurate area calculations
-    gdf_mercator = gdf.to_crs("EPSG:3857")
-
-    # Compute the area for each geometry
-    gdf_mercator["area_m2"] = gdf_mercator["geometry"].area
-
-    # Filter out invalid areas
-    gdf_mercator = gdf_mercator[gdf_mercator["area_m2"].notna()]
-
-    # Transform back to WGS84
-    gdf = gdf_mercator.to_crs("EPSG:4326")
-
-    # Update the stripped_data with the valid features
-    stripped_data["features"] = gdf.drop(columns=["geometry"]).to_dict("records")
-    for idx, feature in enumerate(stripped_data["features"]):
-        feature["geometry"] = mapping(gdf.iloc[idx].geometry)
-        feature["properties"]["id"] = idx
-        feature["properties"]["area_m2"] = gdf_mercator.iloc[idx]["area_m2"]
-
-    # Compute the total area
-    total_area_m2 = gdf_mercator["area_m2"].sum()
-    stripped_data["total_area_m2"] = total_area_m2
 
     print(f"Saving processed data for {iso_code}...")
     with open(processed_path, "w") as f:
