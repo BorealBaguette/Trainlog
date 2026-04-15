@@ -145,10 +145,7 @@ def clip_to_region(iso_spec,iso_code,processed_path):
             json.dump(data, file)
             print(f"Saved final file {iso_code}.geojson")
 
-def process_railway_geometry(iso_code,iso_spec):
-    print(f"Fetching railway geometry for {iso_code} using ISO 3166-{iso_spec}")
-
-    def buffer_linestring(line_coords):
+def buffer_linestring(line_coords):
         line = LineString(line_coords)
         gdf = gpd.GeoDataFrame({"geometry": [line]}, crs="EPSG:4326")
 
