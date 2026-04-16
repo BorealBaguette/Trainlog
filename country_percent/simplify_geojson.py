@@ -4,9 +4,10 @@ Simplify a processed GeoJSON file by:
 2. deleting features of all types except Polygon and Multipolygon,
 3. removing redundant polygon points,
 4. recomputing polygon areas,
-5. re-assign new IDs,
-6. converting the output to CRS84,
-7. truncating coordinate precision to the cm range.
+5. deleting very tiny polygons,
+6. re-assign new IDs,
+7. converting the output to CRS84,
+8. truncating coordinate precision to the cm range.
 
 Usage:
     python simplify_geojson.py <COUNTRY_CODE>
@@ -205,6 +206,9 @@ def process(country_code):
 
     # Compute the area for each geometry
     gdf_mercator["area_m2"] = gdf_mercator["geometry"].area
+
+    # Drop very tiny polygons (less than 1m^2)
+    gdf_mercator = gdf_mercator[gdf_mercator["area_m2"] >= 1].reset_index(drop=True)
 
     # Transform to output crs
     gdf = gdf_mercator.drop(columns=["area_m2"]).to_crs(OUTPUT_CRS)
