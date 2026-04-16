@@ -48,17 +48,28 @@ out body;
 out skel qt;
 """
 
-def get_overpass_data(iso_spec,iso_code, query_template):
-    query = query_template.format(iso_code=iso_code.upper(),iso_spec=iso_spec)
-    r = requests.get(OVERPASS_URL, params={"data": query})
-    match r.status_code:
-        case 200:
-            return r.json()
-        # case 504:
-        #   to do: retry downloading data
-        case _:
-            print(f"Error fetching data: {r.status_code} - {r.reason}")
-            sys.exit(1)
+MAX_OVERPASS_RETRIES = 20
+RETRY_DELAY_SECONDS = 3
+
+
+def get_overpass_data(iso_spec, iso_code, query_template):
+    query = query_template.format(iso_code=iso_code.upper(), iso_spec=iso_spec)
+
+    attempt = 0
+    for attempt in range(MAX_OVERPASS_RETRIES):
+        r = requests.get(OVERPASS_URL, params={"data": query})
+        match r.status_code:
+            case 200:
+                return r.json()
+            case 504:
+                print(f"Error fetching data: {r.status_code} - {r.reason} (attempt ${attempt} of ${MAX_OVERPASS_RETRIES})")
+                time.sleep(RETRY_DELAY_SECONDS * attempt)
+                continue
+            case _:
+                print(f"Error fetching data: {r.status_code} - {r.reason}")
+                sys.exit(1)
+    print("Error fetching data: run out of attempts")
+    exit(1)
 
 def merge_overlapping_polygons(features):
     print("Starting to merge overlapping polygons...")
