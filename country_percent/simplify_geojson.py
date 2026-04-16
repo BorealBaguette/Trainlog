@@ -1,10 +1,12 @@
 """
 Simplify a processed GeoJSON file by:
-1. removing redundant polygon points,
-2. recomputing polygon areas,
-3. re-assign new IDs,
-4. converting the output to CRS84,
-5. truncating coordinate precision to the cm range.
+1. unpacking features of type GeometryCollection,
+2. deleting features of all types except Polygon and Multipolygon,
+3. removing redundant polygon points,
+4. recomputing polygon areas,
+5. re-assign new IDs,
+6. converting the output to CRS84,
+7. truncating coordinate precision to the cm range.
 
 Usage:
     python simplify_geojson.py <COUNTRY_CODE>
@@ -104,10 +106,6 @@ def simplify_geometry(geometry):
     if not geometry:
         return
     geom_type = geometry.get("type")
-    if geom_type == "GeometryCollection":
-        for sub in geometry.get("geometries", []):
-            simplify_geometry(sub)
-        return
     if geom_type == "Polygon":
         geometry["coordinates"] = simplify_polygon_coords(
             geometry.get("coordinates", [])
@@ -116,6 +114,39 @@ def simplify_geometry(geometry):
         geometry["coordinates"] = simplify_multipolygon_coords(
             geometry.get("coordinates", [])
         )
+    else:
+        print(f"Prohibited geometry type: {geom_type}")
+        exit(1)
+
+
+def explode_and_filter_geometries(gdf):
+    allowed_types = {"Polygon", "MultiPolygon"}
+
+    def flattened_geometries(geometry):
+        if geometry is None:
+            return []
+        if geometry.geom_type != "GeometryCollection":
+            return [geometry]
+
+        geometries = []
+        for child in geometry.geoms:
+            geometries.extend(flattened_geometries(child))
+        return geometries
+
+    unpacked_rows = []
+    for _, row in gdf.iterrows():
+        geometries = flattened_geometries(row.geometry)
+        if not geometries:
+            continue
+        for geometry in geometries:
+            if geometry.geom_type not in allowed_types:
+                continue
+            expanded = row.copy()
+            expanded.geometry = geometry
+            unpacked_rows.append(expanded)
+
+    unpacked_gdf = gpd.GeoDataFrame(unpacked_rows, columns=gdf.columns, crs=gdf.crs)
+    return unpacked_gdf.reset_index(drop=True)
 
 
 def get_input_crs(data):
@@ -150,17 +181,18 @@ def process(country_code):
 
     assert data.get("type") == "FeatureCollection"
 
-    features = data.get("features", [])
     # Convert the features to a GeoDataFrame
     geometries = [shape(feature["geometry"]) for feature in data.get("features", [])]
     gdf = gpd.GeoDataFrame(data["features"], geometry=geometries, crs=input_crs)
 
+    # Handle different types of features
+    gdf = explode_and_filter_geometries(gdf)
+
     # Transform to Web Mercator for accurate distance calculations
     gdf_mercator = gdf.to_crs(WEB_MERCATOR_CRS)
 
-    # Update the geometries to Web Mercator for simplification
-    total_features = len(features)
-    for idx, feature in enumerate(features):
+    total_features = len(gdf_mercator)
+    for idx in range(total_features):
         geometry = mapping(gdf_mercator.iloc[idx].geometry)
         simplify_geometry(geometry)
         gdf_mercator.at[idx, "geometry"] = shape(geometry)
