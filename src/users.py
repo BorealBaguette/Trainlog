@@ -14,10 +14,10 @@ class User(authDb.Model):
     share_level = authDb.Column(authDb.Integer, nullable=False, default=0)
     leaderboard = authDb.Column(authDb.Boolean, nullable=False, default=False)
     creation_date = authDb.Column(
-        authDb.DateTime, nullable=False, default=datetime.now(UTC)
+        authDb.DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     last_login = authDb.Column(
-        authDb.DateTime, nullable=False, default=datetime.now(UTC)
+        authDb.DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     admin = authDb.Column(authDb.Boolean, nullable=False, default=False)
     alpha = authDb.Column(authDb.Boolean, nullable=False, default=False)
@@ -70,7 +70,7 @@ class Friendship(authDb.Model):
         authDb.Integer, authDb.ForeignKey("user.uid"), nullable=False
     )
     created_at = authDb.Column(
-        authDb.DateTime, nullable=False, default=datetime.now(UTC)
+        authDb.DateTime, nullable=False, default=lambda: datetime.now(UTC)
     )
     accepted = authDb.Column(authDb.DateTime, default=None)
 

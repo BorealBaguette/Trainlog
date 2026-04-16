@@ -114,46 +114,46 @@ def dashboard_totals(username):
 @dashboard_blueprint.route("/u/<username>/dashboard_trips")
 @login_required
 def dashboard_trips(username):
-    """Today's trips, next 3 upcoming, last 3 recent."""
+    """Next 5 upcoming and last 7 recent trips, split cleanly at NOW()."""
     user_id = get_user_id(username)
 
     def row_to_dict(r):
+        # utc_*_datetime may be timezone-aware or naive; normalise to strings
+        # that JS can parse as UTC by ensuring a trailing "Z".
+        def to_utc_str(dt):
+            if not dt:
+                return None
+            s = dt.isoformat()
+            if not s.endswith("Z") and "+" not in s and s[-6] not in ("+", "-"):
+                s += "Z"
+            return s
+
         return {
             "trip_id": r.trip_id,
             "origin": r.origin_station,
             "destination": r.destination_station,
             "start": r.start_datetime.isoformat() if r.start_datetime else None,
+            "utc_start": to_utc_str(r.utc_start_datetime),
             "end": r.end_datetime.isoformat() if r.end_datetime else None,
+            "utc_end": to_utc_str(r.utc_end_datetime),
             "operator": r.operator,
             "trip_length": r.trip_length,
             "type": r.trip_type,
         }
 
     with pg_session() as pg:
-        today_rows = pg.execute(
-            """
-            SELECT trip_id, origin_station, destination_station,
-                   start_datetime, end_datetime, operator, trip_length, trip_type
-            FROM trips
-            WHERE user_id = :uid
-              AND is_project = false
-              AND DATE(COALESCE(utc_start_datetime, start_datetime)) = CURRENT_DATE
-            ORDER BY COALESCE(utc_start_datetime, start_datetime)
-            LIMIT 10
-            """,
-            {"uid": user_id},
-        ).fetchall()
-
         upcoming_rows = pg.execute(
             """
             SELECT trip_id, origin_station, destination_station,
-                   start_datetime, end_datetime, operator, trip_length, trip_type
+                   start_datetime, end_datetime,
+                   utc_start_datetime, utc_end_datetime,
+                   operator, trip_length, trip_type
             FROM trips
             WHERE user_id = :uid
               AND is_project = false
               AND COALESCE(utc_start_datetime, start_datetime) > NOW()
             ORDER BY COALESCE(utc_start_datetime, start_datetime) ASC
-            LIMIT 3
+            LIMIT 5
             """,
             {"uid": user_id},
         ).fetchall()
@@ -161,21 +161,21 @@ def dashboard_trips(username):
         recent_rows = pg.execute(
             """
             SELECT trip_id, origin_station, destination_station,
-                   start_datetime, end_datetime, operator, trip_length, trip_type
+                   start_datetime, end_datetime,
+                   utc_start_datetime, utc_end_datetime,
+                   operator, trip_length, trip_type
             FROM trips
             WHERE user_id = :uid
               AND is_project = false
-              AND COALESCE(utc_start_datetime, start_datetime) < NOW()
-              AND DATE(COALESCE(utc_start_datetime, start_datetime)) < CURRENT_DATE
+              AND COALESCE(utc_start_datetime, start_datetime) <= NOW()
             ORDER BY COALESCE(utc_start_datetime, start_datetime) DESC
-            LIMIT 5
+            LIMIT 7
             """,
             {"uid": user_id},
         ).fetchall()
 
     return jsonify(
         {
-            "today": [row_to_dict(r) for r in today_rows],
             "upcoming": [row_to_dict(r) for r in upcoming_rows],
             "recent": [row_to_dict(r) for r in recent_rows],
         }
@@ -901,7 +901,6 @@ def dashboard_year(username):
         "trips_change": trips_change,
         "km_change": km_change,
         "busiest_month": serialize_dict(data.get("busiest_month")),
-        "distance_comparisons": data.get("distance_comparisons", [])[:2],
         "duration_hours": data.get("duration_hours"),
         # Highlights
         "top_operators_alltime": [

@@ -23,7 +23,7 @@
     box-shadow: -2px 0 5px rgba(0,0,0,0.1);
     transition: right 0.3s ease;
     z-index: 1000;
-    overflow-y: auto;
+    overflow: visible; /* allow handle to protrude */
     font-size: 0.8em;
 }
 
@@ -31,10 +31,17 @@
     right: 0;
 }
 
+#sidebar-content {
+    position: relative;
+    height: 100%;
+    overflow-y: auto;
+}
+
+/* Handle: absolutely positioned inside the sidebar, protrudes left */
 .sidebar-tab {
-    position: fixed;
+    position: absolute;
     top: 105px;
-    right: 0;
+    left: -44px;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -43,9 +50,7 @@
     border-right: none;
     border-radius: 8px 0 0 8px;
     z-index: 1001;
-    transition: transform 0.3s ease;
     padding: 4px;
-    gap: 6px;
 }
 
 .sidebar-tab i {
@@ -64,27 +69,68 @@
     background-color: #f0f0f0;
 }
 
-
-/* When sidebar is closed — pin to screen right */
-#sidebar:not(.active) ~ #sidebar-tab {
-    right: 0;
-    left: auto;
+/* Map utility buttons: back + copy, top-left of map */
+.map-utils {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 1001;
 }
 
-/* When sidebar is open — attach to left of sidebar */
-#sidebar.active ~ #sidebar-tab {
-    transform: translateX(-400px); /* match sidebar width */
+
+/* Mobile hint: nudge the handle to signal there's a panel */
+@keyframes panelPeek {
+    0%   { transform: translateX(0); }
+    25%  { transform: translateX(-14px); }
+    50%  { transform: translateX(0); }
+    70%  { transform: translateX(-7px); }
+    85%  { transform: translateX(0); }
+    93%  { transform: translateX(-3px); }
+    100% { transform: translateX(0); }
 }
 
-/* Mobile responsiveness */
+.sidebar-tab.hinting {
+    animation: panelPeek 0.9s ease-in-out forwards;
+}
+
+/* Static ribbon: white bg that stays at the screen edge while handle animates */
+#sidebar-handle-ribbon {
+    display: none;
+}
 @media (max-width: 600px) {
-    /* #sidebar.active ~ #sidebar-tab {
-        left: 0;
-    }
-
-    #sidebar:not(.active) ~ #sidebar-tab {
+    #sidebar-handle-ribbon {
+        display: block;
+        position: fixed;
+        top: 105px;
         right: 0;
-    } */
+        width: 44px;
+        height: 44px;
+        background: white;
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        border-right: none;
+        border-radius: 8px 0 0 8px;
+        z-index: 999;
+    }
+}
+
+/* Mobile: leave 40px of map visible when panel is open */
+@media (max-width: 600px) {
+    #sidebar {
+        width: calc(100% - 40px);
+        right: 0;
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+    }
+    #sidebar.active {
+        transform: translateX(0);
+    }
+    /* Hide handle when panel is open — close via × button */
+    #sidebar.active .sidebar-tab {
+        display: none;
+    }
 }
 
 
@@ -249,10 +295,13 @@
 <div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>
 
 <div id="sidebar">
+  <div id="sidebar-tab" class="sidebar-tab">
+    <i id="sidebar-tab-icon" class="fas fa-bars" title="{{toggle}}"></i>
+  </div>
+  <div class="sidebar-close-button" onclick="hideSidebar()">
+      &times;
+  </div>
   <div id="sidebar-content">
-    <div class="sidebar-close-button" onclick="hideSidebar()">
-        &times;
-    </div>
     <div class="itineraryWrapper">
       <ul class="events" id="itinerary">
         <div id="tripDetails">
@@ -295,11 +344,12 @@
     </div>
   </div>
 </div>
-<div id="sidebar-tab" class="sidebar-tab">
-  <i id="sidebar-tab-icon" class="fas fa-bars" title="{{toggle}}"></i>
-  <i class="fas fa-arrow-left sidebar-icon" onclick="leave()" title="{{back}}"></i>
-  <i class="fas fa-clipboard sidebar-icon" onclick="copyURL()" title="{{copy}}"></i>
+<div class="map-utils">
+    <button class="control-button" onclick="leave()" title="{{back}}"><i class="fas fa-chevron-left"></i></button>
+    <button class="control-button" onclick="copyURL()" title="{{copy}}"><i class="fas fa-clipboard"></i></button>
 </div>
+
+<div id="sidebar-handle-ribbon"></div>
 
 <div id="map" class="mapIndiv">
 </div>
@@ -1010,19 +1060,17 @@ if (numberedMarkers.length > 0) {
         trips.forEach(trip => {
             if (trip.time === 'current') {
                 const progress = calculatePosition(trip);
-                const { pastPath, futurePath } = splitPolyline(trip.path, progress);
-                
-                // Ensure coordinates are in the right format [lng, lat]
+
+                // Convert to [lng, lat] and expand air routes to geodesic before splitting
                 let fullCoords = trip.path.map(c => [c[1], c[0]]);
-                let futureCoords = futurePath.map(c => [c[1], c[0]]);
-                
-                // Handle air routes (geodesic lines)
                 if (trip.trip.type === 'air' && fullCoords.length === 2) {
                     fullCoords = MapLibreUtils.createGeodesicLine(fullCoords[0], fullCoords[1]);
                 }
-                if (trip.trip.type === 'air' && futureCoords.length === 2) {
-                    futureCoords = MapLibreUtils.createGeodesicLine(futureCoords[0], futureCoords[1]);
-                }
+
+                // Split the expanded path
+                const splitIndex = Math.floor(progress * fullCoords.length);
+                const pastCoords = fullCoords.slice(0, splitIndex + 1);
+                const futureCoords = fullCoords.slice(splitIndex);
                 
                 // Create full trip feature (will be styled as past)
                 const fullTripFeature = {
@@ -1068,8 +1116,8 @@ if (numberedMarkers.length > 0) {
                 currentTripFeatures.push(fullTripFeature);
                 
                 // Place marker at current position
-                const pegPosition = pastPath[pastPath.length - 1];
-                createCustomMarker([pegPosition[1], pegPosition[0]], 'calc', 'Current Position');
+                const pegPosition = pastCoords[pastCoords.length - 1]; // already [lng, lat]
+                createCustomMarker(pegPosition, 'calc', 'Current Position');
             }
         });
 
@@ -1083,7 +1131,10 @@ if (numberedMarkers.length > 0) {
                     features: currentTripFeatures
                 }
             });
-            
+
+            // Insert below markers so lines don't cover them
+            const beforeMarkersId = map.getLayer('numbered-markers') ? 'numbered-markers' : undefined;
+
             // Add layers for current trips
             MapLibreUtils.MapConfig.transportTypes.forEach(type => {
                 const basePaint = {
@@ -1091,7 +1142,7 @@ if (numberedMarkers.length > 0) {
                     'line-width': (type.id === 'air') ? 1 : 3,
                     'line-opacity': 0.8
                 };
-                
+
                 // Current trip past layer (full trip in normal color)
                 const currentPastId = `current-${type.id}-past`;
                 if (!map.getLayer(currentPastId)) {
@@ -1109,8 +1160,8 @@ if (numberedMarkers.length > 0) {
                             'visibility': 'visible'
                         },
                         paint: basePaint
-                    });
-                    
+                    }, beforeMarkersId);
+
                     // Add interactions
                     map.on('click', currentPastId, (e) => {
                         e.originalEvent.stopPropagation();
@@ -1141,8 +1192,8 @@ if (numberedMarkers.length > 0) {
                             'visibility': 'visible'
                         },
                         paint: basePaint
-                    });
-                    
+                    }, beforeMarkersId);
+
                     // Add interactions
                     map.on('click', currentFutureBaseId, (e) => {
                         e.originalEvent.stopPropagation();
@@ -1177,8 +1228,8 @@ if (numberedMarkers.length > 0) {
                             'line-color': '#ffffff',
                             'line-dasharray': [3, 3]
                         }
-                    });
-                    
+                    }, beforeMarkersId);
+
                     // Add interactions
                     map.on('click', currentFutureOverlayId, (e) => {
                         e.originalEvent.stopPropagation();
@@ -1203,27 +1254,38 @@ if (numberedMarkers.length > 0) {
     
     // Update visibility to show all layers
     MapLibreUtils.updateLayerVisibility(map, MapLibreUtils.MapConfig.transportTypes, simpleFilters);
-    
-    // Show sidebar after map is loaded
-    setTimeout(() => {
-    showSidebar();
-    
-    // Simple bounds calculation from trip data
+
+    // Hide only the red current line — keep its shadow, and remove the new ones we added
+    MapLibreUtils.MapConfig.transportTypes.forEach(type => {
+        if (map.getLayer(`${type.id}-current`)) {
+            map.setLayoutProperty(`${type.id}-current`, 'visibility', 'none');
+        }
+    });
+
+    // Fit bounds and reveal panel
     if (trips.length > 0) {
         const bounds = new maplibregl.LngLatBounds();
-        
         trips.forEach(trip => {
             trip.path.forEach(coord => {
-                bounds.extend([coord[1], coord[0]]); // [lng, lat]
+                bounds.extend([coord[1], coord[0]]);
             });
         });
-        
-        const padding = window.innerWidth > 600 ? 
-            { top: 50, bottom: 50, left: 50, right: 450 } : 50;
-            
-        map.fitBounds(bounds, { padding });
+
+        if (window.innerWidth > 600) {
+            setTimeout(() => {
+                showSidebar();
+                map.fitBounds(bounds, { padding: { top: 50, bottom: 50, left: 50, right: 450 } });
+            }, 500);
+        } else {
+            map.fitBounds(bounds, { padding: 50 });
+            // Nudge the handle to hint the panel exists, panel stays closed
+            setTimeout(() => {
+                const tab = document.getElementById('sidebar-tab');
+                tab.classList.add('hinting');
+                tab.addEventListener('animationend', () => tab.classList.remove('hinting'), { once: true });
+            }, 500);
+        }
     }
-}, window.innerWidth > 600 ? 500 : 800);
     
     
     $('.spinner-container').hide();
@@ -1377,12 +1439,23 @@ function copyURL() {
 }
 
 function leave() {
-    history.back();
+    if (document.referrer) {
+        history.back();
+    } else {
+        window.location.href = '/';
+    }
 }
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    initializeMapAndTrips();
+    initializeMapAndTrips().catch(err => {
+        const msg = err?.message || '';
+        if (msg.includes('webglcontextcreationerror') || msg.includes('Failed to initialize WebGL')) {
+            window.location.href = window.location.pathname.replace('/public/', '/public/leaflet/') + window.location.search;
+        } else {
+            console.error(err);
+        }
+    });
 });
 
 

@@ -6,6 +6,8 @@ import geopandas as gpd
 import pycountry
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
+from py.coverage import get_coverage_geojson_dict
+
 regions = {
     "FR-ARA": "Auvergne-Rhône-Alpes",
     "FR-BFC": "Bourgogne-Franche-Comté",
@@ -337,12 +339,10 @@ def get_country_name(country_code):
         return country_code  # Fallback to the code if not found
 
 
-def generate_image(filename):
-    # Construct the file path
-    filepath = f"country_percent/countries/processed/{filename}.geojson"
-
-    # Load the GeoJSON file into a GeoDataFrame
-    gdf = gpd.read_file(filepath)
+def generate_image(cc):
+    # Load the (immediate or stitched) coverage GeoJSON into a GeoDataFrame
+    geojson_data = get_coverage_geojson_dict(cc)
+    gdf = gpd.GeoDataFrame.from_features(geojson_data["features"])
 
     # Calculate bounds of the GeoDataFrame to determine image size
     minx, miny, maxx, maxy = gdf.total_bounds
@@ -426,18 +426,18 @@ def generate_image(filename):
                         fill=forest_green_fill,
                     )
 
-    # Determine if filename represents a country or a region
-    if len(filename) == 2:  # Country
-        region_name = get_country_name(filename)
-        flag_path = f"static/images/flags/{filename.lower()}.svg"
+    # Determine if cc represents a country or a region
+    if len(cc) == 2:  # Country
+        region_name = get_country_name(cc)
+        flag_path = f"static/images/flags/{cc.lower()}.svg"
         region_flag_img = None  # No region flag for a country
     else:  # Region
-        country_code = filename.split("-")[
+        country_code = cc.split("-")[
             0
-        ]  # Assuming the filename follows the pattern "country-region"
-        region_name = regions.get(filename, filename)
+        ]  # Assuming the cc follows the pattern "country-region"
+        region_name = regions.get(cc, cc)
         flag_path = f"static/images/flags/{country_code.lower()}.svg"
-        region_flag_path = f"static/images/flags/{filename.lower()}.svg"
+        region_flag_path = f"static/images/flags/{cc.lower()}.svg"
 
         # Check if the region flag SVG file exists
         if os.path.exists(region_flag_path):
@@ -476,10 +476,10 @@ def generate_image(filename):
 
     # Apply rounded corners and drop shadow to both flags, except for Nepal, SE, CH special cases
     corner_radius = max_flag_height // 15
-    if filename.lower() not in ["np"]:
+    if cc.lower() not in ["np"]:
         flag_img = add_rounded_corners(flag_img, corner_radius)
     if region_flag_img:
-        if filename.lower().split("-")[0] not in ["ch", "se"]:
+        if cc.lower().split("-")[0] not in ["ch", "se"]:
             region_flag_img = add_rounded_corners(region_flag_img, corner_radius)
 
     # Apply drop shadow to all flags

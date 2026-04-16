@@ -1122,7 +1122,7 @@ var table = $('#tripRows');
     var initialSearch = _urlParams.get('search') || '';
     var isPast = {{ (not projects)|lower }};
     var _urlSortParam = _urlParams.get('sort');
-    var _initialPage = parseInt(_urlParams.get('page') || '0', 10);
+    var _initialPage = parseInt(_urlParams.get('page') || '1', 10);
     var _initialRows = parseInt(_urlParams.get('rows') || '10', 10);
     var _validRows = [10, 50, 100, -1].includes(_initialRows) ? _initialRows : 10;
     var customSort = { field: 'temporal', dir: isPast ? 'desc' : 'asc', label: '{{tripStartTime}}' };
@@ -1243,7 +1243,7 @@ var table = $('#tripRows');
     order: [],
     lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "{{dtAll}}"]],
     pageLength: _validRows,
-    displayStart: _initialPage * (_validRows > 0 ? _validRows : 0),
+    displayStart: Math.max(0, _initialPage - 1) * (_validRows > 0 ? _validRows : 0),
     paging: true,
     select: {
         style: 'multi+shift',
@@ -1293,7 +1293,7 @@ var table = $('#tripRows');
     }
     var _pi = tableObject.page.info();
     if (_pi.page > 0) {
-        url.searchParams.set('page', _pi.page);
+        url.searchParams.set('page', _pi.page + 1);
     } else {
         url.searchParams.delete('page');
     }
