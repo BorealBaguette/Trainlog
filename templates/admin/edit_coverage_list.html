@@ -12,6 +12,7 @@
         <h1 class="mt-3">Country Completion Map</h1>
         
         {% set continents = get_country_codes_from_files() %}
+        {% set continents_immediate = get_country_codes_from_files(immediate_only=True) %}
         {% set continent_names = {
             "EU": EU,
             "AF": AF,
@@ -22,41 +23,64 @@
             "OC": OC
         } %}
         
+        {% macro continent_block(continent, codes) %}
+        {% if continents.get(continent) %}
+        <div class="continent-section mb-3">
+            <h3>{{ continent_names[continent] }}</h3>
+            <ul class="list-group">
+                {% for cc in codes %}
+                    <li class="list-group-item">
+                        {% if cc in continents_immediate.get(continent, []) %}
+                            <a class="countryLink" data-country="{{ cc }}" href="{{ url_for('editCountries', cc=cc) }}">{{ cc }}</a>
+                        {% else %}
+                            {% set region_key = 'Region_' + cc.upper() %}
+                            <button class="btn btn-link p-0 countryLink" data-country="{{ cc }}" data-bs-toggle="collapse" data-bs-target="#regions-{{ cc }}"></button>
+                            <div class="collapse mt-1" id="regions-{{ cc }}">
+                                <ul class="list-group">
+                                    {% for region_cc in continents.get(region_key, []) %}
+                                        <li class="list-group-item">
+                                            <a class="countryLink" data-country="{{ region_cc }}" href="{{ url_for('editCountries', cc=region_cc) }}">{{ region_cc }}</a>
+                                        </li>
+                                    {% endfor %}
+                                </ul>
+                            </div>
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+        {% endmacro %}
+
+        {% set left_continents = ['EU', 'OC', 'CA'] %}
         <div class="row mt-3">
             <div class="col-md-6">
-                <h3>{{EU}}</h3>
-                <ul class="list-group">
-                    {% if continents['EU'] %}
-                        {% for cc in continents['EU'] %}
-                            <li class="list-group-item">
-                                <a class="countryLink" data-country="{{ cc }}" href="{{ url_for('editCountries', cc=cc) }}">{{ cc }}</a>
-                            </li>
-                        {% endfor %}
-                    {% endif %}
-                </ul>
+                {% for continent in left_continents %}
+                    {{ continent_block(continent, continents.get(continent, [])) }}
+                {% endfor %}
             </div>
             <div class="col-md-6">
                 {% for continent, codes in continents.items() %}
-                {% if continent != 'EU' %}
-                <div class="continent-section mb-3">
-                    {% if "Region" not in continent %}
-                        <h3>{{ continent_names[continent] }}</h3>
-                        <ul class="list-group">
-                            {% for cc in codes %}
-                                <li class="list-group-item">
-                                    <a class="countryLink" data-country="{{ cc }}" href="{{ url_for('editCountries', cc=cc) }}">{{ cc }}</a>
-                                </li>
-                            {% endfor %}
-                        </ul>
+                    {% if "Region" not in continent and continent not in left_continents %}
+                        {{ continent_block(continent, codes) }}
                     {% endif %}
-                </div>
-                {% endif %}
                 {% endfor %}
             </div>
         </div>
     </div>
     <br><br>
 
+    {% set has_immediate_regions = namespace(value=false) %}
+    {% for continent, codes in continents.items() %}
+        {% if "Region" in continent %}
+            {% set parent = continent.split('_')[1].lower() %}
+            {% for cont, ccs in continents_immediate.items() %}
+                {% if 'Region' not in cont and parent in ccs %}{% set has_immediate_regions.value = true %}{% endif %}
+            {% endfor %}
+        {% endif %}
+    {% endfor %}
+
+    {% if has_immediate_regions.value %}
     <div class="container mb-3">
         <h1 class="mt-3">Country Subdivisions</h1>
         <div class="row mt-3">
@@ -65,7 +89,12 @@
                 {% for continent, codes in continents.items() %}
                 <div class="continent-section mb-3">
                     {% if "Region" in continent %}
-                        {% if counter[0] is divisibleby(2) %}
+                        {% set parent = continent.split('_')[1].lower() %}
+                        {% set ns = namespace(parent_is_immediate=false) %}
+                        {% for cont, ccs in continents_immediate.items() %}
+                            {% if 'Region' not in cont and parent in ccs %}{% set ns.parent_is_immediate = true %}{% endif %}
+                        {% endfor %}
+                        {% if ns.parent_is_immediate and counter[0] is divisibleby(2) %}
                             <h3><script>document.write(regionNames.of('{% print(continent).split("_")[1] %}'));</script></h3>
                             <ul class="list-group">
                                 {% for cc in codes %}
@@ -85,7 +114,12 @@
                 {% for continent, codes in continents.items() %}
                 <div class="continent-section mb-3">
                     {% if "Region" in continent %}
-                        {% if counter[0] is not divisibleby(2) %}
+                        {% set parent = continent.split('_')[1].lower() %}
+                        {% set ns = namespace(parent_is_immediate=false) %}
+                        {% for cont, ccs in continents_immediate.items() %}
+                            {% if 'Region' not in cont and parent in ccs %}{% set ns.parent_is_immediate = true %}{% endif %}
+                        {% endfor %}
+                        {% if ns.parent_is_immediate and counter[0] is not divisibleby(2) %}
                             <h3><script>document.write(regionNames.of('{% print(continent).split("_")[1] %}'));</script></h3>
                             <ul class="list-group">
                                 {% for cc in codes %}
@@ -102,7 +136,8 @@
             </div>
         </div>
     </div>
-    
+    {% endif %}
+
 </body>
 
 <script>

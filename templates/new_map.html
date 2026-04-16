@@ -611,7 +611,15 @@ function loadPreferences() {
 
 // Initialize everything when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    initMap();
+    initMap().catch(err => {
+        const msg = err?.message || '';
+        if (msg.includes('webglcontextcreationerror') || msg.includes('Failed to initialize WebGL')) {
+            const path = window.location.pathname.replace(/\/$/, '').replace(/\/new_map$/, '');
+            window.location.href = path + '/leaflet' + window.location.search;
+        } else {
+            console.error(err);
+        }
+    });
     if (window.innerWidth <= 640) {
         document.getElementById('controlPanel').classList.add('collapsed');
         const icon = document.getElementById('controlToggleIcon');
