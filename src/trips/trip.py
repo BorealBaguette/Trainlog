@@ -81,6 +81,8 @@ class Trip:
         self.notes = _strip_tags(notes)
         self.price = price
         self.currency = currency
+        if purchasing_date is None and price is not None:
+            purchasing_date = datetime.date.today()
         self.purchasing_date = purchasing_date
         self.ticket_id = ticket_id
         self.is_project = is_project
