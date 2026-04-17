@@ -31,6 +31,8 @@ DEFAULT_INPUT_CRS = "urn:ogc:def:crs:OGC:1.3:CRS84"
 WEB_MERCATOR_CRS = "EPSG:3857"
 OUTPUT_CRS = "urn:ogc:def:crs:OGC:1.3:CRS84"
 
+PROPERTIES_TO_KEEP = ["station"]
+
 
 def round_float(value, decimals=6):
     factor = 10**decimals
@@ -217,12 +219,18 @@ def process(country_code):
     data["features"] = gdf.to_dict("records")
     for idx, feature in enumerate(data["features"]):
         feature["geometry"] = mapping(feature["geometry"])
-        if "properties" not in feature or feature["properties"] is None:
-            feature["properties"] = {}
-        feature["properties"]["id"] = idx  # assign new IDs
+        old_properties = feature.get("properties", {})
+        feature["properties"] = {}
+        # assign new IDs
+        feature["properties"]["id"] = idx
+        # assign polygon area
         feature["properties"]["area_m2"] = round_float(
             gdf_mercator.iloc[idx]["area_m2"], decimals=2
-        )  # assign polygon area
+        )
+        for prop_key in old_properties:
+            if prop_key in PROPERTIES_TO_KEEP:
+                # keep some whitelist of other properties
+                feature["properties"][prop_key] = old_properties[prop_key]
 
     # Compute the total area
     total_area_m2 = sum(
