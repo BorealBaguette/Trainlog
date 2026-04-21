@@ -85,6 +85,24 @@ function getPopupContent(tripObj) {
   const endTime     = withDelayDisplay(trip.end_datetime,   trip.arrival_delay,   trip.start_datetime);
   const profileUrl  = `/public/${tripObj.username}`;
 
+  if (['accommodation', 'poi', 'restaurant'].includes(trip.type)) {
+      let icon = '<i class="fa-solid fa-map-location-dot"></i>'
+      if (trip.type === 'accommodation') icon = '<i class="fa-solid fa-bed"></i>'
+      if (trip.type === 'restaurant') icon = '<i class="fa-solid fa-utensils"></i>'
+      return `
+        <div style="font-family:Century Gothic,sans-serif;min-width:200px;">
+          <div style="font-weight:bold;font-size:1.05em;margin-bottom:6px;">
+            <a href="${profileUrl}" target="_blank" style="text-decoration:none;color:inherit;">${tripObj.username}</a>
+          </div>
+          <div style="font-size:0.9em;color:#333;line-height:1.7;">
+            <div>${icon}&nbsp;<span style="text-transform: capitalize; font-weight: bold">${trip.type === 'poi' ? 'Activity' : trip.type}</strong></div>
+            <div>${origin}</div>
+            <div><strong>Date:</strong> ${startDate}</div>
+            <div><strong>Time:</strong> ${startTime} – ${endTime}</div>
+          </div>
+        </div>`;
+  }
+
   let operatorParts = [];
   if (trip.multi_operators) {
     trip.multi_operators.forEach(op => {
@@ -150,6 +168,26 @@ let firstLoad     = true;
 const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
 
 /* ── rendering ───────────────────────────────────────────────────────────── */
+function addMarker(tripObj) {
+    const type     = (tripObj.trip.type === 'helicopter') ? 'air' : tripObj.trip.type;
+    const coords = tripObj.path.map(([lat, lng]) => [lng, lat]);
+    const color = getTypeColor(type);
+    const progress = calculateProgress(tripObj);
+
+    const pegIdx           = Math.min(Math.floor(progress * (coords.length - 1)), coords.length - 1);
+    const [pegLng, pegLat] = coords[pegIdx];
+
+    const popup = new maplibregl.Popup({ offset: 25, maxWidth: '460px' })
+      .setHTML(getPopupContent(tripObj));
+
+    markers.push(
+      new maplibregl.Marker({ color })
+        .setLngLat([pegLng, pegLat])
+        .setPopup(popup)
+        .addTo(map)
+    );
+}
+
 function renderTrips(trips) {
   markers.forEach(m => m.remove());
   markers = [];
@@ -171,7 +209,10 @@ function renderTrips(trips) {
       coords = MapLibreUtils.createGeodesicLine(coords[0], coords[1]);
     }
 
-    if (coords.length < 2) return;
+    if (coords.length === 1 && ['accommodation', 'poi', 'restaurant'].includes(type)) {
+        addMarker(tripObj);
+        return;
+    }
 
     // Full path (static coloured line)
     staticFeatures.push({
@@ -192,18 +233,7 @@ function renderTrips(trips) {
     }
 
     // Current-position pin marker
-    const pegIdx           = Math.min(Math.floor(progress * (coords.length - 1)), coords.length - 1);
-    const [pegLng, pegLat] = coords[pegIdx];
-
-    const popup = new maplibregl.Popup({ offset: 25, maxWidth: '460px' })
-      .setHTML(getPopupContent(tripObj));
-
-    markers.push(
-      new maplibregl.Marker({ color })
-        .setLngLat([pegLng, pegLat])
-        .setPopup(popup)
-        .addTo(map)
-    );
+    addMarker(tripObj)
   });
 
   map.getSource('live-static').setData({ type: 'FeatureCollection', features: staticFeatures });

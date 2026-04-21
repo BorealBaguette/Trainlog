@@ -3912,23 +3912,7 @@ def edit_translations(langid):
 @app.route("/public/<username>")
 @public_required
 def public(username):
-    """
-    Public home (MapLibre)
-    """
-    user = User.query.filter_by(username=username).first()
-    tileserver = user.tileserver if user else "default"
-    globe = user.globe if user else False
-    return render_template(
-        "new_map.html",
-        nav="bootstrap/public_nav.html",
-        title=lang[session["userinfo"]["lang"]]["map"],
-        username=username,
-        public=True,
-        tileserver=tileserver,
-        globe=globe,
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-    )
+    return public_maplibre(username)
 
 
 @app.route("/public/<username>/leaflet")
@@ -3951,17 +3935,13 @@ def public_leaflet(username):
 @app.route("/public/<username>/map")
 @app.route("/public/<username>/new_map")
 @public_required
-def public_new(username):
+def public_maplibre(username):
     """
-    Public home
+    Public home (MapLibre)
     """
     user = User.query.filter_by(username=getUser()).first()
-    if user is not None:
-        tileserver = (user.tileserver,)
-        globe = user.globe
-    else:
-        tileserver = ("default",)
-        globe = False
+    tileserver = user.tileserver if user else "default"
+    globe = user.globe if user else False
 
     return render_template(
         "new_map.html",
