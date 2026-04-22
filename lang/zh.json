@@ -187,6 +187,7 @@
     "aboutItems4_3": "航班路径简单地使用<a href='https://en.wikipedia.org/wiki/Geodesic'>大圆航线</a>连接起始点和到达点",
     "aboutItems5": "所有地图均使用<a href='https://leafletjs.com'>Leaflet</a>库显示",
     "aboutItems6": "除英语、法语和荷兰语外的其他语言大多是机器生成的，如有不准确之处，请通过本页底部的链接在Discord中报告。",
+    "aboutItems7": "Trainlog 在 <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> 上以 Apache 2.0 许可证发布为开源软件，使代码库可以公开供社区贡献，并提高透明度。",
     "helpHeader": "如何使用：",
     "helpItems1": "搜索：",
     "helpItems2_1": "如果搜索不到站点，您可以手动创建",

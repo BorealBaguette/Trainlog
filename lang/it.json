@@ -187,6 +187,7 @@
     "aboutItems4_3": "Gli itinerari aerei sono semplicemente rappresentati da una <a href='https://it.wikipedia.org/wiki/Geodetica'>geodetica</a> tra partenza e arrivo",
     "aboutItems5": "Tutte le mappe sono visualizzate utilizzando la libreria <a href='https://leafletjs.com'>Leaflet</a>",
     "aboutItems6": "Le lingue diverse dall'inglese, francese e olandese sono in gran parte generate automaticamente. Sentiti libero di segnalare eventuali imprecisioni su Discord tramite il link in fondo a questa pagina.",
+    "aboutItems7": "Trainlog è rilasciato come software open source su <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> con licenza Apache 2.0, rendendo il codice sorgente pubblicamente disponibile per i contributi della comunità e garantendo la trasparenza.",
     "helpHeader": "Uso:",
     "helpItems1": "Ricerca:",
     "helpItems2_1": "Se una stazione non viene trovata tramite la ricerca, è possibile crearla manualmente",

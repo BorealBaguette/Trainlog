@@ -187,6 +187,7 @@
     "aboutItems4_3": "Les itinéraires aériens sont simplement représentés par une <a href='https://fr.wikipedia.org/wiki/G%C3%A9od%C3%A9sique'>géodésique</a> entre l'arrivée et le départ",
     "aboutItems5": "Toutes les cartes sont affichées en utilisant la bibliothèque <a href='https://leafletjs.com'>Leaflet</a>",
     "aboutItems6": "Les langues autres que l'anglais, le français et le néerlandais sont en grande partie générées automatiquement. N'hésitez pas à signaler les inexactitudes sur Discord via le lien en bas de cette page.",
+    "aboutItems7": "Trainlog est distribué en tant que logiciel libre sur <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> sous la licence Apache 2.0, ce qui rend le code source accessible au public pour les contributions de la communauté et la transparence.",
     "helpHeader": "Usage :",
     "helpItems1": "Recherche :",
     "helpItems2_1": "Si une gare n'est pas trouvée par la recherche, vous pouvez la créer manuellement",

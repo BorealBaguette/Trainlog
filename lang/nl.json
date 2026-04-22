@@ -187,6 +187,7 @@
     "aboutItems4_3": "Luchtroutes zijn simpelweg een <a href='https://nl.wikipedia.org/wiki/Geodeet_(wiskunde)'>geodetische</a> lijn tussen aankomst en vertrek",
     "aboutItems5": "Alle kaarten worden weergegeven met de <a href='https://leafletjs.com'>Leaflet</a> bibliotheek",
     "aboutItems6": "Talen anders dan Engels, Frans en Nederlands worden grotendeels machinaal gegenereerd. Fouten kunnen gemeld worden in de Discord via de link onderaan deze pagina.",
+    "aboutItems7": "Trainlog is beschikbaar als open-source software op <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> onder de Apache licentie 2.0 voor bijdragen van de community en openheid.",
     "helpHeader": "Hoe te gebruiken:",
     "helpItems1": "Zoeken:",
     "helpItems2_1": "Als een station niet wordt gevonden door de zoekopdracht, kun je deze handmatig aanmaken",

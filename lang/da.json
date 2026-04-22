@@ -187,6 +187,7 @@
     "aboutItems4_3": "Flyruter er simpelthen en <a href='https://en.wikipedia.org/wiki/Geodesic'>geodætisk linje</a> mellem ankomst og afgang.",
     "aboutItems5": "Alle kort vises med brug af <a href='https://leafletjs.com'>Leaflet</a> biblioteket.",
     "aboutItems6": "Andre sprog end engelsk, fransk og hollandsk er hovedsageligt maskin-genererede. Du er velkommen til at rapportere unøjagtigheder på Discord via linket nederst på denne side.",
+    "aboutItems7": "Trainlog udgives som open source-software på <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> under Apache-licensen 2.0, hvilket gør kodebasen offentligt tilgængelig for bidrag fra fællesskabet og gennemsigtighed.",
     "helpHeader": "Sådan bruges det:",
     "helpItems1": "Søg:",
     "helpItems2_1": "Hvis en station ikke findes i søgningen, kan du oprette den manuelt.",

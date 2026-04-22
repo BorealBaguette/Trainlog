@@ -187,6 +187,7 @@
     "aboutItems4_3": "Õhumarsruudid on lihtsalt <a href='https://en.wikipedia.org/wiki/Geodesic'>geodeetika</a> saabumis- ja väljumiskoha vahel",
     "aboutItems5": "Kõik kaardid kuvatakse <a href='https://leafletjs.com'>Leaflet</a> teegi abil",
     "aboutItems6": "Muud keeled peale inglise, prantsuse ja hollandi keele on suuresti masintõlgitud, ebatäpsuste korral võite sellest teatada Discordis, kasutades selle lehe allosas olevat linki",
+    "aboutItems7": "Trainlog avaldatakse avatud lähtekoodiga tarkvarana <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> Apache litsentsi 2.0 all, muutes koodibaasi kogukonna panuse ja läbipaistvuse huvides avalikult kättesaadavaks.",
     "helpHeader": "Kuidas kasutada:",
     "helpItems1": "Otsing:",
     "helpItems2_1": "Kui jaama otsinguga ei leita, saate selle käsitsi luua",

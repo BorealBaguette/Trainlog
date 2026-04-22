@@ -187,6 +187,7 @@
     "aboutItems4_3": "Hava rotalandırmaları ise başlangıç ve bitiş arasında çizilen bir<a href='https://en.wikipedia.org/wiki/Geodesic'>jeodeziktir.</a>",
     "aboutItems5": "Tüm haritalar <a href='https://leafletjs.com'>Leaflet</a> kütüphanesi kullanılarak gösterilmektedir",
     "aboutItems6": "İngilizce, Fransızca ve Hollandaca dışındaki diller büyük ölçüde makine tarafından oluşturulmuştur, sayfanın altındaki link ile Discord'da hataları bildirebilirsiniz.",
+    "aboutItems7": "Trainlog, Apache 2.0 lisansı altında <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a>'da açık kaynak yazılım olarak yayınlanmıştır; bu sayede kod tabanı topluluk katkılarına ve şeffaflığa açık hale getirilmiştir.",
     "helpHeader": "Nasıl kullanılır :",
     "helpItems1": "Search :",
     "helpItems2_1": "Eğer aradığınız istasyon veritabanında yoksa kendiniz oluşturabilirsiniz",

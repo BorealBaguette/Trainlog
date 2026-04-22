@@ -187,6 +187,7 @@
     "aboutItems4_3": "Air paths are simply a <a href='https://en.wikipedia.org/wiki/Geodesic'>geodesic</a> between the arrival and departure locations.",
     "aboutItems5": "All maps are displayed using the <a href='https://leafletjs.com'>Leaflet</a> library.",
     "aboutItems6": "Languages other than English, French and Dutch are largely machine-generated; feel free to report inaccuracies on the Discord with the link at the bottom of this page.",
+    "aboutItems7": "Trainlog is released as open source software on <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> under the Apache license 2.0, making the codebase publicly available for community contributions and transparency.",
     "helpHeader": "How to use :",
     "helpItems1": "Search :",
     "helpItems2_1": "If a station isn't found by the search, you can create it manually.",

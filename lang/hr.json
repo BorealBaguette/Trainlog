@@ -187,6 +187,7 @@
     "aboutItems4_3": "Leteće rute su jednostavno <a href='https://en.wikipedia.org/wiki/Geodesic'>geodetske</a> između dolaska i odlaska",
     "aboutItems5": "Sve karte se prikazuju koristeći knjižnicu <a href='https://leafletjs.com'>Leaflet</a>",
     "aboutItems6": "Sve karte se prikazuju koristeći <a href='https://leafletjs.com'>Leaflet</a> knjižnicu.",
+    "aboutItems7": "Trainlog je objavljen kao softver otvorenog koda na <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> pod Apache licencom 2.0, što čini kodnu bazu javno dostupnom za doprinose zajednice i transparentnost.",
     "helpHeader": "Kako koristiti :",
     "helpItems1": "Pretraga :",
     "helpItems2_1": "Ako stanica nije pronađena pretragom, možete je stvoriti ručno",

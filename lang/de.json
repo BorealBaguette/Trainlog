@@ -187,6 +187,7 @@
     "aboutItems4_3": "Luftwege sind einfach eine <a href='https://de.wikipedia.org/wiki/Geod%C3%A4te'>Geodäte</a> zwischen Ankunft und Abflug",
     "aboutItems5": "Alle Karten werden mithilfe der <a href='https://leafletjs.com'>Leaflet</a>-Bibliothek angezeigt",
     "aboutItems6": "Sprachen außer Englisch, Französisch und Niederländisch werden größtenteils maschinell generiert. Fehler können Sie gerne im Discord über den Link unten auf dieser Seite melden.",
+    "aboutItems7":"Trainlog wird als Open-Source-Software auf <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> unter der Apache-Lizenz 2.0 veröffentlicht, wodurch der Quellcode öffentlich zugänglich ist und Beiträge aus der Community sowie Transparenz ermöglicht werden.",
     "helpHeader": "Wie benutzt man:",
     "helpItems1": "Suchen:",
     "helpItems2_1": "Wenn eine Station bei der Suche nicht gefunden wird, können Sie sie manuell erstellen",
