@@ -187,6 +187,7 @@
     "aboutItems4_3": "Letecké trasy jsou jednoduše <a href='https://en.wikipedia.org/wiki/Geodesic'>geodetická čára</a> mezi startem a cílem",
     "aboutItems5": "Všechny mapy jsou zobrazeny pomocí knihovny <a href='https://leafletjs.com'>Leaflet</a>",
     "aboutItems6": "Jazyky jiné než angličtina, francouzština a nizozemština jsou převážně strojově generované. Chyby můžete nahlásit na Discordu pomocí odkazu na spodní části této stránky.",
+    "aboutItems7": "Trainlog je vydán jako open source software na <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> pod licencí Apache 2.0, čímž je jeho kódová základna veřejně dostupná pro příspěvky komunity a transparentnost.",
     "helpHeader": "Návod k použití:",
     "helpItems1": "Hledání:",
     "helpItems2_1": "Pokud stanice není nalezena hledáním, můžete ji vytvořit ručně",

@@ -187,6 +187,7 @@
     "aboutItems4_3": "Las rutas aéreas son simplemente una <a href='https://en.wikipedia.org/wiki/Geodesic'>geodésica</a> entre la llegada y la salida",
     "aboutItems5": "Todos los mapas se muestran utilizando la biblioteca <a href='https://leafletjs.com'>Leaflet</a>",
     "aboutItems6": "Los idiomas distintos del inglés, francés y neerlandés se generan en gran medida de manera automática. No dudes en informar sobre inexactitudes en Discord a través del enlace al final de esta página.",
+    "aboutItems7": "Trainlog se publica como software de código abierto en <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> bajo la licencia Apache 2.0, lo que hace que el código fuente esté disponible públicamente para las contribuciones de la comunidad y para garantizar la transparencia.",
     "helpHeader": "Cómo usar:",
     "helpItems1": "Buscar:",
     "helpItems2_1": "Si una estación no es encontrada por la búsqueda, puedes crearla manualmente",

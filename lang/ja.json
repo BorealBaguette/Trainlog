@@ -187,6 +187,7 @@
     "aboutItems4_3": "空路は到着地と出発地の間の単なる<a href='https://ja.wikipedia.org/wiki/測地線'>測地線</a>です",
     "aboutItems5": "すべての地図は<a href='https://leafletjs.com'>Leaflet</a>ライブラリを使用して表示されています",
     "aboutItems6": "英語、フランス語、オランダ語以外の言語は主に機械生成されたものです。誤訳はこのページの下部にあるリンクからDiscordで報告してください。",
+    "aboutItems7": "Trainlogは、Apacheライセンス2.0の下で<a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a>上でオープンソースソフトウェアとして公開されており、コードベースはコミュニティからの貢献と透明性を確保するために一般に公開されています。",
     "helpHeader": "使用方法：",
     "helpItems1": "検索：",
     "helpItems2_1": "検索で駅が見つからない場合は、手動で追加できます。",

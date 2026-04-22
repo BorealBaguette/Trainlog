@@ -187,6 +187,7 @@
     "aboutItems4_3": "Flygrutter är helt enkelt en <a href='https://en.wikipedia.org/wiki/Geodesic'>geodetisk rutt</a> mellan ankomst- och avresaplats",
     "aboutItems5": "Alla kartor visas med hjälp av biblioteket <a href='https://leafletjs.com'>Leaflet</a>",
     "aboutItems6": "Andra språk än engelska, franska och nederländska är till stor del maskin-genererade. Rapportera gärna felaktigheter i Discord via länken längst ner på denna sida.",
+    "aboutItems7": "Trainlog släpps som öppen källkodsprogramvara på <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> under Apache-licensen 2.0, vilket gör kodbasen offentligt tillgänglig för bidrag från communityn och transparens.",
     "helpHeader": "Hur man använder:",
     "helpItems1": "Sök:",
     "helpItems2_1": "Om en station inte hittas av sökfunktionen kan du skapa den manuellt",

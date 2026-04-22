@@ -187,6 +187,7 @@
     "aboutItems4_3": "Os itinerários aéreos são simplesmente uma <a href='https://en.wikipedia.org/wiki/Geodesic'>geodésica</a> entre os pontos de partida e chegada.",
     "aboutItems5": "Todos os mapas gerados utilizam a biblioteca <a href='https://leafletjs.com'>Leaflet</a>.",
     "aboutItems6": "Com exceção do inglês, francês e holandês, as traduções são realizadas em grande medida por máquinas. Não hesites em reportar imprecisões no Discord através da ligação no fundo desta página.",
+    "aboutItems7": "O Trainlog é distribuído como software de código aberto no <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> sob a licença Apache 2.0, tornando a base de código publicamente disponível para contribuições da comunidade e transparência.",
     "helpHeader": "Como usar:",
     "helpItems1": "Procurar:",
     "helpItems2_1": "Se uma estação não for encontrada pela pesquisa, podes criá-la manualmente.",

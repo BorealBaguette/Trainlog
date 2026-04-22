@@ -187,6 +187,7 @@
     "aboutItems4_3": "Ścieżki powietrzne to <a href='https://pl.wikipedia.org/wiki/Ortodroma'>ortodromy</a> łączące początek i koniec lotu",
     "aboutItems5": "Wszystkie mapy są wyświetlane przy użyciu biblioteki <a href='https://leafletjs.com'>Leaflet</a>",
     "aboutItems6": "Języki inne niż angielski, francuski i niderlandzki są w dużej mierze generowane maszynowo. Wszelkie niedokładności zgłoś w Discordzie za pomocą linku na dole tej strony.",
+    "aboutItems7": "Trainlog został udostępniony jako oprogramowanie typu open source w serwisie <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> na licencji Apache 2.0, dzięki czemu baza kodu jest publicznie dostępna, co pozwala społeczności na wkład w projekt i zachowanie przejrzystości.",
     "helpHeader": "Instrukcja:",
     "helpItems1": "Szukaj:",
     "helpItems2_1": "Jeśli stacja nie zostanie znaleziona, możesz ją wprowadzić ręcznie",

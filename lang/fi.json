@@ -187,6 +187,7 @@
     "aboutItems4_3": "Ilmareitit ovat yksinkertaisesti <a href='https://fi.wikipedia.org/wiki/Geodeesi'>geodeettinen viiva</a> lähtö- ja saapumispaikan välillä",
     "aboutItems5": "Kaikki kartat näytetään käyttämällä <a href='https://leafletjs.com'>Leaflet</a> -kirjastoa",
     "aboutItems6": "Muut kuin englanti, ranska ja hollanti ovat suurelta osin koneellisesti tuotettuja, ilmoita epätarkkuuksista Discordissa sivun alareunassa olevalla linkillä.",
+    "aboutItems7": "Trainlog julkaistaan ​​avoimen lähdekoodin ohjelmistona <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> Apache-lisenssillä 2.0, mikä tekee koodikannasta julkisesti saatavilla yhteisön osallistumista ja läpinäkyvyyttä varten.",
     "helpHeader": "Kuinka Trainlogia käytetään:",
     "helpItems1": "Haku:",
     "helpItems2_1": "Jos asemaa ei löydy haulla, voit lisätä sen manuaalisesti",

@@ -187,6 +187,7 @@
     "aboutItems4_3": "Luftweg sind eifach e <a href='https://de.wikipedia.org/wiki/Geod%C3%A4te'>Geodäte</a> zwüsched Aakunft und Abflug",
     "aboutItems5": "Alli Karte werden mithilf vo de <a href='https://leafletjs.com'>Leaflet</a>-Bibliothek azeigt",
     "aboutItems6": "Sprache ussert Englisch, Französisch und Niederländisch werdend grösteteils maschinell generiert. Fehler könnd Sie gern im Discord über de Link une uf dere Siite melde.",
+    "aboutItems7": "Trainlog wird als Open-Source-Software auf <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> unter der Apache-Lizenz 2.0 veröffentlicht, wodurch der Quellcode öffentlich zugänglich ist und Beiträge aus der Community sowie Transparenz ermöglicht werden.",
     "helpHeader": "Wie brucht mer:",
     "helpItems1": "Sueche:",
     "helpItems2_1": "Wenn e Station bi de Suechi nid gfunde wird, könnd Sie sie manuell erstelle",

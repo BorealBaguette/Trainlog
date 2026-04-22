@@ -187,6 +187,7 @@
     "aboutItems4_3": "항로는 출발지와 도착지 사이의 <a href='https://ko.wikipedia.org/wiki/측지선'>측지선</a>을 사용합니다.",
     "aboutItems5": "모든 지도는 <a href='https://leafletjs.com'>Leaflet</a> 라이브러리를 사용해 표시됩니다.",
     "aboutItems6": "영어, 프랑스어, 네덜란드어, 한국어를 제외한 언어들은 대부분 기계번역되었기 때문에, 틀린 부분이 있다면 페이지 하단의 링크를 통해 Discord로 제보해 주세요.",
+    "aboutItems7": "Trainlog는 Apache 2.0 라이선스에 따라 <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a>에서 오픈 소스 소프트웨어로 배포되어 커뮤니티의 기여와 투명성을 위해 코드베이스가 공개적으로 이용 가능합니다.",
     "helpHeader": "사용 방법 :",
     "helpItems1": "검색 :",
     "helpItems2_1": "만약 검색으로 역을 찾을 수 없다면, 직접 추가할 수 있습니다.",
