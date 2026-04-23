@@ -3071,8 +3071,23 @@ def signup():
         "password_reset_request",
         "getGeojson",
     ]
+    
+    def _error_and_return(isFromApp, message):
+        if isFromApp:
+            return jsonify({"success": False, "error": message}), 400
+        else:
+            flash(message)
+            return redirect(url_for("signup"))
 
     if request.method == "POST":
+        fromApp = request.form.get("fromApp", "false") == "true"
+        locale = request.form.get("locale", "en") if fromApp else session["userinfo"]["lang"]
+        
+        try: # Check if the locale of the app exists in Trainlog web
+            lang[locale]["langId"]
+        except KeyError:
+            locale = session["userinfo"]["lang"]
+
         captcha_solution = request.form.get("frc-captcha-solution")
         if not captcha_solution:
             log_suspicious_activity(
@@ -3082,8 +3097,7 @@ def signup():
                 getIp(request),
                 getRequestData(request),
             )
-            flash(lang[session["userinfo"]["lang"]]["captchaFailed"])
-            return redirect(url_for("signup"))
+            return _error_and_return(fromApp, lang[locale]["captchaFailed"])
 
         # Verify the CAPTCHA with FriendlyCaptcha
         captcha_verification = requests.post(
@@ -3105,8 +3119,7 @@ def signup():
                 getIp(request),
                 getRequestData(request),
             )
-            flash(lang[session["userinfo"]["lang"]]["captchaFailed"])
-            return redirect(url_for("signup"))
+            return _error_and_return(fromApp, lang[locale]["captchaFailed"])
 
         username = request.form["username"]
         password = request.form["password"]
@@ -3116,21 +3129,16 @@ def signup():
         regex = r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$"
 
         if not (username and password and email):
-            flash(lang[session["userinfo"]["lang"]]["signupCantEmpty"])
-            return redirect(url_for("signup"))
+            return _error_and_return(fromApp, lang[locale]["signupCantEmpty"])
         elif not re.match(regex, email):
-            flash(lang[session["userinfo"]["lang"]]["invalidEmail"])
-            return redirect(url_for("signup"))
+            return _error_and_return(fromApp, lang[locale]["invalidEmail"])
         elif any(c in username for c in ('@', '.', '<', '>')):
-            flash(lang[session["userinfo"]["lang"]]["usernameNoEmail"])
-            return redirect(url_for("signup"))
+            return _error_and_return(fromApp, lang[locale]["usernameNoEmail"])
         elif username in unauthorised_usernames:
-            flash(
-                lang[session["userinfo"]["lang"]]["usernameNotAvailable"].format(
+            return _error_and_return(fromApp, lang[locale]["usernameNotAvailable"].format(
                     u=username, a=email
                 )
             )
-            return redirect(url_for("signup"))
         else:
             username = username.strip()
             password = password.strip()
@@ -3143,7 +3151,7 @@ def signup():
             username=username,
             pass_hash=hashed_pwd,
             email=email,
-            lang=lang[session["userinfo"]["lang"]]["langId"],
+            lang=lang[locale]["langId"],
         )
         authDb.session.add(new_user)
 
@@ -3158,7 +3166,7 @@ def signup():
                     location,
                     email,
                     request.accept_languages,
-                    lang[session["userinfo"]["lang"]][session["userinfo"]["lang"]],
+                    lang[locale][locale],
                 ),
             )
 
@@ -3168,16 +3176,16 @@ def signup():
             session["logged_in_user_id"] = new_user.uid
 
             # Redirect to the 'about' page after successful signup and login
-            return redirect(url_for("about"))
+            if fromApp:
+                return jsonify({"success": True}), 200
+            else:
+                return redirect(url_for("about"))
 
         except sqlalchemy.exc.IntegrityError as e:
             print(e)
-            flash(
-                lang[session["userinfo"]["lang"]]["usernameNotAvailable"].format(
-                    u=username, a=email
-                )
-            )
-            return redirect(url_for("signup"))
+            return _error_and_return(fromApp, lang[locale]["usernameNotAvailable"].format(
+                u=username, a=email
+            ))
 
     return render_template(
         "signup.html",
