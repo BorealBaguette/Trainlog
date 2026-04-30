@@ -52,7 +52,7 @@ def download_railways_from_overpass(country_code, force_refetch=False):
         print("Fetching data from Overpass...")
         overpass_query = f"""
             [out:json];
-            area["ISO3166-1"="{country_code.upper()}"]->.searchArea;
+            area["ISO3166-1"="{country_code}"]->.searchArea;
             (
               way["railway"="rail"](area.searchArea);
               way["railway"="narrow_gauge"](area.searchArea);
@@ -357,7 +357,7 @@ def save_final_geojson_file(country_code, total_area):
         data = json.load(f_in)
         # set the total area value, calculated in prev step
         data["total_area_m2"] = total_area
-        processed_path = PROCESSED_FILE_DIR + "/" + country_code.lower() + ".geojson"
+        processed_path = PROCESSED_FILE_DIR + "/" + country_code + ".geojson"
         print(f"Saving processed data for {country_code}...")
         with open(processed_path, "w") as f_out:
             json.dump(data, f_out)
@@ -367,8 +367,8 @@ if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Please provide a country's ISO code as a command-line argument.")
         sys.exit(1)
-    country_code = sys.argv[1]
+    country_code = sys.argv[1].upper()
     make_file_dirs()
     json_path = download_railways_from_overpass(country_code, force_refetch=False)
     geojson_path = convert_json_to_geojson(json_path)
-    process_railways(geojson_path, country_code.upper())
+    process_railways(geojson_path, country_code)

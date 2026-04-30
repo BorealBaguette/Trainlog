@@ -14,7 +14,6 @@ Usage:
 
 The script reads from:
     countries/processed/<COUNTRY_CODE>.geojson
-    (falls back to lowercase filename if needed)
 
 It assumes CRS84 if the input file has no CRS, performs distance
 calculations in EPSG:3857, and always writes output in CRS84.
@@ -171,8 +170,6 @@ def set_output_crs(data):
 def process(country_code):
     raw_path = f"countries/processed/{country_code}.geojson"
     path = raw_path
-    if not os.path.exists(path):
-        path = f"countries/processed/{country_code.lower()}.geojson"
     if not os.path.exists(path):
         print(f"Geojson file not found for {country_code}")
         return
