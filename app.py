@@ -579,7 +579,7 @@ def get_country_codes_from_files(immediate_only=False):
             cc = name.split("-")[0].upper()
             continent = "Region_" + cc
             if not immediate_only:
-                add_to_country_codes(cc.lower()) # also add full country if subdivisions exist
+                add_to_country_codes(cc) # also add full country if subdivisions exist
         else:
             cc = name.upper()
             continent = country_to_continent.get(cc, "Unknown")
