@@ -186,7 +186,7 @@ def sendEmail(address, subject, message):
     config = load_config()
 
     try:
-        server = smtplib.SMTP(config["smtp"]["server"], config["smtp"]["port"])
+        server = smtplib.SMTP(config["smtp"]["server"], config["smtp"]["port"], timeout=10)
 
         server.starttls()  # Secure the connection
         server.login(config["smtp"]["user"], config["smtp"]["password"])
