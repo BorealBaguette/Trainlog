@@ -52,6 +52,7 @@ FilteredTrips AS (
     LEFT JOIN tags_associations ON Subquery.uid = tags_associations.trip_id
     LEFT JOIN tags ON tags_associations.tag_id = tags.uid
     LEFT JOIN tags_associations filtered_tags_associations ON Subquery.uid = filtered_tags_associations.trip_id
+    LEFT JOIN tickets ON Subquery.ticket_id = tickets.uid
     LEFT JOIN (
         SELECT *
         FROM tags
@@ -75,6 +76,7 @@ FilteredTrips AS (
           remove_diacritics(LOWER(airliners.iata)) LIKE remove_diacritics(LOWER(:search)) OR 
           remove_diacritics(LOWER(airliners.manufacturer)) LIKE remove_diacritics(LOWER(:search)) OR 
           remove_diacritics(LOWER(airliners.model)) LIKE remove_diacritics(LOWER(:search)) OR
+          remove_diacritics(LOWER(COALESCE(tickets.name, ''))) LIKE remove_diacritics(LOWER(:search)) OR
           filtered_tags.uid IS NOT NULL
       )
     GROUP BY Subquery.uid
