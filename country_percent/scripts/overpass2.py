@@ -21,8 +21,8 @@ import sys
 import time
 
 import geopandas as gpd
-import requests
 import osm2geojson
+import requests
 from shapely.geometry import LineString, mapping, shape
 from shapely.ops import unary_union
 from simplify_geojson import process as simplify_geojson
@@ -53,7 +53,7 @@ RETRY_DELAY_SECONDS = 3
 
 
 def get_overpass_data(iso_spec, iso_code, query_template):
-    query = query_template.format(iso_code=iso_code.upper(), iso_spec=iso_spec)
+    query = query_template.format(iso_code=iso_code, iso_spec=iso_spec)
 
     attempt = 0
     for attempt in range(MAX_OVERPASS_RETRIES):
@@ -62,7 +62,9 @@ def get_overpass_data(iso_spec, iso_code, query_template):
             case 200:
                 return r.json()
             case 504:
-                print(f"Error fetching data: {r.status_code} - {r.reason} (attempt ${attempt} of ${MAX_OVERPASS_RETRIES})")
+                print(
+                    f"Error fetching data: {r.status_code} - {r.reason} (attempt ${attempt} of ${MAX_OVERPASS_RETRIES})"
+                )
                 time.sleep(RETRY_DELAY_SECONDS * attempt)
                 continue
             case _:
@@ -70,6 +72,7 @@ def get_overpass_data(iso_spec, iso_code, query_template):
                 sys.exit(1)
     print("Error fetching data: run out of attempts")
     exit(1)
+
 
 def merge_overlapping_polygons(features):
     print("Starting to merge overlapping polygons...")
@@ -113,14 +116,16 @@ def merge_overlapping_polygons(features):
     print("\nPolygon merging completed!")
     return [feature for i, feature in enumerate(features) if to_keep[i]]
 
-def get_subdivision_boundary(iso_code,iso_spec):
-    osm_json = get_overpass_data(iso_spec,iso_code,SUBDIVISION_QUERY)
+
+def get_subdivision_boundary(iso_code, iso_spec):
+    osm_json = get_overpass_data(iso_spec, iso_code, SUBDIVISION_QUERY)
     # Convert OSM JSON to GeoJSON using osm2geojson
     geojson = osm2geojson.json2geojson(
         osm_json, filter_used_refs=True, log_level="ERROR"
     )
     return geojson
-            
+
+
 def clip_to_state(train_lines_gdf, state_boundary_geojson):
     state_gdf = gpd.GeoDataFrame.from_features(
         state_boundary_geojson["features"], crs=train_lines_gdf.crs
@@ -128,25 +133,30 @@ def clip_to_state(train_lines_gdf, state_boundary_geojson):
     clipped_lines = gpd.clip(train_lines_gdf, state_gdf)
     return clipped_lines
 
-def clip_to_region(iso_spec,iso_code,processed_path):
+
+def clip_to_region(iso_spec, iso_code, processed_path):
     train_lines_gdf = gpd.read_file(processed_path)
-    subdivision_boundary = get_subdivision_boundary(iso_code,iso_spec)
+    subdivision_boundary = get_subdivision_boundary(iso_code, iso_spec)
     clipped_lines = clip_to_state(train_lines_gdf, subdivision_boundary)
     clipped_lines.to_file(processed_path, driver="GeoJSON")
     print(f"Saved initial file {iso_code}.geojson")
 
+
 def buffer_linestring(line_coords):
-        line = LineString(line_coords)
-        gdf = gpd.GeoDataFrame({"geometry": [line]}, crs="EPSG:4326")
+    line = LineString(line_coords)
+    gdf = gpd.GeoDataFrame({"geometry": [line]}, crs="EPSG:4326")
 
-        # Buffer the linestring and transform to Web Mercator for accurate distance calculations
-        gdf = gdf.to_crs("EPSG:3857")
-        gdf["geometry"] = gdf.buffer(RAIL_WIDTH_BUFFER_M)
+    # Buffer the linestring and transform to Web Mercator for accurate distance calculations
+    gdf = gdf.to_crs("EPSG:3857")
+    gdf["geometry"] = gdf.buffer(RAIL_WIDTH_BUFFER_M)
 
-        # Transform back to WGS84
-        gdf = gdf.to_crs("EPSG:4326")
+    # Transform back to WGS84
+    gdf = gdf.to_crs("EPSG:4326")
 
-        return gdf.iloc[0].geometry
+    return gdf.iloc[0].geometry
+    
+def process_railway_geometry(iso_code, iso_spec):
+    print(f"Fetching railway geometry for {iso_code} using ISO 3166-{iso_spec}")
 
     preprocessed_path = "countries/preprocessed/" + country_code + ".json"
     processed_path = "countries/processed/" + country_code + ".geojson"
@@ -155,9 +165,9 @@ def buffer_linestring(line_coords):
     os.makedirs("countries/processed", exist_ok=True)
 
     if not os.path.exists(preprocessed_path):
-            data = get_overpass_data(iso_spec,iso_code,GEOMETRY_QUERY)
-            with open(preprocessed_path, "w") as f:
-                    json.dump(data, f)  
+        data = get_overpass_data(iso_spec, iso_code, GEOMETRY_QUERY)
+        with open(preprocessed_path, "w") as f:
+            json.dump(data, f)
     else:
         print("Loading preprocessed data...")
         with open(preprocessed_path, "r") as f:
@@ -213,26 +223,30 @@ def buffer_linestring(line_coords):
     print(f"Railway geometry processing for {iso_code} completed!")
 
     print("\nClip geojson to region boundary...")
-    clip_to_region(iso_spec,iso_code,processed_path)
+    clip_to_region(iso_spec, iso_code, processed_path)
 
     print("\nSimplify geojson...")
     simplify_geojson(iso_code)
 
-    print ("\nDone!")
+    print("\nDone!")
+
 
 if __name__ == "__main__":
+    try:
+        iso_code = sys.argv[1].upper()
+    except IndexError:
+        raise ValueError("Invalid ISO3166 code: No code provided")
     r = requests.get(ISO3166_URL)
     for country, regions in r.json().items():
-        if sys.argv[1] == country:
+        if iso_code == country:
             iso_spec = 1
-            iso_code = sys.argv[1].lower() # TODO: eventually change to upper
             break
-        if sys.argv[1] in regions:
+        if iso_code in regions:
             iso_spec = 2
-            iso_code = sys.argv[1].upper()
             break
     else:
-        print("Please provide a valid ISO3166 code (either ISO3166-1 or ISO3166-2)")
-        sys.exit(1)
+        raise ValueError(
+            "Invalid ISO3166 code: Please provide a ISO3166-1 or ISO3166-2 code"
+        )
 
-    process_railway_geometry(iso_code,iso_spec)
+    process_railway_geometry(iso_code, iso_spec)
