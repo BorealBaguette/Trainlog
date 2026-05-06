@@ -25,7 +25,7 @@ def get_coverage_geojson_dict(cc, immediate_only=False):
 
 def get_coverage_file_path(cc):
     directory_path = "country_percent/countries/processed/"
-    return os.path.join(directory_path, f"{cc}.geojson")
+    return os.path.join(directory_path, f"{cc.upper()}.geojson")
 
 
 def has_coverage_file_immediate(cc):
