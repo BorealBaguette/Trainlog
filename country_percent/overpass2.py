@@ -81,7 +81,7 @@ def fetch_railway_geometry(country_code):
         return gdf.iloc[0].geometry
 
     preprocessed_path = "countries/preprocessed/" + country_code + ".json"
-    processed_path = "countries/processed/" + country_code.lower() + ".geojson"
+    processed_path = "countries/processed/" + country_code + ".geojson"
 
     os.makedirs("countries/preprocessed", exist_ok=True)
     os.makedirs("countries/processed", exist_ok=True)
@@ -90,7 +90,7 @@ def fetch_railway_geometry(country_code):
         print("Fetching data from Overpass...")
         overpass_query = f"""
         [out:json];
-        area["ISO3166-1"="{country_code.upper()}"]->.searchArea;
+        area["ISO3166-1"="{country_code}"]->.searchArea;
         (
             way["railway"="rail"](area.searchArea);
             way["railway"="narrow_gauge"](area.searchArea);

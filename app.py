@@ -580,7 +580,7 @@ def get_country_codes_from_files(immediate_only=False):
             cc = name.split("-")[0].upper()
             continent = "Region_" + cc
             if not immediate_only:
-                add_to_country_codes(cc.lower()) # also add full country if subdivisions exist
+                add_to_country_codes(cc) # also add full country if subdivisions exist
         else:
             cc = name.upper()
             continent = country_to_continent.get(cc, "Unknown")
@@ -3776,6 +3776,9 @@ def process_queue(cc):
         # Write the updated data back to the file
         with open(file_path, "w") as file:
             json.dump(geojson_data, file)
+
+        # Remove the old data from cache
+        geopip_country.invalidate_cache(cc)
         
         print(f"Successfully processed {len(operations)} operations")
         return jsonify({
