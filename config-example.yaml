@@ -22,12 +22,17 @@ owner:
 # Only include these if you use the related features
 # ================================
 
-# Email sending via SMTP (used for error notifications to owner and password reset)
+# Email sending via SMTP (used for password reset and new-user-signup notification)
 smtp:
   server: smtp.example.com
   port: 587
   user: your_email@example.com
   password: YOUR_PASSWORD_HERE
+
+# Error collector (used to ship server-side 5xx tracebacks to a self-hosted collector)
+error_collector:
+  url: https://errors.example.com/report
+  token: SHARED_SECRET
 
 # OpenAI API (used for auto translation of language files)
 openai:

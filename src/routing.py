@@ -126,11 +126,14 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
             full_url += f"&radiuses={radiuses}"
         return full_url
 
+    # (connect, read) timeouts — connect failures fail fast; reads cap at 8s
+    TIMEOUT = (3, 8)
+
     # Behavior per type
     if routingType == "bus":
         routers_fallback_base = "https://routing.openstreetmap.de/routed-car"
         try:
-            response = requests.get(build_url(base), timeout=5)
+            response = requests.get(build_url(base), timeout=(3, 5))
             if response.status_code != 200:
                 raise Exception("Non-200 response")
 
@@ -139,13 +142,22 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
                 raise Exception("Router responded with NoRoute")
 
             return make_response(data, return_code)
-        except Exception as e:
+        except Exception:
             fallback_url = build_url(routers_fallback_base)
-            return make_response(requests.get(fallback_url).json(), 235)
+            try:
+                return make_response(requests.get(fallback_url, timeout=TIMEOUT).json(), 235)
+            except requests.RequestException as e:
+                return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
 
     if routingType == "train" and use_new_router:
-        gh_json = requests.get(build_gh_url(base), timeout=10).json()
+        try:
+            gh_json = requests.get(build_gh_url(base), timeout=TIMEOUT).json()
+        except requests.RequestException as e:
+            return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
         return convert_graphhopper_to_osrm(gh_json)
 
     # All other types: just proxy text
-    return requests.get(build_url(base), timeout=10).text
+    try:
+        return requests.get(build_url(base), timeout=TIMEOUT).text
+    except requests.RequestException as e:
+        return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
