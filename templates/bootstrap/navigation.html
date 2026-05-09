@@ -352,7 +352,7 @@
     // Sort the countries within each group
     sortedGroups.forEach(function (group) {
       group.countries.sort(function (a, b) {
-        return a.name.localeCompare(b.name);
+        return (a.name || a.iso || '').localeCompare(b.name || b.iso || '');
       });
     });
 
