@@ -52,6 +52,15 @@ def instance(cc):  # noqa: E302
     return _INSTANCE[cc]
 
 
+def invalidate_cache(cc):
+    """Remove GeoPIP instance for cc and all ones that stitch together from this as the underlying data might has changed."""
+    global _INSTANCE
+
+    for cc2 in _INSTANCE:
+        if cc.startswith(cc2):
+            del _INSTANCE[cc2]
+
+
 def search(cc, lng, lat):
     """Reverse geocode lng/lat coordinate within the features from `instance().shapes`.
 

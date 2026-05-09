@@ -248,7 +248,9 @@ def parse_trip_with_ai(text, user_lang="en", images=None, ics_events=None, pdf_t
 A trip is ONE segment (e.g., a flight with one connection = 2 trips).
 Ignore walking trips that are between two public transit trips unless specified
 When no date is given, default to today ({datetime.today().strftime('%Y-%m-%d')}), when date and time are given but no year, default to this year ({datetime.today().strftime('%Y')})
-When only one price is given for a multi leg trip, default to dividing the price among each leg
+When only one price is given for a multi leg trip, default to dividing the price among each leg.
+
+Make sure no indentifyable information is stored in notes (PNR, names, etc)
 
 Return ONLY valid JSON array, no markdown:
 [{{
