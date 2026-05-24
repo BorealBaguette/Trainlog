@@ -77,10 +77,8 @@
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='train') }}"><i class="fa-solid fa-train"></i> {{ train }}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='tram') }}"><i class="fa-solid fa-train-tram"></i> {{ tram }}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='metro') }}"><i class="fa-solid fa-train-subway"></i> {{ metro }}</a>
-            {% if is_alpha %}
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='funicular') }}"><i class="fa-solid fa-mountain"></i> {{ funicular }}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='rail') }}"><i class="fa-solid fa-dumbbell"></i> {{ rail }}</a>   
-            {% endif %}         
             <hr class="dropdown-divider">
             <a class="dropdown-item" href="{{ url_for('new_flight', username=username) }}"><i class="fa-solid fa-plane-up"></i>{{air}}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="bus") }}"><i class="fa-solid fa-bus"></i>{{bus}}</a>
@@ -90,10 +88,8 @@
             <hr class="dropdown-divider">
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="walk") }}"><i class="fa-solid fa-person-hiking"></i> {{walk}}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="cycle") }}"><i class="fa-solid fa-bicycle"></i> {{cycle}}</a>
-            {% if is_alpha %}
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="ski") }}"><i class="fa-solid fa-person-skiing"></i> {{ski}}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="scooter") }}"><i class="bi bi-scooter"></i> {{scooter}}</a>
-            {% endif %}         
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="car") }}"><i class="fa-solid fa-car-side"></i> {{car}}</a>
             <hr class="dropdown-divider">
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="accommodation") }}"><i class="fa-solid fa-bed"></i> {{accommodation}}</a>
