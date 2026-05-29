@@ -43,6 +43,13 @@ def get_exchange_rate(price, base_currency, target_currency, date):
     if base_currency == target_currency:
         return price
 
+    # Guard against unsupported currencies (e.g. a bogus code saved by the AI
+    # importer). These aren't columns in the exchanges table, so SQLite would
+    # silently treat the code as a string literal and crash on float().
+    supported = {"EUR"} | {c["currency"] for c in get_available_currencies()}
+    if base_currency not in supported or target_currency not in supported:
+        return None
+
     # Ensure the price is a float
     price = float(price)
     db_path = "databases/main.db"
@@ -77,7 +84,11 @@ def get_exchange_rate(price, base_currency, target_currency, date):
         row = cursor.fetchone()
 
         if row:
-            base_rate, target_rate = (float(row[0]), float(row[1]))
+            try:
+                base_rate, target_rate = (float(row[0]), float(row[1]))
+            except (TypeError, ValueError):
+                conn.close()
+                return None
 
             if base_currency == "EUR":
                 rate = target_rate

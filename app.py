@@ -209,6 +209,7 @@ from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
 from src.photon import photonInstances, photonRequest, photonRequestSingle
 from src.routing import forward_routing_core
+from src.error_reporter import report_error
 
 app = Flask(__name__)
 start_email_listener(app)
@@ -579,7 +580,7 @@ def get_country_codes_from_files(immediate_only=False):
             cc = name.split("-")[0].upper()
             continent = "Region_" + cc
             if not immediate_only:
-                add_to_country_codes(cc.lower()) # also add full country if subdivisions exist
+                add_to_country_codes(cc) # also add full country if subdivisions exist
         else:
             cc = name.upper()
             continent = country_to_continent.get(cc, "Unknown")
@@ -3783,6 +3784,9 @@ def process_queue(cc):
         # Write the updated data back to the file
         with open(file_path, "w") as file:
             json.dump(geojson_data, file)
+
+        # Remove the old data from cache
+        geopip_country.invalidate_cache(cc)
         
         print(f"Successfully processed {len(operations)} operations")
         return jsonify({
@@ -8367,21 +8371,14 @@ def handle_error(e):
         logger.exception("Unhandled exception", exc_info=e)
         error_code = 500
 
-    # Send email only for server errors (>=500)
+    # Report server errors (>=500) to the error collector
     if error_code >= 500:
-        try:
-            url = request.url or ""
-            if "127.0.0.1" not in url and "localhost" not in url:
-                trace = traceback.format_exc().replace("\n", "<br>")
-                msg = (
-                    f"URL : {url} <br><br>"
-                    f"Logged in user : {getUser()}<br><br>"
-                    f"Trace : <br><br>{trace}"
-                )
-                subject = f"Error {error_code}: {str(e)}"
-                sendOwnerEmail(subject, msg)
-        except Exception as email_err:
-            logger.error("Failed to send owner email: %s", email_err)
+        report_error(
+            subject=f"Error {error_code}: {e}",
+            message=traceback.format_exc(),
+            url=request.url or "",
+            user=str(getUser() or ""),
+        )
 
     # Safe language/session lookups
     userinfo = session.get("userinfo", {}) or {}
