@@ -47,7 +47,7 @@
 
               <h6 class="card-subtitle mb-3 text-muted">{{ feature_requests_voting if feature_requests_voting is defined else 'Voting' }}</h6>
 
-              {% if logged_in_user and not is_owner and username and username != "public" %}
+              {% if logged_in_user and not is_owner and not is_feature_admin and username and username != "public" %}
                 <button type="button"
                         class="btn btn-lg w-100 {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }} mb-2"
                         data-vote-button
@@ -68,7 +68,7 @@
                 {{ request.score }}
               </div>
 
-              {% if logged_in_user and not is_owner and username and username != "public" %}
+              {% if logged_in_user and not is_owner and not is_feature_admin and username and username != "public" %}
                 <button type="button"
                         class="btn btn-lg w-100 {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }}"
                         data-vote-button
@@ -128,7 +128,7 @@
                       </div>
                     </div>
 
-                    {% if logged_in_user and username and username != "public" and (is_owner or request.author_display == logged_in_user) %}
+                    {% if logged_in_user and username and username != "public" and (is_owner or is_feature_admin or request.author_display == logged_in_user) %}
                       <div class="btn-group">
                         <button type="button" class="btn btn-outline-secondary"
                                 onclick="editRequest({{ request.id }}, `{{ request.title|e }}`, `{{ request.description|e }}`)">
@@ -145,12 +145,22 @@
               </div>
 
               <!-- Closure Reason Alert -->
-              {% if request.status in ['completed','not_doing', 'merged'] and request.closure_reason %}
+              {% if request.status in ['completed','not_doing', 'merged'] and (request.closure_reason or request.closed_by) %}
                 <div class="alert alert-info mb-4">
                   <h6 class="alert-heading">
                     <i class="fa-solid fa-circle-info me-2"></i>{{ feature_requests_closure_reason_title }}
                   </h6>
-                  <div style="white-space: pre-wrap;">{{ request.closure_reason }}</div>
+                  {% if request.closure_reason %}
+                    <div style="white-space: pre-wrap;">{{ request.closure_reason }}</div>
+                  {% endif %}
+                  {% if request.closed_by and request.closed_at %}
+                    <hr class="my-2">
+                    <small class="text-muted">
+                      {{ (feature_requests_closed_by_on if feature_requests_closed_by_on is defined else 'Closed by {user} on {date}')
+                         .replace('{user}', '<strong>' ~ request.closed_by ~ '</strong>')
+                         .replace('{date}', '<time class="js-fr-datetime" datetime="' ~ request.closed_at.isoformat() ~ '">' ~ request.closed_at.strftime('%Y-%m-%d %H:%M') ~ '</time>') | safe }}
+                    </small>
+                  {% endif %}
                 </div>
               {% endif %}
 
@@ -247,6 +257,8 @@
                 <small class="text-muted d-block">{{ feature_requests_by }}</small>
                 {% if request.author_display == "admin" %}
                   <span class="badge bg-warning text-dark"><i class="fa-solid fa-crown"></i> admin</span>
+                {% elif request.author_is_feature_admin %}
+                  <span class="badge text-white" style="background-color: #2ECC71;"><i class="fa-solid fa-shield-halved"></i> {{ request.author_display }}</span>
                 {% else %}
                   <span class="badge bg-primary">{{ request.author_display }}</span>
                 {% endif %}
@@ -276,7 +288,7 @@
             </div>
           </div>
 
-          {% if is_owner %}
+          {% if is_owner or is_feature_admin %}
           <!-- Admin Actions -->
           <div class="card">
             <div class="card-header">
@@ -461,9 +473,25 @@ document.getElementById('editModal').addEventListener('hidden.bs.modal', functio
 const REQUEST_ID = {{ request.id }};
 const CURRENT_USER = '{{ logged_in_user|default("", true) }}';
 const IS_OWNER = {{ 'true' if is_owner else 'false' }};
+const IS_FEATURE_ADMIN = {{ 'true' if is_feature_admin else 'false' }};
 const USERNAME = '{{ username|default("", true) }}';
+const USER_LANG = '{{ lang|default("en", true) }}';
 let editingCommentId = null;
 let deletingCommentId = null;
+
+(function formatFrDatetimes() {
+  const fmt = new Intl.DateTimeFormat(USER_LANG || undefined, {
+    dateStyle: 'long',
+    timeStyle: 'short',
+  });
+  document.querySelectorAll('time.js-fr-datetime').forEach(el => {
+    const iso = el.getAttribute('datetime');
+    if (!iso) return;
+    const d = new Date(iso);
+    if (isNaN(d)) return;
+    el.textContent = fmt.format(d);
+  });
+})();
 
 function loadComments() {
   fetch(`/feature_requests/${REQUEST_ID}/comments`)
@@ -495,14 +523,17 @@ function renderComments(comments) {
 
 function renderComment(c, depth) {
   const indent = Math.min(depth, 4) * 20;
-  const canEdit = CURRENT_USER && (IS_OWNER || c.raw_username === CURRENT_USER);
+  const canEdit = CURRENT_USER && (IS_OWNER || IS_FEATURE_ADMIN || c.raw_username === CURRENT_USER);
   const edited = c.modified && c.created !== c.modified;
-  
+  const authorBadge = c.username === 'admin'
+    ? '<i class="fa-solid fa-crown ms-1" style="color: #F39C12;" title="admin"></i>'
+    : (c.is_feature_admin ? '<i class="fa-solid fa-shield-halved ms-1" style="color: #2ECC71;" title="Feature Admin"></i>' : '');
+
   return `
     <div class="border-start ps-3 mb-3" style="margin-left:${indent}px">
       <div class="d-flex justify-content-between align-items-start">
         <div>
-          <strong>${c.username}</strong>
+          <strong>${c.username}</strong>${authorBadge}
           <small class="text-muted ms-2">${new Date(c.created).toLocaleString()}</small>
           ${edited ? '<small class="text-muted fst-italic ms-1">({{ feature_requests_edited if feature_requests_edited is defined else "edited" }})</small>' : ''}
         </div>

@@ -528,6 +528,7 @@ def changeLang(langToSet, session=False):
     session["userinfo"]["is_premium"] = True if user and user.premium else False
     session["userinfo"]["is_admin"] = True if user and user.admin else False
     session["userinfo"]["is_translator"] = True if user and user.translator else False
+    session["userinfo"]["is_feature_admin"] = True if user and user.feature_admin else False
     session["userinfo"]["available_languages"] = available_languages
     session["userinfo"]["lang"] = langToSet
 
@@ -6707,7 +6708,7 @@ def getLastCurrencyDate():
 @owner_required
 def toggle_role(uid, role, action):
     # Define a set of allowed roles to prevent arbitrary field manipulation
-    allowed_roles = {"admin", "alpha", "translator", "premium"}
+    allowed_roles = {"admin", "alpha", "translator", "premium", "feature_admin"}
 
     # Validate the role and action
     if role not in allowed_roles:

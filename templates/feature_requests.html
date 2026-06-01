@@ -62,7 +62,7 @@
                     <div class="row">
                         <!-- Voting Section -->
                         <div class="col-md-1 col-2 text-center">
-                            {% if logged_in_user and not is_owner and username and username != "public" %}
+                            {% if logged_in_user and not is_owner and not is_feature_admin and username and username != "public" %}
                                 <button type="button"
                                         class="btn btn-sm {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }} mb-1"
                                         data-vote-button
@@ -83,7 +83,7 @@
                                 {{ request.score }}
                             </div>
                             
-                            {% if logged_in_user and not is_owner and username and username != "public" %}
+                            {% if logged_in_user and not is_owner and not is_feature_admin and username and username != "public" %}
                                 <button type="button"
                                         class="btn btn-sm {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }} mt-1"
                                         data-vote-button
@@ -115,6 +115,10 @@
                                             <span class="badge bg-warning text-dark">
                                                 <i class="fa-solid fa-crown"></i> admin
                                             </span>
+                                        {% elif request.author_is_feature_admin %}
+                                        <span class="badge text-white" style="background-color: #2ECC71;">
+                                            <i class="fa-solid fa-shield-halved"></i> {{ request.author_display }}
+                                        </span>
                                         {% else %}
                                         <span class="badge bg-primary text-white">
                                             {{ request.author_display }}
@@ -147,7 +151,7 @@
                                     {% endif %}
                                     
                                     <!-- Edit/Delete Buttons -->
-                                    {% if logged_in_user and username and (is_owner or request.author_display == logged_in_user) %}
+                                    {% if logged_in_user and username and (is_owner or is_feature_admin or request.author_display == logged_in_user) %}
                                         <div class="btn-group btn-group-sm">
                                             <button type="button" class="btn btn-outline-secondary" 
                                                     onclick="editRequest({{ request.id }}, `{{ request.title|e }}`, `{{ request.description|e }}`)">
@@ -176,7 +180,7 @@
                                     </a>
                                 </small>
                                 
-                                {% if is_owner %}
+                                {% if is_owner or is_feature_admin %}
                                 <div class="mt-2">
                                     <form method="POST" action="{{ url_for('feature_requests.update_feature_request_status', username=username) }}" class="d-inline">
                                         <input type="hidden" name="request_id" value="{{ request.id }}">

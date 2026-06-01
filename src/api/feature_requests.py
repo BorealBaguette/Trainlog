@@ -16,9 +16,10 @@ from src.users import User
 from src.utils import (
     get_user_id,
     has_current_trip,
+    is_feature_admin_or_owner,
     lang,
+    feature_admin_or_owner_required,
     owner,
-    owner_required,
     post_to_discord,
     sendEmailToUser,
 )
@@ -26,6 +27,10 @@ from src.utils import (
 logger = logging.getLogger(__name__)
 
 feature_requests_blueprint = Blueprint("feature_requests", __name__)
+
+
+def _feature_admin_usernames():
+    return {u.username for u in User.query.filter_by(feature_admin=True).all()}
 
 
 @feature_requests_blueprint.route("/feature_requests")
@@ -57,6 +62,7 @@ def feature_requests(username=None):
             else:
                 result = pg.execute(fr_sql.list_feature_requests()).fetchall()
 
+        feature_admins = _feature_admin_usernames()
         # Convert to list of dictionaries
         request_list = []
         for req in result:
@@ -69,6 +75,7 @@ def feature_requests(username=None):
                 "title": req[1],
                 "description": req[2],
                 "author_display": author_display,
+                "author_is_feature_admin": req[3] in feature_admins,
                 "status": req[4],
                 "created": req[5],
                 "upvotes": req[6],
@@ -76,6 +83,12 @@ def feature_requests(username=None):
                 "score": req[8],
                 "user_vote": req[9] if len(req) > 9 else 0,
                 "closure_reason": req[10] if len(req) > 10 else None,
+                "closed_by": (
+                    "admin"
+                    if (len(req) > 11 and req[11] == owner)
+                    else (req[11] if len(req) > 11 else None)
+                ),
+                "closed_at": req[12] if len(req) > 12 else None,
             }
             request_list.append(request_dict)
 
@@ -126,6 +139,7 @@ def single_feature_request(request_id):
             "title": result[1],
             "description": result[2],
             "author_display": author_display,
+            "author_is_feature_admin": result[3] in _feature_admin_usernames(),
             "status": result[4],
             "created": result[5],
             "upvotes": result[6],
@@ -133,6 +147,12 @@ def single_feature_request(request_id):
             "score": result[8],
             "user_vote": result[9] if len(result) > 9 else 0,
             "closure_reason": result[10] if len(result) > 10 else None,
+            "closed_by": (
+                "admin"
+                if (len(result) > 11 and result[11] == owner)
+                else (result[11] if len(result) > 11 else None)
+            ),
+            "closed_at": result[12] if len(result) > 12 else None,
         }
 
     return render_template(
@@ -216,11 +236,11 @@ def edit_feature_request(username):
     title = request.form["title"]
     description = request.form["description"]
     current_user = session["userinfo"]["logged_in_user"]
-    is_owner = session["userinfo"].get("is_owner", False)
+    can_manage = is_feature_admin_or_owner()
 
     with pg_session() as pg:
         # Check if user can edit this request
-        if not is_owner:
+        if not can_manage:
             # Regular user can only edit their own requests
             result = pg.execute(
                 fr_sql.get_feature_request_author(), {"request_id": request_id}
@@ -251,11 +271,11 @@ def delete_feature_request(username):
     """Delete a feature request (owner can delete any, users can delete their own)"""
     request_id = request.form["request_id"]
     current_user = session["userinfo"]["logged_in_user"]
-    is_owner = session["userinfo"].get("is_owner", False)
+    can_manage = is_feature_admin_or_owner()
 
     with pg_session() as pg:
         # Check if user can delete this request
-        if not is_owner:
+        if not can_manage:
             # Regular user can only delete their own requests
             result = pg.execute(
                 fr_sql.get_feature_request_author(), {"request_id": request_id}
@@ -282,8 +302,8 @@ def delete_feature_request(username):
 @login_required
 def vote_feature_request(username):
     """Handle upvote/downvote for feature requests"""
-    # Prevent owner from voting
-    if session["userinfo"]["is_owner"]:
+    # Prevent owner and feature admins from voting
+    if is_feature_admin_or_owner():
         return jsonify({"error": "Not authorized"}), 403
 
     request_id = request.form.get("request_id")
@@ -430,6 +450,7 @@ def get_feature_request_details(request_id):
 
 def _close_feature_request_and_notify(request_id, new_status, closure_reason=None):
     """Close a feature request and notify the author."""
+    actor = session.get("userinfo", {}).get("logged_in_user")
     with pg_session() as pg:
         # Find author
         author_row = pg.execute(
@@ -437,13 +458,14 @@ def _close_feature_request_and_notify(request_id, new_status, closure_reason=Non
         ).fetchone()
         author_username = author_row[0] if author_row else None
 
-        # Update status + reason
+        # Update status + reason + actor
         pg.execute(
             fr_sql.update_feature_request_status_with_reason(),
             {
                 "request_id": request_id,
                 "status": new_status,
                 "closure_reason": closure_reason,
+                "closed_by": actor,
             },
         )
 
@@ -474,7 +496,7 @@ def _close_feature_request_and_notify(request_id, new_status, closure_reason=Non
 @feature_requests_blueprint.route(
     "/u/<username>/feature_requests/update_status", methods=["POST"]
 )
-@owner_required
+@feature_admin_or_owner_required
 def update_feature_request_status(username):
     """Update status (owner only). If closing, store reason and notify author."""
     request_id = request.form["request_id"]
@@ -499,7 +521,7 @@ def update_feature_request_status(username):
 @feature_requests_blueprint.route(
     "/u/<username>/feature_requests/merge", methods=["POST"]
 )
-@owner_required
+@feature_admin_or_owner_required
 def merge_feature_requests(username):
     """
     Merge two or more feature requests into a single target.
@@ -549,6 +571,7 @@ def get_comments(request_id):
             fr_sql.list_comments(), {"request_id": request_id}
         ).fetchall()
 
+        feature_admins = _feature_admin_usernames()
         comments = []
         for row in result:
             comments.append(
@@ -558,6 +581,7 @@ def get_comments(request_id):
                     "parent_id": row[2],
                     "username": "admin" if row[3] == owner else row[3],
                     "raw_username": row[3],
+                    "is_feature_admin": row[3] in feature_admins,
                     "content": row[4],
                     "created": row[5].isoformat() if row[5] else None,
                     "modified": row[6].isoformat() if row[6] else None,
@@ -668,7 +692,7 @@ def edit_comment(username, comment_id):
     """Edit a comment (owner can edit any, users can edit their own)"""
     content = request.form.get("content", "").strip()
     current_user = session["userinfo"]["logged_in_user"]
-    is_owner_user = session["userinfo"].get("is_owner", False)
+    can_manage = is_feature_admin_or_owner()
 
     if not content:
         return jsonify({"error": "Content required"}), 400
@@ -681,7 +705,7 @@ def edit_comment(username, comment_id):
         if not author_info:
             return jsonify({"error": "Comment not found"}), 404
 
-        if not is_owner_user and author_info[0] != current_user:
+        if not can_manage and author_info[0] != current_user:
             return jsonify({"error": "Not authorized"}), 403
 
         request_id = author_info[1]
@@ -705,7 +729,7 @@ def edit_comment(username, comment_id):
 def delete_comment(username, comment_id):
     """Delete a comment (owner can delete any, users can delete their own)"""
     current_user = session["userinfo"]["logged_in_user"]
-    is_owner_user = session["userinfo"].get("is_owner", False)
+    can_manage = is_feature_admin_or_owner()
 
     with pg_session() as pg:
         author_info = pg.execute(
@@ -715,7 +739,7 @@ def delete_comment(username, comment_id):
         if not author_info:
             return jsonify({"error": "Comment not found"}), 404
 
-        if not is_owner_user and author_info[0] != current_user:
+        if not can_manage and author_info[0] != current_user:
             return jsonify({"error": "Not authorized"}), 403
 
         request_id = author_info[1]

@@ -135,16 +135,25 @@
             admin: 'fa-chess-rook',
             alpha: 'fa-flask',
             translator: 'fa-language',
-            premium: 'fa-gem'
+            premium: 'fa-gem',
+            feature_admin: 'fa-shield-halved'
         };
 
-        return `<button class="btn ${buttonClass} roleButton" 
-                data-uid="${user.uid}" 
-                data-role="${role}" 
+        const roleLabels = {
+            admin: 'Admin',
+            alpha: 'Alpha',
+            translator: 'Translator',
+            premium: 'Premium',
+            feature_admin: 'Feature Admin'
+        };
+
+        return `<button class="btn ${buttonClass} roleButton"
+                data-uid="${user.uid}"
+                data-role="${role}"
                 data-action="${action}">
-                <i class="fa-solid ${roleIcons[role]}"></i> 
-                <i class="fa-solid ${actionIcon}"></i> 
-                ${action === 'make' ? 'Make' : 'Remove'} ${role.charAt(0).toUpperCase() + role.slice(1)}
+                <i class="fa-solid ${roleIcons[role]}"></i>
+                <i class="fa-solid ${actionIcon}"></i>
+                ${action === 'make' ? 'Make' : 'Remove'} ${roleLabels[role] || role}
                 </button>`;
     }
 
@@ -174,6 +183,7 @@
                         if (row.premium) html += '<span style="display:none;">premium</span><i class="fa-solid fa-gem" style="color: #00CED1;"></i> ';
                         if (row.alpha) html += '<span style="display:none;">alpha</span><i class="fas fa-flask" style="color: #9B59B6;"></i> ';
                         if (row.translator) html += '<span style="display:none;">translator</span><i class="fa-solid fa-language" style="color: #3498DB;"></i> ';
+                        if (row.feature_admin) html += '<span style="display:none;">feature_admin</span><i class="fa-solid fa-shield-halved" style="color: #2ECC71;"></i> ';
                         if (row.username != "{{logged_in_user}}") {
                             if (row.admin) html += '<span style="display:none;">admin</span><i class="fa-solid fa-chess-rook" style="color: #E74C3C;"></i> ';
                         } else {
@@ -279,7 +289,8 @@
                     const alphaBtn = createRoleActionButton(row, 'alpha');
                     const translatorBtn = createRoleActionButton(row, 'translator');
                     const premiumBtn = createRoleActionButton(row, 'premium');
-                    return `${adminBtn} ${alphaBtn} ${translatorBtn} ${premiumBtn}`;
+                    const featureAdminBtn = createRoleActionButton(row, 'feature_admin');
+                    return `${adminBtn} ${alphaBtn} ${translatorBtn} ${premiumBtn} ${featureAdminBtn}`;
                 }
             },
             {

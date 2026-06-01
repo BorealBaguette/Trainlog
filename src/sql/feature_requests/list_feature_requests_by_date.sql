@@ -1,4 +1,4 @@
-SELECT 
+SELECT
     id,
     title,
     description,
@@ -7,6 +7,10 @@ SELECT
     created,
     upvotes,
     downvotes,
-    score
+    score,
+    0 AS user_vote,
+    closure_reason,
+    closed_by,
+    closed_at
 FROM feature_requests
 ORDER BY created DESC
