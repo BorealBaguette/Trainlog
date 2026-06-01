@@ -231,7 +231,7 @@
 
     // Create separate series for each year segment
     var cumulativeSeries = cumulativeSeriesData.map((yearData, idx) => ({
-        name: idx === 0 ? 'Yearly Cumulative' : '',
+        name: 'Yearly Cumulative',
         type: 'line',
         data: yearData,
         itemStyle: {
