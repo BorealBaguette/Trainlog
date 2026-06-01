@@ -1140,175 +1140,126 @@ def new_auto(username):
 @app.route("/u/<username>/new/<vehicle_type>")
 @login_required
 def new(username, vehicle_type):
-    if vehicle_type == "train":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]]["newTripTrain"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
-        destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationStationName"
-        ]
-
-    elif vehicle_type == "tram":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]]["newTripTram"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
-        destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationStationName"
-        ]
-
-    elif vehicle_type == "metro":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]]["newTripMetro"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
-        destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationStationName"
-        ]
-
-    elif vehicle_type == "bus":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]]["newTripBus"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["originBusStation"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originBusStationName"]
-        destination_terminal = lang[session["userinfo"]["lang"]][
-            "destinationBusStation"
-        ]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationBusStationName"
-        ]
-
-    elif vehicle_type == "ferry":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]]["newTripFerry"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["originFerryTerminal"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]][
-            "originFerryTerminalName"
-        ]
-        destination_terminal = lang[session["userinfo"]["lang"]][
-            "destinationFerryTerminal"
-        ]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationFerryTerminalName"
-        ]
-
-    elif vehicle_type == "accommodation":
-        new_trip = lang[session["userinfo"]["lang"]]["newAccommodation"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["searchAccommodation"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["accommodationName"]
-        manual_origin = lang[session["userinfo"]["lang"]]["manualAccommodation"]
-        destination_terminal = ""
-        destination_terminal_name = ""
-
-    elif vehicle_type == "poi":
-        new_trip = lang[session["userinfo"]["lang"]]["newPoi"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["searchPoi"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["poiName"]
-        manual_origin = lang[session["userinfo"]["lang"]]["manualPoi"]
-        destination_terminal = ""
-        destination_terminal_name = ""
-
-    elif vehicle_type == "restaurant":
-        new_trip = lang[session["userinfo"]["lang"]]["newRestaurant"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["searchRestaurant"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["restaurantName"]
-        manual_origin = lang[session["userinfo"]["lang"]]["manualRestaurant"]
-        destination_terminal = ""
-        destination_terminal_name = ""
-
-    elif vehicle_type == "helicopter":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]]["newTripHelicopter"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["originHelipad"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originHelipadName"]
-        destination_terminal = lang[session["userinfo"]["lang"]]["destinationHelipad"]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationHelipadName"
-        ]
-
-    elif vehicle_type == "car":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]]["newTripCar"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["originCar"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originCarName"]
-        destination_terminal = lang[session["userinfo"]["lang"]]["destinationCar"]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationCarName"
-        ]
-
-    elif vehicle_type == "walk":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]]["newTripWalk"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["originWalk"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originWalkName"]
-        destination_terminal = lang[session["userinfo"]["lang"]]["destinationWalk"]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationWalkName"
-        ]
-
-    elif vehicle_type == "cycle":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]]["newTripBike"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["originBike"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originBikeName"]
-        destination_terminal = lang[session["userinfo"]["lang"]]["destinationBike"]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationBikeName"
-        ]
-
-    elif vehicle_type == "aerialway":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]]["newTripAerialway"]
-        origin_terminal = lang[session["userinfo"]["lang"]]["originAerialway"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originAerialwayName"]
-        destination_terminal = lang[session["userinfo"]["lang"]]["destinationAerialway"]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationAerialwayName"
-        ]
-
-    elif vehicle_type == "funicular":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]].get("newTripFunicular", "New Trip - Funicular")
-        origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
-        destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationStationName"
-        ]
-
-    elif vehicle_type == "rail":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]].get("newTripRail", "New Trip - Rail")
-        origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
-        origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
-        destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
-        destination_terminal_name = lang[session["userinfo"]["lang"]][
-            "destinationStationName"
-        ]
-
-    elif vehicle_type == "scooter":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]].get("newTripEScooter", "New Trip - E-Scooter")
-        origin_terminal = lang[session["userinfo"]["lang"]].get("originEScooter", lang[session["userinfo"]["lang"]]["originBike"])
-        origin_terminal_name = lang[session["userinfo"]["lang"]].get("originEScooterName", lang[session["userinfo"]["lang"]]["originBikeName"])
-        destination_terminal = lang[session["userinfo"]["lang"]].get("destinationEScooter", lang[session["userinfo"]["lang"]]["destinationBike"])
-        destination_terminal_name = lang[session["userinfo"]["lang"]].get(
-            "destinationEScooterName", lang[session["userinfo"]["lang"]]["destinationBikeName"]
-        )
-
-    elif vehicle_type == "ski":
-        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
-        new_trip = lang[session["userinfo"]["lang"]].get("newTripSki", "New Trip - Ski")
-        origin_terminal = lang[session["userinfo"]["lang"]].get("originSki", lang[session["userinfo"]["lang"]]["originAerialway"])
-        origin_terminal_name = lang[session["userinfo"]["lang"]].get("originSkiName", lang[session["userinfo"]["lang"]]["originAerialwayName"])
-        destination_terminal = lang[session["userinfo"]["lang"]].get("destinationSki", lang[session["userinfo"]["lang"]]["destinationAerialway"])
-        destination_terminal_name = lang[session["userinfo"]["lang"]].get(
-            "destinationSkiName", lang[session["userinfo"]["lang"]]["destinationAerialwayName"]
-        )
+    match vehicle_type:
+        case "train":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]]["newTripTrain"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationStationName"]
+        case "tram":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]]["newTripTram"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationStationName"]
+        case "metro":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]]["newTripMetro"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationStationName"]
+        case "bus":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]]["newTripBus"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["originBusStation"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originBusStationName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationBusStation"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationBusStationName"]
+        case "ferry":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]]["newTripFerry"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["originFerryTerminal"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originFerryTerminalName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationFerryTerminal"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationFerryTerminalName"]
+        case "accommodation":
+            new_trip = lang[session["userinfo"]["lang"]]["newAccommodation"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["searchAccommodation"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["accommodationName"]
+            manual_origin = lang[session["userinfo"]["lang"]]["manualAccommodation"]
+            destination_terminal = ""
+            destination_terminal_name = ""
+        case "poi":
+            new_trip = lang[session["userinfo"]["lang"]]["newPoi"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["searchPoi"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["poiName"]
+            manual_origin = lang[session["userinfo"]["lang"]]["manualPoi"]
+            destination_terminal = ""
+            destination_terminal_name = ""
+        case "restaurant":
+            new_trip = lang[session["userinfo"]["lang"]]["newRestaurant"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["searchRestaurant"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["restaurantName"]
+            manual_origin = lang[session["userinfo"]["lang"]]["manualRestaurant"]
+            destination_terminal = ""
+            destination_terminal_name = ""
+        case "helicopter":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]]["newTripHelicopter"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["originHelipad"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originHelipadName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationHelipad"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationHelipadName"]
+        case "car":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]]["newTripCar"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["originCar"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originCarName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationCar"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationCarName"]
+        case "walk":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]]["newTripWalk"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["originWalk"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originWalkName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationWalk"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationWalkName"]
+        case "cycle":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]]["newTripBike"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["originBike"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originBikeName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationBike"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationBikeName"]
+        case "aerialway":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]]["newTripAerialway"]
+            origin_terminal = lang[session["userinfo"]["lang"]]["originAerialway"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originAerialwayName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationAerialway"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationAerialwayName"]
+        case "funicular":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]].get("newTripFunicular", "New Trip - Funicular")
+            origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationStationName"]
+        case "rail":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]].get("newTripRail", "New Trip - Rail")
+            origin_terminal = lang[session["userinfo"]["lang"]]["originStation"]
+            origin_terminal_name = lang[session["userinfo"]["lang"]]["originStationName"]
+            destination_terminal = lang[session["userinfo"]["lang"]]["destinationStation"]
+            destination_terminal_name = lang[session["userinfo"]["lang"]]["destinationStationName"]
+        case "scooter":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]].get("newTripEScooter", "New Trip - E-Scooter")
+            origin_terminal = lang[session["userinfo"]["lang"]].get("originEScooter", lang[session["userinfo"]["lang"]]["originBike"])
+            origin_terminal_name = lang[session["userinfo"]["lang"]].get("originEScooterName", lang[session["userinfo"]["lang"]]["originBikeName"])
+            destination_terminal = lang[session["userinfo"]["lang"]].get("destinationEScooter", lang[session["userinfo"]["lang"]]["destinationBike"])
+            destination_terminal_name = lang[session["userinfo"]["lang"]].get("destinationEScooterName", lang[session["userinfo"]["lang"]]["destinationBikeName"])
+        case "ski":
+            manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+            new_trip = lang[session["userinfo"]["lang"]].get("newTripSki", "New Trip - Ski")
+            origin_terminal = lang[session["userinfo"]["lang"]].get("originSki", lang[session["userinfo"]["lang"]]["originAerialway"])
+            origin_terminal_name = lang[session["userinfo"]["lang"]].get("originSkiName", lang[session["userinfo"]["lang"]]["originAerialwayName"])
+            destination_terminal = lang[session["userinfo"]["lang"]].get("destinationSki", lang[session["userinfo"]["lang"]]["destinationAerialway"])
+            destination_terminal_name = lang[session["userinfo"]["lang"]].get("destinationSkiName", lang[session["userinfo"]["lang"]]["destinationAerialwayName"])
 
     return render_template(
         "new.html",
@@ -2095,18 +2046,19 @@ def parse_gpx_advanced(username):
                         # 1=chairlift, 7=gondola, 8=bus, 9=ski lift
                         # 3=easy run, 4=medium run, 5=difficult run
                         # 2=unknown/walking, 6=break
-                        if seg_type in [1, 7, 9]:  # Lifts and gondolas
-                            trip_type = 'aerialway'
-                        elif seg_type == 8:  # Bus
-                            trip_type = 'bus'
-                        elif seg_type in [3, 4, 5]:  # Ski runs
-                            trip_type = 'ski'
-                        elif seg_type == 2:  # Unknown/walking
-                            trip_type = 'walk'
-                        elif seg_type == 6:  # Break
-                            continue  # Skip breaks
-                        else:
-                            trip_type = 'other'
+                        match seg_type:
+                            case 1 | 7 | 9:
+                                trip_type = 'aerialway'
+                            case 8:
+                                trip_type = 'bus'
+                            case 3 | 4 | 5:
+                                trip_type = 'ski'
+                            case 2:
+                                trip_type = 'walk'
+                            case 6:
+                                continue
+                            case _:
+                                trip_type = 'other'
 
                         maprika_segments.append({
                             'name': seg_name,
@@ -2341,16 +2293,17 @@ def parse_gpx_stream(username):
                             index_begin = int(seg.get('indexBegin', 0))
                             index_end = int(seg.get('indexEnd', 0))
 
-                            if seg_type in [1, 7, 9]:
-                                trip_type = 'aerialway'
-                            elif seg_type == 8:
-                                trip_type = 'bus'
-                            elif seg_type in [3, 4, 5]:
-                                trip_type = 'ski'
-                            elif seg_type == 2:
-                                trip_type = 'walk'
-                            else:
-                                trip_type = 'other'
+                            match seg_type:
+                                case 1 | 7 | 9:
+                                    trip_type = 'aerialway'
+                                case 8:
+                                    trip_type = 'bus'
+                                case 3 | 4 | 5:
+                                    trip_type = 'ski'
+                                case 2:
+                                    trip_type = 'walk'
+                                case _:
+                                    trip_type = 'other'
 
                             maprika_segments.append({
                                 'name': seg_name,
@@ -3226,18 +3179,15 @@ def landing():
         user = User.query.filter_by(username=username).first()
         if user:
             # Redirect to the user's default landing page
-            if user.default_landing == "dashboard":
-                return redirect(url_for("user_dashboard", username=username))
-            elif user.default_landing == "trips":
-                return redirect(
-                    url_for("dynamic_trips", username=username, time="trips")
-                )
-            elif user.default_landing == "projects":
-                return redirect(
-                    url_for("dynamic_trips", username=username, time="projects")
-                )
-            else:  # Default to map (includes legacy "map" and "new_map" values)
-                return redirect(url_for("user_home", username=username))
+            match user.default_landing:
+                case "dashboard":
+                    return redirect(url_for("user_dashboard", username=username))
+                case "trips":
+                    return redirect(url_for("dynamic_trips", username=username, time="trips"))
+                case "projects":
+                    return redirect(url_for("dynamic_trips", username=username, time="projects"))
+                case _:  # Default to map (includes legacy "map" and "new_map" values)
+                    return redirect(url_for("user_home", username=username))
 
     # If the user is not logged in or is forcing the landing page
     return render_template(
@@ -5144,22 +5094,17 @@ def router_status_single():
     profile = request.args.get("profile", "driving")
 
     # Map profile to dummy query (avoid 'driving' for cycle/walk)
-    if profile == "driving":
-        dummy_profile = "driving"
-    elif profile in {"cycling", "bike"}:
-        dummy_profile = "bike"
-    elif profile in {"foot", "walking", "walk"}:
-        dummy_profile = "foot"
-    elif profile == "ferry":
-        dummy_profile = "driving"  # or whatever the OSRM instance uses
-    elif profile == "train":
-        dummy_profile = "driving"
-    elif profile == "bus":
-        dummy_profile = "driving"
-    elif profile == "aerialway":
-        dummy_profile = "driving"
-    else:
-        dummy_profile = "driving"
+    match profile:
+        case "driving":
+            dummy_profile = "driving"
+        case "cycling" | "bike":
+            dummy_profile = "bike"
+        case "foot" | "walking" | "walk":
+            dummy_profile = "foot"
+        case "ferry" | "train" | "bus" | "aerialway":
+            dummy_profile = "driving"  # or whatever the OSRM instance uses
+        case _:
+            dummy_profile = "driving"
 
     # Most OSRM endpoints use /route/v1/<profile>/<coords>
     try:
@@ -5540,16 +5485,15 @@ def getAdminUsersData():
         reverse = order_dir == "desc"
 
         # Special handling for different data types
-        if sort_key in ["trips", "length", "trips_per_day"]:
-            users_list.sort(key=lambda x: x.get(sort_key, 0), reverse=reverse)
-        elif sort_key in ["last_login", "creation_date"]:
-            users_list.sort(
-                key=lambda x: x.get(sort_key) or datetime.min, reverse=reverse
-            )
-        elif sort_key == "active":
-            users_list.sort(key=lambda x: x.get(sort_key, False), reverse=reverse)
-        else:
-            users_list.sort(key=lambda x: x.get(sort_key, "").lower(), reverse=reverse)
+        match sort_key:
+            case "trips" | "length" | "trips_per_day":
+                users_list.sort(key=lambda x: x.get(sort_key, 0), reverse=reverse)
+            case "last_login" | "creation_date":
+                users_list.sort(key=lambda x: x.get(sort_key) or datetime.min, reverse=reverse)
+            case "active":
+                users_list.sort(key=lambda x: x.get(sort_key, False), reverse=reverse)
+            case _:
+                users_list.sort(key=lambda x: x.get(sort_key, "").lower(), reverse=reverse)
 
     # Get total count before pagination
     total_filtered = len(users_list)
@@ -6224,9 +6168,7 @@ def mergeTrips(username, tripIds):
     newTrip["destinationStation"] = [None, last_trip.get("destination_station", "")]
 
     if first_trip.get("start_datetime") not in (-1, 1):
-        newTrip["newTripStart"] = first_trip.get("start_datetime").replace(" ", "T")[
-            :-3
-        ]
+        newTrip["newTripStart"] = first_trip.get("start_datetime").replace(" ", "T")[:-3]
         newTrip["newTripEnd"] = last_trip.get("end_datetime").replace(" ", "T")[:-3]
         newTrip["precision"] = "preciseDates"
         newTrip["unknownType"] = ""
@@ -6444,69 +6386,70 @@ def get_trips_api_internal(username, is_public=False):
                 search_pattern = f"%{search_term}%"  # Partial match
 
             # Map frontend column names to actual query column names in FilteredTrips
-            if column_name == "type":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(type) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(type)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "origin_station":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(origin_station) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(origin_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "destination_station":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(destination_station) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(destination_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "start_datetime":
-                if is_exact:
-                    additional_conditions.append(f"COALESCE(DATE(start_datetime), '') = :{param_name}")
-                else:
-                    additional_conditions.append(f"COALESCE(DATE(start_datetime), '') LIKE :{param_name}")
-            elif column_name == "operator":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(operator, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(operator, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "line_name":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(line_name, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(line_name, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "countries":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(countries) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(countries)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "visibility":
-                if is_exact and search_term == "":
-                    additional_conditions.append(f"visibility IS NULL")
-                elif is_exact:
-                    additional_conditions.append(f"LOWER(visibility) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(visibility)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "material_type":
-                if is_exact:
-                    additional_conditions.append(f"(LOWER(COALESCE(material_type, '')) = LOWER(:{param_name}) OR LOWER(iata) = LOWER(:{param_name}) OR LOWER(manufacturer) = LOWER(:{param_name}) OR LOWER(model) = LOWER(:{param_name}))")
-                else:
-                    additional_conditions.append(f"(remove_diacritics(LOWER(COALESCE(material_type, ''))) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(iata)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(manufacturer)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(model)) LIKE remove_diacritics(LOWER(:{param_name})))")
-            elif column_name == "reg":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(reg, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(reg, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "notes":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(notes, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(notes, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            else:
-                # Fallback for other columns
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE({column_name}, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE({column_name}, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
+            match column_name:
+                case "type":
+                    if is_exact:
+                        additional_conditions.append(f"LOWER(type) = LOWER(:{param_name})")
+                    else:
+                        additional_conditions.append(f"remove_diacritics(LOWER(type)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                case "origin_station":
+                    if is_exact:
+                        additional_conditions.append(f"LOWER(origin_station) = LOWER(:{param_name})")
+                    else:
+                        additional_conditions.append(f"remove_diacritics(LOWER(origin_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                case "destination_station":
+                    if is_exact:
+                        additional_conditions.append(f"LOWER(destination_station) = LOWER(:{param_name})")
+                    else:
+                        additional_conditions.append(f"remove_diacritics(LOWER(destination_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                case "start_datetime":
+                    if is_exact:
+                        additional_conditions.append(f"COALESCE(DATE(start_datetime), '') = :{param_name}")
+                    else:
+                        additional_conditions.append(f"COALESCE(DATE(start_datetime), '') LIKE :{param_name}")
+                case "operator":
+                    if is_exact:
+                        additional_conditions.append(f"LOWER(COALESCE(operator, '')) = LOWER(:{param_name})")
+                    else:
+                        additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(operator, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
+                case "line_name":
+                    if is_exact:
+                        additional_conditions.append(f"LOWER(COALESCE(line_name, '')) = LOWER(:{param_name})")
+                    else:
+                        additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(line_name, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
+                case "countries":
+                    if is_exact:
+                        additional_conditions.append(f"LOWER(countries) = LOWER(:{param_name})")
+                    else:
+                        additional_conditions.append(f"remove_diacritics(LOWER(countries)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                case "visibility":
+                    if is_exact and search_term == "":
+                        additional_conditions.append(f"visibility IS NULL")
+                    elif is_exact:
+                        additional_conditions.append(f"LOWER(visibility) = LOWER(:{param_name})")
+                    else:
+                        additional_conditions.append(f"remove_diacritics(LOWER(visibility)) LIKE remove_diacritics(LOWER(:{param_name}))")
+                case "material_type":
+                    if is_exact:
+                        additional_conditions.append(f"(LOWER(COALESCE(material_type, '')) = LOWER(:{param_name}) OR LOWER(iata) = LOWER(:{param_name}) OR LOWER(manufacturer) = LOWER(:{param_name}) OR LOWER(model) = LOWER(:{param_name}))")
+                    else:
+                        additional_conditions.append(f"(remove_diacritics(LOWER(COALESCE(material_type, ''))) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(iata)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(manufacturer)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(model)) LIKE remove_diacritics(LOWER(:{param_name})))")
+                case "reg":
+                    if is_exact:
+                        additional_conditions.append(f"LOWER(COALESCE(reg, '')) = LOWER(:{param_name})")
+                    else:
+                        additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(reg, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
+                case "notes":
+                    if is_exact:
+                        additional_conditions.append(f"LOWER(COALESCE(notes, '')) = LOWER(:{param_name})")
+                    else:
+                        additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(notes, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
+                case _:
+                    # Fallback for other columns
+                    if is_exact:
+                        additional_conditions.append(f"LOWER(COALESCE({column_name}, '')) = LOWER(:{param_name})")
+                    else:
+                        additional_conditions.append(f"remove_diacritics(LOWER(COALESCE({column_name}, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
             
             search_params[param_name] = search_pattern
 
@@ -6544,23 +6487,24 @@ def get_trips_api_internal(username, is_public=False):
     count_query = base_count_query
     
     # Add sorting to data query
-    if sort_column_name == "temporal":
-        data_query = base_data_query + f" ORDER BY utc_filtered_start_datetime = 1 {sort_direction}, datetime(utc_filtered_start_datetime, COALESCE(departure_delay, 0) || ' seconds') {sort_direction}, uid {sort_direction} LIMIT :limit OFFSET :offset"
-    elif sort_column_name == "end_datetime":
-        data_query = base_data_query + f" ORDER BY utc_filtered_end_datetime = 1 {sort_direction}, utc_filtered_end_datetime {sort_direction}, uid {sort_direction} LIMIT :limit OFFSET :offset"
-    elif sort_column_name == "price":
-        ticket_share_sql = "(SELECT t.price / NULLIF(COUNT(t2.ticket_id), 0) FROM tickets t LEFT JOIN trip t2 ON t.uid = t2.ticket_id WHERE t.uid = ticket_id GROUP BY t.uid)"
-        ticket_currency_sql = "(SELECT t.currency FROM tickets t WHERE t.uid = ticket_id)"
-        ticket_date_sql = "(SELECT t.purchasing_date FROM tickets t WHERE t.uid = ticket_id)"
-        price_expr = (
-            f"CASE WHEN price IS NULL AND ticket_id IS NULL THEN NULL "
-            f"ELSE COALESCE(price_to_eur(price, currency, purchasing_date), 0)"
-            f"   + COALESCE(price_to_eur({ticket_share_sql}, {ticket_currency_sql}, {ticket_date_sql}), 0) "
-            f"END"
-        )
-        data_query = base_data_query + f" ORDER BY {price_expr} {sort_direction} NULLS LAST LIMIT :limit OFFSET :offset"
-    else:
-        data_query = base_data_query + f" ORDER BY {sort_column_name} {sort_direction} LIMIT :limit OFFSET :offset"
+    match sort_column_name:
+        case "temporal":
+            data_query = base_data_query + f" ORDER BY utc_filtered_start_datetime = 1 {sort_direction}, datetime(utc_filtered_start_datetime, COALESCE(departure_delay, 0) || ' seconds') {sort_direction}, uid {sort_direction} LIMIT :limit OFFSET :offset"
+        case "end_datetime":
+            data_query = base_data_query + f" ORDER BY utc_filtered_end_datetime = 1 {sort_direction}, utc_filtered_end_datetime {sort_direction}, uid {sort_direction} LIMIT :limit OFFSET :offset"
+        case "price":
+            ticket_share_sql = "(SELECT t.price / NULLIF(COUNT(t2.ticket_id), 0) FROM tickets t LEFT JOIN trip t2 ON t.uid = t2.ticket_id WHERE t.uid = ticket_id GROUP BY t.uid)"
+            ticket_currency_sql = "(SELECT t.currency FROM tickets t WHERE t.uid = ticket_id)"
+            ticket_date_sql = "(SELECT t.purchasing_date FROM tickets t WHERE t.uid = ticket_id)"
+            price_expr = (
+                f"CASE WHEN price IS NULL AND ticket_id IS NULL THEN NULL "
+                f"ELSE COALESCE(price_to_eur(price, currency, purchasing_date), 0)"
+                f"   + COALESCE(price_to_eur({ticket_share_sql}, {ticket_currency_sql}, {ticket_date_sql}), 0) "
+                f"END"
+            )
+            data_query = base_data_query + f" ORDER BY {price_expr} {sort_direction} NULLS LAST LIMIT :limit OFFSET :offset"
+        case _:
+            data_query = base_data_query + f" ORDER BY {sort_column_name} {sort_direction} LIMIT :limit OFFSET :offset"
 
     def price_to_eur(price, currency, date):
         if price is None or currency is None or date is None:
@@ -8420,16 +8364,17 @@ def leaderboard(type):
     else:
         nav = "bootstrap/navigation.html"
 
-    if type == "train_countries":
-        template = "leaderboard_train_countries.html"
-    elif type == "countries":
-        template = "leaderboard_countries.html"
-    elif type == "world_squares":
-        template = "leaderboard_world_squares.html"
-    elif type == "carbon":
-        template = "leaderboard_carbon.html"
-    else:
-        template = "leaderboard.html"
+    match type:
+        case "train_countries":
+            template = "leaderboard_train_countries.html"
+        case "countries":
+            template = "leaderboard_countries.html"
+        case "world_squares":
+            template = "leaderboard_world_squares.html"
+        case "carbon":
+            template = "leaderboard_carbon.html"
+        case _:
+            template = "leaderboard.html"
 
     return render_template(
         template,
@@ -8619,41 +8564,33 @@ def admin_trip_growth():
         first_key = list(trip_data.keys())[0]
         last_key = list(trip_data.keys())[-1]
 
-        if group_by == "year":
-            # Parse years directly from the keys
-            start_date = datetime.strptime(first_key, "%Y")
-            end_date = datetime.strptime(last_key, "%Y")
-            # Adjust to cover the full year range
-            start_date = datetime(start_date.year, 1, 1)
-            end_date = datetime(end_date.year, 12, 31)
-
-        elif group_by == "month":
-            # Parse years and months directly
-            start_date = datetime.strptime(first_key, "%Y-%m")
-            end_date = datetime.strptime(last_key, "%Y-%m")
-            # Adjust to cover the full month range
-            start_date = datetime(start_date.year, start_date.month, 1)
-            end_date = (
-                datetime(end_date.year, end_date.month, 1) + timedelta(days=31)
-            ).replace(day=1) - timedelta(days=1)
-
-        elif group_by == "week":
-            # Parse ISO year and week number
-            first_year, first_week_number = map(int, first_key.split("-"))
-            last_year, last_week_number = map(int, last_key.split("-"))
-            # Start at the Monday of the first ISO week
-            start_date = datetime.strptime(
-                f"{first_year} {first_week_number} 1", "%G %V %u"
-            )
-            # End at the Sunday of the last ISO week
-            end_date = datetime.strptime(
-                f"{last_year} {last_week_number} 7", "%G %V %u"
-            )
-
-        else:  # group_by == "day"
-            # Directly parse the days
-            start_date = datetime.strptime(first_key, "%Y-%m-%d")
-            end_date = datetime.strptime(last_key, "%Y-%m-%d")
+        match group_by:
+            case "year":
+                # Parse years directly from the keys
+                start_date = datetime.strptime(first_key, "%Y")
+                end_date = datetime.strptime(last_key, "%Y")
+                # Adjust to cover the full year range
+                start_date = datetime(start_date.year, 1, 1)
+                end_date = datetime(end_date.year, 12, 31)
+            case "month":
+                # Parse years and months directly
+                start_date = datetime.strptime(first_key, "%Y-%m")
+                end_date = datetime.strptime(last_key, "%Y-%m")
+                # Adjust to cover the full month range
+                start_date = datetime(start_date.year, start_date.month, 1)
+                end_date = (datetime(end_date.year, end_date.month, 1) + timedelta(days=31)).replace(day=1) - timedelta(days=1)
+            case "week":
+                # Parse ISO year and week number
+                first_year, first_week_number = map(int, first_key.split("-"))
+                last_year, last_week_number = map(int, last_key.split("-"))
+                # Start at the Monday of the first ISO week
+                start_date = datetime.strptime(f"{first_year} {first_week_number} 1", "%G %V %u")
+                # End at the Sunday of the last ISO week
+                end_date = datetime.strptime(f"{last_year} {last_week_number} 7", "%G %V %u")
+            case _:  # group_by == "day"
+                # Directly parse the days
+                start_date = datetime.strptime(first_key, "%Y-%m-%d")
+                end_date = datetime.strptime(last_key, "%Y-%m-%d")
     else:
         start_date = today
         end_date = today
@@ -8669,17 +8606,18 @@ def admin_trip_growth():
             date_dict[date_key].update(trip_data[date_key])
 
         # Increment the date based on the interval
-        if group_by == "year":
-            current_date = datetime(current_date.year + 1, 1, 1)
-        elif group_by == "month":
-            if current_date.month == 12:
+        match group_by:
+            case "year":
                 current_date = datetime(current_date.year + 1, 1, 1)
-            else:
-                current_date = datetime(current_date.year, current_date.month + 1, 1)
-        elif group_by == "week":
-            current_date += timedelta(weeks=1)
-        else:  # day
-            current_date += timedelta(days=1)
+            case "month":
+                if current_date.month == 12:
+                    current_date = datetime(current_date.year + 1, 1, 1)
+                else:
+                    current_date = datetime(current_date.year, current_date.month + 1, 1)
+            case "week":
+                current_date += timedelta(weeks=1)
+            case _:  # day
+                current_date += timedelta(days=1)
 
     # Assign trips with 'None' created dates to the earliest date
     earliest_date_key = list(date_dict.keys())[0]
@@ -8801,17 +8739,18 @@ def admin_user_growth():
     while current_date <= end_date:
         date_key = current_date.strftime(date_format[group_by])
         date_dict[date_key] = (0, 0, 0)  # active_users, inactive_users, extrapolated
-        if group_by == "year":
-            current_date = datetime(current_date.year + 1, 1, 1)
-        elif group_by == "month":
-            if current_date.month == 12:
+        match group_by:
+            case "year":
                 current_date = datetime(current_date.year + 1, 1, 1)
-            else:
-                current_date = datetime(current_date.year, current_date.month + 1, 1)
-        elif group_by == "week":
-            current_date += timedelta(weeks=1)
-        else:  # day
-            current_date += timedelta(days=1)
+            case "month":
+                if current_date.month == 12:
+                    current_date = datetime(current_date.year + 1, 1, 1)
+                else:
+                    current_date = datetime(current_date.year, current_date.month + 1, 1)
+            case "week":
+                current_date += timedelta(weeks=1)
+            case _:  # day
+                current_date += timedelta(days=1)
 
     # Update date_dict with actual user counts
     for row in results:
@@ -8820,26 +8759,23 @@ def admin_user_growth():
 
     # Calculate extrapolated values for the last period
     last_period_key = list(date_dict.keys())[-1]
-    if group_by == "week":
-        year, week = map(int, last_period_key.split("-"))
-        start_of_week = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
-        print(start_of_week)
-        past_days_in_period = (today - start_of_week).days + 1
-        print(past_days_in_period)
-        total_days_in_period = 7
-    elif group_by == "month":
-        past_days_in_period = (
-            today - datetime.strptime(last_period_key, date_format[group_by])
-        ).days + 1
-        total_days_in_period = calendar.monthrange(today.year, today.month)[1]
-    elif group_by == "year":
-        past_days_in_period = (
-            today - datetime.strptime(last_period_key, date_format[group_by])
-        ).days + 1
-        total_days_in_period = 366 if calendar.isleap(today.year) else 365
-    else:  # day
-        past_days_in_period = 1
-        total_days_in_period = 1
+    match group_by:
+        case "week":
+            year, week = map(int, last_period_key.split("-"))
+            start_of_week = datetime.strptime(f"{year}-W{week}-1", "%Y-W%W-%w")
+            print(start_of_week)
+            past_days_in_period = (today - start_of_week).days + 1
+            print(past_days_in_period)
+            total_days_in_period = 7
+        case "month":
+            past_days_in_period = (today - datetime.strptime(last_period_key, date_format[group_by])).days + 1
+            total_days_in_period = calendar.monthrange(today.year, today.month)[1]
+        case "year":
+            past_days_in_period = (today - datetime.strptime(last_period_key, date_format[group_by])).days + 1
+            total_days_in_period = 366 if calendar.isleap(today.year) else 365
+        case _:  # day
+            past_days_in_period = 1
+            total_days_in_period = 1
 
     active_users, inactive_users, _ = date_dict[last_period_key]
     total_users = active_users + inactive_users
