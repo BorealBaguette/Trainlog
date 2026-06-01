@@ -69,6 +69,21 @@ def owner_required(f):
     return decorated_function
 
 
+def is_feature_admin_or_owner():
+    userinfo = session.get("userinfo", {})
+    return bool(userinfo.get("is_owner") or userinfo.get("is_feature_admin"))
+
+
+def feature_admin_or_owner_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not is_feature_admin_or_owner():
+            abort(401)
+        return f(*args, **kwargs)
+
+    return decorated_function
+
+
 def getUser():
     return session.get("logged_in") if session.get("logged_in") else "public"
 
