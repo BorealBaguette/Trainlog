@@ -80,7 +80,7 @@
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='funicular') }}"><i class="fa-solid fa-mountain"></i> {{ funicular }}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='rail') }}"><i class="fa-solid fa-dumbbell"></i> {{ rail }}</a>   
             <hr class="dropdown-divider">
-            <a class="dropdown-item" href="{{ url_for('new_flight', username=username) }}"><i class="fa-solid fa-plane-up"></i>{{air}}</a>
+            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='air') }}"><i class="fa-solid fa-plane-up"></i>{{air}}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="bus") }}"><i class="fa-solid fa-bus"></i>{{bus}}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="ferry") }}"><i class="fa-solid fa-ship"></i> {{ferry}}</a>
             <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="helicopter") }}"><i class="fa-solid fa-helicopter"></i> {{helicopter}}</a>

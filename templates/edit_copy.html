@@ -147,6 +147,14 @@
 </div>
 
 <!-- FR24 Path Import Modal (for air/helicopter) -->
+<style>
+    #fr24SearchTabs .nav-link { color: var(--bs-secondary); }
+    #fr24SearchTabs .nav-link.active {
+        background-color: var(--bs-secondary);
+        color: #fff;
+    }
+</style>
+
 <div class="modal fade" id="fr24PathModal" tabindex="-1" aria-labelledby="fr24PathModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -157,13 +165,20 @@
             <div class="modal-body">
                 <p class="text-muted">{{importActualFlightPath}}</p>
                 <form id="fr24PathForm">
-                    <!-- Search Type Toggle -->
+                    <!-- Search Type Selector -->
                     <div class="mb-3">
                         <label class="form-label d-block">{{searchBy}}</label>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="fr24SearchToggle">
-                            <label class="form-check-label" for="fr24SearchToggle" id="fr24SearchToggleLabel">{{reg}}</label>
-                        </div>
+                        <ul class="nav nav-pills nav-fill" id="fr24SearchTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button type="button" class="nav-link active" data-fr24-type="flight">{{flightNumber}}</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button type="button" class="nav-link" data-fr24-type="reg">{{reg}}</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button type="button" class="nav-link" data-fr24-type="id">FR24 ID</button>
+                            </li>
+                        </ul>
                     </div>
 
 
@@ -179,7 +194,13 @@
                         <input type="text" class="form-control" id="fr24PathRegNumber"
                             placeholder="{{registrationPlaceholder}}" value="{{tripReg}}">
                     </div>
-                    <div class="mb-3">
+
+                    <div class="mb-3 d-none" id="fr24IdGroup">
+                        <label for="fr24PathFlightId" class="form-label">FR24 ID</label>
+                        <input type="text" class="form-control" id="fr24PathFlightId" placeholder="e.g. 3ff86083">
+                    </div>
+
+                    <div class="mb-3" id="fr24PathDateGroup">
                         <label for="fr24PathDate" class="form-label">{{flightDate}}</label>
                         <input type="date" class="form-control" id="fr24PathDate"
                             value="{{ start_datetime[:10] if start_datetime not in [1, -1, None, ''] else current_date }}">
@@ -981,11 +1002,24 @@
     }
 
     document.getElementById('fr24PathSubmitBtn').addEventListener('click', async function () {
-        const isReg = document.getElementById('fr24SearchToggle').checked;
-        const searchType = isReg ? 'reg' : 'flight';
+        const searchType = document.querySelector('#fr24SearchTabs .nav-link.active').dataset.fr24Type;
         const flightNumber = document.getElementById('fr24PathFlightNumber').value.trim();
         const regNumber = document.getElementById('fr24PathRegNumber').value.trim();
+        const flightId = document.getElementById('fr24PathFlightId').value.trim();
         const flightDate = document.getElementById('fr24PathDate').value;
+
+        // Direct import by FR24 flight ID — fetches the path straight from the ID,
+        // bypassing the flight-number search (fallback for mis-tagged flights).
+        if (searchType === 'id') {
+            if (!flightId) {
+                showFr24PathError('Please enter an FR24 flight ID.');
+                return;
+            }
+            hideFr24PathError();
+            updateFr24PathProgressBar(10);
+            await processFlightLegForPath({ fr24_id: flightId });
+            return;
+        }
 
         if (searchType === 'flight' && (!flightNumber || !flightDate)) {
             showFr24PathError('{{pleaseEnterFlightNumberAndDate}}');
@@ -1645,16 +1679,31 @@
         });
     }
 
-    $('#fr24SearchToggle').on('change', function () {
-        const isReg = $(this).is(':checked');
+    // Remember the user's manual "GPS only" choice so we can restore it after
+    // leaving FR24 ID mode (where it's forced on).
+    var fr24OnlyPathUserState = $('#fr24OnlyPath').is(':checked');
+    $('#fr24OnlyPath').on('change', function () {
+        if (!this.disabled) fr24OnlyPathUserState = this.checked;
+    });
 
-        if (isReg) {
-            $('#flightNumberGroup').addClass('d-none');
-            $('#regNumberGroup').removeClass('d-none');
+    function applyFr24SearchType(type) {
+        $('#flightNumberGroup').toggleClass('d-none', type !== 'flight');
+        $('#regNumberGroup').toggleClass('d-none', type !== 'reg');
+        $('#fr24IdGroup').toggleClass('d-none', type !== 'id');
+        // The date is irrelevant when importing by an exact FR24 ID
+        $('#fr24PathDateGroup').toggleClass('d-none', type === 'id');
+        // Importing by ID is path-only by definition: force-tick and grey out the toggle
+        if (type === 'id') {
+            $('#fr24OnlyPath').prop('checked', true).prop('disabled', true);
         } else {
-            $('#regNumberGroup').addClass('d-none');
-            $('#flightNumberGroup').removeClass('d-none');
+            $('#fr24OnlyPath').prop('disabled', false).prop('checked', fr24OnlyPathUserState);
         }
+    }
+
+    $('#fr24SearchTabs .nav-link').on('click', function () {
+        $('#fr24SearchTabs .nav-link').removeClass('active');
+        $(this).addClass('active');
+        applyFr24SearchType($(this).data('fr24-type'));
     });
 
   {% if tripType in ('train', 'metro', 'tram') %}

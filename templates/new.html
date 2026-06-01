@@ -23,10 +23,106 @@
     .power-type-group label:hover { background-color: #f8f9fa; color: #444; }
 </style>
 
+{% if vehicle_type == 'air' %}
+<div class="modal fade" id="fr24Modal" tabindex="-1" aria-labelledby="fr24ModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="fr24ModalLabel">Import Flight from FR24</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Data is available starting from 30 days in the past to one day in the future</p>
+        <form id="fr24Form">
+          <div class="mb-3">
+            <label class="form-label d-block">{{searchBy}}</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="fr24SearchToggle">
+              <label class="form-check-label" for="fr24SearchToggle" id="fr24SearchToggleLabel">{{reg}}</label>
+            </div>
+          </div>
+
+          <div class="mb-3" id="flightNumberGroup">
+            <label for="fr24FlightNumber" class="form-label">{{flightNumber}}</label>
+            <input type="text" class="form-control" id="fr24FlightNumber" placeholder="e.g. EK184">
+          </div>
+
+          <div class="mb-3 d-none" id="regNumberGroup">
+            <label for="fr24RegNumber" class="form-label">{{reg}}</label>
+            <input type="text" class="form-control" id="fr24RegNumber" placeholder="{{registrationPlaceholder}}">
+          </div>
+          <div class="mb-3">
+            <label for="fr24Date" class="form-label">Flight Date</label>
+            <input type="date" class="form-control" id="fr24Date">
+          </div>
+          <div if="progressContainer" class="progress mt-3  d-none">
+            <div id="fr24ProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+              0%
+            </div>
+          </div>
+        </form>
+        <div id="fr24Error" class="text-danger small d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="fr24SubmitBtn">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="legSelectorModal" tabindex="-1" aria-labelledby="legSelectorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="legSelectorModalLabel">Select Flight Leg</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-3">This flight has multiple legs. Please select which leg you want to import:</p>
+        <div id="legsList" class="list-group">
+          <!-- Legs will be dynamically inserted here -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div id="form" >
   <h2 class="header">{{newTrip}}</h2>
   <div>
     <form id="newTripForm" autocomplete="off" action="javascript:void(0);" method="GET">
+      {% if vehicle_type == 'air' %}
+      <div class="d-inline-flex align-items-center">
+        <span
+          data-bs-toggle="modal"
+          data-bs-target="#fr24Modal"
+          class="btn btn-labeled {% if fr24_calls == 'premium' %}btn-primary{% elif fr24_calls is number and fr24_calls >= 5 %}btn-secondary disabled{% else %}btn-primary{% endif %}"
+          {% if fr24_calls is number and fr24_calls >= 5 %}aria-disabled="true"{% endif %}
+        >
+          <span class="btn-label">
+            <img src="{{ url_for('static', filename='images/icons/fr24.png') }}" alt="FR24" style="height: 1.5em;">
+          </span>
+            {{ import }} FR24 {% if fr24_calls == 'premium' %} <small><i class="fa-solid fa-gem" style="color: #F39C12;"></i></small>{% else %}({{ fr24_calls }}/5){% endif %}
+          </span>
+            {% if fr24_calls is number and fr24_calls >= 5 %}
+          <span
+          class="ms-2"
+          data-bs-toggle="tooltip"
+          data-bs-placement="top"
+          title="{{fr24LimitInfo}}"
+          >
+          <i class="bi bi-info-circle-fill text-muted" style="cursor: help;"></i>
+        </span>
+        {% endif %}
+      </div>
+      <br>
+      {% endif %}
       <label for="originManualToggle" class="checkboxLabel non_manual">{{manualOrigin}}</label>
       <input type="checkbox" id="originManualToggle" name="originManualToggle" class="non_manual" />
 
@@ -315,7 +411,7 @@
         <input type="number" step="any" id="arrivalDelayMinutes" name="arrivalDelayMinutes" placeholder="{{arrival}}"/>
       </fieldset>
 
-      <button id=submit type="submit" onclick="toRouting($('form').serializeArray(), '{{vehicle_type}}' == 'helicopter' ? airRoutingURL : routingURL, '{{vehicle_type}}');">{{submit}}</button>
+      <button id=submit type="submit" onclick="toRouting($('form').serializeArray(), ['helicopter', 'air'].includes('{{vehicle_type}}') ? airRoutingURL : routingURL, '{{vehicle_type}}');">{{submit}}</button>
     </form>
   </div>
 </div>
@@ -333,7 +429,7 @@
   var manualStationsList = [];
   var visitedStations = {};
   var routingURL = "{{url_for('routing', username=username)}}";
-  var airRoutingURL = "{{url_for('air_routing', username=username, type='helicopter')}}";
+  var airRoutingURL = "{{url_for('air_routing', username=username, type=('air' if vehicle_type == 'air' else 'helicopter'))}}";
 
   $.get('{{url_for("getManAndOps", username=username, station_type=vehicle_type)}}', function(manAndOps, status){
     Object.assign(globalStationDict, manAndOps.manualStations);
@@ -345,7 +441,9 @@
 
 
     operatorAutocomplete( $("#operator"), manAndOps, "{{ url_for('static',filename='')}}",  "{{ url_for('static',filename='images/icons/trip_logos/' + vehicle_type + '.png')}}", "{{vehicle_type}}");
+    {% if vehicle_type != 'air' %}
     materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
+    {% endif %}
   });
 
 
@@ -426,13 +524,14 @@
   const params = new URLSearchParams(window.location.search);
   const special = params.get('special');
 
-  console.log(special);
+{% if vehicle_type != 'air' %}
   if("{{vehicle_type}}" == "train" && special){
     stationSearchAutocomplete(".stationSearch", visitedStations, specialURLs[special], "{{manual}}");
   }
   else{
     stationSearchAutocomplete(".stationSearch", visitedStations, URLs["{{vehicle_type}}"], "{{manual}}");
   }
+{% endif %}
 
   const currencySelect = document.getElementById('currency');
   for (let option of currencySelect.options) {
@@ -638,6 +737,377 @@
     updateDelayAvailability();
     $('input[name="precision"]').on('change', updateDelayAvailability);
   })();
+
+{% if vehicle_type == 'air' %}
+  // ---------- Air-specific behaviour ----------
+
+  // Airports don't support manual coordinate entry; hide those controls.
+  $('label[for="originManualToggle"], #originManualToggle, #originStationManual, ' +
+    '#destinationManualToggleLabel, #destinationManualToggle, #destinationStationManual').hide();
+
+  // Airport autocomplete (IATA + flag labels)
+  $(".stationSearch").autocomplete({
+    source: function (request, response) {
+      $.ajax({
+        url: "/api/airportAutocomplete/" + request.term,
+        dataType: "json",
+        success: function (data) {
+          var airportList = [];
+          data.forEach(function (item) {
+            var flag = getFlagEmoji(item.iso_country);
+            var label = `${flag} ${item.name} (${item.iata})`;
+            airportList.push({ "label": label, "value": label });
+            globalStationDict[label] = [[item.latitude, item.longitude], label];
+          });
+          response(airportList);
+        },
+      });
+    },
+  });
+
+  // Aircraft type autocomplete (from the airliner database)
+  let airlinersData = [];
+  $.ajax({
+    url: "/getAirliners",
+    type: "GET",
+    dataType: "json",
+    success: function (data) { airlinersData = data; },
+    error: function (xhr, status, error) { console.log("Error: " + error); }
+  });
+  $("#material_type").autocomplete({
+    source: function (request, response) {
+      const term = request.term.toLowerCase();
+      const filteredData = airlinersData.filter(item => {
+        const combinedString = `${item.iata} ${item.manufacturer} ${item.model}`.toLowerCase();
+        return combinedString.includes(term);
+      });
+      response($.map(filteredData, function (item) {
+        return {
+          label: `${item.iata} - ${item.manufacturer} ${item.model}`,
+          value: item.iata
+        };
+      }));
+    }
+  });
+
+  // Fill an airport input from an ICAO code (barcode / query-param import)
+  function fillFromBarcode(element, icao) {
+    return new Promise((resolve, reject) => {
+      $.ajax({
+        url: "/api/airportAutocomplete/" + icao,
+        dataType: "json",
+        success: function (data) {
+          const airport = data[0];
+          const flag = getFlagEmoji(airport.iso_country);
+          const label = `${flag} ${airport.name} (${airport.iata})`;
+          globalStationDict[label] = [[airport.latitude, airport.longitude], label];
+          element.val(label);
+          resolve(airport);
+        },
+        error: reject
+      });
+    });
+  }
+
+  // Prefill from query params (e.g. boarding pass import)
+  (function fillFormWithQueryParams() {
+    var qp = new URLSearchParams(window.location.search);
+    if ([...qp.keys()].length === 0) return;
+    if (qp.get('origin')) fillFromBarcode($('#originStation'), qp.get('origin'));
+    if (qp.get('destination')) fillFromBarcode($('#destinationStation'), qp.get('destination'));
+    if (qp.get('operator')) $('#operator').val(qp.get('operator'));
+    if (qp.get('flight_number')) $('#lineName').val(qp.get('flight_number'));
+    if (qp.get('start_datetime')) {
+      var startDateTime = qp.get('start_datetime').split('+')[0];
+      $('#newTripStartDate').val(startDateTime.split('T')[0]);
+      $('#newTripStartTime').val(startDateTime.split('T')[1]);
+    }
+    if (qp.get('end_datetime')) {
+      var endDateTime = qp.get('end_datetime').split('+')[0];
+      $('#newTripEndDate').val(endDateTime.split('T')[0]);
+      $('#newTripEndTime').val(endDateTime.split('T')[1]);
+    }
+    if (qp.get('seat_number')) $('#seat').val(qp.get('seat_number'));
+    if (qp.get('material')) $('#material_type').val(qp.get('material'));
+  })();
+
+  // ---------- FR24 import ----------
+  $("#fr24Date").val(getCurrentDate());
+
+  let allFlightLegs = [];
+
+  $("#fr24SubmitBtn").click(async function () {
+    const isReg = document.getElementById('fr24SearchToggle').checked;
+    const searchType = isReg ? 'reg' : 'flight';
+    const flightNumber = $("#fr24FlightNumber").val().trim();
+    const regNumber = $("#fr24RegNumber").val().trim();
+    const flightDate = $("#fr24Date").val();
+
+    if (searchType === 'flight' && (!flightNumber || !flightDate)) {
+      $("#fr24Error").text("Please enter both flight number and date.").removeClass("d-none");
+      return;
+    }
+    if (searchType === 'reg' && (!regNumber || !flightDate)) {
+      $("#fr24Error").text("Please enter both registration and date.").removeClass("d-none");
+      return;
+    }
+
+    $("#fr24Error").addClass("d-none");
+    updateProgressBar(10);
+
+    try {
+      const url = searchType === 'flight'
+        ? '{{url_for("flight_summary", username=username)}}'
+        : '{{url_for("flight_summary_reg", username=username)}}';
+
+      const query = searchType === 'flight'
+        ? { flight_number: flightNumber, date: flightDate }
+        : { registration: regNumber, date: flightDate };
+
+      const res = await $.get(url, query);
+
+      if (!res.data || res.data.length === 0) {
+        $("#fr24Error").text("No flight data found for this number and date.").removeClass("d-none");
+        updateProgressBar(0);
+        return;
+      }
+
+      allFlightLegs = res.data;
+
+      if (allFlightLegs.length === 1) {
+        await processFlightLeg(allFlightLegs[0]);
+      } else {
+        updateProgressBar(0);
+        showLegSelector(allFlightLegs);
+      }
+    } catch (err) {
+      console.error(err);
+      $("#fr24Error").text("Error fetching flight data.").removeClass("d-none");
+      updateProgressBar(0);
+    }
+  });
+
+  $('#fr24SearchToggle').on('change', function () {
+    const isReg = $(this).is(':checked');
+    if (isReg) {
+      $('#flightNumberGroup').addClass('d-none');
+      $('#regNumberGroup').removeClass('d-none');
+    } else {
+      $('#regNumberGroup').addClass('d-none');
+      $('#flightNumberGroup').removeClass('d-none');
+    }
+  });
+
+  async function showLegSelector(legs) {
+    const legsList = $("#legsList");
+    legsList.empty();
+
+    const processedLegs = [];
+
+    for (let index = 0; index < legs.length; index++) {
+      const leg = legs[index];
+
+      const originData = await $.ajax({ url: "/api/airportAutocomplete/" + leg.orig_icao, dataType: "json" });
+      const originAirport = originData[0];
+      const originFlag = getFlagEmoji(originAirport.iso_country);
+      const originLabel = `${originFlag} ${originAirport.name} (${originAirport.iata})`;
+
+      const destData = await $.ajax({ url: "/api/airportAutocomplete/" + leg.dest_icao, dataType: "json" });
+      const destAirport = destData[0];
+      const destFlag = getFlagEmoji(destAirport.iso_country);
+      const destLabel = `${destFlag} ${destAirport.name} (${destAirport.iata})`;
+
+      let departureLocalString = 'Unknown';
+      let departureLocal = null;
+      if (leg.datetime_takeoff_local) {
+        departureLocal = new Date(leg.datetime_takeoff_local);
+        departureLocalString = departureLocal.toLocaleString(undefined, {
+          year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      }
+
+      let arrivalLocalString = 'Unknown';
+      let arrivalLocal = null;
+      if (leg.datetime_landed_local) {
+        arrivalLocal = new Date(leg.datetime_landed_local);
+        arrivalLocalString = arrivalLocal.toLocaleString(undefined, {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      }
+
+      processedLegs.push({
+        index, leg, originAirport, destAirport, originLabel, destLabel,
+        departureLocal, arrivalLocal, departureLocalString, arrivalLocalString
+      });
+    }
+
+    const fr24Modal = bootstrap.Modal.getInstance(document.getElementById('fr24Modal'));
+    fr24Modal.hide();
+
+    const legSelectorModal = new bootstrap.Modal(document.getElementById('legSelectorModal'));
+    legSelectorModal.show();
+
+    processedLegs.forEach((processedLeg) => {
+      const { index, leg, departureLocalString, arrivalLocalString, originLabel, destLabel } = processedLeg;
+
+      const legItem = $(`
+        <a href="#" class="list-group-item list-group-item-action" data-leg-index="${index}">
+          <div class="d-flex w-100 justify-content-between">
+            <h6 class="mb-1">Leg ${index + 1}: ${originLabel} → ${destLabel}</h6>
+            <small class="text-muted">${leg.flight}</small>
+          </div>
+          <p class="mb-1">
+            <strong>Departure:</strong> ${departureLocalString}<br>
+            <strong>Arrival:</strong> ${arrivalLocalString}
+          </p>
+          <small class="text-muted">Aircraft: ${leg.type} (${leg.reg})</small>
+        </a>
+      `);
+
+      legItem.on('click', async function (e) {
+        e.preventDefault();
+        const selectedIndex = $(this).data('leg-index');
+        const legModal = bootstrap.Modal.getInstance(document.getElementById('legSelectorModal'));
+        legModal.hide();
+        await processFlightLegWithData(allFlightLegs[selectedIndex], processedLegs[selectedIndex]);
+      });
+
+      legsList.append(legItem);
+    });
+  }
+
+  async function processFlightLeg(flight) {
+    updateProgressBar(10);
+
+    let durationSeconds = null;
+    if (flight.datetime_takeoff && flight.datetime_landed) {
+      const takeoff = new Date(flight.datetime_takeoff);
+      const landed = new Date(flight.datetime_landed);
+      durationSeconds = Math.floor((landed - takeoff) / 1000);
+    }
+
+    window.FR24 = { "fr24_id": flight.fr24_id, "fr24_duration": durationSeconds };
+
+    updateProgressBar(25);
+
+    await fillFromBarcode($('#originStation'), flight.orig_icao);
+    await fillFromBarcode($('#destinationStation'), flight.dest_icao);
+
+    updateProgressBar(50);
+
+    $('#lineName').val(flight.flight);
+    $('#material_type').val(flight.type);
+    $('#reg').val(flight.reg);
+
+    // Resolve FR24's airline ICAO code to a readable operator name + logo
+    if (flight.operating_as) {
+      try {
+        const airlineRes = await $.get("/api/airlines", { icao: flight.operating_as });
+        if (airlineRes.length > 0) {
+          const airline = airlineRes[0];
+          $('#operator').val(airline.name);
+          if (airline.logo_url) {
+            $(".operatorLogo").attr("src", airline.logo_url);
+          }
+        } else {
+          $('#operator').val(flight.operating_as);
+        }
+      } catch {
+        $('#operator').val(flight.operating_as);
+      }
+    }
+
+    updateProgressBar(65);
+
+    if (flight.datetime_takeoff_local && flight.datetime_landed_local) {
+      const startLocal = new Date(flight.datetime_takeoff_local);
+      const endLocal = new Date(flight.datetime_landed_local);
+
+      $('#newTripStartDate').val(startLocal.toTimezonedISOString().split('T')[0]);
+      $('#newTripStartTime').val(startLocal.toTimeString().slice(0, 5));
+      $('#newTripEndDate').val(endLocal.toTimezonedISOString().split('T')[0]);
+      $('#newTripEndTime').val(endLocal.toTimeString().slice(0, 5));
+      $('#radioPreciseDates').prop('checked', true);
+    }
+
+    updateProgressBar(100);
+    setTimeout(() => {
+      const modal = bootstrap.Modal.getInstance(document.getElementById('fr24Modal'));
+      if (modal) modal.hide();
+      updateProgressBar(0);
+    }, 400);
+  }
+
+  async function processFlightLegWithData(flight, processedData) {
+    updateProgressBar(10);
+
+    let durationSeconds = null;
+    if (flight.datetime_takeoff && flight.datetime_landed) {
+      const takeoff = new Date(flight.datetime_takeoff);
+      const landed = new Date(flight.datetime_landed);
+      durationSeconds = Math.floor((landed - takeoff) / 1000);
+    }
+
+    window.FR24 = { "fr24_id": flight.fr24_id, "fr24_duration": durationSeconds };
+
+    updateProgressBar(25);
+
+    const originFlag = getFlagEmoji(processedData.originAirport.iso_country);
+    const originLabel = `${originFlag} ${processedData.originAirport.name} (${processedData.originAirport.iata})`;
+    globalStationDict[originLabel] = [[processedData.originAirport.latitude, processedData.originAirport.longitude], originLabel];
+    $('#originStation').val(originLabel);
+
+    const destFlag = getFlagEmoji(processedData.destAirport.iso_country);
+    const destLabel = `${destFlag} ${processedData.destAirport.name} (${processedData.destAirport.iata})`;
+    globalStationDict[destLabel] = [[processedData.destAirport.latitude, processedData.destAirport.longitude], destLabel];
+    $('#destinationStation').val(destLabel);
+
+    updateProgressBar(50);
+
+    $('#lineName').val(flight.flight);
+    $('#material_type').val(flight.type);
+    $('#reg').val(flight.reg);
+
+    // Resolve FR24's airline ICAO code to a readable operator name + logo
+    if (flight.operating_as) {
+      try {
+        const airlineRes = await $.get("/api/airlines", { icao: flight.operating_as });
+        if (airlineRes.length > 0) {
+          const airline = airlineRes[0];
+          $('#operator').val(airline.name);
+          if (airline.logo_url) {
+            $(".operatorLogo").attr("src", airline.logo_url);
+          }
+        } else {
+          $('#operator').val(flight.operating_as);
+        }
+      } catch {
+        $('#operator').val(flight.operating_as);
+      }
+    }
+
+    updateProgressBar(65);
+
+    if (processedData.departureLocal && processedData.arrivalLocal) {
+      $('#newTripStartDate').val(processedData.departureLocal.toTimezonedISOString().split('T')[0]);
+      $('#newTripStartTime').val(processedData.departureLocal.toTimeString().slice(0, 5));
+      $('#newTripEndDate').val(processedData.arrivalLocal.toTimezonedISOString().split('T')[0]);
+      $('#newTripEndTime').val(processedData.arrivalLocal.toTimeString().slice(0, 5));
+      $('#radioPreciseDates').prop('checked', true);
+    }
+
+    updateProgressBar(100);
+    setTimeout(() => { updateProgressBar(0); }, 400);
+  }
+
+  function updateProgressBar(percent) {
+    const bar = $('#fr24ProgressBar');
+    bar.parent().removeClass('d-none');
+    bar.css('width', `${percent}%`);
+    bar.attr('aria-valuenow', percent);
+    bar.text(`${percent}%`);
+  }
+{% endif %}
 </script>
 
 {% if vehicle_type in ('train', 'metro', 'tram') %}

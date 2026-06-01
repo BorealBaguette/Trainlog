@@ -545,6 +545,11 @@ function toRouting(data, routingUrl, type){
   if (["accommodation", "restaurant", "poi"].includes(type)){
     newTrip["destinationStation"] = newTrip["originStation"]
   }
+  // Carry FR24-imported flight data through (set by the FR24 import on the air form)
+  if (typeof window.FR24 !== "undefined" && window.FR24){
+    newTrip["fr24_id"] = window.FR24["fr24_id"];
+    newTrip["fr24_duration"] = window.FR24["fr24_duration"];
+  }
   if(
       newTrip["destinationStation"]
       && newTrip["originStation"]

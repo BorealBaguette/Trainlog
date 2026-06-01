@@ -1236,6 +1236,16 @@ def new(username, vehicle_type):
             "destinationHelipadName"
         ]
 
+    elif vehicle_type == "air":
+        manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
+        new_trip = lang[session["userinfo"]["lang"]]["newTripAir"]
+        origin_terminal = lang[session["userinfo"]["lang"]]["originAirport"]
+        origin_terminal_name = lang[session["userinfo"]["lang"]]["originAirport"]
+        destination_terminal = lang[session["userinfo"]["lang"]]["destinationAirport"]
+        destination_terminal_name = lang[session["userinfo"]["lang"]][
+            "destinationAirport"
+        ]
+
     elif vehicle_type == "car":
         manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
         new_trip = lang[session["userinfo"]["lang"]]["newTripCar"]
@@ -1332,6 +1342,7 @@ def new(username, vehicle_type):
         manualOrigin=manual_origin,
         currencyOptions=get_available_currencies(),
         user_currency=getLoggedUserCurrency(),
+        fr24_calls=fr24_usage(username) if vehicle_type == "air" else None,
     )
 
 
@@ -2946,17 +2957,8 @@ def toggle_ticket_active(username, ticket_id):
 @app.route("/u/<username>/new_flight")
 @login_required
 def new_flight(username):
-    fr24_calls = fr24_usage(username)
-    return render_template(
-        "new_flight.html",
-        title=lang[session["userinfo"]["lang"]]["newTripAir"],
-        username=username,
-        currencyOptions=get_available_currencies(),
-        fr24_calls=fr24_calls,
-        user_currency=getLoggedUserCurrency(),
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-    )
+    # Flights are now handled by the unified `new` form as the "air" vehicle type.
+    return redirect(url_for("new", username=username, vehicle_type="air"))
 
 
 @app.route("/u/<username>/routing", methods=['GET', 'POST'])
