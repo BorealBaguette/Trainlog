@@ -62,7 +62,7 @@
                     <div class="row">
                         <!-- Voting Section -->
                         <div class="col-md-1 col-2 text-center">
-                            {% if logged_in_user and not is_owner and not is_feature_admin and username and username != "public" %}
+                            {% if logged_in_user and not is_owner and username and username != "public" %}
                                 <button type="button"
                                         class="btn btn-sm {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }} mb-1"
                                         data-vote-button
@@ -83,7 +83,7 @@
                                 {{ request.score }}
                             </div>
                             
-                            {% if logged_in_user and not is_owner and not is_feature_admin and username and username != "public" %}
+                            {% if logged_in_user and not is_owner and username and username != "public" %}
                                 <button type="button"
                                         class="btn btn-sm {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }} mt-1"
                                         data-vote-button

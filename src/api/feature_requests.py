@@ -302,8 +302,8 @@ def delete_feature_request(username):
 @login_required
 def vote_feature_request(username):
     """Handle upvote/downvote for feature requests"""
-    # Prevent owner and feature admins from voting
-    if is_feature_admin_or_owner():
+    # Prevent owner from voting (feature admins are allowed to vote)
+    if session.get("userinfo", {}).get("is_owner"):
         return jsonify({"error": "Not authorized"}), 403
 
     request_id = request.form.get("request_id")

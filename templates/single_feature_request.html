@@ -47,7 +47,7 @@
 
               <h6 class="card-subtitle mb-3 text-muted">{{ feature_requests_voting if feature_requests_voting is defined else 'Voting' }}</h6>
 
-              {% if logged_in_user and not is_owner and not is_feature_admin and username and username != "public" %}
+              {% if logged_in_user and not is_owner and username and username != "public" %}
                 <button type="button"
                         class="btn btn-lg w-100 {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }} mb-2"
                         data-vote-button
@@ -68,7 +68,7 @@
                 {{ request.score }}
               </div>
 
-              {% if logged_in_user and not is_owner and not is_feature_admin and username and username != "public" %}
+              {% if logged_in_user and not is_owner and username and username != "public" %}
                 <button type="button"
                         class="btn btn-lg w-100 {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }}"
                         data-vote-button
