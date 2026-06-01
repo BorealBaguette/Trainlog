@@ -178,13 +178,14 @@
         title.className = 'card-title ' + (profit >= 0 ? 'text-success' : 'text-danger');
     }
 
-    // Create series data with outstanding indicators (lighter shade for pending revenue)
+    // Create series data with outstanding indicators (lighter shade for pending revenue).
+    // Pending money is attributed to the current month (where it was earned), not the payout month.
+    var currentMonthKey = new Date().toISOString().substr(0, 7);
     var revenueSeriesData = revenueDataPoints.map((value, index) => {
         var item = { value: value };
-        
-        if (outstandingInfo && outstandingInfo.next_payout_date && outstandingInfo.total_pending > 0) {
-            var payoutMonth = outstandingInfo.next_payout_date.substr(0, 7);
-            if (labels[index] === payoutMonth) {
+
+        if (outstandingInfo && outstandingInfo.total_pending > 0) {
+            if (labels[index] === currentMonthKey) {
                 var baseRevenue = value - outstandingInfo.total_pending;
                 return [
                     { value: baseRevenue, itemStyle: { color: '#4CAF50' } },

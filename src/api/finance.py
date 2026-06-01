@@ -16,9 +16,29 @@ finance_blueprint = Blueprint('finance', __name__, url_prefix='/admin')
 def finances():
     """Main finances dashboard with CHART - now includes outstanding Stripe revenue"""
     try:
+        # Auto-sync Stripe whenever the previous month is empty but earlier months have revenue.
+        # This catches the "money - gap - money" pattern regardless of when the page is opened.
+        revenues = SimpleFinanceService.get_all_revenue()
+        today = date.today()
+        prev_month = (today.replace(day=1) - relativedelta(days=1)).strftime("%Y-%m")
+        revenue_months = {r["revenue_date"].strftime("%Y-%m") for r in revenues}
+        has_earlier_revenue = any(m < prev_month for m in revenue_months)
+        if has_earlier_revenue and prev_month not in revenue_months:
+            try:
+                result = SimpleFinanceService.sync_stripe_revenue()
+                if result.get("added", 0) > 0:
+                    amount = result.get("total_amount_added", 0)
+                    flash(
+                        f"Auto-synced Stripe: added {result['added']} entries "
+                        f"({amount:.2f}€)",
+                        "success",
+                    )
+            except Exception as sync_err:
+                flash(f"Auto-sync failed: {sync_err}", "error")
+
         # Get outstanding Stripe info for display
         outstanding_info = SimpleFinanceService.get_stripe_outstanding_balance()
-        
+
         # Use the enhanced calculation that includes outstanding revenue
         monthly_data = SimpleFinanceService.calculate_monthly_data_with_outstanding()
         
