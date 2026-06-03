@@ -1490,3 +1490,16 @@ table.dataTable.dtr-column>tbody>tr>th.control:before {
     text-align: right;
   }
 }
+
+/* Vertically center every Bootstrap modal so it never sits underneath the navbar.
+   Replicates Bootstrap's .modal-dialog-centered behaviour for all modals. */
+.modal-dialog {
+  display: flex;
+  align-items: center;
+  min-height: calc(100% - 1rem);
+}
+@media (min-width: 576px) {
+  .modal-dialog {
+    min-height: calc(100% - 3.5rem);
+  }
+}
