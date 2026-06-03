@@ -8,10 +8,10 @@
 </div>
 
 <div id="leaderboard-container" class="container mt-3">
-    <h2>
+    <h1>
         {{ countryCountLeaderboard }}
-    </h2>
-    
+    </h1>
+
     <br>
     
     {% include "leaderboardNav.html"%}
@@ -19,7 +19,7 @@
     <br>
 
     <table id="leaderboard" class="table table-bordered display nowrap">
-        <thead class="thead">
+        <thead>
             <tr>
                 <th class="rank-column" style="white-space: nowrap;">{{ leaderboardRank }}</th>
                 <th>{{ leaderboardUsername }}</th>

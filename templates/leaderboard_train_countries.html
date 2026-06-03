@@ -8,17 +8,17 @@
 </div>
 
 <div id="leaderboard-container" class="container mt-3">
-    <h2>
+    <h1>
         {{ leaderboardCountries }}
-    </h2>
-    
+    </h1>
+
     <br>
     {% include "leaderboardNav.html"%}
 
     <br>
 
     <table id="leaderboard" class="table table-bordered display nowrap">
-        <thead class="thead">
+        <thead>
             <tr>
                 <th></th>
                 <th class="all">{{ leaderboardCountry }}</th>
@@ -146,12 +146,13 @@ $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(countries, statu
     });
 
     const dTable = $('#leaderboard').DataTable({
-        paging: false, // Don't want paging                
-        bPaginate: false, // Don't want paging   
+        paging: false, // Don't want paging
+        bPaginate: false, // Don't want paging
         columnDefs: [
             {
                 className: 'dtr-control',
                 orderable: false,
+                width: '1em',
                 target: 0
             },
             {
