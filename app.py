@@ -3491,10 +3491,15 @@ def countries(username, cc):
         public_url = url_for("countries", username=username, cc=cc)
         return redirect(public_url)
 
+    # to be removed eventually when all cc in db are uppercase, but added for safety as some old entries have lowercase cc
+    if cc != cc.upper():
+        return redirect(url_for("countries", username=username, cc=cc.upper()))
+
     if username == getUser():
         nav = "bootstrap/navigation.html"
     else:
         nav = "bootstrap/public_nav.html"
+
     if not has_coverage_file(cc):
         abort(410)
 

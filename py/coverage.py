@@ -25,7 +25,7 @@ def get_coverage_geojson_dict(cc, immediate_only=False):
 
 def get_coverage_file_path(cc):
     directory_path = "country_percent/countries/processed/"
-    return os.path.join(directory_path, f"{cc.upper()}.geojson")
+    return os.path.join(directory_path, f"{cc}.geojson")
 
 
 def has_coverage_file_immediate(cc):
@@ -80,7 +80,8 @@ def get_coverage_geojson_dict_from_regions(cc):
 
         region_code = os.path.splitext(os.path.basename(file_path))[0]
         total_area_m2 += geojson_data.get("total_area_m2") or sum(
-            f.get("properties", {}).get("area_m2", 0) for f in geojson_data.get("features", [])
+            f.get("properties", {}).get("area_m2", 0)
+            for f in geojson_data.get("features", [])
         )
 
         for feature in geojson_data.get("features", []):
