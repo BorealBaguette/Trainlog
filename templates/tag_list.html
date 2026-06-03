@@ -3,96 +3,92 @@
 
 {% include "bootstrap/navigation.html" %}
 
-<div class="container mt-4">
-  <div class="row">
-    <div >
-      <h2 class="mb-3 text-center">{{ manage_tags }}</h2>
-      
-      <table id="tagsTable">
-        <thead>
-          <tr>
-            <th>{{ tag_name }}</th>
-            <th>{{ tag_colour }}</th>
-            <th>{{ tag_type }}</th>
-            <th>{{ trips }}</th>
-            <th>{{ tripDuration }}</th> 
-            <th>{{ tripLength }}</th>   
-            <th>{{ actions }}</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for tag in tagsList %}
-          <tr>
-            <td><a class='tagLink' href="{{url_for('public_trip', tagId=tag.uuid)}}">{{ tag.name }}</a></td>
-            <td>
-              <a href="{{url_for('public_trip', tagId=tag.uuid)}}" id="colour-{{tag.uid}}" class="tag-blob d-inline-block px-3 py-2" style="background-color: {{ tag.colour }}; border-radius: 20px;">
-                {{ tag.colour }}
-              </a>
-            </td>
-            <td>
-                {% if tag.type == 'collection' %}
-                    <span class="text-nowrap"><i class="fas fa-list"></i> {{collection}}</span>
-                {% elif tag.type == 'voyage' %}
-                    <span class="text-nowrap"><i class="fas fa-route"></i> {{voyage}}</span>
-                {% endif %}
-            </td>
-            <td>{{ tag.trip_count or 0 }}</td>
-            <td class="total-trip-duration" data-sort="{{ tag.total_trip_duration or 0 }}">
-             {{ tag.total_trip_duration or 0 }}
-            </td>
-            <td class="total-trip-length" data-sort="{{ tag.total_trip_length or 0 }}">
-              {{ tag.total_trip_length or 0 }}
-          </td>
+<div class="container">
+  <h1 class="mt-3">{{ manage_tags }}</h1>
+  
+  <table id="tagsTable">
+    <thead>
+      <tr>
+        <th>{{ tag_name }}</th>
+        <th>{{ tag_colour }}</th>
+        <th>{{ tag_type }}</th>
+        <th>{{ trips }}</th>
+        <th>{{ tripDuration }}</th> 
+        <th>{{ tripLength }}</th>
+        <th>{{ actions }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for tag in tagsList %}
+      <tr>
+        <td><a class='tagLink' href="{{url_for('public_trip', tagId=tag.uuid)}}">{{ tag.name }}</a></td>
+        <td>
+          <a href="{{url_for('public_trip', tagId=tag.uuid)}}" id="colour-{{tag.uid}}" class="tag-blob d-inline-block px-3 py-2" style="background-color: {{ tag.colour }}; border-radius: 20px;">
+            {{ tag.colour }}
+          </a>
+        </td>
+        <td>
+            {% if tag.type == 'collection' %}
+                <span class="text-nowrap"><i class="fas fa-list"></i> {{collection}}</span>
+            {% elif tag.type == 'voyage' %}
+                <span class="text-nowrap"><i class="fas fa-route"></i> {{voyage}}</span>
+            {% endif %}
+        </td>
+        <td>{{ tag.trip_count or 0 }}</td>
+        <td class="total-trip-duration" data-sort="{{ tag.total_trip_duration or 0 }}">
+          {{ tag.total_trip_duration or 0 }}
+        </td>
+        <td class="total-trip-length" data-sort="{{ tag.total_trip_length or 0 }}">
+          {{ tag.total_trip_length or 0 }}
+      </td>
 
-            <td>
-                <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editTagModal{{ tag.uid }}"><i class="fa-regular fa-pen-to-square"></i></button>
-                <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteTagModal" data-tag-id="{{ tag.uid }}"><i class="fa-regular fa-trash-can"></i></button>
-            </td>
-          </tr>
+        <td>
+            <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editTagModal{{ tag.uid }}"><i class="fa-regular fa-pen-to-square"></i></button>
+            <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteTagModal" data-tag-id="{{ tag.uid }}"><i class="fa-regular fa-trash-can"></i></button>
+        </td>
+      </tr>
 
-          <!-- Edit Tag Modal -->
-          <div class="modal fade" id="editTagModal{{ tag.uid }}" tabindex="-1" aria-labelledby="editTagModalLabel{{ tag.uid }}" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h5 class="modal-title" id="editTagModalLabel{{ tag.uid }}">{{ edit_tag }}</h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      <!-- Edit Tag Modal -->
+      <div class="modal fade" id="editTagModal{{ tag.uid }}" tabindex="-1" aria-labelledby="editTagModalLabel{{ tag.uid }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="editTagModalLabel{{ tag.uid }}">{{ edit_tag }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <form id="editTagForm{{ tag.uid }}" action="{{ url_for('update_tag', username=username, tag_id=tag.uid) }}" method="post" autocomplete="off">
+                <div class="form-group mb-3">
+                  <label for="name{{ tag.uid }}">{{ tag_name }}</label>
+                  <input type="text" class="form-control" id="name{{ tag.uid }}" name="name" value="{{ tag.name }}" required>
                 </div>
-                <div class="modal-body">
-                  <form id="editTagForm{{ tag.uid }}" action="{{ url_for('update_tag', username=username, tag_id=tag.uid) }}" method="post" autocomplete="off">
-                    <div class="form-group mb-3">
-                      <label for="name{{ tag.uid }}">{{ tag_name }}</label>
-                      <input type="text" class="form-control" id="name{{ tag.uid }}" name="name" value="{{ tag.name }}" required>
-                    </div>
-                    <div class="form-group mb-3">
-                      <label for="colour{{ tag.uid }}">{{ tag_colour }}</label>
-                      <input id="colour{{ tag.uid }}" name="colour" type="text" class="form-control input-lg" value="{{ tag.colour }}">
-                    </div>
-                    <div class="form-group mb-3">
-                        <label for="type">{{ tag_type }} : </label>
-                        <div>
-                            <select id="type" name="type" class="form-control input-lg">
-                                <option value="collection" {% if tag.type == 'collection' %}selected{% endif %}>Collection</option>
-                                <option value="voyage" {% if tag.type == 'voyage' %}selected{% endif %}>Voyage</option>
-                            </select>
-                        </div>
-                    </div>
-
-
-                    <button type="submit" class="btn btn-primary w-100">{{ submit }}</button>
-                  </form>
+                <div class="form-group mb-3">
+                  <label for="colour{{ tag.uid }}">{{ tag_colour }}</label>
+                  <input id="colour{{ tag.uid }}" name="colour" type="text" class="form-control input-lg" value="{{ tag.colour }}">
                 </div>
-              </div>
+                <div class="form-group mb-3">
+                    <label for="type">{{ tag_type }} : </label>
+                    <div>
+                        <select id="type" name="type" class="form-control input-lg">
+                            <option value="collection" {% if tag.type == 'collection' %}selected{% endif %}>Collection</option>
+                            <option value="voyage" {% if tag.type == 'voyage' %}selected{% endif %}>Voyage</option>
+                        </select>
+                    </div>
+                </div>
+
+
+                <button type="submit" class="btn btn-primary w-100">{{ submit }}</button>
+              </form>
             </div>
           </div>
-          {% endfor %}
-        </tbody>
-      </table>
-      
-      <div class="mt-4 text-center">
-        <a href="{{ url_for('new_tag', username=username) }}" class="btn btn-primary">{{ new_tag }}</a>
+        </div>
       </div>
-    </div>
+      {% endfor %}
+    </tbody>
+  </table>
+  
+  <div class="mt-4 text-center">
+    <a href="{{ url_for('new_tag', username=username) }}" class="btn btn-primary">{{ new_tag }}</a>
   </div>
 </div>
 
@@ -119,16 +115,32 @@
 
 <script>
   $(document).ready(function() {
-    $('#tagsTable').DataTable(
-      {
-        order: [],
-        responsive:true,
-        lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]],
-        drawCallback: function(settings) {
-          updateTagColors();
-        }
-      }
-    );
+    var table = $('#tagsTable').DataTable({
+      order: [],
+      responsive: true,
+      lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]],
+      drawCallback: function(settings) {
+        updateTagColors();
+      },
+      language: {
+        info: "{{dtInfo}}",
+        paginate: {
+          next: "{{dtNext}}",
+          previous: "{{dtPrevious}}",
+        },
+        emptyTable: "{{dtEmptyTable}}",
+        select: {
+          rows: {
+            "_": "{{dtMultipleLineSelected}}",
+            "0": "",
+            "1": "{{dtOneLineSelected}}"
+          },
+        },
+        lengthMenu: "{{dtLengthMenu}}",
+        search: "{{dtSearch}}"
+      },
+    });
+    
     function updateTagColors() {
       {% for tag in tagsList %}
       $("#colour-{{ tag.uid }}").css("color", getTextColor("{{ tag.colour }}"));
