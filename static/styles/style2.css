@@ -1700,15 +1700,6 @@ html, body {
 }
 
 
-table.dataTable.dtr-column>tbody>tr>td.dtr-control:before,
-table.dataTable.dtr-column>tbody>tr>th.dtr-control:before,
-table.dataTable.dtr-column>tbody>tr>td.control:before,
-table.dataTable.dtr-column>tbody>tr>th.control:before {
-
-  height:1em;
-  width:1em;
-}
-
 .leaderboardLink{
   text-decoration: none;
   transition: filter 0.1s;
