@@ -276,10 +276,18 @@ def trip_to_csv(trip: Trip):
         trip.ticket_id,
         trip.purchasing_date,
         trip.visibility,
-        trip.departure_delay,
-        trip.arrival_delay,
+        _delay_to_int(trip.departure_delay),
+        _delay_to_int(trip.arrival_delay),
     ]
     return items
+
+
+def _delay_to_int(value):
+    """Delays are seconds. SQLite stored some as floats (e.g. 792.6) but the PG
+    column is integer, so round to the nearest whole second."""
+    if value is None or value == "":
+        return None
+    return int(round(float(value)))
 
 
 def sync_trips_from_sqlite(pg_session=None):
