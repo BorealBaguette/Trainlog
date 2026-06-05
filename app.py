@@ -6475,6 +6475,10 @@ def get_trips_api_internal(username, is_public=False):
     # Retrieve parameters from DataTables request
     start = request.form.get("start", type=int, default=0)
     length = request.form.get("length", type=int, default=10)
+    # DataTables sends length=-1 for "All". SQLite read that as "no limit"; PG
+    # rejects negative LIMITs, so pass NULL (LIMIT ALL) instead.
+    if length is not None and length < 0:
+        length = None
     search_value = request.form.get("search[value]", default="")
     draw = request.form.get("draw", type=int, default=1)
     past = int(request.args.get("projects") == "False")
