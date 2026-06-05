@@ -216,12 +216,14 @@ def backup_postgres(dst_folder: Path):
     """Dump the PostgreSQL database (trips, paths, tickets, tags, reference data,
     finance, meta, ...) to a compressed custom-format file.
 
-    Runs pg_dump inside the postgis container (via docker compose) so the client
-    version always matches the server (same approach as `make generate-schema-sql`).
+    Runs pg_dump inside the postgis container (via `docker exec`, targeting the
+    container named by POSTGRES_HOST) so the client version always matches the
+    server and it works regardless of the current working directory.
     Restore with: pg_restore --clean --if-exists -U <user> -d <db> < trainlog_pg.dump
     """
     db = os.environ.get("POSTGRES_DB", "postgres")
     user = os.environ.get("POSTGRES_USER", "trainlog")
+    container = os.environ.get("POSTGRES_HOST", "trainlog_db")
 
     out = dst_folder / "trainlog_pg.dump"
     print(f"Backing up PostgreSQL database '{db}' -> {out}")
@@ -229,7 +231,7 @@ def backup_postgres(dst_folder: Path):
     with open(out, "wb") as f:
         subprocess.run(
             [
-                "docker", "compose", "exec", "-T", "trainlog_db",
+                "docker", "exec", "-i", container,
                 "pg_dump",
                 "-Fc",  # compressed custom format (restore with pg_restore)
                 "-U", user,
