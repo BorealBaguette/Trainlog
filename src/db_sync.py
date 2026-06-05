@@ -284,10 +284,15 @@ def trip_to_csv(trip: Trip):
 
 def _delay_to_int(value):
     """Delays are seconds. SQLite stored some as floats (e.g. 792.6) but the PG
-    column is integer, so round to the nearest whole second."""
+    column is integer, so round to the nearest whole second. A few rows hold
+    corrupt out-of-range values (e.g. -57559935420 s ≈ -1825 years) that don't
+    fit a PG integer — discard those (NULL)."""
     if value is None or value == "":
         return None
-    return int(round(float(value)))
+    n = int(round(float(value)))
+    if not (-2147483648 <= n <= 2147483647):
+        return None
+    return n
 
 
 def sync_trips_from_sqlite(pg_session=None):
