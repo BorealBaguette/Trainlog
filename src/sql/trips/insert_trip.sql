@@ -1,5 +1,4 @@
 INSERT INTO trips (
-    trip_id,
     user_id,
     origin_station,
     destination_station,
@@ -33,7 +32,6 @@ INSERT INTO trips (
     arrival_delay
 )
 VALUES (
-    :trip_id,
     :user_id,
     :origin_station,
     :destination_station,

@@ -1,1 +1,0 @@
-SELECT count(uid) as 'trips', CAST(sum(trip_length)/1000 as INT) as 'km' FROM trip

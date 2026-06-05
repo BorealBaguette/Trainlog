@@ -5,7 +5,8 @@ from enum import Enum
 
 from src.carbon import calculate_carbon_footprint_for_trip
 from src.paths import Path
-from src.utils import get_username, managed_cursor, pathConn
+from src.sqlite_legacy import pathConn
+from src.utils import get_username, managed_cursor
 
 
 def _strip_tags(value):

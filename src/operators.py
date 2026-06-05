@@ -3,69 +3,11 @@ from datetime import datetime
 from typing import Literal, NotRequired, TypedDict
 
 from src.pg import pg_session
-from src.utils import mainConn, managed_cursor
 
 LOGO_UPLOAD_FOLDER = "static/images/operator_logos/new"
 
 
 class OperatorsRepository:
-    # region SQLite functions
-    @staticmethod
-    def _add_sqlite(short_name: str, long_name: str, operator_type: str):
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute(
-                "INSERT INTO operators (short_name, long_name, operator_type) VALUES (?, ?, ?)",
-                (short_name, long_name, operator_type),
-            )
-        mainConn.commit()
-
-    @staticmethod
-    def _update_operator_field_sqlite(
-        operator_id: int,
-        field: Literal["short_name", "long_name", "operator_type"],
-        value: str,
-    ):
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute(
-                f"UPDATE operators SET {field} = :value WHERE uid = :operator_id",
-                {"value": value, "operator_id": operator_id},
-            )
-        mainConn.commit()
-
-    @staticmethod
-    def _delete_sqlite(operator_id: int):
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute(
-                "DELETE FROM operator_logos WHERE operator_id = ?", (operator_id,)
-            )
-            cursor.execute("DELETE FROM operators WHERE uid = ?", (operator_id,))
-
-            for file in os.listdir(LOGO_UPLOAD_FOLDER):
-                if file.startswith(f"{operator_id}_"):
-                    logo_path = os.path.join(LOGO_UPLOAD_FOLDER, file)
-                    if os.path.exists(logo_path):
-                        os.remove(logo_path)
-
-            mainConn.commit()
-
-    @staticmethod
-    def _add_operator_logo_sqlite(
-        operator_id: int, logo_url: str, effective_date: datetime | None
-    ):
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute(
-                "INSERT INTO operator_logos (operator_id, logo_url, effective_date) VALUES (?, ?, ?)",
-                (operator_id, logo_url, effective_date if effective_date else None),
-            )
-        mainConn.commit()
-
-    def _delete_operator_logo_sqlite(logo_id: int):
-        with managed_cursor(mainConn) as cursor:
-            cursor.execute("DELETE FROM operator_logos WHERE uid = ?", (logo_id,))
-        mainConn.commit()
-
-    # endregion
-
     @classmethod
     def get_operators(cls):
         with pg_session() as pg:
@@ -95,7 +37,6 @@ class OperatorsRepository:
 
     @classmethod
     def add(cls, short_name: str, long_name: str, operator_type: str):
-        cls._add_sqlite(short_name, long_name, operator_type)
         with pg_session() as pg:
             result = pg.execute(
                 """
@@ -136,7 +77,6 @@ class OperatorsRepository:
         ):
             return {"success": False, "error": "invalid operator_type"}
 
-        cls._update_operator_field_sqlite(operator_id, field, value)
         with pg_session() as pg:
             pg.execute(
                 f"UPDATE operators SET {field} = :value WHERE operator_id = :operator_id",
@@ -146,12 +86,21 @@ class OperatorsRepository:
 
     @classmethod
     def delete(cls, operator_id: int):
-        cls._delete_sqlite(operator_id)
         with pg_session() as pg:
+            pg.execute(
+                "DELETE FROM operator_logos WHERE operator_id = :operator_id",
+                {"operator_id": operator_id},
+            )
             pg.execute(
                 "DELETE FROM operators WHERE operator_id = :operator_id",
                 {"operator_id": operator_id},
             )
+        # Remove logo files for this operator.
+        for file in os.listdir(LOGO_UPLOAD_FOLDER):
+            if file.startswith(f"{operator_id}_"):
+                logo_path = os.path.join(LOGO_UPLOAD_FOLDER, file)
+                if os.path.exists(logo_path):
+                    os.remove(logo_path)
 
     @classmethod
     def get_operator_logos(cls, operator_id: int):
@@ -167,7 +116,6 @@ class OperatorsRepository:
     def add_operator_logo(
         cls, operator_id: int, logo_url: str, effective_date: datetime | None
     ):
-        cls._add_operator_logo_sqlite(operator_id, logo_url, effective_date)
         with pg_session() as pg:
             result = pg.execute(
                 """
@@ -185,7 +133,6 @@ class OperatorsRepository:
 
     @classmethod
     def delete_operator_logo(cls, logo_id: int):
-        cls._delete_operator_logo_sqlite(logo_id)
         with pg_session() as pg:
             pg.execute(
                 "DELETE FROM operator_logos WHERE uid = :logo_id", {"logo_id": logo_id}

@@ -4,11 +4,11 @@ from datetime import date, datetime
 
 from flask import Blueprint, jsonify, request
 
-from py.currency import get_exchange_rate
+from src.currency import get_exchange_rate
 from src.api.wrapped import get_wrapped_data
 from src.pg import pg_session
 from src.users import Friendship, User
-from src.utils import get_user_id, login_required, mainConn, managed_cursor
+from src.utils import get_user_id, login_required
 
 logger = logging.getLogger(__name__)
 
@@ -23,17 +23,17 @@ def _operator_logo(operator_name: str) -> str | None:
     """Return the latest logo_url for an operator by short_name, or None."""
     if not operator_name:
         return None
-    with managed_cursor(mainConn) as cur:
-        row = cur.execute(
+    with pg_session() as pg:
+        row = pg.execute(
             """
             SELECT l.logo_url
             FROM operators o
-            JOIN operator_logos l ON l.operator_id = o.uid
-            WHERE o.short_name = ?
-            ORDER BY l.effective_date DESC
+            JOIN operator_logos l ON l.operator_id = o.operator_id
+            WHERE o.short_name = :name
+            ORDER BY l.effective_date DESC NULLS LAST
             LIMIT 1
             """,
-            (operator_name,),
+            {"name": operator_name},
         ).fetchone()
     return row["logo_url"] if row else None
 
@@ -810,27 +810,26 @@ def dashboard_year(username):
 
     all_ticket_ids = list(ticket_total_by_type.keys())
     if all_ticket_ids:
-        placeholders = ",".join("?" * len(all_ticket_ids))
-        with managed_cursor(mainConn) as cur:
-            cur.execute(
-                f"SELECT uid, price, currency FROM tickets WHERE uid IN ({placeholders})",
-                all_ticket_ids,
-            )
-            for row in cur.fetchall():
-                tid, tprice, tcurrency = row["uid"], row["price"], row["currency"]
-                type_counts_total = ticket_total_by_type.get(tid, {})
-                type_counts_ytd = ticket_ytd_by_type.get(tid, {})
-                total_trips = sum(type_counts_total.values()) or 1
-                converted_price = _to_user_currency(tprice, tcurrency)
-                per_trip = converted_price / total_trips
-                for ttype, cnt in type_counts_total.items():
-                    ticket_shares_alltime_by_type[ttype] = (
-                        ticket_shares_alltime_by_type.get(ttype, 0.0) + per_trip * cnt
-                    )
-                for ttype, cnt in type_counts_ytd.items():
-                    ticket_shares_ytd_by_type[ttype] = (
-                        ticket_shares_ytd_by_type.get(ttype, 0.0) + per_trip * cnt
-                    )
+        with pg_session() as pg:
+            ticket_rows = pg.execute(
+                "SELECT uid, price, currency FROM tickets WHERE uid = ANY(:ids)",
+                {"ids": [int(t) for t in all_ticket_ids]},
+            ).fetchall()
+        for row in ticket_rows:
+            tid, tprice, tcurrency = row["uid"], row["price"], row["currency"]
+            type_counts_total = ticket_total_by_type.get(tid, {})
+            type_counts_ytd = ticket_ytd_by_type.get(tid, {})
+            total_trips = sum(type_counts_total.values()) or 1
+            converted_price = _to_user_currency(tprice, tcurrency)
+            per_trip = converted_price / total_trips
+            for ttype, cnt in type_counts_total.items():
+                ticket_shares_alltime_by_type[ttype] = (
+                    ticket_shares_alltime_by_type.get(ttype, 0.0) + per_trip * cnt
+                )
+            for ttype, cnt in type_counts_ytd.items():
+                ticket_shares_ytd_by_type[ttype] = (
+                    ticket_shares_ytd_by_type.get(ttype, 0.0) + per_trip * cnt
+                )
 
     # ── Build money totals ────────────────────────────────────────────────────
     def _build_money(rows, ticket_by_type):

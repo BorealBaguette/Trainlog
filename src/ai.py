@@ -11,7 +11,8 @@ from icalendar import Calendar
 from py.utils import load_config, getCountryFromCoordinates, get_flag_emoji, getDistance, getCountriesFromPath
 from src.trips import Trip, create_trip
 from src.routing import forward_routing_core
-from src.utils import get_default_trip_visibility, pathConn, managed_cursor
+from src.utils import get_default_trip_visibility
+from src.paths import fetch_path
 from src.pg import pg_session
 from src.photon import photonRequest
 import re
@@ -54,14 +55,13 @@ def route_path(origin, destination, trip_type):
     return None
 
 def get_airport_by_iata(iata):
-    from src.utils import mainConn, managed_cursor
-    with managed_cursor(mainConn) as cursor:
-        result = cursor.execute(
-            "SELECT name, latitude, longitude, iso_country FROM airports WHERE iata = ?",
-            (iata.upper(),)
+    with pg_session() as pg:
+        result = pg.execute(
+            "SELECT name, latitude, longitude, iso_country FROM airports WHERE iata = :iata",
+            {"iata": iata.upper()},
         ).fetchone()
         if result:
-            return dict(result)
+            return dict(result._mapping)
     return None
 
 STATION_EXPANSIONS = {
@@ -105,18 +105,13 @@ def get_coords_from_past_trips(station_name, trip_type="train"):
         
         if not result:
             return None
-        
-        with managed_cursor(pathConn) as cursor:
-            cursor.execute("SELECT path FROM paths WHERE trip_id = ?", (result.trip_id,))
-            row = cursor.fetchone()
-        
-        if not row:
-            return None
-        
-        path = json.loads(row["path"])
+
+        with pg_session() as pg:
+            path = fetch_path(pg, result.trip_id)
+
         if not path:
             return None
-        
+
         point = path[0] if result.matched_field == 'origin' else path[-1]
         return {"lat": point[0], "lng": point[1]}
     except Exception as e:

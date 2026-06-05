@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 from typing import Dict, List, Tuple
 
 from src.pg import pg_session
-from py.currency import get_exchange_rate
+from src.currency import get_exchange_rate
 from py.utils import load_config
 
 logger = logging.getLogger(__name__)

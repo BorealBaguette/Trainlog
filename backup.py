@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import os
 import sqlite3
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -13,9 +15,9 @@ from zoneinfo import ZoneInfo
 SRC_DIR = Path("databases")
 BASE_BACKUP_DIR = Path("backup")
 
-# List of DB filenames
+# SQLite DBs that remain after the PostgreSQL migration (auth + error log).
+# All trip/path/reference data now lives in PostgreSQL (backed up via pg_dump).
 SIMPLE_DBS = ["auth.db", "error.db"]
-FILTERED_DBS = [("main.db", "trip", "uid"), ("path.db", "paths", "trip_id")]
 
 # Max parameters per SQLite query (keep below 999)
 CHUNK_SIZE = 900
@@ -178,23 +180,6 @@ def copy_schema_and_data(
     dst_conn.commit()
 
 
-def get_ids(src_path: Path, table: str, column: str) -> set:
-    """Fetch the set of values of `column` from `table` in src_path."""
-    conn = connect_readonly(src_path)
-    cur = conn.cursor()
-    cur.execute(f"SELECT DISTINCT {column} FROM {table}")
-    ids = {row[0] for row in cur.fetchall()}
-    conn.close()
-    return ids
-
-
-def chunked(iterable, size):
-    """Yield successive chunks from iterable of length ≤ size."""
-    it = list(iterable)
-    for i in range(0, len(it), size):
-        yield it[i : i + size]
-
-
 # ─── Backup Routines ────────────────────────────────────────────────────────────
 
 
@@ -224,87 +209,39 @@ def backup_simple(db_name: str, dst_folder: Path):
         copy_schema_and_data(src_conn, dst_conn, progress_callback=update_progress)
 
 
-def backup_filtered(
-    main_db: str, table: str, column: str, valid_ids: set, dst_folder: Path
-):
+# ─── PostgreSQL backup ──────────────────────────────────────────────────────────
+
+
+def backup_postgres(dst_folder: Path):
+    """Dump the PostgreSQL database (trips, paths, tickets, tags, reference data,
+    finance, meta, ...) to a compressed custom-format file.
+
+    Runs pg_dump inside the postgis container (via docker compose) so the client
+    version always matches the server (same approach as `make generate-schema-sql`).
+    Restore with: pg_restore --clean --if-exists -U <user> -d <db> < trainlog_pg.dump
     """
-    Copy schema + all data *except* `table`, then create `table` and copy only rows
-    whose `column` is in valid_ids (in chunks).
-    """
-    src = SRC_DIR / main_db
-    dst = dst_folder / main_db
+    db = os.environ.get("POSTGRES_DB", "postgres")
+    user = os.environ.get("POSTGRES_USER", "trainlog")
 
-    print(f"Analyzing {main_db}...")
+    out = dst_folder / "trainlog_pg.dump"
+    print(f"Backing up PostgreSQL database '{db}' -> {out}")
 
-    with connect_readonly(src) as src_conn:
-        # Get total rows excluding the filtered table
-        total_other_rows = 0
-        cur = src_conn.cursor()
-        cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+    with open(out, "wb") as f:
+        subprocess.run(
+            [
+                "docker", "compose", "exec", "-T", "trainlog_db",
+                "pg_dump",
+                "-Fc",  # compressed custom format (restore with pg_restore)
+                "-U", user,
+                "-d", db,
+                "-n", "public",
+                "-n", "finance",
+                "-n", "meta",
+            ],
+            stdout=f,
+            check=True,
         )
-        for (tbl,) in cur.fetchall():
-            if tbl != table:
-                total_other_rows += get_table_row_count(src_conn, tbl)
-
-        # Get count of rows we'll copy from the filtered table
-        if valid_ids:
-            # Estimate based on a sample to avoid creating huge IN clauses
-            sample_size = min(100, len(valid_ids))
-            sample_ids = list(valid_ids)[:sample_size]
-            qmarks = ",".join("?" for _ in sample_ids)
-            sample_count = cur.execute(
-                f"SELECT COUNT(*) FROM {table} WHERE {column} IN ({qmarks})",
-                tuple(sample_ids),
-            ).fetchone()[0]
-            # Extrapolate to full set
-            filtered_rows = int(sample_count * len(valid_ids) / sample_size)
-        else:
-            filtered_rows = 0
-
-        total_rows = total_other_rows + filtered_rows
-
-    if total_rows == 0:
-        print(f"✅ {main_db} would be empty after filtering, skipping.")
-        return
-
-    # Create progress bar
-    progress = ProgressBar(total_rows, f"Backing up {main_db} (filtered)")
-
-    with connect_readonly(src) as src_conn, connect_writable(dst) as dst_conn:
-        # 1) Copy everything *except* our filtered table
-        def filter_out(name, obj_type):
-            return not (obj_type == "table" and name == table)
-
-        def update_progress_other(rows_processed):
-            progress.update(rows_processed)
-
-        copy_schema_and_data(
-            src_conn,
-            dst_conn,
-            table_filter=filter_out,
-            progress_callback=update_progress_other,
-        )
-
-        # 2) Now create the filtered table schema itself
-        schema_sql = src_conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
-        ).fetchone()[0]
-        dst_conn.execute(schema_sql)
-
-        # 3) Copy filtered data in chunks
-        insert_cur = dst_conn.cursor()
-        for chunk in chunked(valid_ids, CHUNK_SIZE):
-            qmarks = ",".join("?" for _ in chunk)
-            rows = src_conn.execute(
-                f"SELECT * FROM {table} WHERE {column} IN ({qmarks})", tuple(chunk)
-            ).fetchall()
-            if rows:
-                ph = ",".join("?" for _ in rows[0])
-                insert_cur.executemany(f"INSERT INTO {table} VALUES ({ph})", rows)
-                progress.update(len(rows))
-
-        dst_conn.commit()
+    print("✅ PostgreSQL backup complete")
 
 
 # ─── Main Script ────────────────────────────────────────────────────────────────
@@ -319,32 +256,15 @@ def main():
     dst.mkdir(parents=True, exist_ok=True)
     print(f"📁 Backing up to folder: {dst}\n")
 
-    # 2) Simple DBs
+    # 2) Remaining SQLite DBs (auth + error log)
     for db in SIMPLE_DBS:
         backup_simple(db, dst)
         print()  # Add spacing between databases
 
-    # 3) Compute valid trip IDs = intersection of main.trip.uid and path.paths.trip_id
-    print("🔍 Computing valid trip IDs...")
-    main_ids = get_ids(SRC_DIR / "main.db", "trip", "uid")
-    path_ids = get_ids(SRC_DIR / "path.db", "paths", "trip_id")
-    valid = main_ids & path_ids
+    # 3) PostgreSQL (everything else)
+    backup_postgres(dst)
 
-    print(f"   Found {len(main_ids)} trip IDs in main.db")
-    print(f"   Found {len(path_ids)} trip IDs in path.db")
-    print(f"   Valid intersection: {len(valid)} trip IDs")
-
-    if not valid:
-        print("⚠️  Warning: no matching trip IDs between main.db and path.db")
-    print()
-
-    # 4) Filtered DBs
-    backup_filtered("main.db", "trip", "uid", valid, dst)
-    print()
-    backup_filtered("path.db", "paths", "trip_id", valid, dst)
-    print()
-
-    print("✅ Backup complete!")
+    print("\n✅ Backup complete!")
 
 
 if __name__ == "__main__":

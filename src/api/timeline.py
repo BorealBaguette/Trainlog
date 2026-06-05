@@ -27,14 +27,13 @@ from flask import (
 )
 
 from py.utils import rgb_to_hex
+from src.pg import pg_session
 from src.utils import (
     get_user_id,
     getUser,
     has_current_trip,
     lang,
     login_required,
-    mainConn,
-    managed_cursor,
     public_required,
 )
 
@@ -42,36 +41,26 @@ timeline_blueprint = Blueprint("timeline", __name__)
 
 
 def getTimelineData(username):
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(
+    with pg_session() as pg:
+        trips = pg.execute(
             """
-            WITH UTC_Filtered AS (
-                SELECT *,
-                    CASE
-                        WHEN utc_start_datetime IS NOT NULL AND utc_start_datetime NOT IN (-1, 1)
-                        THEN utc_start_datetime
-                        ELSE start_datetime
-                    END AS utc_filtered_start_datetime,
-                    CASE
-                        WHEN utc_end_datetime IS NOT NULL AND utc_end_datetime NOT IN (-1, 1)
-                        THEN utc_end_datetime
-                        ELSE end_datetime
-                    END AS utc_filtered_end_datetime
-                FROM trip
+            WITH base AS (
+                SELECT origin_station, destination_station,
+                    COALESCE(utc_start_datetime, start_datetime) AS utc_filtered_start_datetime,
+                    COALESCE(utc_end_datetime, end_datetime) AS utc_filtered_end_datetime
+                FROM trips
+                WHERE user_id = :user_id
             )
             SELECT origin_station, destination_station, utc_filtered_start_datetime, utc_filtered_end_datetime
-            FROM UTC_Filtered
-            WHERE username = :username
-              AND utc_filtered_start_datetime NOT IN (-1, 1)
-              AND utc_filtered_end_datetime NOT IN (-1, 1)
+            FROM base
+            WHERE utc_filtered_start_datetime IS NOT NULL
+              AND utc_filtered_end_datetime IS NOT NULL
               AND origin_station IS NOT NULL
               AND destination_station IS NOT NULL
             ORDER BY utc_filtered_start_datetime
         """,
-            {"username": username},
-        )
-
-        trips = cursor.fetchall()
+            {"user_id": get_user_id(username)},
+        ).fetchall()
 
     if not trips:
         return render_template("timeline.html", username=username, country_blocks=[])
@@ -81,8 +70,8 @@ def getTimelineData(username):
 
     MAX_YEAR = 2100
     for row in trips:
-        start_datetime = datetime.fromisoformat(row["utc_filtered_start_datetime"])
-        end_datetime = datetime.fromisoformat(row["utc_filtered_end_datetime"])
+        start_datetime = row["utc_filtered_start_datetime"]
+        end_datetime = row["utc_filtered_end_datetime"]
         if start_datetime.year > MAX_YEAR or end_datetime.year > MAX_YEAR:
             continue
         origin_flag = row["origin_station"][:2]

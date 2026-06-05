@@ -1,31 +1,28 @@
-import datetime
-import json
 import logging
 
 from flask import abort
 
-from py.sql import getUserLines, updatePath, updateTripQuery
-from py.utils import getCountriesFromPath
+from src.paths import coords_to_ewkt
 from src.pg import pg_session
 from src.sql.trips import update_trip_query
-from src.utils import (
-    get_username,
-    mainConn,
-    managed_cursor,
-    owner,
-    pathConn,
-    processDates,
-)
+from src.utils import get_username, owner
 
 from .trip import Trip
-from .utils import compare_trip
 
 logger = logging.getLogger(__name__)
 
 
 def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
     with pg_session() as pg:
-        _update_trip_in_sqlite(formData, trip.last_modified, trip_id, updateCreated)
+        # Ownership check against PostgreSQL.
+        row = pg.execute(
+            "SELECT user_id FROM trips WHERE trip_id = :trip_id", {"trip_id": trip_id}
+        ).fetchone()
+        if row is None:
+            abort(404)  # Trip does not exist
+        if get_username() not in (get_username(row["user_id"]), owner):
+            abort(404)  # Trip does not belong to the user
+
         pg.execute(
             update_trip_query(),
             {
@@ -63,115 +60,17 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
             },
         )
 
-    compare_trip(trip_id)
+        # Update the route geometry. trip.path may be [[lat,lng],...] or
+        # [{"lat":..,"lng":..},...] depending on caller; normalise to [lat,lng].
+        coords = trip.path or []
+        if coords and isinstance(coords[0], dict):
+            coords = [[c["lat"], c["lng"]] for c in coords]
+        ewkt = coords_to_ewkt(coords)
+        if ewkt is not None:
+            pg.execute(
+                "INSERT INTO paths (trip_id, geom) VALUES (:trip_id, ST_GeomFromEWKT(:ewkt))"
+                " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom",
+                {"trip_id": trip_id, "ewkt": ewkt},
+            )
+
     logger.info(f"Successfully updated trip {trip_id}")
-
-
-def _update_trip_in_sqlite(
-    formData,
-    last_modified,
-    tripId=None,
-    updateCreated=False,
-):
-    if tripId is None:
-        tripId = formData["trip_id"]
-
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(
-            "SELECT username FROM trip WHERE uid = :trip_id", {"trip_id": tripId}
-        )
-        row = cursor.fetchone()
-
-        if row is None:
-            abort(404)  # Trip does not exist
-        elif get_username() not in (row["username"], owner):
-            abort(404)  # Trip does not belong to the user
-
-    formattedGetUserLines = getUserLines.format(trip_ids=tripId)
-    with managed_cursor(pathConn) as cursor:
-        pathResult = cursor.execute(formattedGetUserLines).fetchone()
-
-    if "path" in formData.keys():
-        path = [[coord["lat"], coord["lng"]] for coord in json.loads(formData["path"])]
-    else:
-        path = json.loads(pathResult["path"])
-
-    limits = [
-        {
-            "lat": path[0][0],
-            "lng": path[0][1],
-        },
-        {
-            "lat": path[-1][0],
-            "lng": path[-1][1],
-        },
-    ]
-
-    (
-        manual_trip_duration,
-        start_datetime,
-        end_datetime,
-        utc_start_datetime,
-        utc_end_datetime,
-    ) = processDates(formData, limits)
-
-    if "visibility" in formData:
-        visibility = formData["visibility"]
-    else:
-        visibility = None
-
-    updateData = {
-        "trip_id": tripId,
-        "manual_trip_duration": manual_trip_duration,
-        "origin_station": formData["origin_station"],
-        "destination_station": formData["destination_station"],
-        "start_datetime": start_datetime,
-        "end_datetime": end_datetime,
-        "utc_start_datetime": utc_start_datetime,
-        "utc_end_datetime": utc_end_datetime,
-        "operator": formData["operator"],
-        "line_name": formData["lineName"],
-        "material_type": formData["material_type"],
-        "material_type_advanced": formData.get("material_type_advanced"),
-        "reg": formData["reg"],
-        "seat": formData["seat"],
-        "notes": formData["notes"],
-        "last_modified": last_modified,
-        "price": formData["price"],
-        "currency": formData.get("currency") if formData["price"] != "" else None,
-        "ticket_id": formData.get("ticket_id"),
-        "purchasing_date": formData.get("purchasing_date") if formData["price"] != "" else None,
-        "visibility": visibility if visibility != "" else None,
-        "departure_delay": formData.get("departure_delay") or None,
-        "arrival_delay": formData.get("arrival_delay") or None,
-    }
-
-    if updateCreated:
-        updateData["created"] = datetime.datetime.now()
-
-    if "estimated_trip_duration" in formData and "trip_length" in formData:
-        details_parsed = json.loads(formData["details"]) if formData.get("details") else None
-        power_type = formData.get("powerType") or (details_parsed.get("powerType") if details_parsed else None)
-        updateData["countries"] = getCountriesFromPath(
-            [{"lat": coord[0], "lng": coord[1]} for coord in path],
-            formData["type"],
-            details_parsed,
-            power_type,
-        )
-        updateData["estimated_trip_duration"] = formData["estimated_trip_duration"]
-        updateData["trip_length"] = formData["trip_length"]
-    if "waypoints" in formData:
-        updateData["waypoints"] = formData["waypoints"]
-
-    formatted_values = [
-        (value + " = :" + value) for value in updateData if value != "trip_id"
-    ]
-    formattedUpdateQuery = updateTripQuery.format(values=", ".join(formatted_values))
-
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(formattedUpdateQuery, {**updateData})
-    if path:
-        with managed_cursor(pathConn) as cursor:
-            cursor.execute(updatePath, {"trip_id": int(tripId), "path": str(path)})
-        pathConn.commit()
-    mainConn.commit()

@@ -7,10 +7,10 @@ from flask import request
 from src.error_reporter import report_error
 from src.pg import pg_session
 from src.sql.trips import get_current_trip_query
+from src.sqlite_legacy import mainConn
 from src.utils import (
     get_user_id,
     get_username,
-    mainConn,
     managed_cursor,
     parse_date,
 )

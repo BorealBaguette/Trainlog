@@ -5,7 +5,7 @@ from flask import Blueprint, render_template, request, redirect, url_for, flash,
 
 from src.finance import SimpleFinanceService, get_finances
 from src.utils import owner_required, getUser, lang
-from py.currency import get_exchange_rate
+from src.currency import get_exchange_rate
 from dateutil.relativedelta import relativedelta
 
 

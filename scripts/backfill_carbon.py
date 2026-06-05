@@ -3,11 +3,8 @@ Backfill carbon footprint for all existing trips
 """
 import logging
 from src.pg import pg_session
-from src.utils import mainConn, managed_cursor, pathConn
 from src.carbon import calculate_carbon_footprint_for_trip
-from src.paths import Path
-import json
-import traceback
+from src.paths import fetch_path
 
 logger = logging.getLogger(__name__)
 
@@ -28,44 +25,29 @@ def backfill_carbon_for_all_trips():
         logger.info(f"Found {total} trips to backfill")
         
         for idx, trip_id in enumerate(trip_ids, 1):
-            # Fetch trip data from SQLite
-            with managed_cursor(mainConn) as cursor:
-                cursor.execute(
-                    "SELECT * FROM trip WHERE uid = ?", (trip_id,)
-                )
-                row = cursor.fetchone()
-            
+            # Fetch trip data from PostgreSQL
+            row = pg.execute(
+                "SELECT trip_type AS type, trip_length, origin_station, destination_station,"
+                " operator, countries, start_datetime, end_datetime, estimated_trip_duration,"
+                " manual_trip_duration, line_name, material_type, seat, reg, waypoints, notes"
+                " FROM trips WHERE trip_id = :tid",
+                {"tid": trip_id},
+            ).fetchone()
+
             if not row:
-                logger.warning(f"Trip {trip_id} not found in SQLite")
+                logger.warning(f"Trip {trip_id} not found")
                 continue
-            
-            # Convert sqlite3.Row to dict explicitly
-            sqlite_trip = {key: row[key] for key in row.keys()}
-            
-            # Fetch path data
-            with managed_cursor(pathConn) as cursor:
-                cursor.execute(
-                    "SELECT path FROM paths WHERE trip_id = ?", (trip_id,)
-                )
-                path_row = cursor.fetchone()
-            
-            if not path_row:
+
+            sqlite_trip = dict(row._mapping)
+
+            # Fetch path geometry as [[lat, lng], ...]
+            path_data = fetch_path(pg, trip_id)
+            if not path_data:
                 logger.warning(f"Path not found for trip {trip_id}")
                 continue
-            
-            path_data = json.loads(path_row['path']) if isinstance(path_row['path'], str) else path_row['path']
-            
-            # Convert path data to the format Path expects
-            # Path data might be [[lat, lng], [lat, lng]] or [{"lat": x, "lng": y}, ...]
-            if path_data and isinstance(path_data[0], list):
-                # Convert [[lat, lng], ...] to [{"lat": lat, "lng": lng}, ...]
-                path_data_formatted = [{"lat": coord[0], "lng": coord[1]} for coord in path_data]
-            else:
-                path_data_formatted = path_data
-            
-            # Create Path object for any operations that might need it
-            path = Path(path=path_data_formatted, trip_id=trip_id)
-            
+
+            path_data_formatted = [{"lat": coord[0], "lng": coord[1]} for coord in path_data]
+
             # Create a dict with trip data for carbon calculation
             trip_data = {
                 'trip_id': trip_id,

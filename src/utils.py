@@ -23,12 +23,6 @@ from src.users import Friendship, User, authDb
 
 logger = logging.getLogger(__name__)
 
-pathConn = sqlite3.connect(DbNames.PATH_DB.value, check_same_thread=False)
-pathConn.row_factory = sqlite3.Row
-
-mainConn = sqlite3.connect(DbNames.MAIN_DB.value, check_same_thread=False)
-mainConn.row_factory = sqlite3.Row
-
 authConn = sqlite3.connect(DbNames.AUTH_DB.value, check_same_thread=False)
 authConn.row_factory = sqlite3.Row
 
@@ -257,20 +251,20 @@ def listOperatorsLogos(tripType=None):
     selected_types = logo_types.keys() if tripType is None else [tripType]
 
     logoURLs = {}
-    with managed_cursor(mainConn) as cursor:
+    with pg_session() as pg:
         for logo_type in selected_types:
             # Fetch logos based on operator_type field
-            cursor.execute(
+            rows = pg.execute(
                 """
                 SELECT o.short_name, l.logo_url
                 FROM operators o
-                JOIN operator_logos l ON o.uid = l.operator_id
-                WHERE o.operator_type = ?
+                JOIN operator_logos l ON o.operator_id = l.operator_id
+                WHERE o.operator_type = :logo_type
             """,
-                (logo_type,),
-            )
+                {"logo_type": logo_type},
+            ).fetchall()
 
-            for row in cursor.fetchall():
+            for row in rows:
                 logoURLs[row["short_name"]] = row["logo_url"]
 
     return logoURLs
@@ -403,39 +397,37 @@ def check_and_increment_fr24_usage(username, limit=5):
 
     is_premium = bool(User.query.filter_by(username=username).first().premium)
 
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(
+    with pg_session() as pg:
+        row = pg.execute(
             """
             SELECT fr24_calls FROM fr24_usage
-            WHERE username = ? AND month_year = ?
-        """,
-            (username, month_key),
-        )
-        row = cursor.fetchone()
+            WHERE username = :username AND month_year = :month_year
+            """,
+            {"username": username, "month_year": month_key},
+        ).fetchone()
 
         if row:
             fr24_calls = row[0]
         else:
             fr24_calls = 0
-            cursor.execute(
+            pg.execute(
                 """
                 INSERT INTO fr24_usage (username, month_year, fr24_calls)
-                VALUES (?, ?, 0)
+                VALUES (:username, :month_year, 0)
                 ON CONFLICT DO NOTHING
-            """,
-                (username, month_key),
+                """,
+                {"username": username, "month_year": month_key},
             )
 
         # Increment usage
-        cursor.execute(
+        pg.execute(
             """
             UPDATE fr24_usage
             SET fr24_calls = fr24_calls + 1
-            WHERE username = ? AND month_year = ?
-        """,
-            (username, month_key),
+            WHERE username = :username AND month_year = :month_year
+            """,
+            {"username": username, "month_year": month_key},
         )
-        mainConn.commit()
 
     # Only apply limit if user is not premium
     if not is_premium and fr24_calls >= limit:
@@ -450,16 +442,15 @@ def fr24_usage(username):
 
     month_key = datetime.now(UTC).strftime("%Y-%m")
 
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(
+    with pg_session() as pg:
+        row = pg.execute(
             """
             SELECT fr24_calls
             FROM fr24_usage
-            WHERE username = ? AND month_year = ?
-        """,
-            (username, month_key),
-        )
-        row = cursor.fetchone() or (0,)
+            WHERE username = :username AND month_year = :month_year
+            """,
+            {"username": username, "month_year": month_key},
+        ).fetchone() or (0,)
     return row[0]
 
 
@@ -467,26 +458,25 @@ def check_and_increment_ai_usage(username, count=1, limit=10):
     month_key = datetime.utcnow().strftime("%Y-%m")
     is_premium = bool(User.query.filter_by(username=username).first().premium)
 
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(
+    with pg_session() as pg:
+        row = pg.execute(
             """
             SELECT ai_calls FROM ai_usage
-            WHERE username = ? AND month_year = ?
+            WHERE username = :username AND month_year = :month_year
             """,
-            (username, month_key),
-        )
-        row = cursor.fetchone()
+            {"username": username, "month_year": month_key},
+        ).fetchone()
         if row:
             ai_calls = row[0]
         else:
             ai_calls = 0
-            cursor.execute(
+            pg.execute(
                 """
                 INSERT INTO ai_usage (username, month_year, ai_calls)
-                VALUES (?, ?, 0)
+                VALUES (:username, :month_year, 0)
                 ON CONFLICT DO NOTHING
                 """,
-                (username, month_key),
+                {"username": username, "month_year": month_key},
             )
 
         # Check limit before incrementing (for non-premium)
@@ -494,15 +484,14 @@ def check_and_increment_ai_usage(username, count=1, limit=10):
             return False
 
         # Increment usage
-        cursor.execute(
+        pg.execute(
             """
             UPDATE ai_usage
-            SET ai_calls = ai_calls + ?
-            WHERE username = ? AND month_year = ?
+            SET ai_calls = ai_calls + :count
+            WHERE username = :username AND month_year = :month_year
             """,
-            (count, username, month_key),
+            {"count": count, "username": username, "month_year": month_key},
         )
-        mainConn.commit()
 
     return True
 
@@ -511,16 +500,15 @@ def ai_usage(username):
     if User.query.filter_by(username=username).first().premium:
         return "premium"
     month_key = datetime.utcnow().strftime("%Y-%m")
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(
+    with pg_session() as pg:
+        row = pg.execute(
             """
             SELECT ai_calls
             FROM ai_usage
-            WHERE username = ? AND month_year = ?
+            WHERE username = :username AND month_year = :month_year
             """,
-            (username, month_key),
-        )
-        row = cursor.fetchone() or (0,)
+            {"username": username, "month_year": month_key},
+        ).fetchone() or (0,)
     return row[0]
 
 
