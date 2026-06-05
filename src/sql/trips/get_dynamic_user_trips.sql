@@ -67,10 +67,14 @@ sub AS (
     LEFT JOIN operators o ON o.short_name = TRIM(split_part(base.operator, ',', 1))
 ),
 trip_tags AS (
+    -- Scope to the current user's trips: without this the aggregate runs over the
+    -- entire tags_associations table (all users) on every request, which dominated
+    -- the query cost. base is already filtered to :user_id.
     SELECT ta.trip_id,
            json_agg(json_build_object('tag_id', ta.tag_id, 'name', t.name)) AS tags
     FROM tags_associations ta
     JOIN tags t ON ta.tag_id = t.uid
+    WHERE ta.trip_id IN (SELECT uid FROM base)
     GROUP BY ta.trip_id
 ),
 FilteredTrips AS (

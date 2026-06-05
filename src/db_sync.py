@@ -43,6 +43,21 @@ def sync_db_from_sqlite():
     sync_trip_related_tables_from_sqlite()
     sync_reference_tables_from_sqlite()
     sync_paths_from_sqlite()
+    sync_carbon()
+
+
+def sync_carbon():
+    """Recompute the carbon footprint for every trip.
+
+    Carbon is not stored in SQLite (it is computed from the route geometry), so a
+    fresh trips sync writes carbon = NULL for every row. This recomputes it from
+    the paths now present in PG, and must therefore run after sync_paths.
+    """
+    logger.info("Backfilling carbon footprints in PostgreSQL...")
+    # Imported lazily to avoid a src -> scripts import at module load.
+    from scripts.backfill_carbon import backfill_carbon_for_all_trips
+
+    backfill_carbon_for_all_trips()
 
 
 def _clean_coord(value):
@@ -261,6 +276,8 @@ def trip_to_csv(trip: Trip):
         trip.ticket_id,
         trip.purchasing_date,
         trip.visibility,
+        trip.departure_delay,
+        trip.arrival_delay,
     ]
     return items
 
@@ -331,6 +348,8 @@ def sync_trips_from_sqlite(pg_session=None):
             ticket_id=row["ticket_id"] if row["ticket_id"] != "" else None,
             is_project=row["start_datetime"] == 1 or row["end_datetime"] == 1,
             visibility=row["visibility"],
+            departure_delay=row["departure_delay"],
+            arrival_delay=row["arrival_delay"],
             path=None,  # not needed when inserting trips
         )
         csv_writer.writerow(trip_to_csv(trip))
@@ -373,7 +392,9 @@ def sync_trips_from_sqlite(pg_session=None):
                 currency,
                 ticket_id,
                 purchase_date,
-                visibility
+                visibility,
+                departure_delay,
+                arrival_delay
             ) FROM STDIN WITH (
                 FORMAT csv,
                 DELIMITER E'\t',
