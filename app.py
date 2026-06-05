@@ -156,6 +156,7 @@ from src.api.vagonweb import vagonweb_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src import visualisations as viz_module
+from src.api.trips import trips_blueprint
 from src.consts import DbNames, TripTypes
 from src.global_map import (
     available_bins,
@@ -275,6 +276,7 @@ app.register_blueprint(trainset_blueprint)
 app.register_blueprint(vagonweb_blueprint)
 app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
+app.register_blueprint(trips_blueprint)
 
 app.config["CACHE_TYPE"] = "SimpleCache"
 app.config["CACHE_DEFAULT_TIMEOUT"] = 864000
@@ -4297,6 +4299,7 @@ def render_public_trip_page(
         globe=globe,
         og=og,
         num_hidden_trips=num_hidden_trips,
+        username=user.username,
         colorblind = colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
