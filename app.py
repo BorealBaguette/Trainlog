@@ -5830,7 +5830,9 @@ def fetchTripsPaths(username, lastLocal, public):
     paths = {path["trip_id"]: path["path"] for path in pathResult}
 
     for trip in trips:
-        trip = dict(trip._mapping)
+        # adapt_pg_trip_row applies legacy names (trip_id->uid, trip_type->type)
+        # and the 1/-1 date sentinels the map frontend relies on.
+        trip = adapt_pg_trip_row(trip._mapping, username)
         trip.pop("past")
         trip.pop("plannedFuture")
         trip.pop("current")
