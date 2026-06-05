@@ -399,6 +399,23 @@
     <div class="itineraryWrapper">
       <ul class="events" id="itinerary">
         <div id="tripDetails">
+        {% if logged_in_user != "public" %}
+        <button
+          id="rideAlong"
+          class="btn btn-labeled btn-success copyButton"
+          onClick="bulkCopyTrips()"
+          style="min-width: 5em;"
+        >
+
+         <div class="spinner-border" role="status" style="display:none;"></div>
+         <div id="rideAlongText">
+           <div class="btn-label">
+             <i class="fa-solid fa-copy"></i>
+           </div>
+           Ride Along
+         </div>
+       </button>
+       {% endif %}
        {% if tag_description != None %}
             <div class="itinerary_tag_description">
             {% if collection_voyage == 'collection' %}
@@ -596,6 +613,31 @@ function getActualTripDuration(trip) {
     trip.trip_duration[1] + (trip.arrival_delay || 0) - (trip.departure_delay || 0)
   );
 }
+{% if logged_in_user != "public" %}
+function bulkCopyTrips() {
+  $("#rideAlongText").hide();
+  $(".spinner-border").show();
+  $("#rideAlong").addClass("disabled");
+
+  $.post({
+    url: '{{ url_for("trips.bulk_copy_trips", username=username) }}',
+    contentType: 'application/json',
+    data: JSON.stringify({ tripIds: "{{tripIds}}" }),
+    success: function(data, status) {
+      $("#rideAlongText").show();
+      $(".spinner-border").hide();
+      $("#rideAlong").removeClass("disabled");
+      location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}"
+    },
+    fail: function () {
+      $("#rideAlongText").show();
+      $(".spinner-border").hide();
+      $("#rideAlong").removeClass("disabled");
+      alert("Could not duplicate all trips")
+    }
+  })
+}
+{% endif %}
 
 // Itinerary blocks, in display order: undated past (-1), dated trips, future (1).
 // Non-dated trips carry the 1 / -1 integer sentinels instead of a datetime string.
