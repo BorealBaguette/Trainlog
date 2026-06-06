@@ -3,7 +3,7 @@ SELECT
     tickets.name,
     tickets.price,
     tickets.currency,
-    tickets.purchasing_date,
+    to_char(tickets.purchasing_date, 'YYYY-MM-DD') AS purchasing_date,
     tickets.notes,
     tickets.active,
     tickets.active_countries,
