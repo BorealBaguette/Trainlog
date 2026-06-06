@@ -1861,12 +1861,15 @@ def saveTripFromGPX(username, gpx_id):
     # Extract GPX details
     origin = gpx["origin"]
     destination = gpx["destination"]
-    start_time = (
-        gpx["start_time"].replace(" ", "T") if gpx["start_time"] is not None else -1
-    )
-    end_time = (
-        gpx["end_time"].replace(" ", "T") if gpx["start_time"] is not None else -1
-    )
+    def _to_iso(value):
+        if value is None:
+            return -1
+        if isinstance(value, str):
+            return value.replace(" ", "T")
+        return value.isoformat()
+
+    start_time = _to_iso(gpx["start_time"])
+    end_time = _to_iso(gpx["end_time"])
 
     distance = gpx["distance"]
     duration = gpx["duration"] if gpx["duration"] not in (None, "") else 0
