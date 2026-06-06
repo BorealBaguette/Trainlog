@@ -64,7 +64,16 @@ sub AS (
          ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
          LIMIT 1) AS logo_url
     FROM base
-    LEFT JOIN operators o ON o.short_name = TRIM(split_part(base.operator, ',', 1))
+    -- short_name is not unique (e.g. two "SNCB" rows, three "MPK Poznań"), so a
+    -- plain join multiplies each matching trip into duplicate rows. Pick one
+    -- operator deterministically.
+    LEFT JOIN LATERAL (
+        SELECT operator_id, short_name
+        FROM operators
+        WHERE short_name = TRIM(split_part(base.operator, ',', 1))
+        ORDER BY operator_id
+        LIMIT 1
+    ) o ON TRUE
 ),
 trip_tags AS (
     -- Scope to the current user's trips: without this the aggregate runs over the

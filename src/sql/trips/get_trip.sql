@@ -51,5 +51,13 @@ SELECT
         )
     END AS logo_url
 FROM base
-LEFT JOIN operators o ON base.operator = o.short_name
+-- short_name is not unique (e.g. two "SNCB" rows), so a plain join would return
+-- duplicate rows for one trip. Pick one operator deterministically.
+LEFT JOIN LATERAL (
+    SELECT operator_id, short_name
+    FROM operators
+    WHERE short_name = base.operator
+    ORDER BY operator_id
+    LIMIT 1
+) o ON TRUE
 WHERE base.trip_id = :trip_id;
