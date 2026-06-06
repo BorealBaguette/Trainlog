@@ -515,32 +515,53 @@ $(document).ready(function () {
     } else {
       const reader = new FileReader();
       reader.onload = function(e) {
-        parseTrainlogCSV(e.target.result.split('\n').filter(l => l.trim()));
+        parseTrainlogCSV(e.target.result);
       };
       reader.readAsText(file);
     }
   });
 
-  // Simple CSV line parser (handles quoted fields)
-  function parseCSVLine(line) {
-    const result = [];
-    let cur = '', inQ = false;
-    for (let i = 0; i < line.length; i++) {
-      if (line[i] === '"') { inQ = !inQ; }
-      else if (line[i] === ',' && !inQ) { result.push(cur); cur = ''; }
-      else { cur += line[i]; }
+  // Splits CSV text into records, honoring quoted fields that contain embedded
+  // newlines and commas. Returns [{ fields: [...], raw: '<original record text>' }].
+  // `raw` preserves the exact source bytes so the per-row import endpoint receives
+  // a valid single CSV record (server-side csv.DictReader re-parses it).
+  function parseCSVRecords(text) {
+    const records = [];
+    let field = '', fields = [], inQ = false, recordStart = 0;
+    const pushRecord = (raw) => {
+      fields.push(field); field = '';
+      // Skip fully blank records (e.g. trailing newline at EOF).
+      if (!(fields.length === 1 && fields[0] === '')) records.push({ fields, raw });
+      fields = [];
+    };
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (c === '"') {
+        if (inQ && text[i + 1] === '"') { field += '"'; i++; } // escaped quote
+        else inQ = !inQ;
+      } else if (c === ',' && !inQ) {
+        fields.push(field); field = '';
+      } else if ((c === '\n' || c === '\r') && !inQ) {
+        const raw = text.slice(recordStart, i);
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        pushRecord(raw);
+        recordStart = i + 1;
+      } else {
+        field += c;
+      }
     }
-    result.push(cur);
-    return result;
+    if (field !== '' || fields.length) pushRecord(text.slice(recordStart));
+    return records;
   }
 
-  function parseTrainlogCSV(lines) {
-    if (lines.length < 2) { showImportResult('danger', 'No trips found in file.'); return; }
-    const headers = parseCSVLine(lines[0]);
+  function parseTrainlogCSV(text) {
+    const records = parseCSVRecords(text);
+    if (records.length < 2) { showImportResult('danger', 'No trips found in file.'); return; }
+    const headers = records[0].fields;
+    const rawHeaders = records[0].raw;
     importParsedTrips = [];
-    for (let i = 1; i < lines.length; i++) {
-      if (!lines[i].trim()) continue;
-      const cols = parseCSVLine(lines[i]);
+    for (let i = 1; i < records.length; i++) {
+      const cols = records[i].fields;
       const row = {};
       headers.forEach((h, idx) => { row[h.trim()] = (cols[idx] || '').trim(); });
       const distM = parseInt(row['trip_length']);
@@ -554,8 +575,8 @@ $(document).ready(function () {
           operator:    row['operator'] ? decodeURIComponent(row['operator']).replace(/&&/g, ', ') : '',
           line_name:   row['line_name'] ? decodeURIComponent(row['line_name']) : '',
         },
-        rawHeaders: lines[0],
-        rawLine: lines[i],
+        rawHeaders: rawHeaders,
+        rawLine: records[i].raw,
       });
     }
     renderImportPreview();
