@@ -942,22 +942,19 @@ def create_authDb():
 
 @app.before_request
 def before_request():
-    allowed_hosts = [
-        "127.0.0.1:5000",
-        "localhost:5000",
-        "trainlog.me",
-        "www.trainlog.me",
-        "dev.trainlog.me",
-    ]
-    if request.host not in allowed_hosts:
-        log_suspicious_activity(
-            request.url,
-            "invalid_host",
-            request.host,
-            getIp(request),
-            getRequestData(request),
-        )
-        return "", 406
+    if load_config()["allowed_hosts"]["addresses"] == "":
+        raise ValueError("Allowed hosts section in config.yaml empty")
+    else:
+        allowed_hosts = load_config()["allowed_hosts"]["addresses"]
+        if request.host not in allowed_hosts:
+            log_suspicious_activity(
+                request.url,
+                "invalid_host",
+                request.host,
+                getIp(request),
+                getRequestData(request),
+            )
+            return "", 406
     endpoint = request.endpoint
     if endpoint:
         # Get the URL rule associated with the current endpoint

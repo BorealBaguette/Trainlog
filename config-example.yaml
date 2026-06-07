@@ -16,6 +16,14 @@ owner:
   email: your_email
   password: your_password
 
+# Allowed hosts in the HTTP request header
+allowed_hosts:
+  addresses: 
+    - 127.0.0.1:5000
+    - localhost:5000
+    - trainlog.me
+    - www.trainlog.me
+    - dev.trainlog.me
 
 # ================================
 # OPTIONAL CONFIGURATION
