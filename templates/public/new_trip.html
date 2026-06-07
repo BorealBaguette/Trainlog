@@ -290,6 +290,94 @@
 .events time span::before {
   display: none;
 }
+
+/* Itinerary <-> map linking.
+   Scoped to .events to beat ".events span { padding: 0 1.5em 1.5em 1.5em }",
+   which otherwise inflates the badge into a big box. */
+/* Number badge: top-right of the row (matches the map pin number). Absolutely
+   positioned in the full-width li, so it sits at the right edge and never
+   disturbs the original station-name layout. Nudge top/right to taste. */
+.events .itinerary-marker-badge {
+  position: absolute;
+  z-index: 4;
+  top: -1px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 17px;
+  height: 17px;
+  min-width: 0;
+  padding: 0;
+  margin: 0;
+  background: #3887be;
+  color: #fff;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: bold;
+  line-height: 1;
+  vertical-align: middle;
+}
+.events .itinerary-marker-badge::before { content: none; }
+
+.events li.itinerary-trip {
+  position: relative;   /* anchors the badge; no layout change */
+  z-index: 1;           /* keep rows above the trip-card overlay below */
+  cursor: pointer;
+}
+
+/* "Transfert" is wrapped in a span, which would otherwise inherit the
+   ".events span { padding: 0 1.5em }" rule and shift right — cancel it. */
+.events .itinerary-change {
+  padding: 0;
+  display: inline-block;   /* inline elements ignore vertical margins, so the
+                              margin-top below needs a block-ish box to apply */
+}
+/* When a trip is selected, give it breathing room on BOTH sides: the trip itself
+   drops down (gap above) and the transfer below drops further (gap below).
+   No transitions here on purpose — the box is positioned from getBoundingClientRect
+   right after this class toggles, so the layout must be settled (final) at that
+   moment; a transition would still be mid-animation and misplace the box. */
+.events li.itinerary-trip.active {
+  margin-top: 16px;        /* space above the selected trip (departure row) */
+}
+.events li.itinerary-trip.active + li.itinerary-trip.active {
+  margin-top: 0;           /* arrival row is part of the trip; no extra gap */
+}
+.events li.itinerary-trip.active .itinerary-change {
+  margin-top: 16px;        /* push "Transfert" down for space below */
+}
+/* Hide the dotted transfer connector inside the card by starting it at the card's
+   bottom edge (--connector-top is set by positionTripCard). Mirrors the clean top,
+   so the dotting is invisible on the card and resumes just below it. */
+.events li.itinerary-trip.active .trainChange::before,
+.events li.itinerary-trip.active .tripEnds::before {
+  top: var(--connector-top, 0px);
+  height: calc(100% - var(--connector-top, 0px));
+}
+
+/* ONE rounded card behind the active trip. A single element, positioned & sized
+   by JS (left/width/top/height) to cover departure -> arrival station (NOT the
+   transfer below it), then lifted with a slight zoom + shadow. Sits behind the
+   rows (z-index 0 < rows). */
+#itinerary { position: relative; }
+#trip-card {
+  position: absolute;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 9px 24px rgba(0, 0, 0, 0.30), 0 0 0 1px rgba(0, 0, 0, 0.06);
+  z-index: 0;
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.99);
+  transform-origin: center;
+  transition: opacity 0.16s ease, transform 0.16s ease;
+}
+#trip-card.show {
+  opacity: 1;
+  transform: scale(1.015);   /* slight zoom = "coming toward us" */
+}
 </style>
 
 <div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>
@@ -397,6 +485,30 @@
 let map;
 let sidebar;
 let sidebarOpen = false;
+let currentTrips = null;          // sorted trips for the current view (highlight lookup)
+let markerNumbersByIndex = [];    // per-trip {originNumber, destNumber} for itinerary badges
+let highlightedTripUid = null;
+const isCollection = {{ 'true' if collection_voyage == 'collection' else 'false' }};
+
+// Compute the same transfer-point numbering the map's numbered markers use, so the
+// itinerary can show matching badges. Mirrors the numbering logic in placePolylines.
+function computeMarkerNumbers(trips) {
+    markerNumbersByIndex = trips.map(() => ({ originNumber: null, destNumber: null }));
+    let n = 1;
+    trips.forEach((trip, index) => {
+        if (index !== 0) {
+            markerNumbersByIndex[index].originNumber = n++;
+        }
+        if (index !== 0 && index < trips.length - 1 &&
+            trips[index + 1].trip.origin_station !== trips[index].trip.destination_station) {
+            markerNumbersByIndex[index].destNumber = n++;
+        }
+    });
+}
+
+function itineraryMarkerBadge(number) {
+    return $('<span>').addClass('itinerary-marker-badge').text(number);
+}
 
 // Date formatting options
 const dateOptions = { timeZone: 'UTC', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
@@ -436,11 +548,6 @@ function createCarbonInfo(carbonFootprint, tripLength, langId) {
   return `<div class="popupInfo carbon_popupInfo" popupinfo_content="${tooltipText}">
             <i class="fas fa-leaf carbon-icon" style="color: ${color};"></i>
           </div>`;
-}
-
-function processTrips() {
-    buildItinerary(trips, prices);
-    placePolylines(trips);
 }
 
 // Transport type translations
@@ -489,6 +596,10 @@ async function initializeMapAndTrips() {
       };
       return getKey(a) - getKey(b);
     });
+
+    // Keep a reference for itinerary<->map linking, and number the transfer points.
+    currentTrips = trips;
+    computeMarkerNumbers(trips);
 
     // Get center from first trip's first coordinate
     const firstCoord = [trips[0].path[0][1], trips[0].path[0][0]];
@@ -787,9 +898,15 @@ function buildItinerary(trips, prices) {
           durationDisplay = secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + kmPart;
         }
 
+        // Badge numbers matching the map's numbered markers (hidden in collection mode)
+        var originBadge = (!isCollection && markerNumbersByIndex[index] && markerNumbersByIndex[index].originNumber != null)
+            ? itineraryMarkerBadge(markerNumbersByIndex[index].originNumber) : null;
+        var destBadge = (!isCollection && markerNumbersByIndex[index] && markerNumbersByIndex[index].destNumber != null)
+            ? itineraryMarkerBadge(markerNumbersByIndex[index].destNumber) : null;
+
         // Append to itinerary
         $('#itinerary').append(
-            $('<li>').append(
+            $('<li>').attr('data-trip-uid', trip.trip.uid).addClass('itinerary-trip').append(originBadge).append(
                 $('<time>').addClass(trip.trip.type).attr("datetime", trip.trip.start_time).html(startTimeDisplay)
             ).append(
                 $('<span>').attr("class", trip.trip.type).append(
@@ -809,7 +926,7 @@ function buildItinerary(trips, prices) {
                 )
             )
         ).append(
-            $('<li>').append(
+            $('<li>').attr('data-trip-uid', trip.trip.uid).addClass('itinerary-trip').append(destBadge).append(
                 $('<time>').addClass(trip.trip.type).addClass("arrival").attr("datetime", trip.trip.end_time).html(endTimeDisplay)
             ).append(
                 $('<span>').attr("class", function() {
@@ -835,9 +952,9 @@ function buildItinerary(trips, prices) {
                               changeTimeText = "";
                             }
                             if (trip.trip.destination_station == trips[index + 1].trip.origin_station) {
-                                return "{{trainChange}}" + changeTimeText;
+                                return '<span class="itinerary-change">' + "{{trainChange}}" + changeTimeText + '</span>';
                             } else {
-                                return "{{stationChange}}" + changeTimeText;
+                                return '<span class="itinerary-change">' + "{{stationChange}}" + changeTimeText + '</span>';
                             }
                         }
                     }
@@ -868,21 +985,6 @@ function calculatePosition(trip) {
     return Math.min(Math.max(progress, 0), 1);
 }
 
-// Split polyline for current trips
-function splitPolyline(path, progress) {
-    if (path.length === 2) {
-        // Use geodesic line for two-point paths
-        path = MapLibreUtils.createGeodesicLine(path[0], path[1]);
-    }
-    const totalPoints = path.length;
-    const splitIndex = Math.floor(progress * totalPoints);
-    
-    const pastPath = path.slice(0, splitIndex + 1);
-    const futurePath = path.slice(splitIndex);
-    
-    return { pastPath, futurePath };
-}
-
 // Place polylines using MapLibre
 function placePolylines(trips) {
     if (trips.length === 0) {
@@ -904,39 +1006,117 @@ function placePolylines(trips) {
         showShadows: true
     });
 
-// Function to create numbered circle icon on canvas
+    // Click an itinerary leg to highlight (and zoom to) that trip on the map.
+    $('#itinerary').off('click.highlight').on('click.highlight', '.itinerary-trip', function() {
+        highlightTrip($(this).data('trip-uid'), { toggle: true, fit: true });
+    });
+
+// Numbered teardrop pin icon on canvas (head circle + tail to a bottom tip, like
+// the default Leaflet marker). Used with icon-anchor:'bottom' so the tip sits on
+// the exact location. Drawn at 2x for retina.
 function createNumberedIcon(number) {
-    const size = 100; // Double size for retina displays
+    // Drawn at high resolution (then downscaled by icon-size) for crisp edges.
+    const W = 160, H = 208;
     const canvas = document.createElement('canvas');
-    canvas.width = size;
-    canvas.height = size;
+    canvas.width = W;
+    canvas.height = H;
     const ctx = canvas.getContext('2d');
-    
-    // Draw outer white circle (border)
+    ctx.imageSmoothingEnabled = true;
+    const cx = W / 2;
+    const r = 67;            // head radius
+    const cy = r + 9;        // head centre (top padding for the white outline)
+
+    // Pin = circular head + triangular tail converging at `tip`.
+    function pin(rr, tip, color) {
+        ctx.fillStyle = color;
+        const flankY = cy + rr * 0.50;
+        const flankX = rr * 0.78;
+        ctx.beginPath();
+        ctx.moveTo(cx - flankX, flankY);
+        ctx.lineTo(cx + flankX, flankY);
+        ctx.lineTo(cx, tip);
+        ctx.closePath();
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx, cy, rr, 0, Math.PI * 2);
+        ctx.fill();
+    }
+    pin(r + 6, H - 3, '#ffffff');   // white outline
+    pin(r, H - 14, '#3887be');      // blue body
+
     ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.arc(size / 2, size / 2, size / 2 - 2, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Draw inner blue circle
-    ctx.fillStyle = '#3887be';
-    ctx.beginPath();
-    ctx.arc(size / 2, size / 2, size / 2 - 6, 0, Math.PI * 2);
-    ctx.fill();
-    
-    // Draw number
-    ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 50px Arial';
+    ctx.font = 'bold 74px Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(number.toString(), size / 2, size / 2);
-    
+    ctx.fillText(String(number), cx, cy);
+
     return canvas;
 }
 
 // Update the placePolylines function numbered marker section:
 
 {% if collection_voyage != 'collection' %}
+// Station-change connections: when a trip's destination is not the same station
+// as the next trip's origin, draw a straight black dotted line between the two
+// points (with a dot at each end) to represent the connection — mirroring the old
+// Leaflet `selfConnectionPolyline`. Skipped in collection mode (tags).
+const connectionFeatures = [];
+const connectionDotFeatures = [];
+trips.forEach((trip, index) => {
+    if (index < trips.length - 1 &&
+        trips[index + 1].trip.origin_station !== trip.trip.destination_station) {
+        const fromCoord = [trip.path[trip.path.length - 1][1], trip.path[trip.path.length - 1][0]];
+        const toCoord = [trips[index + 1].path[0][1], trips[index + 1].path[0][0]];
+        connectionFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: [fromCoord, toCoord] },
+            properties: {}
+        });
+        [fromCoord, toCoord].forEach(c => connectionDotFeatures.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: c },
+            properties: {}
+        }));
+    }
+});
+
+if (connectionFeatures.length > 0) {
+    map.addSource('station-connections', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: connectionFeatures }
+    });
+    map.addLayer({
+        id: 'station-connections-line',
+        type: 'line',
+        source: 'station-connections',
+        layout: { 'line-cap': 'round', 'line-join': 'round' },
+        paint: {
+            'line-color': '#777777',
+            'line-width': 1.5,
+            'line-opacity': 0.75,
+            'line-dasharray': [0, 2.5]  // round caps + zero-length dash = dotted line
+        }
+    });
+    map.addSource('station-connection-dots', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: connectionDotFeatures }
+    });
+    // Dots at each connection end. Drawn before the numbered markers below, so a
+    // numbered marker sitting on the same point covers the dot; the lone endpoint
+    // (e.g. the first trip's destination) still shows one.
+    map.addLayer({
+        id: 'station-connection-dots',
+        type: 'circle',
+        source: 'station-connection-dots',
+        paint: {
+            'circle-radius': 3,
+            'circle-color': '#777777',
+            'circle-stroke-width': 1,
+            'circle-stroke-color': '#ffffff'
+        }
+    });
+}
+
 // Collect all numbered markers data
 const numberedMarkers = [];
 let markerIndex = 1;
@@ -946,7 +1126,8 @@ trips.forEach((trip, index) => {
         numberedMarkers.push({
             coordinates: [trip.path[0][1], trip.path[0][0]],
             number: markerIndex,
-            popupText: trip.trip.origin_station
+            popupText: trip.trip.origin_station,
+            tripUid: trip.trip.uid
         });
         markerIndex++;
     }
@@ -956,7 +1137,8 @@ trips.forEach((trip, index) => {
             numberedMarkers.push({
                 coordinates: [trip.path[trip.path.length - 1][1], trip.path[trip.path.length - 1][0]],
                 number: markerIndex,
-                popupText: trip.trip.destination_station
+                popupText: trip.trip.destination_station,
+                tripUid: trip.trip.uid
             });
             markerIndex++;
         }
@@ -990,7 +1172,8 @@ if (numberedMarkers.length > 0) {
         properties: {
             number: marker.number,
             popupText: marker.popupText,
-            icon: `numbered-marker-${marker.number}`
+            icon: `numbered-marker-${marker.number}`,
+            id: marker.tripUid
         }
     }));
     
@@ -1003,20 +1186,37 @@ if (numberedMarkers.length > 0) {
         }
     });
     
-    // Add symbol layer with the custom icons
+    // Glow behind a selected trip's markers (filtered to its uid; nothing until selected)
+    map.addLayer({
+        id: 'numbered-markers-highlight',
+        type: 'circle',
+        source: 'numbered-markers',
+        filter: ['==', ['get', 'id'], '__none__'],
+        paint: {
+            'circle-radius': 17,
+            'circle-color': '#3887be',
+            'circle-opacity': 0.55,
+            'circle-blur': 0.7,
+            'circle-translate': [0, -26],            // up toward the pin head
+            'circle-translate-anchor': 'viewport'
+        }
+    });
+
+    // Add symbol layer with the custom pin icons (tip points to the location)
     map.addLayer({
         id: 'numbered-markers',
         type: 'symbol',
         source: 'numbered-markers',
         layout: {
             'icon-image': ['get', 'icon'],
-            'icon-size': 0.5, // Scale down since we created at 2x
+            'icon-size': 0.4, // Scale down since the icon is drawn at high res
+            'icon-anchor': 'bottom',
             'icon-allow-overlap': true,
             'icon-ignore-placement': true
         }
     });
-    
-    // Add click handler for popups
+
+    // Click a marker: popup + highlight its trip and scroll the itinerary to it.
     map.on('click', 'numbered-markers', (e) => {
         e.originalEvent.stopPropagation();
         const properties = e.features[0].properties;
@@ -1025,6 +1225,9 @@ if (numberedMarkers.length > 0) {
                 .setLngLat(e.lngLat)
                 .setText(properties.popupText)
                 .addTo(map);
+        }
+        if (properties.id != null) {
+            highlightTrip(properties.id, { scrollItinerary: true });
         }
     });
     
@@ -1262,6 +1465,37 @@ if (numberedMarkers.length > 0) {
         }
     });
 
+    // Itinerary <-> map highlight layers, added last so they sit ABOVE every trip
+    // line (important on busy maps), just below the numbered markers. Two layers:
+    // a white casing for contrast + the trip's own colour on top. Filtered to the
+    // selected uid; nothing shows until a leg/path is selected.
+    if (!map.getLayer('trip-highlight-core')) {
+        const typeColorMatch = ['match', ['get', 'type']];
+        MapLibreUtils.MapConfig.transportTypes.forEach(t => typeColorMatch.push(t.id, t.color));
+        typeColorMatch.push('#3887be');  // default
+        const beforeId = map.getLayer('numbered-markers') ? 'numbered-markers' : undefined;
+        map.addLayer({
+            id: 'trip-highlight-casing',
+            type: 'line',
+            source: 'trips',
+            filter: ['==', ['get', 'id'], '__none__'],
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': '#ffffff', 'line-width': 9, 'line-opacity': 0.9, 'line-blur': 0.4 }
+        }, beforeId);
+        map.addLayer({
+            id: 'trip-highlight-core',
+            type: 'line',
+            source: 'trips',
+            filter: ['==', ['get', 'id'], '__none__'],
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: { 'line-color': typeColorMatch, 'line-width': 4.5, 'line-opacity': 1 }
+        }, beforeId);
+        // Re-apply any active highlight (e.g. if placePolylines runs again).
+        if (highlightedTripUid != null) {
+            setHighlightFilter(['==', ['get', 'id'], highlightedTripUid]);
+        }
+    }
+
     // Fit bounds and reveal panel
     if (trips.length > 0) {
         const bounds = new maplibregl.LngLatBounds();
@@ -1298,6 +1532,110 @@ function showTripPopup(e) {
         .setLngLat(e.lngLat)
         .setText(`${properties.origin} - ${properties.destination}`)
         .addTo(map);
+    // Reverse link: highlight the matching itinerary leg and scroll it into view.
+    if (properties.id != null) {
+        highlightTrip(properties.id, { scrollItinerary: true });
+    }
+}
+
+// Apply a filter to both highlight layers (casing + core).
+function setHighlightFilter(filter) {
+    ['trip-highlight-casing', 'trip-highlight-core', 'numbered-markers-highlight'].forEach(id => {
+        if (map && map.getLayer(id)) map.setFilter(id, filter);
+    });
+}
+
+// One overlay card behind the active trip: covers from the departure row down to
+// (but not including) the "Transfert" text under the arrival station, so it reads
+// as a single lifted box around the trip.
+let tripCardEl = null;
+function positionTripCard(uid) {
+    const itin = document.getElementById('itinerary');
+    if (!itin) return;
+    const lis = itin.querySelectorAll(`.itinerary-trip[data-trip-uid="${uid}"]`);
+    if (!lis.length) { hideTripCard(); return; }
+    if (!tripCardEl) {
+        tripCardEl = document.createElement('div');
+        tripCardEl.id = 'trip-card';
+        itin.insertBefore(tripCardEl, itin.firstChild);
+    }
+    const depLi = lis[0];
+    const arrLi = lis[lis.length - 1];
+    const iRect = itin.getBoundingClientRect();
+    const dRect = depLi.getBoundingClientRect();
+    // Bottom of the box = bottom of the arrival STATION name (so the transfer,
+    // pushed down by the .active margin, sits below the box).
+    const arrStrong = arrLi.querySelector('strong');
+    const stationBottom = (arrStrong || arrLi).getBoundingClientRect().bottom;
+
+    const PAD_V = 18;        // breathing room above/below the content inside the box
+    const INSET_LEFT = 35;   // left margin off the row edge (+ = inset right)
+    const INSET_RIGHT = 0;  // right margin off the row edge (smaller = further right; - = past edge)
+
+    // Position from the row's real rect (the #itinerary box is shifted off-screen
+    // on the left by .itineraryWrapper{left:-60px}, so CSS left/right can't be used).
+    tripCardEl.style.left = (dRect.left - iRect.left + INSET_LEFT) + 'px';
+    tripCardEl.style.width = Math.max(0, dRect.width - INSET_LEFT - INSET_RIGHT) + 'px';
+    tripCardEl.style.top = (dRect.top - iRect.top - PAD_V) + 'px';
+    const cardBottom = stationBottom + PAD_V;
+    tripCardEl.style.height = Math.max(0, cardBottom - dRect.top + PAD_V) + 'px';
+    tripCardEl.classList.add('show');
+
+    // Mirror the clean top: hide the dotted transfer connector WHERE IT CROSSES
+    // the card by starting it at the card's bottom edge (the ::before reads this
+    // var). Clear any previously-set one first (e.g. when switching trips).
+    clearConnectorOffsets();
+    const arrConnector = arrLi.querySelector('.trainChange, .tripEnds, .tripChange');
+    if (arrConnector) {
+        const start = cardBottom - arrConnector.getBoundingClientRect().top;
+        arrConnector.style.setProperty('--connector-top', Math.max(0, start) + 'px');
+    }
+}
+function clearConnectorOffsets() {
+    document.querySelectorAll('#itinerary [style*="--connector-top"]')
+        .forEach(el => el.style.removeProperty('--connector-top'));
+}
+function hideTripCard() {
+    if (tripCardEl) tripCardEl.classList.remove('show');
+    clearConnectorOffsets();
+}
+
+// Highlight a single trip's path on the map and its itinerary leg(s).
+// opts: toggle (clicking the active leg again clears it), fit (zoom to the trip),
+// scrollItinerary (bring the itinerary leg into view).
+function highlightTrip(uid, opts) {
+    opts = opts || {};
+    if (uid == null || !map || !map.getLayer('trip-highlight-core')) return;
+
+    if (opts.toggle && highlightedTripUid != null && String(highlightedTripUid) === String(uid)) {
+        setHighlightFilter(['==', ['get', 'id'], '__none__']);
+        highlightedTripUid = null;
+        $('.itinerary-trip').removeClass('active');
+        hideTripCard();
+        return;
+    }
+
+    highlightedTripUid = uid;
+    setHighlightFilter(['==', ['get', 'id'], uid]);
+    $('.itinerary-trip').removeClass('active');
+    $(`.itinerary-trip[data-trip-uid="${uid}"]`).addClass('active');
+    positionTripCard(uid);
+
+    const trip = (currentTrips || []).find(t => String(t.trip.uid) === String(uid));
+    if (opts.fit && trip && trip.path && trip.path.length) {
+        const b = new maplibregl.LngLatBounds();
+        trip.path.forEach(c => b.extend([c[1], c[0]]));
+        const panelOpen = sidebarOpen && window.innerWidth > 600;
+        map.fitBounds(b, {
+            padding: { top: 70, bottom: 70, left: 70, right: panelOpen ? 450 : 70 },
+            maxZoom: 15,   // zoom in enough that short trips aren't buried under the pins
+            duration: 600
+        });
+    }
+    if (opts.scrollItinerary) {
+        const el = document.querySelector(`.itinerary-trip[data-trip-uid="${uid}"]`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
 }
 const colorblindMode = {{ 'true' if colorblind else 'false' }};
 // Create custom markers
@@ -1357,40 +1695,6 @@ function createCustomMarker(coordinates, type, popupText) {
     return marker;
 }
 
-// Add numbered marker
-function addNumberedMarker(coordinates, number, popupText) {
-    const el = document.createElement('div');
-    el.className = 'numbered-marker';
-    el.innerHTML = `<span>${number}</span>`;
-    el.style.cssText = `
-        width: 25px;
-        height: 25px;
-        background: #3887be;
-        border: 2px solid #fff;
-        border-radius: 50%;
-        color: white;
-        font-size: 12px;
-        line-height: 21px;
-        text-align: center;
-        cursor: pointer;
-        font-weight: bold;
-    `;
-    
-    // For circular markers, use center anchor
-    const marker = new maplibregl.Marker({ 
-        element: el,
-        anchor: 'center'
-    })
-        .setLngLat(coordinates)
-        .addTo(map);
-    
-    if (popupText) {
-        marker.setPopup(new maplibregl.Popup({ offset: 25 }).setText(popupText));
-    }
-    
-    return marker;
-}
-
 // Sidebar functions
 function showSidebar() {
     const sidebar = document.getElementById('sidebar');
@@ -1398,7 +1702,7 @@ function showSidebar() {
     sidebarOpen = true;
     updateSidebarTabIcon();
 
-    if (window.innerWidth > 600) {
+    if (map && window.innerWidth > 600) {
         map.easeTo({
             padding: { right: 400 },
             duration: 300
@@ -1412,6 +1716,7 @@ function hideSidebar() {
     sidebarOpen = false;
     updateSidebarTabIcon();
 
+    if (!map) return;
     map.easeTo({
         padding: { right: 0 },
         duration: 300
@@ -1478,6 +1783,11 @@ function updateSidebarTabIcon() {
 
 // Handle window resize
 window.addEventListener('resize', () => {
+    // Re-fit the trip-card overlay to the (reflowed) rows.
+    if (highlightedTripUid != null) positionTripCard(highlightedTripUid);
+    // map is assigned asynchronously after the trips POST resolves; a resize firing
+    // before that (or after a failed init) would otherwise throw on map.easeTo.
+    if (!map) return;
     if (sidebarOpen && window.innerWidth > 600) {
         map.easeTo({
             padding: { right: 400 },
