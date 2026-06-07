@@ -198,7 +198,7 @@ from src.trips import (
     delete_ticket_from_db,
     get_current_trip_id,
 )
-from src.paths import Path, coords_to_ewkt, fetch_path
+from src.paths import Path, coords_to_ewkt, fetch_path, geom_geojson_to_coords
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
@@ -5824,26 +5824,21 @@ def fetchTripsPaths(username, lastLocal, public):
         ).fetchall()
 
     trips.reverse()
-    tripIds = [trip["uid"] for trip in trips]
-    with pg_session() as pg:
-        pathResult = pg.execute(
-            get_user_lines_query(), {"ids": [int(i) for i in tripIds]}
-        ).fetchall()
-
-    paths = {path["trip_id"]: path["path"] for path in pathResult}
 
     for trip in trips:
+        # The path geometry comes back on the same row (geojson column) now that
+        # paths share the PG DB, so no second getUserLines round-trip is needed.
+        path = geom_geojson_to_coords(trip._mapping.get("geojson"))
         # adapt_pg_trip_row applies legacy names (trip_id->uid, trip_type->type)
         # and the 1/-1 date sentinels the map frontend relies on.
         trip = adapt_pg_trip_row(trip._mapping, username)
+        trip.pop("geojson", None)
         trip.pop("past")
         trip.pop("plannedFuture")
         trip.pop("current")
         trip.pop("future")
 
-        tripList.append(
-            {"trip": trip, "path": json.loads(paths.get(trip["uid"], "{}"))}
-        )
+        tripList.append({"trip": trip, "path": path})
 
     print(datetime.now() - now)
     lastLocal = datetime.strftime(datetime.now(), "%Y-%m-%dT%H:%M:%S.%f")
@@ -6512,16 +6507,30 @@ def get_trips_api_internal(username, is_public=False):
         sort_column_name = SORT_FIELD_EXPRS[custom_sort_field]
         sort_direction = request.form.get("sort_dir", sort_direction)
 
+    # Negative global terms (smart-search "!term"): trips that match NONE of these
+    # in any field. Sent by the frontend as a JSON list.
+    try:
+        global_not_terms = [
+            t for t in json.loads(request.form.get("search_not", "[]")) if t
+        ]
+    except (ValueError, TypeError):
+        global_not_terms = []
+
     # Handle column-specific searches
     column_searches = {}
     for i in range(20):  # Check up to 20 columns
         column_search = request.form.get(f"columns[{i}][search][value]", "")
         column_exact = request.form.get(f"columns[{i}][search][exact]", "false") == "true"
-        column_searches[i] = {"value": column_search, "exact": column_exact}
+        column_negate = request.form.get(f"columns[{i}][search][negate]", "false") == "true"
+        column_searches[i] = {
+            "value": column_search,
+            "exact": column_exact,
+            "negate": column_negate,
+        }
 
     # Build additional WHERE conditions for column-specific searches
     additional_conditions = []
-    search_params = {"username": username, "past": past, "search": f"%{search_value}%"}
+    search_params = {"username": username, "past": past}
     
     # Add column-specific search conditions
     for column_index, search_data in column_searches.items():
@@ -6530,12 +6539,17 @@ def get_trips_api_internal(username, is_public=False):
             param_name = f"col_search_{column_index}"
             search_term = search_data["value"]
             is_exact = search_data["exact"]
+            is_negate = search_data["negate"]
 
             # Choose LIKE pattern based on exact/partial matching
             if is_exact:
                 search_pattern = search_term  # Exact match
             else:
                 search_pattern = f"%{search_term}%"  # Partial match
+
+            # Each branch below appends exactly one predicate; remember the position
+            # so a negated search ("from:!Paris") can wrap that predicate in NOT.
+            _cond_start = len(additional_conditions)
 
             # Map frontend column names to actual query column names in FilteredTrips
             if column_name == "type":
@@ -6604,8 +6618,66 @@ def get_trips_api_internal(username, is_public=False):
                     additional_conditions.append(f"LOWER(COALESCE(CAST({column_name} AS text), '')) = LOWER(:{param_name})")
                 else:
                     additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(CAST({column_name} AS text), ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            
+
+            # Negate the predicate this column just appended. COALESCE(..., FALSE)
+            # makes NULL columns (e.g. a missing operator) count as "not matching",
+            # so they are included by a negative filter rather than dropped.
+            if is_negate and len(additional_conditions) > _cond_start:
+                additional_conditions[-1] = (
+                    f"NOT COALESCE({additional_conditions[-1]}, FALSE)"
+                )
+
             search_params[param_name] = search_pattern
+
+    # Global free-text search across every field. Appended to the outer query only
+    # when there is something to match, so the common empty-search case lets Postgres
+    # elide the airliners join (count query) and avoids the tickets join entirely.
+    # Columns are referenced at the FilteredTrips level; ticket name and tags are
+    # correlated EXISTS subqueries (the CTE no longer joins tickets).
+    def _global_search_predicate(param):
+        like = (
+            "remove_diacritics(LOWER({col})) LIKE remove_diacritics(LOWER(:" + param + "))"
+        )
+        global_search_columns = [
+            "origin_station",
+            "destination_station",
+            "COALESCE(operator, '')",
+            "COALESCE(countries, '')",
+            "COALESCE(line_name, '')",
+            "COALESCE(CAST(start_datetime AS text), '')",
+            "COALESCE(CAST(end_datetime AS text), '')",
+            "type",
+            "COALESCE(notes, '')",
+            "COALESCE(reg, '')",
+            "COALESCE(material_type, '')",
+            "COALESCE(material_type_advanced, '')",
+            "COALESCE(iata, '')",
+            "COALESCE(manufacturer, '')",
+            "COALESCE(model, '')",
+        ]
+        terms = [like.format(col=col) for col in global_search_columns]
+        terms.append(
+            "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = ticket_id"
+            f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
+        )
+        terms.append(
+            "EXISTS (SELECT 1 FROM tags_associations fta JOIN tags ft ON fta.tag_id = ft.uid"
+            f" WHERE fta.trip_id = uid AND remove_diacritics(LOWER(ft.name)) LIKE remove_diacritics(LOWER(:{param})))"
+        )
+        return "(" + " OR ".join(terms) + ")"
+
+    if search_value:
+        search_params["search"] = f"%{search_value}%"
+        additional_conditions.append(_global_search_predicate("search"))
+
+    # Negative global terms ("!term"): keep only trips where NO field matches the
+    # term. COALESCE(..., FALSE) so a trip with all-NULL fields still passes the NOT.
+    for idx, neg_term in enumerate(global_not_terms):
+        neg_param = f"search_not_{idx}"
+        search_params[neg_param] = f"%{neg_term}%"
+        additional_conditions.append(
+            f"NOT COALESCE({_global_search_predicate(neg_param)}, FALSE)"
+        )
 
     # Build the queries
     base_count_query = get_dynamic_user_trips_query() + "SELECT COUNT(*) FROM FilteredTrips"

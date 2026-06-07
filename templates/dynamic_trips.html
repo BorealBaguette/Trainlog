@@ -105,8 +105,11 @@
                             <div class="mb-2">
                                 <strong>"text"</strong> - {{smart_search_double_quotes_desc}}
                             </div>
+                            <div class="mb-2">
+                                <strong>`text`</strong> - {{smart_search_exact_desc}}
+                            </div>
                             <div>
-                                <strong>'text'</strong> - {{smart_search_single_quotes_desc}}
+                                <strong>!text</strong> - {{smart_search_negate_desc}}
                             </div>
                         </div>
                     </div>
@@ -115,10 +118,13 @@
                 <h6 class="fw-bold mb-2">{{smart_search_examples_title}}</h6>
                 <div class="search-example">from:"Oslo Central" type:train</div>
                 <small class="text-muted d-block mb-2">{{smart_search_example_spaces_desc}}</small>
-                
-                <div class="search-example">from:'Oslo Central' to:'Stockholm'</div>
+
+                <div class="search-example">from:`Oslo S` to:`Stockholm`</div>
                 <small class="text-muted d-block mb-2">{{smart_search_example_exact_desc}}</small>
-                
+
+                <div class="search-example">type:train to:!Paris</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_negate_desc}}</small>
+
                 <div class="search-example">from:Oslo express date:2024-01-15</div>
                 <small class="text-muted d-block">{{smart_search_example_mixed_desc}}</small>
             </div>
@@ -1081,40 +1087,54 @@ var table = $('#tripRows');
         'notes:': {{ trip_column_names.index("notes") }}
     };
 
+    // Strip a wrapping pair of " (spaces) or ` (exact). Returns {value, isExact}.
+    function stripQuotes(value) {
+        if (value.startsWith('`') && value.endsWith('`') && value.length > 1) {
+            return { value: value.slice(1, -1), isExact: true };
+        }
+        if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
+            return { value: value.slice(1, -1), isExact: false };
+        }
+        return { value, isExact: false };
+    }
+
     function parseSmartSearch(searchValue) {
         const columnFilters = {};
         let globalSearch = '';
-        const terms = searchValue.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+        const globalNot = [];
+        // Tokens: bare words, "double-quoted" (spaces) or `backtick-quoted` (exact).
+        const terms = searchValue.match(/(?:[^\s"`]+|"[^"]*"|`[^`]*`)+/g) || [];
         terms.forEach(term => {
             let matched = false;
             for (const [prefix, columnIndex] of Object.entries(SEARCH_PREFIXES)) {
                 if (term.toLowerCase().startsWith(prefix)) {
                     let value = term.substring(prefix.length);
-                    let isExact = false;
+                    let negate = false;
+                    if (value.startsWith('!')) { negate = true; value = value.substring(1); }
                     if (value) {
-                        if (value.startsWith("'") && value.endsWith("'") && value.length > 1) {
-                            value = value.slice(1, -1);
-                            isExact = true;
-                        } else if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
-                            value = value.slice(1, -1);
-                            isExact = false;
-                        }
-                        columnFilters[columnIndex] = { value, isExact };
+                        const { value: cleanValue, isExact } = stripQuotes(value);
+                        columnFilters[columnIndex] = { value: cleanValue, isExact, negate };
                         matched = true;
                         break;
                     }
                 }
             }
             if (!matched) {
-                let cleanTerm = term;
-                if ((term.startsWith('"') && term.endsWith('"')) ||
-                    (term.startsWith("'") && term.endsWith("'"))) {
-                    cleanTerm = term.slice(1, -1);
+                let negate = false;
+                let value = term;
+                if (value.startsWith('!')) { negate = true; value = value.substring(1); }
+                // Global search is a "contains" match; backticks/quotes here only
+                // group spaces, they do not force exactness across all fields.
+                value = stripQuotes(value).value;
+                if (!value) return;
+                if (negate) {
+                    globalNot.push(value);
+                } else {
+                    globalSearch += (globalSearch ? ' ' : '') + value;
                 }
-                globalSearch += (globalSearch ? ' ' : '') + cleanTerm;
             }
         });
-        return { columnFilters, globalSearch };
+        return { columnFilters, globalSearch, globalNot };
     }
 
     var _urlParams = new URLSearchParams(window.location.search);
@@ -1147,11 +1167,13 @@ var table = $('#tripRows');
             
             // Parse smart search
             const searchValue = d.search.value || '';
-            const { columnFilters, globalSearch } = parseSmartSearch(searchValue);
+            const { columnFilters, globalSearch, globalNot } = parseSmartSearch(searchValue);
 
             // Set global search to the non-prefixed terms
             d.search.value = globalSearch;
-            
+            // Negative global terms ("!term"): JSON list the backend excludes
+            d.search_not = JSON.stringify(globalNot);
+
             // Add column-specific searches
             if (d.columns) {
                 d.columns.forEach((column, index) => {
@@ -1160,8 +1182,9 @@ var table = $('#tripRows');
                             value: columnFilters[index].value,
                             regex: false
                         };
-                        // Add exact flag as a separate parameter
+                        // Add exact / negate flags as separate parameters
                         d[`columns[${index}][search][exact]`] = columnFilters[index].isExact ? 'true' : 'false';
+                        d[`columns[${index}][search][negate]`] = columnFilters[index].negate ? 'true' : 'false';
                     }
                 });
             }

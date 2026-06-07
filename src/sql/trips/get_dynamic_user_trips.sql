@@ -86,6 +86,15 @@ trip_tags AS (
     WHERE ta.trip_id IN (SELECT uid FROM base)
     GROUP BY ta.trip_id
 ),
+-- NOTE: the global free-text search predicate is NOT baked into FilteredTrips. It
+-- is appended to the outer "SELECT ... FROM FilteredTrips WHERE ..." by the Python
+-- builder (get_trips_api_internal) only when the search box is non-empty. With an
+-- empty search the predicate is absent, so Postgres can elide the airliners join
+-- (its columns are unused by the COUNT query) and there is no tickets join at all,
+-- roughly halving the count-query cost. The ticket-name match is done there as a
+-- correlated EXISTS on ticket_id, so this CTE no longer needs to join tickets.
+-- (Keep this CTE last so the file ends with ')': the builder concatenates the final
+-- SELECT directly onto this template.)
 FilteredTrips AS (
     SELECT
         sub.*,
@@ -109,7 +118,6 @@ FilteredTrips AS (
         trip_tags.tags AS tags
     FROM sub
     LEFT JOIN airliners ON sub.material_type = airliners.iata
-    LEFT JOIN tickets ON sub.ticket_id = tickets.uid
     LEFT JOIN trip_tags ON sub.uid = trip_tags.trip_id
     WHERE
         (CASE
@@ -117,28 +125,4 @@ FilteredTrips AS (
                  AND (sub.utc_filtered_start_datetime IS NULL OR NOW() > sub.utc_filtered_start_datetime)
             THEN 1 ELSE 0
         END) = :past
-        AND (
-            remove_diacritics(LOWER(origin_station)) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(destination_station)) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(operator, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(countries, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(line_name, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(CAST(sub.start_datetime AS text), ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(CAST(sub.end_datetime AS text), ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(sub.type)) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(sub.notes, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(sub.reg, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(material_type, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(material_type_advanced, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(airliners.iata, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(airliners.manufacturer, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(airliners.model, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            remove_diacritics(LOWER(COALESCE(tickets.name, ''))) LIKE remove_diacritics(LOWER(:search)) OR
-            EXISTS (
-                SELECT 1 FROM tags_associations fta
-                JOIN tags ft ON fta.tag_id = ft.uid
-                WHERE fta.trip_id = sub.uid
-                  AND remove_diacritics(LOWER(ft.name)) LIKE remove_diacritics(LOWER(:search))
-            )
-        )
 )
