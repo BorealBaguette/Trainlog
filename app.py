@@ -4205,12 +4205,19 @@ def render_public_trip_page(
     if not trip_list and num_hidden_trips > 0: # all requested trips are hidden
         abort(401)
 
+    def _trip_sort_key(trip):
+        # Dated trips store utc_filtered_start_datetime as a "YYYY-MM-DD HH:MM:SS"
+        # string; non-dated trips use the sentinel ints -1 (past) and 1 (future).
+        # Return a (group, value) tuple so str and int are never compared directly
+        # (which would raise TypeError when mixing dated and non-dated trips).
+        # Order: past non-dated, then dated chronologically, then future non-dated.
+        dt = trip["utc_filtered_start_datetime"]
+        if isinstance(dt, str):
+            return (1, dt)
+        return (0 if dt == -1 else 2, "")
+
     try:
-        trip_list_sorted = sorted(
-            trip_list, key=lambda trip: trip["utc_filtered_start_datetime"]
-        )
-    except TypeError:
-        abort(416)
+        trip_list_sorted = sorted(trip_list, key=_trip_sort_key)
     except Exception:
         abort(500)
 
@@ -6065,12 +6072,18 @@ def processPublicTrips(tripIds):
             }
         )
     
+    def _pub_trip_sort_key(d):
+        # Dated trips store utc_filtered_start_datetime as a "YYYY-MM-DD HH:MM:SS"
+        # string; non-dated trips use the sentinel ints -1 (past) and 1 (future).
+        # Return a (group, value) tuple so str and int are never compared directly
+        # (which would raise TypeError when mixing dated and non-dated trips).
+        dt = d["trip"]["utc_filtered_start_datetime"]
+        if isinstance(dt, str):
+            return (1, dt)
+        return (0 if dt == -1 else 2, "")
+
     sortedTripList = sorted(tripList, key=lambda d: d["trip"]["uid"], reverse=True)
-    sortedTripList = sorted(
-        sortedTripList,
-        key=lambda d: d["trip"]["utc_filtered_start_datetime"],
-        reverse=True,
-    )
+    sortedTripList = sorted(sortedTripList, key=_pub_trip_sort_key, reverse=True)
     
     priceDict = {
         "total_price": total_price, 
