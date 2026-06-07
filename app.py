@@ -6364,7 +6364,12 @@ def adapt_pg_trip_row(mapping, username):
     if "trip_type" in d:
         d["type"] = d.pop("trip_type")
     if "purchase_date" in d:
-        d["purchasing_date"] = d.pop("purchase_date")
+        purchase_date = d.pop("purchase_date")
+        # Conceptually a date; PG stores it as TIMESTAMP. Format date-only so the
+        # edit page <input type="date"> populates (a full datetime won't bind).
+        if isinstance(purchase_date, (datetime, date)):
+            purchase_date = purchase_date.strftime("%Y-%m-%d")
+        d["purchasing_date"] = purchase_date
     d.pop("user_id", None)
     d["username"] = username
 
