@@ -60,10 +60,20 @@ def create_trip(trip: Trip, pg_session=None):
         path.set_trip_id(trip.trip_id)
         ewkt = coords_to_ewkt([[node.lat, node.lng] for node in path.list])
         if ewkt is not None:
+            # altitude/timestamps are JSON-string arrays aligned with the geom
+            # vertices (None for non-flights / paths without a 3D track).
             pg.execute(
-                "INSERT INTO paths (trip_id, geom) VALUES (:trip_id, ST_GeomFromEWKT(:ewkt))"
-                " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom",
-                {"trip_id": trip.trip_id, "ewkt": ewkt},
+                "INSERT INTO paths (trip_id, geom, altitude, timestamps)"
+                " VALUES (:trip_id, ST_GeomFromEWKT(:ewkt),"
+                " CAST(:altitude AS jsonb), CAST(:timestamps AS jsonb))"
+                " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom,"
+                " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps",
+                {
+                    "trip_id": trip.trip_id,
+                    "ewkt": ewkt,
+                    "altitude": getattr(trip, "altitude", None),
+                    "timestamps": getattr(trip, "timestamps", None),
+                },
             )
 
     logger.info(f"Successfully created trip {trip.trip_id}")

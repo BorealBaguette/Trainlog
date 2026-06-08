@@ -36,6 +36,8 @@ window.flutterBridge = {
 let currentPolyline = null;
 let useFR24 = true;
 let fr24PathCache = null;
+let fr24AltCache = null;   // altitude (metres), parallel to fr24PathCache
+let fr24TimeCache = null;  // timestamps (epoch seconds), parallel to fr24PathCache
 
 const id = getGetParams().get("id");
 let newTrip = null;
@@ -96,7 +98,10 @@ async function updateRoute() {
             showLoadingSidebar();
             try {
                 const res = await fetch(`{{url_for("flight_tracks", username=username, fr24_id='' )}}${newTrip.fr24_id}`);
-                fr24PathCache = await res.json();
+                const data = await res.json();
+                fr24PathCache = data.coordinates;
+                fr24AltCache = data.altitude;
+                fr24TimeCache = data.timestamps;
             } catch (e) {
                 console.warn("FR24 path fetch failed, falling back to geodesic");
                 useFR24 = false;
@@ -215,10 +220,14 @@ async function saveTrip() {
     sidebar.setContent('<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>');
 
     let pathToSave;
+    let altToSave = null;
+    let timeToSave = null;
 
     if (useFR24 && Array.isArray(fr24PathCache) && fr24PathCache.length >= 2) {
-        // Save FR24 path
+        // Save FR24 path (with altitude/timestamps, parallel to the path points)
         pathToSave = fr24PathCache.map(p => ({ lat: p[0], lng: p[1] }));
+        altToSave = fr24AltCache;
+        timeToSave = fr24TimeCache;
         console.log("Saving FR24 path", pathToSave);
         newTrip["trip_length"] = getTotalDistanceFromPath(fr24PathCache);
         newTrip["estimated_trip_duration"] = newTrip.fr24_duration ?? newTrip.estimated_trip_duration;
@@ -237,6 +246,8 @@ async function saveTrip() {
         data: {
             newTrip: JSON.stringify(newTrip),
             jsonPath: JSON.stringify(pathToSave),
+            altitude: altToSave ? JSON.stringify(altToSave) : "",
+            timestamps: timeToSave ? JSON.stringify(timeToSave) : "",
             fromApp: fromApp
         },
         success: function (res) {

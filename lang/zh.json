@@ -559,6 +559,8 @@
     "tileserver_jawg_lagoon": "Jawg Lagoon",
     "tileserver_thunderforest_transport": "Thunderforest 交通",
     "globeLabel": "3D 地球仪",
+    "flight3dSetting": "向所有人以3D（高度）显示我的航班",
+    "flight3dToggle": "切换3D飞行高度",
     "importPathFromGpx": "从 GPX 导入路径",
     "close": "关闭",
     "dropGpxFileHere": "将您的 GPX 文件拖到这里",

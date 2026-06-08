@@ -132,6 +132,7 @@ from py.utils import (
     hex_to_rgb,
     interpolate_great_circle,
     interpolate_points_if_gaps,
+    interpolate_track_if_gaps,
     load_config,
     remove_diacritics,
     rgb_to_hex,
@@ -452,6 +453,19 @@ def flight_summary_reg(username):
     return jsonify(result), status
 
 
+def _fr24_epoch(ts):
+    """Normalise an FR24 track timestamp (ISO 8601 string or epoch number) to
+    epoch seconds. Returns None when missing/unparseable."""
+    if ts is None:
+        return None
+    if isinstance(ts, (int, float)):
+        return int(ts)
+    try:
+        return int(datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
+
+
 @app.route("/api/u/<username>/flight_tracks/<fr24_id>")
 @login_required
 def flight_tracks(username, fr24_id):
@@ -479,18 +493,32 @@ def flight_tracks(username, fr24_id):
             {"error": "Failed to fetch track data from FR24 API", "details": str(e)}
         ), 502
 
-    # Extract lat/lon coordinates
+    # Extract lat/lon plus altitude (Z) and timestamp (T) for the 3D track.
     if not data or "tracks" not in data[0]:
         return jsonify({"error": "No track data found"}), 404
 
-    coordinates = [
-        [track["lat"], track["lon"]]
+    # FR24 altitude is in feet -> store metres; timestamp -> epoch seconds.
+    enriched = [
+        [
+            track["lat"],
+            track["lon"],
+            round((track.get("alt") or 0) * 0.3048, 1),
+            _fr24_epoch(track.get("timestamp")),
+        ]
         for track in data[0]["tracks"]
         if "lat" in track and "lon" in track
     ]
-    coordinates = interpolate_points_if_gaps(coordinates, 50)
+    # Interpolate all four components together so the arrays stay aligned with
+    # the (identical) interpolation the 2D path used previously.
+    enriched = interpolate_track_if_gaps(enriched, 50)
 
-    return jsonify(coordinates)
+    coordinates = [[p[0], p[1]] for p in enriched]
+    altitude = [p[2] for p in enriched]
+    timestamps = [p[3] for p in enriched]
+
+    return jsonify(
+        {"coordinates": coordinates, "altitude": altitude, "timestamps": timestamps}
+    )
 
 
 def getLangDropdown(user):
@@ -653,7 +681,7 @@ def starts_with_flag_emoji(s):
     return bool(re.match(pattern, s))
 
 
-def saveTripToDb(username, newTrip, newPath, trip_type="train"):
+def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, timestamps=None):
     newPath[0]["lat"] = float(newPath[0]["lat"])
     newPath[0]["lng"] = float(newPath[0]["lng"])
     newPath[-1]["lat"] = float(newPath[-1]["lat"])
@@ -766,6 +794,8 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train"):
         arrival_delay=sanitize_param(newTrip.get("arrival_delay")),
         power_type=newTrip.get("powerType"),
         co2_override=float(newTrip["co2Override"]) if newTrip.get("co2Override") else None,
+        altitude=altitude,
+        timestamps=timestamps,
     )
 
     create_trip(trip)
@@ -4781,8 +4811,17 @@ def saveFlight(username, type):
         airlineLogoProcess(newTrip)
         # TODO : Fix visibility for flights
         newTrip["visibility"] = "public"
+        # Optional 3D track (altitude in metres, timestamps in epoch seconds),
+        # each parallel to newPath. Passed through as JSON strings (or None).
+        altitude = request.form.get("altitude") or None
+        timestamps = request.form.get("timestamps") or None
         trip = saveTripToDb(
-            username=username, newTrip=newTrip, newPath=newPath, trip_type=type
+            username=username,
+            newTrip=newTrip,
+            newPath=newPath,
+            trip_type=type,
+            altitude=altitude,
+            timestamps=timestamps,
         )
         if request.form["fromApp"] == "true":
             return jsonify({
@@ -5017,6 +5056,11 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         power_type=power_type,
         co2_override=co2_override,
     )
+
+    # Fresh 3D flight track when the route was (re-)imported from FR24; absent on
+    # plain metadata edits, where update_trip's COALESCE preserves the stored one.
+    trip.altitude = formData.get("altitude") or None
+    trip.timestamps = formData.get("timestamps") or None
 
     return trip
 
@@ -5992,9 +6036,17 @@ def processPublicTrips(tripIds):
         pathResult = pg.execute(
             get_user_lines_query(), {"ids": [int(i) for i in tripIds]}
         ).fetchall()
+        # 3D flight track (altitude/timestamps), fetched separately so the
+        # heavily-shared get_user_lines query keeps its exact contract.
+        trackResult = pg.execute(
+            "SELECT trip_id, altitude, timestamps FROM paths WHERE trip_id = ANY(:ids)",
+            {"ids": [int(i) for i in tripIds]},
+        ).fetchall()
     paths = {}
     for path in pathResult:
         paths[path["trip_id"]] = path["path"]
+    altitudes = {row["trip_id"]: row["altitude"] for row in trackResult}
+    timestamps = {row["trip_id"]: row["timestamps"] for row in trackResult}
 
     total_price = 0
     total_carbon = 0
@@ -6077,11 +6129,23 @@ def processPublicTrips(tripIds):
             and not session.get(owner)
         ):
             abort(401)
+        # 3D altitude track is a premium feature, opt-in per owner. Gate it on the
+        # owner's CURRENT premium status so revoking premium hides it immediately.
+        # Altitude is stored for any type (e.g. GPX with <ele>), but only flights
+        # render it for now.
+        is_flight = trip.get("type") in ("air", "helicopter")
+        show_3d = bool(
+            is_flight
+            and getattr(user, "premium", False)
+            and getattr(user, "flight_3d", False)
+        )
         tripList.append(
             {
                 "time": trip["time"],
                 "trip": dict(trip),
                 "path": path_data,
+                "altitude": altitudes.get(trip["uid"]) if show_3d else None,
+                "timestamps": timestamps.get(trip["uid"]) if show_3d else None,
             }
         )
     
@@ -6928,6 +6992,9 @@ def user_settings(username):
         params["default_landing"] = request.form["default_landing"]
         params["tileserver"] = request.form["tileserver"]
         params["globe"] = "globe" in request.form
+        # Premium-only toggle: only honour it for premium users so a crafted POST
+        # can't enable it without premium.
+        params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
 
         for param in params:
             if getattr(user, param) != params[param]:
@@ -6944,6 +7011,7 @@ def user_settings(username):
     friend_search_checked = "checked" if user.friend_search else ""
     appear_on_global_checked = "checked" if user.appear_on_global else ""
     colorblind_checked = "checked" if user.colorblind else ""
+    flight_3d_checked = "checked" if user.flight_3d else ""
 
     return render_template(
         "user_settings.html",
@@ -6956,6 +7024,7 @@ def user_settings(username):
         friend_search_checked=friend_search_checked,
         appear_on_global_checked=appear_on_global_checked,
         colorblind_checked=colorblind_checked,
+        flight_3d_checked=flight_3d_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,

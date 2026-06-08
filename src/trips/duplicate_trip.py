@@ -12,10 +12,12 @@ def duplicate_trip(trip_id: int):
         new_trip_id = pg.execute(
             duplicate_trip_query(), {"trip_id": trip_id}
         ).fetchone()[0]
-        # Copy the route geometry to the new trip.
+        # Copy the route geometry (and any 3D flight track) to the new trip.
         pg.execute(
-            "INSERT INTO paths (trip_id, geom) SELECT :new_id, geom FROM paths WHERE trip_id = :old_id"
-            " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom",
+            "INSERT INTO paths (trip_id, geom, altitude, timestamps)"
+            " SELECT :new_id, geom, altitude, timestamps FROM paths WHERE trip_id = :old_id"
+            " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom,"
+            " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps",
             {"new_id": new_trip_id, "old_id": trip_id},
         )
 

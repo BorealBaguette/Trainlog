@@ -19,6 +19,10 @@ const MapConfig = {
         { id: 'aerialway', icon: 'fa-cable-car', color: '#afcf3b' },
         { id: 'other', icon: 'fa-circle-question', color: '#000000' }
     ],
+    // Vertical exaggeration for 3D flight altitude. Real cruise (~11 km) over a
+    // ~1000 km route is ~1% of the route length and barely visible, so the stored
+    // (true-metre) altitude is multiplied by this at render time only.
+    altitudeExaggeration: 1,
     jawgAllowedLangs: ["de", "en", "es", "fr", "it", "ja", "ko", "nl", "ru", "zh"],
     vectorStylePaths: {
         "jawg-streets-v2":'/getVectorStyle/{language}/jawg-streets.json',
@@ -669,8 +673,182 @@ function modifyVectorStyle(style, modifications = {}) {
 }
 
 // Export utilities
+// ─── 3D flight tracks (altitude profile) ────────────────────────────────────
+
+let _deckGLPromise = null;
+
+// Lazy-load deck.gl from CDN (only when a 3D flight is actually present).
+function loadDeckGL() {
+    if (window.deck) return Promise.resolve(window.deck);
+    if (_deckGLPromise) return _deckGLPromise;
+    _deckGLPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/deck.gl@9.0.0/dist.min.js';
+        s.onload = () => resolve(window.deck);
+        s.onerror = () => reject(new Error('Failed to load deck.gl'));
+        document.head.appendChild(s);
+    });
+    return _deckGLPromise;
+}
+
+function _hexToRgbArray(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [64, 185, 31];
+}
+
+function _coerceArray(v) {
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') { try { return JSON.parse(v); } catch (e) { return null; } }
+    return null;
+}
+
+// Viewer-side preference (per-device, free for everyone — not premium) for
+// rendering 3D flight tracks. Default ON so premium owners' flights show their
+// 3D "clout", but any viewer can switch it off for performance. Stored in
+// localStorage so it's a machine-specific choice and works for anonymous viewers.
+const FLIGHT_3D_VIEW_KEY = 'trainlog_flight_3d_view';
+function flight3DViewEnabled() {
+    try { return localStorage.getItem(FLIGHT_3D_VIEW_KEY) !== 'off'; } catch (e) { return true; }
+}
+function setFlight3DViewEnabled(on) {
+    try { localStorage.setItem(FLIGHT_3D_VIEW_KEY, on ? 'on' : 'off'); } catch (e) { /* ignore */ }
+}
+
+// A small button to toggle the 3D flight view. Only added when the page actually
+// has 3D-capable (premium-owner) flights, so it doubles as a subtle signal of the
+// premium flex without ever nagging for money. Positioned as a standalone button
+// (not a corner control) so it stays clear of the zoom group and the sidebar
+// handle, which both occupy the top-right corner stack.
+function _addFlight3DToggleControl(map, onToggle, title) {
+    const container = map.getContainer();
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = title || 'Toggle 3D flight altitude';
+    btn.innerHTML = '<i class="fa-solid fa-plane-departure"></i>';
+    btn.style.cssText =
+        'position:absolute;z-index:399;background:#fff;border:none;border-radius:8px;' +
+        'box-shadow:0 1px 5px rgba(0,0,0,.3);font-size:14px;color:#333;' +
+        'cursor:pointer;padding:0;';
+    container.appendChild(btn);
+
+    // Align to the bottom-left legend ("i") button: same left edge and size,
+    // stacked just above it. Falls back to a fixed bottom-left spot if absent.
+    const legend = document.querySelector('.legend-control');
+    function place() {
+        if (legend) {
+            const lr = legend.getBoundingClientRect();
+            const cr = container.getBoundingClientRect();
+            btn.style.left = (lr.left - cr.left) + 'px';
+            btn.style.bottom = (cr.bottom - lr.top + 8) + 'px';
+            btn.style.width = lr.width + 'px';
+            btn.style.height = lr.height + 'px';
+        } else {
+            btn.style.left = '20px';
+            btn.style.bottom = '68px';
+            btn.style.width = '42px';
+            btn.style.height = '38px';
+        }
+    }
+    place();
+    window.addEventListener('resize', place);
+
+    const sync = () => { btn.style.opacity = flight3DViewEnabled() ? '1' : '0.45'; };
+    btn.addEventListener('click', () => { onToggle(!flight3DViewEnabled()); sync(); });
+    sync();
+    return btn;
+}
+
+// Render flights that carry an altitude array as a 3D deck.gl PathLayer. At pitch
+// 0 the path projects exactly onto its 2D ground line (invisible from the top);
+// tilting the map reveals the altitude profile rising above the ground track.
+// Server only sends altitude for premium owners (the "clout" gate); here a free
+// per-viewer toggle decides whether to actually render it (the performance gate).
+async function build3DFlightLayer(map, trips, options = {}) {
+    // deck.gl's overlay can't follow MapLibre's globe projection (the track
+    // detaches from the sphere), so skip 3D entirely in globe mode — the flat 2D
+    // lines render as before.
+    const proj = map.getProjection && map.getProjection();
+    if (proj && proj.type === 'globe') return null;
+
+    const exaggeration = options.exaggeration ?? MapConfig.altitudeExaggeration;
+    // Draw a vertical line from every Nth track point down to the ground track.
+    const dropStep = options.dropLineStep ?? 1;
+
+    const flights = [];
+    const dropLines = [];  // vertical segments {source:[lng,lat,alt], target:[lng,lat,0]}
+    trips.forEach(trip => {
+        const path = _coerceArray(trip.path);          // [[lat, lng], ...]
+        const altitude = _coerceArray(trip.altitude);  // [m, ...] parallel to path
+        if (!path || !altitude || altitude.length < 2) return;
+        const n = Math.min(path.length, altitude.length);
+        const coords = [];
+        for (let i = 0; i < n; i++) {
+            const lng = path[i][1], lat = path[i][0];
+            const z = (altitude[i] || 0) * exaggeration;
+            coords.push([lng, lat, z]);
+            if (i % dropStep === 0 && z > 0) {
+                dropLines.push({ source: [lng, lat, z], target: [lng, lat, 0] });
+            }
+        }
+        flights.push({ uid: trip.trip.uid, coords });
+    });
+
+    // No premium 3D flights on this page -> no overlay, no toggle, no nagging.
+    if (flights.length === 0) return null;
+
+    const airColor = _hexToRgbArray(
+        (MapConfig.transportTypes.find(t => t.id === 'air') || {}).color
+    );
+
+    let overlay = null;
+    async function buildOverlay() {
+        if (overlay) return;
+        const deck = await loadDeckGL();  // only loaded when the viewer wants 3D
+        const pathLayer = new deck.PathLayer({
+            id: 'flight-3d',
+            data: flights,
+            getPath: d => d.coords,
+            getColor: airColor,
+            widthUnits: 'pixels',
+            getWidth: 2,
+            widthMinPixels: 1,
+            jointRounded: true,
+            capRounded: true
+        });
+        // Translucent "wall" of vertical droplines connecting the 3D track to its
+        // 2D ground projection, so the altitude profile reads even when nearly flat.
+        const dropLayer = new deck.LineLayer({
+            id: 'flight-3d-drops',
+            data: dropLines,
+            getSourcePosition: d => d.source,
+            getTargetPosition: d => d.target,
+            getColor: [...airColor, 70],
+            getWidth: 1,
+            widthUnits: 'pixels',
+            widthMinPixels: 1
+        });
+        // Overlaid (not interleaved): deck.gl draws in its own canvas on top of the
+        // map and still camera-syncs pitch for the 3D effect. Interleaved mode shares
+        // MapLibre's WebGL context and can blank the (raster) base map.
+        overlay = new deck.MapboxOverlay({ interleaved: false, layers: [dropLayer, pathLayer] });
+        map.addControl(overlay);
+    }
+    function removeOverlay() {
+        if (overlay) { map.removeControl(overlay); overlay = null; }
+    }
+
+    _addFlight3DToggleControl(map, async (on) => {
+        setFlight3DViewEnabled(on);
+        if (on) await buildOverlay(); else removeOverlay();
+    }, options.toggleTitle);
+
+    if (flight3DViewEnabled()) await buildOverlay();
+    return overlay;
+}
+
 window.MapLibreUtils = {
     MapConfig,
+    build3DFlightLayer,
     initializeMapLibre,
     isVectorTileServer,
     getVectorStyleUrl,

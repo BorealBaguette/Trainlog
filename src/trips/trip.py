@@ -55,6 +55,8 @@ class Trip:
         arrival_delay=None,
         power_type=None,
         co2_override=None,
+        altitude=None,
+        timestamps=None,
     ):
         self.trip_id = trip_id
         self.username = username
@@ -92,6 +94,10 @@ class Trip:
         self.path = path
         self.power_type = power_type
         self.co2_override = co2_override
+        # Optional 3D flight track (JSON-string arrays, parallel to the geom
+        # vertices): altitude in metres, timestamps in epoch seconds.
+        self.altitude = altitude
+        self.timestamps = timestamps
         self.carbon = (
             calculate_carbon_footprint_for_trip(vars(self), path) if path else None
         )

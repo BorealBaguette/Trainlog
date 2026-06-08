@@ -559,6 +559,8 @@
     "tileserver_jawg_lagoon": "Jawg Lagoon",
     "tileserver_thunderforest_transport": "Thunderforest Transport",
     "globeLabel": "Globo 3D",
+    "flight3dSetting": "Mostrar meus voos em 3D (altitude) para todos",
+    "flight3dToggle": "Alternar altitude de voo em 3D",
     "importPathFromGpx": "Importar Caminho do GPX",
     "close": "Fechar",
     "dropGpxFileHere": "Solte seu arquivo GPX aqui",

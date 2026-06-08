@@ -559,6 +559,8 @@
     "tileserver_jawg_lagoon": "Jawg Lagoon",
     "tileserver_thunderforest_transport": "Thunderforest 교통",
     "globeLabel": "3D 지구본",
+    "flight3dSetting": "내 비행을 3D(고도)로 모두에게 표시",
+    "flight3dToggle": "3D 비행 고도 전환",
     "importPathFromGpx": "GPX에서 경로 가져오기",
     "close": "닫기",
     "dropGpxFileHere": "GPX 파일을 여기에 놓으세요",

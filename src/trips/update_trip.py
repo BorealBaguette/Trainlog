@@ -69,10 +69,30 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
             coords = [[c["lat"], c["lng"]] for c in coords]
         ewkt = coords_to_ewkt(coords)
         if ewkt is not None:
-            pg.execute(
-                "INSERT INTO paths (trip_id, geom) VALUES (:trip_id, ST_GeomFromEWKT(:ewkt))"
-                " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom",
-                {"trip_id": trip_id, "ewkt": ewkt},
-            )
+            # The 3D flight track (altitude/timestamps) must stay aligned with the
+            # geometry. If the route itself was (re-)imported/edited (formData carries
+            # a "path"), replace the track with whatever came with it — fresh FR24
+            # arrays, or NULL for a GPX/manual path (clears the now-stale track).
+            # A metadata-only edit reuses the existing geometry, so leave it intact.
+            if formData is not None and "path" in formData:
+                pg.execute(
+                    "INSERT INTO paths (trip_id, geom, altitude, timestamps)"
+                    " VALUES (:trip_id, ST_GeomFromEWKT(:ewkt),"
+                    " CAST(:altitude AS jsonb), CAST(:timestamps AS jsonb))"
+                    " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom,"
+                    " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps",
+                    {
+                        "trip_id": trip_id,
+                        "ewkt": ewkt,
+                        "altitude": getattr(trip, "altitude", None),
+                        "timestamps": getattr(trip, "timestamps", None),
+                    },
+                )
+            else:
+                pg.execute(
+                    "INSERT INTO paths (trip_id, geom) VALUES (:trip_id, ST_GeomFromEWKT(:ewkt))"
+                    " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom",
+                    {"trip_id": trip_id, "ewkt": ewkt},
+                )
 
     logger.info(f"Successfully updated trip {trip_id}")

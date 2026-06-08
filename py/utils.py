@@ -422,8 +422,6 @@ def interpolate_points_if_gaps(points, max_distance_km=50):
     if not points or len(points) < 2:
         return points
 
-    print(len(points))
-
     interpolated = [points[0]]
 
     for i in range(1, len(points)):
@@ -439,9 +437,48 @@ def interpolate_points_if_gaps(points, max_distance_km=50):
             interpolated.extend(intermediate)
 
         interpolated.append(curr)
-    print(len(interpolated))
 
     return interpolated
+
+
+def interpolate_track_if_gaps(points, max_distance_km=50):
+    """Like interpolate_points_if_gaps but for enriched (lat, lon, alt, t) points.
+
+    Inserts the same great-circle midpoints into >max_distance_km gaps as
+    interpolate_points_if_gaps, while linearly interpolating altitude and time
+    with the identical fraction used inside interpolate_great_circle. This keeps
+    all four components aligned so the result can be split into parallel
+    coordinate / altitude / timestamp arrays without desyncing.
+    """
+    if not points or len(points) < 2:
+        return points
+
+    interpolated = [points[0]]
+
+    for i in range(1, len(points)):
+        prev = points[i - 1]
+        curr = points[i]
+        if geodesic((prev[0], prev[1]), (curr[0], curr[1])).km > max_distance_km:
+            mids = interpolate_great_circle(
+                (prev[0], prev[1]), (curr[0], curr[1]), max_distance_km=max_distance_km
+            )
+            n = len(mids)
+            for j, (mlat, mlon) in enumerate(mids, start=1):
+                f = j / (n + 1)
+                malt = _lerp(prev[2], curr[2], f)
+                mt = _lerp(prev[3], curr[3], f)
+                interpolated.append((mlat, mlon, malt, mt))
+
+        interpolated.append(curr)
+
+    return interpolated
+
+
+def _lerp(a, b, f):
+    """Linear interpolation that passes None through (missing alt/timestamp)."""
+    if a is None or b is None:
+        return None
+    return a + f * (b - a)
 
 
 def time_ago(dt):

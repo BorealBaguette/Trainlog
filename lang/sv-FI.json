@@ -559,6 +559,8 @@
     "tileserver_jawg_lagoon": "Jawg Lagoon",
     "tileserver_thunderforest_transport": "Thunderforest Transport",
     "globeLabel": "3D-glob",
+    "flight3dSetting": "Visa mina flyg i 3D (höjd) för alla",
+    "flight3dToggle": "Växla 3D-flyghöjd",
     "importPathFromGpx": "Importera väg från GPX",
     "close": "Stäng",
     "dropGpxFileHere": "Släpp din GPX-fil här",

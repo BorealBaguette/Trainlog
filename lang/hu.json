@@ -559,6 +559,8 @@
     "tileserver_jawg_lagoon": "Jawg Lagoon",
     "tileserver_thunderforest_transport": "Thunderforest Szállítás",
     "globeLabel": "3D földgömb",
+    "flight3dSetting": "Repüléseim megjelenítése 3D-ben (magasság) mindenkinek",
+    "flight3dToggle": "3D repülési magasság be/ki",
     "importPathFromGpx": "Útvonal importálása GPX-ből",
     "close": "Bezárás",
     "dropGpxFileHere": "Húzza ide a GPX fájlt",

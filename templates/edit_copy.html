@@ -660,6 +660,8 @@
 
     var tripType = "{{tripType}}";
     var updatedPath = null;
+    var updatedAltitude = null;    // FR24 altitude (m), parallel to updatedPath
+    var updatedTimestamps = null;  // FR24 timestamps (epoch s), parallel to updatedPath
     var updatedRouteDetails = null;
 
     if (tripType == "air") {
@@ -761,6 +763,8 @@
 
     // GPX Import functionality
     let gpxPath = null;
+    let gpxAltitude = null;    // metres, parallel to gpxPath (null if GPX has no <ele>)
+    let gpxTimestamps = null;  // epoch seconds, parallel to gpxPath (null if no <time>)
     let lastImportType = null;
 
     // GPX Drop zone functionality
@@ -817,26 +821,41 @@
                 const waypoints = gpxDoc.querySelectorAll('wpt');
 
                 let coordinates = [];
+                // Altitude (metres, from <ele>) and time (epoch seconds, from <time>),
+                // built parallel to coordinates so they stay aligned 1:1 with the path.
+                let altitudes = [];
+                let times = [];
+                let hasEle = false, hasTime = false;
+
+                const pushPoint = (point) => {
+                    const lat = parseFloat(point.getAttribute('lat'));
+                    const lon = parseFloat(point.getAttribute('lon'));
+                    coordinates.push({ lat: lat, lng: lon });
+
+                    const eleEl = point.querySelector('ele');
+                    let alt = null;
+                    if (eleEl && eleEl.textContent.trim() !== '') {
+                        const v = parseFloat(eleEl.textContent);
+                        if (!isNaN(v)) { alt = v; hasEle = true; }  // GPX <ele> is already metres
+                    }
+                    altitudes.push(alt);
+
+                    const timeEl = point.querySelector('time');
+                    let t = null;
+                    if (timeEl && timeEl.textContent.trim() !== '') {
+                        const ms = Date.parse(timeEl.textContent.trim());
+                        if (!isNaN(ms)) { t = Math.round(ms / 1000); hasTime = true; }
+                    }
+                    times.push(t);
+                };
 
                 // Try track points first, then route points, then waypoints
                 if (trackPoints.length > 0) {
-                    trackPoints.forEach(point => {
-                        const lat = parseFloat(point.getAttribute('lat'));
-                        const lon = parseFloat(point.getAttribute('lon'));
-                        coordinates.push({ lat: lat, lng: lon });
-                    });
+                    trackPoints.forEach(pushPoint);
                 } else if (routePoints.length > 0) {
-                    routePoints.forEach(point => {
-                        const lat = parseFloat(point.getAttribute('lat'));
-                        const lon = parseFloat(point.getAttribute('lon'));
-                        coordinates.push({ lat: lat, lng: lon });
-                    });
+                    routePoints.forEach(pushPoint);
                 } else if (waypoints.length > 0) {
-                    waypoints.forEach(point => {
-                        const lat = parseFloat(point.getAttribute('lat'));
-                        const lon = parseFloat(point.getAttribute('lon'));
-                        coordinates.push({ lat: lat, lng: lon });
-                    });
+                    waypoints.forEach(pushPoint);
                 }
 
                 if (coordinates.length < 2) {
@@ -847,8 +866,11 @@
 
                 showGpxProgress(80);
 
-                // Store the path data in the expected format
+                // Store the path plus its parallel altitude/time arrays (kept only when
+                // the GPX actually carries them; written together with XY on save).
                 gpxPath = coordinates;
+                gpxAltitude = hasEle ? altitudes : null;
+                gpxTimestamps = hasTime ? times : null;
 
                 showGpxProgress(100);
 
@@ -907,6 +929,10 @@
     document.getElementById('gpxImportBtn').addEventListener('click', function () {
         if (gpxPath) {
             updatedPath = gpxPath;
+            // Use the GPX's own altitude/time when present, else clear (so a prior
+            // FR24 import this session can't leave a stale track on the new geometry).
+            updatedAltitude = gpxAltitude;
+            updatedTimestamps = gpxTimestamps;
             lastImportType = 'gpx';
 
             // Calculate trip length and duration from GPX path
@@ -1154,21 +1180,25 @@
 
         try {
             // Fetch the detailed path data from FR24
-            const pathRes = await $.get(`{{url_for("flight_tracks", username=username, fr24_id='' )}}${flight.fr24_id}`);
+            const pathData = await $.get(`{{url_for("flight_tracks", username=username, fr24_id='' )}}${flight.fr24_id}`);
+            const coordinates = pathData.coordinates;
 
             updateFr24PathProgressBar(40);
 
-            if (!pathRes || pathRes.length === 0) {
+            if (!coordinates || coordinates.length === 0) {
                 showFr24PathError('{{noPathDataAvailable}}');
                 updateFr24PathProgressBar(0);
                 return;
             }
 
-            // Convert FR24 path to the expected format (array of {lat, lng} objects)
-            updatedPath = pathRes.map(point => ({
+            // Convert FR24 path to the expected format (array of {lat, lng} objects),
+            // and keep altitude/timestamps (parallel to the path) for the 3D track.
+            updatedPath = coordinates.map(point => ({
                 lat: point[0],
                 lng: point[1]
             }));
+            updatedAltitude = pathData.altitude || null;
+            updatedTimestamps = pathData.timestamps || null;
 
             if (updatedPath.length < 2) {
                 showFr24PathError('{{insufficientPathData}}');
@@ -1179,7 +1209,7 @@
             updateFr24PathProgressBar(60);
 
             // Calculate trip metrics using the same logic as air routing
-            const tripLength = getTotalDistanceFromPath(pathRes);
+            const tripLength = getTotalDistanceFromPath(coordinates);
             let tripDuration = null;
 
             // Calculate duration from flight times (following air routing pattern)
@@ -1459,6 +1489,9 @@
 
         if (updatedPath != null) {
             formData["path"] = JSON.stringify(updatedPath);
+            // Replace the 3D track together with the geom when re-imported from FR24.
+            if (updatedAltitude != null) formData["altitude"] = JSON.stringify(updatedAltitude);
+            if (updatedTimestamps != null) formData["timestamps"] = JSON.stringify(updatedTimestamps);
             if (updatedRouteDetails != null) {
                 newTrip["details"] = JSON.stringify(updatedRouteDetails);
             }

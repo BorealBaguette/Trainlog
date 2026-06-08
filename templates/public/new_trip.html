@@ -13,6 +13,12 @@
     background: #1a1d28;
 }
 
+/* Slightly smaller bottom-left legend button (the 3D toggle auto-matches its size). */
+.legend-toggle {
+    padding: 8px 11px;
+    font-size: 15px;
+}
+
 #sidebar {
     position: fixed;
     top: 0;
@@ -1025,6 +1031,12 @@ function placePolylines(trips) {
         },
         showShadows: true
     });
+
+    // Overlay a 3D altitude profile for any flights that carry altitude data
+    // (invisible top-down, rises into view when the map is tilted).
+    MapLibreUtils.build3DFlightLayer(map, trips, { toggleTitle: {{ flight3dToggle|tojson }} }).catch(err =>
+        console.warn('3D flight layer failed:', err)
+    );
 
     // Click an itinerary leg to highlight (and zoom to) that trip on the map.
     $('#itinerary').off('click.highlight').on('click.highlight', '.itinerary-trip', function() {
