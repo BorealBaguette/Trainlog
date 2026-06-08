@@ -561,6 +561,14 @@ function toRouting(data, routingUrl, type){
   if (["accommodation", "restaurant", "poi"].includes(type)){
     newTrip["destinationStation"] = newTrip["originStation"]
   }
+  // Collect intermediate "via" waypoints (resolved label -> [coord, label])
+  newTrip["viaStations"] = [];
+  $(".viaStation").each(function(){
+    var val = $(this).val();
+    if (val && globalStationDict[val]){
+      newTrip["viaStations"].push(globalStationDict[val]);
+    }
+  });
   // Carry FR24-imported flight data through (set by the FR24 import on the air form)
   if (typeof window.FR24 !== "undefined" && window.FR24){
     newTrip["fr24_id"] = window.FR24["fr24_id"];
