@@ -155,6 +155,12 @@ from src.api.vagonweb import vagonweb_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src.consts import DbNames, TripTypes
+from src.global_map import (
+    available_bins,
+    build_all_async,
+    build_status,
+    get_cache_path,
+)
 from src.pg import setup_db, pg_session
 from src.suspicious_activity import (
     check_denied_login,
@@ -9744,6 +9750,59 @@ def get_all_current_trips():
     """Get all currently active trips (admin/owner access required)."""
     result = get_current_trips_data(public_only=False)
     return jsonify(result)
+
+
+@app.route("/bestagons")
+def bestagons_map():
+    """
+    Bestagons: experimental deck.gl hexagon view of every trip in the database,
+    split into per-trip-type datasets (each hexagon needs >= 3 distinct users).
+    """
+    username = getUser()
+    return render_template(
+        "public/bestagons.html",
+        username=username,
+        points_endpoint=url_for("bestagons_points"),
+        datasets=available_bins(),
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+        title="Bestagons",
+    )
+
+
+@app.route("/admin/rebuild_bestagons", methods=["POST"])
+@owner_required
+def rebuild_bestagons():
+    """Start a background rebuild of all bestagons bins (owner only)."""
+    return jsonify({"started": build_all_async()})
+
+
+@app.route("/admin/bestagons_status")
+@owner_required
+def bestagons_status():
+    return jsonify(build_status())
+
+
+@app.route("/api/bestagons/points.bin")
+def bestagons_points():
+    """Serve a pre-aggregated bestagons dataset (?set=land|rail|road|air|type_*).
+
+    Serve-only: building is expensive (minutes) and goes through the admin
+    "Rebuild Bestagons" button (or owner ?refresh=1, which starts it async).
+    """
+    if request.args.get("refresh") == "1" and session.get("userinfo", {}).get("is_owner"):
+        build_all_async()
+        return jsonify({"building": True}), 202
+
+    path = get_cache_path(name=request.args.get("set", "land"))
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        abort(404)
+    return send_file(
+        path,
+        mimetype="application/octet-stream",
+        conditional=True,
+        last_modified=os.path.getmtime(path),
+    )
 
 
 @app.route("/live_map")

@@ -41,7 +41,13 @@
                     <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
                         style="display: none;"></span>
                 </button><br>
-                <span id="last_date">...</span>
+                <span id="last_date">...</span><br>
+                <button id="rebuildGlobalBtn" class="btn btn-primary mt-2">
+                    Rebuild Bestagons
+                    <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
+                        style="display: none;"></span>
+                </button><br>
+                <span id="global_map_status">...</span>
             </div>
         </div>
     </div>
@@ -469,6 +475,67 @@
             console.error("Error occurred: " + error);
         }
     });
+
+    // ── Global hexagon map rebuild ─────────────────────────────────────────
+    var globalMapPoll = null;
+
+    function fmtDur(s) {
+        if (s == null) return '?';
+        return s < 90 ? Math.round(s) + 's' : (s / 60).toFixed(1) + ' min';
+    }
+
+    function renderGlobalMapStatus(s) {
+        var btn = $('#rebuildGlobalBtn');
+        var total = Object.values(s.counts || {}).reduce(function(a, b) { return a + b; }, 0);
+
+        if (s.running) {
+            btn.find('.spinner-border').show();
+            btn.prop('disabled', true);
+            var elapsed = s.started ? (Date.now() - Date.parse(s.started)) / 1000 : 0;
+            var est = s.estimate_seconds != null ? ' / ~' + fmtDur(s.estimate_seconds) + ' total' : '';
+            var msg;
+            if (s.phase === 'writing') {
+                msg = 'Writing datasets ' + (s.bins_done || 0) + '/' + (s.bins_total || '?') +
+                      ' — ' + total.toLocaleString() + ' hexagons so far';
+            } else {
+                msg = 'Aggregating trip points…';
+            }
+            $('#global_map_status').text(msg + ' (' + fmtDur(elapsed) + ' elapsed' + est + ')');
+            return;
+        }
+
+        btn.find('.spinner-border').hide();
+        btn.prop('disabled', false);
+        if (s.phase === 'error' || s.error) {
+            $('#global_map_status').text('Build failed: ' + (s.error || 'unknown'));
+        } else if (s.finished) {
+            $('#global_map_status').text(
+                'Last built: ' + s.finished + ' · took ' + fmtDur(s.duration_seconds) +
+                ' · ' + total.toLocaleString() + ' hexagons');
+        } else {
+            var hint = s.estimate_seconds != null ? ' (≈' + fmtDur(s.estimate_seconds) + ' expected)' : '';
+            $('#global_map_status').text('Not built yet.' + hint);
+        }
+    }
+
+    function pollGlobalMapStatus() {
+        $.get('{{url_for("bestagons_status")}}', function(s) {
+            renderGlobalMapStatus(s);
+            if (s.running && !globalMapPoll) {
+                globalMapPoll = setInterval(pollGlobalMapStatus, 4000);
+            } else if (!s.running && globalMapPoll) {
+                clearInterval(globalMapPoll); globalMapPoll = null;
+            }
+        });
+    }
+
+    $('#rebuildGlobalBtn').click(function() {
+        $.post('{{url_for("rebuild_bestagons")}}', function() {
+            pollGlobalMapStatus();
+        });
+    });
+
+    pollGlobalMapStatus();
 
     $('#langModal').on('shown.bs.modal', function () {
         if ($.fn.dataTable.isDataTable('#langTable')) {
