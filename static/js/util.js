@@ -490,7 +490,10 @@ function getFlagEmojiListNew(countriesString, tripType, powerType){
   // Power icon driven by the stored power_type so the display stays consistent
   // with the trip's recorded power (rather than being re-derived from the
   // countries elec/nonelec split). 'auto'/unknown falls back to that split.
-  var powerIcon = powerType === 'electric' ? '⚡'
+  // metro/tram/aerialway/funicular have no power_type and are always electric
+  // (matching force_electric=True in carbon.py), so force ⚡ for them.
+  var alwaysElectric = ['metro', 'tram', 'aerialway', 'funicular'].includes(tripType);
+  var powerIcon = (powerType === 'electric' || alwaysElectric) ? '⚡'
                 : powerType === 'manual'   ? '🦵'
                 : powerType === 'thermic'  ? '🛢️'
                 : null;
