@@ -933,7 +933,7 @@ function renderCarbon(data, type, row) {
 
 function renderFlags(data, type, row) {
     if (type === 'display') {
-        return getFlagEmojiListNew(data, row.type);
+        return getFlagEmojiListNew(data, row.type, row.power_type);
     }
     return data;
 }

@@ -4936,11 +4936,11 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
 
     original_trip = get_trip(trip_id)
 
-    # powerType is inside the map modal which is outside the <form>, so serializeArray()
-    # won't capture it. Extract from the details JSON as fallback.
+    # powerType lives on the main form (captured by serializeArray); keep the
+    # details JSON as a fallback for routes that still send it via the map modal.
     details_parsed = json.loads(formData["details"]) if formData.get("details") else None
     power_type = formData.get("powerType") or (details_parsed.get("powerType") if details_parsed else None)
-    co2_override = sanitize_param(formData.get("co2Override"))
+    co2_override = float(formData["co2Override"]) if formData.get("co2Override") else None
 
     if "estimated_trip_duration" in formData and "trip_length" in formData:
         countries = getCountriesFromPath(
@@ -4952,6 +4952,19 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         )
         estimated_trip_duration = sanitize_param(formData["estimated_trip_duration"])
         trip_length = sanitize_param(formData["trip_length"])
+    elif power_type in ("electric", "thermic", "manual"):
+        # Power changed on the main form without re-routing: recompute the
+        # elec/nonelec split from the existing path. Deterministic for explicit
+        # power types (all-electric / all-thermic), so no OSM routing data is
+        # needed. 'auto' is excluded so OSM-derived splits aren't discarded.
+        countries = getCountriesFromPath(
+            [{"lat": coord[0], "lng": coord[1]} for coord in path],
+            formData["type"],
+            None,
+            power_type,
+        )
+        estimated_trip_duration = original_trip.estimated_trip_duration
+        trip_length = original_trip.trip_length
     else:
         countries = original_trip.countries
         estimated_trip_duration = original_trip.estimated_trip_duration
@@ -7180,6 +7193,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         colorblind=colorblind,
         tripDepartureDelay=tripDepartureDelay,
         tripArrivalDelay=tripArrivalDelay,
+        tripPowerType=trip.get("power_type"),
+        tripCo2Override=trip.get("co2_override"),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

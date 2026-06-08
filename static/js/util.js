@@ -480,12 +480,25 @@ function getTooltipFromStationNew(station){
     
 }
 
-function getFlagEmojiListNew(countriesString, tripType){
+function getFlagEmojiListNew(countriesString, tripType, powerType){
   var flagList = "\u00A0";
   var countriesDict = JSON.parse(countriesString);
   var countriesList = Object.keys(countriesDict);
    
   if (countriesList.indexOf("UN") !== -1) {countriesList.splice(countriesList.indexOf("UN"), 1); countriesList.push("UN");}
+
+  // Power icon driven by the stored power_type so the display stays consistent
+  // with the trip's recorded power (rather than being re-derived from the
+  // countries elec/nonelec split). 'auto'/unknown falls back to that split.
+  var powerIcon = powerType === 'electric' ? '⚡'
+                : powerType === 'manual'   ? '🦵'
+                : powerType === 'thermic'  ? '🛢️'
+                : null;
+  function totalMeters(d) {
+    if (typeof d === 'number') return d;
+    if (typeof d === 'object' && d !== null) return (d.elec || 0) + (d.nonelec || 0);
+    return 0;
+  }
   flagList = [];
   countriesList.forEach(
     function(countryCode){
@@ -495,7 +508,10 @@ function getFlagEmojiListNew(countriesString, tripType){
       
       var title;
       if (!(countriesList.length == 2 && JSON.stringify(countriesDict[countriesList[0]]) == JSON.stringify(countriesDict[countriesList[1]]))) {
-        if (typeof countryData === 'number') {
+        if (powerIcon) {
+          // Explicit power type: one icon for the whole country distance.
+          title = `${CountryName} - ${powerIcon}${mToKm(totalMeters(countryData))}km`;
+        } else if (typeof countryData === 'number') {
           // Simple distance format: {"FR": 100}
           title = `${CountryName} - ${mToKm(countryData)}km`;
         } else if (typeof countryData === 'object' && countryData !== null) {

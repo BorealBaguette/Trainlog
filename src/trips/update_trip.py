@@ -57,6 +57,8 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
                 "visibility": trip.visibility if trip.visibility != "" else None,
                 "departure_delay": trip.departure_delay,
                 "arrival_delay": trip.arrival_delay,
+                "power_type": trip.power_type,
+                "co2_override": trip.co2_override,
             },
         )
 

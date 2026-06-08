@@ -184,7 +184,12 @@ def bulk_change_type(username, trip_ids, new_type: TripTypes):
 
 
 def bulk_set_power_type(username, trip_ids, power_type: str):
-    """Recalculate countries (elec/nonelec split) and carbon for each trip based on new power_type."""
+    """Recalculate carbon (and, for explicit power types, the countries elec/nonelec
+    split) for each trip based on the new power_type, and persist power_type.
+
+    'auto' needs OSM electrification data to split correctly, which isn't available
+    without a re-route, so for 'auto' the stored countries are kept (mirrors the
+    single-trip edit in update_trip_values_from_form_data)."""
     from py.utils import getCountriesFromPath
 
     last_modified = datetime.datetime.now()
@@ -209,9 +214,14 @@ def bulk_set_power_type(username, trip_ids, power_type: str):
                     continue
                 path_dicts = [{"lat": p[0], "lng": p[1]} for p in path]
 
-                new_countries = getCountriesFromPath(
-                    path_dicts, trip["type"], powerType=power_type
-                )
+                if power_type == "auto":
+                    # Keep the stored split (OSM-derived where present); only carbon
+                    # and power_type change. Recomputing here would lose OSM data.
+                    new_countries = trip["countries"]
+                else:
+                    new_countries = getCountriesFromPath(
+                        path_dicts, trip["type"], powerType=power_type
+                    )
                 trip_for_carbon = {
                     "type": trip["type"],
                     "trip_length": trip["trip_length"],
@@ -221,8 +231,17 @@ def bulk_set_power_type(username, trip_ids, power_type: str):
                 }
                 carbon = calculate_carbon_footprint_for_trip(trip_for_carbon, path)
                 pg.execute(
-                    text("UPDATE trips SET countries = :c, carbon = :carbon, last_modified = :lm WHERE trip_id = :id"),
-                    {"c": new_countries, "carbon": carbon, "lm": last_modified, "id": int(trip_id)},
+                    text(
+                        "UPDATE trips SET countries = :c, carbon = :carbon,"
+                        " power_type = :pt, last_modified = :lm WHERE trip_id = :id"
+                    ),
+                    {
+                        "c": new_countries,
+                        "carbon": carbon,
+                        "pt": power_type,
+                        "lm": last_modified,
+                        "id": int(trip_id),
+                    },
                 )
         return True, None
     except Exception as e:
