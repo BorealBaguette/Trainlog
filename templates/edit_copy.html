@@ -128,7 +128,7 @@
                     <i class="fa-solid fa-file-arrow-up fa-3x text-muted mb-3"></i>
                     <h5>{{dropGpxFileHere}}</h5>
                     <p class="text-muted">{{orClickToBrowse}}</p>
-                    <input type="file" id="gpxFileInput" class="gpx-file-input" accept=".gpx" />
+                    <input type="file" id="gpxFileInput" class="gpx-file-input" accept=".gpx,.csv" />
                 </div>
                 <div id="gpxError" class="text-danger small d-none"></div>
                 <div id="gpxProgressContainer" class="progress mt-3 d-none">
@@ -797,8 +797,67 @@
         }
     });
 
+    // Split a CSV line, respecting double-quoted fields (FR24 quotes "lat,lon").
+    function splitCsvLine(line) {
+        const out = [];
+        let cur = '', inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            if (c === '"') inQuotes = !inQuotes;
+            else if (c === ',' && !inQuotes) { out.push(cur); cur = ''; }
+            else cur += c;
+        }
+        out.push(cur);
+        return out;
+    }
+
+    // Parse a FlightRadar24 flight-track CSV export into the same shape as the GPX
+    // parser. Columns: Timestamp,UTC,Callsign,Position("lat,lon"),Altitude(feet),...
+    function parseFr24Csv(content) {
+        const lines = content.split(/\r?\n/).filter(l => l.trim() !== '');
+        const coordinates = [], altitudes = [], times = [];
+        let hasEle = false, hasTime = false;
+        if (lines.length < 2) return { coordinates, altitudes, times, hasEle, hasTime };
+
+        const header = splitCsvLine(lines[0]).map(h => h.trim().toLowerCase());
+        const iTs = header.indexOf('timestamp');
+        const iUtc = header.indexOf('utc');
+        const iPos = header.indexOf('position');
+        const iAlt = header.indexOf('altitude');
+
+        for (let i = 1; i < lines.length; i++) {
+            const cols = splitCsvLine(lines[i]);
+            if (iPos < 0 || cols[iPos] === undefined) continue;
+            const pos = cols[iPos].replace(/"/g, '').split(',');
+            const lat = parseFloat(pos[0]), lng = parseFloat(pos[1]);
+            if (isNaN(lat) || isNaN(lng)) continue;
+
+            const utc = iUtc >= 0 ? cols[iUtc] : null;
+            coordinates.push({ lat: lat, lng: lng, time: utc });  // time used for duration
+
+            let alt = null;  // FR24 altitude is feet -> store metres
+            if (iAlt >= 0 && cols[iAlt] !== undefined && cols[iAlt].trim() !== '') {
+                const ft = parseFloat(cols[iAlt]);
+                if (!isNaN(ft)) { alt = Math.round(ft * 0.3048 * 10) / 10; hasEle = true; }
+            }
+            altitudes.push(alt);
+
+            let t = null;
+            if (iTs >= 0 && cols[iTs] !== undefined && cols[iTs].trim() !== '') {
+                const v = parseInt(cols[iTs], 10);          // already epoch seconds
+                if (!isNaN(v)) { t = v; hasTime = true; }
+            } else if (utc) {
+                const ms = Date.parse(utc);
+                if (!isNaN(ms)) { t = Math.round(ms / 1000); hasTime = true; }
+            }
+            times.push(t);
+        }
+        return { coordinates, altitudes, times, hasEle, hasTime };
+    }
+
     function handleGpxFile(file) {
-        if (!file.name.toLowerCase().endsWith('.gpx')) {
+        const lowerName = file.name.toLowerCase();
+        if (!lowerName.endsWith('.gpx') && !lowerName.endsWith('.csv')) {
             showGpxError('{{pleaseSelectValidGpx}}');
             return;
         }
@@ -809,53 +868,62 @@
         const reader = new FileReader();
         reader.onload = function (e) {
             try {
-                const gpxContent = e.target.result;
-                const parser = new DOMParser();
-                const gpxDoc = parser.parseFromString(gpxContent, 'text/xml');
-
+                const fileContent = e.target.result;
                 showGpxProgress(50);
 
-                // Extract coordinates from GPX
-                const trackPoints = gpxDoc.querySelectorAll('trkpt');
-                const routePoints = gpxDoc.querySelectorAll('rtept');
-                const waypoints = gpxDoc.querySelectorAll('wpt');
-
+                // coordinates [{lat,lng,time?}] plus altitude (metres) and time
+                // (epoch seconds) arrays, all parallel/aligned 1:1 with the path.
                 let coordinates = [];
-                // Altitude (metres, from <ele>) and time (epoch seconds, from <time>),
-                // built parallel to coordinates so they stay aligned 1:1 with the path.
                 let altitudes = [];
                 let times = [];
                 let hasEle = false, hasTime = false;
 
-                const pushPoint = (point) => {
-                    const lat = parseFloat(point.getAttribute('lat'));
-                    const lon = parseFloat(point.getAttribute('lon'));
-                    coordinates.push({ lat: lat, lng: lon });
+                if (lowerName.endsWith('.csv')) {
+                    // FlightRadar24 track CSV: Timestamp,UTC,Callsign,Position,Altitude,...
+                    const parsed = parseFr24Csv(fileContent);
+                    coordinates = parsed.coordinates;
+                    altitudes = parsed.altitudes;
+                    times = parsed.times;
+                    hasEle = parsed.hasEle;
+                    hasTime = parsed.hasTime;
+                } else {
+                    const parser = new DOMParser();
+                    const gpxDoc = parser.parseFromString(fileContent, 'text/xml');
 
-                    const eleEl = point.querySelector('ele');
-                    let alt = null;
-                    if (eleEl && eleEl.textContent.trim() !== '') {
-                        const v = parseFloat(eleEl.textContent);
-                        if (!isNaN(v)) { alt = v; hasEle = true; }  // GPX <ele> is already metres
+                    const trackPoints = gpxDoc.querySelectorAll('trkpt');
+                    const routePoints = gpxDoc.querySelectorAll('rtept');
+                    const waypoints = gpxDoc.querySelectorAll('wpt');
+
+                    const pushPoint = (point) => {
+                        const lat = parseFloat(point.getAttribute('lat'));
+                        const lon = parseFloat(point.getAttribute('lon'));
+                        coordinates.push({ lat: lat, lng: lon });
+
+                        const eleEl = point.querySelector('ele');
+                        let alt = null;
+                        if (eleEl && eleEl.textContent.trim() !== '') {
+                            const v = parseFloat(eleEl.textContent);
+                            if (!isNaN(v)) { alt = v; hasEle = true; }  // GPX <ele> is already metres
+                        }
+                        altitudes.push(alt);
+
+                        const timeEl = point.querySelector('time');
+                        let t = null;
+                        if (timeEl && timeEl.textContent.trim() !== '') {
+                            const ms = Date.parse(timeEl.textContent.trim());
+                            if (!isNaN(ms)) { t = Math.round(ms / 1000); hasTime = true; }
+                        }
+                        times.push(t);
+                    };
+
+                    // Try track points first, then route points, then waypoints
+                    if (trackPoints.length > 0) {
+                        trackPoints.forEach(pushPoint);
+                    } else if (routePoints.length > 0) {
+                        routePoints.forEach(pushPoint);
+                    } else if (waypoints.length > 0) {
+                        waypoints.forEach(pushPoint);
                     }
-                    altitudes.push(alt);
-
-                    const timeEl = point.querySelector('time');
-                    let t = null;
-                    if (timeEl && timeEl.textContent.trim() !== '') {
-                        const ms = Date.parse(timeEl.textContent.trim());
-                        if (!isNaN(ms)) { t = Math.round(ms / 1000); hasTime = true; }
-                    }
-                    times.push(t);
-                };
-
-                // Try track points first, then route points, then waypoints
-                if (trackPoints.length > 0) {
-                    trackPoints.forEach(pushPoint);
-                } else if (routePoints.length > 0) {
-                    routePoints.forEach(pushPoint);
-                } else if (waypoints.length > 0) {
-                    waypoints.forEach(pushPoint);
                 }
 
                 if (coordinates.length < 2) {
