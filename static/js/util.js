@@ -443,12 +443,28 @@ function getTooltipFromStationNew(station){
     
 }
 
-function getFlagEmojiListNew(countriesString, tripType){
+function getFlagEmojiListNew(countriesString, tripType, powerType){
   var flagList = "\u00A0";
   var countriesDict = JSON.parse(countriesString);
   var countriesList = Object.keys(countriesDict);
    
   if (countriesList.indexOf("UN") !== -1) {countriesList.splice(countriesList.indexOf("UN"), 1); countriesList.push("UN");}
+
+  // Power icon driven by the stored power_type so the display stays consistent
+  // with the trip's recorded power (rather than being re-derived from the
+  // countries elec/nonelec split). 'auto'/unknown falls back to that split.
+  // metro/tram/aerialway/funicular have no power_type and are always electric
+  // (matching force_electric=True in carbon.py), so force ⚡ for them.
+  var alwaysElectric = ['metro', 'tram', 'aerialway', 'funicular'].includes(tripType);
+  var powerIcon = (powerType === 'electric' || alwaysElectric) ? '⚡'
+                : powerType === 'manual'   ? '🦵'
+                : powerType === 'thermic'  ? '🛢️'
+                : null;
+  function totalMeters(d) {
+    if (typeof d === 'number') return d;
+    if (typeof d === 'object' && d !== null) return (d.elec || 0) + (d.nonelec || 0);
+    return 0;
+  }
   flagList = [];
   countriesList.forEach(
     function(countryCode){
@@ -458,7 +474,10 @@ function getFlagEmojiListNew(countriesString, tripType){
       
       var title;
       if (!(countriesList.length == 2 && JSON.stringify(countriesDict[countriesList[0]]) == JSON.stringify(countriesDict[countriesList[1]]))) {
-        if (typeof countryData === 'number') {
+        if (powerIcon) {
+          // Explicit power type: one icon for the whole country distance.
+          title = `${CountryName} - ${powerIcon}${mToKm(totalMeters(countryData))}km`;
+        } else if (typeof countryData === 'number') {
           // Simple distance format: {"FR": 100}
           title = `${CountryName} - ${mToKm(countryData)}km`;
         } else if (typeof countryData === 'object' && countryData !== null) {
@@ -508,6 +527,14 @@ function toRouting(data, routingUrl, type){
   if (["accommodation", "restaurant", "poi"].includes(type)){
     newTrip["destinationStation"] = newTrip["originStation"]
   }
+  // Collect intermediate "via" waypoints (resolved label -> [coord, label])
+  newTrip["viaStations"] = [];
+  $(".viaStation").each(function(){
+    var val = $(this).val();
+    if (val && globalStationDict[val]){
+      newTrip["viaStations"].push(globalStationDict[val]);
+    }
+  });
   // Carry FR24-imported flight data through (set by the FR24 import on the air form)
   if (typeof window.FR24 !== "undefined" && window.FR24){
     newTrip["fr24_id"] = window.FR24["fr24_id"];

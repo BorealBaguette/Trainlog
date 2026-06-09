@@ -1,0 +1,342 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<link href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet">
+
+<style>
+  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0d1b2a; }
+
+  /* Standalone dataset selector, always visible (top-left). */
+  #hex-dataset {
+    position: fixed;
+    top: 80px;
+    left: 12px;
+    z-index: 5;
+    background: rgba(20, 28, 40, 0.92);
+    color: #e8edf3;
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+    font-family: "Century Gothic", sans-serif;
+    font-size: 0.82em;
+    width: 190px;
+  }
+  #hex-title { font-weight: bold; font-size: 1.15em; margin-bottom: 8px; letter-spacing: 0.02em; }
+  #hex-dataset label { display: block; margin: 0 0 4px; color: #8fa6bd; text-transform: uppercase; font-size: 0.92em; letter-spacing: 0.04em; }
+  #hex-dataset select { width: 100%; background: #0d1b2a; color: #e8edf3; border: 1px solid #33485f; border-radius: 5px; padding: 3px; }
+
+  #hex-panel {
+    position: fixed;
+    top: 150px;
+    right: 12px;
+    z-index: 5;
+    display: none;
+    background: rgba(20, 28, 40, 0.92);
+    color: #e8edf3;
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+    font-family: "Century Gothic", sans-serif;
+    font-size: 0.82em;
+    width: 240px;
+    max-height: calc(100vh - 170px);
+    overflow-y: auto;
+  }
+  #hex-panel.open { display: block; }
+  #hex-panel h6 { margin: 16px 0 6px; padding-top: 12px; font-weight: bold; border-top: 1px solid #2a3a4d; color: #8fa6bd; text-transform: uppercase; font-size: 0.92em; letter-spacing: 0.04em; }
+  #hex-panel h6:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+  #hex-panel label { display: block; margin: 10px 0 2px; }
+  #hex-panel input[type="range"], #hex-panel select { width: 100%; }
+  #hex-panel select { background: #0d1b2a; color: #e8edf3; border: 1px solid #33485f; border-radius: 5px; padding: 3px; }
+  #hex-panel .row { display: flex; align-items: center; gap: 8px; margin-top: 10px; }
+  #hex-count { color: #9fb0c3; font-size: 0.92em; margin-top: 12px; }
+</style>
+
+<div class="spinner-container">
+  <div class="lds-spinner">
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="hex-dataset">
+  <div id="hex-title">⬡ Bestagons</div>
+  <label for="hex-set">Dataset</label>
+  <select id="hex-set">
+    {% for d in datasets %}<option value="{{ d.value }}">{{ d.label }}</option>
+    {% endfor %}
+  </select>
+</div>
+
+<div id="hex-panel">
+  <h6>Height</h6>
+
+  <label for="hex-dist">Distribution</label>
+  <select id="hex-dist">
+    <option value="rank">Rank (equalized)</option>
+    <option value="log">Logarithmic</option>
+    <option value="quart">Quartic root (lift lows)</option>
+    <option value="cbrt">Cube root</option>
+    <option value="sqrt">Square root</option>
+    <option value="sigmoid">S-curve (mid contrast)</option>
+    <option value="linear" selected>Linear</option>
+    <option value="exp">Exponential</option>
+    <option value="pow2">Power ² (exaggerate highs)</option>
+    <option value="pow3">Power ³ (extreme highs)</option>
+  </select>
+
+  <label for="hex-peak">Tallest bar: <span id="hex-peak-val">300</span> km</label>
+  <input type="range" id="hex-peak" min="50" max="15000" step="50" value="300">
+
+  <h6>Colour</h6>
+
+  <label for="hex-cdist">Curve</label>
+  <select id="hex-cdist">
+    <option value="rank">Rank (equalized)</option>
+    <option value="log">Logarithmic (more spread)</option>
+    <option value="quart">Quartic root</option>
+    <option value="cbrt">Cube root</option>
+    <option value="sqrt">Square root</option>
+    <option value="sigmoid">S-curve</option>
+    <option value="linear" selected>Linear (mostly blue)</option>
+    <option value="exp">Exponential</option>
+    <option value="pow2">Power ²</option>
+    <option value="pow3">Power ³</option>
+  </select>
+
+  <label for="hex-clo">Blue below: <span id="hex-clo-val">0</span>%</label>
+  <input type="range" id="hex-clo" min="0" max="99" step="1" value="0">
+
+  <label for="hex-chi">Red above: <span id="hex-chi-val">50</span>%</label>
+  <input type="range" id="hex-chi" min="1" max="100" step="1" value="50">
+
+  <h6>Shape</h6>
+
+  <label for="hex-size">Hexagon size: <span id="hex-size-val">70</span>%</label>
+  <input type="range" id="hex-size" min="50" max="100" step="2" value="70">
+
+  <div class="row">
+    <input type="checkbox" id="hex-3d" checked>
+    <label for="hex-3d" style="margin:0;">3D extrusion</label>
+  </div>
+
+  <div id="hex-count">loading…</div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<script>
+const POINTS_URL = "{{ points_endpoint }}";
+
+// deck.gl hexagon-example palette (low -> high density).
+const COLOR_RANGE = [
+  [1, 152, 189], [73, 227, 206], [216, 254, 181],
+  [254, 237, 177], [254, 173, 84], [209, 55, 78]
+];
+
+// Web Mercator helpers — corners are built in the SAME metric the server binned
+// in (circumradius 15000 m, flat-top), so the rendered hexagons tile exactly.
+const R = 6378137, D2R = Math.PI / 180, R2D = 180 / Math.PI, HEXR = 15000;
+const ANGLES = [0, 60, 120, 180, 240, 300].map(a => a * D2R);
+const fwd = (lng, lat) => [lng * D2R * R, R * Math.log(Math.tan(Math.PI / 4 + lat * D2R / 2))];
+const inv = (x, y) => [x / R * R2D, (2 * Math.atan(Math.exp(y / R)) - Math.PI / 2) * R2D];
+
+let map, overlay;
+let hexes = [];        // [{ cx, cy, w, rank, polygon }]
+let maxWeight = 1, logMax = 1;
+
+// Normalised value in [0,1] per curve mode (1 = busiest). Used for both height
+// and colour, each with its own selector.
+const P = p => d => (d.w / maxWeight) ** p;          // power family
+const EXPK = 4, SIGK = 10;
+const SIG0 = 1 / (1 + Math.exp(SIGK * 0.5));
+const SIG1 = 1 / (1 + Math.exp(-SIGK * 0.5));
+const NORM = {
+  rank:    d => d.rank,                               // histogram-equalized landscape
+  log:     d => Math.log1p(d.w) / logMax,             // lifts the long tail
+  quart:   P(0.25),
+  cbrt:    P(1 / 3),
+  sqrt:    P(0.5),
+  sigmoid: d => {                                     // S-curve over the log domain
+    const u = Math.log1p(d.w) / logMax;
+    const s = 1 / (1 + Math.exp(-SIGK * (u - 0.5)));
+    return (s - SIG0) / (SIG1 - SIG0);
+  },
+  linear:  P(1),
+  exp:     d => (Math.exp(EXPK * (d.w / maxWeight)) - 1) / (Math.exp(EXPK) - 1),
+  pow2:    P(2),
+  pow3:    P(3),
+};
+const val = (id, fallback) => document.getElementById(id).value || fallback;
+
+function colorRamp(t) {
+  t = Math.max(0, Math.min(1, t));
+  const f = t * (COLOR_RANGE.length - 1);
+  const i = Math.min(Math.floor(f), COLOR_RANGE.length - 2);
+  const k = f - i;
+  const a = COLOR_RANGE[i], b = COLOR_RANGE[i + 1];
+  return [
+    Math.round(a[0] + (b[0] - a[0]) * k),
+    Math.round(a[1] + (b[1] - a[1]) * k),
+    Math.round(a[2] + (b[2] - a[2]) * k),
+    235
+  ];
+}
+
+// Recompute the 6 hexagon corners for a given coverage (size %) -> a small gap.
+function rebuildPolygons(coverage) {
+  const r = HEXR * coverage;
+  for (const h of hexes) {
+    h.polygon = ANGLES.map(a => inv(h.cx + r * Math.cos(a), h.cy + r * Math.sin(a)));
+  }
+}
+
+function buildLayer() {
+  const peakKm   = Number(val('hex-peak', 500));
+  const extruded = document.getElementById('hex-3d').checked;
+  const hMode    = val('hex-dist', 'log');
+  const cMode    = val('hex-cdist', 'linear');
+  const clo      = Number(val('hex-clo', 0)) / 100;
+  const chi      = Number(val('hex-chi', 100)) / 100;
+
+  const hFn = NORM[hMode] || NORM.linear;
+  const cFn = NORM[cMode] || NORM.linear;
+  const span = Math.max(1e-6, chi - clo);
+
+  return new deck.PolygonLayer({
+    id: 'global-hex',
+    data: hexes,
+    extruded,
+    getPolygon: d => d.polygon,
+    getElevation: d => hFn(d),                          // 0..1, scaled by elevationScale
+    getFillColor: d => colorRamp((cFn(d) - clo) / span), // threshold-remapped colour
+    elevationScale: extruded ? peakKm * 1000 : 0,
+    stroked: false,
+    material: { ambient: 0.7, diffuse: 0.6, shininess: 32, specularColor: [60, 60, 60] },
+    pickable: true,
+    updateTriggers: {
+      getPolygon: [lastCoverage],
+      getElevation: [hMode, extruded],
+      getFillColor: [cMode, clo, chi],
+    },
+    transitions: { elevationScale: 250 },
+  });
+}
+
+let lastCoverage = 0.7;
+function refreshLayer() {
+  if (!overlay || !hexes.length) return;
+  const coverage = Number(val('hex-size', 70)) / 100;
+  if (coverage !== lastCoverage) { rebuildPolygons(coverage); lastCoverage = coverage; }
+  overlay.setProps({ layers: [buildLayer()] });
+}
+
+function wireControls() {
+  const bind = (id, valId) => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', () => {
+      if (valId) document.getElementById(valId).textContent = el.value;
+      refreshLayer();
+    });
+    el.addEventListener('change', refreshLayer);
+  };
+  bind('hex-dist');
+  bind('hex-peak', 'hex-peak-val');
+  bind('hex-cdist');
+  bind('hex-clo', 'hex-clo-val');
+  bind('hex-chi', 'hex-chi-val');
+  bind('hex-size', 'hex-size-val');
+  document.getElementById('hex-3d').addEventListener('change', refreshLayer);
+  document.getElementById('hex-set').addEventListener('change', () => loadPoints().then(refreshLayer).catch(() => {
+    hexes = [];
+    document.getElementById('hex-count').textContent = 'Not built yet — rebuild from admin';
+  }));
+}
+
+function loadPoints() {
+  const set = val('hex-set', 'land');
+  document.getElementById('hex-count').textContent = 'loading…';
+  return fetch(POINTS_URL + '?set=' + encodeURIComponent(set))
+    .then(r => { if (!r.ok) throw new Error('not-built'); return r.arrayBuffer(); })
+    .then(buf => {
+      const arr = new Float32Array(buf);
+      const n = arr.length / 3;
+      hexes = new Array(n);
+      maxWeight = 1;
+      for (let i = 0; i < n; i++) {
+        const lng = arr[i * 3], lat = arr[i * 3 + 1], w = arr[i * 3 + 2];
+        const [cx, cy] = fwd(lng, lat);
+        hexes[i] = { cx, cy, w, rank: 0, polygon: null };
+        if (w > maxWeight) maxWeight = w;
+      }
+      logMax = Math.log1p(maxWeight);
+      // Rank fraction (0..1) for the "equalized" curve.
+      const order = hexes.map((_, i) => i).sort((a, b) => hexes[a].w - hexes[b].w);
+      order.forEach((idx, pos) => { hexes[idx].rank = pos / (n - 1); });
+      rebuildPolygons(lastCoverage);
+      document.getElementById('hex-count').textContent =
+        n.toLocaleString() + ' hexagons (≥3 users)';
+    });
+}
+
+MapLibreUtils.initializeMapLibre({
+  container: 'map',
+  tileserver: 'dark-train',
+  useGlobe: false,
+  center: [10, 50],
+  zoom: 3.2,
+}).then(m => {
+  map = m;
+  map.setPitch(55);
+  wireControls();
+
+  // Settings toggle, stacked in the top-right control group right under the zoom.
+  class SettingsToggle {
+    onAdd() {
+      this._c = document.createElement('div');
+      this._c.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.title = 'Display settings';
+      b.innerHTML = '<i class="fa-solid fa-sliders"></i>';
+      b.onclick = () => document.getElementById('hex-panel').classList.toggle('open');
+      this._c.appendChild(b);
+      return this._c;
+    }
+    onRemove() { this._c.remove(); }
+  }
+  map.addControl(new SettingsToggle(), 'top-right');
+
+  map.once('load', () => {
+    overlay = new deck.MapboxOverlay({
+      interleaved: false,
+      layers: [],
+      getTooltip: ({ object }) =>
+        object && {
+          html: `<b>${object.w.toLocaleString()}</b> trip points`,
+          style: { background: 'rgba(0,0,0,0.85)', color: '#fff', padding: '6px 8px', borderRadius: '6px' }
+        }
+    });
+    map.addControl(overlay);
+
+    loadPoints().then(() => {
+      refreshLayer();
+      document.querySelector('.spinner-container').style.display = 'none';
+    }).catch(err => {
+      console.error(err);
+      document.getElementById('hex-count').textContent =
+        err.message === 'not-built' ? 'Not built yet — rebuild from admin' : 'failed to load hexagons';
+      document.querySelector('.spinner-container').style.display = 'none';
+    });
+  });
+}).catch(err => {
+  console.error(err);
+  document.querySelector('.spinner-container').style.display = 'none';
+});
+</script>
+
+{% endblock %}

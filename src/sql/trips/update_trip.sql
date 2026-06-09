@@ -28,5 +28,7 @@ UPDATE trips SET
     carbon = :carbon,
     visibility = :visibility,
     departure_delay = :departure_delay,
-    arrival_delay = :arrival_delay
+    arrival_delay = :arrival_delay,
+    power_type = :power_type,
+    co2_override = :co2_override
 WHERE trip_id = :trip_id

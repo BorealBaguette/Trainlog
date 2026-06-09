@@ -59,7 +59,13 @@ SELECT
     f.current,
     f.planned_future AS "plannedFuture",
     f.future,
-    g.count
+    g.count,
+    -- Path geometry fetched in the same query (paths now live in the same PG DB),
+    -- so the map needs only one round-trip instead of a second getUserLines call.
+    -- ST_AsGeoJSON emits (lng, lat); geom_geojson_to_coords swaps back to [lat,lng].
+    -- Full resolution is kept on purpose: zoomed-in path precision is a core feature.
+    ST_AsGeoJSON(p.geom) AS geojson
 FROM grouped g
 JOIN filtered f ON f.trip_id = g.rep_uid
+LEFT JOIN paths p ON p.trip_id = f.trip_id
 ORDER BY f.utc_filtered_start_datetime DESC NULLS LAST

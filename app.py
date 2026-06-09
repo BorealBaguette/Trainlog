@@ -132,6 +132,7 @@ from py.utils import (
     hex_to_rgb,
     interpolate_great_circle,
     interpolate_points_if_gaps,
+    interpolate_track_if_gaps,
     load_config,
     remove_diacritics,
     rgb_to_hex,
@@ -154,6 +155,12 @@ from src.api.vagonweb import vagonweb_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src.consts import DbNames, TripTypes
+from src.global_map import (
+    available_bins,
+    build_all_async,
+    build_status,
+    get_cache_path,
+)
 from src.pg import setup_db, pg_session
 from src.suspicious_activity import (
     check_denied_login,
@@ -198,7 +205,7 @@ from src.trips import (
     delete_ticket_from_db,
     get_current_trip_id,
 )
-from src.paths import Path, coords_to_ewkt, fetch_path
+from src.paths import Path, coords_to_ewkt, fetch_path, geom_geojson_to_coords
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
@@ -452,6 +459,19 @@ def flight_summary_reg(username):
     return jsonify(result), status
 
 
+def _fr24_epoch(ts):
+    """Normalise an FR24 track timestamp (ISO 8601 string or epoch number) to
+    epoch seconds. Returns None when missing/unparseable."""
+    if ts is None:
+        return None
+    if isinstance(ts, (int, float)):
+        return int(ts)
+    try:
+        return int(datetime.fromisoformat(str(ts).replace("Z", "+00:00")).timestamp())
+    except ValueError:
+        return None
+
+
 @app.route("/api/u/<username>/flight_tracks/<fr24_id>")
 @login_required
 def flight_tracks(username, fr24_id):
@@ -479,18 +499,32 @@ def flight_tracks(username, fr24_id):
             {"error": "Failed to fetch track data from FR24 API", "details": str(e)}
         ), 502
 
-    # Extract lat/lon coordinates
+    # Extract lat/lon plus altitude (Z) and timestamp (T) for the 3D track.
     if not data or "tracks" not in data[0]:
         return jsonify({"error": "No track data found"}), 404
 
-    coordinates = [
-        [track["lat"], track["lon"]]
+    # FR24 altitude is in feet -> store metres; timestamp -> epoch seconds.
+    enriched = [
+        [
+            track["lat"],
+            track["lon"],
+            round((track.get("alt") or 0) * 0.3048, 1),
+            _fr24_epoch(track.get("timestamp")),
+        ]
         for track in data[0]["tracks"]
         if "lat" in track and "lon" in track
     ]
-    coordinates = interpolate_points_if_gaps(coordinates, 50)
+    # Interpolate all four components together so the arrays stay aligned with
+    # the (identical) interpolation the 2D path used previously.
+    enriched = interpolate_track_if_gaps(enriched, 50)
 
-    return jsonify(coordinates)
+    coordinates = [[p[0], p[1]] for p in enriched]
+    altitude = [p[2] for p in enriched]
+    timestamps = [p[3] for p in enriched]
+
+    return jsonify(
+        {"coordinates": coordinates, "altitude": altitude, "timestamps": timestamps}
+    )
 
 
 def getLangDropdown(user):
@@ -647,7 +681,7 @@ def starts_with_flag_emoji(s):
     return bool(re.match(pattern, s))
 
 
-def saveTripToDb(username, newTrip, newPath, trip_type="train"):
+def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, timestamps=None):
     newPath[0]["lat"] = float(newPath[0]["lat"])
     newPath[0]["lng"] = float(newPath[0]["lng"])
     newPath[-1]["lat"] = float(newPath[-1]["lat"])
@@ -760,6 +794,8 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train"):
         arrival_delay=sanitize_param(newTrip.get("arrival_delay")),
         power_type=newTrip.get("powerType"),
         co2_override=float(newTrip["co2Override"]) if newTrip.get("co2Override") else None,
+        altitude=altitude,
+        timestamps=timestamps,
     )
 
     create_trip(trip)
@@ -4199,12 +4235,19 @@ def render_public_trip_page(
     if not trip_list and num_hidden_trips > 0: # all requested trips are hidden
         abort(401)
 
+    def _trip_sort_key(trip):
+        # Dated trips store utc_filtered_start_datetime as a "YYYY-MM-DD HH:MM:SS"
+        # string; non-dated trips use the sentinel ints -1 (past) and 1 (future).
+        # Return a (group, value) tuple so str and int are never compared directly
+        # (which would raise TypeError when mixing dated and non-dated trips).
+        # Order: past non-dated, then dated chronologically, then future non-dated.
+        dt = trip["utc_filtered_start_datetime"]
+        if isinstance(dt, str):
+            return (1, dt)
+        return (0 if dt == -1 else 2, "")
+
     try:
-        trip_list_sorted = sorted(
-            trip_list, key=lambda trip: trip["utc_filtered_start_datetime"]
-        )
-    except TypeError:
-        abort(416)
+        trip_list_sorted = sorted(trip_list, key=_trip_sort_key)
     except Exception:
         abort(500)
 
@@ -4768,8 +4811,17 @@ def saveFlight(username, type):
         airlineLogoProcess(newTrip)
         # TODO : Fix visibility for flights
         newTrip["visibility"] = "public"
+        # Optional 3D track (altitude in metres, timestamps in epoch seconds),
+        # each parallel to newPath. Passed through as JSON strings (or None).
+        altitude = request.form.get("altitude") or None
+        timestamps = request.form.get("timestamps") or None
         trip = saveTripToDb(
-            username=username, newTrip=newTrip, newPath=newPath, trip_type=type
+            username=username,
+            newTrip=newTrip,
+            newPath=newPath,
+            trip_type=type,
+            altitude=altitude,
+            timestamps=timestamps,
         )
         if request.form["fromApp"] == "true":
             return jsonify({
@@ -4923,11 +4975,11 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
 
     original_trip = get_trip(trip_id)
 
-    # powerType is inside the map modal which is outside the <form>, so serializeArray()
-    # won't capture it. Extract from the details JSON as fallback.
+    # powerType lives on the main form (captured by serializeArray); keep the
+    # details JSON as a fallback for routes that still send it via the map modal.
     details_parsed = json.loads(formData["details"]) if formData.get("details") else None
     power_type = formData.get("powerType") or (details_parsed.get("powerType") if details_parsed else None)
-    co2_override = sanitize_param(formData.get("co2Override"))
+    co2_override = float(formData["co2Override"]) if formData.get("co2Override") else None
 
     if "estimated_trip_duration" in formData and "trip_length" in formData:
         countries = getCountriesFromPath(
@@ -4939,6 +4991,19 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         )
         estimated_trip_duration = sanitize_param(formData["estimated_trip_duration"])
         trip_length = sanitize_param(formData["trip_length"])
+    elif power_type in ("electric", "thermic", "manual"):
+        # Power changed on the main form without re-routing: recompute the
+        # elec/nonelec split from the existing path. Deterministic for explicit
+        # power types (all-electric / all-thermic), so no OSM routing data is
+        # needed. 'auto' is excluded so OSM-derived splits aren't discarded.
+        countries = getCountriesFromPath(
+            [{"lat": coord[0], "lng": coord[1]} for coord in path],
+            formData["type"],
+            None,
+            power_type,
+        )
+        estimated_trip_duration = original_trip.estimated_trip_duration
+        trip_length = original_trip.trip_length
     else:
         countries = original_trip.countries
         estimated_trip_duration = original_trip.estimated_trip_duration
@@ -4991,6 +5056,11 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         power_type=power_type,
         co2_override=co2_override,
     )
+
+    # Fresh 3D flight track when the route was (re-)imported from FR24; absent on
+    # plain metadata edits, where update_trip's COALESCE preserves the stored one.
+    trip.altitude = formData.get("altitude") or None
+    trip.timestamps = formData.get("timestamps") or None
 
     return trip
 
@@ -5818,26 +5888,21 @@ def fetchTripsPaths(username, lastLocal, public):
         ).fetchall()
 
     trips.reverse()
-    tripIds = [trip["uid"] for trip in trips]
-    with pg_session() as pg:
-        pathResult = pg.execute(
-            get_user_lines_query(), {"ids": [int(i) for i in tripIds]}
-        ).fetchall()
-
-    paths = {path["trip_id"]: path["path"] for path in pathResult}
 
     for trip in trips:
+        # The path geometry comes back on the same row (geojson column) now that
+        # paths share the PG DB, so no second getUserLines round-trip is needed.
+        path = geom_geojson_to_coords(trip._mapping.get("geojson"))
         # adapt_pg_trip_row applies legacy names (trip_id->uid, trip_type->type)
         # and the 1/-1 date sentinels the map frontend relies on.
         trip = adapt_pg_trip_row(trip._mapping, username)
+        trip.pop("geojson", None)
         trip.pop("past")
         trip.pop("plannedFuture")
         trip.pop("current")
         trip.pop("future")
 
-        tripList.append(
-            {"trip": trip, "path": json.loads(paths.get(trip["uid"], "{}"))}
-        )
+        tripList.append({"trip": trip, "path": path})
 
     print(datetime.now() - now)
     lastLocal = datetime.strftime(datetime.now(), "%Y-%m-%dT%H:%M:%S.%f")
@@ -5971,9 +6036,17 @@ def processPublicTrips(tripIds):
         pathResult = pg.execute(
             get_user_lines_query(), {"ids": [int(i) for i in tripIds]}
         ).fetchall()
+        # 3D flight track (altitude/timestamps), fetched separately so the
+        # heavily-shared get_user_lines query keeps its exact contract.
+        trackResult = pg.execute(
+            "SELECT trip_id, altitude, timestamps FROM paths WHERE trip_id = ANY(:ids)",
+            {"ids": [int(i) for i in tripIds]},
+        ).fetchall()
     paths = {}
     for path in pathResult:
         paths[path["trip_id"]] = path["path"]
+    altitudes = {row["trip_id"]: row["altitude"] for row in trackResult}
+    timestamps = {row["trip_id"]: row["timestamps"] for row in trackResult}
 
     total_price = 0
     total_carbon = 0
@@ -6056,20 +6129,38 @@ def processPublicTrips(tripIds):
             and not session.get(owner)
         ):
             abort(401)
+        # 3D altitude track is a premium feature, opt-in per owner. Gate it on the
+        # owner's CURRENT premium status so revoking premium hides it immediately.
+        # Altitude is stored for any type (e.g. GPX with <ele>), but only flights
+        # render it for now.
+        is_flight = trip.get("type") in ("air", "helicopter")
+        show_3d = bool(
+            is_flight
+            and getattr(user, "premium", False)
+            and getattr(user, "flight_3d", False)
+        )
         tripList.append(
             {
                 "time": trip["time"],
                 "trip": dict(trip),
                 "path": path_data,
+                "altitude": altitudes.get(trip["uid"]) if show_3d else None,
+                "timestamps": timestamps.get(trip["uid"]) if show_3d else None,
             }
         )
     
+    def _pub_trip_sort_key(d):
+        # Dated trips store utc_filtered_start_datetime as a "YYYY-MM-DD HH:MM:SS"
+        # string; non-dated trips use the sentinel ints -1 (past) and 1 (future).
+        # Return a (group, value) tuple so str and int are never compared directly
+        # (which would raise TypeError when mixing dated and non-dated trips).
+        dt = d["trip"]["utc_filtered_start_datetime"]
+        if isinstance(dt, str):
+            return (1, dt)
+        return (0 if dt == -1 else 2, "")
+
     sortedTripList = sorted(tripList, key=lambda d: d["trip"]["uid"], reverse=True)
-    sortedTripList = sorted(
-        sortedTripList,
-        key=lambda d: d["trip"]["utc_filtered_start_datetime"],
-        reverse=True,
-    )
+    sortedTripList = sorted(sortedTripList, key=_pub_trip_sort_key, reverse=True)
     
     priceDict = {
         "total_price": total_price, 
@@ -6506,16 +6597,30 @@ def get_trips_api_internal(username, is_public=False):
         sort_column_name = SORT_FIELD_EXPRS[custom_sort_field]
         sort_direction = request.form.get("sort_dir", sort_direction)
 
+    # Negative global terms (smart-search "!term"): trips that match NONE of these
+    # in any field. Sent by the frontend as a JSON list.
+    try:
+        global_not_terms = [
+            t for t in json.loads(request.form.get("search_not", "[]")) if t
+        ]
+    except (ValueError, TypeError):
+        global_not_terms = []
+
     # Handle column-specific searches
     column_searches = {}
     for i in range(20):  # Check up to 20 columns
         column_search = request.form.get(f"columns[{i}][search][value]", "")
         column_exact = request.form.get(f"columns[{i}][search][exact]", "false") == "true"
-        column_searches[i] = {"value": column_search, "exact": column_exact}
+        column_negate = request.form.get(f"columns[{i}][search][negate]", "false") == "true"
+        column_searches[i] = {
+            "value": column_search,
+            "exact": column_exact,
+            "negate": column_negate,
+        }
 
     # Build additional WHERE conditions for column-specific searches
     additional_conditions = []
-    search_params = {"username": username, "past": past, "search": f"%{search_value}%"}
+    search_params = {"username": username, "past": past}
     
     # Add column-specific search conditions
     for column_index, search_data in column_searches.items():
@@ -6524,12 +6629,17 @@ def get_trips_api_internal(username, is_public=False):
             param_name = f"col_search_{column_index}"
             search_term = search_data["value"]
             is_exact = search_data["exact"]
+            is_negate = search_data["negate"]
 
             # Choose LIKE pattern based on exact/partial matching
             if is_exact:
                 search_pattern = search_term  # Exact match
             else:
                 search_pattern = f"%{search_term}%"  # Partial match
+
+            # Each branch below appends exactly one predicate; remember the position
+            # so a negated search ("from:!Paris") can wrap that predicate in NOT.
+            _cond_start = len(additional_conditions)
 
             # Map frontend column names to actual query column names in FilteredTrips
             if column_name == "type":
@@ -6598,8 +6708,66 @@ def get_trips_api_internal(username, is_public=False):
                     additional_conditions.append(f"LOWER(COALESCE(CAST({column_name} AS text), '')) = LOWER(:{param_name})")
                 else:
                     additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(CAST({column_name} AS text), ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            
+
+            # Negate the predicate this column just appended. COALESCE(..., FALSE)
+            # makes NULL columns (e.g. a missing operator) count as "not matching",
+            # so they are included by a negative filter rather than dropped.
+            if is_negate and len(additional_conditions) > _cond_start:
+                additional_conditions[-1] = (
+                    f"NOT COALESCE({additional_conditions[-1]}, FALSE)"
+                )
+
             search_params[param_name] = search_pattern
+
+    # Global free-text search across every field. Appended to the outer query only
+    # when there is something to match, so the common empty-search case lets Postgres
+    # elide the airliners join (count query) and avoids the tickets join entirely.
+    # Columns are referenced at the FilteredTrips level; ticket name and tags are
+    # correlated EXISTS subqueries (the CTE no longer joins tickets).
+    def _global_search_predicate(param):
+        like = (
+            "remove_diacritics(LOWER({col})) LIKE remove_diacritics(LOWER(:" + param + "))"
+        )
+        global_search_columns = [
+            "origin_station",
+            "destination_station",
+            "COALESCE(operator, '')",
+            "COALESCE(countries, '')",
+            "COALESCE(line_name, '')",
+            "COALESCE(CAST(start_datetime AS text), '')",
+            "COALESCE(CAST(end_datetime AS text), '')",
+            "type",
+            "COALESCE(notes, '')",
+            "COALESCE(reg, '')",
+            "COALESCE(material_type, '')",
+            "COALESCE(material_type_advanced, '')",
+            "COALESCE(iata, '')",
+            "COALESCE(manufacturer, '')",
+            "COALESCE(model, '')",
+        ]
+        terms = [like.format(col=col) for col in global_search_columns]
+        terms.append(
+            "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = ticket_id"
+            f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
+        )
+        terms.append(
+            "EXISTS (SELECT 1 FROM tags_associations fta JOIN tags ft ON fta.tag_id = ft.uid"
+            f" WHERE fta.trip_id = uid AND remove_diacritics(LOWER(ft.name)) LIKE remove_diacritics(LOWER(:{param})))"
+        )
+        return "(" + " OR ".join(terms) + ")"
+
+    if search_value:
+        search_params["search"] = f"%{search_value}%"
+        additional_conditions.append(_global_search_predicate("search"))
+
+    # Negative global terms ("!term"): keep only trips where NO field matches the
+    # term. COALESCE(..., FALSE) so a trip with all-NULL fields still passes the NOT.
+    for idx, neg_term in enumerate(global_not_terms):
+        neg_param = f"search_not_{idx}"
+        search_params[neg_param] = f"%{neg_term}%"
+        additional_conditions.append(
+            f"NOT COALESCE({_global_search_predicate(neg_param)}, FALSE)"
+        )
 
     # Build the queries
     base_count_query = get_dynamic_user_trips_query() + "SELECT COUNT(*) FROM FilteredTrips"
@@ -6824,6 +6992,9 @@ def user_settings(username):
         params["default_landing"] = request.form["default_landing"]
         params["tileserver"] = request.form["tileserver"]
         params["globe"] = "globe" in request.form
+        # Premium-only toggle: only honour it for premium users so a crafted POST
+        # can't enable it without premium.
+        params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
 
         for param in params:
             if getattr(user, param) != params[param]:
@@ -6840,6 +7011,7 @@ def user_settings(username):
     friend_search_checked = "checked" if user.friend_search else ""
     appear_on_global_checked = "checked" if user.appear_on_global else ""
     colorblind_checked = "checked" if user.colorblind else ""
+    flight_3d_checked = "checked" if user.flight_3d else ""
 
     return render_template(
         "user_settings.html",
@@ -6852,6 +7024,7 @@ def user_settings(username):
         friend_search_checked=friend_search_checked,
         appear_on_global_checked=appear_on_global_checked,
         colorblind_checked=colorblind_checked,
+        flight_3d_checked=flight_3d_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
@@ -7089,6 +7262,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         colorblind=colorblind,
         tripDepartureDelay=tripDepartureDelay,
         tripArrivalDelay=tripArrivalDelay,
+        tripPowerType=trip.get("power_type"),
+        tripCo2Override=trip.get("co2_override"),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -9569,6 +9744,59 @@ def get_all_current_trips():
     """Get all currently active trips (admin/owner access required)."""
     result = get_current_trips_data(public_only=False)
     return jsonify(result)
+
+
+@app.route("/bestagons")
+def bestagons_map():
+    """
+    Bestagons: experimental deck.gl hexagon view of every trip in the database,
+    split into per-trip-type datasets (each hexagon needs >= 3 distinct users).
+    """
+    username = getUser()
+    return render_template(
+        "public/bestagons.html",
+        username=username,
+        points_endpoint=url_for("bestagons_points"),
+        datasets=available_bins(),
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+        title="Bestagons",
+    )
+
+
+@app.route("/admin/rebuild_bestagons", methods=["POST"])
+@owner_required
+def rebuild_bestagons():
+    """Start a background rebuild of all bestagons bins (owner only)."""
+    return jsonify({"started": build_all_async()})
+
+
+@app.route("/admin/bestagons_status")
+@owner_required
+def bestagons_status():
+    return jsonify(build_status())
+
+
+@app.route("/api/bestagons/points.bin")
+def bestagons_points():
+    """Serve a pre-aggregated bestagons dataset (?set=land|rail|road|air|type_*).
+
+    Serve-only: building is expensive (minutes) and goes through the admin
+    "Rebuild Bestagons" button (or owner ?refresh=1, which starts it async).
+    """
+    if request.args.get("refresh") == "1" and session.get("userinfo", {}).get("is_owner"):
+        build_all_async()
+        return jsonify({"building": True}), 202
+
+    path = get_cache_path(name=request.args.get("set", "land"))
+    if not os.path.exists(path) or os.path.getsize(path) == 0:
+        abort(404)
+    return send_file(
+        path,
+        mimetype="application/octet-stream",
+        conditional=True,
+        last_modified=os.path.getmtime(path),
+    )
 
 
 @app.route("/live_map")

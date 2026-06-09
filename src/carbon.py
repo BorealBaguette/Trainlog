@@ -1,7 +1,7 @@
 import json, os, math
 import pandas as pd
 from geopy.distance import geodesic
-from datetime import datetime
+from datetime import datetime, date
 
 def load_aircraft_emissions():
     filepath = os.path.join("base_data/carbon", "aircraft_emissions.json")
@@ -27,7 +27,11 @@ def load_grid_intensity_df():
 
 def get_year_from_datetime(start_datetime):
     """Extract year from start_datetime string, handling special cases"""
-    if start_datetime == -1:
+    if isinstance(start_datetime, (datetime, date)):
+        # PostgreSQL hands back datetime/date objects (not the old SQLite -1/1
+        # sentinels or yyyy-mm-dd strings).
+        return start_datetime.year
+    elif start_datetime == -1:
         return 2020  # Default for "unknown past"
     elif start_datetime == 1:
         return 2024  # Default for "unknown future"

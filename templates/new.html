@@ -21,6 +21,15 @@
         background-color: #e9ecef; color: #333; font-weight: 500;
     }
     .power-type-group label:hover { background-color: #f8f9fa; color: #444; }
+
+    .via-row { position: relative; }
+    .via-row input.viaStation { padding-right: 36px; }
+    .via-row .via-remove {
+        position: absolute; top: 0; right: 0; height: 32px; width: 32px;
+        border: 0; background: transparent; cursor: pointer;
+        color: #999; font-size: 1.2rem; line-height: 1; padding: 0;
+    }
+    .via-row .via-remove:hover { color: #333; }
 </style>
 
 {% if vehicle_type == 'air' %}
@@ -149,12 +158,19 @@
       </group>
       <group id="destinationStationManual" class="non_poi" class="non_manual">
         <label for="destinationManualName" class="sr-only">{{destinationTerminalName}}</label>
-        <input type="text" class="" name="destinationManualName" id="destinationManualName" placeholder="{{destinationTerminalName}}"/> 
+        <input type="text" class="" name="destinationManualName" id="destinationManualName" placeholder="{{destinationTerminalName}}"/>
         <label for="destinationManualLat" class="sr-only">Lat</label>
-        <input type="float" class="" name="destinationManualLat" id="destinationManualLat" placeholder="Lat"/> 
+        <input type="float" class="" name="destinationManualLat" id="destinationManualLat" placeholder="Lat"/>
         <label for="destinationManualLng" class="sr-only">Lng</label>
         <input type="float" class="" name="destinationManualLng" id="destinationManualLng" placeholder="Lng"/>
       </group>
+
+      {% if vehicle_type != 'air' %}
+      <group id="viaGroup" class="non_poi">
+        <div id="viaContainer"></div>
+        <button type="button" id="addViaBtn" class="ts-btn"><i class="fas fa-plus"></i> {{via}}</button>
+      </group>
+      {% endif %}
 
       <br class="non_poi">
       <group id="operatorGroup" class="non_poi">
@@ -525,12 +541,33 @@
   const special = params.get('special');
 
 {% if vehicle_type != 'air' %}
+  var stationSearchUrl;
   if("{{vehicle_type}}" == "train" && special){
-    stationSearchAutocomplete(".stationSearch", visitedStations, specialURLs[special], "{{manual}}");
+    stationSearchUrl = specialURLs[special];
   }
   else{
-    stationSearchAutocomplete(".stationSearch", visitedStations, URLs["{{vehicle_type}}"], "{{manual}}");
+    stationSearchUrl = URLs["{{vehicle_type}}"];
   }
+  stationSearchAutocomplete(".stationSearch", visitedStations, stationSearchUrl, "{{manual}}");
+
+  // ---------- Via (intermediate waypoint) stations ----------
+  var viaPlaceholder = "{{via}}";
+  function addViaRow() {
+    var $row = $(
+      '<div class="via-row">' +
+        '<input type="text" class="stationSearch viaStation" placeholder="' + viaPlaceholder + '" />' +
+        '<button type="button" class="via-remove" title="Remove">&times;</button>' +
+      '</div>'
+    );
+    $('#viaContainer').append($row);
+    // Initialise autocomplete on the newly added input
+    stationSearchAutocomplete($row.find('.viaStation'), visitedStations, stationSearchUrl, "{{manual}}");
+    $row.find('.viaStation').focus();
+  }
+  $('#addViaBtn').on('click', addViaRow);
+  $('#viaContainer').on('click', '.via-remove', function() {
+    $(this).closest('.via-row').remove();
+  });
 {% endif %}
 
   const currencySelect = document.getElementById('currency');

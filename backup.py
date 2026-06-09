@@ -17,7 +17,7 @@ BASE_BACKUP_DIR = Path("backup")
 
 # SQLite DBs that remain after the PostgreSQL migration (auth + error log).
 # All trip/path/reference data now lives in PostgreSQL (backed up via pg_dump).
-SIMPLE_DBS = ["auth.db", "error.db"]
+SIMPLE_DBS = ["auth.db"]
 
 # Max parameters per SQLite query (keep below 999)
 CHUNK_SIZE = 900
