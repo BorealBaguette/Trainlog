@@ -6781,16 +6781,16 @@ def get_trips_api_internal(username, is_public=False):
     
     # Add type filtering if needed
     if is_public and is_friend:
-        base_count_query += " WHERE visibility = 'public' OR visibility = 'friends' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro'))"
-        base_data_query += " WHERE visibility = 'public' OR visibility = 'friends' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro'))"
+        base_count_query += " WHERE (visibility = 'public' OR visibility = 'friends' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro')))"
+        base_data_query += " WHERE (visibility = 'public' OR visibility = 'friends' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro')))"
 
         # Add column-specific conditions
         if additional_conditions:
             base_count_query += " AND " + " AND ".join(additional_conditions)
             base_data_query += " AND " + " AND ".join(additional_conditions)
     elif is_public:
-        base_count_query += " WHERE visibility = 'public' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro'))"
-        base_data_query += " WHERE visibility = 'public' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro'))"
+        base_count_query += " WHERE (visibility = 'public' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro')))"
+        base_data_query += " WHERE (visibility = 'public' OR (visibility IS NULL AND type IN ('train', 'bus', 'air', 'ferry', 'helicopter', 'aerialway', 'tram', 'metro')))"
         
         # Add column-specific conditions
         if additional_conditions:
@@ -7778,6 +7778,12 @@ def importAll(username):
             datetime.strptime(dataDict["end_datetime"], "%Y-%m-%d %H:%M:%S"),
             "%Y-%m-%dT%H:%M",
         )
+    elif dataDict["precision"] == "onlyDate":
+        # processDates() reads onlyDate/onlyDateDuration for date-only trips; the CSV
+        # import never set them (KeyError -> 500). Take the date (YYYY-MM-DD, whether
+        # the CSV had a bare date or the 00:00:01 marker) and carry the manual duration.
+        dataDict["onlyDate"] = dataDict["start_datetime"][:10]
+        dataDict["onlyDateDuration"] = dataDict.get("manual_trip_duration")
     else:
         dataDict["unknownType"] = None
 
@@ -7851,8 +7857,13 @@ def detect_precision(start_date, end_date):
         return "unknown"
 
     try:
-        datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S")
-        datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
+        s = datetime.strptime(start_date, "%Y-%m-%d %H:%M:%S")
+        e = datetime.strptime(end_date, "%Y-%m-%d %H:%M:%S")
+        # Date-only trips are materialised at 00:00:01 (the app's marker); every real
+        # time uses 00 seconds. Treat that marker as onlyDate so exporting then
+        # re-importing a date-only trip stays date-only (instead of becoming precise).
+        if s.time() == time(0, 0, 1) and e.time() == time(0, 0, 1):
+            return "onlyDate"
         return "preciseDates"
     except ValueError:
         pass

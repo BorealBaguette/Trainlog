@@ -9,10 +9,10 @@ def _getLeaderboardUsers(type, User):
     # Filter users with "leaderboard" set to True
     leaderboard_users = User.query.filter_by(leaderboard=True).all()
     user_list = [user.uid for user in leaderboard_users]
+    # The frontend (generateLink) compares against usernames, so this must be a list
+    # of usernames — not uids, which never matched and made every name clickable.
     non_public_users = [
-        user_id
-        for user_id in user_list
-        if not User.query.filter_by(uid=user_id).first().is_public()
+        user.username for user in leaderboard_users if not user.is_public()
     ]
     
     if type == "carbon":

@@ -138,7 +138,7 @@
 <script>
 // Global variables
 
-const CACHE_VERSION = 'v1'; // Change this when you need to clear all caches
+const CACHE_VERSION = 'v2'; // Change this when you need to clear all caches
 
 if (!Cookies.get(`cacheCleared_${CACHE_VERSION}`)) {
     localforage.clear().then(function() {
