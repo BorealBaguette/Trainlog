@@ -184,7 +184,8 @@ function updateSidebar(isFr24Active) {
         content += `<p><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></p>`;
     }
 
-    content += `<p><button id="saveTrip" type="button" onclick="saveTrip()" class="btn btn-success">Submit</button></p>`;
+    content += `<p><button id="saveTrip" type="button" onclick="saveTrip()" class="btn btn-success">{{submit}}</button></p>`;
+    content += `<p><button id="saveTripContinue" type="button" onclick="saveTrip(true)" class="btn btn-outline-success btn-sm">{{saveTripContinueButton}}</button></p>`;
     sidebar.setContent(content);
 }
 
@@ -215,7 +216,7 @@ function showLoadingSidebar(message = "Loading flight path...") {
 }
 
 
-async function saveTrip() {
+async function saveTrip(continueTrip=false) {
     flutterBridge.loading(true);
     sidebar.setContent('<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>');
 
@@ -257,7 +258,21 @@ async function saveTrip() {
                 return;
             }
 
-            location.href = "{{ url_for('landing') }}";
+            var isPlan = !!newTrip.plan_uuid;
+            if (isPlan) {
+                if (continueTrip) {
+                    location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${newTrip["destinationStation"]}&prevPlanDay=${newTrip["planEndDay"] || ''}`;
+                } else {
+                    location.href = "/u/{{ username }}/plan/" + encodeURIComponent(newTrip.plan_uuid);
+                }
+                return;
+            }
+
+            if (continueTrip) {
+                location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?prevDest=${newTrip["destinationStation"]}&prevEndDate=${newTrip["newTripEndDate"]}&prevEndTime=${newTrip["newTripEndTime"]}`;
+            } else {
+                location.href = "{{ url_for('landing') }}";
+            }
         },
         error: function (xhr, status, error) {
             flutterBridge.loading(false);

@@ -106,6 +106,12 @@
   <h2 class="header">{{newTrip}}</h2>
   <div>
     <form id="newTripForm" autocomplete="off" action="javascript:void(0);" method="GET">
+      {% if plan_uuid %}
+      <div class="alert alert-info d-flex align-items-center gap-2 py-2 px-3 mb-3" role="alert" style="font-size:0.95rem;">
+        <span style="font-size:1.2rem;">🗺️</span>
+        <span>{{ addingToPlan|default('Adding a trip to plan') }}: <strong>{{ plan_name|default('') }}</strong></span>
+      </div>
+      {% endif %}
       {% if vehicle_type == 'air' %}
       <div class="d-inline-flex align-items-center">
         <span
@@ -325,13 +331,22 @@
           <span class="legend">{{timings}}:</span>
         </legend>
         <div class="radio-group non_poi">
-          <input type="radio" id="radioPreciseDates" class="non_poi" value="preciseDates" name="precision" checked/>
+          <input type="radio" id="radioPreciseDates" class="non_poi" value="preciseDates" name="precision" {% if not plan_uuid %}checked{% endif %}/>
           <label for="radioPreciseDates" class="checkboxLabel non_poi" >{{preciseDates}}</label>
         </div>
+        {% if plan_uuid %}
+        <div class="radio-group non_poi">
+          <input type="radio" id="radioRelative" class="non_poi" value="relative" name="precision" checked/>
+          <label for="radioRelative" class="checkboxLabel non_poi">{{ relativeTiming|default('Day + time') }}</label>
+        </div>
+        {% endif %}
+        {# "unknown" (past/future) is meaningless for a plan — omit it there. #}
+        {% if not plan_uuid %}
         <div class="radio-group non_poi">
           <input type="radio" id="radioUnknown" class="non_poi" value="unknown" name="precision"/>
           <label for="radioUnknown" class="checkboxLabel non_poi">{{unknown}}</label>
         </div>
+        {% endif %}
         <div class="radio-group non_poi">
           <input type="radio" id="radioOnlyDate" class="non_poi" value="onlyDate" name="precision"/>
           <label for="radioOnlyDate" class="checkboxLabel non_poi">{{onlyDate}}</label>
@@ -389,6 +404,31 @@
           <input type="time" name="newTripEndTime" id="newTripEndTime" placeholder=" " />
         </fieldset>
       </group>
+
+      {% if plan_uuid %}
+      <input type="hidden" name="plan_uuid" value="{{ plan_uuid }}"/>
+      <style>
+        #form #relativeDates { display: none; }
+        #form:has(input[id=radioRelative]:checked) #relativeDates { display: grid; gap: 0 0.3rem; }
+      </style>
+      <group id="relativeDates">
+        <fieldset class="fieldset-datetime">
+          <legend><span class="legend">{{ newTripStart }}</span></legend>
+          <label class="sr-only" for="planStartDay">{{ day|default('Day') }}</label>
+          <input type="number" min="1" value="1" name="planStartDay" id="planStartDay" placeholder="{{ day|default('Day') }}"/>
+          <label class="sr-only" for="planStartTime">{{ time }}</label>
+          <input type="time" name="planStartTime" id="planStartTime" placeholder=" " title="{{ timeOptional|default('Time (optional)') }}"/>
+        </fieldset>
+        <fieldset class="fieldset-datetime">
+          <legend><span class="legend">{{ newTripEnd }}</span></legend>
+          <label class="sr-only" for="planEndDay">{{ day|default('Day') }}</label>
+          <input type="number" min="1" value="1" name="planEndDay" id="planEndDay" placeholder="{{ day|default('Day') }}"/>
+          <label class="sr-only" for="planEndTime">{{ time }}</label>
+          <input type="time" name="planEndTime" id="planEndTime" placeholder=" " title="{{ timeOptional|default('Time (optional)') }}"/>
+        </fieldset>
+        <small class="text-muted" style="grid-column:1/-1;">{{ planTimeHint|default('Times are optional — leave blank to plan by day only.') }}</small>
+      </group>
+      {% endif %}
 
       <span id="delayToggleWrapper" class="non_poi" style="display:inline-flex; align-items:center; gap:0.3rem">
         <input type="checkbox" id="delayToggle" />
@@ -481,6 +521,11 @@
     coords = [searchParams.get('prevDest').split(',')[0],searchParams.get('prevDest').split(',')[1]];
     $("#originStation").val(searchParams.get('prevDest').split(',')[2]);
     globalStationDict[searchParams.get('prevDest').split(',')[2]] = [coords, searchParams.get('prevDest').split(',')[2]];
+    // Plan "save & continue": start the next leg on the previous leg's end day.
+    if (searchParams.has('prevPlanDay') && searchParams.get('prevPlanDay')) {
+      $("#planStartDay").val(searchParams.get('prevPlanDay'));
+      $("#planEndDay").val(searchParams.get('prevPlanDay'));
+    }
     if ($("#newTripStartDate").val()>getCurrentDate() )
     {
       $("#purchasing_date").val(getCurrentDate());

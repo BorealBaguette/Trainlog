@@ -148,7 +148,9 @@ def processDates(new_trip, new_path):
     else:
         if new_trip.get("onlyDateDuration") != "":
             man_duration = new_trip.get("onlyDateDuration")
-        if new_trip["unknownType"] == "past":
+        # Default to "future" when unknownType is absent (e.g. app/import payloads
+        # that send precision=unknown without selecting past/future).
+        if new_trip.get("unknownType") == "past":
             start_datetime = end_datetime = -1
         else:
             start_datetime = end_datetime = 1

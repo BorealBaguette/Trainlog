@@ -86,14 +86,25 @@ async function saveTrip(continueTrip=false) {
     sidebar.setContent(spinnerContent);
     flutterBridge.loading(true);
     newTrip["details"] = routeDetails;
+    var isPlan = !!newTrip.plan_uuid;
     $.post({
-        url: '{{url_for("saveTrip", username=username)}}',
+        url: isPlan ? '{{url_for("savePlanTrip", username=username)}}' : '{{url_for("saveTrip", username=username)}}',
         data: {
             jsonPath: JSON.stringify(currentRoute),
             newTrip: JSON.stringify(newTrip),
             fromApp: fromApp
         },
         success: function(res) {
+            if (isPlan) {
+                if (continueTrip) {
+                    // Keep building the plan: prefill origin from this leg's destination
+                    // and carry the day forward (next leg starts on this leg's end day).
+                    location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${newTrip["destinationStation"]}&prevPlanDay=${newTrip["planEndDay"] || ''}`;
+                } else {
+                    location.href = "/u/{{ username }}/plan/" + encodeURIComponent(newTrip.plan_uuid);
+                }
+                return;
+            }
             if (fromApp) {
                 flutterBridge.loading(false);
                 flutterBridge.saveTripDone(true, res);

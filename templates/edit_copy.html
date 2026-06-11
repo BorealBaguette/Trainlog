@@ -1600,9 +1600,13 @@
                 redirectToProjects = (formData["unknownType"] == "past" ? false : true)
             }
             $.post({
-                url: copy ? "{{ url_for('copyTrip', username=username) }}" : "{{ url_for('updateTrip', username=username) }}",
+                url: {% if plan_uuid %}"{{ url_for('update_plan_trip_full_route', username=username, plan_uuid=plan_uuid, plan_trip_uid=plan_trip_uid) }}"{% else %}(copy ? "{{ url_for('copyTrip', username=username) }}" : "{{ url_for('updateTrip', username=username) }}"){% endif %},
                 data: formData,
                 success: function (res) {
+                    {% if plan_uuid %}
+                    location.href = "{{ url_for('plan_view', username=username, plan_uuid=plan_uuid) }}";
+                    return;
+                    {% endif %}
                     var nextUrl = new URLSearchParams(window.location.search).get('next');
                     var nextAllowed = false;
                     if (nextUrl) {

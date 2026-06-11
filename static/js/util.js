@@ -596,6 +596,12 @@ function toRouting(data, routingUrl, type){
           && newTrip["newTripStart"].length == 16
           && newTrip["newTripEnd"].length == 16
         )
+        ||(
+          // Plan-trip relative timing: day offsets required, times optional.
+          newTrip["precision"] == "relative"
+          && newTrip["planStartDay"]
+          && newTrip["planEndDay"]
+        )
 
       )
     ){
@@ -816,6 +822,9 @@ function manualCopyHandler(){
 }
  
 function computeTimeStatus(data) {
+  // Plan legs carry a fixed status from the server (they are hypothetical, never
+  // "past"/"current"); don't re-derive it from the anchor-relative dates vs now.
+  if (data.lockTime) return data;
   let trip = data.trip;
   if (trip.utc_filtered_start_datetime === 1 && trip.utc_filtered_end_datetime === 1) {
     // Datetimes are both 1

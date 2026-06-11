@@ -206,6 +206,24 @@ from src.trips import (
     get_current_trip_id,
 )
 from src.paths import Path, coords_to_ewkt, fetch_path, geom_geojson_to_coords
+from src.sql.plans import (
+    insert_plan_query,
+    get_plan_query,
+    get_user_plans_query,
+    update_plan_query,
+    archive_plan_query,
+    delete_plan_query,
+    get_plan_trips_query,
+    update_plan_trip_query,
+    delete_plan_trip_query,
+    reorder_plan_trip_query,
+)
+from src.plans.process_plan_dates import process_plan_dates
+from src.plans.plan_trip import PlanTrip
+from src.plans.create_plan_trip import create_plan_trip
+from src.plans.update_plan_trip_full import update_plan_trip_full
+from src.plans.delete_plan import delete_plan, delete_plan_trip
+from src.plans.validate_plan import validate_plan
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
@@ -808,6 +826,99 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
     return trip
 
 
+def savePlanTripToDb(username, newTrip, newPath, plan, trip_type="train"):
+    """Like saveTripToDb but writes a plan_trip (parallel world) instead of a trip.
+    Reuses the same flag/country enrichment; timing goes through process_plan_dates."""
+    newPath[0]["lat"] = float(newPath[0]["lat"])
+    newPath[0]["lng"] = float(newPath[0]["lng"])
+    newPath[-1]["lat"] = float(newPath[-1]["lat"])
+    newPath[-1]["lng"] = float(newPath[-1]["lng"])
+    if not starts_with_flag_emoji(newTrip["originStation"][1]):
+        origin_country = getCountryFromCoordinates(newPath[0]["lat"], newPath[0]["lng"])
+        newTrip["originStation"][1] = (
+            f"{get_flag_emoji(origin_country['countryCode'])} {newTrip['originStation'][1]}"
+        )
+    if not starts_with_flag_emoji(newTrip["destinationStation"][1]):
+        destination_country = getCountryFromCoordinates(
+            newPath[-1]["lat"], newPath[-1]["lng"]
+        )
+        newTrip["destinationStation"][1] = (
+            f"{get_flag_emoji(destination_country['countryCode'])} {newTrip['destinationStation'][1]}"
+        )
+
+    now = datetime.now()
+    timing = process_plan_dates(newTrip, newPath, plan["anchor_date"])
+
+    for k in ("reg", "seat", "material_type", "material_type_advanced", "waypoints", "notes"):
+        newTrip.setdefault(k, "")
+
+    if trip_type in ("air", "helicopter"):
+        countries = {}
+        countries[getCountryFromCoordinates(**newPath[0])["countryCode"]] = (
+            newTrip["trip_length"] / 2
+        )
+        countries[getCountryFromCoordinates(**newPath[-1])["countryCode"]] = (
+            newTrip["trip_length"] / 2
+        )
+        countries = json.dumps(countries)
+    else:
+        countries = getCountriesFromPath(
+            newPath, newTrip["type"], newTrip.get("details", None), newTrip.get("powerType", None)
+        )
+
+    details_parsed = json.loads(newTrip["details"]) if newTrip.get("details") else None
+    power_type = newTrip.get("powerType") or (
+        details_parsed.get("powerType") if details_parsed else None
+    )
+    co2_override = float(newTrip["co2Override"]) if newTrip.get("co2Override") else None
+
+    plan_trip = PlanTrip(
+        plan_id=plan["uid"],
+        user_id=plan["user_id"],
+        origin_station=sanitize_param(newTrip["originStation"][1]),
+        destination_station=sanitize_param(newTrip["destinationStation"][1]),
+        trip_type=sanitize_param(trip_type),
+        operator=sanitize_param(newTrip.get("operator")),
+        line_name=sanitize_param(newTrip.get("lineName")),
+        material_type=sanitize_param(newTrip["material_type"]),
+        material_type_advanced=sanitize_param(newTrip["material_type_advanced"]),
+        reg=sanitize_param(newTrip["reg"]),
+        seat=sanitize_param(newTrip["seat"]),
+        notes=sanitize_param(newTrip["notes"]),
+        trip_length=sanitize_param(newTrip.get("trip_length")),
+        estimated_trip_duration=sanitize_param(newTrip.get("estimated_trip_duration")),
+        countries=sanitize_param(countries),
+        price=sanitize_param(newTrip.get("price")),
+        currency=sanitize_param(newTrip.get("currency")),
+        purchase_date=sanitize_param(newTrip.get("purchasing_date")),
+        waypoints=sanitize_param(newTrip["waypoints"]),
+        visibility=sanitize_param(
+            newTrip.get("visibility", get_default_trip_visibility(trip_type))
+        ),
+        path=newPath,
+        timing=timing,
+        power_type=power_type,
+        co2_override=co2_override,
+        created=now,
+        last_modified=now,
+    )
+    create_plan_trip(plan_trip)
+    return plan_trip
+
+
+def get_owned_plan(plan_uuid, username):
+    """Fetch a plan row (mapping) by uuid and verify the logged-in user owns it."""
+    with pg_session() as pg:
+        row = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
+    if row is None:
+        abort(404)
+    plan = dict(row._mapping)
+    user = User.query.filter_by(username=username).first()
+    if user is None or plan["user_id"] != user.uid:
+        abort(403)
+    return plan
+
+
 def hasPrivateTrips(username):
     with pg_session() as pg:
         return pg.execute(
@@ -1357,6 +1468,19 @@ def new(username, vehicle_type):
             "destinationSkiName", lang[session["userinfo"]["lang"]]["destinationAerialwayName"]
         )
 
+    # When a plan is being built, look up its name for the builder info bar.
+    plan_uuid = request.args.get("plan")
+    plan_name = None
+    if plan_uuid:
+        with pg_session() as pg:
+            prow = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
+        # Only surface the name to the plan's owner (authoring is owner-only anyway).
+        plan_name = (
+            prow._mapping["name"]
+            if prow and prow._mapping["user_id"] == session["userinfo"]["user_id"]
+            else None
+        )
+
     return render_template(
         "new.html",
         title=new_trip,
@@ -1374,6 +1498,10 @@ def new(username, vehicle_type):
         currencyOptions=get_available_currencies(),
         user_currency=getLoggedUserCurrency(),
         fr24_calls=fr24_usage(username) if vehicle_type == "air" else None,
+        # When building a trip for a plan, this enables the relative day+time mode
+        # and routes the save to savePlanTrip (the builder is otherwise identical).
+        plan_uuid=plan_uuid,
+        plan_name=plan_name,
     )
 
 
@@ -4715,6 +4843,718 @@ def saveTrip(username):
     return ""
 
 
+@app.route("/u/<username>/savePlanTrip", methods=["POST"])
+def savePlanTrip(username):
+    if not (session.get(username) or session.get(owner)):
+        abort(401)
+    newPath = json.loads(request.form["jsonPath"])
+    newTrip = json.loads(request.form["newTrip"])
+    plan = get_owned_plan(newTrip.get("plan_uuid"), username)
+    savePlanTripToDb(username, newTrip, newPath, plan, trip_type=newTrip["type"])
+    return ""
+
+
+# ---------------------------------------------------------------------------
+# Plans: parallel-world itineraries (separate tables; never in stats/the trips
+# list). Authored with the normal trip builder, viewed/shared with the
+# itinerary+map (new_trip.html), validatable into real trips.
+# ---------------------------------------------------------------------------
+
+def build_plan_trip_list(plan_uuid):
+    """(tripList, priceDict) in the SAME shape as processPublicTrips, built from
+    plan_trips so new_trip.html renders a plan unchanged. Reuses formatTrip."""
+    user_currency = getLoggedUserCurrency()
+    empty = {"total_price": 0, "user_currency": user_currency, "total_carbon": 0, "total_distance": 0}
+    with pg_session() as pg:
+        plan = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
+        if plan is None:
+            return [], empty
+        rows = pg.execute(
+            get_plan_trips_query(), {"plan_id": plan._mapping["uid"]}
+        ).fetchall()
+
+    tripList = []
+    total_price = total_carbon = total_distance = 0
+    for r in rows:
+        pt = r._mapping
+        coords = geom_geojson_to_coords(pt["geojson"])
+        sdt = _fmt_legacy_dt(pt["start_datetime"]) if pt["start_datetime"] else None
+        edt = _fmt_legacy_dt(pt["end_datetime"]) if pt["end_datetime"] else None
+        usdt = _fmt_legacy_dt(pt["utc_start_datetime"]) if pt["utc_start_datetime"] else None
+        uedt = _fmt_legacy_dt(pt["utc_end_datetime"]) if pt["utc_end_datetime"] else None
+        if sdt is None:  # no date -> future sentinel (formatTrip handles 1/-1)
+            sdt = edt = 1
+        trip = {
+            "uid": pt["uid"],
+            "username": None,
+            "type": pt["trip_type"],
+            "origin_station": pt["origin_station"],
+            "destination_station": pt["destination_station"],
+            "start_datetime": sdt,
+            "end_datetime": edt,
+            "utc_start_datetime": usdt,
+            "utc_end_datetime": uedt,
+            "manual_trip_duration": pt["manual_trip_duration"],
+            "estimated_trip_duration": pt["estimated_trip_duration"],
+            "trip_length": pt["trip_length"] or 0,
+            "operator": pt["operator"] or "",
+            "line_name": pt["line_name"] or "",
+            "material_type": pt["material_type"],
+            "price": pt["price"],
+            "currency": pt["currency"],
+            "purchasing_date": pt["purchase_date"],
+            "ticket_id": None,
+            "visibility": pt["visibility"],
+            "departure_delay": None,
+            "arrival_delay": None,
+            "logo_url": None,
+            "operator_name": pt["operator"] or "",
+        }
+        trip = formatTrip(trip)
+        trip["utc_filtered_start_datetime"] = usdt if usdt is not None else sdt
+        trip["utc_filtered_end_datetime"] = uedt if uedt is not None else edt
+        # Plan legs are hypothetical -> always the coloured "planned" style, never
+        # "past"/"current" (lockTime stops the client re-deriving it) and never the
+        # near-invisible white "future" (that style only exists to declutter the
+        # global map, which plans never appear on).
+        trip["time"] = "plannedFuture"
+        trip["day_number"] = pt["start_day"]
+        trip["end_day_number"] = pt["end_day"]
+        trip["carbon_footprint"] = (
+            round(float(pt["carbon"]), 6) if pt["carbon"] is not None else 0
+        )
+        total_carbon += trip["carbon_footprint"]
+        if (pt["trip_length"] or 0) > 0:
+            total_distance += pt["trip_length"] / 1000
+        if trip.get("price_in_user_currency") is not None:
+            trip["user_currency"] = user_currency
+            total_price += trip["price_in_user_currency"]
+        tripList.append(
+            {"time": trip["time"], "trip": trip, "path": coords, "altitude": None,
+             "timestamps": None, "lockTime": True}
+        )
+
+    priceDict = {
+        "total_price": total_price,
+        "user_currency": user_currency,
+        "total_carbon": round(total_carbon, 6),
+        "total_distance": round(total_distance, 2),
+    }
+    return tripList, priceDict
+
+
+def _render_plan_view(plan, username, controls):
+    user = User.query.filter_by(username=username).first() if username else None
+    owner_username = get_username(plan["user_id"])
+    data_url = (
+        url_for("get_plan_trips_json", username=owner_username, plan_uuid=plan["uuid"])
+        if controls
+        else url_for("public_plan_data", plan_uuid=plan["uuid"])
+    )
+    return render_template(
+        "public/new_trip.html",
+        logosList=listOperatorsLogos(),
+        tripIds="",
+        title=plan["name"],
+        collection_voyage="voyage",
+        tag_description=plan["name"],
+        special_og=False,
+        tileserver=user.tileserver if user else "default",
+        globe=user.globe if user else False,
+        og={},
+        num_hidden_trips=0,
+        colorblind=getattr(user, "colorblind", False) if user else False,
+        planDataUrl=data_url,
+        planControls=controls,
+        relativeDates=True,
+        plan=plan,
+        plan_owner=owner_username,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/u/<username>/plans")
+@login_required
+def plan_list(username):
+    user = User.query.filter_by(username=username).first()
+    with pg_session() as pg:
+        rows = pg.execute(get_user_plans_query(), {"user_id": user.uid}).fetchall()
+    plans = [dict(r._mapping) for r in rows]
+    return render_template(
+        "plans/plan_list.html",
+        title="Plans",
+        username=username,
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id(username)),
+        user_plans=plans,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/u/<username>/plans/new", methods=["POST"])
+@login_required
+def submit_plan(username):
+    user = User.query.filter_by(username=username).first()
+    now = datetime.now()
+    plan_uuid = str(uuid.uuid4())
+    with pg_session() as pg:
+        pg.execute(
+            insert_plan_query(),
+            {
+                "uuid": plan_uuid,
+                "user_id": user.uid,
+                "name": sanitize_param(request.form.get("name") or "Plan"),
+                "description": sanitize_param(request.form.get("description")),
+                "anchor_date": request.form.get("anchor_date") or now.date(),
+                "created": now,
+                "last_modified": now,
+            },
+        )
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
+
+
+def _fmt_dhm(seconds):
+    """Seconds -> compact 'Xd Yh Zm' / 'Yh Zm' / 'Zm' string."""
+    try:
+        seconds = int(round(float(seconds or 0)))
+    except (TypeError, ValueError):
+        return ""
+    d, rem = divmod(seconds, 86400)
+    h, rem = divmod(rem, 3600)
+    m = rem // 60
+    parts = []
+    if d:
+        parts.append(f"{d}d")
+    if h:
+        parts.append(f"{h}h")
+    if m or not parts:
+        parts.append(f"{m}m")
+    return " ".join(parts)
+
+
+def _parse_legacy_dt(value):
+    """Parse a legacy 'YYYY-MM-DD HH:MM:SS' string to datetime; None for sentinels
+    (1/-1 = no/unknown date) or anything unparseable."""
+    if not isinstance(value, str):
+        return None
+    try:
+        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
+    except ValueError:
+        return None
+
+
+def compute_plan_stats(trip_list):
+    """Totals + per-type breakdown (count/duration/distance/price) from a plan trip
+    list. Prices are summed in the viewer's currency (already converted by formatTrip).
+
+    `span` is the end-to-end length of the whole trip — first departure to last
+    arrival on the plan's (anchored) timeline — i.e. "is this a 3-day or a 5-hour
+    trip", independent of how much of that time is spent actually moving."""
+    # Stays/stops aren't travelling and shouldn't inflate the trip's duration or span.
+    NON_TRAVEL = ("poi", "accommodation", "restaurant")
+    total_duration = total_distance = total_price = 0.0
+    user_currency = getLoggedUserCurrency()
+    per_type = {}
+    starts, ends = [], []
+    day_starts, day_ends = [], []
+    any_timed = False
+    for item in trip_list:
+        t = item["trip"]
+        ty = t.get("type") or "other"
+        travels = ty not in NON_TRAVEL
+        dur = (t.get("trip_duration") or [None, 0])[1]
+        dur = float(dur) if dur not in (None, "") else 0.0
+        dist = float(t.get("trip_length") or 0)
+        price = t.get("price_in_user_currency")
+        price = float(price) if price not in (None, "") else 0.0
+        if t.get("user_currency"):
+            user_currency = t["user_currency"]
+        if travels:
+            s = _parse_legacy_dt(t.get("start_datetime"))
+            e = _parse_legacy_dt(t.get("end_datetime"))
+            if s:
+                starts.append(s)
+            if e:
+                ends.append(e)
+            if t.get("start_time"):  # has a concrete clock time -> real time resolution
+                any_timed = True
+            dn = t.get("day_number")
+            if dn is not None:
+                day_starts.append(dn)
+                day_ends.append(t.get("end_day_number") or dn)
+            total_duration += dur
+        total_distance += dist
+        total_price += price
+        agg = per_type.setdefault(ty, {"count": 0, "duration": 0.0, "distance": 0.0, "price": 0.0})
+        agg["count"] += 1
+        if travels:
+            agg["duration"] += dur
+        agg["distance"] += dist
+        agg["price"] += price
+    per_type_rows = sorted(
+        ({"type": k, **v, "duration_h": (_fmt_dhm(v["duration"]) if v["duration"] else ""),
+          "distance_km": round(v["distance"] / 1000),
+          "price_str": (f"{round(v['price'])} {user_currency}" if v["price"] else "")}
+         for k, v in per_type.items()),
+        key=lambda r: r["duration"], reverse=True,
+    )
+    # Span: when legs carry real clock times use the precise elapsed time; for a
+    # day-only plan there are no times, so use the inclusive day count (Day 1 -> Day 2
+    # is a 2-day trip).
+    if any_timed and starts and ends:
+        span_seconds = (max(ends) - min(starts)).total_seconds()
+    elif day_starts:
+        span_seconds = (max(day_ends) - min(day_starts) + 1) * 86400.0
+    else:
+        span_seconds = 0.0
+    return {
+        "count": len(trip_list),
+        "total_duration": total_duration,
+        "total_duration_h": _fmt_dhm(total_duration),
+        "total_distance_km": round(total_distance / 1000),
+        "total_price": round(total_price),
+        "has_price": total_price > 0,
+        "user_currency": user_currency,
+        "span_h": _fmt_dhm(span_seconds) if span_seconds > 0 else "",
+        "has_span": span_seconds > 0,
+        "per_type": per_type_rows,
+    }
+
+
+@app.route("/u/<username>/plan/<plan_uuid>")
+@login_required
+def plan_view(username, plan_uuid):
+    plan = get_owned_plan(plan_uuid, username)
+    trip_list, _ = build_plan_trip_list(plan_uuid)
+    # add a per-leg formatted duration for the management list
+    for item in trip_list:
+        d = (item["trip"].get("trip_duration") or [None, 0])[1]
+        item["trip"]["duration_h"] = _fmt_dhm(d)
+    stats = compute_plan_stats(trip_list)
+    # The anchor date / Day-1 prompt only matter when some legs are relative (Day N).
+    # A fully precise-dated plan needs neither.
+    plan_has_relative = any(
+        item["trip"].get("day_number") is not None for item in trip_list
+    )
+    return render_template(
+        "plans/plan.html",
+        title=plan["name"],
+        username=username,
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id(username)),
+        plan=plan,
+        plan_trips=trip_list,
+        plan_stats=stats,
+        plan_has_relative=plan_has_relative,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/getPlanTrips")
+@login_required
+def get_plan_trips_json(username, plan_uuid):
+    get_owned_plan(plan_uuid, username)
+    tripList, priceDict = build_plan_trip_list(plan_uuid)
+    return jsonify([tripList, priceDict])
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/update", methods=["POST"])
+@login_required
+def update_plan_route(username, plan_uuid):
+    plan = get_owned_plan(plan_uuid, username)
+    with pg_session() as pg:
+        pg.execute(
+            update_plan_query(),
+            {
+                "uid": plan["uid"],
+                "user_id": plan["user_id"],
+                "name": sanitize_param(request.form.get("name") or plan["name"]),
+                "description": sanitize_param(request.form.get("description")),
+                "anchor_date": request.form.get("anchor_date") or plan["anchor_date"],
+                "last_modified": datetime.now(),
+            },
+        )
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/archive", methods=["POST"])
+@login_required
+def archive_plan_route(username, plan_uuid):
+    plan = get_owned_plan(plan_uuid, username)
+    archived = request.form.get("archived", "true") == "true"
+    with pg_session() as pg:
+        pg.execute(
+            archive_plan_query(),
+            {
+                "uid": plan["uid"],
+                "user_id": plan["user_id"],
+                "archived": archived,
+                "last_modified": datetime.now(),
+            },
+        )
+    return redirect(url_for("plan_list", username=username))
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/delete", methods=["POST"])
+@login_required
+def delete_plan_route(username, plan_uuid):
+    plan = get_owned_plan(plan_uuid, username)
+    delete_plan(plan["uid"], plan["user_id"])
+    return redirect(url_for("plan_list", username=username))
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/trip/<int:plan_trip_uid>/delete", methods=["POST"])
+@login_required
+def delete_plan_trip_route(username, plan_uuid, plan_trip_uid):
+    plan = get_owned_plan(plan_uuid, username)
+    delete_plan_trip(plan_trip_uid, plan["user_id"])
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/trip/<int:plan_trip_uid>/edit", methods=["POST"])
+@login_required
+def update_plan_trip_route(username, plan_uuid, plan_trip_uid):
+    """Edit a plan-trip's timing + light metadata (keeps the existing path). UTC is
+    recomputed from the stored geom endpoints so cross-timezone durations stay right."""
+    plan = get_owned_plan(plan_uuid, username)
+    with pg_session() as pg:
+        row = pg.execute(
+            "SELECT visibility, ST_AsGeoJSON(geom) AS geojson FROM plan_trips"
+            " WHERE uid = :uid AND plan_id = :pid",
+            {"uid": plan_trip_uid, "pid": plan["uid"]},
+        ).fetchone()
+    if row is None:
+        abort(404)
+    coords = geom_geojson_to_coords(row._mapping["geojson"])
+    path = [{"lat": c[0], "lng": c[1]} for c in coords] or [
+        {"lat": 0.0, "lng": 0.0}, {"lat": 0.0, "lng": 0.0}
+    ]
+    form = {
+        "precision": request.form.get("precision", "relative"),
+        "planStartDay": request.form.get("planStartDay"),
+        "planStartTime": request.form.get("planStartTime"),
+        "planEndDay": request.form.get("planEndDay"),
+        "planEndTime": request.form.get("planEndTime"),
+        "newTripStart": request.form.get("newTripStart"),
+        "newTripEnd": request.form.get("newTripEnd"),
+        "onlyDate": request.form.get("onlyDate"),
+        "unknownType": request.form.get("unknownType"),
+        "onlyDateDuration": request.form.get("onlyDateDuration", ""),
+    }
+    timing = process_plan_dates(form, path, plan["anchor_date"])
+    now = datetime.now()
+    with pg_session() as pg:
+        pg.execute(
+            update_plan_trip_query(),
+            {
+                "uid": plan_trip_uid,
+                "user_id": plan["user_id"],
+                "timing_mode": timing["timing_mode"],
+                "start_day": timing["start_day"],
+                "end_day": timing["end_day"],
+                "start_time": timing["start_time"],
+                "end_time": timing["end_time"],
+                "start_datetime": timing["start_datetime"],
+                "end_datetime": timing["end_datetime"],
+                "utc_start_datetime": timing["utc_start_datetime"],
+                "utc_end_datetime": timing["utc_end_datetime"],
+                "manual_trip_duration": timing["manual_trip_duration"],
+                "operator": sanitize_param(request.form.get("operator")),
+                "line_name": sanitize_param(request.form.get("line_name")),
+                "notes": sanitize_param(request.form.get("notes")),
+                "visibility": sanitize_param(
+                    request.form.get("visibility") or row._mapping["visibility"]
+                ),
+                "last_modified": now,
+            },
+        )
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
+
+
+def _get_plan_trip_row(plan, plan_trip_uid):
+    """Fetch a single plan_trip row (with geojson) for the owning plan, or 404."""
+    with pg_session() as pg:
+        row = pg.execute(
+            "SELECT *, ST_AsGeoJSON(geom) AS geojson FROM plan_trips"
+            " WHERE uid = :uid AND plan_id = :pid",
+            {"uid": plan_trip_uid, "pid": plan["uid"]},
+        ).fetchone()
+    if row is None:
+        abort(404)
+    return dict(row._mapping)
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/trip/<int:plan_trip_uid>/editor")
+@login_required
+def plan_trip_editor(username, plan_uuid, plan_trip_uid):
+    """Open the full trip editor (edit_copy) for a plan-trip. Timing is shown via the
+    datetimes materialised at the plan's anchor_date; the save converts them back to
+    relative day offsets for relative legs (see update_plan_trip_full_route)."""
+    plan = get_owned_plan(plan_uuid, username)
+    pt = _get_plan_trip_row(plan, plan_trip_uid)
+
+    coords = geom_geojson_to_coords(pt["geojson"])  # [[lat,lng],...]
+    wplist = [[c[0], c[1]] for c in coords] or [[0, 0], [0, 0]]
+    if pt["waypoints"]:
+        wp = [[p["lat"], p["lng"]] for p in json.loads(pt["waypoints"])]
+        wplist = [wplist[0]] + wp + [wplist[-1]]
+
+    sdt, edt = pt["start_datetime"], pt["end_datetime"]
+    start_str = sdt.strftime("%Y-%m-%d %H:%M:%S") if sdt else ""
+    end_str = edt.strftime("%Y-%m-%d %H:%M:%S") if edt else ""
+    # Map the plan-trip timing onto edit_copy's precision model.
+    if pt["timing_mode"] == "relative":
+        precision = "precise" if pt["start_time"] is not None else "onlyDate"
+    elif sdt is None:
+        precision = "unknown"
+    elif sdt.second == 1:
+        precision = "onlyDate"
+    else:
+        precision = "precise"
+
+    if pt["manual_trip_duration"] is not None:
+        h, rem = divmod(int(pt["manual_trip_duration"]), 3600)
+        m = rem // 60
+    else:
+        h = lang[session["userinfo"]["lang"]]["hours"]
+        m = lang[session["userinfo"]["lang"]]["minutes"]
+
+    price = pt["price"]
+    if price not in (None, ""):
+        price = price if price % 1 != 0 else int(price)
+    else:
+        price = ""
+
+    pdate = pt["purchase_date"]
+    purchasing_date = pdate.strftime("%Y-%m-%d") if isinstance(pdate, (datetime, date)) else ""
+
+    user_obj = User.query.filter_by(username=username).first()
+    colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
+
+    return render_template(
+        "edit_copy.html",
+        title=lang[session["userinfo"]["lang"]]["edit"],
+        start_datetime=start_str,
+        end_datetime=end_str,
+        currencyOptions=get_available_currencies(),
+        unknownType=None,
+        precision=precision,
+        tripId=plan_trip_uid,
+        origin=pt["origin_station"],
+        destination=pt["destination_station"],
+        trip=pt,
+        fr24_calls=fr24_usage(username),
+        edit_copy_type="edit",
+        country_list=get_all_countries(),
+        username=username,
+        tripOperator=pt["operator"] or "",
+        tripHours=h or "",
+        tripMinutes=m or "",
+        tripLineName=pt["line_name"] or "",
+        tripVisibility=pt["visibility"] or "",
+        tripMaterialType=pt["material_type"] or "",
+        tripMaterialTypeAdvanced=pt["material_type_advanced"] or "",
+        tripSeat=pt["seat"] or "",
+        tripReg=pt["reg"] or "",
+        tripPrice=price if price is not None else "",
+        tripCurrency=pt["currency"] or "",
+        tripPurchasingDate=purchasing_date,
+        tripType=pt["trip_type"],
+        tripTicketId="",
+        wplist=wplist,
+        tripNotes=pt["notes"] or "",
+        colorblind=colorblind,
+        tripDepartureDelay="",
+        tripArrivalDelay="",
+        tripPowerType=pt["power_type"],
+        tripCo2Override=pt["co2_override"],
+        # plan context: switches the save target + redirect inside edit_copy.html
+        plan_uuid=plan_uuid,
+        plan_trip_uid=plan_trip_uid,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/trip/<int:plan_trip_uid>/edit_full", methods=["POST"])
+@login_required
+def update_plan_trip_full_route(username, plan_uuid, plan_trip_uid):
+    """Save a plan-trip edited in the rich editor: route geometry + all metadata +
+    timing. Relative legs keep their day-offset semantics by converting the edited
+    absolute datetimes back to day numbers relative to the plan's anchor_date."""
+    plan = get_owned_plan(plan_uuid, username)
+    pt = _get_plan_trip_row(plan, plan_trip_uid)
+    formData = dict(request.form)
+    anchor = plan["anchor_date"]
+
+    # Path: edited on the map, otherwise keep the stored geometry.
+    if formData.get("path"):
+        path = [{"lat": c["lat"], "lng": c["lng"]} for c in json.loads(formData["path"])]
+    else:
+        coords = geom_geojson_to_coords(pt["geojson"])
+        path = [{"lat": c[0], "lng": c[1]} for c in coords]
+    if not path:
+        path = [{"lat": 0.0, "lng": 0.0}, {"lat": 0.0, "lng": 0.0}]
+
+    precision = formData.get("precision")
+    if pt["timing_mode"] == "relative" and precision in ("preciseDates", "onlyDate"):
+        # Re-anchor: turn the edited absolute date(s) back into Day N (+ optional time).
+        if precision == "preciseDates":
+            sdt = datetime.strptime(formData["newTripStart"], "%Y-%m-%dT%H:%M")
+            edt = datetime.strptime(formData["newTripEnd"], "%Y-%m-%dT%H:%M")
+            tform = {
+                "precision": "relative",
+                "planStartDay": max(1, (sdt.date() - anchor).days + 1),
+                "planStartTime": sdt.strftime("%H:%M"),
+                "planEndDay": max(1, (edt.date() - anchor).days + 1),
+                "planEndTime": edt.strftime("%H:%M"),
+            }
+        else:  # onlyDate -> untimed Day N
+            od = datetime.strptime(formData["onlyDate"], "%Y-%m-%d").date()
+            d = max(1, (od - anchor).days + 1)
+            tform = {
+                "precision": "relative",
+                "planStartDay": d, "planStartTime": "",
+                "planEndDay": d, "planEndTime": "",
+                "onlyDateDuration": formData.get("onlyDateDuration", ""),
+            }
+        timing = process_plan_dates(tform, path, anchor)
+    else:
+        # Precise/onlyDate/unknown legs stay absolute (delegates to processDates).
+        timing = process_plan_dates(formData, path, anchor)
+
+    # Distance/duration/countries: recompute when the route was (re-)drawn, else keep.
+    details_parsed = json.loads(formData["details"]) if formData.get("details") else None
+    power_type = formData.get("powerType") or (
+        details_parsed.get("powerType") if details_parsed else None
+    )
+    co2_override = float(formData["co2Override"]) if formData.get("co2Override") else None
+    trip_type = pt["trip_type"]
+    if "estimated_trip_duration" in formData and "trip_length" in formData:
+        trip_length = sanitize_param(formData["trip_length"])
+        estimated_trip_duration = sanitize_param(formData["estimated_trip_duration"])
+        if trip_type in ("air", "helicopter"):
+            c = {}
+            c[getCountryFromCoordinates(**path[0])["countryCode"]] = float(trip_length or 0) / 2
+            c[getCountryFromCoordinates(**path[-1])["countryCode"]] = float(trip_length or 0) / 2
+            countries = json.dumps(c)
+        else:
+            countries = getCountriesFromPath(path, trip_type, details_parsed, power_type)
+    elif power_type in ("electric", "thermic", "manual"):
+        # Power changed without re-routing: recompute the electrified split from the
+        # existing path (deterministic for explicit power types — see updateTrip).
+        trip_length = pt["trip_length"]
+        estimated_trip_duration = pt["estimated_trip_duration"]
+        countries = getCountriesFromPath(path, trip_type, None, power_type)
+    else:
+        trip_length = pt["trip_length"]
+        estimated_trip_duration = pt["estimated_trip_duration"]
+        countries = pt["countries"]
+
+    has_price = formData.get("price") not in (None, "")
+    now = datetime.now()
+    plan_trip = PlanTrip(
+        plan_id=plan["uid"],
+        user_id=plan["user_id"],
+        origin_station=sanitize_param(formData.get("origin_station")) or pt["origin_station"],
+        destination_station=sanitize_param(formData.get("destination_station")) or pt["destination_station"],
+        trip_type=trip_type,
+        operator=sanitize_param(formData.get("operator")),
+        line_name=sanitize_param(formData.get("lineName")),
+        material_type=sanitize_param(formData.get("material_type")),
+        material_type_advanced=sanitize_param(formData.get("material_type_advanced")),
+        reg=sanitize_param(formData.get("reg")),
+        seat=sanitize_param(formData.get("seat")),
+        notes=sanitize_param(formData.get("notes")),
+        trip_length=trip_length,
+        estimated_trip_duration=estimated_trip_duration,
+        countries=countries,
+        price=sanitize_param(formData.get("price")),
+        currency=sanitize_param(formData.get("currency")) if has_price else None,
+        purchase_date=sanitize_param(formData.get("purchasing_date")) if has_price else None,
+        waypoints=sanitize_param(formData.get("waypoints")) or pt["waypoints"],
+        visibility=sanitize_param(formData.get("visibility")) or pt["visibility"],
+        path=path,
+        timing=timing,
+        power_type=power_type,
+        co2_override=co2_override,
+        sort_order=pt["sort_order"],
+        created=pt["created"],
+        last_modified=now,
+    )
+    update_plan_trip_full(plan_trip_uid, plan_trip)
+    # edit_copy posts via AJAX and redirects client-side.
+    return ""
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/reorder", methods=["POST"])
+@login_required
+def reorder_plan_trips_route(username, plan_uuid):
+    plan = get_owned_plan(plan_uuid, username)
+    order = (request.get_json() or {}).get("order", [])
+    with pg_session() as pg:
+        for i, uid in enumerate(order):
+            pg.execute(
+                reorder_plan_trip_query(),
+                {"uid": int(uid), "plan_id": plan["uid"], "user_id": plan["user_id"], "sort_order": i},
+            )
+    return ("", 204)
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/validate", methods=["POST"])
+@login_required
+def validate_plan_route(username, plan_uuid):
+    plan = get_owned_plan(plan_uuid, username)
+    start_date_str = request.form.get("start_date")
+    # A start date is only needed to anchor relative (Day N) legs; a precise-dated
+    # plan can be logged as-is, so fall back to the stored anchor date when omitted.
+    if start_date_str:
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+    else:
+        start_date = plan["anchor_date"]
+    validate_plan(plan, start_date)
+    return redirect(url_for("plan_list", username=username))
+
+
+def _plan_public_or_403(plan_uuid):
+    """Fetch a plan by uuid for public viewing: owner always; otherwise the owner
+    must have public trips. Returns the plan dict or aborts."""
+    with pg_session() as pg:
+        row = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
+    if row is None:
+        abort(410)
+    plan = dict(row._mapping)
+    owner_user = User.query.filter_by(uid=plan["user_id"]).first()
+    if owner_user is None:
+        abort(410)
+    if (
+        not session.get(owner_user.username)
+        and not owner_user.is_public_trips()
+        and not session.get(owner)
+    ):
+        abort(401)
+    return plan
+
+
+@app.route("/public/plan/<plan_uuid>")
+def public_plan(plan_uuid):
+    plan = _plan_public_or_403(plan_uuid)
+    # Read-only preview for everyone, owner included: all editing lives on the plan
+    # management page, so the map/share view stays an uncluttered visualisation
+    # (no controls bar to crowd small screens).
+    return _render_plan_view(plan, getUser(), controls=False)
+
+
+@app.route("/public/plan/<plan_uuid>/getPlanTrips")
+def public_plan_data(plan_uuid):
+    _plan_public_or_403(plan_uuid)
+    tripList, priceDict = build_plan_trip_list(plan_uuid)
+    return jsonify([tripList, priceDict])
+
+
 @app.route("/u/<username>/scottySaveTrip", methods=["GET", "POST"])
 def scottySaveTrip(username):
     if not (session.get(username) or session.get(owner)):
@@ -4817,6 +5657,17 @@ def saveFlight(username, type):
         airlineLogoProcess(newTrip)
         # TODO : Fix visibility for flights
         newTrip["visibility"] = "public"
+
+        # Building a flight for a plan -> write to plan_trips (parallel world), reusing
+        # savePlanTripToDb's air branch. The 3D track isn't kept for plans.
+        plan_uuid = newTrip.get("plan_uuid")
+        if plan_uuid:
+            plan = get_owned_plan(plan_uuid, username)
+            savePlanTripToDb(
+                username=username, newTrip=newTrip, newPath=newPath, plan=plan, trip_type=type
+            )
+            return ""
+
         # Optional 3D track (altitude in metres, timestamps in epoch seconds),
         # each parallel to newPath. Passed through as JSON strings (or None).
         altitude = request.form.get("altitude") or None

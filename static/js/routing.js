@@ -886,7 +886,7 @@ function routing(map, showSidebar=true, type){
         content += `<p><button id="downloadGeoJSON" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></p>`;
       } else {
         content += `<p><button id="saveTrip" type="button" onclick="saveTrip()">${texts.saveTripButton}</button></p>`;
-        if(newTrip.precision == "preciseDates"){
+        if(newTrip.precision == "preciseDates" || newTrip.plan_uuid){
           content += `<button id="saveTripContinue" type="button"  onclick="saveTrip(true)">${texts.saveTripContinueButton}</button>`;
         }
       }
