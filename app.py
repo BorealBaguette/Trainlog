@@ -5138,6 +5138,17 @@ def plan_view(username, plan_uuid):
     plan_has_relative = any(
         item["trip"].get("day_number") is not None for item in trip_list
     )
+    # Localised vehicle-type names for the add-trip dropdown / breakdown (the lang
+    # keys are the type ids themselves: train -> "Train", poi -> "Activity", ...).
+    L = lang[session["userinfo"]["lang"]]
+    type_labels = {
+        vt: L.get(vt, vt)
+        for vt in [
+            "train", "bus", "tram", "metro", "air", "helicopter", "ferry", "car",
+            "walk", "cycle", "aerialway", "funicular", "rail", "scooter", "ski",
+            "accommodation", "poi", "restaurant", "other",
+        ]
+    }
     return render_template(
         "plans/plan.html",
         title=plan["name"],
@@ -5148,6 +5159,7 @@ def plan_view(username, plan_uuid):
         plan_trips=trip_list,
         plan_stats=stats,
         plan_has_relative=plan_has_relative,
+        type_labels=type_labels,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

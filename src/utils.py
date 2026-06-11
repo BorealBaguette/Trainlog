@@ -127,11 +127,24 @@ def has_current_trip(user_id: int | None = None) -> bool:
     return trip is not None
 
 
+def _parse_precise_datetime(value):
+    """Parse 'YYYY-MM-DDTHH:MM' from the form, tolerating a trailing ':SS' (e.g. GPX
+    imports that include seconds). Seconds are always dropped — the DB stores
+    minute-resolution times, and the seconds field is reserved as a marker
+    (00 = precise, 01 = date-only)."""
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%dT%H:%M:%S"):
+        try:
+            return datetime.strptime(value, fmt).replace(second=0, microsecond=0)
+        except ValueError:
+            continue
+    raise ValueError(f"Unrecognised datetime: {value!r}")
+
+
 def processDates(new_trip, new_path):
     man_duration = utc_start_datetime = utc_end_datetime = None
     if new_trip["precision"] == "preciseDates":
-        start_datetime = datetime.strptime(new_trip["newTripStart"], "%Y-%m-%dT%H:%M")
-        end_datetime = datetime.strptime(new_trip["newTripEnd"], "%Y-%m-%dT%H:%M")
+        start_datetime = _parse_precise_datetime(new_trip["newTripStart"])
+        end_datetime = _parse_precise_datetime(new_trip["newTripEnd"])
         utc_start_datetime = getUtcDatetime(dateTime=start_datetime, **new_path[0])
         utc_end_datetime = getUtcDatetime(dateTime=end_datetime, **new_path[-1])
 

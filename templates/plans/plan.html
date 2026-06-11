@@ -55,7 +55,7 @@
         <ul class="dropdown-menu" style="max-height:60vh; overflow:auto;">
           {% for vt in vtypes %}
           <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('new', username=username, vehicle_type=vt) }}?plan={{ plan.uuid }}">
-            <img src="{{ url_for('static', filename='images/icons/trip_logos/' + vt + '.png') }}" onerror="this.style.display='none'" style="height:18px;">{{ vt }}</a></li>
+            <img src="{{ url_for('static', filename='images/icons/trip_logos/' + vt + '.png') }}" onerror="this.style.display='none'" style="height:18px;">{{ type_labels.get(vt, vt) }}</a></li>
           {% endfor %}
         </ul>
       </div>
@@ -117,7 +117,7 @@
       <tbody>
         {% for r in plan_stats.per_type %}
         <tr>
-          <td><img src="{{ url_for('static', filename='images/icons/trip_logos/' + r.type + '.png') }}" onerror="this.style.display='none'" style="height:18px; vertical-align:middle; margin-right:8px;">{{ r.type }}</td>
+          <td><img src="{{ url_for('static', filename='images/icons/trip_logos/' + r.type + '.png') }}" onerror="this.style.display='none'" style="height:18px; vertical-align:middle; margin-right:8px;">{{ type_labels.get(r.type, r.type) }}</td>
           <td class="text-end">{{ r.count }}</td>
           <td class="text-end">{{ r.duration_h }}</td>
           <td class="text-end">{{ r.distance_km }} km</td>
