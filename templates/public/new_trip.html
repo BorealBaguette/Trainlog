@@ -823,6 +823,14 @@ function buildItinerary(trips, prices) {
         let changeTime = 0;
         let actualChangeTime = 0;
 
+        // Plan day boundary: the next leg starts on a later "Day N". A "Jour N" header
+        // is inserted there, so we must NOT also draw a transfer connector (dangling dots).
+        var nextLeg = trips[index + 1];
+        var planDayBoundary = relativeDates && nextLeg
+            && nextLeg.trip.day_number != null && trip.trip.day_number != null
+            && nextLeg.trip.day_number !== trip.trip.day_number;
+        var isLastTrip = (trip === trips[trips.length - 1]);
+
         if (trip != trips[trips.length - 1]) {
             if (tripGroup(trip) === tripGroup(trips[index + 1])) {
                 changeTime = timeDifference(
@@ -1030,7 +1038,9 @@ function buildItinerary(trips, prices) {
                 $('<time>').addClass(trip.trip.type).addClass("arrival").attr("datetime", trip.trip.end_time).html(endTimeDisplay)
             ).append(
                 $('<span>').attr("class", function() {
-                    if (trips.length > 1 && changeTime <= 43200) {
+                    // No dotted transfer connector on the last leg or across a plan day
+                    // boundary (a "Jour N" header sits there instead).
+                    if (trips.length > 1 && changeTime <= 43200 && !isLastTrip && !planDayBoundary) {
                         return "trainChange";
                     } else {
                         return "tripChange";
@@ -1038,7 +1048,7 @@ function buildItinerary(trips, prices) {
                 }).append(
                     $('<strong>').text(trip.trip.destination_station)
                 ).append('<br>').append(function() {
-                    if (trip != trips[trips.length - 1]) {
+                    if (trip != trips[trips.length - 1] && !planDayBoundary) {
                         if (changeTime <= 43200) {
                             let changeTimeText;
                             if (changeTime != 0) {
@@ -1065,11 +1075,8 @@ function buildItinerary(trips, prices) {
         // A plan inserts a "Day N" header whenever the next leg moves to a later day
         // (not on a >12h gap, which is date/time-driven and wrong for relative plans).
         var nextTrip = trips[index + 1];
-        var planDayChanged = relativeDates && nextTrip
-            && nextTrip.trip.day_number != null && trip.trip.day_number != null
-            && nextTrip.trip.day_number !== trip.trip.day_number;
         var insertHeader = relativeDates
-            ? planDayChanged
+            ? planDayBoundary
             : (changeTime > 43200 && trip != trips[trips.length - 1]);
         if (trips.length > 1 && insertHeader) {
             // Each block gets the header it would show on its own (the first block's is

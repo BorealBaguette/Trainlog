@@ -4917,7 +4917,7 @@ def build_plan_trip_list(plan_uuid):
             "visibility": pt["visibility"],
             "departure_delay": None,
             "arrival_delay": None,
-            "logo_url": None,
+            "logo_url": pt["logo_url"],
             "operator_name": pt["operator"] or "",
         }
         trip = formatTrip(trip)
