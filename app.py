@@ -4875,9 +4875,33 @@ def build_plan_trip_list(plan_uuid):
         plan = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
         if plan is None:
             return [], empty
-        rows = pg.execute(
-            get_plan_trips_query(), {"plan_id": plan._mapping["uid"]}
-        ).fetchall()
+        plan_uid = plan._mapping["uid"]
+        rows = pg.execute(get_plan_trips_query(), {"plan_id": plan_uid}).fetchall()
+        cost_rows = pg.execute(get_plan_costs_query(), {"plan_id": plan_uid}).fetchall()
+
+    # Shared costs -> per-leg "ticket" fields, so a leg on a cost renders with the
+    # existing ticket UI (name + per-leg share). Each cost is converted once; the
+    # cost's full price is added to the total exactly once (total_shared).
+    today = datetime.now().date()
+    cost_by_id = {}
+    total_shared = 0.0
+    for c in cost_rows:
+        cm = c._mapping
+        if cm["price"] in (None, ""):
+            continue
+        cur = cm["currency"] or user_currency
+        full = get_exchange_rate(base_currency=cur, target_currency=user_currency, date=today, price=float(cm["price"]))
+        full = full if full is not None else float(cm["price"])
+        total_shared += full
+        per_leg_orig = float(cm["price_per_leg"]) if cm["price_per_leg"] else 0.0
+        per_leg = per_leg_orig
+        if per_leg_orig:
+            conv = get_exchange_rate(base_currency=cur, target_currency=user_currency, date=today, price=per_leg_orig)
+            per_leg = conv if conv is not None else per_leg_orig
+        cost_by_id[cm["uid"]] = {
+            "name": cm["name"], "currency": cur,
+            "per_leg": round(per_leg, 2), "per_leg_orig": round(per_leg_orig, 2),
+        }
 
     tripList = []
     total_price = total_carbon = total_distance = 0
@@ -4931,6 +4955,14 @@ def build_plan_trip_list(plan_uuid):
         trip["day_number"] = pt["start_day"]
         trip["end_day_number"] = pt["end_day"]
         trip["cost_id"] = pt["cost_id"]
+        # A leg on a shared cost renders like a ticketed trip (reuse the ticket UI).
+        cinfo = cost_by_id.get(pt["cost_id"])
+        if cinfo:
+            trip["ticket"] = cinfo["name"]
+            trip["ticket_price_in_user_currency"] = cinfo["per_leg"]
+            trip["ticket_price"] = cinfo["per_leg_orig"]
+            trip["ticket_currency"] = cinfo["currency"]
+            trip["user_currency"] = user_currency
         trip["carbon_footprint"] = (
             round(float(pt["carbon"]), 6) if pt["carbon"] is not None else 0
         )
@@ -4946,7 +4978,7 @@ def build_plan_trip_list(plan_uuid):
         )
 
     priceDict = {
-        "total_price": total_price,
+        "total_price": total_price + total_shared,
         "user_currency": user_currency,
         "total_carbon": round(total_carbon, 6),
         "total_distance": round(total_distance, 2),
