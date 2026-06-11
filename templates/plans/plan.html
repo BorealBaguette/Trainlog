@@ -109,14 +109,14 @@
 
   <!-- stats -->
   <div class="stat-grid mb-3">
-    <div class="stat-tile"><div class="lbl">{{ totalTrips|default('Trips') }}</div><div class="val">{{ plan_stats.count }}</div></div>
+    <div class="stat-tile"><div class="lbl">{{ totalTrips|default('Trips') }}</div><div class="val"><span class="fmt-num" data-n="{{ plan_stats.count }}">{{ plan_stats.count }}</span></div></div>
     {% if plan_stats.has_span %}
-    <div class="stat-tile" title="{{ planSpanHint|default('From the first departure to the last arrival') }}"><div class="lbl">{{ totalDuration|default('Total duration') }}</div><div class="val">{{ plan_stats.span_h }}</div></div>
+    <div class="stat-tile" title="{{ planSpanHint|default('From the first departure to the last arrival') }}"><div class="lbl">{{ totalDuration|default('Total duration') }}</div><div class="val"><span class="fmt-dur" data-s="{{ plan_stats.span_seconds }}">{{ plan_stats.span_h }}</span></div></div>
     {% endif %}
-    <div class="stat-tile" title="{{ travelTimeHint|default('Time actually spent on transport (excludes stays, activities and meals)') }}"><div class="lbl">{{ planTravelTime|default('Travel time') }}</div><div class="val">{{ plan_stats.total_duration_h or '—' }}</div></div>
-    <div class="stat-tile"><div class="lbl">{{ totalLength|default('Total distance') }}</div><div class="val">{{ plan_stats.total_distance_km }} km</div></div>
+    <div class="stat-tile" title="{{ travelTimeHint|default('Time actually spent on transport (excludes stays, activities and meals)') }}"><div class="lbl">{{ planTravelTime|default('Travel time') }}</div><div class="val"><span class="fmt-dur" data-s="{{ plan_stats.total_duration }}">{{ plan_stats.total_duration_h or '—' }}</span></div></div>
+    <div class="stat-tile"><div class="lbl">{{ totalLength|default('Total distance') }}</div><div class="val"><span class="fmt-num" data-n="{{ plan_stats.total_distance_km }}">{{ plan_stats.total_distance_km }}</span> km</div></div>
     {% if plan_stats.has_price %}
-    <div class="stat-tile"><div class="lbl">{{ price|default('Price') }}</div><div class="val">{{ plan_stats.total_price }} {{ plan_stats.user_currency }}</div></div>
+    <div class="stat-tile"><div class="lbl">{{ price|default('Price') }}</div><div class="val"><span class="fmt-num" data-n="{{ plan_stats.total_price }}">{{ plan_stats.total_price }}</span> {{ plan_stats.user_currency }}</div></div>
     {% endif %}
   </div>
 
@@ -128,10 +128,10 @@
         {% for r in plan_stats.per_type %}
         <tr>
           <td><img src="{{ url_for('static', filename='images/icons/trip_logos/' + r.type + '.png') }}" onerror="this.style.display='none'" style="height:18px; vertical-align:middle; margin-right:8px;">{{ type_labels.get(r.type, r.type) }}</td>
-          <td class="text-end">{{ r.count }}</td>
-          <td class="text-end">{{ r.duration_h }}</td>
-          <td class="text-end">{{ r.distance_km }} km</td>
-          {% if plan_stats.has_price %}<td class="text-end">{{ r.price_str }}</td>{% endif %}
+          <td class="text-end"><span class="fmt-num" data-n="{{ r.count }}">{{ r.count }}</span></td>
+          <td class="text-end"><span class="fmt-dur" data-s="{{ r.duration }}">{{ r.duration_h }}</span></td>
+          <td class="text-end"><span class="fmt-num" data-n="{{ r.distance_km }}">{{ r.distance_km }}</span> km</td>
+          {% if plan_stats.has_price %}<td class="text-end">{% if r.price %}<span class="fmt-num" data-n="{{ r.price|round|int }}">{{ r.price|round|int }}</span> {{ plan_stats.user_currency }}{% endif %}</td>{% endif %}
         </tr>
         {% endfor %}
       </tbody>
@@ -147,9 +147,9 @@
         {% for c in plan_costs %}
         <tr>
           <td><i class="bi bi-tag" style="color:#8a909a; margin-right:8px;"></i>{{ c.name }}</td>
-          <td class="text-end text-muted">{{ c.leg_count }} {{ costLegs|default('legs') }}</td>
-          <td class="text-end text-muted">{% if c.price_per_leg %}{{ c.price_per_leg|round|int }} {{ c.currency }}/{{ costLeg|default('leg') }}{% endif %}</td>
-          <td class="text-end">{{ c.price|round|int }} {{ c.currency }}</td>
+          <td class="text-end text-muted"><span class="fmt-num" data-n="{{ c.leg_count }}">{{ c.leg_count }}</span> {{ costLegs|default('legs') }}</td>
+          <td class="text-end text-muted">{% if c.price_per_leg %}<span class="fmt-num" data-n="{{ c.price_per_leg|round|int }}">{{ c.price_per_leg|round|int }}</span> {{ c.currency }}/{{ costLeg|default('leg') }}{% endif %}</td>
+          <td class="text-end"><span class="fmt-num" data-n="{{ c.price|round|int }}">{{ c.price|round|int }}</span> {{ c.currency }}</td>
           <td class="text-end" style="white-space:nowrap;">
             <button class="btn btn-sm" title="{{ edit|default('Edit') }}"
                     onclick='costEdit({{ {"uid": c.uid, "name": c.name, "price": c.price, "currency": c.currency}|tojson }})'><i class="bi bi-pencil"></i></button>
@@ -194,9 +194,9 @@
           {% elif t.start_date %}
             {{ t.start_date }}{% if t.start_time %} {{ t.start_time }}{% endif %}{% if t.end_time and t.end_time != t.start_time %} &rarr; {{ t.end_time }}{% endif %}
           {% else %}—{% endif %}
-          {% if t.duration_h %} · {{ t.duration_h }}{% endif %}
-          {% if t.trip_length %} · {{ (t.trip_length / 1000)|round|int }} km{% endif %}
-          {% if t.price_in_user_currency %} · {{ t.price_in_user_currency|round|int }} {{ t.user_currency }}{% endif %}
+          {% if t.duration_h %} · <span class="fmt-dur" data-s="{{ t.duration_seconds }}">{{ t.duration_h }}</span>{% endif %}
+          {% if t.trip_length %} · <span class="fmt-num" data-n="{{ (t.trip_length / 1000)|round|int }}">{{ (t.trip_length / 1000)|round|int }}</span> km{% endif %}
+          {% if t.price_in_user_currency %} · <span class="fmt-num" data-n="{{ t.price_in_user_currency|round|int }}">{{ t.price_in_user_currency|round|int }}</span> {{ t.user_currency }}{% endif %}
           {% if t.operator %} · {{ t.operator }}{% endif %}
           {% if t.line_name %} · {{ t.line_name }}{% endif %}
           {% if t.material_type %} · {{ t.material_type }}{% endif %}
@@ -292,6 +292,22 @@
 </form>
 
 <script>
+// Locale-aware formatting of all numbers + durations (Intl, user language).
+(function formatPlanNumbers() {
+  var LOC = "{{ langId }}" || (typeof langId !== 'undefined' ? langId : 'en') || 'en';
+  var nf = new Intl.NumberFormat(LOC);
+  document.querySelectorAll('.fmt-num').forEach(function(el){
+    var n = parseFloat(el.dataset.n);
+    if (!isNaN(n)) el.textContent = nf.format(n);
+  });
+  document.querySelectorAll('.fmt-dur').forEach(function(el){
+    var s = parseFloat(el.dataset.s);
+    if (!isNaN(s) && s > 0 && typeof secondsToDhm === 'function') {
+      try { el.textContent = secondsToDhm(s, LOC); } catch (e) { /* keep server fallback */ }
+    }
+  });
+})();
+
 function planValidate() {
   {% if plan_has_relative %}
   // Relative (Day N) legs need a real Day-1 date to anchor to.

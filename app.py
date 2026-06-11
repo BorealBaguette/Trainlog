@@ -5148,6 +5148,7 @@ def compute_plan_stats(trip_list, costs=None):
         "has_price": total_price > 0,
         "user_currency": user_currency,
         "span_h": _fmt_dhm(span_seconds) if span_seconds > 0 else "",
+        "span_seconds": span_seconds,
         "has_span": span_seconds > 0,
         "per_type": per_type_rows,
     }
@@ -5163,7 +5164,9 @@ def plan_view(username, plan_uuid):
     for item in trip_list:
         t = item["trip"]
         d = (t.get("trip_duration") or [None, 0])[1]
-        t["duration_h"] = "" if t.get("type") in ("poi", "accommodation", "restaurant") else _fmt_dhm(d)
+        static = t.get("type") in ("poi", "accommodation", "restaurant")
+        t["duration_h"] = "" if static else _fmt_dhm(d)
+        t["duration_seconds"] = 0 if static else (float(d) if d not in (None, "") else 0)
     with pg_session() as pg:
         plan_costs = [
             dict(r._mapping)
