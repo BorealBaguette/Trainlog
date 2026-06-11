@@ -437,19 +437,51 @@
                 <span class="legend">{{timings}}:</span>
             </legend>
 
+            {% if plan_uuid %}
+            <div class="radio-group">
+                <input type="radio" id="radioRelative" value="relative" name="precision" />
+                <label for="radioRelative" class="checkboxLabel">{{ relativeTiming|default('Day + time') }}</label>
+            </div>
+            {% endif %}
             <div class="radio-group">
                 <input type="radio" id="radioPreciseDates" value="preciseDates" name="precision" checked />
                 <label for="radioPreciseDates" class="checkboxLabel">{{preciseDates}}</label>
             </div>
+            {% if not plan_uuid %}
             <div class="radio-group">
                 <input type="radio" id="radioUnknown" value="unknown" name="precision" />
                 <label for="radioUnknown" class="checkboxLabel">{{unknown}}</label>
             </div>
+            {% endif %}
             <div class="radio-group">
                 <input type="radio" id="radioOnlyDate" value="onlyDate" name="precision" />
                 <label for="radioOnlyDate" class="checkboxLabel">{{onlyDate}}</label>
             </div>
         </fieldset>
+
+        {% if plan_uuid %}
+        <style>
+          #form #relativeDates { display: none; }
+          #form :has(input[id=radioRelative]:checked) #relativeDates { display: grid; gap: 0 0.3rem; }
+        </style>
+        <group id="relativeDates">
+            <fieldset class="fieldset-datetime">
+                <legend><span class="legend">{{ newTripStart }}</span></legend>
+                <label class="sr-only" for="planStartDay">{{ day|default('Day') }}</label>
+                <input type="number" min="1" name="planStartDay" id="planStartDay" placeholder="{{ day|default('Day') }}" value="{{ planStartDay|default('1') }}"/>
+                <label class="sr-only" for="planStartTime">{{ time }}</label>
+                <input type="time" name="planStartTime" id="planStartTime" placeholder=" " value="{{ planStartTime|default('') }}" title="{{ timeOptional|default('Time (optional)') }}"/>
+            </fieldset>
+            <fieldset class="fieldset-datetime">
+                <legend><span class="legend">{{ newTripEnd }}</span></legend>
+                <label class="sr-only" for="planEndDay">{{ day|default('Day') }}</label>
+                <input type="number" min="1" name="planEndDay" id="planEndDay" placeholder="{{ day|default('Day') }}" value="{{ planEndDay|default('1') }}"/>
+                <label class="sr-only" for="planEndTime">{{ time }}</label>
+                <input type="time" name="planEndTime" id="planEndTime" placeholder=" " value="{{ planEndTime|default('') }}" title="{{ timeOptional|default('Time (optional)') }}"/>
+            </fieldset>
+            <small class="text-muted" style="grid-column:1/-1;">{{ planTimeHint|default('Times are optional — leave blank to plan by day only.') }}</small>
+        </group>
+        {% endif %}
 
         <hr><br>
 
@@ -1525,7 +1557,11 @@
         }
     });
 
-    if ('{{precision}}' == "unknown") {
+    if ('{{precision}}' == "relative") {
+        // Plan leg with relative "Day N + time" timing (inputs prefilled server-side).
+        $("#radioRelative").prop("checked", true);
+    }
+    else if ('{{precision}}' == "unknown") {
         $("#radioUnknown").prop("checked", true);
     }
     else if ('{{precision}}' == "onlyDate") {
@@ -1583,6 +1619,12 @@
                 formData["precision"] == "preciseDates"
                 && formData["newTripStart"].length == 16
                 && formData["newTripEnd"].length == 16
+            )
+            || (
+                // Plan leg: relative Day N (+ optional time); only the days are required.
+                formData["precision"] == "relative"
+                && formData["planStartDay"]
+                && formData["planEndDay"]
             )) {
 
             var redirectToProjects;

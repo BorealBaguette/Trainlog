@@ -715,9 +715,9 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         newTrip["originStation"][1] = (
             f"{get_flag_emoji(origin_country['countryCode'])} {newTrip['originStation'][1]}"
         )
-        if not newTrip["originManualLat"]:
+        if not newTrip.get("originManualLat"):
             newTrip["originManualLat"] = newPath[0]["lat"]
-        if not newTrip["originManualLng"]:
+        if not newTrip.get("originManualLng"):
             newTrip["originManualLng"] = newPath[0]["lng"]
 
     if not starts_with_flag_emoji(newTrip["destinationStation"][1]):
@@ -727,9 +727,9 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         newTrip["destinationStation"][1] = (
             f"{get_flag_emoji(destination_country['countryCode'])} {newTrip['destinationStation'][1]}"
         )
-        if not newTrip["destinationManualLat"]:
+        if not newTrip.get("destinationManualLat"):
             newTrip["destinationManualLat"] = newPath[-1]["lat"]
-        if not newTrip["destinationManualLng"]:
+        if not newTrip.get("destinationManualLng"):
             newTrip["destinationManualLng"] = newPath[-1]["lng"]
 
     now = datetime.now()
@@ -5317,9 +5317,15 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
     sdt, edt = pt["start_datetime"], pt["end_datetime"]
     start_str = sdt.strftime("%Y-%m-%d %H:%M:%S") if sdt else ""
     end_str = edt.strftime("%Y-%m-%d %H:%M:%S") if edt else ""
-    # Map the plan-trip timing onto edit_copy's precision model.
+    # Map the plan-trip timing onto edit_copy's precision model. Relative legs keep
+    # the "Day N + time" editor (prefilled below); precise legs use the date pickers.
+    plan_start_day = plan_end_day = plan_start_time = plan_end_time = None
     if pt["timing_mode"] == "relative":
-        precision = "precise" if pt["start_time"] is not None else "onlyDate"
+        precision = "relative"
+        plan_start_day = pt["start_day"] or 1
+        plan_end_day = pt["end_day"] or plan_start_day
+        plan_start_time = pt["start_time"].strftime("%H:%M") if pt["start_time"] else ""
+        plan_end_time = pt["end_time"].strftime("%H:%M") if pt["end_time"] else ""
     elif sdt is None:
         precision = "unknown"
     elif sdt.second == 1:
@@ -5383,9 +5389,14 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         tripArrivalDelay="",
         tripPowerType=pt["power_type"],
         tripCo2Override=pt["co2_override"],
-        # plan context: switches the save target + redirect inside edit_copy.html
+        # plan context: switches the save target + redirect inside edit_copy.html,
+        # and (for relative legs) prefills the Day N + time editor.
         plan_uuid=plan_uuid,
         plan_trip_uid=plan_trip_uid,
+        planStartDay=plan_start_day,
+        planEndDay=plan_end_day,
+        planStartTime=plan_start_time,
+        planEndTime=plan_end_time,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -5411,32 +5422,9 @@ def update_plan_trip_full_route(username, plan_uuid, plan_trip_uid):
     if not path:
         path = [{"lat": 0.0, "lng": 0.0}, {"lat": 0.0, "lng": 0.0}]
 
-    precision = formData.get("precision")
-    if pt["timing_mode"] == "relative" and precision in ("preciseDates", "onlyDate"):
-        # Re-anchor: turn the edited absolute date(s) back into Day N (+ optional time).
-        if precision == "preciseDates":
-            sdt = datetime.strptime(formData["newTripStart"], "%Y-%m-%dT%H:%M")
-            edt = datetime.strptime(formData["newTripEnd"], "%Y-%m-%dT%H:%M")
-            tform = {
-                "precision": "relative",
-                "planStartDay": max(1, (sdt.date() - anchor).days + 1),
-                "planStartTime": sdt.strftime("%H:%M"),
-                "planEndDay": max(1, (edt.date() - anchor).days + 1),
-                "planEndTime": edt.strftime("%H:%M"),
-            }
-        else:  # onlyDate -> untimed Day N
-            od = datetime.strptime(formData["onlyDate"], "%Y-%m-%d").date()
-            d = max(1, (od - anchor).days + 1)
-            tform = {
-                "precision": "relative",
-                "planStartDay": d, "planStartTime": "",
-                "planEndDay": d, "planEndTime": "",
-                "onlyDateDuration": formData.get("onlyDateDuration", ""),
-            }
-        timing = process_plan_dates(tform, path, anchor)
-    else:
-        # Precise/onlyDate/unknown legs stay absolute (delegates to processDates).
-        timing = process_plan_dates(formData, path, anchor)
+    # The editor exposes the timing modes natively (relative Day N + time, precise,
+    # onlyDate, unknown), so honour whatever was chosen.
+    timing = process_plan_dates(formData, path, anchor)
 
     # Distance/duration/countries: recompute when the route was (re-)drawn, else keep.
     details_parsed = json.loads(formData["details"]) if formData.get("details") else None
