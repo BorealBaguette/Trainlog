@@ -137,7 +137,7 @@
     <li class="plan-leg" data-uid="{{ t.uid }}">
       <div class="leg-icon"><img src="{{ url_for('static', filename='images/icons/trip_logos/' + (t.type or 'other') + '.png') }}" onerror="this.style.display='none'"></div>
       <div class="leg-body">
-        <div class="leg-route text-truncate">{{ t.origin_station }} &rarr; {{ t.destination_station }}</div>
+        <div class="leg-route text-truncate">{{ t.origin_station }}{% if t.destination_station %} &rarr; {{ t.destination_station }}{% endif %}</div>
         <div class="leg-meta text-truncate">
           {% if t.day_number is not none %}
             {# Relative leg: "Day N", optionally with a clock time. Collapse to one

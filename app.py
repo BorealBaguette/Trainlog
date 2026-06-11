@@ -5128,10 +5128,12 @@ def compute_plan_stats(trip_list):
 def plan_view(username, plan_uuid):
     plan = get_owned_plan(plan_uuid, username)
     trip_list, _ = build_plan_trip_list(plan_uuid)
-    # add a per-leg formatted duration for the management list
+    # add a per-leg formatted duration for the management list (stays/stops have no
+    # travel duration -> leave it blank rather than showing "0m")
     for item in trip_list:
-        d = (item["trip"].get("trip_duration") or [None, 0])[1]
-        item["trip"]["duration_h"] = _fmt_dhm(d)
+        t = item["trip"]
+        d = (t.get("trip_duration") or [None, 0])[1]
+        t["duration_h"] = "" if t.get("type") in ("poi", "accommodation", "restaurant") else _fmt_dhm(d)
     stats = compute_plan_stats(trip_list)
     # The anchor date / Day-1 prompt only matter when some legs are relative (Day N).
     # A fully precise-dated plan needs neither.

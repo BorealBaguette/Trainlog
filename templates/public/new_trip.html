@@ -663,19 +663,23 @@ async function initializeMapAndTrips() {
 
     var trips = response[0];
     var prices = response[1];
-    trips.reverse();
-    trips.sort(function(a, b) {
-      // Block order first (past, dated, future); within the dated block, chronological.
-      if (tripGroup(a) !== tripGroup(b)) return tripGroup(a) - tripGroup(b);
-      var getKey = function(t) {
-        try {
-          var dt = t.trip.utc_filtered_start_datetime;
-          var ts = new Date(String(dt).replace(' ', 'T') + 'Z').getTime();
-          return isNaN(ts) ? 0 : ts + (t.trip.departure_delay || 0) * 1000;
-        } catch(e) { return 0; }
-      };
-      return getKey(a) - getKey(b);
-    });
+    // A plan arrives already ordered (sort_order, then day/time) and that order is
+    // authored by the user — keep it verbatim. Real trips get the chronological sort.
+    if (!relativeDates) {
+        trips.reverse();
+        trips.sort(function(a, b) {
+          // Block order first (past, dated, future); within the dated block, chronological.
+          if (tripGroup(a) !== tripGroup(b)) return tripGroup(a) - tripGroup(b);
+          var getKey = function(t) {
+            try {
+              var dt = t.trip.utc_filtered_start_datetime;
+              var ts = new Date(String(dt).replace(' ', 'T') + 'Z').getTime();
+              return isNaN(ts) ? 0 : ts + (t.trip.departure_delay || 0) * 1000;
+            } catch(e) { return 0; }
+          };
+          return getKey(a) - getKey(b);
+        });
+    }
 
     // Keep a reference for itinerary<->map linking, and number the transfer points.
     currentTrips = trips;
@@ -830,23 +834,42 @@ function buildItinerary(trips, prices) {
                 // Boundary between blocks (past / dated / future): render a plain gap.
                 changeTime = Infinity;
             }
-            var previousDay = new Date(trip.trip.end_datetime).toTimezonedISOString().slice(0, 10);
-            var currentDay = new Date(trip.trip.start_datetime).toTimezonedISOString().slice(0, 10);
-            if (currentDay != previousDay) {
-                dayChangeTrip = true;
+            if (relativeDates) {
+                // Plan: a leg "changes day" when it arrives on a later Day N than it left.
+                if (trip.trip.end_day_number != null && trip.trip.day_number != null
+                    && trip.trip.end_day_number !== trip.trip.day_number) {
+                    dayChangeTrip = true;
+                }
+            } else {
+                var previousDay = new Date(trip.trip.end_datetime).toTimezonedISOString().slice(0, 10);
+                var currentDay = new Date(trip.trip.start_datetime).toTimezonedISOString().slice(0, 10);
+                if (currentDay != previousDay) {
+                    dayChangeTrip = true;
+                }
             }
         }
-        
+
         if (index > 0 && tripGroup(trip) === tripGroup(trips[index - 1])) {
             let precedingChangeTime = timeDifference(
                 trips[index - 1].trip.utc_filtered_end_datetime,
                 trip.trip.utc_filtered_start_datetime
             );
 
+            if (relativeDates) {
+                // Plan: a gap between legs spans days when this leg's Day N is past the
+                // previous leg's arrival day.
+                var prevEndDay = trips[index - 1].trip.end_day_number != null
+                    ? trips[index - 1].trip.end_day_number : trips[index - 1].trip.day_number;
+                if (trip.trip.day_number != null && prevEndDay != null
+                    && trip.trip.day_number !== prevEndDay) {
+                    dayChangeIntertrip = true;
+                }
+            } else {
             var previousDay = new Date(trips[index - 1].trip.end_datetime).toTimezonedISOString().slice(0, 10);
             var currentDay = new Date(trip.trip.start_datetime).toTimezonedISOString().slice(0, 10);
             if (currentDay != previousDay && precedingChangeTime <= 43200) {
                 dayChangeIntertrip = true;
+            }
             }
         }
 
@@ -919,7 +942,10 @@ function buildItinerary(trips, prices) {
           } else {
             endAppend = endBase.padStart(10, '\xa0');
           }
-          endTimeDisplay = $("<div>").append($('<div>').addClass('arrow_box').append($('<div>').addClass("dayChange").append((capitalizeFirstLetter(new Date(trip.trip.end_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)))))).append(endAppend);
+          var endDayLabel = relativeDates
+            ? ("{{ day|default('Day') }} " + (trip.trip.end_day_number || trip.trip.day_number))
+            : capitalizeFirstLetter(new Date(trip.trip.end_datetime).toLocaleDateString('{{langId}}', dateOptionsShort));
+          endTimeDisplay = $("<div>").append($('<div>').addClass('arrow_box').append($('<div>').addClass("dayChange").append(endDayLabel))).append(endAppend);
         } else {
           if (trip.trip.arrival_delay) {
             var actualEnd = addDelayToTime(trip.trip.end_time, trip.trip.arrival_delay);
@@ -939,7 +965,10 @@ function buildItinerary(trips, prices) {
           startTimeContent = trip.trip.start_time.padStart(10, '\xa0');
         }
         if (dayChangeIntertrip) {
-            startTimeDisplay = capitalizeFirstLetter(new Date(trip.trip.start_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)).padStart(10, '\xa0') + "<br>" + startTimeContent;
+            var startDayLabel = relativeDates
+                ? ("{{ day|default('Day') }} " + trip.trip.day_number)
+                : capitalizeFirstLetter(new Date(trip.trip.start_datetime).toLocaleDateString('{{langId}}', dateOptionsShort));
+            startTimeDisplay = startDayLabel.padStart(10, '\xa0') + "<br>" + startTimeContent;
         } else {
             startTimeDisplay = startTimeContent;
         }
@@ -1051,7 +1080,16 @@ function buildItinerary(trips, prices) {
             )
         );
         
-        if (trips.length > 1 && changeTime > 43200 && trip != trips[trips.length - 1]) {
+        // A plan inserts a "Day N" header whenever the next leg moves to a later day
+        // (not on a >12h gap, which is date/time-driven and wrong for relative plans).
+        var nextTrip = trips[index + 1];
+        var planDayChanged = relativeDates && nextTrip
+            && nextTrip.trip.day_number != null && trip.trip.day_number != null
+            && nextTrip.trip.day_number !== trip.trip.day_number;
+        var insertHeader = relativeDates
+            ? planDayChanged
+            : (changeTime > 43200 && trip != trips[trips.length - 1]);
+        if (trips.length > 1 && insertHeader) {
             // Each block gets the header it would show on its own (the first block's is
             // already in #tripDate): a date for the dated block, "project" for future.
             var headerText;

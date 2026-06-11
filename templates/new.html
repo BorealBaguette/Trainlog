@@ -475,9 +475,18 @@
 <script>
 
   {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
- 
+
     $(".non_poi").hide();
-  
+
+    {% if plan_uuid %}
+    // In a plan, static legs (stays/stops) still get the timing precision selector
+    // so they can be Day + time, date-only, etc. Clear the inline display we just set
+    // so the stylesheet (which toggles each group by the checked radio) takes over.
+    $(".trip-time-inputs").css('display', '');
+    $(".trip-time-inputs .non_poi").css('display', '');
+    $("#onlyDatePicker, #manDuration").css('display', '');
+    {% endif %}
+
   {% endif %}
 
   manualCopyHandler();
