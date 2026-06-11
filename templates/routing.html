@@ -97,9 +97,17 @@ async function saveTrip(continueTrip=false) {
         success: function(res) {
             if (isPlan) {
                 if (continueTrip) {
-                    // Keep building the plan: prefill origin from this leg's destination
-                    // and carry the day forward (next leg starts on this leg's end day).
-                    location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${newTrip["destinationStation"]}&prevPlanDay=${newTrip["planEndDay"] || ''}`;
+                    // Keep building the plan: prefill origin from this leg's destination and
+                    // carry forward the SAME timing mode this leg used (relative or precise).
+                    var contUrl = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${newTrip["destinationStation"]}`;
+                    if (newTrip.precision == "preciseDates") {
+                        contUrl += `&prevEndDate=${newTrip["newTripEndDate"] || ''}&prevEndTime=${newTrip["newTripEndTime"] || ''}`;
+                    } else if (newTrip.precision == "onlyDate") {
+                        contUrl += `&prevEndDate=${newTrip["onlyDate"] || ''}`;
+                    } else {
+                        contUrl += `&prevPlanDay=${newTrip["planEndDay"] || ''}&prevPlanTime=${newTrip["planEndTime"] || ''}`;
+                    }
+                    location.href = contUrl;
                 } else {
                     location.href = "/u/{{ username }}/plan/" + encodeURIComponent(newTrip.plan_uuid);
                 }

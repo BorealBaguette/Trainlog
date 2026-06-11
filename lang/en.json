@@ -1027,5 +1027,11 @@
     "planTravelTime": "Travel time",
     "travelTimeHint": "Time actually spent on transport (excludes stays, activities and meals)",
     "nameLabel": "Name",
-    "confirmLogAsTrips": "Log this plan as real trips?"
+    "confirmLogAsTrips": "Log this plan as real trips?",
+    "sharedCosts": "Shared costs",
+    "addCost": "Add",
+    "costLegs": "legs",
+    "costLeg": "leg",
+    "noCost": "No shared cost",
+    "confirmDeleteCost": "Delete this shared cost?"
 }

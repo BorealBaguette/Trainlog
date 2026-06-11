@@ -261,7 +261,16 @@ async function saveTrip(continueTrip=false) {
             var isPlan = !!newTrip.plan_uuid;
             if (isPlan) {
                 if (continueTrip) {
-                    location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${newTrip["destinationStation"]}&prevPlanDay=${newTrip["planEndDay"] || ''}`;
+                    // Carry forward the same timing mode this leg used (relative or precise).
+                    var contUrl = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${newTrip["destinationStation"]}`;
+                    if (newTrip.precision == "preciseDates") {
+                        contUrl += `&prevEndDate=${newTrip["newTripEndDate"] || ''}&prevEndTime=${newTrip["newTripEndTime"] || ''}`;
+                    } else if (newTrip.precision == "onlyDate") {
+                        contUrl += `&prevEndDate=${newTrip["onlyDate"] || ''}`;
+                    } else {
+                        contUrl += `&prevPlanDay=${newTrip["planEndDay"] || ''}&prevPlanTime=${newTrip["planEndTime"] || ''}`;
+                    }
+                    location.href = contUrl;
                 } else {
                     location.href = "/u/{{ username }}/plan/" + encodeURIComponent(newTrip.plan_uuid);
                 }

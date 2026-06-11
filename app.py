@@ -217,6 +217,11 @@ from src.sql.plans import (
     update_plan_trip_query,
     delete_plan_trip_query,
     reorder_plan_trip_query,
+    insert_plan_cost_query,
+    get_plan_costs_query,
+    update_plan_cost_query,
+    delete_plan_cost_query,
+    set_plan_trip_cost_query,
 )
 from src.plans.process_plan_dates import process_plan_dates
 from src.plans.plan_trip import PlanTrip
@@ -4900,6 +4905,10 @@ def build_plan_trip_list(plan_uuid):
             "operator": pt["operator"] or "",
             "line_name": pt["line_name"] or "",
             "material_type": pt["material_type"],
+            "material_type_advanced": pt["material_type_advanced"],
+            "seat": pt["seat"],
+            "reg": pt["reg"],
+            "notes": pt["notes"],
             "price": pt["price"],
             "currency": pt["currency"],
             "purchasing_date": pt["purchase_date"],
@@ -4920,6 +4929,7 @@ def build_plan_trip_list(plan_uuid):
         trip["time"] = "plannedFuture"
         trip["day_number"] = pt["start_day"]
         trip["end_day_number"] = pt["end_day"]
+        trip["cost_id"] = pt["cost_id"]
         trip["carbon_footprint"] = (
             round(float(pt["carbon"]), 6) if pt["carbon"] is not None else 0
         )
@@ -5045,9 +5055,11 @@ def _parse_legacy_dt(value):
         return None
 
 
-def compute_plan_stats(trip_list):
+def compute_plan_stats(trip_list, costs=None):
     """Totals + per-type breakdown (count/duration/distance/price) from a plan trip
     list. Prices are summed in the viewer's currency (already converted by formatTrip).
+    `costs` are the plan's shared costs (rental car, ...) — counted once each in the
+    PRIX total, on top of the per-leg prices.
 
     `span` is the end-to-end length of the whole trip — first departure to last
     arrival on the plan's (anchored) timeline — i.e. "is this a 3-day or a 5-hour
@@ -5100,6 +5112,22 @@ def compute_plan_stats(trip_list):
          for k, v in per_type.items()),
         key=lambda r: r["duration"], reverse=True,
     )
+    # Shared costs (rental car, ...): one price each, on top of the per-leg prices.
+    total_shared = 0.0
+    today = datetime.now().date()
+    for c in costs or []:
+        cp = c.get("price")
+        if cp in (None, ""):
+            continue
+        converted = get_exchange_rate(
+            base_currency=c.get("currency") or user_currency,
+            target_currency=user_currency,
+            date=today,
+            price=float(cp),
+        )
+        total_shared += converted if converted is not None else float(cp)
+    total_price += total_shared
+
     # Span: when legs carry real clock times use the precise elapsed time; for a
     # day-only plan there are no times, so use the inclusive day count (Day 1 -> Day 2
     # is a 2-day trip).
@@ -5115,6 +5143,8 @@ def compute_plan_stats(trip_list):
         "total_duration_h": _fmt_dhm(total_duration),
         "total_distance_km": round(total_distance / 1000),
         "total_price": round(total_price),
+        "shared_cost": round(total_shared),
+        "has_shared": total_shared > 0,
         "has_price": total_price > 0,
         "user_currency": user_currency,
         "span_h": _fmt_dhm(span_seconds) if span_seconds > 0 else "",
@@ -5134,7 +5164,12 @@ def plan_view(username, plan_uuid):
         t = item["trip"]
         d = (t.get("trip_duration") or [None, 0])[1]
         t["duration_h"] = "" if t.get("type") in ("poi", "accommodation", "restaurant") else _fmt_dhm(d)
-    stats = compute_plan_stats(trip_list)
+    with pg_session() as pg:
+        plan_costs = [
+            dict(r._mapping)
+            for r in pg.execute(get_plan_costs_query(), {"plan_id": plan["uid"]}).fetchall()
+        ]
+    stats = compute_plan_stats(trip_list, costs=plan_costs)
     # The anchor date / Day-1 prompt only matter when some legs are relative (Day N).
     # A fully precise-dated plan needs neither.
     plan_has_relative = any(
@@ -5160,8 +5195,11 @@ def plan_view(username, plan_uuid):
         plan=plan,
         plan_trips=trip_list,
         plan_stats=stats,
+        plan_costs=plan_costs,
         plan_has_relative=plan_has_relative,
         type_labels=type_labels,
+        currencyOptions=get_available_currencies(),
+        user_currency=getLoggedUserCurrency(),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -5506,6 +5544,81 @@ def reorder_plan_trips_route(username, plan_uuid):
     return ("", 204)
 
 
+@app.route("/u/<username>/plan/<plan_uuid>/cost", methods=["POST"])
+@login_required
+def submit_plan_cost_route(username, plan_uuid):
+    """Create a shared cost on the plan (rental car, rail pass, ...)."""
+    plan = get_owned_plan(plan_uuid, username)
+    name = sanitize_param(request.form.get("name"))
+    price = request.form.get("price")
+    if not name or not price:
+        abort(400)
+    now = datetime.now()
+    with pg_session() as pg:
+        pg.execute(
+            insert_plan_cost_query(),
+            {
+                "plan_id": plan["uid"],
+                "name": name,
+                "price": float(price),
+                "currency": sanitize_param(request.form.get("currency")) or getLoggedUserCurrency(),
+                "notes": sanitize_param(request.form.get("notes")),
+                "created": now,
+                "last_modified": now,
+            },
+        )
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/cost/<int:cost_uid>/edit", methods=["POST"])
+@login_required
+def update_plan_cost_route(username, plan_uuid, cost_uid):
+    plan = get_owned_plan(plan_uuid, username)
+    name = sanitize_param(request.form.get("name"))
+    price = request.form.get("price")
+    if not name or not price:
+        abort(400)
+    with pg_session() as pg:
+        pg.execute(
+            update_plan_cost_query(),
+            {
+                "uid": cost_uid,
+                "plan_id": plan["uid"],
+                "name": name,
+                "price": float(price),
+                "currency": sanitize_param(request.form.get("currency")) or getLoggedUserCurrency(),
+                "notes": sanitize_param(request.form.get("notes")),
+                "last_modified": datetime.now(),
+            },
+        )
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/cost/<int:cost_uid>/delete", methods=["POST"])
+@login_required
+def delete_plan_cost_route(username, plan_uuid, cost_uid):
+    plan = get_owned_plan(plan_uuid, username)
+    with pg_session() as pg:
+        pg.execute(delete_plan_cost_query(), {"uid": cost_uid, "plan_id": plan["uid"]})
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/trip/<int:plan_trip_uid>/cost", methods=["POST"])
+@login_required
+def set_plan_trip_cost_route(username, plan_uuid, plan_trip_uid):
+    """Attach/detach a leg to a shared cost (the per-leg dropdown). cost_id "" -> NULL."""
+    plan = get_owned_plan(plan_uuid, username)
+    cost_id = (request.get_json() or {}).get("cost_id")
+    cost_id = int(cost_id) if cost_id not in (None, "", "none") else None
+    with pg_session() as pg:
+        pg.execute(
+            set_plan_trip_cost_query(),
+            {"uid": plan_trip_uid, "plan_id": plan["uid"], "cost_id": cost_id,
+             "last_modified": datetime.now()},
+        )
+    return ("", 204)
+
+
 @app.route("/u/<username>/plan/<plan_uuid>/validate", methods=["POST"])
 @login_required
 def validate_plan_route(username, plan_uuid):
@@ -5517,7 +5630,11 @@ def validate_plan_route(username, plan_uuid):
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
     else:
         start_date = plan["anchor_date"]
-    validate_plan(plan, start_date)
+    tag_uuid = validate_plan(plan, start_date)
+    # Land on the new tag grouping the validated trips; fall back to the plan list
+    # for an empty plan (no trips -> no tag).
+    if tag_uuid:
+        return redirect(url_for("public_trip", tagId=tag_uuid))
     return redirect(url_for("plan_list", username=username))
 
 

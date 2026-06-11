@@ -2,11 +2,12 @@
 then archive the plan (keep it for reference). Reuses create_trip unchanged."""
 
 import logging
+import uuid as uuid_lib
 from datetime import datetime, time as dtime, timedelta
 
 from src.paths import geom_geojson_to_coords
 from src.pg import get_or_create_pg_session
-from src.sql.plans import archive_plan_query, get_plan_trips_query
+from src.sql.plans import archive_plan_query, get_plan_costs_query, get_plan_trips_query
 from src.trips.create_trip import create_trip
 from src.trips.trip import Trip
 from src.utils import get_username, getUtcDatetime
@@ -20,6 +21,8 @@ def validate_plan(plan, start_date, pg_session=None):
     username = get_username(plan["user_id"])
     now = datetime.now()
     created_ids = []
+    cost_to_trips = {}  # plan_costs.uid -> [created trip_id, ...]
+    tag_uuid = None
 
     with get_or_create_pg_session(pg_session) as pg:
         rows = pg.execute(get_plan_trips_query(), {"plan_id": plan["uid"]}).fetchall()
@@ -99,7 +102,61 @@ def validate_plan(plan, start_date, pg_session=None):
                 power_type=pt["power_type"],
                 co2_override=pt["co2_override"],
             )
-            created_ids.append(create_trip(trip, pg_session=pg))
+            trip_id = create_trip(trip, pg_session=pg)
+            created_ids.append(trip_id)
+            if pt["cost_id"] is not None:
+                cost_to_trips.setdefault(pt["cost_id"], []).append(trip_id)
+
+        # Export each shared cost as a real ticket linked to exactly its trips, so the
+        # main-level price_per_trip / price_per_km work natively (nothing lost).
+        if cost_to_trips:
+            costs = pg.execute(
+                get_plan_costs_query(), {"plan_id": plan["uid"]}
+            ).fetchall()
+            for c in costs:
+                cm = c._mapping
+                trip_ids = cost_to_trips.get(cm["uid"])
+                if not trip_ids:
+                    continue
+                ticket_uid = pg.execute(
+                    "INSERT INTO tickets (name, username, price, currency, purchasing_date, notes)"
+                    " VALUES (:name, :username, :price, :currency, :purchasing_date, :notes)"
+                    " RETURNING uid",
+                    {
+                        "name": cm["name"],
+                        "username": username,
+                        "price": cm["price"],
+                        "currency": cm["currency"] or "EUR",
+                        "purchasing_date": start_date,
+                        "notes": cm["notes"],
+                    },
+                ).fetchone()[0]
+                pg.execute(
+                    "UPDATE trips SET ticket_id = :tid WHERE trip_id = ANY(:ids)",
+                    {"tid": ticket_uid, "ids": trip_ids},
+                )
+
+        # Group the created trips under a tag named after the plan, so the validated
+        # voyage stays together (and gets a shareable link). Returned for redirect.
+        if created_ids:
+            tag_uuid = str(uuid_lib.uuid4())
+            tag_uid = pg.execute(
+                "INSERT INTO tags (username, name, colour, uuid, type)"
+                " VALUES (:username, :name, :colour, :uuid, :type) RETURNING uid",
+                {
+                    "username": username,
+                    "name": plan["name"],
+                    "colour": "#4b78d6",
+                    "uuid": tag_uuid,
+                    "type": "voyage",
+                },
+            ).fetchone()[0]
+            for trip_id in created_ids:
+                pg.execute(
+                    "INSERT INTO tags_associations (tag_id, trip_id)"
+                    " VALUES (:tag_id, :trip_id) ON CONFLICT (tag_id, trip_id) DO NOTHING",
+                    {"tag_id": tag_uid, "trip_id": trip_id},
+                )
 
         pg.execute(
             archive_plan_query(),
@@ -112,4 +169,4 @@ def validate_plan(plan, start_date, pg_session=None):
         )
 
     logger.info(f"Validated plan {plan['uid']} -> {len(created_ids)} trips")
-    return created_ids
+    return tag_uuid

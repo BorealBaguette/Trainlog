@@ -834,13 +834,9 @@ function buildItinerary(trips, prices) {
                 // Boundary between blocks (past / dated / future): render a plain gap.
                 changeTime = Infinity;
             }
-            if (relativeDates) {
-                // Plan: a leg "changes day" when it arrives on a later Day N than it left.
-                if (trip.trip.end_day_number != null && trip.trip.day_number != null
-                    && trip.trip.end_day_number !== trip.trip.day_number) {
-                    dayChangeTrip = true;
-                }
-            } else {
+            // Plans use the "Jour N" section headers for day grouping, so skip the
+            // inline day-change pointer entirely. Real trips keep it.
+            if (!relativeDates) {
                 var previousDay = new Date(trip.trip.end_datetime).toTimezonedISOString().slice(0, 10);
                 var currentDay = new Date(trip.trip.start_datetime).toTimezonedISOString().slice(0, 10);
                 if (currentDay != previousDay) {
@@ -855,16 +851,8 @@ function buildItinerary(trips, prices) {
                 trip.trip.utc_filtered_start_datetime
             );
 
-            if (relativeDates) {
-                // Plan: a gap between legs spans days when this leg's Day N is past the
-                // previous leg's arrival day.
-                var prevEndDay = trips[index - 1].trip.end_day_number != null
-                    ? trips[index - 1].trip.end_day_number : trips[index - 1].trip.day_number;
-                if (trip.trip.day_number != null && prevEndDay != null
-                    && trip.trip.day_number !== prevEndDay) {
-                    dayChangeIntertrip = true;
-                }
-            } else {
+            // Plans skip the inline day-change pointer (the "Jour N" headers cover it).
+            if (!relativeDates) {
             var previousDay = new Date(trips[index - 1].trip.end_datetime).toTimezonedISOString().slice(0, 10);
             var currentDay = new Date(trip.trip.start_datetime).toTimezonedISOString().slice(0, 10);
             if (currentDay != previousDay && precedingChangeTime <= 43200) {
@@ -942,10 +930,7 @@ function buildItinerary(trips, prices) {
           } else {
             endAppend = endBase.padStart(10, '\xa0');
           }
-          var endDayLabel = relativeDates
-            ? ("{{ day|default('Day') }} " + (trip.trip.end_day_number || trip.trip.day_number))
-            : capitalizeFirstLetter(new Date(trip.trip.end_datetime).toLocaleDateString('{{langId}}', dateOptionsShort));
-          endTimeDisplay = $("<div>").append($('<div>').addClass('arrow_box').append($('<div>').addClass("dayChange").append(endDayLabel))).append(endAppend);
+          endTimeDisplay = $("<div>").append($('<div>').addClass('arrow_box').append($('<div>').addClass("dayChange").append((capitalizeFirstLetter(new Date(trip.trip.end_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)))))).append(endAppend);
         } else {
           if (trip.trip.arrival_delay) {
             var actualEnd = addDelayToTime(trip.trip.end_time, trip.trip.arrival_delay);
@@ -965,10 +950,7 @@ function buildItinerary(trips, prices) {
           startTimeContent = trip.trip.start_time.padStart(10, '\xa0');
         }
         if (dayChangeIntertrip) {
-            var startDayLabel = relativeDates
-                ? ("{{ day|default('Day') }} " + trip.trip.day_number)
-                : capitalizeFirstLetter(new Date(trip.trip.start_datetime).toLocaleDateString('{{langId}}', dateOptionsShort));
-            startTimeDisplay = startDayLabel.padStart(10, '\xa0') + "<br>" + startTimeContent;
+            startTimeDisplay = capitalizeFirstLetter(new Date(trip.trip.start_datetime).toLocaleDateString('{{langId}}', dateOptionsShort)).padStart(10, '\xa0') + "<br>" + startTimeContent;
         } else {
             startTimeDisplay = startTimeContent;
         }

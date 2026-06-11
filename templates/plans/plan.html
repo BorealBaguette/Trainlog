@@ -82,20 +82,30 @@
     </div>
   </div>
 
-  <!-- plan settings (name + Day-1 anchor), tucked behind the gear toggle -->
+  <!-- plan settings (name + description + Day-1 anchor), tucked behind the gear toggle -->
   <div class="collapse mb-4" id="planSettings">
-    <form method="post" action="{{ url_for('update_plan_route', username=username, plan_uuid=plan.uuid) }}" class="d-flex gap-2 align-items-center flex-wrap p-3 rounded" style="background:#f7f8fa; border:1px solid #e5e7eb;">
-      <label class="small text-muted mb-0">{{ nameLabel|default('Name') }}</label>
-      <input type="text" name="name" value="{{ plan.name }}" class="form-control form-control-sm" style="max-width:260px;"/>
-      {% if plan_has_relative %}
-      <label class="small text-muted mb-0" title="{{ planAnchorHint|default('Day-1 reference date (for the preview)') }}">{{ day|default('Day') }} 1 =</label>
-      <input type="date" name="anchor_date" value="{{ plan.anchor_date }}" class="form-control form-control-sm" style="max-width:170px;" title="{{ planAnchorHint|default('Day-1 reference date (for the preview)') }}"/>
-      {% else %}
-      <input type="hidden" name="anchor_date" value="{{ plan.anchor_date }}"/>
-      {% endif %}
+    <form method="post" action="{{ url_for('update_plan_route', username=username, plan_uuid=plan.uuid) }}" class="p-3 rounded" style="background:#f7f8fa; border:1px solid #e5e7eb;">
+      <div class="d-flex gap-2 align-items-center flex-wrap mb-2">
+        <label class="small text-muted mb-0">{{ nameLabel|default('Name') }}</label>
+        <input type="text" name="name" value="{{ plan.name }}" class="form-control form-control-sm" style="max-width:260px;"/>
+        {% if plan_has_relative %}
+        <label class="small text-muted mb-0" title="{{ planAnchorHint|default('Day-1 reference date (for the preview)') }}">{{ day|default('Day') }} 1 =</label>
+        <input type="date" name="anchor_date" value="{{ plan.anchor_date }}" class="form-control form-control-sm" style="max-width:170px;" title="{{ planAnchorHint|default('Day-1 reference date (for the preview)') }}"/>
+        {% else %}
+        <input type="hidden" name="anchor_date" value="{{ plan.anchor_date }}"/>
+        {% endif %}
+      </div>
+      <div class="mb-2">
+        <label class="small text-muted mb-0">{{ notes|default('Notes') }}</label>
+        <textarea name="description" class="form-control form-control-sm" rows="2" placeholder="{{ notes|default('Notes') }}">{{ plan.description or '' }}</textarea>
+      </div>
       <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-check-lg"></i> {{ save|default('Save') }}</button>
     </form>
   </div>
+
+  {% if plan.description %}
+  <p class="text-muted mb-3" style="white-space:pre-wrap;">{{ plan.description }}</p>
+  {% endif %}
 
   <!-- stats -->
   <div class="stat-grid mb-3">
@@ -129,6 +139,42 @@
   </div>
   {% endif %}
 
+  <!-- shared costs (rental car, rail pass, ...) -->
+  <div class="breakdown mb-4">
+    <table>
+      <thead><tr><th colspan="5">{{ sharedCosts|default('Shared costs') }}</th></tr></thead>
+      <tbody>
+        {% for c in plan_costs %}
+        <tr>
+          <td><i class="bi bi-tag" style="color:#8a909a; margin-right:8px;"></i>{{ c.name }}</td>
+          <td class="text-end text-muted">{{ c.leg_count }} {{ costLegs|default('legs') }}</td>
+          <td class="text-end text-muted">{% if c.price_per_leg %}{{ c.price_per_leg|round|int }} {{ c.currency }}/{{ costLeg|default('leg') }}{% endif %}</td>
+          <td class="text-end">{{ c.price|round|int }} {{ c.currency }}</td>
+          <td class="text-end" style="white-space:nowrap;">
+            <button class="btn btn-sm" title="{{ edit|default('Edit') }}"
+                    onclick='costEdit({{ {"uid": c.uid, "name": c.name, "price": c.price, "currency": c.currency}|tojson }})'><i class="bi bi-pencil"></i></button>
+            <form method="post" class="d-inline" action="{{ url_for('delete_plan_cost_route', username=username, plan_uuid=plan.uuid, cost_uid=c.uid) }}" onsubmit="return confirm('{{ confirmDeleteCost|default('Delete this shared cost?') }}');">
+              <button class="btn btn-sm act-del" type="submit" title="{{ delete|default('Delete') }}"><i class="bi bi-trash3"></i></button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <td colspan="5" style="border-top:1px solid #f0f1f3;">
+            <form method="post" action="{{ url_for('submit_plan_cost_route', username=username, plan_uuid=plan.uuid) }}" class="d-flex gap-2 align-items-center flex-wrap py-1">
+              <input type="text" name="name" placeholder="{{ addCost|default('Add a shared cost') }}" required class="form-control form-control-sm" style="max-width:220px;"/>
+              <input type="number" step="any" name="price" placeholder="{{ price|default('Price') }}" required class="form-control form-control-sm" style="max-width:110px;"/>
+              <select name="currency" class="form-select form-select-sm" style="max-width:110px;">
+                {% for cur in currencyOptions %}<option value="{{ cur['currency'] }}" {% if cur['currency'] == user_currency %}selected{% endif %}>{{ cur['currency'] }}</option>{% endfor %}
+              </select>
+              <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-plus-lg"></i> {{ addCost|default('Add') }}</button>
+            </form>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
   <!-- trips -->
   {% if plan_trips %}
   <ul class="plan-list" id="plan-trip-list">
@@ -152,7 +198,23 @@
           {% if t.trip_length %} · {{ (t.trip_length / 1000)|round|int }} km{% endif %}
           {% if t.price_in_user_currency %} · {{ t.price_in_user_currency|round|int }} {{ t.user_currency }}{% endif %}
           {% if t.operator %} · {{ t.operator }}{% endif %}
+          {% if t.line_name %} · {{ t.line_name }}{% endif %}
+          {% if t.material_type %} · {{ t.material_type }}{% endif %}
+          {% if t.seat %} · {{ seat|default('Seat') }} {{ t.seat }}{% endif %}
+          {% if t.reg %} · {{ t.reg }}{% endif %}
         </div>
+        {% if t.notes %}
+        <div class="leg-meta text-truncate" style="font-style:italic;"><i class="bi bi-sticky" style="margin-right:4px;"></i>{{ t.notes }}</div>
+        {% endif %}
+        {% if plan_costs %}
+        <div class="leg-meta mt-1">
+          <i class="bi bi-tag" style="color:#98a0ab;"></i>
+          <select class="leg-cost-select" data-uid="{{ t.uid }}" style="border:1px solid #e5e7eb; border-radius:6px; font-size:.8rem; padding:.05rem .3rem; color:#6b7280;">
+            <option value="">{{ noCost|default('No shared cost') }}</option>
+            {% for c in plan_costs %}<option value="{{ c.uid }}" {% if t.cost_id == c.uid %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
+          </select>
+        </div>
+        {% endif %}
       </div>
       <div class="leg-actions d-flex gap-1 align-items-center">
         <button class="btn btn-sm plan-move" data-dir="-1" title="{{ moveUp|default('Move up') }}"><i class="bi bi-arrow-up"></i></button>
@@ -204,6 +266,27 @@
   </div>
 </div>
 
+<!-- Shared cost edit modal -->
+<div class="modal fade" id="costEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form class="modal-content" id="costEditForm" method="post" action="">
+      <div class="modal-header"><h5 class="modal-title">{{ edit|default('Edit') }} — {{ sharedCosts|default('Shared cost') }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="mb-2"><label class="form-label small">{{ nameLabel|default('Name') }}</label><input type="text" name="name" id="c_name" class="form-control" required/></div>
+        <div class="row g-2">
+          <div class="col"><label class="form-label small">{{ price|default('Price') }}</label><input type="number" step="any" name="price" id="c_price" class="form-control" required/></div>
+          <div class="col"><label class="form-label small">{{ currency|default('Currency') }}</label>
+            <select name="currency" id="c_currency" class="form-select">
+              {% for cur in currencyOptions %}<option value="{{ cur['currency'] }}">{{ cur['currency'] }}</option>{% endfor %}
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer"><button type="submit" class="btn btn-primary">{{ save|default('Save') }}</button></div>
+    </form>
+  </div>
+</div>
+
 <form id="plan-validate-form" method="post" action="{{ url_for('validate_plan_route', username=username, plan_uuid=plan.uuid) }}" style="display:none;">
   <input type="hidden" name="start_date" id="plan-validate-date"/>
 </form>
@@ -247,6 +330,27 @@ document.querySelectorAll('.plan-move').forEach(function(btn){
     fetch("{{ url_for('reorder_plan_trips_route', username=username, plan_uuid=plan.uuid) }}", {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({order: order})
     });
+  });
+});
+
+// Shared cost edit modal.
+var costEditModal = new bootstrap.Modal(document.getElementById('costEditModal'));
+function costEdit(c) {
+  document.getElementById('costEditForm').action =
+    "{{ url_for('plan_view', username=username, plan_uuid=plan.uuid) }}".replace(/\/$/, '') + "/cost/" + c.uid + "/edit";
+  document.getElementById('c_name').value = c.name || '';
+  document.getElementById('c_price').value = c.price != null ? c.price : '';
+  document.getElementById('c_currency').value = c.currency || '';
+  costEditModal.show();
+}
+
+// Per-leg shared-cost dropdown -> attach/detach, then refresh to recompute totals.
+document.querySelectorAll('.leg-cost-select').forEach(function(sel){
+  sel.addEventListener('change', function(){
+    fetch("{{ url_for('plan_view', username=username, plan_uuid=plan.uuid) }}".replace(/\/$/, '') + "/trip/" + sel.dataset.uid + "/cost", {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({cost_id: sel.value})
+    }).then(function(){ location.reload(); });
   });
 });
 </script>

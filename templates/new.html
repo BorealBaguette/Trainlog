@@ -523,18 +523,39 @@
 
   }
   else{
-    $("#newTripStartDate").val(searchParams.get('prevEndDate'));    
-    $("#newTripEndDate").val(searchParams.get('prevEndDate'));    
-    $("#newTripStartTime").val(searchParams.get('prevEndTime'));
-    $("#onlyDate").val(searchParams.get('prevEndDate'));
     coords = [searchParams.get('prevDest').split(',')[0],searchParams.get('prevDest').split(',')[1]];
     $("#originStation").val(searchParams.get('prevDest').split(',')[2]);
     globalStationDict[searchParams.get('prevDest').split(',')[2]] = [coords, searchParams.get('prevDest').split(',')[2]];
-    // Plan "save & continue": start the next leg on the previous leg's end day.
-    if (searchParams.has('prevPlanDay') && searchParams.get('prevPlanDay')) {
-      $("#planStartDay").val(searchParams.get('prevPlanDay'));
-      $("#planEndDay").val(searchParams.get('prevPlanDay'));
+    {% if plan_uuid %}
+    // Plan "save & continue": carry forward the previous leg's timing MODE.
+    if (searchParams.has('prevEndDate')) {
+      // Previous leg was precise (or date-only) -> continue in precise mode.
+      $("#radioPreciseDates").prop("checked", true);
+      $("#newTripStartDate").val(searchParams.get('prevEndDate'));
+      $("#newTripEndDate").val(searchParams.get('prevEndDate'));
+      $("#newTripStartTime").val(searchParams.get('prevEndTime') || '');
+      $("#onlyDate").val(searchParams.get('prevEndDate'));
+    } else {
+      // Previous leg was relative -> continue in Day + time mode.
+      $("#radioRelative").prop("checked", true);
+      if (searchParams.get('prevPlanDay')) {
+        $("#planStartDay").val(searchParams.get('prevPlanDay'));
+        $("#planEndDay").val(searchParams.get('prevPlanDay'));
+      }
+      if (searchParams.get('prevPlanTime')) {
+        $("#planStartTime").val(searchParams.get('prevPlanTime'));
+      }
+      // Harmless defaults for the hidden precise fields.
+      $("#newTripStartDate").val(getCurrentDate());
+      $("#newTripStartTime").val(getCurrentTime());
+      $("#onlyDate").val(getCurrentDate());
     }
+    $("#purchasing_date").val(getCurrentDate()).attr({"max":getCurrentDate()});
+    {% else %}
+    $("#newTripStartDate").val(searchParams.get('prevEndDate'));
+    $("#newTripEndDate").val(searchParams.get('prevEndDate'));
+    $("#newTripStartTime").val(searchParams.get('prevEndTime'));
+    $("#onlyDate").val(searchParams.get('prevEndDate'));
     if ($("#newTripStartDate").val()>getCurrentDate() )
     {
       $("#purchasing_date").val(getCurrentDate());
@@ -544,8 +565,27 @@
       $("#purchasing_date").val($("#newTripStartDate").val());
       $("#purchasing_date").attr({"max":$("#newTripStartDate").val()});
     }
+    {% endif %}
   }
-  
+
+  {% if plan_uuid %}
+  // Fresh plan legs default to relative "Day + time". Don't override a precise-mode
+  // continue (prevEndDate present) or a user's explicit pick.
+  (function() {
+    if (new URLSearchParams(window.location.search).has('prevEndDate')) return;
+    var userPickedPrecision = false;
+    $('input[name="precision"]').on('change', function() { userPickedPrecision = true; });
+    function forceRelative() {
+      if (!userPickedPrecision && $('#radioRelative').length) {
+        $('#radioRelative').prop('checked', true);
+      }
+    }
+    forceRelative();                           // immediately
+    $(forceRelative);                          // DOM ready
+    $(window).on('load', forceRelative);       // after everything
+  })();
+  {% endif %}
+
   $("#newTripStartDate").on("focusout", function() {
     if($("#newTripEndDate").val() < $(this).val())
     {

@@ -1027,5 +1027,11 @@
     "planTravelTime": "Temps en voyage",
     "travelTimeHint": "Temps réellement passé en transport (hors séjours, activités et repas)",
     "nameLabel": "Nom",
-    "confirmLogAsTrips": "Enregistrer ce plan en trajets réels ?"
+    "confirmLogAsTrips": "Enregistrer ce plan en trajets réels ?",
+    "sharedCosts": "Frais partagés",
+    "addCost": "Ajouter",
+    "costLegs": "trajets",
+    "costLeg": "trajet",
+    "noCost": "Aucun frais partagé",
+    "confirmDeleteCost": "Supprimer ce frais partagé ?"
 }
