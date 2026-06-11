@@ -443,6 +443,56 @@
     <button class="control-button" onclick="copyURL()" title="{{copy}}"><i class="fas fa-clipboard"></i></button>
 </div>
 
+{% if planControls %}
+<style>
+  #plan-controls {
+    position: fixed; top: 10px; left: 60px; z-index: 1001;
+    display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+    background: #fff; padding: 6px 10px; border-radius: 10px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.2); font-size: 14px;
+  }
+  #plan-controls .plan-title { font-weight: 700; margin-right: 4px; }
+  #plan-controls form { margin: 0; display: inline; }
+  #plan-controls select,
+  #plan-controls .plan-btn {
+    font: inherit; padding: 5px 10px; border: 1px solid #d0d0d0;
+    border-radius: 7px; background: #f6f6f6; cursor: pointer;
+    color: #222; text-decoration: none; line-height: 1.25; box-sizing: border-box;
+  }
+  #plan-controls .plan-btn:hover,
+  #plan-controls select:hover { background: #ececec; }
+  #plan-controls .plan-btn--primary { background: #3887be; border-color: #3887be; color: #fff; }
+  #plan-controls .plan-btn--primary:hover { background: #2f76a6; }
+  @media (max-width: 600px) { #plan-controls { left: 10px; right: 10px; top: 56px; } }
+</style>
+<div id="plan-controls">
+    <span class="plan-title">{{ plan.name }}</span>
+    <select id="plan-add-select" onchange="if(this.value){location.href=this.value}" aria-label="{{ singularTrip|default('Trip') }}">
+        <option value="">+ {{ singularTrip|default('Trip') }}</option>
+        {% for vt in ['train','bus','tram','metro','air','helicopter','ferry','car','walk','cycle','aerialway','funicular','rail','scooter','ski','accommodation','poi','restaurant'] %}
+        <option value="{{ url_for('new', username=plan_owner, vehicle_type=vt) }}?plan={{ plan.uuid }}">{{ vt }}</option>
+        {% endfor %}
+    </select>
+    <button class="plan-btn plan-btn--primary" onclick="planValidate()">{{ submit|default('Validate') }}</button>
+    <a class="plan-btn" href="{{ url_for('public_plan', plan_uuid=plan.uuid) }}" target="_blank">{{ shareTrip|default('Share') }}</a>
+    <form method="post" action="{{ url_for('archive_plan_route', username=plan_owner, plan_uuid=plan.uuid) }}">
+        <input type="hidden" name="archived" value="{{ 'false' if plan.archived else 'true' }}"/>
+        <button class="plan-btn" type="submit">{{ 'Unarchive' if plan.archived else 'Archive' }}</button>
+    </form>
+    <form id="plan-validate-form" method="post" action="{{ url_for('validate_plan_route', username=plan_owner, plan_uuid=plan.uuid) }}" style="display:none;">
+        <input type="hidden" name="start_date" id="plan-validate-date"/>
+    </form>
+</div>
+<script>
+function planValidate() {
+    var d = prompt("Start date for Day 1 (YYYY-MM-DD):", "{{ plan.anchor_date }}");
+    if (!d) return;
+    document.getElementById('plan-validate-date').value = d;
+    document.getElementById('plan-validate-form').submit();
+}
+</script>
+{% endif %}
+
 <div id="sidebar-handle-ribbon"></div>
 
 <div id="map" class="mapIndiv">
@@ -519,6 +569,13 @@ function itineraryMarkerBadge(number) {
 // Date formatting options
 const dateOptions = { timeZone: 'UTC', weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
 const dateOptionsShort = { month: 'short', day: 'numeric' };
+// Plan views with undated (relative) trips label the timeline "Day N" instead of
+// showing the (anchored) calendar date.
+const relativeDates = {{ 'true' if relativeDates else 'false' }};
+function planDayLabel(trip) {
+    var d = trip && trip.trip ? trip.trip.day_number : null;
+    return d != null ? ("{{ day|default('Day') }} " + d) : null;
+}
 
 function addDelayToTime(timeStr, delaySeconds) {
   if (!timeStr || !delaySeconds) return timeStr;
@@ -589,14 +646,21 @@ async function initializeMapAndTrips() {
     const serverType = params.get('tileserver') || "{{ tileserver|default('osm') }}";
     const useGlobe = params.has('globe') ? params.get('globe') === 'true' : {{ 'true' if globe else 'false' }};
     
-    // Load trips data first
+    // Load trips data first. A plan view supplies planDataUrl (parallel-world data
+    // in the same shape); otherwise we POST the public trip ids.
+    var planDataUrl = "{{ planDataUrl|default('') }}";
     var tripIds = {{tripIds|tojson}};
-    const response = await $.post({
-        url: '{{url_for("getPublicTrips")}}',
-        contentType: 'application/json',
-        data: JSON.stringify({ tripIds: tripIds })
-    });
-    
+    let response;
+    if (planDataUrl) {
+        response = await $.get(planDataUrl);
+    } else {
+        response = await $.post({
+            url: '{{url_for("getPublicTrips")}}',
+            contentType: 'application/json',
+            data: JSON.stringify({ tripIds: tripIds })
+        });
+    }
+
     var trips = response[0];
     var prices = response[1];
     trips.reverse();
@@ -617,8 +681,10 @@ async function initializeMapAndTrips() {
     currentTrips = trips;
     computeMarkerNumbers(trips);
 
-    // Get center from first trip's first coordinate
-    const firstCoord = [trips[0].path[0][1], trips[0].path[0][0]];
+    // An empty plan (no trips yet) still needs a usable map + visible controls.
+    const firstCoord = (trips.length && trips[0].path && trips[0].path.length)
+        ? [trips[0].path[0][1], trips[0].path[0][0]]
+        : [10, 30];
     
     // Initialize map
     map = await MapLibreUtils.initializeMapLibre({
@@ -785,7 +851,9 @@ function buildItinerary(trips, prices) {
         }
 
         if (index == 0) {
-            if (trip.trip.start_date.length > 2) {
+            if (relativeDates && planDayLabel(trip)) {
+                $('#tripDate').text(planDayLabel(trip));
+            } else if (trip.trip.start_date.length > 2) {
                 $('#tripDate').text(capitalizeFirstLetter(new Date(trip.trip.start_date + "T12:00:00Z").toLocaleDateString('{{langId}}', dateOptions)));
             } else {
                 if (trip.trip.start_datetime == -1) {
@@ -986,9 +1054,14 @@ function buildItinerary(trips, prices) {
         if (trips.length > 1 && changeTime > 43200 && trip != trips[trips.length - 1]) {
             // Each block gets the header it would show on its own (the first block's is
             // already in #tripDate): a date for the dated block, "project" for future.
-            var headerText = tripGroup(trips[index + 1]) === 1
-                ? capitalizeFirstLetter(new Date(trips[index + 1].trip.start_date + "T12:00:00Z").toLocaleDateString('{{langId}}', dateOptions))
-                : "{{project}}";
+            var headerText;
+            if (relativeDates && planDayLabel(trips[index + 1])) {
+                headerText = planDayLabel(trips[index + 1]);
+            } else if (tripGroup(trips[index + 1]) === 1) {
+                headerText = capitalizeFirstLetter(new Date(trips[index + 1].trip.start_date + "T12:00:00Z").toLocaleDateString('{{langId}}', dateOptions));
+            } else {
+                headerText = "{{project}}";
+            }
             $('#itinerary').append('<div id="tripDetails">' + headerText + '</div><br>');
         }
     });
@@ -1787,7 +1860,8 @@ function leave() {
 document.addEventListener('DOMContentLoaded', () => {
     initializeMapAndTrips().catch(err => {
         const msg = err?.message || '';
-        if (msg.includes('webglcontextcreationerror') || msg.includes('Failed to initialize WebGL')) {
+        if ((msg.includes('webglcontextcreationerror') || msg.includes('Failed to initialize WebGL'))
+            && window.location.pathname.includes('/public/')) {
             window.location.href = window.location.pathname.replace('/public/', '/public/leaflet/') + window.location.search;
         } else {
             console.error(err);

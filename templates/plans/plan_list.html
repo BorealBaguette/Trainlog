@@ -1,0 +1,41 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+
+<div class="container" style="max-width:820px; margin-top:1.5rem;">
+  <h2 class="mb-3">{{ plans|default('Plans') }}</h2>
+  <p class="text-muted">{{ plansIntro|default('A parallel planning world. Plans never appear in your trips, stats or maps until you validate them into real trips.') }}</p>
+
+  <form method="post" action="{{ url_for('submit_plan', username=username) }}" class="d-flex gap-2 align-items-center mb-4 flex-wrap">
+    <input type="text" name="name" placeholder="{{ newPlanName|default('New plan name') }}" required class="form-control" style="max-width:300px;"/>
+    <input type="date" name="anchor_date" class="form-control" style="max-width:180px;" title="{{ planAnchorHint|default('Day 1 reference date (for the preview)') }}"/>
+    <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg"></i> {{ createPlan|default('Create plan') }}</button>
+  </form>
+
+  <ul class="list-group">
+    {% for p in user_plans %}
+    <li class="list-group-item d-flex justify-content-between align-items-center {% if p.archived %}list-group-item-light{% endif %}">
+      <span>
+        <a href="{{ url_for('plan_view', username=username, plan_uuid=p.uuid) }}" class="fw-bold text-decoration-none">{{ p.name }}</a>
+        <span class="badge bg-secondary">{{ p.trip_count }}</span>
+        {% if p.archived %}<span class="badge bg-light text-dark border">{{ archived|default('Archived') }}</span>{% endif %}
+        {% if p.description %}<div class="small text-muted">{{ p.description }}</div>{% endif %}
+      </span>
+      <span class="d-flex gap-1">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=p.uuid) }}" target="_blank"><i class="bi bi-link-45deg"></i> {{ shareTrip|default('Share') }}</a>
+        <form method="post" action="{{ url_for('archive_plan_route', username=username, plan_uuid=p.uuid) }}">
+          <input type="hidden" name="archived" value="{{ 'false' if p.archived else 'true' }}"/>
+          <button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi {{ 'bi-arrow-up-circle' if p.archived else 'bi-archive' }}"></i> {{ (unarchive|default('Unarchive')) if p.archived else (archive|default('Archive')) }}</button>
+        </form>
+        <form method="post" action="{{ url_for('delete_plan_route', username=username, plan_uuid=p.uuid) }}" onsubmit="return confirm('{{ confirmDeletePlan|default('Delete this plan and all its trips?') }}');">
+          <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash3"></i></button>
+        </form>
+      </span>
+    </li>
+    {% else %}
+    <li class="list-group-item text-muted">{{ planEmptyList|default('No plans yet — create one above.') }}</li>
+    {% endfor %}
+  </ul>
+</div>
+{% endblock %}

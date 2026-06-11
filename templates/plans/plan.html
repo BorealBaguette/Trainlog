@@ -1,0 +1,253 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+
+{% set vtypes = ['train','bus','tram','metro','air','helicopter','ferry','car','walk','cycle','aerialway','funicular','rail','scooter','ski','accommodation','poi','restaurant'] %}
+
+<style>
+  .plan-wrap { max-width: 920px; }
+  .plan-head h2 { font-weight: 700; letter-spacing: -.01em; }
+  .plan-toolbar .btn { border-radius: 8px; }
+  /* stat tiles */
+  .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .75rem; }
+  .stat-tile { background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #e5e7eb);
+               border-radius: 12px; padding: .85rem 1rem; }
+  .stat-tile .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #8a909a; }
+  .stat-tile .val { font-size: 1.4rem; font-weight: 700; line-height: 1.1; }
+  .breakdown { border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; background: #fff; }
+  .breakdown table { width: 100%; margin: 0; border-collapse: collapse; background: transparent; }
+  .breakdown thead th { font-size: .7rem; text-transform: uppercase; letter-spacing: .03em;
+                        color: #8a909a !important; font-weight: 600; border: 0 !important;
+                        background: #f7f8fa !important; padding: .5rem .9rem; text-align: left; }
+  .breakdown thead th.text-end { text-align: right; }
+  .breakdown td { border: 0; border-top: 1px solid #f0f1f3; background: transparent;
+                  padding: .5rem .9rem; vertical-align: middle; color: #374151; }
+  .breakdown tbody tr:hover td { background: #fafbfc; }
+  /* trip timeline */
+  .plan-list { list-style: none; padding: 0; margin: 0; }
+  .plan-leg { display: flex; align-items: center; gap: .9rem; padding: .8rem 1rem;
+              border: 1px solid var(--bs-border-color, #e5e7eb); border-radius: 12px;
+              margin-bottom: .55rem; background: var(--bs-body-bg, #fff); transition: box-shadow .12s, border-color .12s; }
+  .plan-leg:hover { box-shadow: 0 2px 10px rgba(0,0,0,.06); border-color: #cbd2db; }
+  .leg-icon { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 10px;
+              background: rgba(0,0,0,.04); display: flex; align-items: center; justify-content: center; }
+  .leg-icon img { height: 24px; }
+  .leg-body { min-width: 0; flex: 1 1 auto; }
+  .leg-route { font-weight: 600; }
+  .leg-meta { font-size: .82rem; color: #8a909a; margin-top: .1rem; }
+  .day-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: #4b78d6;
+              background: rgba(75,120,214,.12); border-radius: 999px; padding: .05rem .5rem; margin-right: .35rem; }
+  .leg-actions .btn { border: 0; color: #98a0ab; padding: .25rem .45rem; }
+  .leg-actions .btn:hover { color: #1f2937; background: rgba(0,0,0,.05); }
+  .leg-actions .btn.act-del:hover { color: #dc3545; background: rgba(220,53,69,.1); }
+</style>
+
+<div class="container plan-wrap" style="margin-top:1.5rem;">
+
+  <a href="{{ url_for('plan_list', username=username) }}" class="text-muted small text-decoration-none">&larr; {{ plans|default('Plans') }}</a>
+
+  <div class="plan-head d-flex justify-content-between align-items-center flex-wrap gap-2 mt-1 mb-3">
+    <h2 class="mb-0">{{ plan.name }} {% if plan.archived %}<span class="badge bg-secondary align-middle">{{ archived|default('archived') }}</span>{% endif %}</h2>
+    <div class="plan-toolbar d-flex gap-2 flex-wrap align-items-center">
+      <div class="dropdown">
+        <button class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-plus-lg"></i> {{ singularTrip|default('Trip') }}</button>
+        <ul class="dropdown-menu" style="max-height:60vh; overflow:auto;">
+          {% for vt in vtypes %}
+          <li><a class="dropdown-item d-flex align-items-center gap-2" href="{{ url_for('new', username=username, vehicle_type=vt) }}?plan={{ plan.uuid }}">
+            <img src="{{ url_for('static', filename='images/icons/trip_logos/' + vt + '.png') }}" onerror="this.style.display='none'" style="height:18px;">{{ vt }}</a></li>
+          {% endfor %}
+        </ul>
+      </div>
+      <button class="btn btn-sm btn-success" onclick="planValidate()"><i class="bi bi-journal-check"></i> {{ logAsTrips|default('Log as trips') }}</button>
+      <div class="vr d-none d-sm-block"></div>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=plan.uuid) }}" target="_blank"><i class="bi bi-map"></i> {{ shareTrip|default('Share') }}</a>
+      <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#planSettings" title="{{ user_settings|default('Settings') }}"><i class="bi bi-gear"></i></button>
+      <div class="dropdown">
+        <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown" title="{{ more|default('More') }}"><i class="bi bi-three-dots"></i></button>
+        <ul class="dropdown-menu dropdown-menu-end">
+          <li>
+            <form method="post" action="{{ url_for('archive_plan_route', username=username, plan_uuid=plan.uuid) }}">
+              <input type="hidden" name="archived" value="{{ 'false' if plan.archived else 'true' }}"/>
+              <button class="dropdown-item" type="submit"><i class="bi {{ 'bi-arrow-up-circle' if plan.archived else 'bi-archive' }} me-2"></i>{{ (unarchive|default('Unarchive')) if plan.archived else (archive|default('Archive')) }}</button>
+            </form>
+          </li>
+          <li>
+            <form method="post" action="{{ url_for('delete_plan_route', username=username, plan_uuid=plan.uuid) }}" onsubmit="return confirm('{{ confirmDeletePlan|default('Delete this plan and all its trips?') }}');">
+              <button class="dropdown-item text-danger" type="submit"><i class="bi bi-trash3 me-2"></i>{{ delete|default('Delete') }}</button>
+            </form>
+          </li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- plan settings (name + Day-1 anchor), tucked behind the gear toggle -->
+  <div class="collapse mb-4" id="planSettings">
+    <form method="post" action="{{ url_for('update_plan_route', username=username, plan_uuid=plan.uuid) }}" class="d-flex gap-2 align-items-center flex-wrap p-3 rounded" style="background:#f7f8fa; border:1px solid #e5e7eb;">
+      <label class="small text-muted mb-0">{{ nameLabel|default('Name') }}</label>
+      <input type="text" name="name" value="{{ plan.name }}" class="form-control form-control-sm" style="max-width:260px;"/>
+      {% if plan_has_relative %}
+      <label class="small text-muted mb-0" title="{{ planAnchorHint|default('Day-1 reference date (for the preview)') }}">{{ day|default('Day') }} 1 =</label>
+      <input type="date" name="anchor_date" value="{{ plan.anchor_date }}" class="form-control form-control-sm" style="max-width:170px;" title="{{ planAnchorHint|default('Day-1 reference date (for the preview)') }}"/>
+      {% else %}
+      <input type="hidden" name="anchor_date" value="{{ plan.anchor_date }}"/>
+      {% endif %}
+      <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-check-lg"></i> {{ save|default('Save') }}</button>
+    </form>
+  </div>
+
+  <!-- stats -->
+  <div class="stat-grid mb-3">
+    <div class="stat-tile"><div class="lbl">{{ totalTrips|default('Trips') }}</div><div class="val">{{ plan_stats.count }}</div></div>
+    {% if plan_stats.has_span %}
+    <div class="stat-tile" title="{{ planSpanHint|default('From the first departure to the last arrival') }}"><div class="lbl">{{ totalDuration|default('Total duration') }}</div><div class="val">{{ plan_stats.span_h }}</div></div>
+    {% endif %}
+    <div class="stat-tile" title="{{ travelTimeHint|default('Time actually spent on transport (excludes stays, activities and meals)') }}"><div class="lbl">{{ planTravelTime|default('Travel time') }}</div><div class="val">{{ plan_stats.total_duration_h or '—' }}</div></div>
+    <div class="stat-tile"><div class="lbl">{{ totalLength|default('Total distance') }}</div><div class="val">{{ plan_stats.total_distance_km }} km</div></div>
+    {% if plan_stats.has_price %}
+    <div class="stat-tile"><div class="lbl">{{ price|default('Price') }}</div><div class="val">{{ plan_stats.total_price }} {{ plan_stats.user_currency }}</div></div>
+    {% endif %}
+  </div>
+
+  {% if plan_stats.per_type %}
+  <div class="breakdown mb-4">
+    <table>
+      <thead><tr><th>{{ sortType|default('Type') }}</th><th class="text-end">{{ trips|default('Trips') }}</th><th class="text-end">{{ tripDuration|default('Duration') }}</th><th class="text-end">{{ tripLength|default('Distance') }}</th>{% if plan_stats.has_price %}<th class="text-end">{{ price|default('Price') }}</th>{% endif %}</tr></thead>
+      <tbody>
+        {% for r in plan_stats.per_type %}
+        <tr>
+          <td><img src="{{ url_for('static', filename='images/icons/trip_logos/' + r.type + '.png') }}" onerror="this.style.display='none'" style="height:18px; vertical-align:middle; margin-right:8px;">{{ r.type }}</td>
+          <td class="text-end">{{ r.count }}</td>
+          <td class="text-end">{{ r.duration_h }}</td>
+          <td class="text-end">{{ r.distance_km }} km</td>
+          {% if plan_stats.has_price %}<td class="text-end">{{ r.price_str }}</td>{% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+
+  <!-- trips -->
+  {% if plan_trips %}
+  <ul class="plan-list" id="plan-trip-list">
+    {% for item in plan_trips %}
+    {% set t = item.trip %}
+    <li class="plan-leg" data-uid="{{ t.uid }}">
+      <div class="leg-icon"><img src="{{ url_for('static', filename='images/icons/trip_logos/' + (t.type or 'other') + '.png') }}" onerror="this.style.display='none'"></div>
+      <div class="leg-body">
+        <div class="leg-route text-truncate">{{ t.origin_station }} &rarr; {{ t.destination_station }}</div>
+        <div class="leg-meta text-truncate">
+          {% if t.day_number is not none %}
+            {# Relative leg: "Day N", optionally with a clock time. Collapse to one
+               "Day N" when departure and arrival fall on the same day. #}
+            <span class="day-pill">{{ day|default('Day') }} {{ t.day_number }}</span>{% if t.start_time %}{{ t.start_time }}{% endif %}
+            {% if t.end_day_number and t.end_day_number != t.day_number %} &rarr; <span class="day-pill">{{ day|default('Day') }} {{ t.end_day_number }}</span>{% if t.end_time %}{{ t.end_time }}{% endif %}
+            {% elif t.end_time and t.end_time != t.start_time %} &rarr; {{ t.end_time }}{% endif %}
+          {% elif t.start_date %}
+            {{ t.start_date }}{% if t.start_time %} {{ t.start_time }}{% endif %}{% if t.end_time and t.end_time != t.start_time %} &rarr; {{ t.end_time }}{% endif %}
+          {% else %}—{% endif %}
+          {% if t.duration_h %} · {{ t.duration_h }}{% endif %}
+          {% if t.trip_length %} · {{ (t.trip_length / 1000)|round|int }} km{% endif %}
+          {% if t.price_in_user_currency %} · {{ t.price_in_user_currency|round|int }} {{ t.user_currency }}{% endif %}
+          {% if t.operator %} · {{ t.operator }}{% endif %}
+        </div>
+      </div>
+      <div class="leg-actions d-flex gap-1 align-items-center">
+        <button class="btn btn-sm plan-move" data-dir="-1" title="{{ moveUp|default('Move up') }}"><i class="bi bi-arrow-up"></i></button>
+        <button class="btn btn-sm plan-move" data-dir="1" title="{{ moveDown|default('Move down') }}"><i class="bi bi-arrow-down"></i></button>
+        <a class="btn btn-sm" title="{{ edit|default('Edit') }}"
+           href="{{ url_for('plan_trip_editor', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}"><i class="bi bi-pencil"></i></a>
+        <form method="post" action="{{ url_for('delete_plan_trip_route', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}" onsubmit="return confirm('{{ confirmDeletePlanTrip|default('Delete this trip?') }}');">
+          <button class="btn btn-sm act-del" type="submit" title="{{ delete|default('Delete') }}"><i class="bi bi-trash3"></i></button>
+        </form>
+      </div>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <div class="text-center text-muted py-5">
+    <div style="font-size:2.5rem; line-height:1;">🗺️</div>
+    <p class="mt-2 mb-0">{{ planEmpty|default('No trips yet — add one with') }} <strong>+ {{ singularTrip|default('Trip') }}</strong>.</p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Edit modal -->
+<div class="modal fade" id="planEditModal" tabindex="-1">
+  <div class="modal-dialog">
+    <form class="modal-content" id="planEditForm" method="post" action="">
+      <input type="hidden" name="precision" value="relative"/>
+      <div class="modal-header"><h5 class="modal-title">{{ edit|default('Edit') }} {{ singularTrip|default('trip') }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+      <div class="modal-body">
+        <div class="row g-2 mb-2">
+          <div class="col"><label class="form-label small">{{ newTripStart|default('Departure') }}: Day</label><input type="number" min="1" name="planStartDay" id="e_startDay" class="form-control"/></div>
+          <div class="col"><label class="form-label small">{{ time|default('Time') }}</label><input type="time" name="planStartTime" id="e_startTime" class="form-control"/></div>
+        </div>
+        <div class="row g-2 mb-2">
+          <div class="col"><label class="form-label small">{{ newTripEnd|default('Arrival') }}: Day</label><input type="number" min="1" name="planEndDay" id="e_endDay" class="form-control"/></div>
+          <div class="col"><label class="form-label small">{{ time|default('Time') }}</label><input type="time" name="planEndTime" id="e_endTime" class="form-control"/></div>
+        </div>
+        <div class="mb-2"><label class="form-label small">{{ operator|default('Operator') }}</label><input type="text" name="operator" id="e_operator" class="form-control"/></div>
+        <div class="mb-2"><label class="form-label small">{{ lineName|default('Line') }}</label><input type="text" name="line_name" id="e_line" class="form-control"/></div>
+        <div class="mb-2"><label class="form-label small">{{ notes|default('Notes') }}</label><textarea name="notes" id="e_notes" class="form-control" rows="2"></textarea></div>
+        <div class="mb-2"><label class="form-label small">{{ visibility|default('Visibility') }}</label>
+          <select name="visibility" id="e_visibility" class="form-select">
+            <option value="public">public</option><option value="friends">friends</option><option value="private">private</option>
+          </select>
+        </div>
+        <p class="small text-muted mb-0">Editing here keeps the existing route. To change the route, delete and re-add the trip.</p>
+      </div>
+      <div class="modal-footer"><button type="submit" class="btn btn-primary">{{ save|default('Save') }}</button></div>
+    </form>
+  </div>
+</div>
+
+<form id="plan-validate-form" method="post" action="{{ url_for('validate_plan_route', username=username, plan_uuid=plan.uuid) }}" style="display:none;">
+  <input type="hidden" name="start_date" id="plan-validate-date"/>
+</form>
+
+<script>
+function planValidate() {
+  {% if plan_has_relative %}
+  // Relative (Day N) legs need a real Day-1 date to anchor to.
+  var d = prompt("{{ validatePrompt|default('Start date for Day 1 (YYYY-MM-DD):') }}", "{{ plan.anchor_date }}");
+  if (!d) return;
+  document.getElementById('plan-validate-date').value = d;
+  {% else %}
+  // Fully precise-dated plan: the trips already carry their dates, just log them.
+  if (!confirm("{{ confirmLogAsTrips|default('Log this plan as real trips?') }}")) return;
+  {% endif %}
+  document.getElementById('plan-validate-form').submit();
+}
+
+var planEditModal = new bootstrap.Modal(document.getElementById('planEditModal'));
+function planEdit(t) {
+  document.getElementById('planEditForm').action =
+    "{{ url_for('plan_view', username=username, plan_uuid=plan.uuid) }}".replace(/\/$/, '') + "/trip/" + t.uid + "/edit";
+  document.getElementById('e_startDay').value = t.start_day || 1;
+  document.getElementById('e_startTime').value = t.start_time || '';
+  document.getElementById('e_endDay').value = t.end_day || t.start_day || 1;
+  document.getElementById('e_endTime').value = t.end_time || '';
+  document.getElementById('e_operator').value = t.operator || '';
+  document.getElementById('e_line').value = t.line_name || '';
+  document.getElementById('e_notes').value = t.notes || '';
+  document.getElementById('e_visibility').value = t.visibility || 'public';
+  planEditModal.show();
+}
+
+// Reorder: up/down swap, then POST the new uid order.
+document.querySelectorAll('.plan-move').forEach(function(btn){
+  btn.addEventListener('click', function(){
+    var li = btn.closest('li'), dir = parseInt(btn.dataset.dir, 10);
+    if (dir < 0 && li.previousElementSibling) li.parentNode.insertBefore(li, li.previousElementSibling);
+    if (dir > 0 && li.nextElementSibling) li.parentNode.insertBefore(li.nextElementSibling, li);
+    var order = Array.from(document.querySelectorAll('#plan-trip-list li')).map(function(x){ return x.dataset.uid; });
+    fetch("{{ url_for('reorder_plan_trips_route', username=username, plan_uuid=plan.uuid) }}", {
+      method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({order: order})
+    });
+  });
+});
+</script>
+{% endblock %}
