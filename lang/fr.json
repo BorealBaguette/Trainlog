@@ -1033,5 +1033,9 @@
     "costLegs": "trajets",
     "costLeg": "trajet",
     "noCost": "Aucun frais partagé",
-    "confirmDeleteCost": "Supprimer ce frais partagé ?"
+    "confirmDeleteCost": "Supprimer ce frais partagé ?",
+    "importTrips": "Déplacer des trajets dans ce plan",
+    "importTripsHint": "Identifiants de trajets, séparés par des virgules (ex : 1042, 1043)",
+    "importTripsBtn": "Déplacer",
+    "confirmImportTrips": "Déplacer ces trajets dans le plan ? Ils seront retirés de vos trajets."
 }

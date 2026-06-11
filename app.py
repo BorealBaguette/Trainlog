@@ -229,6 +229,7 @@ from src.plans.create_plan_trip import create_plan_trip
 from src.plans.update_plan_trip_full import update_plan_trip_full
 from src.plans.delete_plan import delete_plan, delete_plan_trip
 from src.plans.validate_plan import validate_plan
+from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
@@ -5620,6 +5621,17 @@ def set_plan_trip_cost_route(username, plan_uuid, plan_trip_uid):
              "last_modified": datetime.now()},
         )
     return ("", 204)
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/import_trips", methods=["POST"])
+@login_required
+def import_trips_to_plan_route(username, plan_uuid):
+    """Move existing real trips (comma/space separated ids) into the plan."""
+    plan = get_owned_plan(plan_uuid, username)
+    ids = [int(x) for x in re.findall(r"\d+", request.form.get("trip_ids", ""))]
+    if ids:
+        import_trips_to_plan(plan, ids)
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
 
 
 @app.route("/u/<username>/plan/<plan_uuid>/validate", methods=["POST"])

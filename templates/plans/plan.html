@@ -101,6 +101,17 @@
       </div>
       <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-check-lg"></i> {{ save|default('Save') }}</button>
     </form>
+
+    <!-- Move existing real trips into this plan (by id) -->
+    <form method="post" action="{{ url_for('import_trips_to_plan_route', username=username, plan_uuid=plan.uuid) }}"
+          class="p-3 rounded mt-2" style="background:#f7f8fa; border:1px solid #e5e7eb;"
+          onsubmit="return confirm('{{ confirmImportTrips|default('Move these trips into the plan? They will be removed from your trips.') }}');">
+      <label class="small text-muted mb-1 d-block">{{ importTrips|default('Move trips into this plan') }}</label>
+      <div class="d-flex gap-2 align-items-center flex-wrap">
+        <input type="text" name="trip_ids" placeholder="{{ importTripsHint|default('Trip ids, comma-separated (e.g. 1042, 1043)') }}" required class="form-control form-control-sm" style="max-width:380px;"/>
+        <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-box-arrow-in-down"></i> {{ importTripsBtn|default('Move in') }}</button>
+      </div>
+    </form>
   </div>
 
   {% if plan.description %}
