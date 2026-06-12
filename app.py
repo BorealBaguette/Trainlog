@@ -872,7 +872,11 @@ def savePlanTripToDb(username, newTrip, newPath, plan, trip_type="train"):
             newPath, newTrip["type"], newTrip.get("details", None), newTrip.get("powerType", None)
         )
 
-    details_parsed = json.loads(newTrip["details"]) if newTrip.get("details") else None
+    # `details` arrives already parsed (newTrip is JSON-decoded from the form), so it's a
+    # dict here — not a string. The new router (graphhopper) populates it with the
+    # electrification split, which is why this only bit when that router was used.
+    _details = newTrip.get("details")
+    details_parsed = json.loads(_details) if isinstance(_details, str) else _details
     power_type = newTrip.get("powerType") or (
         details_parsed.get("powerType") if details_parsed else None
     )
