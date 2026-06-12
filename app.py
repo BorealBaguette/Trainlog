@@ -5385,10 +5385,12 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
     pt = _get_plan_trip_row(plan, plan_trip_uid)
 
     coords = geom_geojson_to_coords(pt["geojson"])  # [[lat,lng],...]
-    wplist = [[c[0], c[1]] for c in coords] or [[0, 0], [0, 0]]
+    # Routing waypoints are just the endpoints (+ any stored waypoints), NOT every geom
+    # vertex — mirrors the normal trip editor (see the edit route's wplist logic).
+    wplist = [coords[0], coords[-1]] if coords else [[0, 0], [0, 0]]
     if pt["waypoints"]:
         wp = [[p["lat"], p["lng"]] for p in json.loads(pt["waypoints"])]
-        wplist = [wplist[0]] + wp + [wplist[-1]]
+        wplist = [coords[0]] + wp + [coords[-1]]
 
     sdt, edt = pt["start_datetime"], pt["end_datetime"]
     start_str = sdt.strftime("%Y-%m-%d %H:%M:%S") if sdt else ""

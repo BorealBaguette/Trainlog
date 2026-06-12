@@ -6,6 +6,13 @@ from src.carbon import calculate_carbon_footprint_for_trip
 from src.trips.trip import _strip_tags
 
 
+def _int_seconds(value):
+    """Durations are whole seconds; the form may send a float string (e.g. '1715.3')."""
+    if value in (None, ""):
+        return None
+    return int(round(float(value)))
+
+
 class PlanTrip:
     def __init__(
         self,
@@ -52,7 +59,7 @@ class PlanTrip:
         self.seat = _strip_tags(seat)
         self.notes = _strip_tags(notes)
         self.trip_length = trip_length
-        self.estimated_trip_duration = estimated_trip_duration
+        self.estimated_trip_duration = _int_seconds(estimated_trip_duration)
         self.countries = countries
         self.price = price
         self.currency = currency
@@ -75,7 +82,7 @@ class PlanTrip:
         self.end_datetime = timing["end_datetime"]
         self.utc_start_datetime = timing["utc_start_datetime"]
         self.utc_end_datetime = timing["utc_end_datetime"]
-        self.manual_trip_duration = timing["manual_trip_duration"]
+        self.manual_trip_duration = _int_seconds(timing["manual_trip_duration"])
 
         # carbon — best-effort (calculate_carbon_footprint_for_trip uses .get()).
         carbon_input = {
