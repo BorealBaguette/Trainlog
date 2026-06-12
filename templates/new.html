@@ -249,9 +249,11 @@
           <input type="date" name="purchasing_date" id="purchasing_date" />
         </fieldset>
 
+        {% if not plan_uuid %}
         <label for="ticketSearchInput" id="ticketSearchInputLabel" class="form-label">{{select_ticket}}</label>
         <select id="ticketSearchInput" name="ticket_id" class="form-select">
         </select>
+        {% endif %}
         <!-- Power Type Toggle -->
         {% if vehicle_type == 'train' %}
         <div class="mb-3">
@@ -490,6 +492,12 @@
   {% endif %}
 
   manualCopyHandler();
+
+  {% if plan_uuid %}
+  // Plans have no tickets or delays — hide the delay section (its init then self-skips
+  // because #delayToggle is hidden). The ticket selector isn't rendered in plan mode.
+  $('#delayToggleWrapper, #delayModeSwitchWrapper, #delayMinutesInputs, #depActualGroup, #arrActualGroup').hide();
+  {% endif %}
   var globalStationDict = {};
   var manualStationsList = [];
   var visitedStations = {};
@@ -696,7 +704,9 @@
           $("#price").css("grid-column-end", "-1");
       }
   }).trigger('input'); // Trigger on load to apply initial state
+  {% if not plan_uuid %}
   fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}");
+  {% endif %}
   //setupTagAutocomplete(`{{ url_for("get_all_tags", username=username) }}`);
 
 

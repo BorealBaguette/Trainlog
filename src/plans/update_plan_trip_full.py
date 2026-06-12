@@ -51,6 +51,7 @@ def update_plan_trip_full(plan_trip_uid, plan_trip: PlanTrip, pg_session=None):
                 "price": plan_trip.price,
                 "currency": plan_trip.currency,
                 "purchase_date": plan_trip.purchase_date,
+                "booked": plan_trip.booked,
                 "waypoints": plan_trip.waypoints,
                 "visibility": plan_trip.visibility,
                 "carbon": plan_trip.carbon,

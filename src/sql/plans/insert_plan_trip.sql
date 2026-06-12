@@ -7,7 +7,7 @@ INSERT INTO plan_trips (
     estimated_trip_duration, manual_trip_duration,
     origin_station, destination_station, trip_type, operator, line_name,
     material_type, material_type_advanced, reg, seat, notes,
-    trip_length, countries, price, currency, purchase_date, waypoints, visibility, carbon,
+    trip_length, countries, price, currency, purchase_date, booked, waypoints, visibility, carbon,
     power_type, co2_override,
     geom, created, last_modified
 )
@@ -18,7 +18,7 @@ VALUES (
     :estimated_trip_duration, :manual_trip_duration,
     :origin_station, :destination_station, :trip_type, :operator, :line_name,
     :material_type, :material_type_advanced, :reg, :seat, :notes,
-    :trip_length, :countries, :price, :currency, :purchase_date, :waypoints, :visibility, :carbon,
+    :trip_length, :countries, :price, :currency, :purchase_date, :booked, :waypoints, :visibility, :carbon,
     :power_type, :co2_override,
     ST_GeomFromEWKT(:geom_ewkt), :created, :last_modified
 )

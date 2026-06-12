@@ -2,6 +2,8 @@
 of trip fields, the timing dict from process_plan_dates, and the path. Never written
 to the `trips` table — only to `plan_trips` (via create_plan_trip)."""
 
+from datetime import date
+
 from src.carbon import calculate_carbon_footprint_for_trip
 from src.trips.trip import _strip_tags
 
@@ -38,6 +40,7 @@ class PlanTrip:
         path,
         timing,
         purchase_date=None,
+        booked=False,
         power_type=None,
         co2_override=None,
         sort_order=0,
@@ -63,6 +66,11 @@ class PlanTrip:
         self.countries = countries
         self.price = price
         self.currency = currency
+        self.booked = bool(booked)
+        # A price always needs a date for FX conversion. For an estimate the date is
+        # just a silent reference (today); for a booked ticket it's the real date paid.
+        if price not in (None, "") and purchase_date in (None, ""):
+            purchase_date = date.today()
         self.purchase_date = purchase_date
         self.power_type = power_type
         self.co2_override = co2_override

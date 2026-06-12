@@ -30,6 +30,10 @@
               border: 1px solid var(--bs-border-color, #e5e7eb); border-radius: 12px;
               margin-bottom: .55rem; background: var(--bs-body-bg, #fff); transition: box-shadow .12s, border-color .12s; }
   .plan-leg:hover { box-shadow: 0 2px 10px rgba(0,0,0,.06); border-color: #cbd2db; }
+  /* Impossible connection: this leg departs before the previous one arrives. */
+  .plan-leg.leg-impossible { border-color: #dc3545; background: rgba(220,53,69,.05); }
+  .leg-warning { font-size: .78rem; font-weight: 600; color: #dc3545; margin-top: .12rem; }
+  .leg-warning i { margin-right: .25rem; }
   .leg-icon { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 10px;
               background: rgba(0,0,0,.04); display: flex; align-items: center; justify-content: center; }
   .leg-icon img { height: 24px; }
@@ -191,10 +195,13 @@
   <ul class="plan-list" id="plan-trip-list">
     {% for item in plan_trips %}
     {% set t = item.trip %}
-    <li class="plan-leg" data-uid="{{ t.uid }}">
+    <li class="plan-leg{% if item.impossible %} leg-impossible{% endif %}" data-uid="{{ t.uid }}">
       <div class="leg-icon"><img src="{{ url_for('static', filename='images/icons/trip_logos/' + (t.type or 'other') + '.png') }}" onerror="this.style.display='none'"></div>
       <div class="leg-body">
         <div class="leg-route text-truncate">{{ t.origin_station }}{% if t.destination_station %} &rarr; {{ t.destination_station }}{% endif %}</div>
+        {% if item.impossible %}
+        <div class="leg-warning"><i class="bi bi-exclamation-triangle-fill"></i> {{ impossibleConnection|default('Departs before the previous leg arrives') }}</div>
+        {% endif %}
         <div class="leg-meta text-truncate">
           {% if t.day_number is not none %}
             {# Relative leg: "Day N", optionally with a clock time. Collapse to one

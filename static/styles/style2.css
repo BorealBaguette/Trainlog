@@ -758,6 +758,31 @@ input[type=number] {
   width:100% !important;
 }
 
+/* Plan mode: price = estimate by default. Lay out price + currency on one row, then
+   the "booked" toggle, then (only when booked) the purchase date — each full width. */
+#form .fieldset-price-plan {
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem 0.4rem;
+  align-items: center;
+}
+#form .fieldset-price-plan #bookedWrapper,
+#form .fieldset-price-plan #purchasing_date {
+  grid-column: 1 / -1;
+}
+#bookedWrapper {
+  margin: 0.1rem 0;
+}
+#bookedWrapper label {
+  margin: 0;
+  cursor: pointer;
+  user-select: none;
+}
+#bookedWrapper input[type="checkbox"] {
+  width: auto !important;
+  margin: 0;
+  cursor: pointer;
+}
+
 @media (max-width:439px) {
   #form .legend {
     width:100%;

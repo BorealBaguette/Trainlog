@@ -1037,5 +1037,7 @@
     "importTrips": "Move trips into this plan",
     "importTripsHint": "Trip ids, comma-separated (e.g. 1042, 1043)",
     "importTripsBtn": "Move in",
-    "confirmImportTrips": "Move these trips into the plan? They will be removed from your trips."
+    "confirmImportTrips": "Move these trips into the plan? They will be removed from your trips.",
+    "bookedLabel": "Already booked",
+    "impossibleConnection": "Departs before the previous leg arrives"
 }

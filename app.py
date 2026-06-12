@@ -897,6 +897,7 @@ def savePlanTripToDb(username, newTrip, newPath, plan, trip_type="train"):
         price=sanitize_param(newTrip.get("price")),
         currency=sanitize_param(newTrip.get("currency")),
         purchase_date=sanitize_param(newTrip.get("purchasing_date")),
+        booked=newTrip.get("booked") in ("true", "on", "1", True),
         waypoints=sanitize_param(newTrip["waypoints"]),
         visibility=sanitize_param(
             newTrip.get("visibility", get_default_trip_visibility(trip_type))
@@ -4905,8 +4906,18 @@ def build_plan_trip_list(plan_uuid):
 
     tripList = []
     total_price = total_carbon = total_distance = 0
+    prev_end_utc = None  # arrival (UTC) of the previous timed leg, for connection checks
     for r in rows:
         pt = r._mapping
+        # Impossible connection: this timed leg departs before the previous one arrives.
+        cur_start_utc = pt["utc_start_datetime"]
+        impossible = (
+            prev_end_utc is not None
+            and cur_start_utc is not None
+            and cur_start_utc < prev_end_utc
+        )
+        if pt["utc_end_datetime"] is not None:
+            prev_end_utc = pt["utc_end_datetime"]
         coords = geom_geojson_to_coords(pt["geojson"])
         sdt = _fmt_legacy_dt(pt["start_datetime"]) if pt["start_datetime"] else None
         edt = _fmt_legacy_dt(pt["end_datetime"]) if pt["end_datetime"] else None
@@ -4974,7 +4985,7 @@ def build_plan_trip_list(plan_uuid):
             total_price += trip["price_in_user_currency"]
         tripList.append(
             {"time": trip["time"], "trip": trip, "path": coords, "altitude": None,
-             "timestamps": None, "lockTime": True}
+             "timestamps": None, "lockTime": True, "impossible": impossible}
         )
 
     priceDict = {
@@ -5425,7 +5436,13 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         price = ""
 
     pdate = pt["purchase_date"]
-    purchasing_date = pdate.strftime("%Y-%m-%d") if isinstance(pdate, (datetime, date)) else ""
+    # Default the purchase date to today when none is stored, so editing never leaves
+    # a price without a date.
+    purchasing_date = (
+        pdate.strftime("%Y-%m-%d")
+        if isinstance(pdate, (datetime, date))
+        else date.today().strftime("%Y-%m-%d")
+    )
 
     user_obj = User.query.filter_by(username=username).first()
     colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
@@ -5458,6 +5475,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         tripPrice=price if price is not None else "",
         tripCurrency=pt["currency"] or "",
         tripPurchasingDate=purchasing_date,
+        tripBooked=pt["booked"],
         tripType=pt["trip_type"],
         tripTicketId="",
         wplist=wplist,
@@ -5553,6 +5571,7 @@ def update_plan_trip_full_route(username, plan_uuid, plan_trip_uid):
         price=sanitize_param(formData.get("price")),
         currency=sanitize_param(formData.get("currency")) if has_price else None,
         purchase_date=sanitize_param(formData.get("purchasing_date")) if has_price else None,
+        booked=has_price and formData.get("booked") in ("true", "on", "1"),
         waypoints=sanitize_param(formData.get("waypoints")) or pt["waypoints"],
         visibility=sanitize_param(formData.get("visibility")) or pt["visibility"],
         path=path,
@@ -8214,7 +8233,9 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         else None
     )
     tripCurrency = trip["currency"]
-    tripPurchasingDate = trip["purchasing_date"]
+    # Default the purchase date to today when none is stored, so editing never leaves
+    # a price without a date.
+    tripPurchasingDate = trip["purchasing_date"] or date.today().strftime("%Y-%m-%d")
     unknownType = None
 
     wplist = [path[0], path[-1]]

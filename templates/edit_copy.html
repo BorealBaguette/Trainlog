@@ -354,7 +354,7 @@
         </fieldset>
 
         <!-- Price Details Subgroup -->
-        <fieldset class="fieldset-fixed fieldset-price">
+        <fieldset class="fieldset-fixed fieldset-price{% if plan_uuid %} fieldset-price-plan{% endif %}">
             <legend>
                 <span class="legend">{{priceLabel}}</span>
             </legend>
@@ -373,14 +373,25 @@
                 {% endfor %}
             </select>
 
+            {% if plan_uuid %}
+            <!-- Plan mode: a price is a budget estimate unless the ticket is actually
+                 booked. Only booked tickets expose (and persist) a real purchase date. -->
+            <span id="bookedWrapper" style="display:none; align-items:center; gap:0.3rem">
+                <input type="checkbox" id="bookedToggle" name="booked" value="true" {% if tripBooked %}checked{% endif %}>
+                <label for="bookedToggle" class="checkboxLabel">{{ bookedLabel|default('Already booked') }}</label>
+            </span>
+            {% endif %}
+
             <!-- Purchasing Date Picker, limited to today's date or earlier -->
             <label for="purchasing_date" id="purchasing_date_label" class="sr-only">{{purchasing_date}}</label>
             <input type="date" name="purchasing_date" id="purchasing_date" value="{{tripPurchasingDate}}">
         </fieldset>
 
+        {% if not plan_uuid %}
         <label for="ticketSearchInput" id="ticketSearchInputLabel" class="form-label">{{select_ticket}}</label>
         <select id="ticketSearchInput" name="ticket_id" class="form-select">
         </select>
+        {% endif %}
 
         <!-- Power Type Toggle -->
         {% if tripType == 'train' %}
@@ -1732,33 +1743,33 @@
         }
     }
 
-    $('#price').on('input', function () {
-        var priceDefined = isNumber($(this).val());
-
+    // In plan mode a price is an estimate; the purchase date only applies (and shows)
+    // when the ticket is marked as actually booked.
+    var isPlanEdit = {{ 'true' if plan_uuid else 'false' }};
+    function updatePriceFields() {
+        var priceDefined = isNumber($('#price').val());
         if (priceDefined) {
-            // Show currency and purchasing_date if price is defined
-            $('#currency').show();
-            $('#currency_label').show();
-            $('#purchasing_date').show();
-            $('#purchasing_date_label').show();
-            $("#price").show();
-            $("#price").css("width", "");
-            $("#price").css("grid-column-start", "");
-            $("#price").css("grid-column-end", "");
+            $('#currency, #currency_label').show();
+            $("#price").show().css({ "width": "", "grid-column-start": "", "grid-column-end": "" });
+            if (isPlanEdit) {
+                $('#bookedWrapper').css('display', 'inline-flex');
+                var booked = $('#bookedToggle').is(':checked');
+                $('#purchasing_date, #purchasing_date_label').toggle(booked);
+            } else {
+                $('#purchasing_date, #purchasing_date_label').show();
+            }
         } else {
-            // Hide currency and purchasing_date if price is not defined
-            $('#currency').hide();
-            $('#currency_label').hide();
-            $('#purchasing_date').hide();
-            $('#purchasing_date_label').hide();
-            $("#price").show();
-            $("#price").css("width", "100%");
-            $("#price").css("grid-column-start", "1");
-            $("#price").css("grid-column-end", "-1");
+            $('#currency, #currency_label, #purchasing_date, #purchasing_date_label, #bookedWrapper').hide();
+            $("#price").show().css({ "width": "100%", "grid-column-start": "1", "grid-column-end": "-1" });
         }
-    }).trigger('input'); // Trigger on load to apply initial state
+    }
+    $('#price').on('input', updatePriceFields);
+    $('#bookedToggle').on('change', updatePriceFields);
+    updatePriceFields(); // Apply initial state
 
+    {% if not plan_uuid %}
     fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}", {{ tripTicketId }});
+    {% endif %}
 
     var editCopyType = "{{ edit_copy_type }}";
     var precision = "{{ precision }}";
@@ -1885,6 +1896,11 @@
 
   // Delay section controls
   (function() {
+    // Plans are tentative and have no delays — hide the section and skip its wiring.
+    if (isPlanEdit) {
+      $('#delayToggleWrapper, #delayModeSwitchWrapper, #delayMinutesInputs, #depActualGroup, #arrActualGroup').hide();
+      return;
+    }
     var delayDateMode = Cookies.get('delayDateMode') === 'true';
     $('#delayModeSwitch').prop('checked', delayDateMode);
 

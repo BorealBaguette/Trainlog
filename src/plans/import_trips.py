@@ -78,6 +78,8 @@ def import_trips_to_plan(plan, trip_ids, pg_session=None):
                 price=r["price"],
                 currency=r["currency"],
                 purchase_date=r["purchase_date"],
+                # An imported real trip with a price was actually paid → booked.
+                booked=r["price"] not in (None, ""),
                 waypoints=r["waypoints"],
                 visibility=r["visibility"],
                 power_type=r["power_type"],
