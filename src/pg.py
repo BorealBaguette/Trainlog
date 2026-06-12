@@ -2,6 +2,7 @@ import logging
 import os
 import re
 import threading
+import time
 from contextlib import contextmanager
 
 from sqlalchemy import create_engine
@@ -123,8 +124,9 @@ def setup_db():
         logger.info(f"Database setup already complete, skipping in process {os.getpid()}")
         return
     
+    setup_started = time.monotonic()
     logger.info(f"Running database setup in process {os.getpid()}")
-    
+
     if not db_exists():
         logger.info("Database was detected to be empty")
         # check the current environment; in production, raise an error
@@ -147,11 +149,13 @@ def setup_db():
     # migrations are rolled back
     with pg_session() as session:
         for m in migrations:
+            t = time.monotonic()
             apply_migration(session, m)
+            logger.info(f"Migration {m} took {time.monotonic() - t:.2f}s")
+        t = time.monotonic()
         load_base_data(session, "airliners")
         load_base_data(session, "wagons", upsert=True)
-
-    _migrate_sqlite_nom_to_label()
+        logger.info(f"Base data load took {time.monotonic() - t:.2f}s")
 
     # Dispose the engine used during setup - workers will create their own
     global pg_session_engine
@@ -161,7 +165,10 @@ def setup_db():
         pg_session_engine = None
     
     _setup_complete = True
-    logger.info(f"Database setup complete in process {os.getpid()}")
+    logger.info(
+        f"Database setup complete in process {os.getpid()} "
+        f"in {time.monotonic() - setup_started:.2f}s"
+    )
 
 
 def list_migrations_to_apply():
@@ -305,55 +312,3 @@ def load_base_data(pg, table_name, upsert=False):
         """,
         {"t": table_name, "m": csv_mtime},
     )
-
-
-def _migrate_sqlite_nom_to_label():
-    """Rename 'nom' -> 'label' in inline JSON compositions stored in the SQLite trip table.
-
-    This is the SQLite counterpart of the DO block in migration 0020.
-    It is idempotent: rows that already use 'label' (or have no 'nom') are skipped.
-    """
-    import json
-    import sqlite3
-
-    from src.consts import DbNames
-
-    db_path = DbNames.MAIN_DB.value
-    if not os.path.exists(db_path):
-        logger.info("SQLite main.db not found, skipping nom→label migration")
-        return
-
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    try:
-        rows = conn.execute(
-            "SELECT uid, material_type_advanced FROM trip "
-            "WHERE material_type_advanced IS NOT NULL AND material_type_advanced LIKE '[%'"
-        ).fetchall()
-
-        updated = 0
-        for row in rows:
-            try:
-                units = json.loads(row["material_type_advanced"])
-                if not isinstance(units, list):
-                    continue
-                new_units, changed = [], False
-                for u in units:
-                    if "nom" in u and "label" not in u:
-                        u = dict(u)
-                        u["label"] = u.pop("nom")
-                        changed = True
-                    new_units.append(u)
-                if changed:
-                    conn.execute(
-                        "UPDATE trip SET material_type_advanced = ? WHERE uid = ?",
-                        (json.dumps(new_units), row["uid"]),
-                    )
-                    updated += 1
-            except (json.JSONDecodeError, TypeError, KeyError):
-                continue
-
-        conn.commit()
-        logger.info(f"SQLite: renamed 'nom' -> 'label' in {updated} trip composition(s)")
-    finally:
-        conn.close()

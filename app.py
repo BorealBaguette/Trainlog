@@ -237,8 +237,14 @@ from src.photon import photonInstances, photonRequest, photonRequestSingle
 from src.routing import forward_routing_core
 from src.error_reporter import report_error
 
+import time as _boot_time
+_boot_t0 = _boot_time.perf_counter()
+def _boot_mark(label):
+    logger.info(f"[boot] {label}: +{_boot_time.perf_counter() - _boot_t0:.2f}s")
+
 app = Flask(__name__)
 start_email_listener(app)
+_boot_mark("app created + email listener started")
 
 app.config['DEBUG'] = True
 Compress(app)
@@ -261,6 +267,7 @@ app.register_blueprint(trainset_blueprint)
 app.register_blueprint(vagonweb_blueprint)
 app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
+_boot_mark("blueprints registered")
 
 app.config["CACHE_TYPE"] = "SimpleCache"
 app.config["CACHE_DEFAULT_TIMEOUT"] = 864000
@@ -304,11 +311,15 @@ def generate_distinct_color(existing_hex_colors):
     return rgb_to_hex(new_rgb_color)
 
 
+_boot_mark("before git/dashboard")
 r = git.repo.Repo("./")
 dashboard.config.version = r.git.describe(tags=True).split("-")[0]
+_boot_mark("git describe done")
 dashboard.config.group_by = getUser
 dashboard.bind(app)
+_boot_mark("dashboard.bind done")
 latest_commit = r.head.commit
+_boot_mark("git head.commit done")
 
 app.config["SQLALCHEMY_DATABASE_URI"] = "sqlite:///{db}".format(db=DbNames.AUTH_DB.value)
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
@@ -11028,9 +11039,13 @@ def get_flag(code):
     return resp
 
 
+_boot_mark("module body done (route defs)")
+
 with app.app_context():
     if not database_exists(authDb.get_engine().url):
         create_authDb()
     authDb.create_all()
+_boot_mark("authDb ready")
 
 setup_db()
+_boot_mark("setup_db done")
