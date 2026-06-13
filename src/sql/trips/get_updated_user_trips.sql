@@ -1,9 +1,9 @@
--- Like get_unique_user_trips, but returns the representative trip's FULL column
--- set (f.*) instead of just the map-display subset. Used by the getUpdatedTrips
--- endpoint, which needs every modified-trip field (not only uid/type/dates) while
--- keeping the same route-deduplication, path geometry and lastLocal filtering as
--- get_unique_user_trips. Rows are passed through adapt_pg_trip_row in Python to get
--- legacy names and the 1/-1 date sentinels.
+-- Full per-trip data for every trip modified since :lastLocal, used by the
+-- getUpdatedTrips endpoint to update a local DB. Unlike get_unique_user_trips
+-- there is NO route deduplication: each trip is returned individually (one row
+-- per trip_id) with its FULL column set (f.*), so callers get complete,
+-- per-UID modified-trip data. Rows are passed through adapt_pg_trip_row in
+-- Python to get legacy names and the 1/-1 date sentinels.
 WITH base AS (
     SELECT trips.*,
         COALESCE(utc_start_datetime, start_datetime) AS utc_filtered_start_datetime,
@@ -34,28 +34,17 @@ filtered AS (
           OR (:friend = 1 AND visibility = 'friends')
           OR (visibility IS NULL AND trip_type IN ('train', 'air', 'bus', 'ferry', 'aerialway', 'tram', 'metro'))
       )
-),
-grouped AS (
-    -- One representative trip (highest trip_id) per distinct route/year/category,
-    -- plus how many trips collapsed into it.
-    SELECT MAX(trip_id) AS rep_uid,
-           count(*) AS count
-    FROM filtered
-    GROUP BY origin_station, destination_station, trip_length, trip_year,
-             past, current, planned_future, future
 )
 SELECT
-    -- Full representative-trip row: every trips column plus the computed
+    -- Full trip row: every trips column plus the computed
     -- utc_filtered_* / trip_year / past / current / planned_future / future fields.
     f.*,
     -- plannedFuture alias matches the legacy/frontend trip shape.
     f.planned_future AS "plannedFuture",
-    g.count,
     -- Path geometry fetched in the same query. ST_AsGeoJSON emits (lng, lat);
     -- geom_geojson_to_coords swaps back to [lat,lng]. Full resolution is kept on
     -- purpose: zoomed-in path precision is a core feature.
     ST_AsGeoJSON(p.geom) AS geojson
-FROM grouped g
-JOIN filtered f ON f.trip_id = g.rep_uid
+FROM filtered f
 LEFT JOIN paths p ON p.trip_id = f.trip_id
 ORDER BY f.utc_filtered_start_datetime DESC NULLS LAST
