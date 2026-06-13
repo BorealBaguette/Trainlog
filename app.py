@@ -103,6 +103,7 @@ from src.sql.trips import (
     get_trip_query,
     get_trips_country_query,
     get_unique_user_trips_query,
+    get_updated_user_trips_query,
     get_user_lines_query,
     get_user_trips_query,
 )
@@ -6958,6 +6959,61 @@ def public_getTripsPaths(username, lastLocal):
 @login_required  # Login access check
 def get_trip_paths(username, lastLocal):
     result = fetchTripsPaths(username, lastLocal, public=0)
+    return jsonify(result)
+
+
+def fetchUpdatedTrips(username, lastLocal, public):
+    """Like fetchTripsPaths, but returns the *full* trip data for each modified
+    trip instead of only the map-display subset. Still returns idList and
+    lastLocal so the frontend can integrate changes and reconcile deletions."""
+    tripList = []
+    now = datetime.now()
+
+    user_id = get_user_id(username)
+    with pg_session() as pg:
+        idList = [
+            row["uid"]
+            for row in pg.execute(
+                "SELECT trip_id AS uid FROM trips WHERE user_id = :user_id",
+                {"user_id": user_id},
+            ).fetchall()
+        ]
+
+        trips = pg.execute(
+            get_updated_user_trips_query(),
+            {
+                "user_id": user_id,
+                "lastLocal": lastLocal,
+                "public": public,
+                "friend": int(current_user_is_friend_with(username)),
+            },
+        ).fetchall()
+
+    trips.reverse()
+
+    for trip in trips:
+        # The path geometry comes back on the same row (geojson column), so no
+        # second getUserLines round-trip is needed.
+        path = geom_geojson_to_coords(trip._mapping.get("geojson"))
+        # adapt_pg_trip_row applies legacy names (trip_id->uid, trip_type->type)
+        # and the 1/-1 date sentinels the map frontend relies on. Unlike
+        # fetchTripsPaths we keep every column so the full trip data is returned.
+        trip = adapt_pg_trip_row(trip._mapping, username)
+        trip.pop("geojson", None)
+        # planned_future is duplicated by the plannedFuture alias used elsewhere.
+        trip.pop("planned_future", None)
+
+        tripList.append({"trip": trip, "path": path})
+
+    print(datetime.now() - now)
+    lastLocal = datetime.strftime(datetime.now(), "%Y-%m-%dT%H:%M:%S.%f")
+    return {"trips": tripList, "lastLocal": lastLocal, "idList": idList}
+
+
+@app.route("/u/<username>/getUpdatedTrips/<lastLocal>", methods=["GET", "POST"])
+@login_required  # Login access check
+def get_updated_trips(username, lastLocal):
+    result = fetchUpdatedTrips(username, lastLocal, public=0)
     return jsonify(result)
 
 
