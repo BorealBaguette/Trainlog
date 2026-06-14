@@ -1,0 +1,319 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+{% include "bootstrap/navigation.html" %}
+{% include "includes/trip_cards.html" %}
+
+{#
+  REDESIGN PROPOSAL for the settings page (preview via ?v2=1, owner-only).
+  Concept: a route map / timetable — each setting group is a "station" strung
+  along a line. Flat, editorial. Reuses the /settings context and POSTs to the
+  same endpoint. Tileserver picker + import/MFR24 modals are shared includes.
+#}
+
+<style>
+  .pref {
+    --ink: #1f2733; --muted: #76808f; --hair: #dce3ec; --paper: #f4f7fb;
+    --ac: #207cca; --ac-deep: #1a5f9c; --ac-soft: rgba(32,124,202,.14);
+    background: var(--paper); min-height: 100vh; color: var(--ink);
+    padding: 0 0 4rem; font-feature-settings: "tnum";
+  }
+  .pref-wrap { max-width: 720px; margin: 0 auto; padding: 1.5rem 1.25rem 0; }
+
+  .pref-top { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+  .pref-top h1 {
+    font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; margin: 0;
+    display: flex; align-items: center; gap: .55rem;
+  }
+  .pref-top h1 .glyph { color: var(--ac); }
+  .pref-who { color: var(--muted); font-size: .95rem; margin: .1rem 0 0; }
+  .pref-classic {
+    font-size: .85rem; color: var(--muted); text-decoration: none;
+    border: 1px solid var(--hair); border-radius: 999px; padding: .28rem .8rem; white-space: nowrap;
+  }
+  .pref-classic:hover { color: var(--ac-deep); border-color: var(--ac); }
+  .pref-note { color: var(--muted); font-size: .82rem; margin: .6rem 0 1.6rem; }
+  .pref-note a { color: var(--ac-deep); }
+
+  /* The line + stations */
+  .stations { position: relative; }
+  .station { position: relative; padding: 0 0 2.1rem 2.4rem; }
+  .stations form { margin: 0; }
+  /* the rail — uniform line; segments overlap so 01→05 reads as one continuous track */
+  .station::before, .save-row::before {
+    content: ""; position: absolute; left: 12px; top: -.4rem; bottom: -.4rem; width: 2px;
+    background: color-mix(in srgb, var(--ac) 55%, var(--paper));
+  }
+  .station:first-child::before { top: .15rem; }       /* start at the first stop */
+  .station:last-child::before { bottom: auto; height: 1.6rem; }  /* stop at the last stop */
+  .station::after {             /* the stop */
+    content: ""; position: absolute; left: 5px; top: .15rem; width: 16px; height: 16px;
+    border-radius: 50%; background: var(--paper); border: 3px solid var(--ac);
+  }
+  .station.is-action::after { background: var(--ac); box-shadow: 0 0 0 3px var(--ac-soft); }
+
+  .st-title {
+    font-size: .8rem; font-weight: 700; text-transform: uppercase; letter-spacing: .09em;
+    color: var(--ink); margin: 0 0 .35rem; display: flex; align-items: center; gap: .5rem;
+    min-height: 1.1rem;
+  }
+  .st-title .code { color: var(--ac-deep); font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: .72rem; letter-spacing: .04em; }
+  .st-sub { color: var(--muted); font-size: .82rem; margin: 0 0 .9rem; }
+
+  /* Rows */
+  .opt { display: flex; align-items: flex-start; gap: .7rem; padding: .5rem 0; }
+  .opt + .opt { border-top: 1px dashed var(--hair); }
+  .opt label { font-weight: 500; margin: 0; cursor: pointer; }
+  .opt .hint { color: var(--muted); font-size: .8rem; margin: .15rem 0 0; }
+
+  /* Toggle (custom, no Bootstrap "AI switch" look) */
+  .toggle { position: relative; flex: none; width: 42px; height: 24px; margin-top: .1rem; }
+  .toggle input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; z-index: 2; }
+  .toggle .track {
+    position: absolute; inset: 0; background: #cdd6e2; border-radius: 999px; transition: background .15s;
+    pointer-events: none;   /* clicks pass through to the input above */
+  }
+  .toggle .track::after {
+    content: ""; position: absolute; left: 3px; top: 3px; width: 18px; height: 18px;
+    background: #fff; border-radius: 50%; box-shadow: 0 1px 2px rgba(0,0,0,.25); transition: transform .15s;
+  }
+  .toggle input:checked + .track { background: var(--ac); }
+  .toggle input:checked + .track::after { transform: translateX(18px); }
+
+  .pref select.form-select {
+    border: 1px solid var(--hair); border-radius: 10px; background-color: #fff;
+    max-width: 360px;
+  }
+  .pref select.form-select:focus { border-color: var(--ac); box-shadow: 0 0 0 .18rem rgba(232,89,12,.18); }
+  .field-label { font-size: .8rem; font-weight: 600; color: var(--muted); margin: .7rem 0 .25rem; }
+
+  /* Buttons */
+  .btn-ticket {
+    background: var(--ac); color: #fff; border: none; border-radius: 10px;
+    padding: .55rem 1.5rem; font-weight: 700; letter-spacing: .01em;
+  }
+  .btn-ticket:hover { background: var(--ac-deep); color: #fff; }
+  .btn-line {
+    background: #fff; color: var(--ink); border: 1px solid var(--hair); border-radius: 10px;
+    padding: .45rem 1rem; font-weight: 600; font-size: .9rem; text-decoration: none; display: inline-flex;
+    align-items: center; gap: .45rem;
+  }
+  .btn-line:hover { border-color: var(--ac); color: var(--ac-deep); }
+  .btn-line.danger:hover { border-color: #dc2626; color: #dc2626; }
+
+  .save-row { position: relative; padding-left: 2.4rem; margin: 0 0 1.4rem; }
+
+  /* GPS station — a little ticket-stub flavour */
+  .stub {
+    background: #fff; border: 1px solid var(--hair); border-radius: 12px; padding: 1rem 1.1rem;
+    background-image: radial-gradient(circle at 0 18px, var(--paper) 7px, transparent 8px),
+                      radial-gradient(circle at 100% 18px, var(--paper) 7px, transparent 8px);
+  }
+  .stub code { color: var(--ac-deep); }
+  .stub .form-control { border-color: var(--hair); }
+  .stub ul { margin: .2rem 0 .6rem; padding-left: 1.1rem; }
+</style>
+
+<div class="pref">
+<div class="pref-wrap">
+
+  <div class="pref-top">
+    <div>
+      <h1><span class="glyph">🚉</span> {{ user_settings }}</h1>
+      <p class="pref-who">{{ username }}</p>
+    </div>
+    <a class="pref-classic" href="{{ url_for('user_settings', username=username) }}">
+      <i class="fa-solid fa-arrow-left me-1"></i> {{ settingsClassic }}
+    </a>
+  </div>
+  <p class="pref-note">
+    <i class="fa-solid fa-flask me-1"></i> {{ settingsRedesignNote }}
+  </p>
+
+  <div class="stations">
+
+    <form autocomplete="off" method="POST" action="{{ url_for('user_settings', username=username) }}">
+
+      <!-- 01 · Privacy -->
+      <section class="station">
+        <div class="st-title"><span class="code">01</span> {{ settingsSectionPrivacy }}</div>
+        <div class="st-body">
+          <select class="form-select" id="share_level" name="share_level">
+            <option value="0" data-details="{{shareLevel0Details}}" {% if share_level==0 %}selected{% endif %}>{{shareLevel0}}</option>
+            <option value="1" data-details="{{shareLevel1Details}}" {% if share_level==1 %}selected{% endif %}>{{shareLevel1}}</option>
+            <option value="2" data-details="{{shareLevel2Details}}" {% if share_level==2 %}selected{% endif %}>{{shareLevel2}}</option>
+          </select>
+          <p class="hint mt-1" id="share-level-details"></p>
+
+          <div class="opt mt-2">
+            <span class="toggle"><input type="checkbox" id="leaderboard" name="leaderboard" {{leaderboard_checked}}><span class="track"></span></span>
+            <label for="leaderboard">{{ (leaderboardText|replace("{leaderboard_url}", url_for('leaderboard')))|safe }}</label>
+          </div>
+          <div class="opt">
+            <span class="toggle"><input type="checkbox" id="friend_search" name="friend_search" {{friend_search_checked}}><span class="track"></span></span>
+            <label for="friend_search">{{ friendSearchText|safe }}</label>
+          </div>
+          <div class="opt">
+            <span class="toggle"><input type="checkbox" id="appear_on_global" name="appear_on_global" {{appear_on_global_checked}}><span class="track"></span></span>
+            <label for="appear_on_global">{{ appearOnGlobalText|replace("{global_live_map}", url_for('live_map'))|safe }}</label>
+          </div>
+        </div>
+      </section>
+
+      <!-- 02 · Map & appearance -->
+      <section class="station">
+        <div class="st-title"><span class="code">02</span> {{ settingsSectionAppearance }}</div>
+        <div class="st-body">
+          <div class="opt">
+            <span class="toggle"><input type="checkbox" id="globe" name="globe" {% if user_globe %}checked{% endif %}><span class="track"></span></span>
+            <label for="globe">{{ globeLabel }}</label>
+          </div>
+          <div class="opt">
+            <span class="toggle"><input type="checkbox" id="colorblind" name="colorblind" {{colorblind_checked}}><span class="track"></span></span>
+            <label for="colorblind">{{ colorblindMode|safe }}</label>
+          </div>
+          {% if is_premium %}
+          <div class="opt">
+            <span class="toggle"><input type="checkbox" id="flight_3d" name="flight_3d" {{ flight_3d_checked }}><span class="track"></span></span>
+            <label for="flight_3d"><i class="fa-solid fa-gem" style="color:#00CED1"></i> {{ flight3dSetting }}</label>
+          </div>
+          {% endif %}
+          <div class="opt d-block">
+            <div class="field-label mt-0">{{ tilesetLabel }}</div>
+            <button type="button" class="form-select text-start" id="tileserverPickerBtn" style="cursor:pointer; max-width:360px;">
+              <i class="fa-solid fa-map me-2" id="tileserverPickerIcon"></i><span id="tileserverPickerLabel"></span>
+            </button>
+            <input type="hidden" id="tileserver" name="tileserver" value="{{ user_tileserver }}">
+            {% if is_premium %}
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" id="orm-enabled" name="orm_enabled">
+              <label class="form-check-label" for="orm-enabled">
+                <i class="fa-solid fa-gem" style="color:#00CED1;"></i> Enable OpenRailwayMap overlay
+              </label>
+            </div>
+            <div id="orm-options" class="mt-2 p-2 rounded" style="display:none; background:#fff; border:1px solid var(--hair); max-width:360px;">
+              <label class="field-label mt-0" for="orm-type">Railway Layer Type</label>
+              <select class="form-select" name="orm_type" id="orm-type">
+                <option value="standard">🛤️ Standard</option>
+                <option value="maxspeed">🏃 Max Speed</option>
+                <option value="signals">🚦 Signals</option>
+                <option value="electrified">⚡ Electrified</option>
+                <option value="gauge">📏 Track Gauge</option>
+              </select>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </section>
+
+      <!-- 03 · Preferences -->
+      <section class="station">
+        <div class="st-title"><span class="code">03</span> {{ settingsSectionGeneral }}</div>
+        <div class="st-body">
+          <div class="field-label">{{ defaultLanding }}</div>
+          <select class="form-select" name="default_landing" id="default_landing">
+            <option value="dashboard" {% if default_landing=="dashboard" %}selected{% endif %}>🏠 {{user_dashboard}}</option>
+            <option value="map" {% if default_landing in ["map","new_map"] %}selected{% endif %}>🗺️ {{map}}</option>
+            <option value="trips" {% if default_landing=="trips" %}selected{% endif %}>🕰️ {{trips}}</option>
+            <option value="projects" {% if default_landing=="projects" %}selected{% endif %}>🕒 {{projectList}}</option>
+          </select>
+          <div class="field-label">{{ language }}</div>
+          <select class="form-select" name="lang" id="lang">
+            {% for l in langs %}<option value="{{l.code}}">{{l.name}}</option>{% endfor %}
+          </select>
+          <div class="field-label">{{ currency }}</div>
+          <select class="form-select" name="user_currency" id="user_currency">
+            {% for c in currencyOptions %}
+            <option value="{{ c['currency'] }}" data-country="{{ c['country'] }}" {% if c['currency']==user_currency %}selected{% endif %}>{{ c['currency'] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </section>
+
+      <div class="save-row">
+        <button type="submit" class="btn-ticket">{{ submit }}</button>
+      </div>
+    </form>
+
+    <!-- 04 · Data -->
+    <section class="station is-action">
+      <div class="st-title"><span class="code">04</span> {{ settingsSectionData }}</div>
+      <div class="st-body d-flex flex-wrap gap-2">
+        <a class="btn-line" href="{{ url_for('export', username=username) }}">
+          <i class="fa-solid fa-file-export"></i> {{ export }}
+        </a>
+        <button type="button" class="btn-line" id="importTrainlogBtn">
+          <i class="fa-solid fa-file-import"></i> {{ import }}
+        </button>
+        <button type="button" class="btn-line" id="importMFR24Btn">
+          <i class="fa-solid fa-plane"></i> {{ import }} MFR24
+        </button>
+        <button type="button" class="btn-line danger" id="clear-cache">
+          <i class="fa-solid fa-trash"></i> {{ clearCache }}
+        </button>
+      </div>
+    </section>
+
+    {% if is_owner %}
+    <!-- 05 · Automatic logging -->
+    <section class="station is-action">
+      <div class="st-title"><span class="code">05</span> {{ gpsLoggingTitle }}</div>
+      <p class="st-sub">{{ gpsLoggingDesc|replace("{gpslogger_url}", "https://gpslogger.app/")|safe }}</p>
+      <div class="stub">
+        <div class="field-label mt-0">{{ gpsUploadUrlLabel }}</div>
+        <div class="input-group input-group-sm mb-2">
+          <input type="text" class="form-control font-monospace" id="gpsUploadUrl" value="{{ gps_upload_url }}" readonly>
+          <button class="btn-line" type="button" id="copyGpsUrl" title="{{ copy }}"><i class="bi bi-clipboard"></i></button>
+          <form method="POST" class="d-inline" action="{{ url_for('regenerate_gps_token', username=username) }}"
+                onsubmit="return confirm('{{ gpsRegenerateConfirm }}');">
+            <button class="btn-line" type="submit" title="{{ gpsRegenerate }}"><i class="fa-solid fa-rotate"></i></button>
+          </form>
+        </div>
+        <ul class="small text-muted">
+          <li>{{ gpsVariantStage|replace("{gpx_list_url}", url_for('list_gpx', username=username))|safe }}</li>
+          <li>{{ gpsVariantImport|safe }}</li>
+          <li>{{ gpsVariantRouting|safe }}</li>
+        </ul>
+        <p class="small text-muted mb-0">{{ gpsParamsHelp|safe }}</p>
+      </div>
+    </section>
+    {% endif %}
+
+  </div>
+</div>
+</div>
+
+{% include "includes/import_modal.html" %}
+{% include "includes/tileserver_picker.html" %}
+
+<script>
+  function updateShareDetails() {
+    const opt = document.querySelector('#share_level option:checked');
+    const txt = (opt.dataset.details || '').replace("{public_link}",
+      "{{ url_for('public', username=username, _external=True, _scheme='https') }}");
+    document.getElementById('share-level-details').innerHTML = txt;
+  }
+  document.getElementById('share_level').addEventListener('change', updateShareDetails);
+  updateShareDetails();
+
+  if (typeof getFlagEmoji === 'function') {
+    for (const opt of document.getElementById('user_currency').options) {
+      opt.text = `${getFlagEmoji(opt.dataset.country)} ${opt.text}`;
+    }
+  }
+
+  const copyGpsBtn = document.getElementById('copyGpsUrl');
+  if (copyGpsBtn) {
+    copyGpsBtn.addEventListener('click', function () {
+      navigator.clipboard.writeText(document.getElementById('gpsUploadUrl').value).then(() => {
+        const i = this.querySelector('i'); i.className = 'bi bi-check-lg';
+        setTimeout(() => { i.className = 'bi bi-clipboard'; }, 1500);
+      });
+    });
+  }
+
+  document.getElementById('clear-cache').addEventListener('click', function () {
+    localforage.clear().then(() => alert("{{ cacheCleared }}")).catch(() => alert("{{ cacheError }}"));
+  });
+</script>
+{% endblock %}

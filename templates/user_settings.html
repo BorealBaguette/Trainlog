@@ -3,12 +3,15 @@
 {% include "bootstrap/navigation.html"%}
 
 {% include "includes/trip_cards.html" %}
-<style>
-  #importDropZone.dragover { border-color: #0d6efd !important; background: #e7f1ff !important; }
-</style>
 
 <div id="form">
   <h2 class="header">{{user_settings}} {{username}}</h2>
+  {% if is_owner %}
+  <div class="alert alert-info d-flex justify-content-between align-items-center py-2 px-3">
+    <span><i class="fa-solid fa-wand-magic-sparkles me-1"></i> {{ settingsRedesignNote }}</span>
+    <a class="btn btn-sm btn-primary" href="{{ url_for('user_settings', username=username, v2=1) }}">{{ settingsRedesignPreview }}</a>
+  </div>
+  {% endif %}
   <div>
     <form autocomplete="off" method="POST">
 
@@ -144,629 +147,87 @@
 
       <button id=submit type="submit" onclick="">{{submit}}</button>
     </form>
-  </div>
-</div>
 
-<!-- Import modal -->
-<div class="modal fade" id="importModal" tabindex="-1">
-  <div class="modal-dialog modal-lg">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="importModalTitle">Import</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
+    {% if is_owner %}
+    <hr>
+    <div class="card mt-3 mb-2">
+      <div class="card-body">
+        <h6 class="card-title mb-2">
+          <i class="fa-solid fa-location-dot me-1"></i> {{ gpsLoggingTitle }}
+        </h6>
+        <p class="small text-muted mb-3">
+          {{ gpsLoggingDesc|replace("{gpslogger_url}", "https://gpslogger.app/")|safe }}
+        </p>
 
-        <!-- Step 1: file picker -->
-        <div id="importStep1">
-          <div id="importDropZone" class="border border-2 rounded-3 p-4 text-center bg-light"
-               style="cursor:pointer; border-style: dashed !important; transition: all 0.2s;">
-            <i class="bi bi-cloud-upload fs-1 text-secondary mb-2 d-block"></i>
-            <p class="mb-0 text-muted">{{ orClickToBrowse }}</p>
-          </div>
-          <input type="file" id="importFileInput" accept=".csv" class="d-none">
-          <div id="importFileInfo" class="mt-2 text-muted small"></div>
+        <label class="form-label small fw-semibold mb-1">{{ gpsUploadUrlLabel }}</label>
+        <div class="input-group input-group-sm mb-3">
+          <input type="text" class="form-control font-monospace" id="gpsUploadUrl"
+                 value="{{ gps_upload_url }}" readonly>
+          <button class="btn btn-outline-secondary" type="button" id="copyGpsUrl" title="{{ copy }}">
+            <i class="bi bi-clipboard"></i>
+          </button>
+          <form method="POST" class="d-inline"
+                action="{{ url_for('regenerate_gps_token', username=username) }}"
+                onsubmit="return confirm('{{ gpsRegenerateConfirm }}');">
+            <button class="btn btn-outline-warning" type="submit" title="{{ gpsRegenerate }}">
+              <i class="fa-solid fa-rotate"></i>
+            </button>
+          </form>
         </div>
 
-        <!-- Step 2: parsing progress -->
-        <div id="importStep2" class="d-none text-center py-4">
-          <div class="spinner-border text-primary mb-3" role="status"></div>
-          <p id="importProgressText" class="mb-0">{{ processing_starting }}</p>
-          <div class="progress mt-3" style="height: 20px;">
-            <div id="importProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
-                 role="progressbar" style="width: 0%">0%</div>
-          </div>
-        </div>
-
-        <!-- Step 3: preview -->
-        <div id="importStep3" class="d-none">
-          <div class="d-flex justify-content-between align-items-center mb-3">
-            <span>{{ trips_found }}: <strong id="importTripCount">0</strong></span>
-            <div>
-              <button class="btn btn-sm btn-outline-secondary" id="importSelectAll">{{ all }}</button>
-              <button class="btn btn-sm btn-outline-secondary ms-1" id="importSelectNone">{{ none_t }}</button>
-            </div>
-          </div>
-          <div id="importTripsList" style="max-height: 420px; overflow-y: auto;"></div>
-        </div>
-
-        <!-- Result -->
-        <div id="importResult" class="d-none mt-2"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="importCancelBtn">{{ cancel }}</button>
-        <button type="button" class="btn btn-primary d-none" id="importParseBtn">
-          <i class="bi bi-search me-1"></i>{{ submit }}
-        </button>
-        <button type="button" class="btn btn-success d-none" id="importSaveBtn">
-          <i class="bi bi-check-circle me-1"></i>{{ save_selected }}
-        </button>
-      </div>
-    </div>
-  </div>
-</div>
-
-
-<!-- Tileserver picker modal -->
-<div class="modal fade" id="tileserverModal" tabindex="-1">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="fa-solid fa-map me-2"></i>{{ tilesetLabel }}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <ul class="nav nav-tabs mb-3" id="tileserverTabs" role="tablist">
-          <li class="nav-item" role="presentation">
-            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#ts-general" type="button">OpenStreetMap</button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ts-jawg" type="button">Jawg</button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ts-ofm" type="button">OpenFreeMap</button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ts-other" type="button">{{ other }}</button>
-          </li>
+        <label class="form-label small fw-semibold mb-1">{{ gpsUrlVariants }}</label>
+        <ul class="small text-muted mb-3 ps-3">
+          <li>{{ gpsVariantStage|replace("{gpx_list_url}", url_for('list_gpx', username=username))|safe }}</li>
+          <li>{{ gpsVariantImport|safe }}</li>
+          <li>{{ gpsVariantRouting|safe }}</li>
         </ul>
-        <div class="tab-content">
 
-          <!-- OpenStreetMap tab -->
-          <div class="tab-pane fade show active" id="ts-general">
-            <div class="ts-grid">
-              <button type="button" class="ts-option" data-value="osm">
-                <i class="fa-solid fa-map"></i><span>{{ tileserver_default }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="de">
-                <i class="fa-solid fa-map"></i><span>{{ tileserver_de }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="fr">
-                <i class="fa-solid fa-map"></i><span>{{ tileserver_fr }}</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Jawg tab -->
-          <div class="tab-pane fade" id="ts-jawg">
-            <div class="ts-grid">
-              <button type="button" class="ts-option" data-value="jawg-streets">
-                <i class="fa-solid fa-road"></i><span>{{ tileserver_jawg_streets }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="jawg-light">
-                <i class="fa-solid fa-sun"></i><span>{{ tileserver_jawg_light }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="jawg-dark">
-                <i class="fa-solid fa-moon"></i><span>{{ tileserver_jawg_dark }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="jawg-sunny">
-                <i class="fa-solid fa-cloud-sun"></i><span>{{ tileserver_jawg_sunny }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="jawg-terrain">
-                <i class="fa-solid fa-mountain"></i><span>{{ tileserver_jawg_terrain }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="jawg-lagoon">
-                <i class="fa-solid fa-water"></i><span>{{ tileserver_jawg_lagoon }}</span>
-              </button>
-              {% if is_premium %}
-              <button type="button" class="ts-option ts-vector" data-value="jawg-streets-v2">
-                <i class="fa-solid fa-road"></i><i class="fa-solid fa-gem ts-gem"></i><span>Streets V2</span>
-              </button>
-              <button type="button" class="ts-option ts-vector" data-value="jawg-lagoon-v2">
-                <i class="fa-solid fa-water"></i><i class="fa-solid fa-gem ts-gem"></i><span>Lagoon V2</span>
-              </button>
-              {% endif %}
-            </div>
-          </div>
-
-          <!-- OpenFreeMap tab -->
-          <div class="tab-pane fade" id="ts-ofm">
-            <div class="ts-grid">
-              <button type="button" class="ts-option ts-vector" data-value="ofm-liberty">
-                <i class="fa-solid fa-map-location-dot"></i><span>Liberty</span>
-              </button>
-              <button type="button" class="ts-option ts-vector" data-value="ofm-bright">
-                <i class="fa-solid fa-map"></i><span>Bright</span>
-              </button>
-              <button type="button" class="ts-option ts-vector" data-value="ofm-positron">
-                <i class="fa-solid fa-circle-dot"></i><span>Positron</span>
-              </button>
-              <button type="button" class="ts-option ts-vector" data-value="dark-train">
-                <i class="fa-solid fa-moon"></i><span>Dark Train</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Other tab -->
-          <div class="tab-pane fade" id="ts-other">
-            <div class="ts-grid">
-              <button type="button" class="ts-option" data-value="none">
-                <i class="fa-solid fa-ban"></i><span>{{ none_t }}</span>
-              </button>
-            </div>
-          </div>
-
-        </div>
+        <label class="form-label small fw-semibold mb-1">{{ gpsParamsLabel }}</label>
+        <p class="small text-muted mb-0">{{ gpsParamsHelp|safe }}</p>
       </div>
     </div>
+    {% endif %}
   </div>
 </div>
 
-<style>
-  .ts-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
-  .ts-option {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 12px 8px;
-    border: 2px solid #dee2e6;
-    border-radius: 8px;
-    background: white;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    font-size: 0.8rem;
-    color: #444;
-    position: relative;
-  }
-  .ts-option i:first-child { font-size: 1.3rem; color: #666; }
-  .ts-option:hover { border-color: #0d6efd; background: #f0f6ff; }
-  .ts-option.ts-selected { border-color: #0d6efd; background: #e7f0ff; color: #0d6efd; }
-  .ts-option.ts-selected i:first-child { color: #0d6efd; }
-  .ts-gem { position: absolute; top: 6px; right: 6px; font-size: 0.65rem !important; color: #00ced1 !important; }
-</style>
+{% include "includes/import_modal.html" %}
+{% include "includes/tileserver_picker.html" %}
 
 <script>
-
-  document.getElementById("clear-cache").addEventListener("click", function () {
-    localforage.clear().then(function () {
-      alert("{{cacheCleared}}");
-    }).catch(function (err) {
-      alert("{{cacheError}}");
-    });
-  });
-
-  const currencySelect = document.getElementById('user_currency');
-  for (let option of currencySelect.options) {
-    const countryCode = option.dataset.country; // Assuming you're using a data attribute for the country code
-    const emoji = getFlagEmoji(countryCode);
-    option.text = `${emoji} ${option.text}`; // Prepend the emoji to the option text
-  }
-
-  // ---- Tileserver picker (defined at script scope so ORM handlers can access them) ----
-  const TS_META = {
-    'none':             { label: '{{ none_t }}',                  icon: 'fa-ban',              tab: 'ts-other' },
-    'osm':              { label: '{{ tileserver_default }}',     icon: 'fa-map',              tab: 'ts-general' },
-    'de':               { label: '{{ tileserver_de }}',          icon: 'fa-map',              tab: 'ts-general' },
-    'fr':               { label: '{{ tileserver_fr }}',          icon: 'fa-map',              tab: 'ts-general' },
-    'jawg-streets':     { label: '{{ tileserver_jawg_streets }}',icon: 'fa-road',             tab: 'ts-jawg' },
-    'jawg-light':       { label: '{{ tileserver_jawg_light }}',  icon: 'fa-sun',              tab: 'ts-jawg' },
-    'jawg-dark':        { label: '{{ tileserver_jawg_dark }}',   icon: 'fa-moon',             tab: 'ts-jawg' },
-    'jawg-sunny':       { label: '{{ tileserver_jawg_sunny }}',  icon: 'fa-cloud-sun',        tab: 'ts-jawg' },
-    'jawg-terrain':     { label: '{{ tileserver_jawg_terrain }}',icon: 'fa-mountain',         tab: 'ts-jawg' },
-    'jawg-lagoon':      { label: '{{ tileserver_jawg_lagoon }}', icon: 'fa-water',            tab: 'ts-jawg' },
-    'dark-train':       { label: 'Dark Train',                   icon: 'fa-moon',             tab: 'ts-ofm',  vector: true },
-    'jawg-streets-v2':  { label: 'Streets V2',                   icon: 'fa-road',             tab: 'ts-jawg', vector: true },
-    'jawg-lagoon-v2':   { label: 'Lagoon V2',                    icon: 'fa-water',            tab: 'ts-jawg', vector: true },
-    'ofm-liberty':      { label: 'Liberty',                      icon: 'fa-map-location-dot', tab: 'ts-ofm',  vector: true },
-    'ofm-bright':       { label: 'Bright',                       icon: 'fa-map',              tab: 'ts-ofm',  vector: true },
-    'ofm-positron':     { label: 'Positron',                     icon: 'fa-circle-dot',       tab: 'ts-ofm',  vector: true },
-  };
-
-  // Updates the picker UI only — does NOT touch #tileserver.val()
-  function updateTileserverPickerUI(value) {
-    const meta = TS_META[value] || { label: value, icon: 'fa-map' };
-    $('#tileserverPickerLabel').text(meta.label);
-    $('#tileserverPickerIcon').attr('class', 'fa-solid me-2 ' + meta.icon);
-    $('.ts-option').removeClass('ts-selected');
-    $(`.ts-option[data-value="${value}"]`).addClass('ts-selected');
-  }
-
-$(document).ready(function () {
-    // Initial display based on the selected value
-    updateDetails();
-
-    // Event listener for when the select changes
-    $('#share_level').on('change', updateDetails);
-
-    $('#tileserverPickerBtn').on('click', function() {
-      // When ORM is active, highlight the base map in the picker
-      const baseMap = {% if is_premium %}$('#orm-enabled').is(':checked') ? ($('#tileserver').data('base-map') || 'osm') : $('#tileserver').val(){% else %}$('#tileserver').val(){% endif %};
-      const meta = TS_META[baseMap];
-      if (meta) $(`#tileserverTabs button[data-bs-target="#${meta.tab}"]`).tab('show');
-      updateTileserverPickerUI(baseMap);
-      new bootstrap.Modal(document.getElementById('tileserverModal')).show();
-    });
-
-    $(document).on('click', '.ts-option', function() {
-      const value = $(this).data('value');
-      updateTileserverPickerUI(value);
-      {% if is_premium %}
-      if ($('#orm-enabled').is(':checked')) {
-        $('#tileserver').data('base-map', value);
-        updateORMValue();
-      } else {
-        $('#tileserver').val(value);
-      }
-      {% else %}
-      $('#tileserver').val(value);
-      {% endif %}
-      bootstrap.Modal.getInstance(document.getElementById('tileserverModal')).hide();
-    });
-
-    // Init picker and tileserver value
-    {% if is_premium %}
-    const currentTileserver = "{{ user_tileserver }}";
-    const ormRasterMatch = currentTileserver.match(/^openrailwaymap-(.+)\.(.+)$/);
-    const ormVectorMatch = currentTileserver.match(/^orm-vector-([^.]+)\.(.+)$/);
-
-    if (ormRasterMatch) {
-      $('#orm-enabled').prop('checked', true);
-      $('#orm-type').val(ormRasterMatch[1]);
-      $('#tileserver').data('base-map', ormRasterMatch[2]);
-      updateTileserverPickerUI(ormRasterMatch[2]);
-      $('#orm-options').show();
-    } else if (ormVectorMatch) {
-      $('#orm-enabled').prop('checked', true);
-      $('#orm-type').val(ormVectorMatch[1]);
-      $('#tileserver').data('base-map', ormVectorMatch[2]);
-      updateTileserverPickerUI(ormVectorMatch[2]);
-      $('#orm-options').show();
-    } else {
-      updateTileserverPickerUI(currentTileserver);
-    }
-    {% else %}
-    updateTileserverPickerUI('{{ user_tileserver }}');
-    {% endif %}
-  });
-
-  // Function to update the displayed details
+  // Share-level help text + icon
   function updateDetails() {
-
     let selectedIconClass = $('#share_level option:selected').data('icon');
-    // Clear previous icons and apply the new one to the label
     $('.input-group-text i').attr('class', selectedIconClass);
-
-    const selectedDetails = $('#share_level option:selected').data('details').replace("{public_link}", "{{ url_for('public', username=username, _external=True,  _scheme='https')}}");
+    const selectedDetails = $('#share_level option:selected').data('details')
+      .replace("{public_link}", "{{ url_for('public', username=username, _external=True, _scheme='https') }}");
     $('#share-level-details').html(selectedDetails);
   }
+  $(document).ready(function () {
+    updateDetails();
+    $('#share_level').on('change', updateDetails);
+  });
 
-  var urls = {
-    "MFR24":         "{{ url_for('processMFR24', username=username)}}",
-    "parseMFR24":    "{{ url_for('parse_mfr24', username=username)}}",
-    "saveMFR24":     "{{ url_for('save_parsed_mfr24', username=username)}}",
-    "trainlogImport":"{{ url_for('importAll', username=username)}}",
-    "trips":         "{{ url_for('dynamic_trips', time='trips', username=username) }}"
-  };
-
-  // ---- Import modal ----
-  let importType = null;
-  let importParsedTrips = [];
-  let importXhr = null;
-
-  function openImportModal(type) {
-    importType = type;
-    importParsedTrips = [];
-    $('#importModalTitle').text(type === 'trainlog' ? '{{ importText }}' : '{{ MFR24 }} My Flightradar 24');
-    $('#importStep1, #importStep2, #importStep3, #importResult').each(function() {
-      $(this).toggleClass('d-none', !$(this).is('#importStep1'));
-    });
-    $('#importFileInfo').text('');
-    $('#importFileInput').val('');
-    $('#importParseBtn').removeClass('d-none');
-    $('#importSaveBtn').addClass('d-none');
-    new bootstrap.Modal(document.getElementById('importModal')).show();
+  // Currency flags
+  const currencySelect = document.getElementById('user_currency');
+  for (let option of currencySelect.options) {
+    option.text = `${getFlagEmoji(option.dataset.country)} ${option.text}`;
   }
 
-  $('#importTrainlogBtn').on('click', function() { openImportModal('trainlog'); });
-  $('#importMFR24Btn').on('click', function() { openImportModal('mfr24'); });
-
-  document.getElementById('importModal').addEventListener('hide.bs.modal', function() {
-    if (importXhr) {
-      importXhr.abort();
-      importXhr = null;
-    }
+  // Clear cache
+  document.getElementById("clear-cache").addEventListener("click", function () {
+    localforage.clear().then(() => alert("{{cacheCleared}}")).catch(() => alert("{{cacheError}}"));
   });
 
-  // File drop/pick
-  const importDropZone = document.getElementById('importDropZone');
-  const importFileInput = document.getElementById('importFileInput');
-  let importDroppedFile = null;
-
-  importDropZone.addEventListener('click', () => importFileInput.click());
-  importDropZone.addEventListener('dragover', (e) => { e.preventDefault(); importDropZone.classList.add('dragover'); });
-  importDropZone.addEventListener('dragleave', () => importDropZone.classList.remove('dragover'));
-  importDropZone.addEventListener('drop', (e) => {
-    e.preventDefault();
-    importDropZone.classList.remove('dragover');
-    const f = e.dataTransfer.files[0];
-    if (f) { importDroppedFile = f; $('#importFileInfo').text(f.name); }
-  });
-  importFileInput.addEventListener('change', function() {
-    if (this.files[0]) { importDroppedFile = null; $('#importFileInfo').text(this.files[0].name); }
-  });
-
-  function getImportFile() {
-    return importDroppedFile || (importFileInput.files[0] || null);
-  }
-
-  $('#importParseBtn').on('click', function() {
-    const file = getImportFile();
-    if (!file) { alert('{{ alert_no_file_selected }}'); return; }
-    if (importType === 'mfr24') {
-      parseMFR24File(file);
-    } else {
-      const reader = new FileReader();
-      reader.onload = function(e) {
-        parseTrainlogCSV(e.target.result);
-      };
-      reader.readAsText(file);
-    }
-  });
-
-  // Splits CSV text into records, honoring quoted fields that contain embedded
-  // newlines and commas. Returns [{ fields: [...], raw: '<original record text>' }].
-  // `raw` preserves the exact source bytes so the per-row import endpoint receives
-  // a valid single CSV record (server-side csv.DictReader re-parses it).
-  function parseCSVRecords(text) {
-    const records = [];
-    let field = '', fields = [], inQ = false, recordStart = 0;
-    const pushRecord = (raw) => {
-      fields.push(field); field = '';
-      // Skip fully blank records (e.g. trailing newline at EOF).
-      if (!(fields.length === 1 && fields[0] === '')) records.push({ fields, raw });
-      fields = [];
-    };
-    for (let i = 0; i < text.length; i++) {
-      const c = text[i];
-      if (c === '"') {
-        if (inQ && text[i + 1] === '"') { field += '"'; i++; } // escaped quote
-        else inQ = !inQ;
-      } else if (c === ',' && !inQ) {
-        fields.push(field); field = '';
-      } else if ((c === '\n' || c === '\r') && !inQ) {
-        const raw = text.slice(recordStart, i);
-        if (c === '\r' && text[i + 1] === '\n') i++;
-        pushRecord(raw);
-        recordStart = i + 1;
-      } else {
-        field += c;
-      }
-    }
-    if (field !== '' || fields.length) pushRecord(text.slice(recordStart));
-    return records;
-  }
-
-  function parseTrainlogCSV(text) {
-    const records = parseCSVRecords(text);
-    if (records.length < 2) { showImportResult('danger', 'No trips found in file.'); return; }
-    const headers = records[0].fields;
-    const rawHeaders = records[0].raw;
-    importParsedTrips = [];
-    for (let i = 1; i < records.length; i++) {
-      const cols = records[i].fields;
-      const row = {};
-      headers.forEach((h, idx) => { row[h.trim()] = (cols[idx] || '').trim(); });
-      const distM = parseInt(row['trip_length']);
-      importParsedTrips.push({
-        display: {
-          origin:      row['origin_station'] || '?',
-          destination: row['destination_station'] || '?',
-          type:        row['type'] || '',
-          date:        (row['start_datetime'] || '').substring(0, 10),
-          distance:    !isNaN(distM) ? (Math.round(distM / 100) / 10) + ' km' : '',
-          operator:    row['operator'] ? decodeURIComponent(row['operator']).replace(/&&/g, ', ') : '',
-          line_name:   row['line_name'] ? decodeURIComponent(row['line_name']) : '',
-        },
-        rawHeaders: rawHeaders,
-        rawLine: records[i].raw,
+  // Copy GPS upload URL (owner only)
+  const copyGpsBtn = document.getElementById("copyGpsUrl");
+  if (copyGpsBtn) {
+    copyGpsBtn.addEventListener("click", function () {
+      navigator.clipboard.writeText(document.getElementById("gpsUploadUrl").value).then(() => {
+        const icon = this.querySelector("i");
+        icon.className = "bi bi-check-lg";
+        setTimeout(() => { icon.className = "bi bi-clipboard"; }, 1500);
       });
-    }
-    renderImportPreview();
-  }
-
-  function parseMFR24File(file) {
-    const formData = new FormData();
-    formData.append('file', file);
-
-    $('#importStep1').addClass('d-none');
-    $('#importStep2').removeClass('d-none');
-    $('#importParseBtn').addClass('d-none');
-    $('#importProgressText').text('{{ processing_starting }}');
-    $('#importProgressBar').css('width', '0%').text('0%');
-
-    importParsedTrips = [];
-    let total = 0;
-
-    importXhr = new XMLHttpRequest();
-    const xhr = importXhr;
-    let buffer = '';
-
-    xhr.onprogress = function() {
-      const newData = xhr.responseText.substring(buffer.length);
-      buffer = xhr.responseText;
-
-      for (const line of newData.split('\n')) {
-        if (!line.startsWith('data: ')) continue;
-        try {
-          const ev = JSON.parse(line.substring(6));
-          if (ev.type === 'total') {
-            total = ev.count;
-            $('#importProgressText').text('{{ processing_found_trips }}'.replace('{count}', total));
-          } else if (ev.type === 'progress') {
-            const pct = Math.round((ev.current / total) * 100);
-            $('#importProgressText').text('{{ processing_trip_progress }}'.replace('{current}', ev.current).replace('{total}', total).replace('{name}', '').replace(/\s*[:/]\s*$/, ''));
-            $('#importProgressBar').css('width', pct + '%').text(pct + '%');
-          } else if (ev.type === 'result') {
-            importParsedTrips.push(ev.result);
-          } else if (ev.type === 'done') {
-            importXhr = null;
-            renderImportPreview();
-          }
-        } catch (e) { /* partial line */ }
-      }
-    };
-
-    xhr.onerror = function() {
-      importXhr = null;
-      $('#importStep2').addClass('d-none');
-      $('#importStep1').removeClass('d-none');
-      $('#importParseBtn').removeClass('d-none');
-      showImportResult('danger', '{{ error_generic }}');
-    };
-
-    xhr.onabort = function() {
-      importXhr = null;
-    };
-
-    xhr.open('POST', urls['parseMFR24']);
-    xhr.send(formData);
-  }
-
-  function renderImportPreview() {
-    if (!importParsedTrips.length) { showImportResult('warning', '{{ no_trips_found }}'); return; }
-    renderTripCards(importParsedTrips, 'importTripsList', { cbClass: 'import-cb' });
-    const okCount = importParsedTrips.filter(t => t.ok !== false).length;
-    const failCount = importParsedTrips.length - okCount;
-    $('#importTripCount').text(
-      failCount > 0
-        ? `${okCount} / ${importParsedTrips.length}`
-        : importParsedTrips.length
-    );
-    $('#importStep2').addClass('d-none');
-    $('#importStep3').removeClass('d-none');
-    $('#importSaveBtn').removeClass('d-none');
-  }
-
-  $(document).on('click', '.trip-card', function(e) {
-    if ($(e.target).is('.import-cb')) return;
-    const $cb = $(this).find('.import-cb');
-    $cb.prop('checked', !$cb.prop('checked'));
-    $(this).toggleClass('selected', $cb.prop('checked'));
-  });
-  $(document).on('change', '.import-cb', function() {
-    $(this).closest('.trip-card').toggleClass('selected', this.checked);
-  });
-  $('#importSelectAll').on('click', () => $('.import-cb').prop('checked', true).closest('.trip-card').addClass('selected'));
-  $('#importSelectNone').on('click', function() {
-    $('.import-cb').prop('checked', false);
-    $('.trip-card').removeClass('selected');
-  });
-
-  $('#importSaveBtn').on('click', async function() {
-    const selected = [];
-    $('.import-cb:checked').each(function() {
-      selected.push(importParsedTrips[parseInt($(this).closest('.trip-card').data('index'))]);
     });
-    if (!selected.length) { showImportResult('warning', '{{ select_at_least_one }}'); return; }
-
-    $('#importStep3').addClass('d-none');
-    $('#importStep2').removeClass('d-none');
-    $('#importSaveBtn').addClass('d-none');
-
-    let saved = 0;
-
-    if (importType === 'mfr24') {
-      // All parse work is already done; send pre-parsed data in one request
-      $('#importProgressText').text('{{ saving_trip_progress }}'.replace('{current}', '').replace('{total}', ''));
-      $('#importProgressBar').css('width', '100%').text('');
-      try {
-        const resp = await $.ajax({
-          type: 'POST', url: urls['saveMFR24'],
-          contentType: 'application/json',
-          data: JSON.stringify({ trips: selected.map(t => t.save_data) })
-        });
-        saved = resp.saved || 0;
-      } catch(err) { console.error('Save error:', err); }
-    } else {
-      // Trainlog CSV: send rows one by one (existing endpoint)
-      const failures = [];
-      for (let i = 0; i < selected.length; i++) {
-        const t = selected[i];
-        const pct = Math.round(((i + 1) / selected.length) * 100);
-        $('#importProgressText').text('{{ saving_trip_progress }}'.replace('{current}', i + 1).replace('{total}', selected.length));
-        $('#importProgressBar').css('width', pct + '%').text(pct + '%');
-        try {
-          const resp = await $.ajax({ type: 'POST', url: urls['trainlogImport'],
-            data: encodeURIComponent(t.rawHeaders + '\n' + t.rawLine) });
-          if (resp && resp.error) throw new Error(resp.error);
-          saved++;
-        } catch(err) {
-          console.error('Import error:', err);
-          failures.push(`${t.display.origin} → ${t.display.destination}`);
-        }
-      }
-      $('#importStep2').addClass('d-none');
-      if (failures.length) {
-        const failList = failures.map(f => `<li>${f}</li>`).join('');
-        showImportResult('warning',
-          `<strong>${saved} {{ trips_saved }}</strong><br>` +
-          `<small class="text-danger">{{ failed_upload }}:<ul class="mb-0 mt-1">${failList}</ul></small>`);
-        return;
-      }
-    }
-
-    $('#importStep2').addClass('d-none');
-    showImportResult('success', `<strong>${saved} {{ trips_saved }}</strong>`);
-    setTimeout(() => { bootstrap.Modal.getInstance(document.getElementById('importModal')).hide(); location.href = urls['trips']; }, 1500);
-  });
-
-  function showImportResult(type, msg) {
-    $('#importResult').removeClass('d-none alert-success alert-danger alert-warning')
-      .addClass('alert alert-' + type).html(msg);
   }
-
-  {% if is_premium %}
-    $('#orm-enabled').on('change', function() {
-        if ($(this).is(':checked')) {
-            $('#tileserver').data('base-map', $('#tileserver').val());
-            $('#orm-options').slideDown();
-            updateORMValue();
-        } else {
-            $('#orm-options').slideUp();
-            const baseMap = $('#tileserver').data('base-map') || 'osm';
-            $('#tileserver').val(baseMap);
-            updateTileserverPickerUI(baseMap);
-        }
-    });
-
-    $('#orm-type').on('change', updateORMValue);
-
-    function updateORMValue() {
-        if (!$('#orm-enabled').is(':checked')) return;
-        const baseMap = $('#tileserver').data('base-map') || 'osm';
-        const isVector = !!(TS_META[baseMap] && TS_META[baseMap].vector);
-        const ormType = $('#orm-type').val() || 'standard';
-        if (isVector) {
-            $('#tileserver').val(`orm-vector-${ormType}.${baseMap}`);
-        } else {
-            $('#tileserver').val(`openrailwaymap-${ormType}.${baseMap}`);
-        }
-    }
-  {% endif %}
 </script>
 {% endblock %}

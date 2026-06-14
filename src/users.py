@@ -26,6 +26,9 @@ class User(authDb.Model):
     friend_search = authDb.Column(authDb.Boolean, nullable=False, default=True)
     colorblind = authDb.Column(authDb.Boolean, nullable=False, default=False)
     reset_token = authDb.Column(authDb.String(100), default="")
+    # Per-user secret token for the GPSLogger GPX ingest endpoint
+    # (/api/gps/<token>/upload). Scoped to GPS ingest only; regenerable.
+    gps_token = authDb.Column(authDb.String(100), default="")
     default_landing = authDb.Column(authDb.String(20), nullable=False, default="map")
     appear_on_global = authDb.Column(authDb.Boolean, nullable=False, default=False)
     tileserver = authDb.Column(authDb.String(50), nullable=False, default="default")
@@ -48,6 +51,7 @@ class User(authDb.Model):
             "creation_date": self.creation_date,
             "last_login": self.last_login,
             "reset_token": self.reset_token,
+            "gps_token": self.gps_token,
             "share_level": self.share_level,
             "user_currency": self.user_currency,
             "colorblind": self.colorblind,

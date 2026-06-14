@@ -58,6 +58,7 @@ from requests.adapters import HTTPAdapter, Retry
 from scgraph.geographs.marnet import marnet_geograph
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy_utils import database_exists
+from werkzeug.datastructures import FileStorage
 from werkzeug.exceptions import HTTPException
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
@@ -234,6 +235,15 @@ from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
 from src.photon import photonInstances, photonRequest, photonRequestSingle
 from src.routing import forward_routing_core
+from src.gpx_import import (
+    GpxIngestError,
+    build_trip_payload,
+    clean_tasker_gpx_files,
+    getAddressFromCoords,
+    ingest_gpx_files,
+    parse_gpx_files,
+    parse_trip_params,
+)
 from src.error_reporter import report_error
 
 app = Flask(__name__)
@@ -1108,6 +1118,7 @@ def before_request():
         "trainlog.me",
         "www.trainlog.me",
         "dev.trainlog.me",
+        "192.168.32.214:5000",
     ]
     if request.host not in allowed_hosts:
         log_suspicious_activity(
@@ -1614,21 +1625,6 @@ def new_ticket(username):
     )
 
 
-def getAddressFromCoords(lat, lng):
-    response_json = photonRequest("/reverse", {"lon": lng, "lat": lat, "lang": "en"})
-
-    if response_json is None or not response_json.get("features"):
-        return ""
-
-    props = response_json["features"][0]["properties"]
-    country_code = props.get("countrycode", "").upper()
-    city = props.get("city") or props.get("county") or ""
-    suburb = props.get("suburb") or props.get("district") or ""
-
-    flag = get_flag_emoji(country_code)
-    return f"{flag} {city}" + (f" - {suburb}" if suburb else "")
-
-
 @app.route("/u/<username>/handle_gpx_upload/<source>", methods=["POST"])
 @login_required
 def handle_gpx_upload(username, source):
@@ -1638,138 +1634,122 @@ def handle_gpx_upload(username, source):
     if not files:
         return jsonify({"error": "No files uploaded"}), 400
 
-    gpx_rows = []
-    for file in files:
-        if file.filename.endswith(".gpx"):
-            gpx = gpxpy.parse(file.stream)
-
-            points = None
-            start_time = None
-            end_time = None
-            distance = 0
-
-            # Handle Tracks
-            if gpx.tracks and any(track.segments for track in gpx.tracks):
-                all_points = []
-                total_distance = 0
-                first_time = None
-                last_time = None
-
-                # 1. Gather all points from all segments
-                for track in gpx.tracks:
-                    for segment in track.segments:
-                        if segment.points:
-                            if first_time is None:
-                                first_time = segment.points[
-                                    0
-                                ].time  # Only set start once
-                            last_time = segment.points[
-                                -1
-                            ].time  # Continuously update end
-                            all_points.extend(segment.points)
-
-                # 2. Compute total distance across *all* points (including "gaps" between segments)
-                for i in range(1, len(all_points)):
-                    total_distance += getDistance(
-                        {
-                            "lat": all_points[i - 1].latitude,
-                            "lng": all_points[i - 1].longitude,
-                        },
-                        {"lat": all_points[i].latitude, "lng": all_points[i].longitude},
-                    )
-
-                # Assign them back to your existing variables so you don't change the rest of your code.
-                points = all_points
-                start_time = first_time
-                end_time = last_time
-                distance = total_distance
-
-            # Handle Routes
-            elif gpx.routes and gpx.routes[0].points:
-                points = gpx.routes[0].points
-                # Routes typically don't include timestamps; set start/end times to None
-                start_time = None
-                end_time = None
-                # Approximate route distance by summing distances between consecutive points
-                for i in range(len(points) - 1):
-                    distance += gpxpy.geo.distance(
-                        points[i].latitude,
-                        points[i].longitude,
-                        0,
-                        points[i + 1].latitude,
-                        points[i + 1].longitude,
-                        0,
-                    )
-
-            if points:
-                # Generate path in [[lat, lng], [lat, lng]] format
-                path = json.dumps(
-                    [[point.latitude, point.longitude] for point in points]
-                )
-
-                # Extract start and end points
-                start_point = points[0]
-                end_point = points[-1]
-
-                # Geocode start and end points
-                origin = getAddressFromCoords(
-                    lat=start_point.latitude, lng=start_point.longitude
-                )
-                destination = getAddressFromCoords(
-                    lat=end_point.latitude, lng=end_point.longitude
-                )
-
-                # Calculate duration (only for tracks with timestamps)
-                duration = 0
-                if start_time and end_time:
-                    duration = int(
-                        (end_time - start_time).total_seconds()
-                    )  # Duration in seconds
-
-                    # Convert to local time
-                    start_time = getLocalDatetime(
-                        start_point.latitude, start_point.longitude, start_time
-                    )
-                    end_time = getLocalDatetime(
-                        end_point.latitude, end_point.longitude, end_time
-                    )
-
-                    # Format to "YYYY-MM-DD HH:MM"
-                    start_time = start_time.strftime("%Y-%m-%d %H:%M")
-                    end_time = end_time.strftime("%Y-%m-%d %H:%M")
-
-                gpx_rows.append(
-                    {
-                        "source": source,
-                        "username": username,
-                        "origin": origin,
-                        "destination": destination,
-                        "start_time": start_time,
-                        "end_time": end_time,
-                        "duration": duration,
-                        "distance": int(distance),
-                        "path": path,
-                        "notes": notes,
-                    }
-                )
-
-            else:
-                return jsonify({"error": f"No points found in {file.filename}"}), 400
-        else:
-            return jsonify({"error": f"{file.filename} is not a valid GPX file"}), 400
-
-    with pg_session() as pg:
-        for gpx_row in gpx_rows:
-            pg.execute(
-                """
-                INSERT INTO gpx (source, username, origin, destination, start_time, end_time, duration, distance, path, notes)
-                VALUES (:source, :username, :origin, :destination, :start_time, :end_time, :duration, :distance, :path, :notes)
-                """,
-                gpx_row,
-            )
+    try:
+        ingest_gpx_files(username, source, files, notes)
+    except GpxIngestError as e:
+        return jsonify({"error": str(e)}), 400
 
     return jsonify({"message": "Files processed successfully"}), 200
 
+
+@app.route("/api/gps/upload", methods=["GET", "POST"])
+@app.route("/api/gps/upload/<trip_type>", methods=["GET", "POST"])
+@app.route("/api/gps/upload/<trip_type>/<routing>", methods=["GET", "POST"])
+@app.route("/api/gps/<token>/upload", methods=["GET", "POST"])
+@app.route("/api/gps/<token>/upload/<trip_type>", methods=["GET", "POST"])
+@app.route("/api/gps/<token>/upload/<trip_type>/<routing>", methods=["GET", "POST"])
+def gps_logger_upload(token=None, trip_type=None, routing=None):
+    """Token-authenticated GPX ingest for the mendhak GPSLogger app (via Tasker).
+
+    The phone records offline and auto-sends recorded .gpx files on WiFi. No
+    browser session exists, so auth is the per-user gps_token, accepted either in
+    the path (/api/gps/<token>/upload) or as a query/form param (?key=<token>).
+
+    URL shapes:
+      - /upload                  -> stage to the `gpx` table for review (list_gpx)
+      - /upload/<trip_type>      -> import directly as a finished trip
+      - /upload/<trip_type>/routing -> import directly, snapped with smart routing
+    Trip attributes can be preset via query params (operator, material_type,
+    electric, line_name, seat, reg, ...); see parse_trip_params.
+
+    GET is accepted so GPSLogger's URL validation / connectivity checks don't 404.
+    """
+    token = (
+        token
+        or request.args.get("key")
+        or request.args.get("token")
+        or request.form.get("key")
+    )
+    user = User.query.filter_by(gps_token=token).first() if token else None
+    if not user:
+        abort(401)
+
+    if routing is not None and routing.lower() not in ("routing", "route"):
+        abort(404)
+    use_routing = routing is not None or str(
+        request.values.get("routing", "")
+    ).lower() in ("1", "true", "yes", "routing")
+
+    if trip_type is not None and trip_type not in {t.value for t in TripTypes}:
+        return (f"Unknown trip type: {trip_type}", 400)
+
+    files = (
+        request.files.getlist("gpx_files")
+        or request.files.getlist("file")
+        # Accept whatever field name the client (e.g. Tasker) uses for the upload.
+        or list(request.files.values())
+    )
+    # Fall back to a raw GPX request body (Tasker/GPSLogger can POST the file body).
+    if not files:
+        body = request.get_data()
+        if body and (b"<gpx" in body[:1024].lower() or b"<trk" in body[:1024].lower()):
+            files = [FileStorage(stream=BytesIO(body), filename="gpslogger.gpx")]
+
+    if files:
+        cleaned_files = clean_tasker_gpx_files(files)
+        try:
+            if trip_type is None:
+                # Default: stage for manual review/finalize via list_gpx.
+                ingest_gpx_files(user.username, source="gpslogger", files=cleaned_files)
+                return ("OK", 200)
+
+            # Direct import: each file becomes a finished trip, prefilled from
+            # the URL params, optionally snapped to the network with routing.
+            params = parse_trip_params(request.args)
+            rows = parse_gpx_files(cleaned_files, source="gpslogger", username=user.username)
+            for row in rows:
+                newTrip, path = build_trip_payload(
+                    row, trip_type, params, use_routing, request
+                )
+                saveTripToDb(
+                    username=user.username,
+                    newTrip=newTrip,
+                    newPath=path,
+                    trip_type=trip_type,
+                )
+            return (f"OK (imported {len(rows)} trip(s))", 200)
+        except GpxIngestError as e:
+            app.logger.exception("GPX ingest failed")
+            return (str(e), 400)
+
+    # No file (e.g. a bare GET ping / URL-validation check). Dump the *entire*
+    # request so the exact client format can be inspected, and return 200 so the
+    # uploader (Tasker/GPSLogger) marks it successful.
+    body = request.get_data(as_text=True) or ""
+    app.logger.info(
+        "gps_logger_upload RAW DUMP from %s\n"
+        "  method=%s\n"
+        "  url=%s\n"
+        "  query_string=%s\n"
+        "  args=%s\n"
+        "  form=%s\n"
+        "  files=%s\n"
+        "  content_type=%s content_length=%s\n"
+        "  headers=%s\n"
+        "  body=%s",
+        user.username,
+        request.method,
+        request.url,
+        request.query_string.decode("utf-8", "replace"),
+        dict(request.args),
+        dict(request.form),
+        list(request.files.keys()),
+        request.content_type,
+        request.content_length,
+        dict(request.headers),
+        body[:2000],
+    )
+    return ("OK (no GPX received)", 200)
 
 @app.route("/u/<username>/upload_gpx")
 @login_required
@@ -1949,67 +1929,6 @@ def delete_gpx(username, gpx_id):
     return redirect(url_for("list_gpx", username=username))
 
 
-def cluster_waypoints(waypoints, min_distance_meters=10):
-    """
-    Group waypoints that are within min_distance_meters of each other
-    and return the average position for each cluster.
-
-    :param waypoints: List of {"lat": float, "lng": float} waypoints
-    :param min_distance_meters: Minimum distance in meters to consider points as separate
-    :return: List of simplified waypoints
-    """
-    from math import asin, cos, radians, sin, sqrt
-
-    def haversine(lat1, lon1, lat2, lon2):
-        """Calculate the great circle distance between two points in meters"""
-        # Convert decimal degrees to radians
-        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
-
-        # Haversine formula
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-        c = 2 * asin(sqrt(a))
-        # Radius of earth in meters
-        r = 6371000
-        return c * r
-
-    if not waypoints:
-        return []
-
-    simplified = []
-    current_cluster = [waypoints[0]]
-
-    for i in range(1, len(waypoints)):
-        # Check distance from current point to the first point in the current cluster
-        distance = haversine(
-            waypoints[i]["lat"],
-            waypoints[i]["lng"],
-            current_cluster[0]["lat"],
-            current_cluster[0]["lng"],
-        )
-
-        if distance <= min_distance_meters:
-            # Add to current cluster
-            current_cluster.append(waypoints[i])
-        else:
-            # Calculate the average position for the cluster
-            avg_lat = sum(p["lat"] for p in current_cluster) / len(current_cluster)
-            avg_lng = sum(p["lng"] for p in current_cluster) / len(current_cluster)
-            simplified.append({"lat": avg_lat, "lng": avg_lng})
-
-            # Start a new cluster with the current point
-            current_cluster = [waypoints[i]]
-
-    # Don't forget to add the last cluster
-    if current_cluster:
-        avg_lat = sum(p["lat"] for p in current_cluster) / len(current_cluster)
-        avg_lng = sum(p["lng"] for p in current_cluster) / len(current_cluster)
-        simplified.append({"lat": avg_lat, "lng": avg_lng})
-
-    return simplified
-
-
 @app.route("/u/<username>/save_trip_from_gpx/<gpx_id>", methods=["POST"])
 @login_required
 def saveTripFromGPX(username, gpx_id):
@@ -2029,97 +1948,11 @@ def saveTripFromGPX(username, gpx_id):
             {"error": "GPX file not found or does not belong to the user."}
         ), 404
 
-    # Extract GPX details
-    origin = gpx["origin"]
-    destination = gpx["destination"]
-    def _to_iso(value):
-        if value is None:
-            return -1
-        if isinstance(value, str):
-            return value.replace(" ", "T")
-        return value.isoformat()
-
-    start_time = _to_iso(gpx["start_time"])
-    end_time = _to_iso(gpx["end_time"])
-
-    distance = gpx["distance"]
-    duration = gpx["duration"] if gpx["duration"] not in (None, "") else 0
-    notes = gpx["notes"]
-    precision = "preciseDates" if start_time != -1 else "unknown"
-
-    # Convert points to proper format
-    raw_waypoints = [
-        {"lat": point[0], "lng": point[1]} for point in json.loads(gpx["path"])
-    ]
-
-    # Create a new trip structure
-    newTrip = {
-        "type": trip_type,
-        "originStation": [None, origin],
-        "destinationStation": [None, destination],
-        "newTripStart": start_time,
-        "newTripEnd": end_time,
-        "trip_length": distance,
-        "estimated_trip_duration": duration,
-        "operator": "",
-        "lineName": "",
-        "price": None,
-        "currency": None,
-        "purchasing_date": None,
-        "precision": precision,
-        "notes": notes,
-        "onlyDateDuration": "",
-        "unknownType": "past",
-        "waypoints": json.dumps([]),  # Will be updated below
-    }
-
-    # Process the route based on user preferences
-    if use_routing and trip_type in [
-        "train", "metro", "tram", "funicular", "rail", "ferry", "aerialway", "bus", "car", "walk", "cycle", "scooter"
-    ]:
-        # Use advanced GPS cleaning instead of basic routing
-        print(f"Processing GPS route with {len(raw_waypoints)} points using smart routing...")
-        
-        cleaning_result = clean_gps_route(
-            raw_waypoints=raw_waypoints,
-            forwardRouting=lambda path, routingType, options=None: forward_routing_core(routingType=routingType, path=path, flask_request=request, extra_args=options),
-            trip_type=trip_type,
-            deviation_threshold=800,       # Kept: Now defines the "validation corridor" width
-            max_search_points=75
-        )
-
-        if cleaning_result["success"]:
-            # Use cleaned route
-            path = cleaning_result["path"]
-            waypoints = cleaning_result["waypoints"]
-            
-            # Update trip details with cleaned route info
-            newTrip["trip_length"] = cleaning_result["distance"]
-            newTrip["estimated_trip_duration"] = cleaning_result["duration"]
-            newTrip["waypoints"] = json.dumps(waypoints)
-            
-            # Add processing stats to notes (optional - can be removed for production)
-            processing_stats = (
-                f" [Smart routing: {len(raw_waypoints)}→{len(path)} points "
-                f"({cleaning_result['compression_ratio']:.1f}x compression), "
-                f"{cleaning_result['reroute_count']} route corrections]"
-            )
-            newTrip["notes"] = (notes or "") + processing_stats
-            
-            print(f"Smart routing successful: {cleaning_result['compression_ratio']:.1f}x compression")
-            
-        else:
-            # Fallback to basic clustering if smart routing fails
-            print(f"Smart routing failed: {cleaning_result.get('error')}. Using basic clustering.")
-            waypoints = cluster_waypoints(raw_waypoints, 20)
-            path = raw_waypoints
-            newTrip["waypoints"] = json.dumps(waypoints)
-            
-    else:
-        # No routing - use original GPX path with basic clustering
-        path = raw_waypoints
-        waypoints = cluster_waypoints(raw_waypoints, 20)
-        newTrip["waypoints"] = json.dumps(waypoints)
+    row = dict(gpx._mapping)
+    raw_count = len(json.loads(row["path"]))
+    newTrip, path = build_trip_payload(
+        row, trip_type, parse_trip_params(request.args), use_routing, request
+    )
 
     # Delete the GPX file after saving as a trip
     with pg_session() as pg:
@@ -2128,16 +1961,13 @@ def saveTripFromGPX(username, gpx_id):
             {"uid": gpx_id, "username": username},
         )
 
-    # Call the saveTripToDb function to save the trip
-    saveTripToDb(
-        username=username, newTrip=newTrip, newPath=path, trip_type=trip_type
-    )
+    saveTripToDb(username=username, newTrip=newTrip, newPath=path, trip_type=trip_type)
 
     return jsonify({
         "success": True,
         "message": f"Trip saved with {'smart routing' if use_routing else 'original path'}",
-        "points_processed": len(raw_waypoints),
-        "final_points": len(path)
+        "points_processed": raw_count,
+        "final_points": len(path),
     }), 200
 
 
@@ -8048,6 +7878,16 @@ def user_settings(username):
 
         authDb.session.commit()
 
+    # Automatic logging is owner-only for now: only mint/show the token then.
+    gps_upload_url = None
+    if session.get("userinfo", {}).get("is_owner"):
+        if not user.gps_token:
+            user.gps_token = secrets.token_urlsafe(32)
+            authDb.session.commit()
+        gps_upload_url = url_for(
+            "gps_logger_upload", token=user.gps_token, _external=True
+        )
+
     langs = getLangDropdown(user)
 
     share_level = user.share_level
@@ -8057,8 +7897,15 @@ def user_settings(username):
     colorblind_checked = "checked" if user.colorblind else ""
     flight_3d_checked = "checked" if user.flight_3d else ""
 
+    # Temporary: preview the redesigned settings page with ?v2=1 (owner only).
+    template = (
+        "user_settings_v2.html"
+        if request.args.get("v2") and session.get("userinfo", {}).get("is_owner")
+        else "user_settings.html"
+    )
+
     return render_template(
-        "user_settings.html",
+        template,
         currencyOptions=get_available_currencies(),
         title=lang[session["userinfo"]["lang"]]["user_settings"],
         username=username,
@@ -8073,9 +7920,21 @@ def user_settings(username):
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
         user_globe=user.globe,
+        gps_upload_url=gps_upload_url,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
+
+
+@app.route("/u/<username>/gps_token/regenerate", methods=["POST"])
+@login_required
+def regenerate_gps_token(username):
+    """Invalidate the old GPSLogger upload URL by minting a fresh token."""
+    user = User.query.filter_by(username=username).first()
+    user.gps_token = secrets.token_urlsafe(32)
+    authDb.session.commit()
+    return redirect(url_for("user_settings", username=username))
+
 
 @app.route("/u/<username>/settings_app", methods=["GET", "POST"])
 @login_required
@@ -11024,9 +10883,26 @@ def get_flag(code):
     return resp
 
 
+def ensure_auth_db_columns():
+    """Idempotently add columns to the existing auth.db `user` table.
+
+    authDb.create_all() creates missing tables but never alters existing ones,
+    so new columns on the User model need a manual ALTER on the SQLite file."""
+    existing = {
+        row[1]
+        for row in authDb.session.execute(sqlalchemy.text("PRAGMA table_info(user)"))
+    }
+    if "gps_token" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN gps_token VARCHAR(100) DEFAULT ''")
+        )
+        authDb.session.commit()
+
+
 with app.app_context():
     if not database_exists(authDb.get_engine().url):
         create_authDb()
     authDb.create_all()
+    ensure_auth_db_columns()
 
 setup_db()
