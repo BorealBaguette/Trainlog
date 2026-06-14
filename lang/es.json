@@ -1058,6 +1058,13 @@
     "importTripsHint": "IDs de viajes separados por comas (p. ej. 1042, 1043)",
     "importTripsBtn": "Mover",
     "confirmImportTrips": "¿Mover estos viajes al plan? Se eliminarán de tus viajes.",
+    "searchPlans": "Buscar planes…",
+    "sortModified": "Última modificación",
+    "sortName": "Nombre (A–Z)",
+    "sortTrips": "Número de viajes",
+    "sortCreated": "Fecha de creación",
+    "showArchived": "Mostrar archivados",
+    "noMatch": "No hay planes coincidentes.",
     "bookedLabel": "Ya reservado",
     "impossibleConnection": "Sale antes de que llegue el tramo anterior"
 }

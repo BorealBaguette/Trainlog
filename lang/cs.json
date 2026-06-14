@@ -1058,6 +1058,13 @@
     "importTripsHint": "ID cest oddělená čárkou (např. 1042, 1043)",
     "importTripsBtn": "Přesunout",
     "confirmImportTrips": "Přesunout tyto cesty do plánu? Budou odebrány z vašich cest.",
+    "searchPlans": "Hledat plány…",
+    "sortModified": "Naposledy upraveno",
+    "sortName": "Název (A–Z)",
+    "sortTrips": "Počet cest",
+    "sortCreated": "Datum vytvoření",
+    "showArchived": "Zobrazit archivované",
+    "noMatch": "Žádné odpovídající plány.",
     "bookedLabel": "Již rezervováno",
     "impossibleConnection": "Odjíždí před příjezdem předchozího úseku"
 }

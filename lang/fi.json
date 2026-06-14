@@ -1058,6 +1058,13 @@
     "importTripsHint": "Matkojen tunnukset pilkuilla erotettuna (esim. 1042, 1043)",
     "importTripsBtn": "Siirrä sisään",
     "confirmImportTrips": "Siirretäänkö nämä matkat suunnitelmaan? Ne poistetaan matkoistasi.",
+    "searchPlans": "Hae suunnitelmia…",
+    "sortModified": "Viimeksi muokattu",
+    "sortName": "Nimi (A–Ö)",
+    "sortTrips": "Matkojen määrä",
+    "sortCreated": "Luontipäivä",
+    "showArchived": "Näytä arkistoidut",
+    "noMatch": "Ei vastaavia suunnitelmia.",
     "bookedLabel": "Jo varattu",
     "impossibleConnection": "Lähtee ennen kuin edellinen etappi saapuu"
 }

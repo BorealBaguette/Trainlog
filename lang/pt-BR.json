@@ -1058,6 +1058,13 @@
     "importTripsHint": "IDs de viagem, separados por vírgula (ex.: 1042, 1043)",
     "importTripsBtn": "Mover para cá",
     "confirmImportTrips": "Mover estas viagens para o plano? Elas serão removidas das suas viagens.",
+    "searchPlans": "Pesquisar planos…",
+    "sortModified": "Última modificação",
+    "sortName": "Nome (A–Z)",
+    "sortTrips": "Número de viagens",
+    "sortCreated": "Data de criação",
+    "showArchived": "Mostrar arquivados",
+    "noMatch": "Nenhum plano correspondente.",
     "bookedLabel": "Já reservado",
     "impossibleConnection": "Parte antes de chegar o trecho anterior"
 }

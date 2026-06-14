@@ -1058,6 +1058,13 @@
     "importTripsHint": "ID dei viaggi separati da virgola (es. 1042, 1043)",
     "importTripsBtn": "Sposta",
     "confirmImportTrips": "Spostare questi viaggi nel piano? Verranno rimossi dai tuoi viaggi.",
+    "searchPlans": "Cerca piani…",
+    "sortModified": "Ultima modifica",
+    "sortName": "Nome (A–Z)",
+    "sortTrips": "Numero di viaggi",
+    "sortCreated": "Data di creazione",
+    "showArchived": "Mostra archiviati",
+    "noMatch": "Nessun piano corrispondente.",
     "bookedLabel": "Già prenotato",
     "impossibleConnection": "Parte prima dell'arrivo della tappa precedente"
 }

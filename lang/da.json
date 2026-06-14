@@ -1058,6 +1058,13 @@
     "importTripsHint": "Rejse-id'er, kommaseparerede (f.eks. 1042, 1043)",
     "importTripsBtn": "Flyt ind",
     "confirmImportTrips": "Flyt disse rejser ind i planen? De fjernes fra dine rejser.",
+    "searchPlans": "Søg i planer…",
+    "sortModified": "Sidst ændret",
+    "sortName": "Navn (A–Z)",
+    "sortTrips": "Antal ture",
+    "sortCreated": "Oprettelsesdato",
+    "showArchived": "Vis arkiverede",
+    "noMatch": "Ingen matchende planer.",
     "bookedLabel": "Allerede bestilt",
     "impossibleConnection": "Afgår inden forrige etape ankommer"
 }

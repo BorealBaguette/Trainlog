@@ -1058,6 +1058,13 @@
     "importTripsHint": "ID-ovi putovanja odvojeni zarezima (npr. 1042, 1043)",
     "importTripsBtn": "Premjesti",
     "confirmImportTrips": "Premjestiti ova putovanja u plan? Bit će uklonjena iz vaših putovanja.",
+    "searchPlans": "Pretraži planove…",
+    "sortModified": "Zadnje izmijenjeno",
+    "sortName": "Naziv (A–Z)",
+    "sortTrips": "Broj putovanja",
+    "sortCreated": "Datum izrade",
+    "showArchived": "Prikaži arhivirane",
+    "noMatch": "Nema odgovarajućih planova.",
     "bookedLabel": "Već rezervirano",
     "impossibleConnection": "Polazi prije dolaska prethodne dionice"
 }

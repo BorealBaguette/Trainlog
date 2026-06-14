@@ -1058,6 +1058,13 @@
     "importTripsHint": "Rese-id:n, kommaseparerade (t.ex. 1042, 1043)",
     "importTripsBtn": "Flytta in",
     "confirmImportTrips": "Flytta dessa resor till planen? De tas bort från dina resor.",
+    "searchPlans": "Sök planer…",
+    "sortModified": "Senast ändrad",
+    "sortName": "Namn (A–Ö)",
+    "sortTrips": "Antal resor",
+    "sortCreated": "Skapad datum",
+    "showArchived": "Visa arkiverade",
+    "noMatch": "Inga matchande planer.",
     "bookedLabel": "Redan bokad",
     "impossibleConnection": "Avgår innan föregående sträcka anländer"
 }

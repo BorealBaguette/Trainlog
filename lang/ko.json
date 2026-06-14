@@ -1058,6 +1058,13 @@
     "importTripsHint": "여정 ID, 쉼표로 구분 (예: 1042, 1043)",
     "importTripsBtn": "이동",
     "confirmImportTrips": "이 여정들을 계획으로 이동하시겠습니까? 여행 기록에서 제거됩니다.",
+    "searchPlans": "계획 검색…",
+    "sortModified": "최근 수정",
+    "sortName": "이름 (A–Z)",
+    "sortTrips": "여행 수",
+    "sortCreated": "생성일",
+    "showArchived": "보관된 항목 표시",
+    "noMatch": "일치하는 계획이 없습니다.",
     "bookedLabel": "이미 예약됨",
     "impossibleConnection": "이전 구간 도착 전에 출발합니다"
 }

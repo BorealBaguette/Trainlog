@@ -1058,6 +1058,13 @@
     "importTripsHint": "Reis-IDs, kommagetrennt (z. B. 1042, 1043)",
     "importTripsBtn": "Iiverschiebe",
     "confirmImportTrips": "Die Reise in d'Planig verschiebe? Si wärde us dine Reise entfernt.",
+    "searchPlans": "Pläne sueche…",
+    "sortModified": "Zletscht gändert",
+    "sortName": "Name (A–Z)",
+    "sortTrips": "Reisenazahl",
+    "sortCreated": "Erstelligsdatum",
+    "showArchived": "Archivierti zeige",
+    "noMatch": "Keni passendi Pläne.",
     "bookedLabel": "Scho buecht",
     "impossibleConnection": "Fährt ab, bevor de vorherige Abschnitt aachunnt"
 }

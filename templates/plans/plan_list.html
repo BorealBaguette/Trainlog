@@ -3,39 +3,253 @@
 
 {% include nav %}
 
-<div class="container" style="max-width:820px; margin-top:1.5rem;">
-  <h2 class="mb-3">{{ plans|default('Plans') }}</h2>
-  <p class="text-muted">{{ plansIntro|default('A parallel planning world. Plans never appear in your trips, stats or maps until you validate them into real trips.') }}</p>
+{% set active_plans   = user_plans | rejectattr('archived') | list %}
+{% set archived_plans = user_plans | selectattr('archived') | list %}
 
-  <form method="post" action="{{ url_for('submit_plan', username=username) }}" class="d-flex gap-2 align-items-center mb-4 flex-wrap">
-    <input type="text" name="name" placeholder="{{ newPlanName|default('New plan name') }}" required class="form-control" style="max-width:300px;"/>
-    <input type="date" name="anchor_date" class="form-control" style="max-width:180px;" title="{{ planAnchorHint|default('Day 1 reference date (for the preview)') }}"/>
-    <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg"></i> {{ createPlan|default('Create plan') }}</button>
-  </form>
+<style>
+  .pl-wrap { max-width: 820px; }
 
-  <ul class="list-group">
-    {% for p in user_plans %}
-    <li class="list-group-item d-flex justify-content-between align-items-center {% if p.archived %}list-group-item-light{% endif %}">
-      <span>
-        <a href="{{ url_for('plan_view', username=username, plan_uuid=p.uuid) }}" class="fw-bold text-decoration-none">{{ p.name }}</a>
-        <span class="badge bg-secondary">{{ p.trip_count }}</span>
-        {% if p.archived %}<span class="badge bg-light text-dark border">{{ archived|default('Archived') }}</span>{% endif %}
-        {% if p.description %}<div class="small text-muted">{{ p.description }}</div>{% endif %}
-      </span>
-      <span class="d-flex gap-1">
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=p.uuid) }}" target="_blank"><i class="bi bi-link-45deg"></i> {{ shareTrip|default('Share') }}</a>
-        <form method="post" action="{{ url_for('archive_plan_route', username=username, plan_uuid=p.uuid) }}">
-          <input type="hidden" name="archived" value="{{ 'false' if p.archived else 'true' }}"/>
-          <button class="btn btn-sm btn-outline-secondary" type="submit"><i class="bi {{ 'bi-arrow-up-circle' if p.archived else 'bi-archive' }}"></i> {{ (unarchive|default('Unarchive')) if p.archived else (archive|default('Archive')) }}</button>
+  /* toolbar */
+  .pl-toolbar { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+  .pl-toolbar .form-control, .pl-toolbar .form-select {
+    font-size: .85rem; border-radius: 8px; border-color: #e2e6ea;
+    background: #f8f9fa; transition: border-color .15s, box-shadow .15s;
+  }
+  .pl-toolbar .form-control:focus, .pl-toolbar .form-select:focus {
+    border-color: #86b7fe; box-shadow: 0 0 0 .2rem rgba(13,110,253,.15);
+    background: #fff;
+  }
+
+  /* create form */
+  .pl-create { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 12px; padding: 1rem 1.1rem; }
+  .pl-create .form-control { border-radius: 8px; }
+  .pl-create .btn-primary { border-radius: 8px; }
+
+  /* plan card */
+  .pl-item {
+    display: flex; align-items: flex-start; gap: .85rem;
+    padding: .85rem 1rem; border: 1px solid #e9ecef; border-radius: 12px;
+    margin-bottom: .45rem; background: #fff;
+    transition: box-shadow .12s, border-color .12s;
+  }
+  .pl-item:hover { box-shadow: 0 2px 10px rgba(0,0,0,.07); border-color: #ced4da; }
+  .pl-item.pl-archived { background: #f8f9fa; opacity: .8; }
+
+  .pl-icon {
+    flex: 0 0 38px; width: 38px; height: 38px; border-radius: 10px;
+    background: linear-gradient(135deg, #e9f0ff 0%, #dbeafe 100%);
+    display: flex; align-items: center; justify-content: center;
+    color: #4b78d6; font-size: 1.1rem; margin-top: .05rem;
+  }
+  .pl-archived .pl-icon { background: #f0f0f0; color: #aaa; }
+
+  .pl-body { flex: 1 1 auto; min-width: 0; }
+  .pl-name { font-weight: 600; font-size: 1rem; color: #1a202c; text-decoration: none; }
+  .pl-name:hover { color: #4b78d6; text-decoration: none; }
+  .pl-archived .pl-name { color: #6c757d; }
+  .pl-desc { font-size: .8rem; color: #8a909a; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: .1rem; }
+
+  .pl-stats { display: flex; flex-wrap: wrap; gap: .35rem; margin-top: .4rem; }
+  .pl-chip {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: .74rem; font-weight: 500; color: #5a6472;
+    background: #f0f2f5; border-radius: 999px; padding: .1rem .55rem;
+  }
+  .pl-chip i { font-size: .75rem; color: #8a909a; }
+  .pl-chip.chip-count { background: #e8eeff; color: #4b78d6; }
+
+  .pl-actions { flex: 0 0 auto; display: flex; gap: .3rem; align-items: center; padding-top: .05rem; }
+  .pl-actions .btn { border-radius: 8px; padding: .28rem .52rem; font-size: .8rem;
+                     border-color: #e2e6ea; color: #6c757d; }
+  .pl-actions .btn:hover { background: #f0f2f5; border-color: #ced4da; color: #1a202c; }
+  .pl-actions .btn-del:hover { background: rgba(220,53,69,.08); border-color: #f5c2c7; color: #dc3545; }
+
+  /* archived toggle */
+  .pl-archived-toggle {
+    display: inline-flex; align-items: center; gap: .4rem;
+    font-size: .82rem; color: #6c757d; border: 1px solid #dee2e6;
+    border-radius: 8px; padding: .35rem .75rem; background: transparent;
+    cursor: pointer; transition: all .12s;
+  }
+  .pl-archived-toggle:hover { background: #f8f9fa; color: #495057; border-color: #ced4da; }
+
+  /* empty states */
+  .pl-empty { text-align: center; padding: 2.5rem 1rem; color: #8a909a; }
+  .pl-empty-icon { font-size: 2.2rem; margin-bottom: .5rem; }
+</style>
+
+<div class="container pl-wrap" style="margin-top:1.5rem;">
+
+  <div class="mb-4">
+    <h2 class="mb-1" style="font-weight:700; letter-spacing:-.01em;">{{ plans|default('Plans') }}</h2>
+    <p class="text-muted mb-0" style="font-size:.9rem;">{{ plansIntro|default('A parallel planning world. Plans never appear in your trips, stats or maps until you validate them into real trips.') }}</p>
+  </div>
+
+  <!-- Create -->
+  <div class="pl-create mb-4">
+    <form method="post" action="{{ url_for('submit_plan', username=username) }}" class="d-flex gap-2 align-items-center flex-wrap">
+      <input type="text" name="name" placeholder="{{ newPlanName|default('New plan name') }}" required class="form-control" style="max-width:280px;"/>
+      <input type="date" name="anchor_date" class="form-control" style="max-width:170px;" title="{{ planAnchorHint|default('Day 1 reference date (for the preview)') }}"/>
+      <button type="submit" class="btn btn-primary"><i class="bi bi-plus-lg me-1"></i>{{ createPlan|default('Create plan') }}</button>
+    </form>
+  </div>
+
+  <!-- Search + sort -->
+  <div class="pl-toolbar mb-3">
+    <div style="position:relative; flex:1 1 200px; max-width:260px;">
+      <i class="bi bi-search" style="position:absolute; left:.65rem; top:50%; transform:translateY(-50%); color:#adb5bd; font-size:.8rem; pointer-events:none;"></i>
+      <input type="search" id="plan-search" class="form-control" style="padding-left:2rem;"
+             placeholder="{{ searchPlans|default('Search plans…') }}" oninput="filterPlans()">
+    </div>
+    <select id="plan-sort" class="form-select" style="max-width:190px;" onchange="sortPlans()">
+      <option value="modified">{{ sortModified|default('Last modified') }}</option>
+      <option value="name">{{ sortName|default('Name (A–Z)') }}</option>
+      <option value="trips">{{ sortTrips|default('Trip count') }}</option>
+      <option value="distance">{{ sortDistance|default('Distance') }}</option>
+      <option value="created">{{ sortCreated|default('Date created') }}</option>
+    </select>
+    <span class="text-muted" id="pl-count" style="font-size:.82rem; white-space:nowrap;"></span>
+  </div>
+
+  <!-- Active plans -->
+  <div id="plan-list">
+    {% for p in active_plans %}
+    <div class="pl-item"
+         data-name="{{ p.name | lower }}"
+         data-modified="{{ p.last_modified or p.created or '' }}"
+         data-created="{{ p.created or '' }}"
+         data-trips="{{ p.trip_count }}"
+         data-distance="{{ p.total_distance_km | round | int }}">
+      <div class="pl-icon"><i class="bi bi-map"></i></div>
+      <div class="pl-body">
+        <a href="{{ url_for('plan_view', username=username, plan_uuid=p.uuid) }}" class="pl-name">{{ p.name }}</a>
+        {% if p.description %}<div class="pl-desc">{{ p.description }}</div>{% endif %}
+        <div class="pl-stats">
+          <span class="pl-chip chip-count"><i class="bi bi-signpost-split"></i>{{ p.trip_count }}</span>
+          {% if p.total_distance_km > 0 %}
+          <span class="pl-chip"><i class="bi bi-arrows-expand-vertical"></i><span class="fmt-num" data-n="{{ p.total_distance_km | round | int }}">{{ p.total_distance_km | round | int }}</span> km</span>
+          {% endif %}
+          {% if p.total_duration_s > 0 %}
+          <span class="pl-chip"><i class="bi bi-clock"></i><span class="fmt-dur" data-s="{{ p.total_duration_s }}">{{ (p.total_duration_s // 3600) | int }}h {{ ((p.total_duration_s % 3600) // 60) | int }}m</span></span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="pl-actions">
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=p.uuid) }}" target="_blank" title="{{ shareTrip|default('Share') }}"><i class="bi bi-link-45deg"></i></a>
+        <form method="post" action="{{ url_for('archive_plan_route', username=username, plan_uuid=p.uuid) }}" class="d-contents">
+          <input type="hidden" name="archived" value="true"/>
+          <button class="btn btn-sm btn-outline-secondary" type="submit" title="{{ archive|default('Archive') }}"><i class="bi bi-archive"></i></button>
         </form>
-        <form method="post" action="{{ url_for('delete_plan_route', username=username, plan_uuid=p.uuid) }}" onsubmit="return confirm('{{ confirmDeletePlan|default('Delete this plan and all its trips?') }}');">
-          <button class="btn btn-sm btn-outline-danger" type="submit"><i class="bi bi-trash3"></i></button>
+        <form method="post" action="{{ url_for('delete_plan_route', username=username, plan_uuid=p.uuid) }}" class="d-contents" onsubmit="return confirm('{{ confirmDeletePlan|default('Delete this plan and all its trips?') }}');">
+          <button class="btn btn-sm btn-outline-secondary btn-del" type="submit"><i class="bi bi-trash3"></i></button>
         </form>
-      </span>
-    </li>
+      </div>
+    </div>
     {% else %}
-    <li class="list-group-item text-muted">{{ planEmptyList|default('No plans yet — create one above.') }}</li>
+    <div class="pl-empty" id="plan-empty">
+      <div class="pl-empty-icon">🗺️</div>
+      <div>{{ planEmptyList|default('No plans yet — create one above.') }}</div>
+    </div>
     {% endfor %}
-  </ul>
+    <div class="pl-empty d-none" id="plan-no-match">
+      <div class="pl-empty-icon">🔍</div>
+      <div>{{ noMatch|default('No matching plans.') }}</div>
+    </div>
+  </div>
+
+  <!-- Archived -->
+  {% if archived_plans %}
+  <div class="mt-3">
+    <button class="pl-archived-toggle" type="button" data-bs-toggle="collapse" data-bs-target="#archived-plans">
+      <i class="bi bi-archive"></i>
+      {{ showArchived|default('Show archived') }}
+      <span class="badge bg-secondary" style="font-size:.7rem;">{{ archived_plans | length }}</span>
+    </button>
+    <div class="collapse mt-2" id="archived-plans">
+      {% for p in archived_plans %}
+      <div class="pl-item pl-archived">
+        <div class="pl-icon"><i class="bi bi-archive"></i></div>
+        <div class="pl-body">
+          <a href="{{ url_for('plan_view', username=username, plan_uuid=p.uuid) }}" class="pl-name">{{ p.name }}</a>
+          {% if p.description %}<div class="pl-desc">{{ p.description }}</div>{% endif %}
+          <div class="pl-stats">
+            <span class="pl-chip"><i class="bi bi-signpost-split"></i>{{ p.trip_count }}</span>
+            {% if p.total_distance_km > 0 %}<span class="pl-chip"><i class="bi bi-arrows-expand-vertical"></i>{{ p.total_distance_km | round | int }} km</span>{% endif %}
+            {% if p.total_duration_s > 0 %}<span class="pl-chip"><i class="bi bi-clock"></i>{{ (p.total_duration_s // 3600) | int }}h {{ ((p.total_duration_s % 3600) // 60) | int }}m</span>{% endif %}
+          </div>
+        </div>
+        <div class="pl-actions">
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=p.uuid) }}" target="_blank" title="{{ shareTrip|default('Share') }}"><i class="bi bi-link-45deg"></i></a>
+          <form method="post" action="{{ url_for('archive_plan_route', username=username, plan_uuid=p.uuid) }}" class="d-contents">
+            <input type="hidden" name="archived" value="false"/>
+            <button class="btn btn-sm btn-outline-secondary" type="submit" title="{{ unarchive|default('Unarchive') }}"><i class="bi bi-arrow-up-circle"></i></button>
+          </form>
+          <form method="post" action="{{ url_for('delete_plan_route', username=username, plan_uuid=p.uuid) }}" class="d-contents" onsubmit="return confirm('{{ confirmDeletePlan|default('Delete this plan and all its trips?') }}');">
+            <button class="btn btn-sm btn-outline-secondary btn-del" type="submit"><i class="bi bi-trash3"></i></button>
+          </form>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
 </div>
+
+<script>
+(function() {
+  var LOC = "{{ langId }}" || 'en';
+  var nf = new Intl.NumberFormat(LOC);
+  document.querySelectorAll('.fmt-num').forEach(function(el) {
+    var n = parseFloat(el.dataset.n);
+    if (!isNaN(n)) el.textContent = nf.format(n);
+  });
+  document.querySelectorAll('.fmt-dur').forEach(function(el) {
+    var s = parseFloat(el.dataset.s);
+    if (!isNaN(s) && s > 0 && typeof secondsToDhm === 'function') {
+      try { el.textContent = secondsToDhm(s, LOC); } catch(e) {}
+    }
+  });
+})();
+
+function updateCount() {
+  var items = document.querySelectorAll('#plan-list .pl-item');
+  var visible = Array.from(items).filter(function(el) { return el.style.display !== 'none'; }).length;
+  var total = items.length;
+  var el = document.getElementById('pl-count');
+  if (el) el.textContent = visible < total ? (visible + ' / ' + total) : (total ? total + '' : '');
+}
+
+function filterPlans() {
+  var q = document.getElementById('plan-search').value.toLowerCase().trim();
+  var items = document.querySelectorAll('#plan-list .pl-item');
+  var visible = 0;
+  items.forEach(function(el) {
+    var match = !q || el.dataset.name.includes(q);
+    el.style.display = match ? '' : 'none';
+    if (match) visible++;
+  });
+  var noMatch = document.getElementById('plan-no-match');
+  var empty = document.getElementById('plan-empty');
+  if (noMatch) noMatch.classList.toggle('d-none', visible > 0 || (empty && !empty.classList.contains('d-none')));
+  updateCount();
+}
+
+function sortPlans() {
+  var key = document.getElementById('plan-sort').value;
+  var list = document.getElementById('plan-list');
+  var items = Array.from(list.querySelectorAll('.pl-item'));
+  items.sort(function(a, b) {
+    if (key === 'name')     return a.dataset.name.localeCompare(b.dataset.name);
+    if (key === 'trips')    return parseInt(b.dataset.trips) - parseInt(a.dataset.trips);
+    if (key === 'distance') return parseInt(b.dataset.distance) - parseInt(a.dataset.distance);
+    if (key === 'created')  return (b.dataset.created || '').localeCompare(a.dataset.created || '');
+    return (b.dataset.modified || '').localeCompare(a.dataset.modified || '');
+  });
+  var anchor = document.getElementById('plan-no-match');
+  items.forEach(function(el) { list.insertBefore(el, anchor); });
+}
+
+updateCount();
+</script>
 {% endblock %}

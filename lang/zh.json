@@ -1058,6 +1058,13 @@
     "importTripsHint": "行程ID，逗号分隔（例如 1042, 1043）",
     "importTripsBtn": "移入",
     "confirmImportTrips": "将这些行程移入计划？它们将从您的行程中删除。",
+    "searchPlans": "搜索计划…",
+    "sortModified": "最近修改",
+    "sortName": "名称 (A–Z)",
+    "sortTrips": "行程数",
+    "sortCreated": "创建日期",
+    "showArchived": "显示已归档",
+    "noMatch": "没有匹配的计划。",
     "bookedLabel": "已预订",
     "impossibleConnection": "在前一段到达之前出发"
 }

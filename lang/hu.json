@@ -1058,6 +1058,13 @@
     "importTripsHint": "Utazás azonosítók, vesszővel elválasztva (pl. 1042, 1043)",
     "importTripsBtn": "Áthelyezés",
     "confirmImportTrips": "Áthelyezi ezeket az utazásokat a tervbe? Eltávolítják őket az utazásaidból.",
+    "searchPlans": "Tervek keresése…",
+    "sortModified": "Utoljára módosítva",
+    "sortName": "Név (A–Z)",
+    "sortTrips": "Utazások száma",
+    "sortCreated": "Létrehozás dátuma",
+    "showArchived": "Archivált megjelenítése",
+    "noMatch": "Nincs egyező terv.",
     "bookedLabel": "Már lefoglalt",
     "impossibleConnection": "Az előző szakasz megérkezése előtt indul"
 }

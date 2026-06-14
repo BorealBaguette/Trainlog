@@ -1058,6 +1058,13 @@
     "importTripsHint": "Reiside ID-d komadega eraldatult (nt 1042, 1043)",
     "importTripsBtn": "Vii sisse",
     "confirmImportTrips": "Viia need reisid plaani? Need eemaldatakse sinu reisidest.",
+    "searchPlans": "Otsi plaane…",
+    "sortModified": "Viimati muudetud",
+    "sortName": "Nimi (A–Z)",
+    "sortTrips": "Reiside arv",
+    "sortCreated": "Loomiskuupäev",
+    "showArchived": "Kuva arhiveeritud",
+    "noMatch": "Sobivaid plaane pole.",
     "bookedLabel": "Juba broneeritud",
     "impossibleConnection": "Väljub enne, kui eelmine etapp saabub"
 }

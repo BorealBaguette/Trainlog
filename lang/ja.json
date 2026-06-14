@@ -1058,6 +1058,13 @@
     "importTripsHint": "旅程ID、カンマ区切り（例：1042, 1043）",
     "importTripsBtn": "移動する",
     "confirmImportTrips": "これらの旅程をプランに移動しますか？旅行履歴から削除されます。",
+    "searchPlans": "プランを検索…",
+    "sortModified": "最終更新",
+    "sortName": "名前 (A–Z)",
+    "sortTrips": "旅程数",
+    "sortCreated": "作成日",
+    "showArchived": "アーカイブを表示",
+    "noMatch": "一致するプランがありません。",
     "bookedLabel": "予約済み",
     "impossibleConnection": "前の区間が到着する前に出発します"
 }

@@ -1058,6 +1058,13 @@
     "importTripsHint": "Seyahat id'leri, virgülle ayrılmış (örn. 1042, 1043)",
     "importTripsBtn": "İçe taşı",
     "confirmImportTrips": "Bu seyahatler plana taşınsın mı? Seyahatlerinizden kaldırılacaklar.",
+    "searchPlans": "Plan ara…",
+    "sortModified": "Son değiştirme",
+    "sortName": "Ad (A–Z)",
+    "sortTrips": "Seyahat sayısı",
+    "sortCreated": "Oluşturma tarihi",
+    "showArchived": "Arşivlenenleri göster",
+    "noMatch": "Eşleşen plan yok.",
     "bookedLabel": "Zaten rezerve edildi",
     "impossibleConnection": "Önceki güzergah varmadan önce kalkıyor"
 }

@@ -1058,6 +1058,13 @@
     "importTripsHint": "Reise-IDs, kommagetrennt (z. B. 1042, 1043)",
     "importTripsBtn": "Einverschieben",
     "confirmImportTrips": "Diese Reisen in die Planung verschieben? Sie werden aus deinen Reisen entfernt.",
+    "searchPlans": "Pläne suchen…",
+    "sortModified": "Zuletzt geändert",
+    "sortName": "Name (A–Z)",
+    "sortTrips": "Reiseanzahl",
+    "sortCreated": "Erstellungsdatum",
+    "showArchived": "Archivierte anzeigen",
+    "noMatch": "Keine passenden Pläne.",
     "bookedLabel": "Bereits gebucht",
     "impossibleConnection": "Fährt ab, bevor der vorherige Abschnitt ankommt"
 }

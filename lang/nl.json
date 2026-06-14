@@ -1058,6 +1058,13 @@
     "importTripsHint": "Rit-id's, kommagescheiden (bijv. 1042, 1043)",
     "importTripsBtn": "Verplaatsen",
     "confirmImportTrips": "Deze ritten naar het plan verplaatsen? Ze worden verwijderd uit je ritten.",
+    "searchPlans": "Plannen zoeken…",
+    "sortModified": "Laatst gewijzigd",
+    "sortName": "Naam (A–Z)",
+    "sortTrips": "Aantal ritten",
+    "sortCreated": "Aanmaakdatum",
+    "showArchived": "Gearchiveerden tonen",
+    "noMatch": "Geen overeenkomende plannen.",
     "bookedLabel": "Al geboekt",
     "impossibleConnection": "Vertrekt voordat het vorige traject aankomt"
 }

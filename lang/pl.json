@@ -1058,6 +1058,13 @@
     "importTripsHint": "Identyfikatory podróży oddzielone przecinkami (np. 1042, 1043)",
     "importTripsBtn": "Przenieś",
     "confirmImportTrips": "Przenieść te podróże do planu? Zostaną usunięte z Twoich podróży.",
+    "searchPlans": "Szukaj planów…",
+    "sortModified": "Ostatnio zmieniony",
+    "sortName": "Nazwa (A–Z)",
+    "sortTrips": "Liczba podróży",
+    "sortCreated": "Data utworzenia",
+    "showArchived": "Pokaż zarchiwizowane",
+    "noMatch": "Brak pasujących planów.",
     "bookedLabel": "Już zarezerwowane",
     "impossibleConnection": "Odjeżdża przed przyjazdem poprzedniego odcinka"
 }
