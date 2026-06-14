@@ -1,0 +1,1057 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+{% include "bootstrap/leafletLayout.html" %}
+
+{% include "bootstrap/navigation.html" %}
+
+<style>
+  /* ── Layout ── */
+  #sidebar { display: none !important; }
+  .compose-wrap {
+    display: flex; height: calc(100vh - 56px); overflow: hidden;
+  }
+  .compose-panel {
+    width: 380px; flex: 0 0 380px; overflow-y: auto;
+    border-right: 1px solid #e9ecef; background: #fff;
+    display: flex; flex-direction: column;
+  }
+  .compose-map {
+    flex: 1 1 auto; position: relative;
+  }
+  #map {
+    width: 100%; height: 100%;
+  }
+
+  /* ── Panel header ── */
+  .cp-header {
+    display: flex; align-items: center; gap: .6rem;
+    padding: .9rem 1.1rem .6rem; border-bottom: 1px solid #f0f2f5;
+    position: sticky; top: 0; background: #fff; z-index: 10;
+  }
+  .cp-icon {
+    width: 36px; height: 36px; border-radius: 10px; flex-shrink: 0;
+    background: #e8eeff; display: flex; align-items: center; justify-content: center;
+  }
+  .cp-icon img { height: 20px; }
+  .cp-title { font-weight: 700; font-size: 1rem; color: #1a202c; }
+
+  /* ── Section titles ── */
+  .cp-section { padding: .8rem 1.1rem; border-bottom: 1px solid #f0f2f5; }
+  .cp-section-title {
+    font-size: .68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #9ca3af; margin-bottom: .55rem;
+  }
+
+  /* ── Inputs ── */
+  .cp-input-row { margin-bottom: .5rem; }
+  .cp-input-row label { font-size: .78rem; color: #6b7280; margin-bottom: .2rem; display: block; }
+  .cp-input-row .form-control, .cp-input-row .form-select {
+    font-size: .875rem; border-radius: 8px; border-color: #e2e6ea;
+    background: #fafbfc; transition: border-color .15s, box-shadow .15s;
+  }
+  .cp-input-row .form-control:focus, .cp-input-row .form-select:focus {
+    border-color: #86b7fe; box-shadow: 0 0 0 .2rem rgba(13,110,253,.12);
+    background: #fff;
+  }
+
+  /* Station rows with resolve indicator */
+  .cp-station-wrap { position: relative; }
+  .cp-station-dot {
+    position: absolute; right: .6rem; top: 50%; transform: translateY(-50%);
+    width: 8px; height: 8px; border-radius: 50%; background: #d1d5db;
+    transition: background .2s;
+  }
+  .cp-station-dot.resolved { background: #22c55e; }
+  .cp-station-wrap .form-control { padding-right: 1.8rem; }
+
+  /* Via rows */
+  .via-compose-row { position: relative; margin-bottom: .4rem; }
+  .via-compose-row .form-control { padding-right: 2rem; }
+  .via-compose-remove {
+    position: absolute; right: .35rem; top: 50%; transform: translateY(-50%);
+    border: 0; background: none; cursor: pointer; color: #9ca3af; font-size: 1.1rem;
+    line-height: 1; padding: 0;
+  }
+  .via-compose-remove:hover { color: #374151; }
+
+  /* Operator logo */
+  .cp-operator-row { display: flex; align-items: center; gap: .5rem; }
+  .cp-operator-row .operatorLogo { height: 24px; border-radius: 4px; flex-shrink: 0; }
+
+  /* Precision toggle */
+  .cp-precision { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .5rem; }
+  .cp-prec-btn {
+    flex: 1; text-align: center; font-size: .78rem; font-weight: 500;
+    padding: .3rem .5rem; border: 1px solid #e2e6ea; border-radius: 8px;
+    background: #fafbfc; color: #6b7280; cursor: pointer; transition: all .12s;
+    white-space: nowrap;
+  }
+  input[name="precision"]:checked + .cp-prec-btn {
+    background: #4b78d6; color: #fff; border-color: #4b78d6;
+  }
+  input[name="precision"] { display: none; }
+
+
+  /* Save bar */
+  .cp-save-bar {
+    padding: .9rem 1.1rem; border-top: 1px solid #e9ecef;
+    background: #fff; position: sticky; bottom: 0;
+    display: flex; gap: .5rem;
+  }
+  .cp-save-bar .btn { border-radius: 10px; font-size: .875rem; }
+
+  /* Power type */
+  .power-type-group { display: flex; border: 1px solid #e2e6ea; border-radius: 8px; overflow: hidden; }
+  .power-type-group input[type="radio"] { display: none; }
+  .power-type-group label {
+    flex: 1; text-align: center; padding: .35rem .5rem; margin: 0;
+    cursor: pointer; font-size: .8rem; color: #6b7280;
+    background: #fafbfc; border-right: 1px solid #e2e6ea; transition: all .12s;
+  }
+  .power-type-group label:last-of-type { border-right: none; }
+  .power-type-group input[type="radio"]:checked + label { background: #e8eeff; color: #4b78d6; font-weight: 500; }
+
+  /* Tag chips */
+  .tag-blob { font-size: .75rem; padding: .15rem .55rem; border-radius: 999px; cursor: pointer; }
+
+  @media (max-width: 700px) {
+    .compose-wrap { flex-direction: column; height: auto; }
+    .compose-panel { width: 100%; border-right: 0; border-bottom: 1px solid #e9ecef; max-height: 65vh; }
+    .compose-map { height: 50vh; }
+  }
+</style>
+
+{% if vehicle_type == 'air' %}
+<div class="modal fade" id="fr24Modal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Import Flight from FR24</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">{{ fr24DataAvailability|default('Data available from 30 days ago to 1 day ahead.') }}</p>
+        <form id="fr24Form">
+          <div class="mb-3">
+            <label class="form-label d-block">{{ searchBy|default('Search by') }}</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="fr24SearchToggle">
+              <label class="form-check-label" for="fr24SearchToggle">{{ reg|default('Registration') }}</label>
+            </div>
+          </div>
+          <div class="mb-3" id="flightNumberGroup">
+            <label class="form-label">{{ flightNumber|default('Flight number') }}</label>
+            <input type="text" class="form-control" id="fr24FlightNumber" placeholder="e.g. EK184">
+          </div>
+          <div class="mb-3 d-none" id="regNumberGroup">
+            <label class="form-label">{{ reg|default('Registration') }}</label>
+            <input type="text" class="form-control" id="fr24RegNumber" placeholder="{{ registrationPlaceholder|default('e.g. F-HBXD') }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label">{{ date|default('Date') }}</label>
+            <input type="date" class="form-control" id="fr24Date">
+          </div>
+          <div class="progress mt-3 d-none">
+            <div id="fr24ProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width:0%">0%</div>
+          </div>
+        </form>
+        <div id="fr24Error" class="text-danger small d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ cancel|default('Cancel') }}</button>
+        <button type="button" class="btn btn-primary" id="fr24SubmitBtn">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="modal fade" id="legSelectorModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Select Flight Leg</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-3">This flight has multiple legs. Select which leg to import:</p>
+        <div id="legsList" class="list-group"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ cancel|default('Cancel') }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
+
+{% if plan_uuid %}
+<div class="alert alert-info d-flex align-items-center gap-2 py-2 px-3 mb-0" role="alert" style="font-size:.9rem; border-radius:0;">
+  <span>🗺️</span>
+  <span>{{ addingToPlan|default('Adding a trip to plan') }}: <strong>{{ plan_name|default('') }}</strong></span>
+</div>
+{% endif %}
+
+<div class="compose-wrap">
+
+  <!-- ── Left panel ── -->
+  <div class="compose-panel">
+
+    <!-- Header -->
+    <div class="cp-header">
+      <a href="javascript:history.back()" class="text-muted" style="line-height:1;"><i class="bi bi-arrow-left"></i></a>
+      <div class="cp-icon">
+        <img src="{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}" onerror="this.style.display='none'">
+      </div>
+      <div class="cp-title">{{ newTrip }}</div>
+      {% if vehicle_type == 'air' %}
+      <span data-bs-toggle="modal" data-bs-target="#fr24Modal"
+        class="btn btn-sm ms-auto {% if fr24_calls == 'premium' %}btn-primary{% elif fr24_calls is number and fr24_calls >= 5 %}btn-secondary disabled{% else %}btn-primary{% endif %}"
+        {% if fr24_calls is number and fr24_calls >= 5 %}aria-disabled="true" title="{{ fr24LimitInfo|default('') }}"{% endif %}>
+        <img src="{{ url_for('static', filename='images/icons/fr24.png') }}" style="height:1.2em;" alt="FR24">
+        FR24{% if fr24_calls != 'premium' %} <small>({{ fr24_calls }}/5)</small>{% endif %}
+      </span>
+      {% endif %}
+    </div>
+
+    <!-- Origin / Destination / Via -->
+    <div class="cp-section">
+      <div class="cp-section-title">{{ tOrigin|default('Route') }}</div>
+
+      <!-- Origin -->
+      <div class="cp-input-row">
+        <label>{{ originTerminal }}</label>
+        <div class="cp-station-wrap">
+          <input type="text" id="originStation" class="form-control stationSearch" placeholder="{{ originTerminal }}">
+          <span class="cp-station-dot" id="dot-origin"></span>
+        </div>
+      </div>
+
+      <!-- Via container -->
+      {% if vehicle_type not in ('air', 'accommodation', 'poi', 'restaurant') %}
+      <div id="viaContainer"></div>
+      <button type="button" id="addViaBtn" class="btn btn-sm btn-outline-secondary mb-2" style="border-radius:8px; font-size:.78rem;">
+        <i class="bi bi-plus"></i> {{ via|default('Via') }}
+      </button>
+      {% endif %}
+
+      <!-- Destination -->
+      {% if vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
+      <div class="cp-input-row">
+        <label>{{ destinationTerminal }}</label>
+        <div class="cp-station-wrap">
+          <input type="text" id="destinationStation" class="form-control stationSearch" placeholder="{{ destinationTerminal }}">
+          <span class="cp-station-dot" id="dot-dest"></span>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Timing -->
+    <div class="cp-section">
+      <div class="cp-section-title">{{ timings|default('Timing') }}</div>
+      <div class="cp-precision">
+        <input type="radio" name="precision" id="prec-precise" value="preciseDates" {% if not plan_uuid %}checked{% endif %}>
+        <label class="cp-prec-btn" for="prec-precise">{{ preciseDates|default('Precise') }}</label>
+        {% if plan_uuid %}
+        <input type="radio" name="precision" id="prec-relative" value="relative" checked>
+        <label class="cp-prec-btn" for="prec-relative">{{ relativeTiming|default('Day + time') }}</label>
+        {% endif %}
+        <input type="radio" name="precision" id="prec-date" value="onlyDate">
+        <label class="cp-prec-btn" for="prec-date">{{ onlyDate|default('Date only') }}</label>
+        <input type="radio" name="precision" id="prec-unknown" value="unknown">
+        <label class="cp-prec-btn" for="prec-unknown">{{ unknown|default('Unknown') }}</label>
+      </div>
+
+      <!-- Precise dates -->
+      <div id="timing-precise">
+        <div class="cp-input-row">
+          <label>{{ newTripStart|default('Departure') }}</label>
+          <div class="d-flex gap-2">
+            <input type="date" id="newTripStartDate" name="newTripStartDate" class="form-control">
+            <input type="time" id="newTripStartTime" name="newTripStartTime" class="form-control">
+          </div>
+        </div>
+        <div class="cp-input-row">
+          <label>{{ newTripEnd|default('Arrival') }}</label>
+          <div class="d-flex gap-2">
+            <input type="date" id="newTripEndDate" name="newTripEndDate" class="form-control">
+            <input type="time" id="newTripEndTime" name="newTripEndTime" class="form-control">
+          </div>
+        </div>
+      </div>
+
+      <!-- Date only -->
+      <div id="timing-date" style="display:none;">
+        <div class="cp-input-row"><label>{{ date|default('Date') }}</label>
+          <input type="date" id="onlyDate" name="onlyDate" class="form-control"></div>
+      </div>
+
+      <!-- Unknown -->
+      <div id="timing-unknown" style="display:none;">
+        <div class="cp-precision">
+          <input type="radio" name="unknownType" id="unk-past" value="past" checked>
+          <label class="cp-prec-btn" for="unk-past">{{ past|default('Past') }}</label>
+          <input type="radio" name="unknownType" id="unk-future" value="future">
+          <label class="cp-prec-btn" for="unk-future">{{ future|default('Future') }}</label>
+        </div>
+      </div>
+
+      <!-- Relative (plan) -->
+      {% if plan_uuid %}
+      <div id="timing-relative" style="display:none;">
+        <div class="cp-input-row">
+          <label>{{ newTripStart|default('Departure') }}</label>
+          <div class="d-flex gap-2">
+            <input type="number" min="1" value="1" id="planStartDay" name="planStartDay" class="form-control" placeholder="{{ day|default('Day') }}">
+            <input type="time" id="planStartTime" name="planStartTime" class="form-control">
+          </div>
+        </div>
+        <div class="cp-input-row">
+          <label>{{ newTripEnd|default('Arrival') }}</label>
+          <div class="d-flex gap-2">
+            <input type="number" min="1" value="1" id="planEndDay" name="planEndDay" class="form-control" placeholder="{{ day|default('Day') }}">
+            <input type="time" id="planEndTime" name="planEndTime" class="form-control">
+          </div>
+        </div>
+        <small class="text-muted" style="font-size:.75rem;">{{ planTimeHint|default('Times are optional.') }}</small>
+      </div>
+      {% endif %}
+
+      <!-- Manual duration -->
+      <div class="cp-input-row mt-1">
+        <label>{{ tripDuration|default('Duration') }} <small class="text-muted">({{ optional|default('optional') }})</small></label>
+        <div class="d-flex gap-2">
+          <input type="number" min="0" max="200" step="1" id="manDurationHours" name="manDurationHours" class="form-control" placeholder="{{ hours|default('h') }}">
+          <input type="number" min="0" max="59" step="1" id="manDurationMinutes" name="manDurationMinutes" class="form-control" placeholder="{{ minutes|default('m') }}">
+        </div>
+      </div>
+    </div>
+
+    <!-- Details -->
+    <div class="cp-section">
+      <div class="cp-section-title">{{ details|default('Details') }}</div>
+
+      {% if vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
+      <!-- Operator -->
+      <div class="cp-input-row cp-operator-row">
+        <img class="operatorLogo" src="{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}">
+        <input type="text" name="operator" id="operator" class="form-control" placeholder="{{ operator|default('Operator') }}">
+      </div>
+      <!-- Line -->
+      <div class="cp-input-row">
+        <label>{{ lineName|default('Line') }}</label>
+        <input type="text" name="lineName" id="lineName" class="form-control" placeholder="{{ lineName|default('Line') }}">
+      </div>
+      <!-- Material -->
+      <div class="cp-input-row">
+        <label>{{ material_type|default('Rolling stock') }}</label>
+        <input type="text" name="material_type" id="material_type" class="form-control" placeholder="{{ material_type|default('Rolling stock') }}">
+        <input type="hidden" name="material_type_advanced" id="material_type_advanced">
+      </div>
+      <!-- Reg / Seat -->
+      <div class="row g-2">
+        <div class="col-6 cp-input-row"><label>{{ reg|default('Reg') }}</label>
+          <input type="text" name="reg" id="reg" class="form-control" placeholder="{{ reg|default('Reg') }}"></div>
+        <div class="col-6 cp-input-row"><label>{{ seat|default('Seat') }}</label>
+          <input type="text" name="seat" id="seat" class="form-control" placeholder="{{ seat|default('Seat') }}"></div>
+      </div>
+      {% endif %}
+
+      <!-- Notes -->
+      <div class="cp-input-row">
+        <label>{{ notes|default('Notes') }}</label>
+        <input type="text" name="notes" id="notes" class="form-control" placeholder="{{ notes|default('Notes') }}">
+      </div>
+
+      <!-- Visibility -->
+      <div class="cp-input-row">
+        <label>{{ visibility|default('Visibility') }}</label>
+        <select name="visibility" id="visibility" class="form-select">
+          <option value="public" {% if trip_visibility == "public" %}selected{% endif %}>{{ visibility_public|default('Public') }}</option>
+          <option value="friends" {% if trip_visibility == "friends" %}selected{% endif %}>{{ visibility_friends|default('Friends') }}</option>
+          <option value="private" {% if trip_visibility == "private" %}selected{% endif %}>{{ visibility_private|default('Private') }}</option>
+        </select>
+      </div>
+
+      {% if vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
+      <!-- Power type -->
+      {% if vehicle_type == 'train' %}
+      <div class="cp-input-row">
+        <label>{{ powerType|default('Power') }}</label>
+        <div class="power-type-group">
+          <input type="radio" name="powerType" id="powerAuto" value="auto" checked>
+          <label for="powerAuto"><i class="fas fa-magic"></i> {{ auto|default('Auto') }}</label>
+          <input type="radio" name="powerType" id="powerElectric" value="electric">
+          <label for="powerElectric"><i class="fas fa-bolt"></i> {{ electric|default('Electric') }}</label>
+          <input type="radio" name="powerType" id="powerThermic" value="thermic">
+          <label for="powerThermic"><i class="fas fa-fire"></i> {{ thermic|default('Diesel') }}</label>
+        </div>
+      </div>
+      {% endif %}
+      {% endif %}
+    </div>
+
+    <!-- Price -->
+    <div class="cp-section">
+      <div class="cp-section-title">{{ priceLabel|default('Price') }}</div>
+      <div class="row g-2">
+        <div class="col-7 cp-input-row">
+          <label>{{ price|default('Amount') }}</label>
+          <input type="number" step="any" name="price" id="price" class="form-control" placeholder="{{ price|default('Amount') }}">
+        </div>
+        <div class="col-5 cp-input-row">
+          <label>{{ currency|default('Currency') }}</label>
+          <select name="currency" id="currency" class="form-select">
+            {% for cur in currencyOptions %}
+            <option value="{{ cur['currency'] }}" data-country="{{ cur['country'] }}" {% if cur['currency'] == user_currency %}selected{% endif %}>{{ cur['currency'] }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div class="cp-input-row" id="cp-purchase-date-row">
+        <label>{{ purchasing_date|default('Purchase date') }}</label>
+        <input type="date" name="purchasing_date" id="purchasing_date" class="form-control">
+      </div>
+    </div>
+
+    <!-- Tags -->
+    <div class="cp-section">
+      <div class="cp-section-title">{{ tags|default('Tags') }}</div>
+      <input type="text" id="tagSearchInput" placeholder="{{ select_tag|default('Add a tag…') }}" class="form-control form-control-sm mb-2" autocomplete="off">
+      <div id="tagList" class="d-flex flex-wrap gap-1"></div>
+    </div>
+
+    <!-- Save bar -->
+    <div class="cp-save-bar">
+      {% if plan_uuid %}
+      <input type="hidden" name="plan_uuid" value="{{ plan_uuid }}">
+      <button type="button" id="btnSave" class="btn btn-primary flex-grow-1" onclick="composeSave(false)">
+        <i class="bi bi-check-lg me-1"></i>{{ submit|default('Save') }}
+      </button>
+      <button type="button" id="btnSaveContinue" class="btn btn-outline-primary" onclick="composeSave(true)">
+        <i class="bi bi-arrow-right me-1"></i>{{ saveTripContinueButton|default('Save & continue') }}
+      </button>
+      {% else %}
+      <button type="button" id="btnSave" class="btn btn-primary flex-grow-1" onclick="composeSave(false)">
+        <i class="bi bi-check-lg me-1"></i>{{ submit|default('Save') }}
+      </button>
+      <button type="button" id="btnSaveContinue" class="btn btn-outline-primary" onclick="composeSave(true)">
+        <i class="bi bi-arrow-right me-1"></i>{{ saveTripContinueButton|default('Save & continue') }}
+      </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- ── Right panel: map ── -->
+  <div class="compose-map">
+    <div id="map" style="width:100%;height:100%;"></div>
+    <div id="sidebar"><div id="sidebar-content"></div></div>
+  </div>
+</div>
+
+<script src="{{ static_autoversion(filename='js/map.js') }}"></script>
+<script>
+var vehicle_type = "{{ vehicle_type }}";
+var saveURL = "{{ url_for('saveTrip', username=username) }}";
+var savePlanURL = "{{ url_for('savePlanTrip', username=username) }}";
+var plan_uuid = "{{ plan_uuid or '' }}";
+
+// ── Globals required by routing.js ──
+var routerurl = `${window.location.origin}/forwardRouting/${vehicle_type}/route/v1`;
+var wplist, origLabel = '', destLabel = '';
+var viaStations = [];
+var spinnerContent = '<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>';
+var errorContent = '<h4>{{ routingError|default("Routing error") }}</h4><p><button onclick="location.reload()">{{ retry|default("Retry") }}</button></p>';
+var saveErrorContent = '<h4>{{ saveError|default("Save error") }}</h4><p><button onclick="location.reload()">{{ retry|default("Retry") }}</button></p>';
+var texts = {
+  routeTitle:             "{{ routeTitle|default('{origLabel} → {destLabel}') }}",
+  fineTuneNote:           "{{ fineTuneNote|default('Drag waypoints to fine-tune the route.') }}",
+  distanceTime:           "{{ distanceTime|default('{km} · {time}') }}",
+  downloadGeoJSONButton:  "{{ downloadGeoJSONButton|default('Download GeoJSON') }}",
+  saveTripButton:         "{{ submit|default('Save') }}",
+  saveTripContinueButton: "{{ saveTripContinueButton|default('Save & continue') }}",
+  remove:                 "{{ remove|default('Remove') }}",
+  waypoint:               "{{ waypoint|default('Waypoint') }}",
+  useNewRouter:           "{{ useNewRouter|default('Use new router') }}"
+};
+
+// ── Global newTrip — routing.js reads/writes this (trip_length, estimated_trip_duration, details…) ──
+var newTrip = { type: vehicle_type, plan_uuid: plan_uuid || undefined };
+
+// ── Station state ──
+var globalStationDict = {};
+var manualStationsList = [];
+var visitedStations = {};
+var originEntry = null, destEntry = null;
+var routingStarted = false;
+var tempMarkers = {};
+
+// ── Map (createMap from map.js handles tile server selection) ──
+var map = createMap(null, [48, 8]);
+
+// ── Station search URLs ──
+var stationSearchURLs = {
+  "bus":           "/stationAutocomplete?osm_tag=amenity:bus_station&osm_tag=highway:bus_stop",
+  "train":         "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
+  "tram":          "/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station&osm_tag=railway:halt",
+  "metro":         "/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance",
+  "funicular":     "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
+  "rail":          "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
+  "ferry":         "/stationAutocomplete?osm_tag=amenity:ferry_terminal",
+  "helicopter":    "/stationAutocomplete?osm_tag=aeroway:helipad&osm_tag=aeroway:heliport",
+  "accommodation": "/stationAutocomplete?osm_tag=tourism:hotel&osm_tag=tourism:hostel&osm_tag=tourism:motel&osm_tag=tourism:guest_house",
+  "poi":           "/stationAutocomplete?osm_tag=tourism",
+  "restaurant":    "/stationAutocomplete?osm_tag=amenity:restaurant&osm_tag=amenity:cafe&osm_tag=amenity:pub",
+  "aerialway":     "/stationAutocomplete?osm_tag=aerialway:station",
+  "ski":           "/stationAutocomplete?osm_tag=aerialway:station",
+};
+var stationSearchUrl = stationSearchURLs[vehicle_type] || "/stationAutocomplete";
+
+$.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) }}', function(manAndOps) {
+  Object.assign(globalStationDict, manAndOps.manualStations);
+  Object.assign(visitedStations, manAndOps.visitedStations);
+  Object.keys(manAndOps.manualStations).forEach(function(s) {
+    manualStationsList.push({ label: s, value: s, manual: true });
+  });
+  operatorAutocomplete($("#operator"), manAndOps, "{{ url_for('static', filename='') }}", "{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}", vehicle_type);
+  {% if vehicle_type == 'air' %}
+  // Airport-specific autocomplete
+  $(".stationSearch").autocomplete({
+    source: function(request, response) {
+      $.ajax({
+        url: "/api/airportAutocomplete/" + request.term,
+        dataType: "json",
+        success: function(data) {
+          var airportList = [];
+          data.forEach(function(item) {
+            var flag = getFlagEmoji(item.iso_country);
+            var label = flag + ' ' + item.name + ' (' + item.iata + ')';
+            airportList.push({ label: label, value: label });
+            globalStationDict[label] = [[item.latitude, item.longitude], label];
+          });
+          response(airportList);
+        }
+      });
+    }
+  });
+  // Airliner autocomplete
+  var airlinersData = [];
+  $.get("/getAirliners", function(data) { airlinersData = data; });
+  $("#material_type").autocomplete({
+    source: function(request, response) {
+      var term = request.term.toLowerCase();
+      response($.map(airlinersData.filter(function(item) {
+        return (item.iata + ' ' + item.manufacturer + ' ' + item.model).toLowerCase().includes(term);
+      }), function(item) {
+        return { label: item.iata + ' - ' + item.manufacturer + ' ' + item.model, value: item.iata };
+      }));
+    }
+  });
+
+  // ── FR24 helpers ──
+  async function fillFromBarcode(element, icao) {
+    return new Promise(function(resolve, reject) {
+      $.ajax({ url: "/api/airportAutocomplete/" + icao, dataType: "json",
+        success: function(data) {
+          var airport = data[0];
+          var flag = getFlagEmoji(airport.iso_country);
+          var label = flag + ' ' + airport.name + ' (' + airport.iata + ')';
+          var entry = [[airport.latitude, airport.longitude], label];
+          globalStationDict[label] = entry;
+          element.val(label);
+          var isOrigin = element.attr('id') === 'originStation';
+          onStationSelected(isOrigin ? 'origin' : 'dest', entry, isOrigin ? 'dot-origin' : 'dot-dest');
+          resolve(airport);
+        }, error: reject
+      });
+    });
+  }
+
+  function updateProgressBar(pct) {
+    var bar = $('#fr24ProgressBar');
+    bar.parent().removeClass('d-none');
+    bar.css('width', pct + '%').attr('aria-valuenow', pct).text(pct + '%');
+  }
+
+  var allFlightLegs = [];
+
+  $('#fr24SubmitBtn').click(async function() {
+    var isReg = document.getElementById('fr24SearchToggle').checked;
+    var flightNumber = $('#fr24FlightNumber').val().trim();
+    var regNumber = $('#fr24RegNumber').val().trim();
+    var flightDate = $('#fr24Date').val();
+    $('#fr24Error').addClass('d-none');
+    if (!isReg && (!flightNumber || !flightDate)) { $('#fr24Error').text('Please enter flight number and date.').removeClass('d-none'); return; }
+    if (isReg && (!regNumber || !flightDate)) { $('#fr24Error').text('Please enter registration and date.').removeClass('d-none'); return; }
+    updateProgressBar(10);
+    try {
+      var url = isReg ? '{{ url_for("flight_summary_reg", username=username) }}' : '{{ url_for("flight_summary", username=username) }}';
+      var query = isReg ? { registration: regNumber, date: flightDate } : { flight_number: flightNumber, date: flightDate };
+      var res = await $.get(url, query);
+      if (!res.data || !res.data.length) { $('#fr24Error').text('No flight found.').removeClass('d-none'); updateProgressBar(0); return; }
+      allFlightLegs = res.data;
+      if (allFlightLegs.length === 1) { await processFlightLeg(allFlightLegs[0]); }
+      else { updateProgressBar(0); showLegSelector(allFlightLegs); }
+    } catch(err) { $('#fr24Error').text('Error fetching flight data.').removeClass('d-none'); updateProgressBar(0); }
+  });
+
+  $('#fr24SearchToggle').on('change', function() {
+    var isReg = $(this).is(':checked');
+    $('#flightNumberGroup').toggleClass('d-none', isReg);
+    $('#regNumberGroup').toggleClass('d-none', !isReg);
+  });
+
+  async function processFlightLeg(flight) {
+    updateProgressBar(10);
+    var durationSeconds = null;
+    if (flight.datetime_takeoff && flight.datetime_landed) {
+      durationSeconds = Math.floor((new Date(flight.datetime_landed) - new Date(flight.datetime_takeoff)) / 1000);
+    }
+    newTrip.fr24_id = flight.fr24_id;
+    newTrip.fr24_duration = durationSeconds;
+    updateProgressBar(25);
+    await fillFromBarcode($('#originStation'), flight.orig_icao);
+    await fillFromBarcode($('#destinationStation'), flight.dest_icao);
+    updateProgressBar(50);
+    $('#lineName').val(flight.flight); $('#material_type').val(flight.type); $('#reg').val(flight.reg);
+    if (flight.operating_as) {
+      try {
+        var airlineRes = await $.get("/api/airlines", { icao: flight.operating_as });
+        var airline = airlineRes[0];
+        $('#operator').val(airline ? airline.name : flight.operating_as);
+        if (airline && airline.logo_url) $('.operatorLogo').attr('src', airline.logo_url);
+      } catch(e) { $('#operator').val(flight.operating_as); }
+    }
+    updateProgressBar(65);
+    if (flight.datetime_takeoff_local && flight.datetime_landed_local) {
+      var s = new Date(flight.datetime_takeoff_local), e = new Date(flight.datetime_landed_local);
+      $('#newTripStartDate').val(s.toTimezonedISOString().split('T')[0]); $('#newTripStartTime').val(s.toTimeString().slice(0,5));
+      $('#newTripEndDate').val(e.toTimezonedISOString().split('T')[0]);   $('#newTripEndTime').val(e.toTimeString().slice(0,5));
+      $('#prec-precise').prop('checked', true).trigger('change');
+    }
+    updateProgressBar(100);
+    setTimeout(function() { bootstrap.Modal.getInstance(document.getElementById('fr24Modal'))?.hide(); updateProgressBar(0); }, 400);
+  }
+
+  async function showLegSelector(legs) {
+    var legsList = $('#legsList').empty();
+    var processedLegs = [];
+    for (var i = 0; i < legs.length; i++) {
+      var leg = legs[i];
+      var origData = await $.ajax({ url: "/api/airportAutocomplete/" + leg.orig_icao, dataType: "json" });
+      var destData = await $.ajax({ url: "/api/airportAutocomplete/" + leg.dest_icao, dataType: "json" });
+      var origAirport = origData[0], destAirport = destData[0];
+      var originLabel = getFlagEmoji(origAirport.iso_country) + ' ' + origAirport.name + ' (' + origAirport.iata + ')';
+      var destLabel   = getFlagEmoji(destAirport.iso_country) + ' ' + destAirport.name + ' (' + destAirport.iata + ')';
+      var depLocal = leg.datetime_takeoff_local ? new Date(leg.datetime_takeoff_local) : null;
+      var arrLocal = leg.datetime_landed_local  ? new Date(leg.datetime_landed_local)  : null;
+      processedLegs.push({ index: i, leg, origAirport, destAirport, originLabel, destLabel, depLocal, arrLocal });
+    }
+    bootstrap.Modal.getInstance(document.getElementById('fr24Modal'))?.hide();
+    new bootstrap.Modal(document.getElementById('legSelectorModal')).show();
+    processedLegs.forEach(function(pl) {
+      var depStr = pl.depLocal ? pl.depLocal.toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '?';
+      var arrStr = pl.arrLocal ? pl.arrLocal.toLocaleString(undefined, {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '?';
+      var item = $('<a href="#" class="list-group-item list-group-item-action">').html(
+        '<div class="d-flex justify-content-between"><h6 class="mb-1">Leg ' + (pl.index+1) + ': ' + pl.originLabel + ' → ' + pl.destLabel + '</h6>' +
+        '<small class="text-muted">' + pl.leg.flight + '</small></div>' +
+        '<p class="mb-1"><strong>Dep:</strong> ' + depStr + ' &nbsp; <strong>Arr:</strong> ' + arrStr + '</p>' +
+        '<small class="text-muted">Aircraft: ' + pl.leg.type + ' (' + pl.leg.reg + ')</small>'
+      );
+      item.on('click', async function(e) {
+        e.preventDefault();
+        bootstrap.Modal.getInstance(document.getElementById('legSelectorModal'))?.hide();
+        var durationSeconds = null;
+        if (pl.leg.datetime_takeoff && pl.leg.datetime_landed)
+          durationSeconds = Math.floor((new Date(pl.leg.datetime_landed) - new Date(pl.leg.datetime_takeoff)) / 1000);
+        newTrip.fr24_id = pl.leg.fr24_id; newTrip.fr24_duration = durationSeconds;
+        globalStationDict[pl.originLabel] = [[pl.origAirport.latitude, pl.origAirport.longitude], pl.originLabel];
+        globalStationDict[pl.destLabel]   = [[pl.destAirport.latitude, pl.destAirport.longitude], pl.destLabel];
+        $('#originStation').val(pl.originLabel); onStationSelected('origin', globalStationDict[pl.originLabel], 'dot-origin');
+        $('#destinationStation').val(pl.destLabel); onStationSelected('dest', globalStationDict[pl.destLabel], 'dot-dest');
+        $('#lineName').val(pl.leg.flight); $('#material_type').val(pl.leg.type); $('#reg').val(pl.leg.reg);
+        if (pl.leg.operating_as) {
+          try { var ar = await $.get("/api/airlines", { icao: pl.leg.operating_as }); var al = ar[0];
+            $('#operator').val(al ? al.name : pl.leg.operating_as); if (al && al.logo_url) $('.operatorLogo').attr('src', al.logo_url);
+          } catch(e) { $('#operator').val(pl.leg.operating_as); }
+        }
+        if (pl.depLocal && pl.arrLocal) {
+          $('#newTripStartDate').val(pl.depLocal.toTimezonedISOString().split('T')[0]); $('#newTripStartTime').val(pl.depLocal.toTimeString().slice(0,5));
+          $('#newTripEndDate').val(pl.arrLocal.toTimezonedISOString().split('T')[0]);   $('#newTripEndTime').val(pl.arrLocal.toTimeString().slice(0,5));
+          $('#prec-precise').prop('checked', true).trigger('change');
+        }
+      });
+      legsList.append(item);
+    });
+  }
+
+  $('#fr24Date').val(getCurrentDate());
+  {% else %}
+  stationSearchAutocomplete(".stationSearch", visitedStations, stationSearchUrl, "{{ manual|default('Manual') }}");
+  materialTypeAutocomplete($("#material_type"), manAndOps, vehicle_type);
+  {% endif %}
+});
+
+// ── Pin before routing starts ──
+function placeTempPin(entry, role) {
+  var coords = entry[0];
+  var latlng = L.latLng(coords[0], coords[1]);
+  var icon = role === 'origin' ? markerIconStart : markerIconEnd;
+  if (tempMarkers[role]) tempMarkers[role].setLatLng(latlng);
+  else tempMarkers[role] = L.marker(latlng, { icon: icon }).addTo(map);
+  if (!originEntry || !destEntry) map.setView(latlng, Math.max(map.getZoom(), 10), { animate: true });
+}
+
+// ── Air routing state ──
+{% if vehicle_type == 'air' %}
+var airPolyline = null;
+var airOrigMarker = null, airDestMarker = null;
+var useFR24 = true;
+var fr24PathCache = null, fr24AltCache = null, fr24TimeCache = null;
+var flightTracksUrl = "{{ url_for('flight_tracks', username=username, fr24_id='') }}";
+var saveFlightUrl = "{{ url_for('saveFlight', username=username, type='air') }}";
+
+function normalizeDateLinePath(path) {
+  if (!Array.isArray(path) || path.length < 2) return path;
+  var normalized = [path[0]];
+  for (var i = 1; i < path.length; i++) {
+    var prev = normalized[normalized.length - 1];
+    var lat = path[i][0], lon = path[i][1];
+    var delta = lon - prev[1];
+    if (delta > 180) lon -= 360; else if (delta < -180) lon += 360;
+    normalized.push([lat, lon]);
+  }
+  return normalized;
+}
+
+function updateAirRoute() {
+  if (airPolyline) { map.removeLayer(airPolyline); airPolyline = null; }
+  var origCoord = originEntry[0], destCoord = destEntry[0];
+
+  if (newTrip.fr24_id && useFR24) {
+    if (!fr24PathCache) {
+      fetch(flightTracksUrl + newTrip.fr24_id)
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          fr24PathCache = data.coordinates;
+          fr24AltCache = data.altitude;
+          fr24TimeCache = data.timestamps;
+          updateAirRoute();
+        })
+        .catch(function() { useFR24 = false; updateAirRoute(); });
+      return;
+    }
+    if (!Array.isArray(fr24PathCache) || fr24PathCache.length < 2) {
+      useFR24 = false; return updateAirRoute();
+    }
+    var path = normalizeDateLinePath(fr24PathCache);
+    airPolyline = L.polyline(path, { color: '#3388ff', weight: 3, opacity: .9 }).addTo(map);
+    airOrigMarker.setLatLng(path[0]).dragging.disable();
+    airDestMarker.setLatLng(path[path.length - 1]).dragging.disable();
+    newTrip.trip_length = getTotalDistanceFromPath(fr24PathCache);
+    newTrip.estimated_trip_duration = newTrip.fr24_duration || (newTrip.trip_length / 235) + 1800;
+  } else {
+    airOrigMarker.setLatLng(origCoord).dragging.enable();
+    airDestMarker.setLatLng(destCoord).dragging.enable();
+    airPolyline = new L.Geodesic([origCoord, destCoord], { wrap: false, steps: 8, color: '#3388ff', weight: 3, opacity: .9 }).addTo(map);
+    newTrip.trip_length = getDistanceFromLocations(
+      { lat: airOrigMarker.getLatLng().lat, lng: airOrigMarker.getLatLng().lng },
+      { lat: airDestMarker.getLatLng().lat, lng: airDestMarker.getLatLng().lng }
+    );
+    newTrip.estimated_trip_duration = (newTrip.trip_length / 235) + 1800;
+  }
+  map.fitBounds(airPolyline.getBounds(), { padding: [40, 40] });
+}
+{% endif %}
+
+function startRouting() {
+  Object.values(tempMarkers).forEach(function(m) { map.removeLayer(m); });
+  tempMarkers = {};
+  origLabel = originEntry[1];
+  destLabel = destEntry[1];
+  newTrip.originStation = originEntry;
+  newTrip.destinationStation = destEntry;
+  newTrip.viaStations = viaStations.filter(Boolean);
+  newTrip.powerType = (document.querySelector('input[name="powerType"]:checked') || {}).value || 'auto';
+  routingStarted = true;
+
+  {% if vehicle_type == 'air' %}
+  var origCoord = originEntry[0], destCoord = destEntry[0];
+  airOrigMarker = L.marker(origCoord, { icon: markerIconStart, draggable: true }).addTo(map);
+  airDestMarker = L.marker(destCoord, { icon: markerIconEnd, draggable: true }).addTo(map);
+  airOrigMarker.on('dragend', updateAirRoute);
+  airDestMarker.on('dragend', updateAirRoute);
+  updateAirRoute();
+  {% else %}
+  wplist = [originEntry[0]].concat(viaStations.filter(Boolean).map(function(v) { return v[0]; })).concat([destEntry[0]]);
+  routing(map, false, vehicle_type);
+  {% endif %}
+}
+
+function onStationSelected(role, entry, dotId) {
+  document.getElementById(dotId).classList.add('resolved');
+  if (role === 'origin') originEntry = entry; else destEntry = entry;
+  if (!routingStarted) {
+    placeTempPin(entry, role);
+    if (originEntry && destEntry) startRouting();
+  } else {
+    {% if vehicle_type == 'air' %}
+    // Move the air marker and redraw geodesic
+    var latlng = L.latLng(entry[0][0], entry[0][1]);
+    if (role === 'origin' && airOrigMarker) airOrigMarker.setLatLng(latlng);
+    else if (airDestMarker) airDestMarker.setLatLng(latlng);
+    updateAirRoute();
+    {% else %}
+    if (window.currentPlan) {
+      var wps = window.currentPlan.getWaypoints();
+      var latlng = L.latLng(entry[0][0], entry[0][1]);
+      if (role === 'origin') wps[0] = L.Routing.waypoint(latlng);
+      else wps[wps.length - 1] = L.Routing.waypoint(latlng);
+      window.currentPlan.setWaypoints(wps);
+    }
+    {% endif %}
+  }
+}
+
+// autocompleteselect fires before value is written — defer one tick
+$('#originStation').on('autocompleteselect', function(e, ui) {
+  var self = this;
+  setTimeout(function() {
+    self.value = ui.item.value;
+    var entry = globalStationDict[self.value];
+    if (!entry) return;
+    document.getElementById('dot-origin').classList.remove('resolved');
+    onStationSelected('origin', entry, 'dot-origin');
+    {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
+    destEntry = entry; // single-point types
+    {% endif %}
+  }, 0);
+});
+{% if vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
+$('#destinationStation').on('autocompleteselect', function(e, ui) {
+  var self = this;
+  setTimeout(function() {
+    self.value = ui.item.value;
+    var entry = globalStationDict[self.value];
+    if (!entry) return;
+    document.getElementById('dot-dest').classList.remove('resolved');
+    onStationSelected('dest', entry, 'dot-dest');
+  }, 0);
+});
+{% endif %}
+
+// ── Form via stations ──
+{% if vehicle_type not in ('air', 'accommodation', 'poi', 'restaurant') %}
+var viaRows = [];
+document.getElementById('addViaBtn').addEventListener('click', function() {
+  var idx = viaRows.length;
+  viaStations.push(null);
+  viaRows.push(null);
+  var row = document.createElement('div');
+  row.className = 'via-compose-row';
+  row.innerHTML = '<input type="text" class="form-control stationSearch viaStation" placeholder="{{ via|default("Via") }}">' +
+    '<button type="button" class="via-compose-remove">&times;</button>';
+  document.getElementById('viaContainer').appendChild(row);
+  var input = row.querySelector('input');
+  stationSearchAutocomplete($(input), visitedStations, stationSearchUrl, "{{ manual|default('Manual') }}");
+  $(input).on('autocompleteselect', function(e, ui) {
+    var inp = this;
+    setTimeout(function() {
+      inp.value = ui.item.value;
+      var entry = globalStationDict[inp.value];
+      if (!entry) return;
+      viaStations[idx] = entry;
+      if (routingStarted && window.currentPlan) {
+        // Splice before the last waypoint (destination)
+        var wps = window.currentPlan.getWaypoints();
+        wps.splice(wps.length - 1, 0, L.Routing.waypoint(L.latLng(entry[0][0], entry[0][1])));
+        window.currentPlan.setWaypoints(wps);
+      }
+    }, 0);
+  });
+  row.querySelector('.via-compose-remove').addEventListener('click', function() {
+    var entry = viaStations[idx];
+    viaStations.splice(idx, 1); viaRows.splice(idx, 1); row.remove();
+    if (routingStarted && window.currentPlan && entry) {
+      // Remove the matching waypoint from the plan
+      var latlng = L.latLng(entry[0][0], entry[0][1]);
+      var wps = window.currentPlan.getWaypoints();
+      var removeIdx = wps.findIndex(function(wp) {
+        return wp.latLng && wp.latLng.distanceTo(latlng) < 100;
+      });
+      if (removeIdx > 0 && removeIdx < wps.length - 1) {
+        window.currentPlan.spliceWaypoints(removeIdx, 1);
+      }
+    }
+  });
+});
+{% endif %}
+
+// ── Timing panel toggle ──
+function updateTimingPanel() {
+  var prec = document.querySelector('input[name="precision"]:checked');
+  if (!prec) return;
+  var v = prec.value;
+  document.getElementById('timing-precise').style.display = v === 'preciseDates' ? '' : 'none';
+  document.getElementById('timing-date').style.display = v === 'onlyDate' ? '' : 'none';
+  document.getElementById('timing-unknown').style.display = v === 'unknown' ? '' : 'none';
+  {% if plan_uuid %}
+  document.getElementById('timing-relative').style.display = v === 'relative' ? '' : 'none';
+  {% endif %}
+}
+document.querySelectorAll('input[name="precision"]').forEach(function(r) { r.addEventListener('change', updateTimingPanel); });
+updateTimingPanel();
+
+// ── Default dates ──
+(function() {
+  var now = new Date();
+  var today = now.toISOString().slice(0, 10);
+  document.getElementById('newTripStartDate').value = today;
+  document.getElementById('newTripStartTime').value = now.toTimeString().slice(0, 5);
+  document.getElementById('newTripEndDate').value = today;
+  document.getElementById('onlyDate').value = today;
+  document.getElementById('purchasing_date').value = today;
+  document.getElementById('purchasing_date').max = today;
+})();
+
+// ── Currency flags ──
+for (var _opt of document.getElementById('currency').options) {
+  if (_opt.dataset.country) _opt.text = _opt.text + ' ' + getFlagEmoji(_opt.dataset.country);
+}
+
+// ── Tags ──
+setupTagAutocomplete('{{ url_for("get_all_tags", username=username) }}');
+
+// ── Save (also exposed as saveTrip() so routing.js sidebar button works) ──
+function saveTrip(continueTrip) { composeSave(!!continueTrip); }
+
+function composeSave(continueTrip) {
+  if (!originEntry) { alert('{{ pleaseSetOrigin|default("Please set an origin.") }}'); return; }
+  {% if vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
+  if (!destEntry) { alert('{{ pleaseSetDest|default("Please set a destination.") }}'); return; }
+  {% endif %}
+
+  var prec = (document.querySelector('input[name="precision"]:checked') || {}).value || 'preciseDates';
+  // Write form data into the global newTrip (routing.js has already set trip_length/details on it)
+  newTrip.originStation = originEntry;
+  newTrip.destinationStation = destEntry || originEntry;
+  newTrip.viaStations = viaStations.filter(Boolean);
+  newTrip.type = vehicle_type;
+
+  // Timing
+  newTrip.precision = prec;
+  newTrip.newTripStartDate = document.getElementById('newTripStartDate').value;
+  newTrip.newTripStartTime = document.getElementById('newTripStartTime').value;
+  newTrip.newTripEndDate = document.getElementById('newTripEndDate').value;
+  newTrip.newTripEndTime = document.getElementById('newTripEndTime').value;
+  newTrip.onlyDate = document.getElementById('onlyDate').value;
+  newTrip.unknownType = (document.querySelector('input[name="unknownType"]:checked') || {}).value || '';
+  {% if plan_uuid %}
+  newTrip.planStartDay = document.getElementById('planStartDay').value;
+  newTrip.planStartTime = document.getElementById('planStartTime').value;
+  newTrip.planEndDay = document.getElementById('planEndDay').value;
+  newTrip.planEndTime = document.getElementById('planEndTime').value;
+  newTrip.plan_uuid = plan_uuid;
+  {% endif %}
+  newTrip.manDurationHours = document.getElementById('manDurationHours').value;
+  newTrip.manDurationMinutes = document.getElementById('manDurationMinutes').value;
+  processFormDates(newTrip); // mutates newTrip in place (also returns it, but we use the global)
+
+  // Details
+  newTrip.operator = (document.getElementById('operator') || {}).value || '';
+  newTrip.lineName = (document.getElementById('lineName') || {}).value || '';
+  newTrip.material_type = (document.getElementById('material_type') || {}).value || '';
+  newTrip.material_type_advanced = (document.getElementById('material_type_advanced') || {}).value || '';
+  newTrip.reg = (document.getElementById('reg') || {}).value || '';
+  newTrip.seat = (document.getElementById('seat') || {}).value || '';
+  newTrip.notes = document.getElementById('notes').value;
+  newTrip.visibility = document.getElementById('visibility').value;
+  newTrip.price = document.getElementById('price').value;
+  newTrip.currency = document.getElementById('currency').value;
+  newTrip.purchasing_date = document.getElementById('purchasing_date').value;
+  newTrip.powerType = (document.querySelector('input[name="powerType"]:checked') || {}).value || 'auto';
+  newTrip.tag_ids = Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(function(el) { return el.dataset.tagId; });
+
+  var timingOk = (
+    (prec === 'preciseDates' && newTrip.newTripStart && newTrip.newTripStart.length === 16 && newTrip.newTripEnd && newTrip.newTripEnd.length === 16) ||
+    (prec === 'onlyDate' && newTrip.onlyDate) ||
+    (prec === 'unknown' && newTrip.unknownType) ||
+    (prec === 'relative' && newTrip.planStartDay && newTrip.planEndDay)
+  );
+  if (!timingOk) { alert('{{ pleaseFillTiming|default("Please fill in the timing fields.") }}'); return; }
+
+  document.getElementById('btnSave').disabled = true;
+  document.getElementById('btnSaveContinue').disabled = true;
+
+  function onSaveSuccess() {
+    if (plan_uuid) {
+      if (continueTrip) {
+        location.href = '{{ url_for("compose", username=username, vehicle_type="__VT__") }}'.replace('__VT__', vehicle_type) +
+          '?plan=' + encodeURIComponent(plan_uuid) +
+          '&prevDest=' + encodeURIComponent(JSON.stringify(newTrip.destinationStation));
+      } else {
+        location.href = '/u/{{ username }}/plan/' + encodeURIComponent(plan_uuid);
+      }
+    } else {
+      var isProject = prec === 'unknown' ? newTrip.unknownType === 'future'
+        : prec === 'preciseDates' && newTrip.newTripStart ? new Date() < new Date(newTrip.newTripStart) : false;
+      location.href = isProject
+        ? "{{ url_for('dynamic_trips', time='projects', username=username) }}"
+        : "{{ url_for('dynamic_trips', time='trips', username=username) }}";
+    }
+  }
+  function onSaveError() {
+    alert('{{ saveError|default("Save failed.") }}');
+    document.getElementById('btnSave').disabled = false;
+    document.getElementById('btnSaveContinue').disabled = false;
+  }
+
+  {% if vehicle_type == 'air' %}
+  if (!airOrigMarker || !airDestMarker) { onSaveError(); return; }
+  var pathToSave, altToSave = null, timeToSave = null;
+  if (useFR24 && Array.isArray(fr24PathCache) && fr24PathCache.length >= 2) {
+    pathToSave = fr24PathCache.map(function(p) { return { lat: p[0], lng: p[1] }; });
+    altToSave = fr24AltCache;
+    timeToSave = fr24TimeCache;
+    newTrip.trip_length = getTotalDistanceFromPath(fr24PathCache);
+    newTrip.estimated_trip_duration = newTrip.fr24_duration || newTrip.estimated_trip_duration;
+  } else {
+    pathToSave = [
+      { lat: airOrigMarker.getLatLng().lat, lng: airOrigMarker.getLatLng().lng },
+      { lat: airDestMarker.getLatLng().lat, lng: airDestMarker.getLatLng().lng }
+    ];
+    newTrip.trip_length = getDistanceFromLocations(pathToSave[0], pathToSave[1]);
+    newTrip.estimated_trip_duration = (newTrip.trip_length / 235) + 1800;
+  }
+  $.post({
+    url: saveFlightUrl,
+    data: {
+      newTrip: JSON.stringify(newTrip),
+      jsonPath: JSON.stringify(pathToSave),
+      altitude: altToSave ? JSON.stringify(altToSave) : '',
+      timestamps: timeToSave ? JSON.stringify(timeToSave) : '',
+      fromApp: 'false'
+    },
+    success: onSaveSuccess, error: onSaveError
+  });
+  {% else %}
+  if (!currentRoute || currentRoute.length < 2) {
+    alert('{{ pleaseWaitRoute|default("Please wait for the route to load.") }}');
+    document.getElementById('btnSave').disabled = false;
+    document.getElementById('btnSaveContinue').disabled = false;
+    return;
+  }
+  newTrip.details = routeDetails;
+  $.post({
+    url: plan_uuid ? savePlanURL : saveURL,
+    data: { jsonPath: JSON.stringify(currentRoute), newTrip: JSON.stringify(newTrip), fromApp: 'false' },
+    success: onSaveSuccess, error: onSaveError
+  });
+  {% endif %}
+}
+</script>
+
+{% if vehicle_type in ('train', 'metro', 'tram') %}
+{% include "includes/trainset_builder_modal.html" %}
+{% endif %}
+
+{% endblock %}

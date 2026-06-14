@@ -835,6 +835,15 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
     )
 
     create_trip(trip)
+    tag_ids = [int(t) for t in (newTrip.get("tag_ids") or []) if str(t).isdigit()]
+    if tag_ids:
+        with pg_session() as pg:
+            for tag_id in tag_ids:
+                pg.execute(
+                    "INSERT INTO tags_associations (tag_id, trip_id)"
+                    " VALUES (:tag_id, :trip_id) ON CONFLICT DO NOTHING",
+                    {"tag_id": tag_id, "trip_id": trip.trip_id},
+                )
     return trip
 
 
@@ -1303,9 +1312,15 @@ def new_auto(username):
     )
 
 
+@app.route("/u/<username>/compose/<vehicle_type>")
+@login_required
+def compose(username, vehicle_type):
+    return new(username, vehicle_type, template="compose.html")
+
+
 @app.route("/u/<username>/new/<vehicle_type>")
 @login_required
-def new(username, vehicle_type):
+def new(username, vehicle_type, template="new.html"):
     if vehicle_type == "train":
         manual_origin = lang[session["userinfo"]["lang"]]["manOrigin"]
         new_trip = lang[session["userinfo"]["lang"]]["newTripTrain"]
@@ -1500,7 +1515,7 @@ def new(username, vehicle_type):
         )
 
     return render_template(
-        "new.html",
+        template,
         title=new_trip,
         username=username,
         **lang[session["userinfo"]["lang"]],

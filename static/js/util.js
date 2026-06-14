@@ -577,6 +577,9 @@ function toRouting(data, routingUrl, type){
     newTrip["fr24_id"] = window.FR24["fr24_id"];
     newTrip["fr24_duration"] = window.FR24["fr24_duration"];
   }
+  // Collect selected tag IDs from the tag chip list
+  newTrip["tag_ids"] = Array.from(document.querySelectorAll('#tagList [data-tag-id]'))
+    .map(el => el.dataset.tagId);
   if(
       newTrip["destinationStation"]
       && newTrip["originStation"]
@@ -1081,37 +1084,61 @@ function getTextColor(bgColor) {
   return luminance > 0.5 ? '#000000' : '#FFFFFF';
 }
 
-function setupTagAutocomplete(url, new_trip) {
+function makeTagChip(tag) {
+  return $('<span>')
+    .addClass('tag-blob')
+    .attr('data-tag-id', tag.uid)
+    .css('background-color', tag.colour)
+    .css('color', getTextColor(tag.colour))
+    .text(tag.name)
+    .on('click', function(event) {
+      event.stopPropagation();
+      $(this).remove();
+    });
+}
+
+// setupTagAutocomplete(url, tripId=null)
+// tripId: when editing, pre-populate chips for tags already attached to this trip.
+// Returns a function getOriginalTagIds() so callers can diff for edit-mode sync.
+function setupTagAutocomplete(url, tripId) {
   let tags = [];
+  let originalTagIds = new Set();
 
   fetch(url)
     .then(response => response.json())
     .then(data => {
-        tags = data.tags;
+      tags = data.tags;
+      if (tripId != null) {
+        tags.filter(t => {
+          const ids = t.trip_ids ? t.trip_ids.split(',') : [];
+          return ids.includes(String(tripId));
+        }).forEach(t => {
+          $('#tagList').append(makeTagChip(t));
+          originalTagIds.add(String(t.uid));
+        });
+      }
     })
     .catch(error => console.error('Failed to fetch tags:', error));
-    $("#tagSearchInput").autocomplete({
-        source: function(request, response) {
-            const results = $.ui.autocomplete.filter(tags.map(tag => tag.name), request.term);
-            response(results);
-        },
-        select: function(event, ui) {
-            const selectedTag = tags.find(tag => tag.name === ui.item.value);
-            if (selectedTag) {
-              const span = $('<span>')
-                .addClass('tag-blob')
-                .css('background-color', selectedTag.colour)
-                .css('color', getTextColor(selectedTag.colour))
-                .html(`${selectedTag.name}`)
-                .on('click', function(event) {
-                    event.stopPropagation();
-                    $(this).parent().remove();
-                });
-              $('#tagList').append(span);
-          }
-            return false; 
-        }
-    });
+
+  $("#tagSearchInput").autocomplete({
+    source: function(request, response) {
+      const alreadyIn = new Set(
+        Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(el => el.dataset.tagId)
+      );
+      const results = $.ui.autocomplete.filter(
+        tags.filter(t => !alreadyIn.has(String(t.uid))).map(t => t.name),
+        request.term
+      );
+      response(results);
+    },
+    select: function(event, ui) {
+      const selectedTag = tags.find(t => t.name === ui.item.value);
+      if (selectedTag) $('#tagList').append(makeTagChip(selectedTag));
+      return false;
+    }
+  });
+
+  return { getOriginalTagIds: () => originalTagIds };
 }
 
 

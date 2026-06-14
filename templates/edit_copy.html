@@ -351,6 +351,10 @@
             <label for="notes">{{notes}}</label>
             <input type="text" name="notes" id="notes" placeholder="{{notes}}" value="{{tripNotes}}">
 
+            <label>{{tags|default('Tags')}}</label>
+            <input type="text" id="tagSearchInput" placeholder="{{select_tag|default('Add a tag…')}}" class="form-control form-control-sm" autocomplete="off" style="margin-bottom:.4rem;">
+            <div id="tagList" class="d-flex flex-wrap gap-1"></div>
+
         </fieldset>
 
         <!-- Price Details Subgroup -->
@@ -1660,20 +1664,41 @@
                     location.href = "{{ url_for('plan_view', username=username, plan_uuid=plan_uuid) }}";
                     return;
                     {% endif %}
-                    var nextUrl = new URLSearchParams(window.location.search).get('next');
-                    var nextAllowed = false;
-                    if (nextUrl) {
-                        try {
-                            var resolved = new URL(nextUrl, window.location.origin);
-                            nextAllowed = resolved.origin === window.location.origin;
-                        } catch(e) {}
+                    function doRedirect() {
+                        var nextUrl = new URLSearchParams(window.location.search).get('next');
+                        var nextAllowed = false;
+                        if (nextUrl) {
+                            try {
+                                var resolved = new URL(nextUrl, window.location.origin);
+                                nextAllowed = resolved.origin === window.location.origin;
+                            } catch(e) {}
+                        }
+                        if (nextAllowed) location.href = nextUrl;
+                        else if (redirectToProjects) location.href = "{{ url_for('dynamic_trips', time='projects', username=username) }}";
+                        else location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}";
                     }
-                    if (nextAllowed) {
-                        location.href = nextUrl;
-                    } else if (redirectToProjects) {
-                        location.href = "{{ url_for('dynamic_trips', time='projects', username=username) }}";
+                    // Sync tags (edit mode only — copy creates a new unknown trip id)
+                    if (!copy && typeof _tagSetup !== 'undefined') {
+                        var tripId = location.pathname.split('/').pop();
+                        var currentIds = new Set(
+                            Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(el => el.dataset.tagId)
+                        );
+                        var orig = _tagSetup.getOriginalTagIds();
+                        var toAdd = [...currentIds].filter(id => !orig.has(id));
+                        var toRemove = [...orig].filter(id => !currentIds.has(id));
+                        var ops = [
+                            ...toAdd.map(id => fetch('{{ url_for("attach_tag", username=username) }}', {
+                                method: 'POST', headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({tag_id: id, trip_ids: [tripId]})
+                            })),
+                            ...toRemove.map(id => fetch('{{ url_for("detach_tag", username=username) }}', {
+                                method: 'POST', headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({tag_id: id, trip_ids: [tripId]})
+                            }))
+                        ];
+                        Promise.all(ops).finally(doRedirect);
                     } else {
-                        location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}";
+                        doRedirect();
                     }
                 },
                 fail: function () {
@@ -1770,6 +1795,10 @@
     {% if not plan_uuid %}
     fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}", {{ tripTicketId }});
     {% endif %}
+    var _tagSetup = setupTagAutocomplete(
+        '{{ url_for("get_all_tags", username=username) }}',
+        {{ tripId if edit_copy_type == 'edit' else 'null' }}
+    );
 
     var editCopyType = "{{ edit_copy_type }}";
     var precision = "{{ precision }}";

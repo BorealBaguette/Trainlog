@@ -320,9 +320,9 @@
           <input type="number" class="form-control" id="co2Override" name="co2Override" min="0" step="0.1" placeholder="{{co2OverridePlaceholder}}">
         </div>
         {% endif %}
-       <!-- <br>
-        <input type="text" id="tagSearchInput" placeholder="{{select_tag}}" class="form-control" autocomplete="off">
-        <div id="tagList" class="d-flex flex-wrap"></div> -->
+        <br>
+        <input type="text" id="tagSearchInput" placeholder="{{select_tag}}" class="form-control" autocomplete="off" style="margin-bottom:.4rem;">
+        <div id="tagList" class="d-flex flex-wrap gap-1"></div>
       </div>
 
       <br/>
@@ -707,7 +707,7 @@
   {% if not plan_uuid %}
   fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}");
   {% endif %}
-  //setupTagAutocomplete(`{{ url_for("get_all_tags", username=username) }}`);
+  setupTagAutocomplete(`{{ url_for("get_all_tags", username=username) }}`);
 
 
   if(!CSS.supports("contain:strict")) {
