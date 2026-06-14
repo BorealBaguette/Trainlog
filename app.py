@@ -2662,6 +2662,17 @@ def convert_to_user_currency(amount, base_currency, target_currency, date):
         target_currency=target_currency,
         date=date,
     )
+    
+@app.route("/convert_currency", methods=["POST"])
+def convert_currency():
+    data = request.get_json()
+    amount = data.get("amount")
+    base_currency = data.get("base_currency")
+    target_currency = data.get("target_currency")
+    date = data.get("date")
+
+    converted_amount = convert_to_user_currency(amount, base_currency, target_currency, date)
+    return jsonify({"converted_amount": converted_amount})
 
 
 @app.route("/u/<username>/ticket_list")
