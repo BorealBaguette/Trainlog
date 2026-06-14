@@ -10898,6 +10898,21 @@ def get_flag(code):
     return resp
 
 
+@app.route("/<path:subpath>", methods=["GET", "POST", "PUT", "DELETE", "PATCH"])
+def user_shortcut(subpath):
+    user = getUser()
+    qs = request.query_string.decode("latin-1")
+    if user != "public":
+        target = f"/u/{user}/{subpath}"
+        if qs:
+            target = f"{target}?{qs}"
+        return redirect(target, 307)
+    next_url = f"/{subpath}"
+    if qs:
+        next_url = f"{next_url}?{qs}"
+    return redirect(url_for("login") + "?" + urllib.parse.urlencode({"next": next_url}), 302)
+
+
 def ensure_auth_db_columns():
     """Idempotently add columns to the existing auth.db `user` table.
 
