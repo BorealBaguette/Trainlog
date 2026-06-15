@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import json
 import os
 import sqlite3
 import subprocess
@@ -21,6 +22,11 @@ SIMPLE_DBS = ["auth.db"]
 
 # Max parameters per SQLite query (keep below 999)
 CHUNK_SIZE = 900
+
+# History of recent pg_dump runs (duration + dump size), used to estimate how
+# long the next dump will take and to render a live progress bar.
+PG_HISTORY_FILE = BASE_BACKUP_DIR / "pg_dump_history.json"
+PG_HISTORY_KEEP = 10
 
 # ─── Progress Bar Class ─────────────────────────────────────────────────────────
 
@@ -212,6 +218,104 @@ def backup_simple(db_name: str, dst_folder: Path):
 # ─── PostgreSQL backup ──────────────────────────────────────────────────────────
 
 
+def _format_size(num_bytes: float) -> str:
+    """Format a byte count as MB/GB."""
+    mb = num_bytes / (1024 * 1024)
+    if mb >= 1024:
+        return f"{mb / 1024:.2f} GB"
+    return f"{mb:.1f} MB"
+
+
+def _format_duration(seconds: float) -> str:
+    """Format seconds into a short human-readable string."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    elif seconds < 3600:
+        return f"{int(seconds // 60)}m {int(seconds % 60)}s"
+    else:
+        return f"{int(seconds // 3600)}h {int((seconds % 3600) // 60)}m"
+
+
+def load_pg_history() -> list:
+    """Load the recorded pg_dump runs (newest last). Tolerates a missing/corrupt file."""
+    try:
+        with open(PG_HISTORY_FILE) as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        pass
+    return []
+
+
+def save_pg_run(duration_sec: float, size_bytes: int):
+    """Append a completed run and keep only the most recent PG_HISTORY_KEEP entries."""
+    history = load_pg_history()
+    history.append(
+        {
+            "timestamp": datetime.now(ZoneInfo("Europe/Oslo")).isoformat(timespec="seconds"),
+            "duration_sec": round(duration_sec, 2),
+            "size_bytes": int(size_bytes),
+        }
+    )
+    history = history[-PG_HISTORY_KEEP:]
+    PG_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(PG_HISTORY_FILE, "w") as f:
+        json.dump(history, f, indent=2)
+
+
+def estimate_pg(history: list):
+    """Estimate (final_size_bytes, sec_per_byte) for the next dump from past runs.
+
+    Final size is taken from the most recent run (best predictor of a growing DB);
+    sec_per_byte is a rough baseline averaged over all recorded runs. Returns
+    (None, None) when there's no usable history yet.
+    """
+    runs = [r for r in history if r.get("size_bytes")]
+    if not runs:
+        return None, None
+
+    est_size = runs[-1]["size_bytes"]
+    total_dur = sum(r["duration_sec"] for r in runs)
+    total_size = sum(r["size_bytes"] for r in runs)
+    sec_per_byte = total_dur / total_size if total_size else None
+    return est_size, sec_per_byte
+
+
+def _display_pg_progress(current, est_size, sec_per_byte, start, width=40, final=False):
+    """Render the live pg_dump progress line based on the growing dump file size."""
+    elapsed = time.time() - start
+
+    if est_size:
+        frac = 1.0 if final else min(current / est_size, 1.0)
+        filled = int(width * frac)
+        bar = "█" * filled + "▒" * (width - filled)
+        pct = 100.0 if final else min(frac * 100, 99.9)
+
+        if final:
+            tail = f" | Done in {_format_duration(elapsed)}"
+        elif sec_per_byte and current < est_size:
+            remaining = (est_size - current) * sec_per_byte
+            tail = f" | ETA: {_format_duration(remaining)}"
+        else:
+            tail = " | finishing..."
+
+        line = (
+            f"\rBacking up PostgreSQL |{bar}| {pct:5.1f}% "
+            f"({_format_size(current)} / ~{_format_size(est_size)}){tail}"
+        )
+    else:
+        # First run (no history): we can't estimate completion, just show progress.
+        line = (
+            f"\rBacking up PostgreSQL | {_format_size(current)} written "
+            f"| {_format_duration(elapsed)}"
+        )
+
+    print(line.ljust(90), end="", flush=True)
+    if final:
+        print()
+
+
 def backup_postgres(dst_folder: Path):
     """Dump the PostgreSQL database (trips, paths, tickets, tags, reference data,
     finance, meta, ...) to a compressed custom-format file.
@@ -220,6 +324,10 @@ def backup_postgres(dst_folder: Path):
     container named by POSTGRES_HOST) so the client version always matches the
     server and it works regardless of the current working directory.
     Restore with: pg_restore --clean --if-exists -U <user> -d <db> < trainlog_pg.dump
+
+    The duration and resulting dump size of each run are recorded in
+    PG_HISTORY_FILE, so the next run can show a live progress bar / ETA derived
+    from a rough sec/MB baseline and the dump file's current size.
     """
     db = os.environ.get("POSTGRES_DB", "postgres")
     user = os.environ.get("POSTGRES_USER", "trainlog")
@@ -228,8 +336,20 @@ def backup_postgres(dst_folder: Path):
     out = dst_folder / "trainlog_pg.dump"
     print(f"Backing up PostgreSQL database '{db}' -> {out}")
 
+    est_size, sec_per_byte = estimate_pg(load_pg_history())
+    if est_size:
+        eta = sec_per_byte * est_size if sec_per_byte else None
+        eta_str = f", ~{_format_duration(eta)}" if eta else ""
+        print(
+            f"   Estimated from history: ~{_format_size(est_size)}{eta_str} "
+            f"(based on last run / sec-per-MB baseline)"
+        )
+    else:
+        print("   No history yet — this run will calibrate future estimates.")
+
+    start = time.time()
     with open(out, "wb") as f:
-        subprocess.run(
+        proc = subprocess.Popen(
             [
                 "docker", "exec", "-i", container,
                 "pg_dump",
@@ -241,9 +361,31 @@ def backup_postgres(dst_folder: Path):
                 "-n", "meta",
             ],
             stdout=f,
-            check=True,
         )
-    print("✅ PostgreSQL backup complete")
+
+        # Poll the growing dump file to drive the progress bar.
+        while proc.poll() is None:
+            try:
+                current = out.stat().st_size
+            except FileNotFoundError:
+                current = 0
+            _display_pg_progress(current, est_size, sec_per_byte, start)
+            time.sleep(0.5)
+
+        rc = proc.wait()
+
+    if rc != 0:
+        raise subprocess.CalledProcessError(rc, "pg_dump")
+
+    duration = time.time() - start
+    final_size = out.stat().st_size
+    _display_pg_progress(final_size, est_size or final_size, sec_per_byte, start, final=True)
+
+    save_pg_run(duration, final_size)
+    print(
+        f"✅ PostgreSQL backup complete — {_format_size(final_size)} "
+        f"in {_format_duration(duration)}"
+    )
 
 
 # ─── Main Script ────────────────────────────────────────────────────────────────
