@@ -10101,7 +10101,6 @@ def generate_visited_squares_geojson(username):
     land_squares = set()
     air_squares = set()
     visited_squares = {}
-    current_utc_datetime = datetime.now()
 
     with pg_session() as pg:
         trips = pg.execute(
@@ -10110,9 +10109,12 @@ def generate_visited_squares_geojson(username):
                 FROM trips
                 WHERE user_id = :user_id
                   AND NOT is_project
-                  AND COALESCE(utc_start_datetime, start_datetime) < :now
+                  AND (
+                        COALESCE(utc_start_datetime, start_datetime) IS NULL
+                        OR NOW() > COALESCE(utc_start_datetime, start_datetime)
+                      )
             """,
-            {"user_id": get_user_id(username), "now": current_utc_datetime},
+            {"user_id": get_user_id(username)},
         ).fetchall()
 
         for trip in trips:
