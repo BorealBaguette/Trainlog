@@ -160,7 +160,7 @@ function renderGrid() {
     const d      = new Date(year, 0, 1);
     const monthCols = {}; // month -> week column where it starts
     while (d.getFullYear() === +year) {
-      const key = d.toISOString().slice(0, 10);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
       const col = Math.floor((cells.length) / 7);
       const mon = d.getMonth();
       if (!(mon in monthCols)) monthCols[mon] = col;
