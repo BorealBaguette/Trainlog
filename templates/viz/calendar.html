@@ -141,22 +141,23 @@ function isoDow(date) {
   return (date.getDay() + 6) % 7;
 }
 
-function buildCalendar(data) {
-  datasets.travel = {};
-  data.forEach(d => { datasets.travel[d.day] = d; });
+const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MON_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-  // Summary stats
-  const totalTrips = data.reduce((s, d) => s + d.trips, 0);
-  const totalKm    = data.reduce((s, d) => s + d.km, 0);
-  const years      = [...new Set(data.map(d => d.day.slice(0,4)))].sort();
-  const activeDays = data.length;
+function renderSummary(data) {
+  // Totals always from travel data so log-date gaps don't affect them
+  const travel     = Object.values(datasets.travel);
+  const totalTrips = travel.reduce((s, d) => s + d.trips, 0);
+  const totalKm    = travel.reduce((s, d) => s + d.km, 0);
+  const activeDays = travel.length;
 
+  // Busiest stats from the active dataset
+  const years    = [...new Set(data.map(d => d.day.slice(0, 4)))].sort();
   const busyYear = years.reduce((best, y) => {
-    const n = data.filter(d => d.day.startsWith(y)).reduce((s,d) => s+d.trips, 0);
-    return n > (best.n||0) ? {y, n} : best;
+    const n = data.filter(d => d.day.startsWith(y)).reduce((s, d) => s + d.trips, 0);
+    return n > (best.n || 0) ? { y, n } : best;
   }, {}).y;
 
-  const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
   const byDow = {};
   data.forEach(d => {
     const [y, m, day] = d.day.split('-').map(Number);
@@ -164,23 +165,25 @@ function buildCalendar(data) {
     byDow[dow] = (byDow[dow] || 0) + d.trips;
   });
   const busyDow = Object.entries(byDow).sort((a, b) => b[1] - a[1])[0];
-  const busyWeekday = busyDow ? DOW_NAMES[+busyDow[0]] : '—';
 
-  const MON_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   const byMon = {};
   data.forEach(d => { const m = +d.day.slice(5, 7) - 1; byMon[m] = (byMon[m] || 0) + d.trips; });
   const busyMon = Object.entries(byMon).sort((a, b) => b[1] - a[1])[0];
-  const busyMonth = busyMon ? MON_NAMES[+busyMon[0]] : '—';
 
   document.getElementById('summary').innerHTML = [
-    { val: totalTrips.toLocaleString(), lbl: 'Total trips' },
-    { val: Math.round(totalKm).toLocaleString() + ' km', lbl: 'Total distance' },
-    { val: activeDays.toLocaleString(), lbl: 'Days with travel' },
-    { val: busyYear || '—', lbl: 'Busiest year' },
-    { val: busyWeekday, lbl: 'Busiest weekday' },
-    { val: busyMonth, lbl: 'Busiest month' },
+    { val: totalTrips.toLocaleString(),                   lbl: 'Total trips' },
+    { val: Math.round(totalKm).toLocaleString() + ' km',  lbl: 'Total distance' },
+    { val: activeDays.toLocaleString(),                   lbl: 'Days with travel' },
+    { val: busyYear || '—',                               lbl: 'Busiest year' },
+    { val: busyDow ? DOW_NAMES[+busyDow[0]] : '—',       lbl: 'Busiest weekday' },
+    { val: busyMon ? MON_NAMES[+busyMon[0]] : '—',       lbl: 'Busiest month' },
   ].map(s => `<div class="stat"><div class="val">${s.val}</div><div class="lbl">${s.lbl}</div></div>`).join('');
+}
 
+function buildCalendar(data) {
+  datasets.travel = {};
+  data.forEach(d => { datasets.travel[d.day] = d; });
+  renderSummary(data);
   renderGrid();
   renderLegend();
 }
@@ -351,13 +354,14 @@ document.querySelectorAll('#by-toggle .toggle-btn').forEach(btn => {
     if (newBy === byMode) return;
     byMode = newBy;
     document.querySelectorAll('#by-toggle .toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const redraw = () => { renderSummary(Object.values(datasets[byMode])); renderGrid(); };
     if (Object.keys(datasets[byMode]).length) {
-      renderGrid();
+      redraw();
     } else {
       fetch(DATA_URL + '?by=' + byMode).then(r => r.json()).then(data => {
         datasets[byMode] = {};
         data.forEach(d => { datasets[byMode][d.day] = d; });
-        renderGrid();
+        redraw();
       });
     }
   });
