@@ -8,7 +8,7 @@ from app.py after fetchTripsPaths is defined.
 import json
 from datetime import datetime
 
-from flask import Blueprint, jsonify, render_template, session, url_for
+from flask import Blueprint, jsonify, render_template, request, session, url_for
 
 from src.pg import pg_session
 from src.utils import get_user_id, lang, login_required
@@ -130,11 +130,28 @@ def heatmap_geojson(username):
 @bp.route("/u/<username>/api/calendar.json")
 @login_required
 def calendar_api(username):
-    """Per-day trip count and km for the calendar heatmap."""
+    """Per-day trip count and km for the calendar heatmap.
+
+    ?by=travel (default) — grouped by travel date (utc_start_datetime / start_datetime)
+    ?by=log             — grouped by the date the trip was created (created)
+    """
     user_id = get_user_id(username)
-    with pg_session() as pg:
-        rows = pg.execute(
+    by = request.args.get("by", "travel")
+
+    if by == "log":
+        sql = """
+            SELECT DATE(created) AS day,
+                   COUNT(*)                      AS trip_count,
+                   COALESCE(SUM(trip_length), 0) / 1000.0 AS total_km
+            FROM   trips
+            WHERE  user_id = :user_id
+              AND  created IS NOT NULL
+              AND  NOT COALESCE(is_project, FALSE)
+            GROUP  BY day
+            ORDER  BY day
             """
+    else:
+        sql = """
             SELECT DATE(COALESCE(utc_start_datetime, start_datetime)) AS day,
                    COUNT(*)                      AS trip_count,
                    COALESCE(SUM(trip_length), 0) / 1000.0 AS total_km
@@ -145,9 +162,9 @@ def calendar_api(username):
               AND  NOT COALESCE(is_project, FALSE)
             GROUP  BY day
             ORDER  BY day
-            """,
-            {"user_id": user_id},
-        ).fetchall()
+            """
+    with pg_session() as pg:
+        rows = pg.execute(sql, {"user_id": user_id}).fetchall()
     return jsonify([
         {"day": str(r["day"]), "trips": r["trip_count"],
          "km": round(float(r["total_km"] or 0), 1)}
