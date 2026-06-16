@@ -921,6 +921,49 @@ for (var _opt of document.getElementById('currency').options) {
 // ── Tags ──
 setupTagAutocomplete('{{ url_for("get_all_tags", username=username) }}');
 
+// ── Prefill from "Save & continue": origin = previous leg's destination,
+//    departure timing carried forward from the previous leg's arrival. ──
+(function() {
+  var qp = new URLSearchParams(window.location.search);
+  var prevDest = qp.get('prevDest');
+  if (prevDest) {
+    try {
+      var entry = JSON.parse(prevDest);
+      if (Array.isArray(entry) && entry.length === 2 && Array.isArray(entry[0])) {
+        var label = entry[1];
+        globalStationDict[label] = entry;
+        $('#originStation').val(label);
+        document.getElementById('dot-origin').classList.remove('resolved');
+        onStationSelected('origin', entry, 'dot-origin');
+        {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
+        destEntry = entry; // single-point types reuse origin as destination
+        {% endif %}
+      }
+    } catch (e) { /* malformed prevDest — ignore */ }
+  }
+
+  var prevEndDate = qp.get('prevEndDate');
+  var prevPlanDay = qp.get('prevPlanDay');
+  if (prevEndDate) {
+    document.getElementById('prec-precise').checked = true;
+    document.getElementById('newTripStartDate').value = prevEndDate;
+    document.getElementById('newTripStartTime').value = qp.get('prevEndTime') || '';
+    document.getElementById('newTripEndDate').value = prevEndDate;
+    document.getElementById('onlyDate').value = prevEndDate;
+    updateTimingPanel();
+  }
+  {% if plan_uuid %}
+  else if (prevPlanDay) {
+    document.getElementById('prec-relative').checked = true;
+    document.getElementById('planStartDay').value = prevPlanDay;
+    document.getElementById('planEndDay').value = prevPlanDay;
+    var prevPlanTime = qp.get('prevPlanTime');
+    if (prevPlanTime) document.getElementById('planStartTime').value = prevPlanTime;
+    updateTimingPanel();
+  }
+  {% endif %}
+})();
+
 // ── Save (also exposed as saveTrip() so routing.js sidebar button works) ──
 function saveTrip(continueTrip) { composeSave(!!continueTrip); }
 
@@ -983,14 +1026,28 @@ function composeSave(continueTrip) {
   document.getElementById('btnSaveContinue').disabled = true;
 
   function onSaveSuccess() {
-    if (plan_uuid) {
-      if (continueTrip) {
-        location.href = '{{ url_for("compose", username=username, vehicle_type="__VT__") }}'.replace('__VT__', vehicle_type) +
-          '?plan=' + encodeURIComponent(plan_uuid) +
-          '&prevDest=' + encodeURIComponent(JSON.stringify(newTrip.destinationStation));
-      } else {
-        location.href = '/u/{{ username }}/plan/' + encodeURIComponent(plan_uuid);
+    if (continueTrip) {
+      // Reopen the compose form prefilled from this leg: origin = this destination,
+      // departure timing carried forward from this leg's arrival.
+      var contUrl = '{{ url_for("compose", username=username, vehicle_type="__VT__") }}'.replace('__VT__', vehicle_type) +
+        '?prevDest=' + encodeURIComponent(JSON.stringify(newTrip.destinationStation));
+      if (plan_uuid) {
+        contUrl += '&plan=' + encodeURIComponent(plan_uuid);
       }
+      if (prec === 'preciseDates') {
+        contUrl += '&prevEndDate=' + encodeURIComponent(newTrip.newTripEndDate || '') +
+                   '&prevEndTime=' + encodeURIComponent(newTrip.newTripEndTime || '');
+      } else if (prec === 'onlyDate') {
+        contUrl += '&prevEndDate=' + encodeURIComponent(newTrip.onlyDate || '');
+      } else if (prec === 'relative') {
+        contUrl += '&prevPlanDay=' + encodeURIComponent(newTrip.planEndDay || '') +
+                   '&prevPlanTime=' + encodeURIComponent(newTrip.planEndTime || '');
+      }
+      location.href = contUrl;
+      return;
+    }
+    if (plan_uuid) {
+      location.href = '/u/{{ username }}/plan/' + encodeURIComponent(plan_uuid);
     } else {
       var isProject = prec === 'unknown' ? newTrip.unknownType === 'future'
         : prec === 'preciseDates' && newTrip.newTripStart ? new Date() < new Date(newTrip.newTripStart) : false;
