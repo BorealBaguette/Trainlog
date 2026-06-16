@@ -104,33 +104,33 @@ def available_bins():
 _HEAVY_SQL = """
 CREATE UNLOGGED TABLE hex_agg_tmp AS
 WITH base AS (
-    SELECT t.user_id, t.trip_type, p.geom
+    SELECT t.user_id, t.trip_type, t.trip_id, p.geom
     FROM paths p JOIN trips t ON t.trip_id = p.trip_id
     WHERE NOT (t.is_project AND t.start_datetime IS NULL)
 ),
 pts AS (
-    SELECT user_id, trip_type,
+    SELECT user_id, trip_type, trip_id,
            (ST_DumpPoints(ST_SnapToGrid(ST_Segmentize(ST_Simplify(geom, 0.01), 0.02), 0.02))).geom AS g
     FROM base WHERE trip_type NOT IN ('air', 'helicopter')
     UNION ALL
-    SELECT user_id, trip_type,
+    SELECT user_id, trip_type, trip_id,
            (ST_DumpPoints(ST_SnapToGrid(ST_Simplify(geom, 0.01), 0.02))).geom AS g
     FROM base WHERE trip_type IN ('air', 'helicopter')
 ),
 merc AS (
-    SELECT user_id, trip_type,
+    SELECT user_id, trip_type, trip_id,
            ST_X(g) * 6378137.0 * pi() / 180.0 AS x,
            ln(tan(pi() / 4 + ST_Y(g) * pi() / 360.0)) * 6378137.0 AS y
     FROM pts WHERE g IS NOT NULL AND ST_Y(g) BETWEEN -85 AND 85
 ),
 ax AS (
-    SELECT user_id, trip_type,
+    SELECT user_id, trip_type, trip_id,
            (2.0 / 3.0 * x) / :size AS qf,
            ((-1.0 / 3.0) * x + sqrt(3.0) / 3.0 * y) / :size AS rf
     FROM merc
 ),
 rnd AS (
-    SELECT user_id, trip_type, qf, rf,
+    SELECT user_id, trip_type, trip_id, qf, rf,
         round(qf) AS rx, round(-qf - rf) AS ry, round(rf) AS rz,
         abs(round(qf) - qf) AS dx,
         abs(round(-qf - rf) - (-qf - rf)) AS dy,
@@ -138,12 +138,12 @@ rnd AS (
     FROM ax
 ),
 hexed AS (
-    SELECT user_id, trip_type,
+    SELECT user_id, trip_type, trip_id,
         CASE WHEN dx > dy AND dx > dz THEN -ry - rz ELSE rx END AS qi,
         CASE WHEN (dx > dy AND dx > dz) OR (dy > dz) THEN rz ELSE -rx - ry END AS ri
     FROM rnd
 )
-SELECT qi, ri, trip_type, user_id, count(*)::int AS cnt
+SELECT qi, ri, trip_type, user_id, count(DISTINCT trip_id)::int AS cnt
 FROM hexed GROUP BY qi, ri, trip_type, user_id
 """
 

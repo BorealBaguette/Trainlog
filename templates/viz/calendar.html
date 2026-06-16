@@ -36,29 +36,30 @@
 
   .cal-wrap { display: flex; gap: 6px; }
   .dow-labels {
-    display: grid; grid-template-rows: 20px repeat(7, 13px); gap: 2px;
-    font-size: 0.7em; color: #4a6278; padding-top: 0; width: 24px;
-    align-items: center;
+    display: grid; gap: 2px;
+    font-size: 0.7em; color: #4a6278; width: 24px;
+    align-items: center; flex-shrink: 0;
   }
-  .dow-labels span { line-height: 13px; }
 
   .cal-grid-wrap { overflow-x: auto; }
   .month-labels {
     display: flex; font-size: 0.72em; color: #4a6278;
-    margin-bottom: 3px; padding-left: 0;
+    margin-bottom: 3px;
   }
-  .month-labels span { display: inline-block; }
+  .month-labels span { display: inline-block; flex-shrink: 0; }
 
   .cal-grid {
     display: grid;
-    grid-template-rows: repeat(7, 13px);
     grid-auto-flow: column;
     gap: 2px;
   }
   .cell {
-    width: 13px; height: 13px; border-radius: 2px;
+    border-radius: 2px;
     cursor: default; transition: opacity 0.1s;
-    position: relative;
+  }
+
+  @media (max-width: 640px) {
+    #page { padding: 70px 12px 40px; }
   }
   .cell:hover { opacity: 0.75; outline: 1px solid #e8edf3; outline-offset: 1px; cursor: pointer; }
   .cell.empty { background: transparent !important; pointer-events: none; }
@@ -145,23 +146,92 @@ function buildCalendar(data) {
   renderLegend();
 }
 
-function renderGrid() {
-  const cal = document.getElementById('calendar');
-  cal.innerHTML = '';
+const CELL_GAP = 2;
 
-  const years = [...new Set(Object.keys(allData).map(d => d.slice(0,4)))].sort().reverse();
+function cellSize(numWeeks) {
+  const page  = document.getElementById('page');
+  const style = getComputedStyle(page);
+  const content = page.clientWidth
+    - parseFloat(style.paddingLeft)
+    - parseFloat(style.paddingRight)
+    - 30; // 24px dow-labels + 6px gap between dow-labels and grid
+  return Math.max(8, Math.floor((content - (numWeeks - 1) * CELL_GAP) / numWeeks));
+}
+
+function renderHalf(container, label, cells, numWeeks, monthCols, colOffset) {
+  const sz  = cellSize(numWeeks);
+  const colW = sz + CELL_GAP;
+
+  // Month labels
+  const labelRow = document.createElement('div');
+  labelRow.className = 'month-labels';
+  for (let w = 0; w < numWeeks; w++) {
+    const span = document.createElement('span');
+    span.style.width = colW + 'px';
+    const mon = Object.entries(monthCols).find(([, c]) => +c - colOffset === w);
+    span.textContent = mon ? MONTHS[+mon[0]] : '';
+    labelRow.appendChild(span);
+  }
+
+  // Cell grid
+  const grid = document.createElement('div');
+  grid.className = 'cal-grid';
+  grid.style.gridTemplateColumns = `repeat(${numWeeks}, ${sz}px)`;
+  grid.style.gridTemplateRows   = `repeat(7, ${sz}px)`;
+  cells.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'cell' + (c ? '' : ' empty');
+    el.style.width  = sz + 'px';
+    el.style.height = sz + 'px';
+    if (c) {
+      el.style.background = PALETTE[level(mode === 'trips' ? c.trips : c.km, mode)];
+      el.dataset.date  = c.date;
+      el.dataset.trips = c.trips;
+      el.dataset.km    = c.km;
+    }
+    grid.appendChild(el);
+  });
+
+  // DOW labels — height matches: one colW row for month header, 7×sz rows for days
+  const dowLabels = document.createElement('div');
+  dowLabels.className = 'dow-labels';
+  dowLabels.style.gridTemplateRows = `${colW}px repeat(7, ${sz}px)`;
+  dowLabels.innerHTML = '<span></span>' + DOW.map(d => `<span style="line-height:${sz}px">${d}</span>`).join('');
+
+  const gridWrap = document.createElement('div');
+  gridWrap.className = 'cal-grid-wrap';
+  gridWrap.appendChild(labelRow);
+  gridWrap.appendChild(grid);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'cal-wrap';
+  wrap.appendChild(dowLabels);
+  wrap.appendChild(gridWrap);
+
+  const block = document.createElement('div');
+  block.className = 'year-block';
+  block.innerHTML = `<div class="year-label">${label}</div>`;
+  block.appendChild(wrap);
+  container.appendChild(block);
+}
+
+function renderGrid() {
+  const cal    = document.getElementById('calendar');
+  cal.innerHTML = '';
+  const isMob  = window.innerWidth < 640;
+
+  const years = [...new Set(Object.keys(allData).map(d => d.slice(0, 4)))].sort().reverse();
 
   years.forEach(year => {
-    const jan1   = new Date(year, 0, 1);
-    const offset = isoDow(jan1); // blank cells before Jan 1
+    const jan1   = new Date(+year, 0, 1);
+    const offset = isoDow(jan1);
 
-    // Build cell list: nulls for offset, then each day of the year
-    const cells  = Array(offset).fill(null);
-    const d      = new Date(year, 0, 1);
-    const monthCols = {}; // month -> week column where it starts
+    const cells     = Array(offset).fill(null);
+    const d         = new Date(+year, 0, 1);
+    const monthCols = {};
     while (d.getFullYear() === +year) {
       const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
-      const col = Math.floor((cells.length) / 7);
+      const col = Math.floor(cells.length / 7);
       const mon = d.getMonth();
       if (!(mon in monthCols)) monthCols[mon] = col;
       cells.push({ date: key, ...(allData[key] || { trips: 0, km: 0 }) });
@@ -170,55 +240,13 @@ function renderGrid() {
     const numWeeks = Math.ceil(cells.length / 7);
     while (cells.length < numWeeks * 7) cells.push(null);
 
-    // Month labels row
-    const labelRow = document.createElement('div');
-    labelRow.className = 'month-labels';
-    for (let w = 0; w < numWeeks; w++) {
-      const span = document.createElement('span');
-      span.style.width = '15px';
-      // find if any month starts in this week
-      const mon = Object.entries(monthCols).find(([,c]) => c === w);
-      span.textContent = mon ? MONTHS[+mon[0]] : '';
-      labelRow.appendChild(span);
+    if (isMob && monthCols[6] !== undefined) {
+      const split = monthCols[6];
+      renderHalf(cal, `${year} · Jan–Jun`, cells.slice(0, split * 7), split, monthCols, 0);
+      renderHalf(cal, `${year} · Jul–Dec`, cells.slice(split * 7), numWeeks - split, monthCols, split);
+    } else {
+      renderHalf(cal, String(year), cells, numWeeks, monthCols, 0);
     }
-
-    // Cell grid
-    const grid = document.createElement('div');
-    grid.className = 'cal-grid';
-    grid.style.gridTemplateColumns = `repeat(${numWeeks}, 13px)`;
-    cells.forEach(c => {
-      const el = document.createElement('div');
-      el.className = 'cell' + (c ? '' : ' empty');
-      if (c) {
-        const val  = mode === 'trips' ? c.trips : c.km;
-        const lv   = level(val, mode);
-        el.style.background = PALETTE[lv];
-        el.dataset.date  = c.date;
-        el.dataset.trips = c.trips;
-        el.dataset.km    = c.km;
-      }
-      grid.appendChild(el);
-    });
-
-    // DOW labels
-    const dowLabels = document.createElement('div');
-    dowLabels.className = 'dow-labels';
-    dowLabels.innerHTML = '<span></span>' + DOW.map(d => `<span>${d}</span>`).join('');
-
-    const wrap = document.createElement('div');
-    wrap.className = 'cal-wrap';
-    const gridWrap = document.createElement('div');
-    gridWrap.className = 'cal-grid-wrap';
-    gridWrap.appendChild(labelRow);
-    gridWrap.appendChild(grid);
-    wrap.appendChild(dowLabels);
-    wrap.appendChild(gridWrap);
-
-    const block = document.createElement('div');
-    block.className = 'year-block';
-    block.innerHTML = `<div class="year-label">${year}</div>`;
-    block.appendChild(wrap);
-    cal.appendChild(block);
   });
 }
 
@@ -260,6 +288,12 @@ document.querySelectorAll('.mode-btn').forEach(btn => {
     renderGrid();
     renderLegend();
   });
+});
+
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => { if (Object.keys(allData).length) renderGrid(); }, 150);
 });
 
 fetch(DATA_URL).then(r => r.json()).then(buildCalendar);

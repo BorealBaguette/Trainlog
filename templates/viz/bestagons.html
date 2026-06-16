@@ -54,13 +54,29 @@ const COLOR_RANGE = [
   [1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]
 ];
 
-let overlay, points = [];
+let overlay, rawTrips = [], points = [];
+
+// For each trip, add at most one point per hexagon cell it passes through,
+// so HexagonLayer counts trips rather than raw GPS points.
+function computePoints(radiusM) {
+  const step = radiusM / 111320; // approximate degrees per metre
+  const pts = [];
+  rawTrips.forEach(t => {
+    const seen = new Set();
+    t.path.forEach(p => {
+      const k = `${Math.round(p[0] / step)},${Math.round(p[1] / step)}`;
+      if (!seen.has(k)) { seen.add(k); pts.push(p); }
+    });
+  });
+  return pts;
+}
 
 function buildLayer() {
   const radius   = Number(document.getElementById('radius').value) * 1000;
   const escale   = Number(document.getElementById('escale').value);
   const coverage = Number(document.getElementById('cov').value) / 100;
   const extruded = document.getElementById('extruded').checked;
+  points = computePoints(radius);
   return new deck.HexagonLayer({
     id: 'hex',
     data: points,
@@ -76,7 +92,7 @@ function buildLayer() {
 }
 
 function refresh() {
-  if (overlay && points.length) overlay.setProps({ layers: [buildLayer()] });
+  if (overlay && rawTrips.length) overlay.setProps({ layers: [buildLayer()] });
 }
 
 ['radius','escale','cov'].forEach(id => {
@@ -113,17 +129,16 @@ MapLibreUtils.initializeMapLibre({
     overlay = new deck.MapboxOverlay({
       interleaved: false, layers: [],
       getTooltip: ({ object }) => object && {
-        html: `<b>${object.elevationValue || object.points?.length || '?'}</b> trip points`,
+        html: `<b>${object.points?.length || '?'}</b> trips`,
         style: { background:'rgba(0,0,0,0.85)', color:'#fff', padding:'6px 8px', borderRadius:'6px' }
       }
     });
     map.addControl(overlay);
 
     fetch(DATA_URL).then(r => r.json()).then(trips => {
-      trips.forEach(t => t.path.forEach(p => points.push(p)));
+      rawTrips = trips;
       overlay.setProps({ layers: [buildLayer()] });
-      document.getElementById('status').textContent =
-        points.length.toLocaleString() + ' points · ' + trips.length + ' trips';
+      document.getElementById('status').textContent = trips.length + ' trips';
       document.querySelector('.spinner-container').style.display = 'none';
     }).catch(() => {
       document.getElementById('status').textContent = 'Failed to load';
