@@ -55,8 +55,8 @@ if (!newTrip) {
     throw new Error('No trip data');
 }
 var fromApp = !!getGetParams().get("fromApp");
+var type = getGetParams().get("type") || newTrip.type;
 
-console.log(newTrip);
 console.log(newTrip);
 
 let origCoord = newTrip.originStation?.[0] ?? [0, 0];
