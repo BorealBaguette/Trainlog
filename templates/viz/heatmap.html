@@ -7,10 +7,11 @@
   #info { position: fixed; top: 80px; left: 12px; z-index: 5;
     background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
     padding: 10px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.85em; }
-  #controls { position: fixed; top: 80px; right: 12px; z-index: 5;
+  #controls { position: fixed; top: 150px; right: 12px; z-index: 5;
     background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
     padding: 12px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.82em; width: 210px;
-    max-height: calc(100vh - 100px); overflow-y: auto; }
+    max-height: calc(100vh - 100px); overflow-y: auto; display: none; }
+  #controls.open { display: block; }
   #controls label { display: block; margin: 8px 0 2px; color: #8fa6bd; }
   #controls input[type=range] { width: 100%; }
   #controls h6 { margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #2a3a4d;
@@ -183,6 +184,22 @@ MapLibreUtils.initializeMapLibre({
   center: [10, 48], zoom: 4,
 }).then(m => {
   map = m;
+
+  class SettingsToggle {
+    onAdd() {
+      this._c = document.createElement('div');
+      this._c.className = 'maplibregl-ctrl maplibregl-ctrl-group';
+      const b = document.createElement('button');
+      b.type = 'button'; b.title = 'Display settings';
+      b.innerHTML = '<i class="fa-solid fa-sliders"></i>';
+      b.onclick = () => document.getElementById('controls').classList.toggle('open');
+      this._c.appendChild(b);
+      return this._c;
+    }
+    onRemove() { this._c.remove(); }
+  }
+  map.addControl(new SettingsToggle(), 'top-right');
+
   map.once('load', () => {
     fetch(DATA_URL).then(r => r.json()).then(geojson => {
       allFeatures = applyGeodesic(geojson.features);
