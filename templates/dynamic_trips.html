@@ -1575,12 +1575,13 @@ $('.deleteButton').off('click').on('click', function() {
             }
         }
     });
-    
 }
+
+const ownsTrips = "{{privateButtons}}" == "True";
 
 function shareTrips(openInNewTab) {
     const isAllPublic = Object.values(checkedTripData).every(trip => trip.visibility === 'public');
-    if(isAllPublic) {
+    if(isAllPublic || !ownsTrips) {
         window.open("{{ url_for('public_trip', tripIds='') }}" + checkedTrips, openInNewTab ? '_blank' : '_self', 'noopener')
         return;
     }
