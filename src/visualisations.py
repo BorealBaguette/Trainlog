@@ -214,7 +214,7 @@ def calendar(username):
     from flask import url_for as _uf
     return render_template(
         "viz/calendar.html", title="Calendar",
-        trips_url=_uf("dynamic_trips", username=username, time="past"),
+        trips_url=_uf("dynamic_trips", username=username, time="trips"),
         **_ctx(username),
     )
 
