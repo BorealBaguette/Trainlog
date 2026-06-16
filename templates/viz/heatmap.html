@@ -1,0 +1,216 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<link href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0d1b2a; }
+  #info { position: fixed; top: 80px; left: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 10px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.85em; }
+  #controls { position: fixed; top: 80px; right: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 12px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.82em; width: 210px;
+    max-height: calc(100vh - 100px); overflow-y: auto; }
+  #controls label { display: block; margin: 8px 0 2px; color: #8fa6bd; }
+  #controls input[type=range] { width: 100%; }
+  #controls h6 { margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #2a3a4d;
+    color: #8fa6bd; text-transform: uppercase; font-size: 0.9em; letter-spacing: 0.04em; font-weight: bold; }
+  .type-row { display: flex; align-items: center; gap: 7px; margin: 4px 0; cursor: pointer; }
+  .type-row input { cursor: pointer; accent-color: var(--tc); }
+  .type-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+</style>
+
+<div class="spinner-container">
+  <div class="lds-spinner">
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="info">
+  <b>Heatmap</b><br>
+  <span id="status">Loading…</span>
+</div>
+
+<div id="controls">
+  <label>Sensitivity: top <span id="sens-val">5</span>% → hot
+    <input type="range" id="sens" min="1" max="99" step="1" value="5">
+  </label>
+  <div id="thresh-info" style="color:#9fb0c3;font-size:0.9em;margin-top:2px;"></div>
+  <label>Glow size: <span id="glow-val">10</span>px
+    <input type="range" id="glow" min="4" max="60" step="2" value="10">
+  </label>
+  <h6>Trip types</h6>
+  <div id="type-filters"></div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<script>
+const DATA_URL = "{{ url_for('viz.heatmap_geojson', username=username) }}";
+
+const TYPE_COLORS = {
+  train: '#52b0fe', tram: '#a2d7ff', metro: '#004595', bus: '#9f4bbb',
+  car: '#a68fcd', cycle: '#6e211a', scooter: '#00d084', funicular: '#6495ed',
+  rail: '#7ec8ff', ski: '#b8e6f0', walk: '#e88c00', air: '#40b91f',
+  ferry: '#1e1e7c', aerialway: '#afcf3b', other: '#888888',
+};
+
+let map, allFeatures = [], activeTypes = new Set();
+let sortedCounts = [];
+
+// Replace 2-point LineStrings with a great-circle arc (50 segments).
+// MapLibre renders lines in Mercator so a straight [A,B] line for a
+// transatlantic flight looks nothing like the actual flight path.
+function geodesicCoords(p1, p2, n = 50) {
+  const R = Math.PI / 180;
+  const [lng1, lat1] = [p1[0] * R, p1[1] * R];
+  const [lng2, lat2] = [p2[0] * R, p2[1] * R];
+  const d = 2 * Math.asin(Math.sqrt(
+    Math.sin((lat2 - lat1) / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin((lng2 - lng1) / 2) ** 2
+  ));
+  if (d < 1e-6) return [p1, p2];
+  const pts = [];
+  for (let i = 0; i <= n; i++) {
+    const f = i / n;
+    const A = Math.sin((1 - f) * d) / Math.sin(d);
+    const B = Math.sin(f * d) / Math.sin(d);
+    const x = A * Math.cos(lat1) * Math.cos(lng1) + B * Math.cos(lat2) * Math.cos(lng2);
+    const y = A * Math.cos(lat1) * Math.sin(lng1) + B * Math.cos(lat2) * Math.sin(lng2);
+    const z = A * Math.sin(lat1) + B * Math.sin(lat2);
+    pts.push([
+      Math.atan2(y, x) / R,
+      Math.atan2(z, Math.sqrt(x * x + y * y)) / R,
+    ]);
+  }
+  return pts;
+}
+
+function applyGeodesic(features) {
+  return features.map(f => {
+    const c = f.geometry.coordinates;
+    if (c.length === 2) {
+      return { ...f, geometry: { type: 'LineString', coordinates: geodesicCoords(c[0], c[1]) } };
+    }
+    return f;
+  });
+}
+
+function buildFrequencyDistribution(features) {
+  const freq = {};
+  features.forEach(f => {
+    const c = f.geometry.coordinates;
+    const s = c[0].map(v => Math.round(v)).join(',');
+    const e = c[c.length - 1].map(v => Math.round(v)).join(',');
+    const key = [s, e].sort().join('→');
+    freq[key] = (freq[key] || 0) + 1;
+  });
+  sortedCounts = Object.values(freq).sort((a, b) => a - b);
+}
+
+function countAtPercentile(p) {
+  if (!sortedCounts.length) return 1;
+  const idx = Math.min(sortedCounts.length - 1, Math.floor(p * sortedCounts.length));
+  return Math.max(1, sortedCounts[idx]);
+}
+
+function applyFilter() {
+  if (!map || !map.getLayer('heat-outer')) return;
+  const filter = ['in', ['get', 'type'], ['literal', [...activeTypes]]];
+  ['heat-outer', 'heat-mid', 'heat-core'].forEach(id => map.setFilter(id, filter));
+}
+
+function updatePaint() {
+  if (!map || !map.getLayer('heat-outer')) return;
+  const pct  = Number(document.getElementById('sens').value) / 100;
+  const glow = Number(document.getElementById('glow').value);
+  const threshold = countAtPercentile(1 - pct);
+  const o = 1 / threshold;
+  document.getElementById('thresh-info').textContent =
+    `≥ ${threshold} trip${threshold === 1 ? '' : 's'} on a corridor → hot`;
+
+  map.setPaintProperty('heat-outer', 'line-width',   glow);
+  map.setPaintProperty('heat-outer', 'line-blur',    glow * 0.6);
+  map.setPaintProperty('heat-outer', 'line-opacity', o * 0.8);
+  map.setPaintProperty('heat-mid',   'line-width',   glow * 0.4);
+  map.setPaintProperty('heat-mid',   'line-blur',    glow * 0.15);
+  map.setPaintProperty('heat-mid',   'line-opacity', o * 1.2);
+  map.setPaintProperty('heat-core',  'line-width',   Math.max(1, glow * 0.12));
+  map.setPaintProperty('heat-core',  'line-opacity', o * 2.5);
+}
+
+function buildTypeFilters(features) {
+  const counts = {};
+  features.forEach(f => {
+    const t = f.properties.type || 'other';
+    counts[t] = (counts[t] || 0) + 1;
+  });
+  const container = document.getElementById('type-filters');
+  container.innerHTML = '';
+  // Sort by count descending
+  Object.entries(counts).sort((a, b) => b[1] - a[1]).forEach(([type, n]) => {
+    activeTypes.add(type);
+    const color = TYPE_COLORS[type] || TYPE_COLORS.other;
+    const row = document.createElement('label');
+    row.className = 'type-row';
+    row.style.setProperty('--tc', color);
+    row.innerHTML = `
+      <input type="checkbox" data-type="${type}" checked>
+      <span class="type-dot" style="background:${color}"></span>
+      <span>${type} <span style="color:#9fb0c3">(${n})</span></span>
+    `;
+    row.querySelector('input').addEventListener('change', e => {
+      if (e.target.checked) activeTypes.add(type); else activeTypes.delete(type);
+      applyFilter();
+    });
+    container.appendChild(row);
+  });
+}
+
+['sens', 'glow'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    document.getElementById(id + '-val').textContent = document.getElementById(id).value;
+    updatePaint();
+  });
+});
+
+MapLibreUtils.initializeMapLibre({
+  container: 'map', tileserver: 'dark-train', useGlobe: false,
+  center: [10, 48], zoom: 4,
+}).then(m => {
+  map = m;
+  map.once('load', () => {
+    fetch(DATA_URL).then(r => r.json()).then(geojson => {
+      allFeatures = applyGeodesic(geojson.features);
+      map.addSource('trips', { type: 'geojson', data: { type: 'FeatureCollection', features: allFeatures } });
+
+      map.addLayer({ id: 'heat-outer', type: 'line', source: 'trips',
+        paint: { 'line-color': '#0055ff', 'line-width': 10, 'line-blur': 6, 'line-opacity': 0.05 }
+      });
+      map.addLayer({ id: 'heat-mid', type: 'line', source: 'trips',
+        paint: { 'line-color': '#ff6600', 'line-width': 4, 'line-blur': 1.5, 'line-opacity': 0.08 }
+      });
+      map.addLayer({ id: 'heat-core', type: 'line', source: 'trips',
+        paint: { 'line-color': '#ffee44', 'line-width': 1.2, 'line-blur': 0, 'line-opacity': 0.15 }
+      });
+
+      buildFrequencyDistribution(allFeatures);
+      buildTypeFilters(allFeatures);
+      updatePaint();
+      applyFilter();
+
+      document.getElementById('status').textContent = allFeatures.length + ' trips';
+      document.querySelector('.spinner-container').style.display = 'none';
+    }).catch(() => {
+      document.getElementById('status').textContent = 'Failed to load';
+      document.querySelector('.spinner-container').style.display = 'none';
+    });
+  });
+});
+</script>
+
+{% endblock %}

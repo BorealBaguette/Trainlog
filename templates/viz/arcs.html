@@ -1,0 +1,174 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<link href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0d1b2a; }
+  #info { position: fixed; top: 80px; left: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 10px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.85em; }
+  #controls { position: fixed; top: 80px; right: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 12px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.82em; width: 210px;
+    max-height: calc(100vh - 100px); overflow-y: auto; }
+  #controls label { display: block; margin: 8px 0 2px; color: #8fa6bd; }
+  #controls input[type=range] { width: 100%; }
+  #controls h6 { margin: 12px 0 6px; padding-top: 10px; border-top: 1px solid #2a3a4d;
+    color: #8fa6bd; text-transform: uppercase; font-size: 0.9em; letter-spacing: 0.04em; font-weight: bold; }
+  .type-row { display: flex; align-items: center; gap: 7px; margin: 4px 0; cursor: pointer; }
+  .type-row input { cursor: pointer; }
+  .type-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+</style>
+
+<div class="spinner-container">
+  <div class="lds-spinner">
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="info">
+  <b>Arc flow</b><br>
+  <span id="status">Loading…</span>
+</div>
+
+<div id="controls">
+  <label>Merge radius: <span id="snap-val">0.2</span>°
+    <input type="range" id="snap" min="0.05" max="2" step="0.05" value="0.2">
+  </label>
+  <label>Max arc width: <span id="maxw-val">20</span>px
+    <input type="range" id="maxw" min="2" max="60" step="1" value="20">
+  </label>
+  <label>Opacity: <span id="opacity-val">80</span>%
+    <input type="range" id="opacity" min="10" max="100" step="5" value="80">
+  </label>
+  <h6>Trip types</h6>
+  <div id="type-filters"></div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<script>
+const DATA_URL = "{{ url_for('viz.arc_trips_api', username=username) }}";
+const TYPE_COLORS = {
+  train: [82,176,254], tram: [162,215,255], metro: [0,69,149], bus: [159,75,187],
+  car: [166,143,205], cycle: [110,33,26], scooter: [0,208,132], funicular: [100,149,237],
+  rail: [126,200,255], ski: [184,230,240], walk: [232,140,0], air: [64,185,31],
+  ferry: [30,30,124], aerialway: [175,207,59], other: [136,136,136],
+};
+const TYPE_COLORS_HEX = Object.fromEntries(
+  Object.entries(TYPE_COLORS).map(([k,[r,g,b]]) => [k, `rgb(${r},${g},${b})`])
+);
+
+let overlay, rawTrips = [], activeTypes = new Set(), maxCount = 1;
+
+function snap(v, step) { return Math.round(v / step) * step; }
+
+function aggregate(trips, step) {
+  const map = {};
+  trips.forEach(t => {
+    if (!activeTypes.has(t.type)) return;
+    const sk = `${snap(t.src[0], step).toFixed(4)},${snap(t.src[1], step).toFixed(4)}`;
+    const dk = `${snap(t.dst[0], step).toFixed(4)},${snap(t.dst[1], step).toFixed(4)}`;
+    if (sk === dk) return; // same cell after snapping → skip
+    const key = [sk, dk].sort().join('|') + '|' + t.type;
+    if (!map[key]) {
+      const sv = t.src, dv = t.dst;
+      map[key] = { src: [snap(sv[0],step), snap(sv[1],step)],
+                   dst: [snap(dv[0],step), snap(dv[1],step)],
+                   type: t.type, count: 0 };
+    }
+    map[key].count++;
+  });
+  return Object.values(map);
+}
+
+function buildLayer(arcs) {
+  maxCount = Math.max(1, ...arcs.map(a => a.count));
+  const maxW   = Number(document.getElementById('maxw').value);
+  const opacity = Number(document.getElementById('opacity').value) / 100 * 255;
+  return new deck.ArcLayer({
+    id: 'arcs',
+    data: arcs,
+    getSourcePosition: d => d.src,
+    getTargetPosition: d => d.dst,
+    getWidth: d => Math.max(1, (d.count / maxCount) * maxW),
+    getSourceColor: d => { const c = TYPE_COLORS[d.type] || TYPE_COLORS.other; return [...c, opacity * 0.5]; },
+    getTargetColor: d => { const c = TYPE_COLORS[d.type] || TYPE_COLORS.other; return [...c, opacity]; },
+    pickable: true,
+  });
+}
+
+function refresh() {
+  if (!overlay) return;
+  const step = Number(document.getElementById('snap').value);
+  const arcs  = aggregate(rawTrips, step);
+  overlay.setProps({
+    layers: [buildLayer(arcs)],
+    getTooltip: ({ object }) => object && {
+      html: `<b>${object.type}</b> × ${object.count}`,
+      style: { background: 'rgba(0,0,0,0.85)', color: '#fff', padding: '6px 8px', borderRadius: '6px' }
+    }
+  });
+  document.getElementById('status').textContent =
+    `${arcs.length} arcs · ${rawTrips.length} trips`;
+}
+
+['snap','maxw','opacity'].forEach(id => {
+  document.getElementById(id).addEventListener('input', () => {
+    document.getElementById(id + '-val').textContent = document.getElementById(id).value;
+    refresh();
+  });
+});
+
+function buildTypeFilters() {
+  const counts = {};
+  rawTrips.forEach(t => { counts[t.type] = (counts[t.type] || 0) + 1; });
+  const container = document.getElementById('type-filters');
+  container.innerHTML = '';
+  Object.entries(counts).sort((a, b) => b[1] - a[1]).forEach(([type, n]) => {
+    activeTypes.add(type);
+    const color = TYPE_COLORS_HEX[type] || '#888';
+    const row = document.createElement('label');
+    row.className = 'type-row';
+    row.innerHTML = `
+      <input type="checkbox" data-type="${type}" checked>
+      <span class="type-dot" style="background:${color}"></span>
+      <span>${type} <span style="color:#9fb0c3">(${n})</span></span>
+    `;
+    row.querySelector('input').addEventListener('change', e => {
+      if (e.target.checked) activeTypes.add(type); else activeTypes.delete(type);
+      refresh();
+    });
+    container.appendChild(row);
+  });
+}
+
+MapLibreUtils.initializeMapLibre({
+  container: 'map', tileserver: 'dark-train', useGlobe: false,
+  center: [10, 48], zoom: 4,
+}).then(map => {
+  map.once('load', () => {
+    overlay = new deck.MapboxOverlay({
+      interleaved: false, layers: [],
+    });
+    map.addControl(overlay);
+
+    fetch(DATA_URL).then(r => r.json()).then(data => {
+      rawTrips = data;
+      buildTypeFilters();
+      refresh();
+      document.querySelector('.spinner-container').style.display = 'none';
+    }).catch(() => {
+      document.getElementById('status').textContent = 'Failed to load';
+      document.querySelector('.spinner-container').style.display = 'none';
+    });
+  });
+});
+</script>
+
+{% endblock %}

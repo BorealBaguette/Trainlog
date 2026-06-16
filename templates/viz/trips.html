@@ -1,0 +1,154 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<link href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0d1b2a; }
+  #info { position: fixed; top: 80px; left: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 10px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.85em; }
+  #info b { font-size: 1.1em; }
+  #controls { position: fixed; top: 80px; right: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 12px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.82em; width: 200px; }
+  #controls label { display: block; margin: 8px 0 2px; color: #8fa6bd; }
+  #controls input[type=range] { width: 100%; }
+  #controls input[type=checkbox] { margin-right: 6px; }
+  #clock { font-size: 1.3em; font-weight: bold; margin-top: 8px; color: #52b0fe; }
+</style>
+
+<div class="spinner-container">
+  <div class="lds-spinner">
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="info">
+  <b>Trip Replay</b><br>
+  <span id="status">Loading…</span>
+  <div id="clock"></div>
+</div>
+
+<div id="controls">
+  <label>Speed: <span id="speed-val">30</span> days/s
+    <input type="range" id="speed" min="1" max="365" step="1" value="30">
+  </label>
+  <label>Trail: <span id="trail-val">14</span> days
+    <input type="range" id="trail" min="1" max="180" step="1" value="14">
+  </label>
+  <label>Width: <span id="width-val">4</span>px
+    <input type="range" id="width" min="1" max="12" step="1" value="4">
+  </label>
+  <label><input type="checkbox" id="playing" checked>Playing</label>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<script>
+const DATA_URL = "{{ data_url }}";
+const TYPE_COLORS = {
+  train: [82,176,254], tram: [162,215,255], metro: [0,69,149],
+  bus: [159,75,187], car: [166,143,205], cycle: [110,33,26],
+  walk: [232,140,0], air: [64,185,31], ferry: [30,30,124],
+  funicular: [100,149,237], aerialway: [175,207,59], other: [150,150,150]
+};
+
+let overlay, trips = [], minTs = 0, maxTs = 1, currentTime = 0, raf;
+
+const DAY = 86400; // seconds per day
+
+function buildLayer() {
+  const trailDays = Number(document.getElementById('trail').value);
+  const width = Number(document.getElementById('width').value);
+  return new deck.TripsLayer({
+    id: 'trips',
+    data: trips,
+    getPath: d => d.path,
+    getTimestamps: d => d.timestamps,
+    getColor: d => TYPE_COLORS[d.type] || TYPE_COLORS.other,
+    currentTime,
+    trailLength: trailDays * DAY,
+    widthMinPixels: width,
+    pickable: true,
+  });
+}
+
+function refresh() {
+  if (overlay && trips.length) overlay.setProps({ layers: [buildLayer()] });
+}
+
+function updateClock() {
+  const d = new Date(currentTime * 1000);
+  document.getElementById('clock').textContent = d.toLocaleDateString('fr-FR', {
+    year: 'numeric', month: 'short', day: 'numeric'
+  });
+}
+
+let lastT = null;
+function animate(t) {
+  if (!document.getElementById('playing').checked) { lastT = null; raf = requestAnimationFrame(animate); return; }
+  const speedDays = Number(document.getElementById('speed').value);
+  if (lastT !== null) {
+    const dt = (t - lastT) / 1000; // real seconds
+    currentTime += dt * speedDays * DAY; // advance simulated time: speedDays days per real second
+    if (currentTime > maxTs) currentTime = minTs;
+  }
+  lastT = t;
+  refresh();
+  updateClock();
+  raf = requestAnimationFrame(animate);
+}
+
+['trail','width'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    document.getElementById(id+'-val').textContent = el.value;
+    refresh();
+  });
+});
+document.getElementById('speed').addEventListener('input', () => {
+  document.getElementById('speed-val').textContent = document.getElementById('speed').value;
+});
+
+MapLibreUtils.initializeMapLibre({
+  container: 'map', tileserver: 'dark-train', useGlobe: false,
+  center: [10, 48], zoom: 4,
+}).then(map => {
+  map.once('load', () => {
+    overlay = new deck.MapboxOverlay({
+      interleaved: false, layers: [],
+      getTooltip: ({ object }) => object && {
+        html: `<b>${object.from}</b> → <b>${object.to}</b> <i>(${object.type})</i>`,
+        style: { background:'rgba(0,0,0,0.85)', color:'#fff', padding:'6px 8px', borderRadius:'6px' }
+      }
+    });
+    map.addControl(overlay);
+
+    fetch(DATA_URL).then(r => r.json()).then(data => {
+      // Only trips that have timestamps
+      trips = data.filter(t => t.timestamps && t.timestamps.length >= 2);
+      if (!trips.length) {
+        document.getElementById('status').textContent = 'No trips with timestamps';
+        document.querySelector('.spinner-container').style.display = 'none';
+        return;
+      }
+      minTs = Math.min(...trips.map(t => t.timestamps[0]));
+      maxTs = Math.max(...trips.map(t => t.timestamps[t.timestamps.length - 1]));
+      currentTime = minTs;
+      document.getElementById('status').textContent = trips.length + ' trips';
+      document.querySelector('.spinner-container').style.display = 'none';
+      raf = requestAnimationFrame(animate);
+    }).catch(() => {
+      document.getElementById('status').textContent = 'Failed to load';
+      document.querySelector('.spinner-container').style.display = 'none';
+    });
+  });
+});
+</script>
+
+{% endblock %}

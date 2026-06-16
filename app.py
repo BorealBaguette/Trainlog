@@ -154,6 +154,7 @@ from src.api.trainset import trainset_blueprint
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
+from src import visualisations as viz_module
 from src.consts import DbNames, TripTypes
 from src.global_map import (
     available_bins,
@@ -6814,6 +6815,10 @@ def fetchTripsPaths(username, lastLocal, public):
     return {"trips": tripList, "lastLocal": lastLocal, "idList": idList}
 
 
+# Register visualisation blueprint here — after fetchTripsPaths is defined.
+viz_module.register(app, fetchTripsPaths)
+
+
 @app.route("/public/<username>/getTripsPaths/<lastLocal>", methods=["GET", "POST"])
 @public_required  # Public access check
 def public_getTripsPaths(username, lastLocal):
@@ -10761,6 +10766,7 @@ def bestagons_points():
         conditional=True,
         last_modified=os.path.getmtime(path),
     )
+
 
 
 @app.route("/live_map")

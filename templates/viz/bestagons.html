@@ -1,0 +1,119 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<link href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  #map { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #0d1b2a; }
+  #info { position: fixed; top: 80px; left: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 10px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.85em; }
+  #info b { font-size: 1.1em; }
+  #controls { position: fixed; top: 80px; right: 12px; z-index: 5;
+    background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
+    padding: 12px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.82em; width: 200px; }
+  #controls label { display: block; margin: 8px 0 2px; color: #8fa6bd; }
+  #controls input[type=range] { width: 100%; }
+  #controls input[type=checkbox] { margin-right: 6px; }
+</style>
+
+<div class="spinner-container">
+  <div class="lds-spinner">
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+    <div></div><div></div><div></div><div></div><div></div><div></div>
+  </div>
+</div>
+
+<div id="map"></div>
+
+<div id="info">
+  <b>⬡ Hexagons</b><br>
+  <span id="status">Loading…</span>
+</div>
+
+<div id="controls">
+  <label>Radius: <span id="radius-val">15</span> km
+    <input type="range" id="radius" min="5" max="100" step="5" value="15">
+  </label>
+  <label>Height scale: <span id="escale-val">50</span>×
+    <input type="range" id="escale" min="0" max="200" step="10" value="50">
+  </label>
+  <label>Coverage: <span id="cov-val">70</span>%
+    <input type="range" id="cov" min="30" max="100" step="5" value="70">
+  </label>
+  <label><input type="checkbox" id="extruded" checked>3D extrusion</label>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/deck.gl@9.0.0/dist.min.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<script>
+const DATA_URL = "{{ data_url }}";
+const COLOR_RANGE = [
+  [1,152,189],[73,227,206],[216,254,181],[254,237,177],[254,173,84],[209,55,78]
+];
+
+let overlay, points = [];
+
+function buildLayer() {
+  const radius   = Number(document.getElementById('radius').value) * 1000;
+  const escale   = Number(document.getElementById('escale').value);
+  const coverage = Number(document.getElementById('cov').value) / 100;
+  const extruded = document.getElementById('extruded').checked;
+  return new deck.HexagonLayer({
+    id: 'hex',
+    data: points,
+    getPosition: d => d,
+    radius,
+    coverage,
+    elevationScale: extruded ? escale : 0,
+    extruded,
+    colorRange: COLOR_RANGE,
+    transitions: { elevationScale: 250 },
+    pickable: true,
+  });
+}
+
+function refresh() {
+  if (overlay && points.length) overlay.setProps({ layers: [buildLayer()] });
+}
+
+['radius','escale','cov'].forEach(id => {
+  const el = document.getElementById(id);
+  el.addEventListener('input', () => {
+    document.getElementById(id+'-val').textContent = el.value;
+    refresh();
+  });
+});
+document.getElementById('extruded').addEventListener('change', refresh);
+
+MapLibreUtils.initializeMapLibre({
+  container: 'map', tileserver: 'dark-train', useGlobe: false,
+  center: [10, 48], zoom: 4,
+}).then(map => {
+  map.setPitch(45);
+  map.once('load', () => {
+    overlay = new deck.MapboxOverlay({
+      interleaved: false, layers: [],
+      getTooltip: ({ object }) => object && {
+        html: `<b>${object.elevationValue || object.points?.length || '?'}</b> trip points`,
+        style: { background:'rgba(0,0,0,0.85)', color:'#fff', padding:'6px 8px', borderRadius:'6px' }
+      }
+    });
+    map.addControl(overlay);
+
+    fetch(DATA_URL).then(r => r.json()).then(trips => {
+      trips.forEach(t => t.path.forEach(p => points.push(p)));
+      overlay.setProps({ layers: [buildLayer()] });
+      document.getElementById('status').textContent =
+        points.length.toLocaleString() + ' points · ' + trips.length + ' trips';
+      document.querySelector('.spinner-container').style.display = 'none';
+    }).catch(() => {
+      document.getElementById('status').textContent = 'Failed to load';
+      document.querySelector('.spinner-container').style.display = 'none';
+    });
+  });
+});
+</script>
+
+{% endblock %}
