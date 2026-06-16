@@ -738,6 +738,7 @@
     "notesReplace": "Erstat",
     "notesAppend": "Tilføj i slutningen",
     "shiftTimes": "Flyt planlagte tider",
+    "changeTripType": "Skift rejsetype",
     "share_trips_some_trips_not_public": "Nogle af de valgte rejser er ikke offentlige. Ønsker du at gøre dem offentlige nu?",
     "share_trips_leave_as_is": "Behold som det er",
     "share_trips_make_public": "Gøre offentlig",

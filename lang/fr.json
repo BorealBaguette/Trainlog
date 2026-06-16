@@ -738,6 +738,7 @@
     "notesReplace": "Remplacer",
     "notesAppend": "Ajouter",
     "shiftTimes": "Décaler les horaires",
+    "changeTripType": "Changer le type de trajet",
     "share_trips_some_trips_not_public": "Certaines des voyages sélectionnés ne sont pas publics. Voulez-vous les rendre publics maintenant ?",
     "share_trips_leave_as_is": "Laisser tel quel",
     "share_trips_make_public": "Rendre public",

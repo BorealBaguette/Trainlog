@@ -738,6 +738,7 @@
     "notesReplace": "Ersätt",
     "notesAppend": "Lägg till i slutet",
     "shiftTimes": "Flytta planerade tider",
+    "changeTripType": "Ändra resetyp",
     "share_trips_some_trips_not_public": "Några av de valda resorna är inte offentliga. Vill du göra dem offentliga nu?",
     "share_trips_leave_as_is": "Lämna som det är",
     "share_trips_make_public": "Gör offentlig",

@@ -1577,7 +1577,9 @@ $('.deleteButton').off('click').on('click', function() {
     });
 }
 
-const ownsTrips = "{{privateButtons}}" == "True";
+// True only when viewing your own trips (you may change their visibility).
+// The public/friend view sets isPublic=True; the owner's own page sets it False.
+const ownsTrips = "{{ isPublic }}" != "True";
 
 function shareTrips(openInNewTab) {
     const isAllPublic = Object.values(checkedTripData).every(trip => trip.visibility === 'public');

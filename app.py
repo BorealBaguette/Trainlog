@@ -1312,6 +1312,21 @@ def new_auto(username):
     )
 
 
+def get_new_trip_types(user_lang):
+    """Ordered {type: label} of the vehicle types the new-trip form supports.
+
+    Used to populate the in-form type switcher (click the header icon to swap
+    type, e.g. follow a train trip with a bus trip). Only types that ``new()``
+    can actually render are listed (``other`` has no form branch).
+    """
+    order = [
+        "train", "rail", "tram", "metro", "funicular", "bus", "ferry",
+        "car", "cycle", "scooter", "walk", "aerialway", "ski",
+        "air", "helicopter", "accommodation", "poi", "restaurant",
+    ]
+    return {t: user_lang[t] for t in order}
+
+
 @app.route("/u/<username>/compose/<vehicle_type>")
 @login_required
 def compose(username, vehicle_type):
@@ -1535,6 +1550,7 @@ def new(username, vehicle_type, template="new.html"):
         # and routes the save to savePlanTrip (the builder is otherwise identical).
         plan_uuid=plan_uuid,
         plan_name=plan_name,
+        new_trip_types=get_new_trip_types(lang[session["userinfo"]["lang"]]),
     )
 
 

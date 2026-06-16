@@ -180,8 +180,21 @@
 
       <br class="non_poi">
       <group id="operatorGroup" class="non_poi">
-        <div class="operatorLogoWrapper">
-          <img class="operatorLogo" src="{{ url_for('static',filename='images/icons/trip_logos/'+ vehicle_type +'.png')}}"/>
+        <div class="operatorLogoWrapper dropdown">
+          <img class="operatorLogo" id="typeSwitchIcon" data-bs-toggle="dropdown" aria-expanded="false"
+               role="button" title="{{ changeTripType|default('Change trip type') }}" style="cursor:pointer;"
+               src="{{ url_for('static',filename='images/icons/trip_logos/'+ vehicle_type +'.png')}}"/>
+          <ul class="dropdown-menu" id="typeSwitchMenu" aria-labelledby="typeSwitchIcon" style="max-height:60vh;overflow:auto;">
+            {% for t, label in new_trip_types.items() %}
+            <li>
+              <a class="dropdown-item d-flex align-items-center gap-2 {% if t == vehicle_type %}active{% endif %}"
+                 href="{{ url_for('new', username=username, vehicle_type=t) }}{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">
+                <img src="{{ url_for('static', filename='images/icons/trip_logos/' + t + '.png') }}" width="20" height="20" onerror="this.style.display='none'">
+                <span>{{ label }}</span>
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
         </div>
         <label for="operator" class="sr-only">{{operator}}</label>
         <input type="text" name="operator" id="operator" placeholder="{{operator}}"/>

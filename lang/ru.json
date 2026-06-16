@@ -738,6 +738,7 @@
     "notesReplace": "Заменить",
     "notesAppend": "Добавить в конец",
     "shiftTimes": "Смещение запланированного времени",
+    "changeTripType": "Изменить тип поездки",
     "share_trips_some_trips_not_public": "Некоторые из выбранных поездок не являются публичными. Вы хотите сделать их публичными сейчас?",
     "share_trips_leave_as_is": "Оставить как есть",
     "share_trips_make_public": "Сделать публичным",

@@ -738,6 +738,7 @@
     "notesReplace": "교체",
     "notesAppend": "추가",
     "shiftTimes": "계획된 시간을 이동",
+    "changeTripType": "여행 유형 변경",
     "share_trips_some_trips_not_public": "선택한 여정 중 일부가 공개되지 않았습니다. 지금 공개하시겠습니까?",
     "share_trips_leave_as_is": "그대로 두기",
     "share_trips_make_public": "공개하기",

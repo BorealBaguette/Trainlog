@@ -738,6 +738,7 @@
     "notesReplace": "置換",
     "notesAppend": "追加",
     "shiftTimes": "計画された時間をシフト",
+    "changeTripType": "移動手段を変更",
     "share_trips_some_trips_not_public": "選択された記録のいくつかは公開されていません。今すぐ公開しますか？",
     "share_trips_leave_as_is": "そのままにする",
     "share_trips_make_public": "公開する",

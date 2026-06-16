@@ -738,6 +738,7 @@
     "notesReplace": "Substituir",
     "notesAppend": "Anexar",
     "shiftTimes": "Deslocar horários planeados",
+    "changeTripType": "Alterar tipo de viagem",
     "share_trips_some_trips_not_public": "Algumas das viagens selecionadas não são públicas. Deseja torná-las públicas agora?",
     "share_trips_leave_as_is": "Manter como está",
     "share_trips_make_public": "Tornar público",

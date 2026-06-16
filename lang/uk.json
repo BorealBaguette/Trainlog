@@ -738,6 +738,7 @@
     "notesReplace": "Замінити",
     "notesAppend": "Додати в кінець",
     "shiftTimes": "Зсунути заплановані часи",
+    "changeTripType": "Змінити тип поїздки",
     "share_trips_some_trips_not_public": "Деякі з обраних поїздок не є публічними. Бажаєте зробити їх публічними зараз?",
     "share_trips_leave_as_is": "Залишити як є",
     "share_trips_make_public": "Зробити публічним",

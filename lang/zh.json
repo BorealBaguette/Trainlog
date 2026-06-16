@@ -738,6 +738,7 @@
     "notesReplace": "替换",
     "notesAppend": "附加",
     "shiftTimes": "调整计划时间",
+    "changeTripType": "更改行程类型",
     "share_trips_some_trips_not_public": "某些选定的行程尚未公开。你想现在公开它们吗？",
     "share_trips_leave_as_is": "保持原样",
     "share_trips_make_public": "公开",
