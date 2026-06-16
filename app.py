@@ -7893,16 +7893,6 @@ def user_settings(username):
 
         authDb.session.commit()
 
-    # Automatic logging is owner-only for now: only mint/show the token then.
-    gps_upload_url = None
-    if session.get("userinfo", {}).get("is_owner"):
-        if not user.gps_token:
-            user.gps_token = secrets.token_urlsafe(32)
-            authDb.session.commit()
-        gps_upload_url = url_for(
-            "gps_logger_upload", token=user.gps_token, _external=True
-        )
-
     langs = getLangDropdown(user)
 
     share_level = user.share_level
@@ -7935,6 +7925,31 @@ def user_settings(username):
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
         user_globe=user.globe,
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/u/<username>/gps", methods=["GET"])
+@login_required
+def gps_settings(username):
+    """
+    Standalone GPSLogger setup page.
+
+    Deliberately not linked from the settings UI: it is reachable only by
+    knowing the URL, so the page can be shared with someone else who is
+    setting up GPSLogger to log trips for this user.
+    """
+    user = User.query.filter_by(username=username).first()
+    if not user.gps_token:
+        user.gps_token = secrets.token_urlsafe(32)
+        authDb.session.commit()
+    gps_upload_url = url_for("gps_logger_upload", token=user.gps_token, _external=True)
+
+    return render_template(
+        "gps_settings.html",
+        title=lang[session["userinfo"]["lang"]]["gpsLoggingTitle"],
+        username=username,
         gps_upload_url=gps_upload_url,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
@@ -7948,7 +7963,7 @@ def regenerate_gps_token(username):
     user = User.query.filter_by(username=username).first()
     user.gps_token = secrets.token_urlsafe(32)
     authDb.session.commit()
-    return redirect(url_for("user_settings", username=username))
+    return redirect(url_for("gps_settings", username=username))
 
 
 @app.route("/u/<username>/settings_app", methods=["GET", "POST"])
