@@ -1043,6 +1043,8 @@
     "logAsTrips": "여행으로 기록",
     "validatePrompt": "1일차 시작 날짜 (YYYY-MM-DD):",
     "confirmDeletePlan": "이 계획과 모든 여정을 삭제하시겠습니까?",
+    "duplicate": "복제",
+    "copySuffix": "(사본)",
     "confirmDeletePlanTrip": "이 여정을 삭제하시겠습니까?",
     "planSpanHint": "첫 출발부터 마지막 도착까지",
     "planTravelTime": "이동 시간",

@@ -1043,6 +1043,8 @@
     "logAsTrips": "Als Reise spichere",
     "validatePrompt": "Startdatum für Tag 1 (YYYY-MM-DD):",
     "confirmDeletePlan": "Die Planig und alli Reise lösche?",
+    "duplicate": "Dupliziere",
+    "copySuffix": "(Kopie)",
     "confirmDeletePlanTrip": "Die Reis lösche?",
     "planSpanHint": "Vo de erste Abfahrt bis zur letschte Aachunft",
     "planTravelTime": "Reisze",

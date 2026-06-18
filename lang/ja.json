@@ -1043,6 +1043,8 @@
     "logAsTrips": "旅行として記録",
     "validatePrompt": "第1日の開始日（YYYY-MM-DD）：",
     "confirmDeletePlan": "このプランとすべての旅程を削除しますか？",
+    "duplicate": "複製",
+    "copySuffix": "(コピー)",
     "confirmDeletePlanTrip": "この旅程を削除しますか？",
     "planSpanHint": "最初の出発から最後の到着まで",
     "planTravelTime": "移動時間",

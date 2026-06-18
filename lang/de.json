@@ -1043,6 +1043,8 @@
     "logAsTrips": "Als Reisen speichern",
     "validatePrompt": "Startdatum für Tag 1 (YYYY-MM-DD):",
     "confirmDeletePlan": "Diese Planung und alle ihre Reisen löschen?",
+    "duplicate": "Duplizieren",
+    "copySuffix": "(Kopie)",
     "confirmDeletePlanTrip": "Diese Reise löschen?",
     "planSpanHint": "Von der ersten Abfahrt bis zur letzten Ankunft",
     "planTravelTime": "Reisezeit",

@@ -1043,6 +1043,8 @@
     "logAsTrips": "Registra come viaggi",
     "validatePrompt": "Data di inizio del giorno 1 (YYYY-MM-DD):",
     "confirmDeletePlan": "Eliminare questo piano e tutti i suoi viaggi?",
+    "duplicate": "Duplica",
+    "copySuffix": "(copia)",
     "confirmDeletePlanTrip": "Eliminare questo viaggio?",
     "planSpanHint": "Dalla prima partenza all'ultimo arrivo",
     "planTravelTime": "Tempo di viaggio",

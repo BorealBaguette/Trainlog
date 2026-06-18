@@ -1043,6 +1043,8 @@
     "logAsTrips": "Zaznamenat jako cesty",
     "validatePrompt": "Datum začátku 1. dne (YYYY-MM-DD):",
     "confirmDeletePlan": "Smazat tento plán a všechny jeho cesty?",
+    "duplicate": "Duplikovat",
+    "copySuffix": "(kopie)",
     "confirmDeletePlanTrip": "Smazat tuto cestu?",
     "planSpanHint": "Od prvního odjezdu do posledního příjezdu",
     "planTravelTime": "Doba cestování",

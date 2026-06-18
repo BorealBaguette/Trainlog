@@ -29,6 +29,9 @@ class User(authDb.Model):
     # Per-user secret token for the GPSLogger GPX ingest endpoint
     # (/api/gps/<token>/upload). Scoped to GPS ingest only; regenerable.
     gps_token = authDb.Column(authDb.String(100), default="")
+    # Per-user secret token for the MCP server (/mcp?api_key=<token>), letting an
+    # external AI manage this user's trips. Regenerable; revokes on regenerate.
+    mcp_token = authDb.Column(authDb.String(100), default="")
     default_landing = authDb.Column(authDb.String(20), nullable=False, default="map")
     appear_on_global = authDb.Column(authDb.Boolean, nullable=False, default=False)
     tileserver = authDb.Column(authDb.String(50), nullable=False, default="default")
@@ -52,6 +55,7 @@ class User(authDb.Model):
             "last_login": self.last_login,
             "reset_token": self.reset_token,
             "gps_token": self.gps_token,
+            "mcp_token": self.mcp_token,
             "share_level": self.share_level,
             "user_currency": self.user_currency,
             "colorblind": self.colorblind,

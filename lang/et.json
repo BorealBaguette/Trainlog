@@ -1043,6 +1043,8 @@
     "logAsTrips": "Logi reisidena",
     "validatePrompt": "1. päeva alguskuupäev (YYYY-MM-DD):",
     "confirmDeletePlan": "Kustuta see plaan ja kõik selle reisid?",
+    "duplicate": "Dubleeri",
+    "copySuffix": "(koopia)",
     "confirmDeletePlanTrip": "Kustuta see reis?",
     "planSpanHint": "Esimesest väljumisest viimase saabumiseni",
     "planTravelTime": "Reisiaeg",

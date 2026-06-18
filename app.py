@@ -150,6 +150,7 @@ from src.api.carbon import carbon_blueprint
 from src.api.wrapped import wrapped_blueprint, DISTANCE_COMPARISONS, DURATION_COMPARISONS
 from src.api.stats import stats_blueprint, fetch_stats, get_distinct_stat_years
 from src.api.ai import ai_blueprint
+from src.api.mcp import blueprint as mcp_blueprint
 from src.api.trainset import trainset_blueprint
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.dashboard import dashboard_blueprint
@@ -189,7 +190,8 @@ from src.utils import (
     check_and_increment_fr24_usage,
     fr24_usage,
     get_default_trip_visibility,
-    current_user_is_friend_with
+    current_user_is_friend_with,
+    external_url,
 )
 from src.trips import (
     Trip,
@@ -229,6 +231,7 @@ from src.plans.plan_trip import PlanTrip
 from src.plans.create_plan_trip import create_plan_trip
 from src.plans.update_plan_trip_full import update_plan_trip_full
 from src.plans.delete_plan import delete_plan, delete_plan_trip
+from src.plans.duplicate_plan import duplicate_plan
 from src.plans.validate_plan import validate_plan
 from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
@@ -267,6 +270,7 @@ app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
 app.register_blueprint(wrapped_blueprint)
 app.register_blueprint(ai_blueprint)
+app.register_blueprint(mcp_blueprint)
 app.register_blueprint(trainset_blueprint)
 app.register_blueprint(vagonweb_blueprint)
 app.register_blueprint(dashboard_blueprint)
@@ -5167,6 +5171,20 @@ def delete_plan_route(username, plan_uuid):
     return redirect(url_for("plan_list", username=username))
 
 
+@app.route("/u/<username>/plan/<plan_uuid>/duplicate", methods=["POST"])
+@login_required
+def duplicate_plan_route(username, plan_uuid):
+    """Fork a plan (with all its legs and shared costs) into a new draft."""
+    plan = get_owned_plan(plan_uuid, username)
+    suffix = lang[session["userinfo"]["lang"]].get("copySuffix", "(copy)")
+    new_uuid = duplicate_plan(
+        plan["uuid"], plan["user_id"], name=f"{plan['name']} {suffix}"
+    )
+    if new_uuid is None:
+        abort(404)
+    return redirect(url_for("plan_view", username=username, plan_uuid=new_uuid))
+
+
 @app.route("/u/<username>/plan/<plan_uuid>/trip/<int:plan_trip_uid>/delete", methods=["POST"])
 @login_required
 def delete_plan_trip_route(username, plan_uuid, plan_trip_uid):
@@ -7954,8 +7972,15 @@ def user_settings(username):
 @app.route("/u/<username>/gps", methods=["GET"])
 @login_required
 def gps_settings(username):
+    """Legacy alias for the API/integrations page (kept so old shared links work)."""
+    return redirect(url_for("api_settings", username=username))
+
+
+@app.route("/u/<username>/api", methods=["GET"])
+@login_required
+def api_settings(username):
     """
-    Standalone GPSLogger setup page.
+    Standalone API/integrations page: GPSLogger upload URL + MCP server URL.
 
     Deliberately not linked from the settings UI: it is reachable only by
     knowing the URL, so the page can be shared with someone else who is
@@ -7965,13 +7990,24 @@ def gps_settings(username):
     if not user.gps_token:
         user.gps_token = secrets.token_urlsafe(32)
         authDb.session.commit()
-    gps_upload_url = url_for("gps_logger_upload", token=user.gps_token, _external=True)
+    gps_upload_url = external_url("gps_logger_upload", token=user.gps_token)
+
+    # MCP server access is premium-only. Mint the token lazily for premium users so
+    # the connection URL can be shown on this page.
+    mcp_url = None
+    if user.premium:
+        if not user.mcp_token:
+            user.mcp_token = secrets.token_urlsafe(32)
+            authDb.session.commit()
+        mcp_url = external_url("mcp.handle") + f"?api_key={user.mcp_token}"
 
     return render_template(
-        "gps_settings.html",
+        "api_settings.html",
         title=lang[session["userinfo"]["lang"]]["gpsLoggingTitle"],
         username=username,
         gps_upload_url=gps_upload_url,
+        mcp_url=mcp_url,
+        mcp_premium=user.premium,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -7984,7 +8020,46 @@ def regenerate_gps_token(username):
     user = User.query.filter_by(username=username).first()
     user.gps_token = secrets.token_urlsafe(32)
     authDb.session.commit()
-    return redirect(url_for("gps_settings", username=username))
+    return redirect(url_for("api_settings", username=username))
+
+
+@app.route("/u/<username>/mcp", methods=["GET"])
+@login_required
+def mcp_settings(username):
+    """Return this user's MCP connection details (mints the token on first use).
+
+    The token authenticates an external AI to the MCP server (/mcp), letting it
+    list, create and delete this user's trips. Keep it secret; rotate via
+    /u/<username>/mcp_token/regenerate.
+    """
+    user = User.query.filter_by(username=username).first()
+    if not user.premium:
+        abort(403)
+    if not user.mcp_token:
+        user.mcp_token = secrets.token_urlsafe(32)
+        authDb.session.commit()
+    mcp_url = external_url("mcp.handle") + f"?api_key={user.mcp_token}"
+    return jsonify({
+        "url": mcp_url,
+        "token": user.mcp_token,
+        "config": {
+            "mcpServers": {
+                "trainlog": {"type": "streamable-http", "url": mcp_url}
+            }
+        },
+    })
+
+
+@app.route("/u/<username>/mcp_token/regenerate", methods=["POST"])
+@login_required
+def regenerate_mcp_token(username):
+    """Revoke the old MCP token by minting a fresh one (premium-only)."""
+    user = User.query.filter_by(username=username).first()
+    if not user.premium:
+        abort(403)
+    user.mcp_token = secrets.token_urlsafe(32)
+    authDb.session.commit()
+    return redirect(url_for("api_settings", username=username))
 
 
 @app.route("/u/<username>/settings_app", methods=["GET", "POST"])
@@ -10964,6 +11039,11 @@ def ensure_auth_db_columns():
     if "gps_token" not in existing:
         authDb.session.execute(
             sqlalchemy.text("ALTER TABLE user ADD COLUMN gps_token VARCHAR(100) DEFAULT ''")
+        )
+        authDb.session.commit()
+    if "mcp_token" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN mcp_token VARCHAR(100) DEFAULT ''")
         )
         authDb.session.commit()
 

@@ -136,6 +136,9 @@
       </div>
       <div class="pl-actions">
         <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=p.uuid) }}" target="_blank" title="{{ shareTrip|default('Share') }}"><i class="bi bi-link-45deg"></i></a>
+        <form method="post" action="{{ url_for('duplicate_plan_route', username=username, plan_uuid=p.uuid) }}" class="d-contents">
+          <button class="btn btn-sm btn-outline-secondary" type="submit" title="{{ duplicate|default('Duplicate') }}"><i class="bi bi-files"></i></button>
+        </form>
         <form method="post" action="{{ url_for('archive_plan_route', username=username, plan_uuid=p.uuid) }}" class="d-contents">
           <input type="hidden" name="archived" value="true"/>
           <button class="btn btn-sm btn-outline-secondary" type="submit" title="{{ archive|default('Archive') }}"><i class="bi bi-archive"></i></button>

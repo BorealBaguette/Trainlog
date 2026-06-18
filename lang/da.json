@@ -1043,6 +1043,8 @@
     "logAsTrips": "Log som rejser",
     "validatePrompt": "Startdato for dag 1 (YYYY-MM-DD):",
     "confirmDeletePlan": "Slet denne plan og alle dens rejser?",
+    "duplicate": "Dupliker",
+    "copySuffix": "(kopi)",
     "confirmDeletePlanTrip": "Slet denne rejse?",
     "planSpanHint": "Fra første afgang til sidste ankomst",
     "planTravelTime": "Rejsetid",

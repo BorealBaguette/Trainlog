@@ -1043,6 +1043,8 @@
     "logAsTrips": "Kirjaa matkoiksi",
     "validatePrompt": "1. päivän aloituspäivämäärä (YYYY-MM-DD):",
     "confirmDeletePlan": "Poistetaanko tämä suunnitelma ja kaikki sen matkat?",
+    "duplicate": "Monista",
+    "copySuffix": "(kopio)",
     "confirmDeletePlanTrip": "Poistetaanko tämä matka?",
     "planSpanHint": "Ensimmäisestä lähdöstä viimeiseen saapumiseen",
     "planTravelTime": "Matka-aika",

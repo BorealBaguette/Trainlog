@@ -1043,6 +1043,8 @@
     "logAsTrips": "Seyahat olarak kaydet",
     "validatePrompt": "1. Gün için başlangıç tarihi (YYYY-MM-DD):",
     "confirmDeletePlan": "Bu plan ve tüm seyahatleri silinsin mi?",
+    "duplicate": "Çoğalt",
+    "copySuffix": "(kopya)",
     "confirmDeletePlanTrip": "Bu seyahat silinsin mi?",
     "planSpanHint": "İlk kalkıştan son varışa kadar",
     "planTravelTime": "Seyahat süresi",

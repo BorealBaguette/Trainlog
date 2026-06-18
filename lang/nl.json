@@ -1043,6 +1043,8 @@
     "logAsTrips": "Opslaan als ritten",
     "validatePrompt": "Startdatum voor dag 1 (YYYY-MM-DD):",
     "confirmDeletePlan": "Dit plan en alle ritten verwijderen?",
+    "duplicate": "Dupliceren",
+    "copySuffix": "(kopie)",
     "confirmDeletePlanTrip": "Deze rit verwijderen?",
     "planSpanHint": "Van het eerste vertrek tot de laatste aankomst",
     "planTravelTime": "Reistijd",

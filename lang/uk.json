@@ -1043,6 +1043,8 @@
     "logAsTrips": "Записати як поїздки",
     "validatePrompt": "Дата початку дня 1 (YYYY-MM-DD):",
     "confirmDeletePlan": "Видалити цей план і всі його поїздки?",
+    "duplicate": "Дублювати",
+    "copySuffix": "(копія)",
     "confirmDeletePlanTrip": "Видалити цю поїздку?",
     "planSpanHint": "Від першого відправлення до останнього прибуття",
     "planTravelTime": "Час у дорозі",

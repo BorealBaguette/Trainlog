@@ -1043,6 +1043,8 @@
     "logAsTrips": "Rögzítés utazásként",
     "validatePrompt": "Az 1. nap kezdési dátuma (YYYY-MM-DD):",
     "confirmDeletePlan": "Törli ezt a tervet és az összes utazását?",
+    "duplicate": "Duplikálás",
+    "copySuffix": "(másolat)",
     "confirmDeletePlanTrip": "Törli ezt az utazást?",
     "planSpanHint": "Az első indulástól az utolsó érkezésig",
     "planTravelTime": "Menetidő",

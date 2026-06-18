@@ -1043,6 +1043,8 @@
     "logAsTrips": "记录为行程",
     "validatePrompt": "第1天的开始日期（YYYY-MM-DD）：",
     "confirmDeletePlan": "删除此计划及其所有行程？",
+    "duplicate": "复制",
+    "copySuffix": "(副本)",
     "confirmDeletePlanTrip": "删除此行程？",
     "planSpanHint": "从第一次出发到最后一次到达",
     "planTravelTime": "旅行时间",

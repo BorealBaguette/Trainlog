@@ -1023,6 +1023,8 @@
     "logAsTrips": "Log as trips",
     "validatePrompt": "Start date for Day 1 (YYYY-MM-DD):",
     "confirmDeletePlan": "Delete this plan and all its trips?",
+    "duplicate": "Duplicate",
+    "copySuffix": "(copy)",
     "confirmDeletePlanTrip": "Delete this trip?",
     "planSpanHint": "From the first departure to the last arrival",
     "planTravelTime": "Travel time",

@@ -1023,6 +1023,8 @@
     "logAsTrips": "Enregistrer en trajets",
     "validatePrompt": "Date de début pour le Jour 1 (AAAA-MM-JJ) :",
     "confirmDeletePlan": "Supprimer ce plan et tous ses trajets ?",
+    "duplicate": "Dupliquer",
+    "copySuffix": "(copie)",
     "confirmDeletePlanTrip": "Supprimer ce trajet ?",
     "planSpanHint": "Du premier départ à la dernière arrivée",
     "planTravelTime": "Temps en voyage",

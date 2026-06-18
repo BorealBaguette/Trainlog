@@ -1043,6 +1043,8 @@
     "logAsTrips": "Zabilježi kao putovanja",
     "validatePrompt": "Datum početka 1. dana (YYYY-MM-DD):",
     "confirmDeletePlan": "Izbrisati ovaj plan i sva njegova putovanja?",
+    "duplicate": "Dupliciraj",
+    "copySuffix": "(kopija)",
     "confirmDeletePlanTrip": "Izbrisati ovo putovanje?",
     "planSpanHint": "Od prvog polaska do posljednjeg dolaska",
     "planTravelTime": "Vrijeme putovanja",

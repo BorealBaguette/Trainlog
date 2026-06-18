@@ -1043,6 +1043,8 @@
     "logAsTrips": "Logga som resor",
     "validatePrompt": "Startdatum för dag 1 (YYYY-MM-DD):",
     "confirmDeletePlan": "Ta bort denna plan och alla dess resor?",
+    "duplicate": "Duplicera",
+    "copySuffix": "(kopia)",
     "confirmDeletePlanTrip": "Ta bort denna resa?",
     "planSpanHint": "Från första avgång till sista ankomst",
     "planTravelTime": "Restid",

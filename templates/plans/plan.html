@@ -77,6 +77,11 @@
             </form>
           </li>
           <li>
+            <form method="post" action="{{ url_for('duplicate_plan_route', username=username, plan_uuid=plan.uuid) }}">
+              <button class="dropdown-item" type="submit"><i class="bi bi-files me-2"></i>{{ duplicate|default('Duplicate') }}</button>
+            </form>
+          </li>
+          <li>
             <form method="post" action="{{ url_for('delete_plan_route', username=username, plan_uuid=plan.uuid) }}" onsubmit="return confirm('{{ confirmDeletePlan|default('Delete this plan and all its trips?') }}');">
               <button class="dropdown-item text-danger" type="submit"><i class="bi bi-trash3 me-2"></i>{{ delete|default('Delete') }}</button>
             </form>

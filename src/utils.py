@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import re
 import smtplib
 import sqlite3
@@ -16,7 +17,7 @@ from flask import abort, redirect, request, session, url_for
 from timezonefinder import TimezoneFinder
 
 from py.utils import load_config
-from src.consts import DbNames
+from src.consts import DbNames, Env
 from src.pg import pg_session
 from src.sql.trips import get_current_trip_query
 from src.users import Friendship, User, authDb
@@ -593,6 +594,19 @@ def current_user_is_friend_with(target_username):
         )
     else:
         return 0
+
+
+def external_url(*args, **kwargs):
+    """url_for(_external=True) but forced to https outside local dev.
+
+    Behind a reverse proxy Flask only sees the internal http request, so
+    _external URLs come out as http://. We don't terminate TLS, the proxy does,
+    so the public URL is https everywhere except local.
+    """
+    url = url_for(*args, _external=True, **kwargs)
+    if os.environ.get("ENVIRONMENT") != Env.LOCAL.value and url.startswith("http://"):
+        url = "https://" + url[len("http://"):]
+    return url
 
 
 def parse_date(date: str):
