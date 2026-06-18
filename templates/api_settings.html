@@ -40,6 +40,35 @@
         <p class="small text-muted mb-0">{{ gpsParamsHelp|safe }}</p>
       </div>
     </div>
+
+    {% if mcp_premium %}
+    <div class="card mt-3 mb-2">
+      <div class="card-body">
+        <h5 class="card-title mb-2">
+          <i class="fa-solid fa-robot me-1"></i> {{ mcpTitle|default('AI assistant (MCP)') }}
+        </h5>
+        <p class="small text-muted mb-3">
+          {{ mcpDesc|default('Connect an external AI assistant to manage your trips and plans through the Model Context Protocol. Add this URL to your MCP client (e.g. Claude). Keep it secret: anyone with it can read and edit your trips.') }}
+        </p>
+
+        <label class="form-label small fw-semibold mb-1">{{ mcpUrlLabel|default('MCP server URL') }}</label>
+        <div class="input-group input-group-sm mb-2">
+          <input type="text" class="form-control font-monospace" id="mcpUrl"
+                 value="{{ mcp_url }}" readonly>
+          <button class="btn btn-outline-secondary" type="button" id="copyMcpUrl" title="{{ copy }}">
+            <i class="bi bi-clipboard"></i>
+          </button>
+          <form method="POST" class="d-inline"
+                action="{{ url_for('regenerate_mcp_token', username=username) }}"
+                onsubmit="return confirm('{{ mcpRegenerateConfirm|default('Generate a new URL? The current one will stop working immediately.') }}');">
+            <button class="btn btn-outline-warning" type="submit" title="{{ mcpRegenerate|default('Regenerate') }}">
+              <i class="fa-solid fa-rotate"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 </div>
 
@@ -49,6 +78,18 @@
   if (copyGpsBtn) {
     copyGpsBtn.addEventListener("click", function () {
       navigator.clipboard.writeText(document.getElementById("gpsUploadUrl").value).then(() => {
+        const icon = this.querySelector("i");
+        icon.className = "bi bi-check-lg";
+        setTimeout(() => { icon.className = "bi bi-clipboard"; }, 1500);
+      });
+    });
+  }
+
+  // Copy MCP server URL
+  const copyMcpBtn = document.getElementById("copyMcpUrl");
+  if (copyMcpBtn) {
+    copyMcpBtn.addEventListener("click", function () {
+      navigator.clipboard.writeText(document.getElementById("mcpUrl").value).then(() => {
         const icon = this.querySelector("i");
         icon.className = "bi bi-check-lg";
         setTimeout(() => { icon.className = "bi bi-clipboard"; }, 1500);
