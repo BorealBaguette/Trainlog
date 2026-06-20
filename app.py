@@ -104,6 +104,7 @@ from src.sql.trips import (
     get_trip_query,
     get_trips_country_query,
     get_unique_user_trips_query,
+    get_updated_user_trips_query,
     get_user_lines_query,
     get_user_trips_query,
 )
@@ -6851,6 +6852,47 @@ def public_getTripsPaths(username, lastLocal):
 @login_required  # Login access check
 def get_trip_paths(username, lastLocal):
     result = fetchTripsPaths(username, lastLocal, public=0)
+    return jsonify(result)
+
+
+def fetchUpdatedTrips(username, lastLocal, public):
+    tripList = []
+
+    user_id = get_user_id(username)
+    with pg_session() as pg:
+        idList = [
+            row["uid"]
+            for row in pg.execute(
+                "SELECT trip_id AS uid FROM trips WHERE user_id = :user_id",
+                {"user_id": user_id},
+            ).fetchall()
+        ]
+
+        trips = pg.execute(
+            get_updated_user_trips_query(),
+            {
+                "user_id": user_id,
+                "lastLocal": lastLocal,
+                "public": public,
+                "friend": int(current_user_is_friend_with(username)),
+            },
+        ).fetchall()
+
+    for trip in trips:
+        path = geom_geojson_to_coords(trip._mapping.get("geojson"))
+        trip = adapt_pg_trip_row(trip._mapping, username)
+        trip.pop("geojson", None)
+        trip.pop("planned_future", None)
+        tripList.append({"trip": trip, "path": path})
+
+    lastLocal = datetime.strftime(datetime.now(), "%Y-%m-%dT%H:%M:%S.%f")
+    return {"trips": tripList, "lastLocal": lastLocal, "idList": idList}
+
+
+@app.route("/u/<username>/getUpdatedTrips/<lastLocal>", methods=["GET", "POST"])
+@login_required
+def get_updated_trips(username, lastLocal):
+    result = fetchUpdatedTrips(username, lastLocal, public=0)
     return jsonify(result)
 
 
