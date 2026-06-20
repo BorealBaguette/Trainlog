@@ -30,7 +30,7 @@ def bulk_copy_trips(username):
     current_user_username = getUser()
     current_user_id = get_user_id(current_user_username)
 
-    if not _trips_visible_to_user(trip_ids, current_user_username):
+    if not _trips_visible_to_user(trip_ids, current_user_id):
         abort(401)
 
     new_trip_ids = duplicate_trips(
@@ -44,15 +44,15 @@ def bulk_copy_trips(username):
     return jsonify({"newTrips": new_trip_ids})
 
 
-def _trips_visible_to_user(trip_ids: list[int], current_user: str) -> bool:
+def _trips_visible_to_user(trip_ids: list[int], current_user_id: int) -> bool:
     user_cache = {}
     friend_cache = set()
 
     with pg_session() as pg:
         rows = pg.execute(
-            "SELECT t.trip_id, u.username, t.visibility"
-            " FROM trips t JOIN \"user\" u ON t.user_id = u.uid"
-            f" WHERE t.trip_id IN ({','.join(str(i) for i in trip_ids)})"
+            "SELECT user_id, visibility"
+            " FROM trips"
+            f" WHERE trip_id IN ({','.join(str(i) for i in trip_ids)})"
         ).fetchall()
 
     if not rows:
@@ -60,30 +60,25 @@ def _trips_visible_to_user(trip_ids: list[int], current_user: str) -> bool:
     if len(rows) != len(trip_ids):
         return False
 
-    for trip in rows:
-        trip_owner_username = trip[1]
-
-        if current_user == trip_owner_username:
+    for trip_user_id, visibility in rows:
+        if current_user_id == trip_user_id:
             continue
 
-        if trip[2] == 'private':
+        if visibility == 'private':
             return False
 
-        if trip[2] == 'friends':
-            if trip_owner_username in friend_cache:
-                continue
-            elif current_user_is_friend_with(trip_owner_username):
-                friend_cache.add(trip_owner_username)
-                continue
-            else:
-                return False
+        trip_owner = user_cache.get(trip_user_id) or User.query.filter_by(uid=trip_user_id).first()
+        user_cache[trip_user_id] = trip_owner
 
-        user_public = user_cache.get(trip_owner_username)
-        if user_public is None:
-            user_public = User.query.filter_by(username=trip_owner_username).first().is_public_trips()
-            user_cache[trip_owner_username] = user_public
+        if visibility == 'friends':
+            if trip_user_id in friend_cache:
+                continue
+            if current_user_is_friend_with(trip_owner.username):
+                friend_cache.add(trip_user_id)
+                continue
+            return False
 
-        if not user_public:
+        if not trip_owner.is_public_trips():
             return False
 
     return True
