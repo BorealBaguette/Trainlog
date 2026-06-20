@@ -1,5 +1,4 @@
 INSERT INTO trips (
-    trip_id,
     user_id,
     origin_station,
     destination_station,
@@ -30,7 +29,6 @@ INSERT INTO trips (
     visibility
 )
 SELECT
-    :new_trip_id,
     :new_user_id,
     origin_station,
     destination_station,
