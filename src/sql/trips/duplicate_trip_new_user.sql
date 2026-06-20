@@ -13,20 +13,11 @@ INSERT INTO trips (
     operator,
     countries,
     line_name,
-    created,
-    last_modified,
     trip_type,
     material_type,
     material_type_advanced,
-    seat,
     reg,
-    waypoints,
-    notes,
-    price,
-    currency,
-    ticket_id,
-    purchase_date,
-    visibility
+    waypoints
 )
 SELECT
     :new_user_id,
@@ -43,20 +34,11 @@ SELECT
     operator,
     countries,
     line_name,
-    created,
-    last_modified,
     trip_type,
     material_type,
     material_type_advanced,
-    seat,
     reg,
-    waypoints,
-    notes,
-    price,
-    currency,
-    ticket_id,
-    purchase_date,
-    visibility
+    waypoints
 FROM trips
 WHERE trip_id = :trip_id
 RETURNING trip_id
