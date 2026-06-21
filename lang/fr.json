@@ -361,6 +361,7 @@
     "copy": "Copier",
     "copyTrip": "Copier le voyage",
     "rideAlong": "Voyager avec",
+    "rideAlongConfirm": "Copier ces voyages dans votre profil ?",
     "active": "Actif",
     "new_tag": "Créer un nouveau tag",
     "new_tag_nav": "Nouveau Tag",

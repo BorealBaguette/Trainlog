@@ -399,23 +399,26 @@
     <div class="itineraryWrapper">
       <ul class="events" id="itinerary">
         <div id="tripDetails">
-        {% if logged_in_user != "public" %}
+        {% if show_ride_along %}
         <button
           id="rideAlong"
-          class="btn btn-labeled btn-success copyButton"
-          onClick="bulkCopyTrips()"
-          style="min-width: 5em;"
+          onClick="showRideAlongModal()"
+          style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px;margin-bottom:8px;"
         >
+          <i class="fa-solid fa-copy"></i>
+          {{ rideAlong }}
+        </button>
+        {% endif %}
 
-         <div class="spinner-border" role="status" style="display:none;"></div>
-         <div id="rideAlongText">
-           <div class="btn-label">
-             <i class="fa-solid fa-copy"></i>
-           </div>
-           {{ rideAlong }}
-         </div>
-       </button>
-       {% endif %}
+        <div id="rideAlongModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+          <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
+            <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+              <button onclick="hideRideAlongModal()" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;">{{ cancel }}</button>
+              <button id="rideAlongConfirmBtn" onclick="bulkCopyTrips()" style="padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;">{{ submit }}</button>
+            </div>
+          </div>
+        </div>
        {% if tag_description != None %}
             <div class="itinerary_tag_description">
             {% if collection_voyage == 'collection' %}
@@ -613,26 +616,26 @@ function getActualTripDuration(trip) {
     trip.trip_duration[1] + (trip.arrival_delay || 0) - (trip.departure_delay || 0)
   );
 }
-{% if logged_in_user != "public" %}
+{% if show_ride_along %}
+function showRideAlongModal() {
+  document.getElementById("rideAlongModal").style.display = "flex";
+}
+function hideRideAlongModal() {
+  document.getElementById("rideAlongModal").style.display = "none";
+}
 function bulkCopyTrips() {
-  $("#rideAlongText").hide();
-  $(".spinner-border").show();
-  $("#rideAlong").addClass("disabled");
+  const btn = document.getElementById("rideAlongConfirmBtn");
+  btn.disabled = true;
 
   $.post({
     url: '{{ url_for("trips.bulk_copy_trips", username=username) }}',
     contentType: 'application/json',
     data: JSON.stringify({ tripIds: "{{tripIds}}" }),
     success: function(data, status) {
-      $("#rideAlongText").show();
-      $(".spinner-border").hide();
-      $("#rideAlong").removeClass("disabled");
       location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}"
     },
-    fail: function () {
-      $("#rideAlongText").show();
-      $(".spinner-border").hide();
-      $("#rideAlong").removeClass("disabled");
+    error: function () {
+      btn.disabled = false;
       alert("Could not duplicate all trips")
     }
   })

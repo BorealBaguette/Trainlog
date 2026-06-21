@@ -4312,6 +4312,7 @@ def render_public_trip_page(
         og=og,
         num_hidden_trips=num_hidden_trips,
         username=user.username if user is not None else None,
+        show_ride_along=user is not None and user.username != trip_list_sorted[0]["username"],
         colorblind = colorblind,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
