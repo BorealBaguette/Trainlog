@@ -104,9 +104,7 @@
           <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
             <a class="dropdown-item" href="{{ url_for('dynamic_trips', time='trips', username=username) }}"><i class="bi bi-clock"></i> {{past}}</a>
             <a class="dropdown-item" href="{{ url_for('dynamic_trips', time='projects', username=username) }}"><i class="bi bi-clock-history"></i> {{Projects}}</a>
-            {% if is_alpha %}
-            <a class="dropdown-item" href="{{ url_for('plan_list', username=username) }}"><i class="bi bi-map"></i> {{plans}} ᵦ</a>
-            {% endif %}
+            <a class="dropdown-item" href="{{ url_for('plan_list', username=username) }}"><i class="bi bi-signpost-2"></i> {{plans}}</a>
           </div>
         </li>
         <li class="nav-item dropdown">
