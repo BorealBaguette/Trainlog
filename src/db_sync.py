@@ -79,7 +79,13 @@ def _clean_coord(value):
 
 
 def _copy_full_table(
-    pg, sqlite_conn, table, *, drop_col=None, reset_serial=None, bool_cols=(),
+    pg,
+    sqlite_conn,
+    table,
+    *,
+    drop_col=None,
+    reset_serial=None,
+    bool_cols=(),
     coord_cols=(),
 ):
     """Copy every row of a SQLite table into the identically-named PG table.
@@ -145,7 +151,7 @@ def _copy_full_table(
     if reset_serial is not None:
         pg.execute(
             f"SELECT setval(pg_get_serial_sequence('{table}', '{reset_serial}'),"
-            f" COALESCE((SELECT MAX({reset_serial}) FROM {table}), 0), true)"
+            f" COALESCE((SELECT MAX({reset_serial}) FROM {table}), 1), true)"
         )
 
 
@@ -238,7 +244,10 @@ def sync_reference_tables_from_sqlite(pg_session=None):
         _copy_full_table(pg, mainConn, "airports")
         _copy_full_table(pg, mainConn, "train_stations")
         _copy_full_table(
-            pg, mainConn, "manual_stations", reset_serial="uid",
+            pg,
+            mainConn,
+            "manual_stations",
+            reset_serial="uid",
             coord_cols=("lat", "lng"),
         )
         _copy_full_table(pg, mainConn, "here_api_operators")
@@ -421,7 +430,7 @@ def sync_trips_from_sqlite(pg_session=None):
 
         # reset ID sequence so future rows line up with SQLite
         pg.execute(
-            "SELECT setval(pg_get_serial_sequence('trips', 'trip_id'),COALESCE((SELECT MAX(trip_id) FROM trips), 0),true)"
+            "SELECT setval(pg_get_serial_sequence('trips', 'trip_id'),COALESCE((SELECT MAX(trip_id) FROM trips), 1),true)"
         )
     logger.info("Finished migrating trips from sqlite to pg!")
 
@@ -508,7 +517,7 @@ def sync_operators_from_sqlite(pg_session=None):
 
         # reset ID sequence so future rows line up with SQLite
         pg.execute(
-            "SELECT setval(pg_get_serial_sequence('operators', 'operator_id'),COALESCE((SELECT MAX(operator_id) FROM operators), 0),true)"
+            "SELECT setval(pg_get_serial_sequence('operators', 'operator_id'),COALESCE((SELECT MAX(operator_id) FROM operators), 1),true)"
         )
 
     logger.info("Step 2/2: Syncing operator logos from SQLite to PostgreSQL...")
@@ -526,7 +535,7 @@ def sync_operators_from_sqlite(pg_session=None):
 
         # reset ID sequence so future rows line up with SQLite
         pg.execute(
-            "SELECT setval(pg_get_serial_sequence('operator_logos', 'uid'),COALESCE((SELECT MAX(uid) FROM operator_logos), 0),true)"
+            "SELECT setval(pg_get_serial_sequence('operator_logos', 'uid'),COALESCE((SELECT MAX(uid) FROM operator_logos), 1),true)"
         )
 
     logger.info("Finished migrating operators from sqlite to pg!")
