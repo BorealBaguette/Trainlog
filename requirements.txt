@@ -50,3 +50,4 @@ IMAPClient==3.0.1
 pypdf==6.6.0
 icalendar==6.3.2
 cryptography==45.0.7
+pytz
