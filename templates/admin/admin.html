@@ -34,20 +34,22 @@
                 <div id="totals"></div>
                 <div id="languages"></div>
             </div>
-            <div class="col-auto text-right">
-                <button id="showLangModalBtn" class="btn btn-info">Language Stats</button><br>
-                <button id="loadDateBtn" class="btn btn-primary">
-                    Refresh Currency
-                    <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
-                        style="display: none;"></span>
-                </button><br>
-                <span id="last_date">...</span><br>
-                <button id="rebuildGlobalBtn" class="btn btn-primary mt-2">
-                    Rebuild Bestagons
-                    <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
-                        style="display: none;"></span>
-                </button><br>
-                <span id="global_map_status">...</span>
+            <div class="col-auto">
+                <div class="d-flex flex-column align-items-stretch" style="gap: 0.5rem; min-width: 200px;">
+                    <button id="showLangModalBtn" class="btn btn-info">Language Stats</button>
+                    <button id="loadDateBtn" class="btn btn-primary">
+                        Refresh Currency
+                        <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
+                            style="display: none;"></span>
+                    </button>
+                    <span id="last_date" class="text-muted small">...</span>
+                    <button id="rebuildGlobalBtn" class="btn btn-primary">
+                        Rebuild Bestagons
+                        <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
+                            style="display: none;"></span>
+                    </button>
+                    <span id="global_map_status" class="text-muted small">...</span>
+                </div>
             </div>
         </div>
     </div>
