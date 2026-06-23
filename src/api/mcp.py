@@ -32,7 +32,9 @@ from datetime import datetime
 
 from src.ai import create_trip_from_parsed
 from src.consts import TripTypes
+from src.photon import photonRequest
 from src.pg import pg_session
+from src.sql.stations import get_airports_query
 from src.plans.create_from_parsed import create_plan_trip_from_parsed
 from src.plans.delete_plan import delete_plan as _delete_plan
 from src.plans.delete_plan import delete_plan_trip as _delete_plan_trip
@@ -64,6 +66,37 @@ logger = logging.getLogger(__name__)
 blueprint = Blueprint("mcp", __name__, url_prefix="/mcp")
 
 TRIP_TYPE_VALUES = [t.value for t in TripTypes]
+
+# Per-trip-type OSM tag filters for the station search, mirroring the URLs map in
+# templates/new.html. A type absent from this map (car, walk, cycle, scooter,
+# other) searches all places with no tag filter. 'air' is handled separately via
+# the airport database, not Photon.
+STATION_SEARCH_OSM_TAGS = {
+    "bus": ["amenity:bus_station", "highway:bus_stop"],
+    "train": ["railway:halt", "railway:station"],
+    "tram": ["railway:tram_stop", "railway:station", "railway:halt"],
+    "metro": ["railway:station", "railway:subway_entrance"],
+    "funicular": ["railway:halt", "railway:station"],
+    "rail": ["railway:halt", "railway:station"],
+    "ferry": ["amenity:ferry_terminal"],
+    "helicopter": ["aeroway:helipad", "aeroway:heliport", "aeroway:aerodrome"],
+    "accomodation": [
+        "tourism:alpine_hut", "tourism:apartment", "tourism:chalet",
+        "tourism:guest_house", "tourism:hostel", "tourism:hotel",
+        "tourism:motel", "tourism:wilderness_hut",
+    ],
+    "poi": [
+        "tourism", "!tourism:alpine_hut", "!tourism:apartment", "!tourism:chalet",
+        "!tourism:guest_house", "!tourism:hostel", "!tourism:hotel",
+        "!tourism:motel", "!tourism:wilderness_hut",
+    ],
+    "restaurant": [
+        "amenity:restaurant", "amenity:pub", "amenity:biergarten",
+        "amenity:cafe", "amenity:bar",
+    ],
+    "aerialway": ["aerialway:station"],
+    "ski": ["aerialway:station"],
+}
 
 # ── auth ──────────────────────────────────────────────────────────────────────
 
@@ -116,6 +149,44 @@ def _owned_plan(plan_uuid: str, uid: int) -> dict:
 
 def _build_tools() -> list:
     return [
+        {
+            "name": "search_stations",
+            "description": (
+                "Resolve a place name to real stations/stops/airports with their "
+                "exact coordinates, using Trainlog's own station search (the same "
+                "one the website uses). ALWAYS call this FIRST to get coordinates "
+                "for add_trip / add_plan_trip — pass the SAME `type` you will use "
+                "for the trip so the right kind of stop is searched (e.g. railway "
+                "stations for 'train', airports for 'air', ferry terminals for "
+                "'ferry'). Use the lat/lng (and IATA, for flights) of the result "
+                "that matches what the user meant. Only fall back to estimating "
+                "coordinates from your own knowledge when this returns no usable "
+                "match for the place."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "query": {
+                        "type": "string",
+                        "description": "Place / station / airport name to search for.",
+                    },
+                    "type": {
+                        "type": "string",
+                        "description": (
+                            "Trip type to scope the search (default 'train'). "
+                            "Determines which kind of stop is matched."
+                        ),
+                        "default": "train",
+                        "enum": TRIP_TYPE_VALUES,
+                    },
+                    "limit": {
+                        "type": "integer",
+                        "description": "Max results to return (default 8, max 20).",
+                    },
+                },
+                "required": ["query"],
+            },
+        },
         {
             "name": "list_trips",
             "description": (
@@ -180,10 +251,13 @@ def _build_tools() -> list:
                 "connection is two trips). Trainlog geocodes the stations, routes "
                 "the path, splits distance across countries and resolves "
                 "timezones for you, so you only supply the facts below.\n\n"
-                "ALWAYS provide origin_lat/lng and destination_lat/lng (estimate "
-                "from your own knowledge of the place) — they anchor geocoding. "
-                "For flights (type='air'), also provide origin_iata/destination_iata; "
-                "the airport database is then authoritative.\n\n"
+                "ALWAYS provide origin_lat/lng and destination_lat/lng. Get them "
+                "by calling search_stations FIRST (with the same `type`) and using "
+                "the matching result's coordinates; only estimate coordinates from "
+                "your own knowledge when search_stations returns no usable match. "
+                "For flights (type='air'), also provide origin_iata/destination_iata "
+                "(search_stations returns them); the airport database is then "
+                "authoritative.\n\n"
                 "Dates are YYYY-MM-DD; times are HH:MM local. Omit times for a "
                 "date-only trip. Put booking reference / ticket number / class in "
                 "the dedicated fields, not in notes."
@@ -312,8 +386,10 @@ def _build_tools() -> list:
         {
             "name": "add_plan_trip",
             "description": (
-                "Add a leg to a plan. Same geocoding/routing as add_trip (supply "
-                "origin/destination + lat/lng, and IATA for flights).\n\n"
+                "Add a leg to a plan. Same geocoding/routing as add_trip: call "
+                "search_stations FIRST (with the same `type`) to get accurate "
+                "origin/destination lat/lng (and IATA for flights), and only "
+                "estimate coordinates yourself when it returns no match.\n\n"
                 "Timing is one of:\n"
                 "  • Relative (default): start_day / end_day (1 = anchor_date) with "
                 "optional start_time / end_time (HH:MM). This is the native plan "
@@ -568,11 +644,77 @@ def _plan_cost_summary(r: dict) -> dict:
     }
 
 
+# ── station search ────────────────────────────────────────────────────────────
+
+
+def _search_stations(query: str, trip_type: str, limit: int) -> list[dict]:
+    """Resolve a place name to candidate stations/stops with their coordinates.
+
+    Same backend the website's station autocomplete uses (templates/new.html):
+    airports come from Trainlog's airport database, everything else from the
+    Photon geocoder filtered by the trip type's OSM tags. Returns a list of
+    {name, lat, lng, country, iata?} dicts, best match first."""
+    query = (query or "").strip()
+    if not query:
+        return []
+
+    # Flights resolve against the authoritative airport database (IATA/ICAO/name).
+    if trip_type == "air":
+        with pg_session() as pg:
+            rows = pg.execute(
+                get_airports_query(), {"searchPattern": "%" + query + "%"}
+            ).fetchall()
+        out = []
+        for r in rows[:limit]:
+            a = dict(r._mapping)
+            out.append({
+                "name": a.get("name"),
+                "iata": a.get("iata"),
+                "lat": a.get("latitude"),
+                "lng": a.get("longitude"),
+                "country": a.get("iso_country"),
+            })
+        return out
+
+    params = {"q": query, "lang": "en"}
+    tags = STATION_SEARCH_OSM_TAGS.get(trip_type)
+    if tags:
+        params["osm_tag"] = tags  # requests serialises a list as repeated params
+    resp = photonRequest("/api", params=params, timeout=3)
+    if resp is None:
+        raise ValueError("Station search is temporarily unavailable.")
+
+    out = []
+    for feature in resp.get("features", [])[:limit]:
+        props = feature.get("properties", {})
+        lon, lat = (feature.get("geometry", {}).get("coordinates") or [None, None])[:2]
+        name = props.get("name")
+        city = props.get("city")
+        if city and city != name:
+            name = f"{city} - {name}" if name else city
+        out.append({
+            "name": name,
+            "lat": lat,
+            "lng": lon,
+            "country": props.get("countrycode"),
+            "type": props.get("osm_value"),
+        })
+    return out
+
+
 # ── tool implementations ──────────────────────────────────────────────────────
 
 
 def _call_tool(name: str, args: dict, user) -> str:
     uid = user.uid
+
+    if name == "search_stations":
+        trip_type = args.get("type", "train")
+        if trip_type not in TRIP_TYPE_VALUES:
+            raise ValueError(f"Unknown trip type: {trip_type}")
+        limit = max(1, min(int(args.get("limit", 8)), 20))
+        results = _search_stations(args.get("query", ""), trip_type, limit)
+        return json.dumps(results, indent=2)
 
     if name == "list_trips":
         limit = max(1, min(int(args.get("limit", 50)), 500))
