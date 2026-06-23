@@ -511,9 +511,12 @@
         if (s.phase === 'error' || s.error) {
             $('#global_map_status').text('Build failed: ' + (s.error || 'unknown'));
         } else if (s.finished) {
-            $('#global_map_status').text(
-                'Last built: ' + s.finished + ' · took ' + fmtDur(s.duration_seconds) +
-                ' · ' + total.toLocaleString() + ' hexagons');
+            var built = new Date(s.finished);
+            var when = new Intl.DateTimeFormat('en-IE', {
+                dateStyle: 'medium',
+                timeStyle: 'short'
+            }).format(built);
+            $('#global_map_status').text('Built ' + when + ' in ' + fmtDur(s.duration_seconds));
         } else {
             var hint = s.estimate_seconds != null ? ' (≈' + fmtDur(s.estimate_seconds) + ' expected)' : '';
             $('#global_map_status').text('Not built yet.' + hint);
