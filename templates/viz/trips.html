@@ -10,12 +10,42 @@
   #info b { font-size: 1.1em; }
   #controls { position: fixed; top: 150px; right: 12px; z-index: 5;
     background: rgba(20,28,40,0.92); color: #e8edf3; border-radius: 10px;
-    padding: 12px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.82em; width: 200px; display: none; }
+    padding: 12px 14px; font-family: "Century Gothic", sans-serif; font-size: 0.82em; width: 220px;
+    max-height: calc(100vh - 240px); overflow-y: auto; display: none; }
   #controls.open { display: block; }
   #controls label { display: block; margin: 8px 0 2px; color: #8fa6bd; }
   #controls input[type=range] { width: 100%; }
   #controls input[type=checkbox] { margin-right: 6px; }
+  #controls input[type=date] { width: 100%; background: rgba(13,27,42,0.9); color: #e8edf3;
+    border: 1px solid #34465c; border-radius: 5px; padding: 3px 5px; font-family: inherit; }
+  #controls hr { border: none; border-top: 1px solid #34465c; margin: 12px 0 4px; }
   #clock { font-size: 1.3em; font-weight: bold; margin-top: 8px; color: #52b0fe; }
+  #timeline { position: fixed; left: 0; right: 0; bottom: 0; z-index: 6;
+    display: none; align-items: center; gap: 12px; box-sizing: border-box;
+    background: rgba(20,28,40,0.94); padding: 10px 16px;
+    font-family: "Century Gothic", sans-serif; color: #e8edf3; }
+  #timeline.ready { display: flex; }
+  #playpause { background: #52b0fe; color: #0d1b2a; border: none; border-radius: 50%;
+    width: 38px; height: 38px; font-size: 1em; cursor: pointer; flex: 0 0 auto; }
+  #progress { position: relative; flex: 1 1 auto; height: 10px; border-radius: 5px;
+    background: #34465c; cursor: pointer; touch-action: none; }
+  #progress-fill { position: absolute; top: 0; left: 0; height: 100%;
+    background: #52b0fe; border-radius: 5px; pointer-events: none; }
+  #gaps { position: absolute; top: 0; left: 0; right: 0; height: 100%; pointer-events: none; }
+  #gaps .gap { position: absolute; top: 0; height: 100%; box-sizing: border-box;
+    background: repeating-linear-gradient(45deg,
+      rgba(232,140,0,0.6) 0 4px, rgba(232,140,0,0.18) 4px 8px);
+    border-left: 1px solid rgba(232,140,0,0.85);
+    border-right: 1px solid rgba(232,140,0,0.85); }
+  #scrubber { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%;
+    background: #fff; transform: translate(-50%,-50%); pointer-events: none;
+    box-shadow: 0 0 4px rgba(0,0,0,0.6); }
+  #time-label { flex: 0 0 auto; font-size: 0.85em; min-width: 96px; text-align: right; color: #52b0fe; }
+  .type-row { display: flex; align-items: center; margin: 3px 0; color: #e8edf3; cursor: pointer; }
+  .type-row .swatch { width: 11px; height: 11px; border-radius: 2px; margin-right: 7px; flex: 0 0 auto; }
+  .type-row input { margin-right: 6px; }
+  #type-actions { margin: 6px 0 2px; }
+  #type-actions a { color: #52b0fe; cursor: pointer; text-decoration: underline; margin-right: 10px; }
 </style>
 
 <div class="spinner-container">
@@ -44,6 +74,34 @@
     <input type="range" id="width" min="1" max="12" step="1" value="4">
   </label>
   <label><input type="checkbox" id="playing" checked>Playing</label>
+
+  <hr>
+  <label><input type="checkbox" id="cumulative">Cumulative (no fade)</label>
+  <label><input type="checkbox" id="autoskip" checked>Auto-skip gaps</label>
+  <label id="gap-label">Skip gaps over: <span id="gap-val">30</span> days
+    <input type="range" id="gap" min="3" max="180" step="1" value="30">
+  </label>
+
+  <hr>
+  <label>From</label>
+  <input type="date" id="date-from">
+  <label>To</label>
+  <input type="date" id="date-to">
+
+  <hr>
+  <label>Trip types</label>
+  <div id="type-actions"><a id="type-all">All</a><a id="type-none">None</a></div>
+  <div id="type-filters"></div>
+</div>
+
+<div id="timeline">
+  <button id="playpause" type="button" title="Play / pause"><i class="fa-solid fa-pause"></i></button>
+  <div id="progress">
+    <div id="gaps"></div>
+    <div id="progress-fill"></div>
+    <div id="scrubber"></div>
+  </div>
+  <span id="time-label"></span>
 </div>
 
 <script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
@@ -59,13 +117,20 @@ const TYPE_COLORS = {
   funicular: [100,149,237], aerialway: [175,207,59], other: [150,150,150]
 };
 
-let overlay, trips = [], minTs = 0, maxTs = 1, currentTime = 0, raf;
+let overlay, allTrips = [], trips = [], minTs = 0, maxTs = 1, currentTime = 0, raf;
+let dataMin = 0, dataMax = 1; // full extent of loaded data
+let gaps = [];                // empty travel stretches longer than the threshold
 
 const DAY = 86400; // seconds per day
+const $ = id => document.getElementById(id);
+
+function trailSeconds() {
+  if ($('cumulative').checked) return Math.max(maxTs - minTs, DAY) + DAY;
+  return Number($('trail').value) * DAY;
+}
 
 function buildLayer() {
-  const trailDays = Number(document.getElementById('trail').value);
-  const width = Number(document.getElementById('width').value);
+  const width = Number($('width').value);
   return new deck.TripsLayer({
     id: 'trips',
     data: trips,
@@ -73,30 +138,158 @@ function buildLayer() {
     getTimestamps: d => d.timestamps,
     getColor: d => TYPE_COLORS[d.type] || TYPE_COLORS.other,
     currentTime,
-    trailLength: trailDays * DAY,
+    trailLength: trailSeconds(),
     widthMinPixels: width,
     pickable: true,
+    updateTriggers: { getColor: [] },
   });
 }
 
 function refresh() {
-  if (overlay && trips.length) overlay.setProps({ layers: [buildLayer()] });
+  if (overlay) overlay.setProps({ layers: [buildLayer()] });
+}
+
+// --- filtering -------------------------------------------------------------
+function tsToDateInput(ts) {
+  const d = new Date(ts * 1000);
+  return d.toISOString().slice(0, 10);
+}
+function dateInputToTs(val, endOfDay) {
+  if (!val) return null;
+  const d = new Date(val + (endOfDay ? 'T23:59:59' : 'T00:00:00'));
+  return Math.floor(d.getTime() / 1000);
+}
+
+// Great-circle interpolation between two [lng,lat] points (degrees).
+// Longitudes are unwrapped so antimeridian crossings stay continuous.
+function geodesicPoints(a, b, segments) {
+  const R = Math.PI / 180, D = 180 / Math.PI;
+  const lat1 = a[1] * R, lon1 = a[0] * R, lat2 = b[1] * R, lon2 = b[0] * R;
+  const d = 2 * Math.asin(Math.sqrt(
+    Math.sin((lat2 - lat1) / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin((lon2 - lon1) / 2) ** 2));
+  if (!d) return [a.slice(), b.slice()];
+  const pts = [];
+  for (let i = 0; i <= segments; i++) {
+    const f = i / segments;
+    const A = Math.sin((1 - f) * d) / Math.sin(d);
+    const B = Math.sin(f * d) / Math.sin(d);
+    const x = A * Math.cos(lat1) * Math.cos(lon1) + B * Math.cos(lat2) * Math.cos(lon2);
+    const y = A * Math.cos(lat1) * Math.sin(lon1) + B * Math.cos(lat2) * Math.sin(lon2);
+    const z = A * Math.sin(lat1) + B * Math.sin(lat2);
+    pts.push([Math.atan2(y, x) * D, Math.atan2(z, Math.sqrt(x * x + y * y)) * D]);
+  }
+  for (let i = 1; i < pts.length; i++) {
+    const dlon = pts[i][0] - pts[i - 1][0];
+    if (dlon > 180) pts[i][0] -= 360;
+    else if (dlon < -180) pts[i][0] += 360;
+  }
+  return pts;
+}
+
+// Replace straight 2-point flight segments with a curved great-circle path,
+// re-spreading timestamps evenly along the new points.
+function geodesifyFlights() {
+  const SEGS = 64;
+  for (const t of allTrips) {
+    if (t.type !== 'air' || t.path.length !== 2) continue;
+    const path = geodesicPoints(t.path[0], t.path[1], SEGS);
+    const t0 = t.timestamps[0], t1 = t.timestamps[t.timestamps.length - 1];
+    t.path = path;
+    t.timestamps = path.map((_, i) => Math.round(t0 + (t1 - t0) * i / (path.length - 1)));
+  }
+}
+
+function enabledTypes() {
+  const set = new Set();
+  document.querySelectorAll('#type-filters input:checked').forEach(c => set.add(c.value));
+  return set;
+}
+
+function applyFilters() {
+  const types = enabledTypes();
+  const from = dateInputToTs($('date-from').value, false) ?? dataMin;
+  const to   = dateInputToTs($('date-to').value, true) ?? dataMax;
+  const lo = Math.min(from, to), hi = Math.max(from, to);
+
+  trips = allTrips.filter(t =>
+    types.has(t.type) &&
+    t.timestamps[0] <= hi && t.timestamps[t.timestamps.length - 1] >= lo
+  );
+
+  minTs = lo;
+  maxTs = hi;
+  if (currentTime < minTs || currentTime > maxTs) currentTime = minTs;
+
+  $('status').textContent = trips.length + ' / ' + allTrips.length + ' trips';
+  renderGaps();
+  refresh();
+  updateClock();
+}
+
+// A gap = a continuous span within [minTs,maxTs] where no visible trip is
+// travelling, longer than the "skip gaps over" threshold. Overlapping trips
+// are merged first; trail fade is ignored (gaps are pure travel time).
+function computeGaps() {
+  const gapSec = Number($('gap').value) * DAY;
+  const ivs = trips
+    .map(t => [Math.max(t.timestamps[0], minTs),
+               Math.min(t.timestamps[t.timestamps.length - 1], maxTs)])
+    .filter(iv => iv[1] >= minTs && iv[0] <= maxTs)
+    .sort((a, b) => a[0] - b[0]);
+  const out = [];
+  let cursor = minTs;
+  for (const [s, e] of ivs) {
+    if (s - cursor > gapSec) out.push({ start: cursor, end: s });
+    if (e > cursor) cursor = e;
+  }
+  if (maxTs - cursor > gapSec) out.push({ start: cursor, end: maxTs });
+  return out;
+}
+
+function renderGaps() {
+  gaps = computeGaps();
+  const span = maxTs - minTs;
+  const c = $('gaps');
+  c.innerHTML = '';
+  if (span <= 0) return;
+  for (const g of gaps) {
+    const el = document.createElement('div');
+    el.className = 'gap';
+    el.style.left  = ((g.start - minTs) / span * 100) + '%';
+    el.style.width = ((g.end - g.start) / span * 100) + '%';
+    const days = Math.round((g.end - g.start) / DAY);
+    el.title = 'No travel — ' + days + ' day' + (days === 1 ? '' : 's') + ' (skipped)';
+    c.appendChild(el);
+  }
 }
 
 function updateClock() {
   const d = new Date(currentTime * 1000);
-  document.getElementById('clock').textContent = d.toLocaleDateString('fr-FR', {
-    year: 'numeric', month: 'short', day: 'numeric'
-  });
+  const label = d.toLocaleDateString('fr-FR', { year: 'numeric', month: 'short', day: 'numeric' });
+  $('clock').textContent = label;
+  $('time-label').textContent = label;
+  const span = maxTs - minTs;
+  const pct = span > 0 ? Math.max(0, Math.min(100, (currentTime - minTs) / span * 100)) : 0;
+  $('progress-fill').style.width = pct + '%';
+  $('scrubber').style.left = pct + '%';
 }
 
 let lastT = null;
 function animate(t) {
-  if (!document.getElementById('playing').checked) { lastT = null; raf = requestAnimationFrame(animate); return; }
-  const speedDays = Number(document.getElementById('speed').value);
+  if (!$('playing').checked || !trips.length) { lastT = null; raf = requestAnimationFrame(animate); return; }
+  const speedDays = Number($('speed').value);
   if (lastT !== null) {
     const dt = (t - lastT) / 1000; // real seconds
     currentTime += dt * speedDays * DAY; // advance simulated time: speedDays days per real second
+
+    // Auto-skip materialised gaps, so the replay never stalls over empty time.
+    if ($('autoskip').checked) {
+      for (const g of gaps) {
+        if (currentTime > g.start && currentTime < g.end) { currentTime = g.end; break; }
+      }
+    }
+
     if (currentTime > maxTs) currentTime = minTs;
   }
   lastT = t;
@@ -106,15 +299,80 @@ function animate(t) {
 }
 
 ['trail','width'].forEach(id => {
-  const el = document.getElementById(id);
+  const el = $(id);
   el.addEventListener('input', () => {
-    document.getElementById(id+'-val').textContent = el.value;
+    $(id+'-val').textContent = el.value;
     refresh();
   });
 });
-document.getElementById('speed').addEventListener('input', () => {
-  document.getElementById('speed-val').textContent = document.getElementById('speed').value;
+$('speed').addEventListener('input', () => {
+  $('speed-val').textContent = $('speed').value;
 });
+// Changing the threshold redefines the gaps → re-mark the bar.
+$('gap').addEventListener('input', () => {
+  $('gap-val').textContent = $('gap').value;
+  renderGaps();
+});
+
+// --- play/pause + scrubbing -----------------------------------------------
+function setPlaying(on) {
+  $('playing').checked = on;
+  $('playpause').innerHTML = on
+    ? '<i class="fa-solid fa-pause"></i>'
+    : '<i class="fa-solid fa-play"></i>';
+}
+$('playpause').addEventListener('click', () => setPlaying(!$('playing').checked));
+$('playing').addEventListener('change', () => setPlaying($('playing').checked));
+
+let scrubbing = false;
+function seekFromEvent(e) {
+  const r = $('progress').getBoundingClientRect();
+  const frac = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  currentTime = minTs + frac * (maxTs - minTs);
+  refresh();
+  updateClock();
+}
+$('progress').addEventListener('pointerdown', e => {
+  scrubbing = true;
+  $('progress').setPointerCapture(e.pointerId);
+  seekFromEvent(e);
+});
+$('progress').addEventListener('pointermove', e => { if (scrubbing) seekFromEvent(e); });
+$('progress').addEventListener('pointerup', () => { scrubbing = false; });
+
+// Cumulative mode makes the manual trail slider irrelevant.
+$('cumulative').addEventListener('change', () => {
+  $('trail').disabled = $('cumulative').checked;
+  refresh();
+});
+$('autoskip').addEventListener('change', () => {
+  $('gap-label').style.display = $('autoskip').checked ? 'block' : 'none';
+});
+['date-from','date-to'].forEach(id => $(id).addEventListener('change', applyFilters));
+$('type-all').addEventListener('click', () => {
+  document.querySelectorAll('#type-filters input').forEach(c => c.checked = true);
+  applyFilters();
+});
+$('type-none').addEventListener('click', () => {
+  document.querySelectorAll('#type-filters input').forEach(c => c.checked = false);
+  applyFilters();
+});
+
+function buildTypeFilters(types) {
+  const c = $('type-filters');
+  c.innerHTML = '';
+  types.forEach(type => {
+    const col = TYPE_COLORS[type] || TYPE_COLORS.other;
+    const row = document.createElement('label');
+    row.className = 'type-row';
+    row.innerHTML =
+      `<input type="checkbox" value="${type}" checked>` +
+      `<span class="swatch" style="background:rgb(${col[0]},${col[1]},${col[2]})"></span>` +
+      `${type}`;
+    row.querySelector('input').addEventListener('change', applyFilters);
+    c.appendChild(row);
+  });
+}
 
 MapLibreUtils.initializeMapLibre({
   container: 'map', tileserver: 'dark-train', useGlobe: false,
@@ -140,27 +398,40 @@ MapLibreUtils.initializeMapLibre({
       interleaved: false, layers: [],
       getTooltip: ({ object }) => object && {
         html: `<b>${object.from}</b> → <b>${object.to}</b> <i>(${object.type})</i>`,
-        style: { background:'rgba(0,0,0,0.85)', color:'#fff', padding:'6px 8px', borderRadius:'6px' }
+        style: { background:'rgba(0,0,0,0.85)', color:'#fff', padding:'6px 8px', borderRadius:'6px',
+                 maxWidth:'280px', maxHeight:'40vh', overflowX:'hidden', overflowY:'auto',
+                 whiteSpace:'normal', wordBreak:'break-word', overflowWrap:'anywhere' }
       }
     });
     map.addControl(overlay);
 
     fetch(DATA_URL).then(r => r.json()).then(data => {
       // Only trips that have timestamps
-      trips = data.filter(t => t.timestamps && t.timestamps.length >= 2);
-      if (!trips.length) {
-        document.getElementById('status').textContent = 'No trips with timestamps';
+      allTrips = data.filter(t => t.timestamps && t.timestamps.length >= 2);
+      if (!allTrips.length) {
+        $('status').textContent = 'No trips with timestamps';
         document.querySelector('.spinner-container').style.display = 'none';
         return;
       }
-      minTs = Math.min(...trips.map(t => t.timestamps[0]));
-      maxTs = Math.max(...trips.map(t => t.timestamps[t.timestamps.length - 1]));
-      currentTime = minTs;
-      document.getElementById('status').textContent = trips.length + ' trips';
+      geodesifyFlights();
+      dataMin = Math.min(...allTrips.map(t => t.timestamps[0]));
+      dataMax = Math.max(...allTrips.map(t => t.timestamps[t.timestamps.length - 1]));
+      currentTime = dataMin;
+
+      // Populate filter UI from the data actually present.
+      const presentTypes = [...new Set(allTrips.map(t => t.type))].sort();
+      buildTypeFilters(presentTypes);
+      $('date-from').value = tsToDateInput(dataMin);
+      $('date-to').value   = tsToDateInput(dataMax);
+      $('date-from').min = $('date-to').min = tsToDateInput(dataMin);
+      $('date-from').max = $('date-to').max = tsToDateInput(dataMax);
+
+      applyFilters();
+      $('timeline').classList.add('ready');
       document.querySelector('.spinner-container').style.display = 'none';
       raf = requestAnimationFrame(animate);
     }).catch(() => {
-      document.getElementById('status').textContent = 'Failed to load';
+      $('status').textContent = 'Failed to load';
       document.querySelector('.spinner-container').style.display = 'none';
     });
   });
