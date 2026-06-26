@@ -174,7 +174,24 @@
     flex-shrink: 0;
     font-size: 0.85rem;
     color: var(--primary-color);
+    transition: opacity .1s ease-in;
   }
+  .trip-icon-static {
+    position: absolute;
+    transition: opacity .1s ease-in;
+  }
+  .trip-icon-default {
+    position: absolute;
+    transition: opacity .1s ease-in;
+  }
+  .trip-icon-hover {
+    position: absolute;
+    transition: opacity .1s ease-in;
+  }
+  .trip-icon .trip-icon-default { opacity: 1; }
+  .trip-icon .trip-icon-hover { opacity: 0; }
+  .trip-icon:hover .trip-icon-default { opacity: 0; }
+  .trip-icon:hover .trip-icon-hover { opacity: 1; }
   .trip-route {
     font-weight: 500;
     font-size: 0.9rem;
@@ -1422,6 +1439,40 @@ function fetchLeaderboard(year) {
 
 fetchLeaderboard(_hlYear);
 
+// ─── Copying Trips ───────────────────────────────────────────────────────────
+
+function copyTrip(id) {
+  const btn = document.getElementById(`btn-trip-${id}`)
+  const iconsDefault = document.getElementById(`icons-trip-${id}`)
+  const iconsActive = document.getElementById(`icons-active-trip-${id}`)
+
+  btn.disabled = true;
+  fetch('{{ url_for("trips.bulk_copy_trips", username=username) }}', {
+    method: 'POST',
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ tripIds: id })
+  })
+    .then(r => {
+      if (!r.ok) {
+        return
+      }
+
+      // Update Icons to show success for 1 second
+      iconsActive.style = "opacity:1;"
+      iconsDefault.style = "opacity:0;"
+
+      setTimeout(() => {
+        iconsActive.style = "opacity:0;"
+        iconsDefault.style = "opacity:1;"
+      }, 3000)
+    })
+    .catch(() => {})
+
+  btn.disabled = false;
+}
+
 // ─── Friends ─────────────────────────────────────────────────────────────────
 
 function usernameColor(name) {
@@ -1435,15 +1486,32 @@ function friendItem(t, right) {
   const icon = tripIcon(t.type);
   const tag = t.trip_id ? "a" : "div";
   const href = t.trip_id ? ` href="/public/trip/${t.trip_id}"` : "";
-  return `<${tag}${href} class="friend-item" style="text-decoration:none;color:inherit;">
-    <div class="trip-icon"><i class="${icon}"></i></div>
-    <div style="flex:1;min-width:0">
+
+  const btnTripId = t.trip_id ? `id="btn-trip-${t.trip_id}"` : "";
+  const iconsTripId = t.trip_id ? `id="icons-trip-${t.trip_id}"` : "";
+  const iconsTripIdActive = t.trip_id ? `id="icons-active-trip-${t.trip_id}"` : "";
+  const btnOnClick = t.trip_id ? ` onClick="copyTrip(${t.trip_id})"` : "";
+
+  return `<div class="friend-item" style="text-decoration:none;color:inherit">
+    <button
+      class="trip-icon"
+      ${btnTripId}
+      ${btnOnClick}
+      style=";border:none;"
+    >
+      <span ${iconsTripId} class="trip-icon trip-icon-static">
+        <i class="trip-icon-default ${icon}"></i>
+        <i class="trip-icon-hover fa-solid fa-copy"></i>
+      </span>
+      <i class="trip-icon-static fa-solid fa-check" style="opacity:0;" ${iconsTripIdActive}></i>
+    </button>
+    <${tag}${href} style="text-decoration:none;color:inherit;flex:1;min-width:0">
       <div><span class="friend-username" style="background:${usernameColor(t.username).bg};color:${usernameColor(t.username).color};"><i class="fa-solid fa-user" style="font-size:0.6rem;margin-right:3px;opacity:0.8;"></i>${esc(t.username)}</span></div>
       <div class="trip-route">${esc(t.origin) || "?"} → ${esc(t.destination) || "?"}</div>
       <div class="trip-meta">${esc(t.operator)}${t.km ? " · " + fmt(t.km) + " km" : ""}</div>
-    </div>
+    </${tag}>
     ${right ? `<div class="trip-right">${right}</div>` : ""}
-  </${tag}>`;
+  </div>`;
 }
 
 function friendSection(label, labelStyle, items) {
