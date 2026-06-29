@@ -2,15 +2,27 @@
 
 A plan-trip is timed either with absolute precision (mirroring the trip builder's
 'preciseDates' / 'onlyDate' / 'unknown') or with relative 'day offset + time' for
-both departure and arrival. For the relative mode we anchor the day offsets at the
-plan's anchor_date (Day 1 = anchor_date) and compute timezone-correct UTC instants
-from the path endpoints, so the chained itinerary simulates accurately. The precise
-modes delegate to the existing trips processDates() so behaviour stays identical.
+both departure and arrival.
+
+Relative ("Day N") legs are deliberately NOT tied to any real calendar date: only the
+anchor chosen at save time (validate_plan) turns them into dated trips. For storage and
+the in-plan simulation we materialise them against a fixed internal reference date, so
+a leg's stored datetimes depend only on (day offset, time, location) — never on the
+plan's anchor_date. (Anchoring relative legs at the plan's anchor_date used to make
+legs drift apart whenever the anchor changed between saves.) The day offset and clock
+time live in their own durable columns (start_day/end_day/start_time/end_time) and are
+the real source of truth. The precise modes delegate to the existing trips
+processDates() so behaviour stays identical.
 """
 
-from datetime import datetime, time as dtime, timedelta
+from datetime import date, datetime, time as dtime, timedelta
 
 from src.utils import getUtcDatetime, processDates
+
+# Fixed internal anchor for relative legs (Day 1). Arbitrary — only the time-of-day,
+# the day offset and the timezone-correct elapsed/UTC ordering it produces are
+# meaningful; the calendar date itself is a placeholder.
+RELATIVE_REF_DATE = date(2000, 1, 1)
 
 
 def _parse_time(value):
@@ -24,7 +36,7 @@ def _parse_time(value):
     return None
 
 
-def process_plan_dates(new_trip, new_path, anchor_date):
+def process_plan_dates(new_trip, new_path):
     """Return the timing column dict for a plan_trip given the builder payload."""
     mode = new_trip.get("precision", "relative")
 
@@ -34,12 +46,14 @@ def process_plan_dates(new_trip, new_path, anchor_date):
         start_time = _parse_time(new_trip.get("planStartTime"))
         end_time = _parse_time(new_trip.get("planEndTime"))
         if start_time is not None and end_time is not None:
-            # Timed leg: real local datetimes -> timezone-correct UTC, precise duration.
+            # Timed leg: local datetimes on the fixed reference date -> timezone-correct
+            # UTC (so the elapsed duration, and the cross-leg ordering, are right even
+            # across timezone boundaries), independent of any anchor_date.
             local_start = datetime.combine(
-                anchor_date + timedelta(days=start_day - 1), start_time
+                RELATIVE_REF_DATE + timedelta(days=start_day - 1), start_time
             )
             local_end = datetime.combine(
-                anchor_date + timedelta(days=end_day - 1), end_time
+                RELATIVE_REF_DATE + timedelta(days=end_day - 1), end_time
             )
             utc_start = getUtcDatetime(dateTime=local_start, **new_path[0])
             utc_end = getUtcDatetime(dateTime=local_end, **new_path[-1])
@@ -48,10 +62,10 @@ def process_plan_dates(new_trip, new_path, anchor_date):
             # (00:00:01) so formatTrip shows no clock time; duration falls back to the
             # routed estimate. No UTC (there is no concrete time).
             local_start = datetime.combine(
-                anchor_date + timedelta(days=start_day - 1), dtime(0, 0, 1)
+                RELATIVE_REF_DATE + timedelta(days=start_day - 1), dtime(0, 0, 1)
             )
             local_end = datetime.combine(
-                anchor_date + timedelta(days=end_day - 1), dtime(0, 0, 1)
+                RELATIVE_REF_DATE + timedelta(days=end_day - 1), dtime(0, 0, 1)
             )
             utc_start = utc_end = None
             start_time = end_time = None

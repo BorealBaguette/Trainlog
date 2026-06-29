@@ -16,6 +16,10 @@ import requests
 from flask import abort, redirect, request, session, url_for
 from timezonefinder import TimezoneFinder
 
+# TimezoneFinder loads its boundary data on construction, which is expensive. It is
+# thread-safe for read-only lookups, so build it once and reuse it everywhere.
+_timezone_finder = TimezoneFinder()
+
 from py.utils import load_config
 from src.consts import DbNames, Env
 from src.pg import pg_session
@@ -178,8 +182,7 @@ def processDates(new_trip, new_path):
 
 
 def getUtcDatetime(lat, lng, dateTime):
-    tf = TimezoneFinder()
-    timezone_str = tf.timezone_at(lat=lat, lng=lng)
+    timezone_str = _timezone_finder.timezone_at(lat=lat, lng=lng)
 
     # Handle override for specific zones
     if timezone_str in ["Asia/Urumqi", "Asia/Kashgar"]:
@@ -195,9 +198,7 @@ def getUtcDatetime(lat, lng, dateTime):
 
 
 def getLocalDatetime(lat, lng, dateTime):
-    # Instantiate TimezoneFinder and find timezone for given lat, lng
-    tf = TimezoneFinder()
-    timezone_str = tf.timezone_at(lat=lat, lng=lng)
+    timezone_str = _timezone_finder.timezone_at(lat=lat, lng=lng)
 
     if timezone_str in ["Asia/Urumqi", "Asia/Kashgar"]:
         local_timezone = pytz.FixedOffset(480)  # 480 minutes = 8 hours

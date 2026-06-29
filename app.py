@@ -186,6 +186,7 @@ from src.utils import (
     sendOwnerEmail,
     sendEmail,
     getLocalDatetime,
+    getUtcDatetime,
     login_required,
     admin_required,
     public_required,
@@ -229,7 +230,7 @@ from src.sql.plans import (
     delete_plan_cost_query,
     set_plan_trip_cost_query,
 )
-from src.plans.process_plan_dates import process_plan_dates
+from src.plans.process_plan_dates import RELATIVE_REF_DATE, process_plan_dates
 from src.plans.plan_trip import PlanTrip
 from src.plans.create_plan_trip import create_plan_trip
 from src.plans.update_plan_trip_full import update_plan_trip_full
@@ -877,7 +878,7 @@ def savePlanTripToDb(username, newTrip, newPath, plan, trip_type="train"):
         )
 
     now = datetime.now()
-    timing = process_plan_dates(newTrip, newPath, plan["anchor_date"])
+    timing = process_plan_dates(newTrip, newPath)
 
     for k in ("reg", "seat", "material_type", "material_type_advanced", "waypoints", "notes"):
         newTrip.setdefault(k, "")
@@ -4789,19 +4790,21 @@ def build_plan_trip_list(plan_uuid):
 
     tripList = []
     total_price = total_carbon = total_distance = 0
-    prev_end_utc = None  # arrival (UTC) of the previous timed leg, for connection checks
+    prev_end_pos = None  # arrival position of the previous timed leg, for connection checks
     for r in rows:
         pt = r._mapping
-        # Impossible connection: this timed leg departs before the previous one arrives.
-        cur_start_utc = pt["utc_start_datetime"]
-        impossible = (
-            prev_end_utc is not None
-            and cur_start_utc is not None
-            and cur_start_utc < prev_end_utc
-        )
-        if pt["utc_end_datetime"] is not None:
-            prev_end_utc = pt["utc_end_datetime"]
         coords = geom_geojson_to_coords(pt["geojson"])
+        # Impossible connection: this timed leg departs before the previous one arrives.
+        # Positions are timezone-correct and anchor-independent (see _plan_leg_positions),
+        # so neither a timezone boundary nor anchor_date drift can fabricate a conflict.
+        cur_start_pos, cur_end_pos = _plan_leg_positions(pt, coords)
+        impossible = (
+            prev_end_pos is not None
+            and cur_start_pos is not None
+            and cur_start_pos < prev_end_pos
+        )
+        if cur_end_pos is not None:
+            prev_end_pos = cur_end_pos
         sdt = _fmt_legacy_dt(pt["start_datetime"]) if pt["start_datetime"] else None
         edt = _fmt_legacy_dt(pt["end_datetime"]) if pt["end_datetime"] else None
         usdt = _fmt_legacy_dt(pt["utc_start_datetime"]) if pt["utc_start_datetime"] else None
@@ -4868,7 +4871,10 @@ def build_plan_trip_list(plan_uuid):
             total_price += trip["price_in_user_currency"]
         tripList.append(
             {"time": trip["time"], "trip": trip, "path": coords, "altitude": None,
-             "timestamps": None, "lockTime": True, "impossible": impossible}
+             "timestamps": None, "lockTime": True, "impossible": impossible,
+             # UTC-epoch departure/arrival used by compute_plan_stats for the span
+             # (timezone-correct, anchor-independent — see _plan_leg_positions).
+             "pos_start": cur_start_pos, "pos_end": cur_end_pos}
         )
 
     priceDict = {
@@ -4971,15 +4977,35 @@ def _fmt_dhm(seconds):
     return " ".join(parts)
 
 
-def _parse_legacy_dt(value):
-    """Parse a legacy 'YYYY-MM-DD HH:MM:SS' string to datetime; None for sentinels
-    (1/-1 = no/unknown date) or anything unparseable."""
-    if not isinstance(value, str):
-        return None
-    try:
-        return datetime.strptime(value, "%Y-%m-%d %H:%M:%S")
-    except ValueError:
-        return None
+def _plan_leg_positions(pt, coords):
+    """(departure, arrival) UTC-epoch positions for a plan-trip, used only to order and
+    compare consecutive legs (span + impossible-connection checks).
+
+    Relative ("Day N") legs are resolved on the fixed reference date (RELATIVE_REF_DATE)
+    and converted to UTC from the path endpoints, so the comparison is correct even when
+    consecutive legs sit in different timezones — and it never touches the stored
+    datetimes, so anchor_date drift on legacy data can't fabricate false conflicts.
+    Absolute (precise) legs use their stored UTC instants. `coords` is [[lat,lng],...].
+    Returns (None, None) for untimed legs."""
+    # Seconds since the Unix epoch, from a naive UTC datetime. (Not datetime.timestamp(),
+    # which would reinterpret the naive value in the server's local timezone.)
+    epoch = lambda dt: (dt - datetime(1970, 1, 1)).total_seconds() if dt is not None else None
+    sd = pt["start_day"]
+    if sd is not None:  # relative leg
+        st, et = pt["start_time"], pt["end_time"]
+        if st is None:  # untimed -> no concrete connection to check
+            return None, None
+        ed = pt["end_day"] or sd
+        et = et if et is not None else st
+        local_s = datetime.combine(RELATIVE_REF_DATE + timedelta(days=sd - 1), st)
+        local_e = datetime.combine(RELATIVE_REF_DATE + timedelta(days=ed - 1), et)
+        if coords:
+            us = getUtcDatetime(lat=coords[0][0], lng=coords[0][1], dateTime=local_s)
+            ue = getUtcDatetime(lat=coords[-1][0], lng=coords[-1][1], dateTime=local_e)
+        else:  # no geometry to resolve a timezone -> compare the local clocks as-is
+            us, ue = local_s, local_e
+        return epoch(us), epoch(ue)
+    return epoch(pt["utc_start_datetime"]), epoch(pt["utc_end_datetime"])  # absolute leg
 
 
 def compute_plan_stats(trip_list, costs=None):
@@ -4989,16 +5015,16 @@ def compute_plan_stats(trip_list, costs=None):
     PRIX total, on top of the per-leg prices.
 
     `span` is the end-to-end length of the whole trip — first departure to last
-    arrival on the plan's (anchored) timeline — i.e. "is this a 3-day or a 5-hour
-    trip", independent of how much of that time is spent actually moving."""
+    arrival — i.e. "is this a 3-day or a 5-hour trip", independent of how much of that
+    time is spent actually moving. It reads the per-leg positions attached by
+    build_plan_trip_list (timezone-correct, anchor-independent)."""
     # Stays/stops aren't travelling and shouldn't inflate the trip's duration or span.
     NON_TRAVEL = ("poi", "accommodation", "restaurant")
     total_duration = total_distance = total_price = 0.0
     user_currency = getLoggedUserCurrency()
     per_type = {}
-    starts, ends = [], []
-    day_starts, day_ends = [], []
-    any_timed = False
+    pos_starts, pos_ends = [], []  # UTC-epoch departure/arrival (timed legs)
+    day_starts, day_ends = [], []  # Day-N offsets (relative legs, for the day-only span)
     for item in trip_list:
         t = item["trip"]
         ty = t.get("type") or "other"
@@ -5011,14 +5037,12 @@ def compute_plan_stats(trip_list, costs=None):
         if t.get("user_currency"):
             user_currency = t["user_currency"]
         if travels:
-            s = _parse_legacy_dt(t.get("start_datetime"))
-            e = _parse_legacy_dt(t.get("end_datetime"))
-            if s:
-                starts.append(s)
-            if e:
-                ends.append(e)
-            if t.get("start_time"):  # has a concrete clock time -> real time resolution
-                any_timed = True
+            # Timezone-correct, anchor-independent positions (see _plan_leg_positions);
+            # day numbers feed the fallback when the plan is day-only (no clock times).
+            ps, pe = item.get("pos_start"), item.get("pos_end")
+            if ps is not None and pe is not None:
+                pos_starts.append(ps)
+                pos_ends.append(pe)
             dn = t.get("day_number")
             if dn is not None:
                 day_starts.append(dn)
@@ -5055,11 +5079,11 @@ def compute_plan_stats(trip_list, costs=None):
         total_shared += converted if converted is not None else float(cp)
     total_price += total_shared
 
-    # Span: when legs carry real clock times use the precise elapsed time; for a
-    # day-only plan there are no times, so use the inclusive day count (Day 1 -> Day 2
-    # is a 2-day trip).
-    if any_timed and starts and ends:
-        span_seconds = (max(ends) - min(starts)).total_seconds()
+    # Span: first departure to last arrival. Timed legs give a precise elapsed time
+    # (positions are timezone-correct UTC epochs); a day-only plan has no clock times,
+    # so fall back to the inclusive day count (Day 1 -> Day 2 is a 2-day trip).
+    if pos_starts and pos_ends:
+        span_seconds = max(pos_ends) - min(pos_starts)
     elif day_starts:
         span_seconds = (max(day_ends) - min(day_starts) + 1) * 86400.0
     else:
@@ -5240,7 +5264,7 @@ def update_plan_trip_route(username, plan_uuid, plan_trip_uid):
         "unknownType": request.form.get("unknownType"),
         "onlyDateDuration": request.form.get("onlyDateDuration", ""),
     }
-    timing = process_plan_dates(form, path, plan["anchor_date"])
+    timing = process_plan_dates(form, path)
     now = datetime.now()
     with pg_session() as pg:
         pg.execute(
@@ -5286,9 +5310,10 @@ def _get_plan_trip_row(plan, plan_trip_uid):
 @app.route("/u/<username>/plan/<plan_uuid>/trip/<int:plan_trip_uid>/editor")
 @login_required
 def plan_trip_editor(username, plan_uuid, plan_trip_uid):
-    """Open the full trip editor (edit_copy) for a plan-trip. Timing is shown via the
-    datetimes materialised at the plan's anchor_date; the save converts them back to
-    relative day offsets for relative legs (see update_plan_trip_full_route)."""
+    """Open the full trip editor (edit_copy) for a plan-trip. Relative legs are edited
+    as Day N + time (prefilled from their durable day/time columns); precise legs use
+    the stored absolute datetimes. anchor_date is irrelevant here — it only matters at
+    save-as-trips time (validate_plan)."""
     plan = get_owned_plan(plan_uuid, username)
     pt = _get_plan_trip_row(plan, plan_trip_uid)
 
@@ -5399,12 +5424,11 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
 @login_required
 def update_plan_trip_full_route(username, plan_uuid, plan_trip_uid):
     """Save a plan-trip edited in the rich editor: route geometry + all metadata +
-    timing. Relative legs keep their day-offset semantics by converting the edited
-    absolute datetimes back to day numbers relative to the plan's anchor_date."""
+    timing. Relative legs keep their day-offset semantics (Day N + time), stored
+    independently of the plan's anchor_date (see process_plan_dates)."""
     plan = get_owned_plan(plan_uuid, username)
     pt = _get_plan_trip_row(plan, plan_trip_uid)
     formData = dict(request.form)
-    anchor = plan["anchor_date"]
 
     # Path: edited on the map, otherwise keep the stored geometry.
     if formData.get("path"):
@@ -5417,7 +5441,7 @@ def update_plan_trip_full_route(username, plan_uuid, plan_trip_uid):
 
     # The editor exposes the timing modes natively (relative Day N + time, precise,
     # onlyDate, unknown), so honour whatever was chosen.
-    timing = process_plan_dates(formData, path, anchor)
+    timing = process_plan_dates(formData, path)
 
     # Distance/duration/countries: recompute when the route was (re-)drawn, else keep.
     details_parsed = json.loads(formData["details"]) if formData.get("details") else None

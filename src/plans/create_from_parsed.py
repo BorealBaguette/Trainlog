@@ -47,7 +47,7 @@ def create_plan_trip_from_parsed(
     else:
         countries = getCountriesFromPath(path, trip_type, None, None)
 
-    timing = process_plan_dates(timing_input, path, plan["anchor_date"])
+    timing = process_plan_dates(timing_input, path)
 
     # Routed legs with concrete UTC instants get a precise estimated duration.
     estimated = None
