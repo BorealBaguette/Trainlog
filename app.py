@@ -59,7 +59,8 @@ from scgraph.geographs.marnet import marnet_geograph
 from sqlalchemy import and_, case, func, or_
 from sqlalchemy_utils import database_exists
 from werkzeug.datastructures import FileStorage
-from werkzeug.exceptions import HTTPException
+from werkzeug.exceptions import HTTPException, MethodNotAllowed, NotFound
+from werkzeug.routing import RequestRedirect
 from werkzeug.security import check_password_hash, generate_password_hash
 from werkzeug.utils import secure_filename
 import sqlite3
@@ -7732,12 +7733,12 @@ def get_trips_api_internal(username, is_public=False):
         ]
         terms = [like.format(col=col) for col in global_search_columns]
         terms.append(
-            "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = ticket_id"
+            "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = FilteredTrips.ticket_id"
             f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
         )
         terms.append(
             "EXISTS (SELECT 1 FROM tags_associations fta JOIN tags ft ON fta.tag_id = ft.uid"
-            f" WHERE fta.trip_id = uid AND remove_diacritics(LOWER(ft.name)) LIKE remove_diacritics(LOWER(:{param})))"
+            f" WHERE fta.trip_id = FilteredTrips.uid AND remove_diacritics(LOWER(ft.name)) LIKE remove_diacritics(LOWER(:{param})))"
         )
         return "(" + " OR ".join(terms) + ")"
 
@@ -11075,6 +11076,15 @@ def user_shortcut(subpath):
     qs = request.query_string.decode("latin-1")
     if user != "public":
         target = f"/u/{user}/{subpath}"
+        adapter = app.url_map.bind(request.host)
+        try:
+            endpoint, _ = adapter.match(target, method=request.method)
+            if endpoint == "user_shortcut":
+                abort(404)
+        except RequestRedirect:
+            pass
+        except (NotFound, MethodNotAllowed):
+            abort(404)
         if qs:
             target = f"{target}?{qs}"
         return redirect(target, 307)
