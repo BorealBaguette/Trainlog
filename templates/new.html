@@ -247,7 +247,9 @@
         <input type="text" class="non_poi" name="seat" id="seat" placeholder="{{seat}}">
         <label for="notes" class="sr-only">{{notes}}</label>
         <input type="text" name="notes" id="notes" placeholder="{{notes}}">
-
+        <label for="tagSearchInput">{{tags|default('Tags')}}</label>
+        <input type="text" id="tagSearchInput" placeholder="{{select_tag}}" class="form-control" autocomplete="off" style="margin-bottom:.4rem;">
+        <div id="tagList" class="d-flex flex-wrap gap-1"></div>
 
         <!-- Price Details Subgroup -->
         <fieldset class="fieldset-fixed fieldset-price">
@@ -345,8 +347,6 @@
         </div>
         {% endif %}
         <br>
-        <input type="text" id="tagSearchInput" placeholder="{{select_tag}}" class="form-control" autocomplete="off" style="margin-bottom:.4rem;">
-        <div id="tagList" class="d-flex flex-wrap gap-1"></div>
       </div>
 
       <br/>
