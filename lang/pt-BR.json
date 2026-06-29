@@ -146,6 +146,7 @@
     "routes": "Rotas viajadas",
     "stations": "Estações visitadas",
     "shareTrip": "Criar link",
+    "selectPage": "Selecionar página",
     "confirmDelete": "Tem certeza de que deseja excluir esta viagem?",
     "confirmMultiDelete": "Você está prestes a excluir ${tripNumber} viagens, tem certeza?",
     "confirmConfirm": "Tem certeza, certeza MESMO?",
