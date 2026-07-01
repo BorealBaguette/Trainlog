@@ -845,7 +845,8 @@ function routing(map, showSidebar=true, type){
       router: customRouter
     }).on('routeselected', function(){
       var content = `<h4>${texts.routeTitle.replace("{origLabel}", origLabel).replace("{destLabel}", destLabel)}</h4>`;
-      
+      var hintHtml = ''; // "adjust the markers" hint, shown inline next to the distance (train only)
+
       // Add router selector for train, tram, metro
       if(["train", "tram", "metro"].includes(type)){
         content += `
@@ -862,7 +863,8 @@ function routing(map, showSidebar=true, type){
             </label>
           </div>
         `;
-        content += `<p><small>${texts.fineTuneNote}</small></p>`;
+        // Tuck the "adjust the markers" hint behind a small info icon (rendered inline with distance).
+        hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div>${texts.fineTuneNote}</div></details>`;
       }
       
       // Add note about freehand segments if any exist
@@ -877,18 +879,19 @@ function routing(map, showSidebar=true, type){
       var time = secondsToDhm(durationS, "en");
       
       var formattedData = `${texts.distanceTime.replace("{km}", km).replace("{time}", time)}`;
-      content += `<p><i>${formattedData}</i></p>`;
+      content += `<div class="route-meta"><span class="route-dist">${formattedData}</span>${hintHtml}</div>`;
 
       flutterBridge.routeInfo(formattedData, distanceM, durationS);
       flutterBridge.loading(false);
     
       if(geojson){
-        content += `<p><button id="downloadGeoJSON" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></p>`;
+        content += `<div class="sidebar-actions"><button id="downloadGeoJSON" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></div>`;
       } else {
-        content += `<p><button id="saveTrip" type="button" onclick="saveTrip()">${texts.saveTripButton}</button></p>`;
+        content += `<div class="sidebar-actions"><button id="saveTrip" type="button" onclick="saveTrip()">${texts.saveTripButton}</button>`;
         if(newTrip.precision == "preciseDates" || newTrip.plan_uuid){
-          content += `<button id="saveTripContinue" type="button"  onclick="saveTrip(true)">${texts.saveTripContinueButton}</button>`;
+          content += `<button id="saveTripContinue" type="button" onclick="saveTrip(true)">${texts.saveTripContinueButton}</button>`;
         }
+        content += `</div>`;
       }
        
       sidebar.setContent(content);

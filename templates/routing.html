@@ -112,8 +112,8 @@ function enterFreehand() {
       newTrip["estimated_trip_duration"] = (distance / 30) * 3.6; // rough; freehand has no network
       sidebar.setContent(
         '<h4>' + origLabel + ' → ' + destLabel + '</h4>' +
-        '<p><i>' + mToKm(distance) + ' km</i></p>' +
-        '<p><button id="saveTrip" type="button" onclick="saveTrip()">' + texts.saveTripButton + '</button></p>'
+        '<div class="route-meta"><span class="route-dist">' + mToKm(distance) + ' km</span></div>' +
+        '<div class="sidebar-actions"><button id="saveTrip" type="button" onclick="saveTrip()">' + texts.saveTripButton + '</button></div>'
       );
     }
   });
@@ -132,13 +132,19 @@ if (!SINGLE_POINT.includes(type)) {
   // the panel in BOTH modes (router content comes from routing.js, freehand from enterFreehand).
   var _sidebarSetContent = sidebar.setContent.bind(sidebar);
   sidebar.setContent = function (html) {
+    _sidebarSetContent(html || '');
+    // Put the mode toggle in the action row so it shares a line with Save (+ continue);
+    // if there's no action row yet (e.g. the loading spinner), fall back to the panel top.
     var icon = freehandActive ? 'fa-solid fa-route' : 'fa-solid fa-pencil';
     var label = freehandActive ? texts.routerMode : texts.freehandMode;
-    var btnHtml = '<button type="button" id="freehandToggleBtn" class="freehand-toggle-btn">' +
-      '<i class="fh-ico ' + icon + '"></i><span>' + label + '</span></button>';
-    _sidebarSetContent(btnHtml + (html || ''));
-    var b = document.getElementById('freehandToggleBtn');
-    if (b) b.onclick = function () { freehandActive ? exitFreehand() : enterFreehand(); };
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.id = 'freehandToggleBtn';
+    b.className = 'freehand-toggle-btn';
+    b.innerHTML = '<i class="fh-ico ' + icon + '"></i><span>' + label + '</span>';
+    b.onclick = function () { freehandActive ? exitFreehand() : enterFreehand(); };
+    var host = document.querySelector('#sidebar .sidebar-actions') || document.getElementById('sidebar');
+    host.insertBefore(b, host.firstChild);
   };
   if (startFreehand) enterFreehand();
 }

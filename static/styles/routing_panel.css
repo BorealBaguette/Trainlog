@@ -4,11 +4,11 @@
    base CSS and the inline styles routing.js emits, without touching the shared JS markup. */
 
 .leaflet-sidebar > .leaflet-control#sidebar {
-  padding: 18px 20px;
+  padding: 15px 17px;
   border: none;
   border-radius: 14px;
   box-shadow: 0 10px 30px rgba(17, 24, 39, .16), 0 2px 6px rgba(17, 24, 39, .08);
-  font: 15px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font: 14.5px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: #1f2733;
 }
 .leaflet-touch .leaflet-sidebar > .leaflet-control#sidebar {
@@ -16,15 +16,43 @@
   box-shadow: 0 10px 30px rgba(17, 24, 39, .16), 0 2px 6px rgba(17, 24, 39, .08);
 }
 
-#sidebar h4 { margin: 2px 0 14px; font-size: 1.06rem; font-weight: 700; line-height: 1.3; color: #111827; }
-#sidebar p { margin: 0 0 12px; }
+#sidebar h4 { margin: 0 0 11px; font-size: 1rem; font-weight: 700; line-height: 1.35; color: #111827; }
+#sidebar p { margin: 0 0 10px; }
 #sidebar small { color: #6b7280; font-size: .82em; }
 
-/* distance -> subtle chip */
-#sidebar p > i {
+/* distance -> subtle chip (air-routing still emits <p><i>…</i>) */
+#sidebar p > i,
+#sidebar .route-dist {
   display: inline-block; font-style: normal; font-weight: 600; color: #374151;
-  background: #f3f4f6; padding: 5px 11px; border-radius: 8px;
+  background: #f3f4f6; padding: 4px 10px; border-radius: 8px;
 }
+
+/* distance + info icon share one row */
+#sidebar .route-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 11px; }
+
+/* "adjust the markers" hint tucked behind a small info icon */
+#sidebar .route-meta .route-hint { margin: 0; }
+#sidebar .route-hint { margin: 0 0 10px; }
+#sidebar .route-hint summary {
+  list-style: none; cursor: pointer; width: 22px; height: 22px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: #eef1f5; color: #7a8494; transition: background .12s, color .12s;
+}
+#sidebar .route-hint summary::-webkit-details-marker { display: none; }
+#sidebar .route-hint summary::marker { content: ""; }
+#sidebar .route-hint summary:hover { background: #e2e7ee; color: #4b5563; }
+#sidebar .route-hint[open] summary { margin-bottom: 7px; }
+#sidebar .route-hint[open] { flex-basis: 100%; } /* when open, drop to its own line for readable text */
+#sidebar .route-hint > div { font-size: .82em; line-height: 1.45; color: #6b7280; }
+
+/* action buttons on one row (specificity beats the full-width button rule below) */
+#sidebar .sidebar-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; margin-top: 2px; }
+#sidebar .sidebar-actions button:not(.freehand-toggle-btn) { flex: 1 1 130px; width: auto; margin: 0; }
+/* the mode toggle shares that row but stays sized to its label */
+#sidebar .sidebar-actions .freehand-toggle-btn { flex: 0 0 auto; margin: 0; }
+/* the long "submit & continue" button always drops to its own full-width line, so the row
+   stays 2 lines ([toggle] [Valider] / [continue]) instead of three cramped, tall buttons */
+#sidebar .sidebar-actions #saveTripContinue { flex: 1 0 100%; }
 
 /* router-choice box (routing.js emits inline greys) */
 #sidebar > div[style] {
@@ -34,7 +62,7 @@
 #sidebar > div[style] span { font-size: .9em; color: #374151; }
 
 /* freehand mode toggle pinned flush at the top */
-#sidebar .freehand-toggle-btn { margin: 0 0 14px; }
+#sidebar .freehand-toggle-btn { margin: 0 0 11px; }
 
 /* action buttons (everything except the freehand mode toggle) */
 #sidebar button:not(.freehand-toggle-btn) {
@@ -59,12 +87,12 @@
    The plugin makes the panel a cramped 20%-tall band at the top; give it room to fit its
    content (up to ~62% height, scroll beyond) and read as a clean top sheet, with bigger taps. */
 @media (max-width: 767px) {
-  .leaflet-sidebar { height: auto !important; max-height: 62%; }
+  .leaflet-sidebar { height: auto !important; max-height: 55%; }
   .leaflet-sidebar > .leaflet-control#sidebar {
-    max-height: 62vh;
-    padding: 14px 16px;
+    max-height: 55vh;
+    padding: 13px 15px;
     border-radius: 0 0 16px 16px;
   }
-  #sidebar h4 { margin-bottom: 10px; }
-  #sidebar button:not(.freehand-toggle-btn) { padding: 12px 14px; }
+  #sidebar h4 { margin-bottom: 9px; font-size: .96rem; }
+  #sidebar .sidebar-actions button:not(.freehand-toggle-btn) { padding: 11px 12px; font-size: 13px; }
 }
