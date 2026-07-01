@@ -499,7 +499,7 @@
     "distanceTime": "{km} km、{time}",
     "downloadGeoJSONButton": "GeoJSONをダウンロード",
     "clearCacheLabel": "ローカル記録キャッシュをクリアします。<br><small>ブラウザの空き容量が増えますが、最初の地図のリロードに時間がかかります<small>",
-    "saveTripContinueButton": "記録を送信し、次の記録を追加",
+    "saveTripContinueButton": "送信して旅を続ける",
     "cacheCleared": "キャッシュが正常にクリアされました！",
     "cacheError": "キャッシュをクリア中にエラーが発生しました！",
     "clearCache": "キャッシュをクリア",

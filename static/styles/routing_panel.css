@@ -20,6 +20,11 @@
 #sidebar p { margin: 0 0 10px; }
 #sidebar small { color: #6b7280; font-size: .82em; }
 
+/* Loading spinner: the global .spinner-container is height:100% (with a top:50% centering
+   trick), which balloons the panel to full height during submit/route calc. Keep it compact. */
+#sidebar .spinner-container { height: auto; padding: 16px 0; }
+#sidebar .lds-spinner { top: 0; margin-top: 0; }
+
 /* distance -> subtle chip (air-routing still emits <p><i>…</i>) */
 #sidebar p > i,
 #sidebar .route-dist {
@@ -45,14 +50,8 @@
 #sidebar .route-hint[open] { flex-basis: 100%; } /* when open, drop to its own line for readable text */
 #sidebar .route-hint > div { font-size: .82em; line-height: 1.45; color: #6b7280; }
 
-/* action buttons on one row (specificity beats the full-width button rule below) */
-#sidebar .sidebar-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: stretch; margin-top: 2px; }
-#sidebar .sidebar-actions button:not(.freehand-toggle-btn) { flex: 1 1 130px; width: auto; margin: 0; }
-/* the mode toggle shares that row but stays sized to its label */
-#sidebar .sidebar-actions .freehand-toggle-btn { flex: 0 0 auto; margin: 0; }
-/* the long "submit & continue" button always drops to its own full-width line, so the row
-   stays 2 lines ([toggle] [Valider] / [continue]) instead of three cramped, tall buttons */
-#sidebar .sidebar-actions #saveTripContinue { flex: 1 0 100%; }
+/* freehand mode toggle rides on the distance/info row, pushed to the right */
+#sidebar .route-meta .freehand-toggle-btn { margin-left: auto; }
 
 /* router-choice box (routing.js emits inline greys) */
 #sidebar > div[style] {
@@ -61,8 +60,8 @@
 }
 #sidebar > div[style] span { font-size: .9em; color: #374151; }
 
-/* freehand mode toggle pinned flush at the top */
-#sidebar .freehand-toggle-btn { margin: 0 0 11px; }
+/* freehand mode toggle: no default margin (placement handled by .route-meta) */
+#sidebar .freehand-toggle-btn { margin: 0; }
 
 /* action buttons (everything except the freehand mode toggle) */
 #sidebar button:not(.freehand-toggle-btn) {
@@ -71,13 +70,42 @@
   font: 600 14px/1.2 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; cursor: pointer;
   transition: background .12s, filter .12s, border-color .12s;
 }
-#sidebar #saveTrip, #sidebar #downloadGeoJSON, #sidebar #uploadGpxBtn { background: #2e8b57; color: #fff; }
-#sidebar #saveTrip:hover, #sidebar #downloadGeoJSON:hover, #sidebar #uploadGpxBtn:hover { filter: brightness(1.07); }
-#sidebar #saveTripContinue { background: #fff; color: #2e8b57; border-color: #2e8b57; }
-#sidebar #saveTripContinue:hover { background: #f1f8f4; }
+#sidebar #saveTrip, #sidebar #downloadGeoJSON, #sidebar #uploadGpxBtn,
+#sidebar .submit-main { background: #2e8b57; color: #fff; }
+#sidebar #saveTrip:hover, #sidebar #downloadGeoJSON:hover, #sidebar #uploadGpxBtn:hover,
+#sidebar .submit-main:hover { filter: brightness(1.07); }
 /* air-routing "Switch to FR24/Geodesic path" secondary button */
 #sidebar button.btn-outline-primary { background: #fff; color: #2f6fed; border-color: #cdd9f5; }
 #sidebar button.btn-outline-primary:hover { background: #f2f6ff; border-color: #2f6fed; }
+
+/* ── Submit control: single "Valider", or a split button whose caret (CSS-only <details>)
+   reveals "…et continuer". ── */
+#sidebar .submit-control { margin-top: 4px; }
+#sidebar .submit-split { position: relative; display: flex; }
+#sidebar .submit-split .submit-main { flex: 1; margin: 0; border-radius: 9px 0 0 9px; }
+#sidebar .submit-more { display: flex; }
+#sidebar .submit-more summary {
+  list-style: none; cursor: pointer; width: 42px;
+  display: flex; align-items: center; justify-content: center;
+  background: #2e8b57; color: #fff; border-radius: 0 9px 9px 0;
+  border-left: 1px solid rgba(255, 255, 255, .28);
+}
+#sidebar .submit-more summary::-webkit-details-marker { display: none; }
+#sidebar .submit-more summary::marker { content: ""; }
+#sidebar .submit-more summary:hover { filter: brightness(1.07); }
+#sidebar .submit-more summary i { transition: transform .15s; }
+#sidebar .submit-more[open] summary i { transform: rotate(180deg); } /* ▾ closed -> ▴ open */
+#sidebar .submit-menu {
+  position: absolute; right: 0; bottom: calc(100% + 6px); min-width: 210px; z-index: 1200;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 6px;
+  box-shadow: 0 10px 26px rgba(17, 24, 39, .18);
+}
+#sidebar .submit-menu button:not(.freehand-toggle-btn) {
+  display: block; width: 100%; margin: 0; padding: 9px 12px; text-align: left;
+  border: none; border-radius: 7px; background: #fff; color: #111827;
+  font: 500 13.5px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; cursor: pointer;
+}
+#sidebar .submit-menu button:hover { background: #f1f8f4; color: #2e8b57; }
 
 /* close (x) */
 .leaflet-sidebar .close { font-size: 22px; color: #9ca3af; }
@@ -94,5 +122,5 @@
     border-radius: 0 0 16px 16px;
   }
   #sidebar h4 { margin-bottom: 9px; font-size: .96rem; }
-  #sidebar .sidebar-actions button:not(.freehand-toggle-btn) { padding: 11px 12px; font-size: 13px; }
+  #sidebar .submit-main { padding: 12px 14px; }
 }

@@ -499,7 +499,7 @@
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON 다운로드",
     "clearCacheLabel": "로컬 여행 캐시 지우기. <br><small>브라우저의 공간을 확보하지만, 첫 번째 지도 새로 고침은 더 오래 걸립니다<small>",
-    "saveTripContinueButton": "제출하고 여행 계속하기",
+    "saveTripContinueButton": "등록하고 여행 계속하기",
     "cacheCleared": "캐시가 성공적으로 지워졌습니다!",
     "cacheError": "캐시 지우기 오류!",
     "clearCache": "캐시 지우기",

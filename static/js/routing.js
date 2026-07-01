@@ -885,13 +885,13 @@ function routing(map, showSidebar=true, type){
       flutterBridge.loading(false);
     
       if(geojson){
-        content += `<div class="sidebar-actions"><button id="downloadGeoJSON" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></div>`;
+        content += `<div class="submit-control"><button id="downloadGeoJSON" class="submit-main" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></div>`;
       } else {
-        content += `<div class="sidebar-actions"><button id="saveTrip" type="button" onclick="saveTrip()">${texts.saveTripButton}</button>`;
-        if(newTrip.precision == "preciseDates" || newTrip.plan_uuid){
-          content += `<button id="saveTripContinue" type="button" onclick="saveTrip(true)">${texts.saveTripContinueButton}</button>`;
-        }
-        content += `</div>`;
+        content += buildSubmitControl({
+          saveLabel: texts.saveTripButton,
+          continueLabel: texts.saveTripContinueButton,
+          showContinue: newTrip.precision == "preciseDates" || !!newTrip.plan_uuid
+        });
       }
        
       sidebar.setContent(content);
@@ -963,3 +963,18 @@ function routing(map, showSidebar=true, type){
   }
 }
 window.switchRouter = switchRouter;
+
+// Build the submit control for the sidebar: a plain "Valider" button, or — when a
+// "save & continue" action applies — a split button whose caret (a CSS-only <details>)
+// reveals the continue option. Shared by routing.js and routing.html's freehand mode.
+function buildSubmitControl(opts) {
+  var save = '<button id="saveTrip" class="submit-main" type="button" onclick="saveTrip()">' + opts.saveLabel + '</button>';
+  if (!opts.showContinue) {
+    return '<div class="submit-control">' + save + '</div>';
+  }
+  return '<div class="submit-control"><div class="submit-split">' + save +
+    '<details class="submit-more"><summary><i class="fa-solid fa-chevron-down"></i></summary>' +
+    '<div class="submit-menu"><button id="saveTripContinue" type="button" onclick="saveTrip(true)">' +
+    opts.continueLabel + '</button></div></details></div></div>';
+}
+window.buildSubmitControl = buildSubmitControl;

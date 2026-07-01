@@ -499,7 +499,7 @@
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Download GeoJSON",
     "clearCacheLabel": "Ryd den lokale rejse-cache. <br><small>Frigør plads i din browser, men den første genindlæsning af kortet vil tage længere tid<small>",
-    "saveTripContinueButton": "Send og fortsæt turen",
+    "saveTripContinueButton": "Indsend og fortsæt turen",
     "cacheCleared": "Cachen er ryddet med succes!",
     "cacheError": "Fejl ved rydning af cachen!",
     "clearCache": "Ryd cache",

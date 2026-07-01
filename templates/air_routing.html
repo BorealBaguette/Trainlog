@@ -182,11 +182,10 @@ function updateSidebar(isFr24Active) {
     flutterBridge.loading(false);
 
     if (newTrip.fr24_id) {
-        content += `<div class="sidebar-actions"><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></div>`;
+        content += `<div class="submit-control"><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></div>`;
     }
 
-    content += `<div class="sidebar-actions"><button id="saveTrip" type="button" onclick="saveTrip()" class="btn btn-success">{{submit}}</button>`;
-    content += `<button id="saveTripContinue" type="button" onclick="saveTrip(true)" class="btn btn-outline-success btn-sm">{{saveTripContinueButton}}</button></div>`;
+    content += `<div class="submit-control"><div class="submit-split"><button id="saveTrip" class="submit-main" type="button" onclick="saveTrip()">{{submit}}</button><details class="submit-more"><summary><i class="fa-solid fa-chevron-down"></i></summary><div class="submit-menu"><button id="saveTripContinue" type="button" onclick="saveTrip(true)">{{saveTripContinueButton}}</button></div></details></div></div>`;
     sidebar.setContent(content);
 }
 

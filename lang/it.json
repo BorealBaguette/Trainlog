@@ -499,7 +499,7 @@
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Scarica GeoJSON",
     "clearCacheLabel": "Cancella la cache dei viaggi locali. <br><small>Libera spazio nel tuo browser, ma il primo ricaricamento della mappa impiegherà più tempo<small>",
-    "saveTripContinueButton": "Invia e continua il viaggio",
+    "saveTripContinueButton": "Conferma e continua il viaggio",
     "cacheCleared": "Cache cancellata con successo!",
     "cacheError": "Errore nella cancellazione della cache!",
     "clearCache": "Cancella cache",

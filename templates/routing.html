@@ -113,7 +113,11 @@ function enterFreehand() {
       sidebar.setContent(
         '<h4>' + origLabel + ' → ' + destLabel + '</h4>' +
         '<div class="route-meta"><span class="route-dist">' + mToKm(distance) + ' km</span></div>' +
-        '<div class="sidebar-actions"><button id="saveTrip" type="button" onclick="saveTrip()">' + texts.saveTripButton + '</button></div>'
+        buildSubmitControl({
+          saveLabel: texts.saveTripButton,
+          continueLabel: texts.saveTripContinueButton,
+          showContinue: newTrip.precision == "preciseDates" || !!newTrip.plan_uuid
+        })
       );
     }
   });
@@ -143,8 +147,10 @@ if (!SINGLE_POINT.includes(type)) {
     b.className = 'freehand-toggle-btn';
     b.innerHTML = '<i class="fh-ico ' + icon + '"></i><span>' + label + '</span>';
     b.onclick = function () { freehandActive ? exitFreehand() : enterFreehand(); };
-    var host = document.querySelector('#sidebar .sidebar-actions') || document.getElementById('sidebar');
-    host.insertBefore(b, host.firstChild);
+    // Only show the toggle on the distance/info row (right side). During loading/spinner or
+    // error states there's no .route-meta, so we simply don't render it (avoids a stray button).
+    var host = document.querySelector('#sidebar .route-meta');
+    if (host) host.appendChild(b);
   };
   if (startFreehand) enterFreehand();
 }
