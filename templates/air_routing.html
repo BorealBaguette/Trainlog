@@ -185,7 +185,11 @@ function updateSidebar(isFr24Active) {
         content += `<div class="submit-control"><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></div>`;
     }
 
-    content += `<div class="submit-control"><div class="submit-split"><button id="saveTrip" class="submit-main" type="button" onclick="saveTrip()">{{submit}}</button><details class="submit-more"><summary><i class="fa-solid fa-chevron-down"></i></summary><div class="submit-menu"><button id="saveTripContinue" type="button" onclick="saveTrip(true)">{{saveTripContinueButton}}</button></div></details></div></div>`;
+    content += buildSubmitControl({
+        saveLabel: "{{submit}}",
+        continueLabel: "{{saveTripContinueButton}}",
+        showContinue: true
+    });
     sidebar.setContent(content);
 }
 

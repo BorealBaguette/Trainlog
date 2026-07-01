@@ -213,6 +213,11 @@ from src.trips import (
     get_current_trip_id,
 )
 from src.paths import Path, coords_to_ewkt, fetch_path, geom_geojson_to_coords
+from src.trips.freehand_transform import (
+    apply_to_trip,
+    purge_expired_backups,
+    revert_trip,
+)
 from src.sql.plans import (
     insert_plan_query,
     get_plan_query,
@@ -4120,6 +4125,118 @@ def add_dummy_path(trip_id):
             "success": True,
             "message": f"Dummy path added to trip {trip_id}"
         })
+
+
+# ── Freehandify: turn legacy over-sampled routes into editable freehand ones ──
+# The old freehand endpoint stored the raw mouse track (thousands of points) with no
+# waypoints and route_source 'router', so those trips can't be reopened in the freehand
+# canvas. These routes simplify the dense path to a few waypoints (Douglas-Peucker) and
+# rebuild the drawn line with the exact logic of static/js/freehand.js (buildSavePath),
+# writing waypoints + rebuilt geometry + route_source='freehand'. The first run snapshots
+# the original into freehand_backup, so the change is reversible and can be re-run at a
+# different tolerance from the full-detail original. trip_length and carbon are left
+# untouched (the simplified line's length is within ~1% of the original).
+
+def _parse_trip_ids(trip_ids):
+    """Comma-separated ids -> [int]. Returns None if any token isn't an integer."""
+    try:
+        return [int(t) for t in trip_ids.split(",") if t.strip()]
+    except ValueError:
+        return None
+
+
+def _run_freehandify(ids, epsilon, restrict_user_id=None):
+    """Apply/revert helpers share this loop. When restrict_user_id is set, trips not
+    owned by that user are skipped (never touched)."""
+    results = []
+    with pg_session() as pg:
+        purge_expired_backups(pg)  # drop undo snapshots past their TTL
+        for trip_id in ids:
+            if restrict_user_id is not None:
+                row = pg.execute(
+                    "SELECT user_id FROM trips WHERE trip_id = :t", {"t": trip_id}
+                ).fetchone()
+                if row is None:
+                    results.append({"trip_id": trip_id, "status": "skipped", "reason": "not found"})
+                    continue
+                if row["user_id"] != restrict_user_id:
+                    results.append({"trip_id": trip_id, "status": "skipped", "reason": "not owned"})
+                    continue
+            results.append(apply_to_trip(pg, trip_id, epsilon))
+    return results
+
+
+def _run_revert(ids, restrict_user_id=None):
+    results = []
+    with pg_session() as pg:
+        purge_expired_backups(pg)  # drop undo snapshots past their TTL
+        for trip_id in ids:
+            if restrict_user_id is not None:
+                row = pg.execute(
+                    "SELECT user_id FROM trips WHERE trip_id = :t", {"t": trip_id}
+                ).fetchone()
+                if row is None:
+                    results.append({"trip_id": trip_id, "status": "skipped", "reason": "not found"})
+                    continue
+                if row["user_id"] != restrict_user_id:
+                    results.append({"trip_id": trip_id, "status": "skipped", "reason": "not owned"})
+                    continue
+            results.append(revert_trip(pg, trip_id))
+    return results
+
+
+@app.route("/admin/freehandify/<trip_ids>", methods=["GET"])
+@owner_required
+def freehandify_trips_admin(trip_ids):
+    """Owner-only: freehandify any trips. See _run_freehandify. `?epsilon` (metres,
+    default 50) tunes simplification — larger means fewer waypoints."""
+    ids = _parse_trip_ids(trip_ids)
+    if ids is None:
+        return jsonify({"success": False, "message": "trip_ids must be integers"}), 400
+    try:
+        epsilon = float(request.args.get("epsilon", 50))
+    except ValueError:
+        return jsonify({"success": False, "message": "epsilon must be a number"}), 400
+    return jsonify({"success": True, "epsilon": epsilon, "results": _run_freehandify(ids, epsilon)})
+
+
+@app.route("/admin/freehandify/revert/<trip_ids>", methods=["GET"])
+@owner_required
+def freehandify_revert_admin(trip_ids):
+    """Owner-only: restore trips' original routes from the freehand_backup snapshot."""
+    ids = _parse_trip_ids(trip_ids)
+    if ids is None:
+        return jsonify({"success": False, "message": "trip_ids must be integers"}), 400
+    return jsonify({"success": True, "results": _run_revert(ids)})
+
+
+@app.route("/u/<username>/freehandify/<trip_ids>", methods=["GET"])
+@login_required
+def freehandify_trips_user(username, trip_ids):
+    """Freehandify the caller's own trips (login_required guarantees username is the
+    logged-in user); trips owned by anyone else are skipped. `?epsilon` (metres,
+    default 50) tunes simplification — larger means fewer waypoints."""
+    ids = _parse_trip_ids(trip_ids)
+    if ids is None:
+        return jsonify({"success": False, "message": "trip_ids must be integers"}), 400
+    try:
+        epsilon = float(request.args.get("epsilon", 50))
+    except ValueError:
+        return jsonify({"success": False, "message": "epsilon must be a number"}), 400
+    results = _run_freehandify(ids, epsilon, restrict_user_id=get_user_id(username))
+    return jsonify({"success": True, "epsilon": epsilon, "results": results})
+
+
+@app.route("/u/<username>/freehandify/revert/<trip_ids>", methods=["GET"])
+@login_required
+def freehandify_revert_user(username, trip_ids):
+    """Restore the caller's own trips from their freehand_backup snapshot; trips owned
+    by anyone else are skipped."""
+    ids = _parse_trip_ids(trip_ids)
+    if ids is None:
+        return jsonify({"success": False, "message": "trip_ids must be integers"}), 400
+    results = _run_revert(ids, restrict_user_id=get_user_id(username))
+    return jsonify({"success": True, "results": results})
 
 def listOperatorsLogos(tripType=None):
     """

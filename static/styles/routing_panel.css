@@ -105,7 +105,15 @@
   border: none; border-radius: 7px; background: #fff; color: #111827;
   font: 500 13.5px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; cursor: pointer;
 }
-#sidebar .submit-menu button:hover { background: #f1f8f4; color: #2e8b57; }
+/* Either action can be the primary/secondary button, so #saveTrip may land in the menu;
+   override the green #id styling (line above) so the dropdown option stays neutral. */
+#sidebar .submit-menu #saveTrip, #sidebar .submit-menu #saveTripContinue {
+  background: #fff; color: #111827;
+}
+#sidebar .submit-menu button:hover,
+#sidebar .submit-menu #saveTrip:hover, #sidebar .submit-menu #saveTripContinue:hover {
+  background: #f1f8f4; color: #2e8b57;
+}
 
 /* close (x) */
 .leaflet-sidebar .close { font-size: 22px; color: #9ca3af; }

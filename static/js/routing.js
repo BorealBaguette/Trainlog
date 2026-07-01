@@ -964,17 +964,45 @@ function routing(map, showSidebar=true, type){
 }
 window.switchRouter = switchRouter;
 
+// Remember whether the user last used "Save" or "Save & continue" so we can promote
+// that action to the big primary button next time (the other drops under the caret).
+function getSubmitDefault() {
+  var m = document.cookie.match(/(?:^|;\s*)routingSubmitDefault=([^;]+)/);
+  return m && decodeURIComponent(m[1]) === 'continue' ? 'continue' : 'save';
+}
+function setSubmitDefault(mode) {
+  var expires = new Date(Date.now() + 365 * 864e5).toUTCString();
+  document.cookie = 'routingSubmitDefault=' + mode + '; expires=' + expires + '; path=/';
+}
+// Persist the choice, then run the page's saveTrip(). onclick target for both buttons.
+window.saveTripPref = function(continueTrip) {
+  setSubmitDefault(continueTrip ? 'continue' : 'save');
+  saveTrip(continueTrip);
+};
+
 // Build the submit control for the sidebar: a plain "Valider" button, or — when a
 // "save & continue" action applies — a split button whose caret (a CSS-only <details>)
-// reveals the continue option. Shared by routing.js and routing.html's freehand mode.
+// reveals the alternative option. The last-used action is shown as the primary button
+// (remembered in a cookie). Shared by routing.js, routing.html and air_routing.html.
+function submitBtn(id, cls, label, continueTrip) {
+  return '<button id="' + id + '"' + (cls ? ' class="' + cls + '"' : '') +
+    ' type="button" onclick="saveTripPref(' + (continueTrip ? 'true' : 'false') + ')">' + label + '</button>';
+}
 function buildSubmitControl(opts) {
-  var save = '<button id="saveTrip" class="submit-main" type="button" onclick="saveTrip()">' + opts.saveLabel + '</button>';
+  var save = submitBtn('saveTrip', 'submit-main', opts.saveLabel, false);
   if (!opts.showContinue) {
     return '<div class="submit-control">' + save + '</div>';
   }
-  return '<div class="submit-control"><div class="submit-split">' + save +
+  var continueFirst = getSubmitDefault() === 'continue';
+  // Primary (big) button is the last-used action; the other goes under the caret.
+  var primary = continueFirst
+    ? submitBtn('saveTripContinue', 'submit-main', opts.continueLabel, true)
+    : save;
+  var secondary = continueFirst
+    ? submitBtn('saveTrip', '', opts.saveLabel, false)
+    : submitBtn('saveTripContinue', '', opts.continueLabel, true);
+  return '<div class="submit-control"><div class="submit-split">' + primary +
     '<details class="submit-more"><summary><i class="fa-solid fa-chevron-down"></i></summary>' +
-    '<div class="submit-menu"><button id="saveTripContinue" type="button" onclick="saveTrip(true)">' +
-    opts.continueLabel + '</button></div></details></div></div>';
+    '<div class="submit-menu">' + secondary + '</div></details></div></div>';
 }
 window.buildSubmitControl = buildSubmitControl;
