@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "bijv. 45",
     "useOldRouter": "Overschakelen naar klassieke routeringsengine",
     "useNewRouter": "Probeer nieuwe router (toont elektrificatie)",
+    "freehandMode": "Vrije hand",
+    "routerMode": "Routering",
     "news": "Trainlog Nieuws",
     "CO2": "CO₂e",
     "donate": "Koop een koffie voor me",

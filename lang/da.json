@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "f.eks. 45",
     "useOldRouter": "Skift til klassisk routingmotor",
     "useNewRouter": "Prøv ny router (viser elektrificering)",
+    "freehandMode": "Frihånd",
+    "routerMode": "Rute",
     "news": "Trainlog Nyheder",
     "CO2": "CO₂e",
     "donate": "Køb mig en kaffe",

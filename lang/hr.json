@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "npr. 45",
     "useOldRouter": "Prebaci na klasični motor za usmjeravanje",
     "useNewRouter": "Isprobajte novi router (prikazuje elektrifikaciju)",
+    "freehandMode": "Slobodnom rukom",
+    "routerMode": "Ruta",
     "news": "Vijesti Trainlog",
     "CO2": "CO₂e",
     "donate": "Kupi mi kavu",

@@ -26,7 +26,8 @@ INSERT INTO trips (
     currency,
     ticket_id,
     purchase_date,
-    visibility
+    visibility,
+    route_source
 )
 SELECT
     user_id,
@@ -56,7 +57,8 @@ SELECT
     currency,
     ticket_id,
     purchase_date,
-    visibility
+    visibility,
+    route_source
 FROM trips
 WHERE trip_id = :trip_id
 RETURNING trip_id

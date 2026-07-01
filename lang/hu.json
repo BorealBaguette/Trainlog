@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "pl. 45",
     "useOldRouter": "Váltás a klasszikus útvonalmotorra",
     "useNewRouter": "Próbálja ki az új útválasztót (mutatja az elektromos hálózatot)",
+    "freehandMode": "Szabadkézi",
+    "routerMode": "Útvonal",
     "news": "Trainlog Hírek",
     "CO2": "CO₂e",
     "donate": "Vegyél nekem egy kávét",

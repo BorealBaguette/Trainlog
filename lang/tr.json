@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "örn. 45",
     "useOldRouter": "Klasik yönlendirme motoruna geç",
     "useNewRouter": "Yeni yönlendiriciyi deneyin (elektrifikasyonu gösterir)",
+    "freehandMode": "Serbest çizim",
+    "routerMode": "Rota",
     "news": "Trainlog Haberler",
     "CO2": "CO₂e",
     "donate": "Bana bir kahve al",

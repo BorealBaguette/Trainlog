@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "z.B. 45",
     "useOldRouter": "Uf klassische Routenmaschine umschalte",
     "useNewRouter": "Probier de neu Router (zeigt Elektrifizierig)",
+    "freehandMode": "Freihand",
+    "routerMode": "Routing",
     "news": "Trainlog-Neuigkeite",
     "CO2": "CO₂e",
     "donate": "Chauf mier es Kaffi",

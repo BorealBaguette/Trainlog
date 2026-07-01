@@ -463,6 +463,8 @@
 </div>
 
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lib/leaflet.geometryutil.js') }}"></script>
+<script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
 <script>
 var vehicle_type = "{{ vehicle_type }}";
 var saveURL = "{{ url_for('saveTrip', username=username) }}";
@@ -498,9 +500,59 @@ var visitedStations = {};
 var originEntry = null, destEntry = null;
 var routingStarted = false;
 var tempMarkers = {};
+// Freehand inline mode (declared unconditionally so composeSave can always read them).
+var freehandEditor = null;
+var freehandActive = false;
 
 // ── Map (createMap from map.js handles tile server selection) ──
 var map = createMap(null, [48, 8]);
+
+// ── Inline freehand mode: a map toggle swaps the router for the hand-draw canvas
+//    on this same map, keeping all form fields. Only for routable ground types. ──
+{% if vehicle_type not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
+function composeFreehandSeed() {
+  var via = viaStations.filter(Boolean).map(function (v) { return v[0]; });
+  return [originEntry[0]].concat(via).concat([destEntry[0]]);
+}
+function enterFreehand() {
+  if (freehandActive) return;
+  if (!originEntry || !destEntry) {
+    alert('{{ pleaseSetDest|default("Please set an origin and destination.") }}');
+    return;
+  }
+  freehandActive = true;
+  if (window.control) map.removeControl(window.control);
+  var seed = composeFreehandSeed();
+  freehandEditor = createFreehandEditor(map, {
+    origin: seed[0], dest: seed[seed.length - 1], waypoints: seed.slice(1, -1),
+    markerIconStart: markerIconStart, markerIconEnd: markerIconEnd,
+    onChange: function (path, distance) {
+      currentRoute = path.map(function (p) { return { lat: p.lat, lng: p.lng }; });
+      routeDetails = null;
+      newTrip.trip_length = distance;
+      newTrip.estimated_trip_duration = (distance / 30) * 3.6; // rough; freehand has no network
+    }
+  });
+}
+function exitFreehand() {
+  if (!freehandActive) return;
+  freehandActive = false;
+  if (freehandEditor) { freehandEditor.destroy(); freehandEditor = null; }
+  if (window.control) window.control.addTo(map); // re-adds + re-routes
+}
+var fhToggle = addFreehandToggle(map, {
+  labelFreehand: "{{ freehandMode|default('Freehand') }}",
+  labelRouter: "{{ routerMode|default('Router') }}",
+  onToggle: function (active) {
+    if (active) {
+      enterFreehand();
+      if (!freehandActive) fhToggle.setActive(false); // aborted (no stations yet) → revert button
+    } else {
+      exitFreehand();
+    }
+  }
+});
+{% endif %}
 
 // ── Station search URLs ──
 var stationSearchURLs = {
@@ -1112,6 +1164,12 @@ function composeSave(continueTrip) {
     return;
   }
   newTrip.details = routeDetails;
+  if (freehandActive && freehandEditor) {
+    newTrip.route_source = 'freehand';
+    newTrip.waypoints = JSON.stringify(freehandEditor.getWaypoints());
+  } else {
+    newTrip.route_source = 'router';
+  }
   $.post({
     url: plan_uuid ? savePlanURL : saveURL,
     data: { jsonPath: JSON.stringify(currentRoute), newTrip: JSON.stringify(newTrip), fromApp: 'false' },

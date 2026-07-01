@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "např. 45",
     "useOldRouter": "Přepnout na klasický směrovací stroj",
     "useNewRouter": "Vyzkoušejte nový router (zobrazuje elektrifikaci)",
+    "freehandMode": "Od ruky",
+    "routerMode": "Trasování",
     "news": "Zprávy Trainlog",
     "CO2": "CO₂e",
     "donate": "Kup mi kávu",

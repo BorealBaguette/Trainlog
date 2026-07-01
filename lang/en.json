@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "e.g. 45",
     "useOldRouter": "Switch to classic routing engine",
     "useNewRouter": "Try new router (shows electrification)",
+    "freehandMode": "Freehand",
+    "routerMode": "Router",
     "news": "Trainlog News",
     "CO2": "CO₂e",
     "donate": "Buy me a coffee",

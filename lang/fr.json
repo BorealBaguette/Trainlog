@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "ex. 45",
     "useOldRouter": "Passer au routeur classique",
     "useNewRouter": "Essayer le nouveau routeur (affiche l'électrification)",
+    "freehandMode": "Main levée",
+    "routerMode": "Routage",
     "news": "Actualités Trainlog",
     "CO2": "CO₂e",
     "donate": "M'offrir un café",

@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "例: 45",
     "useOldRouter": "旧式の経路設定に切り替え",
     "useNewRouter": "新しい経路設定を試す（電化を表示）",
+    "freehandMode": "フリーハンド",
+    "routerMode": "ルート",
     "news": "Trainloadニュース",
     "CO2": "CO₂e",
     "donate": "コーヒーを奢ってください",

@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "nt. 45",
     "useOldRouter": "Lülita klassikalisele marsruutimismootorile",
     "useNewRouter": "Proovi uut ruuterit (kuvab elektrifitseerimist)",
+    "freehandMode": "Vabakäsi",
+    "routerMode": "Marsruut",
     "news": "Trainlog Uudised",
     "CO2": "CO₂e",
     "donate": "Osta mulle kohv",

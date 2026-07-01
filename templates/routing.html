@@ -1,6 +1,7 @@
 {% extends "layout.html" %}
 {% block content %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet-gpx/1.5.1/gpx.min.js"></script>
+<script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
 <div id="map" class="mapRouting"></div>
 <div id="sidebar">
     <div id="sidebar-content"></div>
@@ -11,6 +12,8 @@
   nav.navbar { display: none !important; }
 </style>
 {% endif %}
+
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/routing_panel.css') }}">
 <script>
 // ─── Flutter bridge (for app) ───────────────────────────────────────────────
 window.flutterBridge = {
@@ -39,7 +42,9 @@ const texts = {
   "saveTripContinueButton": "{{saveTripContinueButton}}",
   "remove": "{{remove}}",
   "waypoint": "{{waypoint}}",
-  "useNewRouter": "{{useNewRouter}}"
+  "useNewRouter": "{{useNewRouter}}",
+  "freehandMode": "{{freehandMode|default('Freehand')}}",
+  "routerMode": "{{routerMode|default('Router')}}"
 };
 
 // Try POST data first, then sessionStorage
@@ -58,12 +63,10 @@ if (!newTrip) {
 var fromApp = !!getGetParams().get("fromApp");
 var type = getGetParams().get("type") || newTrip.type;
 newTrip["type"] = type;
-var freehand = getGetParams().get("freehand");
-if (!freehand) {
-    var routerurl = `${window.location.origin}/forwardRouting/${type}/route/v1`;
-} else {
-    location.href = "{{ url_for('freehand', username=username) }}" + location.search;
-}
+// Freehand is now an inline mode toggled on this same map (see below); `?freehand`
+// in the URL just selects it as the initial mode instead of redirecting away.
+var startFreehand = !!getGetParams().get("freehand");
+var routerurl = `${window.location.origin}/forwardRouting/${type}/route/v1`;
 var origCoord = newTrip["originStation"][0];
 var destCoord = newTrip["destinationStation"][0];
 var origLabel = newTrip["originStation"][1];
@@ -78,7 +81,75 @@ var sidebar;
 var getCountryUrl = '{{url_for("getCountry")}}';
 routing(map, true, type, getCountryUrl);
 
+// ── Inline freehand mode ────────────────────────────────────────────────────
+// Swaps this map between the road/rail router and the hand-draw canvas without
+// leaving the page. The router control (window.control, set by routing()) is
+// removed while drawing and re-added (which re-routes) when switching back.
+var SINGLE_POINT = ["accommodation", "restaurant", "poi"];
+var freehandEditor = null;
+var freehandActive = false;
+
+function enterFreehand() {
+  if (freehandActive) return;
+  freehandActive = true;
+  if (window.control) map.removeControl(window.control);
+  // Seed from the live router waypoints if present, otherwise the initial endpoints.
+  var seed = (window.currentPlan && window.currentPlan.getWaypoints)
+    ? window.currentPlan.getWaypoints().filter(function (w) { return w.latLng; })
+        .map(function (w) { return [w.latLng.lat, w.latLng.lng]; })
+    : wplist;
+  if (!seed || seed.length < 2) seed = wplist;
+  freehandEditor = createFreehandEditor(map, {
+    origin: seed[0],
+    dest: seed[seed.length - 1],
+    waypoints: seed.slice(1, -1),
+    markerIconStart: markerIconStart,
+    markerIconEnd: markerIconEnd,
+    onChange: function (path, distance) {
+      currentRoute = path.map(function (p) { return { lat: p.lat, lng: p.lng }; });
+      routeDetails = null;
+      newTrip["trip_length"] = distance;
+      newTrip["estimated_trip_duration"] = (distance / 30) * 3.6; // rough; freehand has no network
+      sidebar.setContent(
+        '<h4>' + origLabel + ' → ' + destLabel + '</h4>' +
+        '<p><i>' + mToKm(distance) + ' km</i></p>' +
+        '<p><button id="saveTrip" type="button" onclick="saveTrip()">' + texts.saveTripButton + '</button></p>'
+      );
+    }
+  });
+}
+
+function exitFreehand() {
+  if (!freehandActive) return;
+  freehandActive = false;
+  if (freehandEditor) { freehandEditor.destroy(); freehandEditor = null; }
+  if (window.control) window.control.addTo(map); // re-adds + re-routes
+}
+
+if (!SINGLE_POINT.includes(type)) {
+  // The sidebar plugin overwrites the panel body on every setContent(), so we can't just
+  // insert a button once. Instead wrap setContent so the toggle is re-injected at the top of
+  // the panel in BOTH modes (router content comes from routing.js, freehand from enterFreehand).
+  var _sidebarSetContent = sidebar.setContent.bind(sidebar);
+  sidebar.setContent = function (html) {
+    var icon = freehandActive ? 'fa-solid fa-route' : 'fa-solid fa-pencil';
+    var label = freehandActive ? texts.routerMode : texts.freehandMode;
+    var btnHtml = '<button type="button" id="freehandToggleBtn" class="freehand-toggle-btn">' +
+      '<i class="fh-ico ' + icon + '"></i><span>' + label + '</span></button>';
+    _sidebarSetContent(btnHtml + (html || ''));
+    var b = document.getElementById('freehandToggleBtn');
+    if (b) b.onclick = function () { freehandActive ? exitFreehand() : enterFreehand(); };
+  };
+  if (startFreehand) enterFreehand();
+}
+
 async function saveTrip(continueTrip=false) {
+  if (freehandActive && freehandEditor) {
+    newTrip["route_source"] = "freehand";
+    newTrip["waypoints"] = JSON.stringify(freehandEditor.getWaypoints());
+  } else {
+    newTrip["route_source"] = "router";
+  }
     if (["accommodation", "restaurant", "poi"].includes(type)) {
         newTrip["trip_length"] = 0;
         newTrip["estimated_trip_duration"] = 0;

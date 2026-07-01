@@ -48,6 +48,7 @@ def create_trip(trip: Trip, pg_session=None):
                 "arrival_delay": trip.arrival_delay,
                 "power_type": trip.power_type,
                 "co2_override": trip.co2_override,
+                "route_source": trip.route_source,
             },
         ).fetchone()[0]
 

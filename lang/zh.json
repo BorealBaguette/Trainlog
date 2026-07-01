@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "例如：45",
     "useOldRouter": "切换到经典路由引擎",
     "useNewRouter": "尝试新路由器（显示电气化）",
+    "freehandMode": "手绘",
+    "routerMode": "路线",
     "news": "Trainlog 新闻",
     "CO2": "CO₂e",
     "donate": "请给我买杯咖啡",

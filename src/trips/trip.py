@@ -57,6 +57,7 @@ class Trip:
         co2_override=None,
         altitude=None,
         timestamps=None,
+        route_source="router",
     ):
         self.trip_id = trip_id
         self.username = username
@@ -99,6 +100,8 @@ class Trip:
         # vertices): altitude in metres, timestamps in epoch seconds.
         self.altitude = altitude
         self.timestamps = timestamps
+        # How the route was produced: 'router' | 'freehand' | 'gpx' | 'gpx_routed' | 'fr24'.
+        self.route_source = route_source
         self.carbon = (
             calculate_carbon_footprint_for_trip(vars(self), path) if path else None
         )
@@ -150,6 +153,7 @@ class Trip:
             trip["visibility"],
             trip["departure_delay"],
             trip["arrival_delay"],
+            route_source=trip["route_source"],
         )
 
     def _json_safe(self, value):

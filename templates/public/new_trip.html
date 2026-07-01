@@ -592,6 +592,9 @@ const dateOptionsShort = { month: 'short', day: 'numeric' };
 // Plan views with undated (relative) trips label the timeline "Day N" instead of
 // showing the (anchored) calendar date.
 const relativeDates = {{ 'true' if relativeDates else 'false' }};
+// Plan views have no Leaflet fallback page, so the WebGL failure path below must
+// not redirect them to a non-existent /public/leaflet/plan/ route.
+const isPlanView = {{ 'true' if plan else 'false' }};
 function planDayLabel(trip) {
     var d = trip && trip.trip ? trip.trip.day_number : null;
     return d != null ? ("{{ day|default('Day') }} " + d) : null;
@@ -1933,7 +1936,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeMapAndTrips().catch(err => {
         const msg = err?.message || '';
         if ((msg.includes('webglcontextcreationerror') || msg.includes('Failed to initialize WebGL'))
-            && window.location.pathname.includes('/public/')) {
+            && window.location.pathname.includes('/public/') && !isPlanView) {
             window.location.href = window.location.pathname.replace('/public/', '/public/leaflet/') + window.location.search;
         } else {
             console.error(err);

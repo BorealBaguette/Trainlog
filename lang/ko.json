@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "예: 45",
     "useOldRouter": "클래식 라우팅 엔진으로 전환",
     "useNewRouter": "새 라우터를 시도하세요 (전력 공급을 표시)",
+    "freehandMode": "자유 그리기",
+    "routerMode": "경로",
     "news": "트레인로그 뉴스",
     "CO2": "CO₂e",
     "donate": "커피 한 잔 사줘",

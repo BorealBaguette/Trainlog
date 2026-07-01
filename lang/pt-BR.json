@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "ex: 45",
     "useOldRouter": "Mudar para o motor de roteamento clássico",
     "useNewRouter": "Experimente o novo roteador (mostra eletrificação)",
+    "freehandMode": "À mão livre",
+    "routerMode": "Rota",
     "news": "Notícias do Trainlog",
     "CO2": "CO₂e",
     "donate": "Compre-me um café",

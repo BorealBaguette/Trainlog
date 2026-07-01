@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "наприклад, 45",
     "useOldRouter": "Переключитися на класичний рушій маршрутізації",
     "useNewRouter": "Спробуйте новий маршрутизатор (показує електрифікацію)",
+    "freehandMode": "Від руки",
+    "routerMode": "Маршрут",
     "news": "Новини Trainlog",
     "CO2": "CO₂e",
     "donate": "Купи мені каву",

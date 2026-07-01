@@ -686,6 +686,8 @@
     "co2OverridePlaceholder": "esim. 45",
     "useOldRouter": "Vaihda perinteiseen reititysalgoritmiin",
     "useNewRouter": "Kokeile uutta reititintä (näyttää sähköistyksen)",
+    "freehandMode": "Vapaapiirto",
+    "routerMode": "Reititys",
     "news": "Trainlog-uutiset",
     "CO2": "CO₂e",
     "donate": "Osta minulle kahvi",
