@@ -495,6 +495,7 @@
     "tools": "Narzędzia",
     "automatedRouters": "Automatyczne routery",
     "routeTitle": "{origLabel} do {destLabel}",
+    "ferrySplitNote": "Podziel na osobne podróże przy każdym przejściu promem ({n} odcinek promu wykryty)",
     "fineTuneNote": "Uwaga: Router jest ten sam dla pociągu, tramwaju i metra. Może być konieczne dostosowanie umiejscowienia pinu, aby poprowadzić trasę na żądanej ścieżce.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Pobierz GeoJSON",

@@ -53,6 +53,10 @@ antpathStyles =  {
 };
 
 var useNewRouter = false;
+// Persists the ferry-split checkbox's state across re-renders (routeWhileDragging
+// fires routeselected repeatedly, which fully re-creates the sidebar HTML — without
+// this, an unchecked box would silently reset to checked on the next drag/reroute).
+var ferrySplitEnabled = true;
 
 var markergroup = new L.featureGroup(markerIconStart, markerIconEnd);
 
@@ -612,7 +616,37 @@ function combineRoutes(routes, waypoints, callback, context) {
   callback.call(context, null, [combinedRoute]);
 }
 
-function routing(map, showSidebar=true, type){
+// Trip types whose OSRM profile can plausibly cross a ferry leg (car/bus ferries,
+// foot/bike passenger ferries, train ferries). Trams, metros, air, etc. never do.
+var FERRY_SPLIT_TYPES = ['car', 'bus', 'train', 'cycle', 'walk'];
+window.FERRY_SPLIT_TYPES = FERRY_SPLIT_TYPES;
+
+// Group a route's instructions into contiguous driving/ferry segments, using each
+// instruction's coordinate-array `index` to slice out per-segment coordinates.
+// Freehand placeholder instructions carry no `.mode`, so they're treated as
+// 'driving' and simply merge into whichever driving segment surrounds them.
+function detectModeSegments(route) {
+  var instructions = route.instructions, coords = route.coordinates;
+  var segments = []; // {mode, startIdx, roadName, distance, time, coordinates}
+  instructions.forEach(function(instr) {
+    var mode = instr.mode === 'ferry' ? 'ferry' : 'driving';
+    var cur = segments[segments.length - 1];
+    if (!cur || cur.mode !== mode) {
+      cur = { mode: mode, startIdx: instr.index, distance: 0, time: 0, roadName: null };
+      segments.push(cur);
+    }
+    cur.distance += instr.distance;
+    cur.time += instr.time;
+    if (mode === 'ferry' && !cur.roadName) cur.roadName = instr.road; // OSRM ferry step name
+  });
+  for (var i = 0; i < segments.length; i++) {
+    var endIdx = (i < segments.length - 1) ? segments[i + 1].startIdx : coords.length - 1;
+    segments[i].coordinates = coords.slice(segments[i].startIdx, endIdx + 1);
+  }
+  return segments;
+}
+
+function routing(map, showSidebar=true, type, allowFerrySplit=false){
   flutterBridge.loading(true);
 
   sidebar = L.control.sidebar('sidebar', {
@@ -847,6 +881,14 @@ function routing(map, showSidebar=true, type){
       var content = `<h4>${texts.routeTitle.replace("{origLabel}", origLabel).replace("{destLabel}", destLabel)}</h4>`;
       var hintHtml = ''; // "adjust the markers" hint, shown inline next to the distance (train only)
 
+      // Detect car/ferry mode transitions so the ferry-split toggle and
+      // saveTripSplit() in routing.html can offer splitting into separate trips.
+      // Only offered on the dedicated new-trip routing page (allowFerrySplit) — the
+      // edit/copy path editor and the AI-compose map reuse this same routing() control
+      // but only ever save a single trip, so splitting isn't wired up there.
+      window.modeSegments = (allowFerrySplit && FERRY_SPLIT_TYPES.includes(type)) ? detectModeSegments(this._selectedRoute) : null;
+      var hasFerry = window.modeSegments && window.modeSegments.some(function(s) { return s.mode === 'ferry'; });
+
       // Add router selector for train, tram, metro
       if(["train", "tram", "metro"].includes(type)){
         content += `
@@ -870,6 +912,28 @@ function routing(map, showSidebar=true, type){
       // Add note about freehand segments if any exist
       if (freehandSegments.size > 0) {
         content += `<p><small>⚠️ Route includes ${freehandSegments.size} freehand segment(s) shown as orange dashed lines</small></p>`;
+      }
+
+      // Ferry-split toggle: offered when adding a new leg (plain trip or new plan leg).
+      // allowFerrySplit is false on the edit/copy path editor, so editing an existing
+      // trip or plan leg's route never shows this — splitting an in-place edit into a
+      // different number of trips/legs is out of scope.
+      if (allowFerrySplit && FERRY_SPLIT_TYPES.includes(type) && hasFerry) {
+        var ferryCount = window.modeSegments.filter(function(s) { return s.mode === 'ferry'; }).length;
+        content += `
+          <div style="margin: 10px 0; padding: 10px; background-color: #eef6ff; border-radius: 4px;">
+            <label style="display: flex; align-items: center; cursor: pointer;">
+              <input
+                type="checkbox"
+                id="ferrySplitToggle"
+                onchange="ferrySplitEnabled = this.checked"
+                ${ferrySplitEnabled ? 'checked' : ''}
+                style="margin-right: 8px;"
+              >
+              <span>${texts.ferrySplitNote.replace("{n}", ferryCount)}</span>
+            </label>
+          </div>
+        `;
       }
 
       var distanceM = this._selectedRoute.summary.totalDistance;

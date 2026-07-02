@@ -495,6 +495,7 @@
     "tools": "Hulpmiddelen",
     "automatedRouters": "Geautomatiseerde routers",
     "routeTitle": "{origLabel} naar {destLabel}",
+    "ferrySplitNote": "Splits op in aparte trips bij elke veeroversteek ({n} veerdienst(en) gedetecteerd)",
     "fineTuneNote": "Opmerking: De router is hetzelfde voor trein, tram en metro. Mogelijk moet je de plaatsing van de pen fijn afstellen om de route op het gewenste pad te leiden.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON downloaden",

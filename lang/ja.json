@@ -495,6 +495,7 @@
     "tools": "ツール",
     "automatedRouters": "自動経路",
     "routeTitle": "{origLabel} から {destLabel}",
+    "ferrySplitNote": "フェリー横断ごとに別々の旅程に分割（フェリー区間を{n}件検出）",
     "fineTuneNote": "注意：経路設定はどのタイプの鉄道も同じです。目的の経路にするには、ピンの配置を微調整する必要があるかもしれません。",
     "distanceTime": "{km} km、{time}",
     "downloadGeoJSONButton": "GeoJSONをダウンロード",

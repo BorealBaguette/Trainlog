@@ -495,6 +495,7 @@
     "tools": "Tools",
     "automatedRouters": "Automated Routers",
     "routeTitle": "{origLabel} to {destLabel}",
+    "ferrySplitNote": "Split into separate trips at each ferry crossing ({n} ferry leg(s) detected)",
     "fineTuneNote": "Note: The router is the same for train, tram, and metro. You may need to fine-tune the peg placement to get it to route on the desired path.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Download GeoJSON",

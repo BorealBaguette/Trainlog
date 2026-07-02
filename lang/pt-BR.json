@@ -495,6 +495,7 @@
     "tools": "Ferramentas",
     "automatedRouters": "Roteadores Automatizados",
     "routeTitle": "{origLabel} a {destLabel}",
+    "ferrySplitNote": "Dividir em viagens separadas em cada travessia de balsa ({n} trecho(s) de balsa detectado(s))",
     "fineTuneNote": "Nota: O roteador é o mesmo para trem, bonde e metrô. Você pode precisar ajustar o posicionamento do pino para que ele siga a rota desejada.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Baixar GeoJSON",

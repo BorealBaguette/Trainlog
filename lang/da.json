@@ -495,6 +495,7 @@
     "tools": "Værktøjer",
     "automatedRouters": "Automatiserede routere",
     "routeTitle": "{origLabel} til {destLabel}",
+    "ferrySplitNote": "Opdel i separate ture ved hver færgeoverfart ({n} færgeetape(r) fundet)",
     "fineTuneNote": "Bemærk: Routeren er den samme for tog, sporvogn og metro. Du skal muligvis finjustere placeringen af pinden for at få den til at rute på den ønskede vej.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Download GeoJSON",

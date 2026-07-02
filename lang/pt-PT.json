@@ -495,6 +495,7 @@
     "tools": "Ferramentas",
     "automatedRouters": "Calculadoras de itinerário automatizadas",
     "routeTitle": "{origLabel} para {destLabel}",
+    "ferrySplitNote": "Dividir em viagens separadas em cada travessia de ferry ({n} troço(s) de ferry detetado(s))",
     "fineTuneNote": "Nota: A calculadora de itinerário é a mesma para o comboio, o elétrico e o metro. Podes ter que ajustar finamente a localização do alfinete para o itinerário calcular o caminho desejado.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Transferir GeoJSON",

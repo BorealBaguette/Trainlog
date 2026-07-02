@@ -82,7 +82,7 @@
    reveals "…et continuer". ── */
 #sidebar .submit-control { margin-top: 4px; }
 #sidebar .submit-split { position: relative; display: flex; }
-#sidebar .submit-split .submit-main { flex: 1; margin: 0; border-radius: 9px 0 0 9px; }
+#sidebar .submit-split .submit-main { flex: 1; width: auto; margin: 0; border-radius: 9px 0 0 9px; }
 #sidebar .submit-more { display: flex; }
 #sidebar .submit-more summary {
   list-style: none; cursor: pointer; width: 42px;

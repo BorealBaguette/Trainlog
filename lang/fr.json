@@ -495,6 +495,7 @@
     "tools": "Outils",
     "automatedRouters": "Routeurs Automatisés",
     "routeTitle": "{origLabel} à {destLabel}",
+    "ferrySplitNote": "Diviser en trajets distincts à chaque traversée en ferry ({n} traversée(s) détectée(s))",
     "fineTuneNote": "Remarque : Le routeur est le même pour le train, le tramway et le métro. Vous devrez peut-être ajuster la position des marqueurs pour que le trajet suive le parcours souhaité.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Télécharger GeoJSON",

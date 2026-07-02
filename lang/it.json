@@ -495,6 +495,7 @@
     "tools": "Strumenti",
     "automatedRouters": "Router automatizzati",
     "routeTitle": "{origLabel} a {destLabel}",
+    "ferrySplitNote": "Dividi in viaggi separati a ogni traversata in traghetto ({n} tratta/e in traghetto rilevata/e)",
     "fineTuneNote": "Nota: Il router è lo stesso per treno, tram e metropolitana. Potrebbe essere necessario perfezionare il posizionamento del perno per instradarlo sul percorso desiderato.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Scarica GeoJSON",

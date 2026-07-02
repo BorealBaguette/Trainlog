@@ -35,6 +35,8 @@ var currentRoute;
 var routeDetails = null;
 const texts = {
   "routeTitle": "{{routeTitle}}",
+  "ferrySplitNote": "{{ferrySplitNote}}",
+  "savingTripProgress": "{{saving_trip_progress}}",
   "fineTuneNote": "{{fineTuneNote}}",
   "distanceTime": "{{distanceTime}}",
   "downloadGeoJSONButton": "{{downloadGeoJSONButton}}",
@@ -44,7 +46,9 @@ const texts = {
   "waypoint": "{{waypoint}}",
   "useNewRouter": "{{useNewRouter}}",
   "freehandMode": "{{freehandMode|default('Freehand')}}",
-  "routerMode": "{{routerMode|default('Router')}}"
+  "routerMode": "{{routerMode|default('Router')}}",
+  "saveError": "{{saveError}}",
+  "tripList": "{{tripList}}"
 };
 
 // Try POST data first, then sessionStorage
@@ -79,7 +83,7 @@ var saveErrorContent = '<h4 id="save-error">{{saveError}}</h4><p>{{saveErrorDeta
 var map = createMap(null, origCoord);
 var sidebar;
 var getCountryUrl = '{{url_for("getCountry")}}';
-routing(map, true, type, getCountryUrl);
+routing(map, true, type, true, getCountryUrl); // allowFerrySplit=true: this is the only page that saves via saveTripSplit()
 
 // ── Inline freehand mode ────────────────────────────────────────────────────
 // Swaps this map between the road/rail router and the hand-draw canvas without
@@ -155,6 +159,32 @@ if (!SINGLE_POINT.includes(type)) {
   if (startFreehand) enterFreehand();
 }
 
+function navigateAfterSave(continueTrip, isPlan, lastTrip) {
+    if (isPlan) {
+        if (continueTrip) {
+            // Keep building the plan: prefill origin from this leg's destination and
+            // carry forward the SAME timing mode this leg used (relative or precise).
+            var contUrl = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${lastTrip["destinationStation"]}`;
+            if (lastTrip.precision == "preciseDates") {
+                contUrl += `&prevEndDate=${lastTrip["newTripEndDate"] || ''}&prevEndTime=${lastTrip["newTripEndTime"] || ''}`;
+            } else if (lastTrip.precision == "onlyDate") {
+                contUrl += `&prevEndDate=${lastTrip["onlyDate"] || ''}`;
+            } else {
+                contUrl += `&prevPlanDay=${lastTrip["planEndDay"] || ''}&prevPlanTime=${lastTrip["planEndTime"] || ''}`;
+            }
+            location.href = contUrl;
+        } else {
+            location.href = "/u/{{ username }}/plan/" + encodeURIComponent(newTrip.plan_uuid);
+        }
+        return;
+    }
+    if (!continueTrip || lastTrip.precision != "preciseDates") {
+        location.href = "{{ url_for('landing') }}";
+    } else {
+        location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?prevDest=${lastTrip["destinationStation"]}&prevEndDate=${lastTrip["newTripEndDate"]}&prevEndTime=${lastTrip["newTripEndTime"]}`;
+    }
+}
+
 async function saveTrip(continueTrip=false) {
   if (freehandActive && freehandEditor) {
     newTrip["route_source"] = "freehand";
@@ -166,6 +196,15 @@ async function saveTrip(continueTrip=false) {
         newTrip["trip_length"] = 0;
         newTrip["estimated_trip_duration"] = 0;
     }
+
+    var splitToggle = document.getElementById('ferrySplitToggle');
+    var doSplit = window.FERRY_SPLIT_TYPES.includes(type) && !freehandActive &&
+                  window.modeSegments && window.modeSegments.length > 1 &&
+                  splitToggle && splitToggle.checked;
+    if (doSplit) {
+        return saveTripSplit(continueTrip);
+    }
+
     sidebar.setContent(spinnerContent);
     flutterBridge.loading(true);
     newTrip["details"] = routeDetails;
@@ -178,35 +217,12 @@ async function saveTrip(continueTrip=false) {
             fromApp: fromApp
         },
         success: function(res) {
-            if (isPlan) {
-                if (continueTrip) {
-                    // Keep building the plan: prefill origin from this leg's destination and
-                    // carry forward the SAME timing mode this leg used (relative or precise).
-                    var contUrl = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${newTrip["destinationStation"]}`;
-                    if (newTrip.precision == "preciseDates") {
-                        contUrl += `&prevEndDate=${newTrip["newTripEndDate"] || ''}&prevEndTime=${newTrip["newTripEndTime"] || ''}`;
-                    } else if (newTrip.precision == "onlyDate") {
-                        contUrl += `&prevEndDate=${newTrip["onlyDate"] || ''}`;
-                    } else {
-                        contUrl += `&prevPlanDay=${newTrip["planEndDay"] || ''}&prevPlanTime=${newTrip["planEndTime"] || ''}`;
-                    }
-                    location.href = contUrl;
-                } else {
-                    location.href = "/u/{{ username }}/plan/" + encodeURIComponent(newTrip.plan_uuid);
-                }
-                return;
-            }
-            if (fromApp) {
+            if (fromApp && !isPlan) {
                 flutterBridge.loading(false);
                 flutterBridge.saveTripDone(true, res);
                 return;
             }
-
-            if (!continueTrip || newTrip.precision != "preciseDates") {
-                location.href = "{{ url_for('landing') }}";
-            } else {
-                location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?prevDest=${newTrip["destinationStation"]}&prevEndDate=${newTrip["newTripEndDate"]}&prevEndTime=${newTrip["newTripEndTime"]}`;
-            }
+            navigateAfterSave(continueTrip, isPlan, newTrip);
         },
         error: function(xhr, status, error) {
             flutterBridge.loading(false);
@@ -214,6 +230,260 @@ async function saveTrip(continueTrip=false) {
             sidebar.setContent(saveErrorContent);
         }
     });
+}
+
+// Derive [departureTerminalLabel, arrivalTerminalLabel] from an OSRM ferry step's
+// name (e.g. "Halhjem - Sandvikvåg"). Falls back to using the full name for both
+// ends if it doesn't split cleanly into exactly two parts.
+function splitFerryTerminals(roadName) {
+    var name = roadName || texts.ferrySplitNote;
+    var parts = name.split(/ [-–] /).map(function(p) { return p.trim(); }).filter(Boolean);
+    if (parts.length === 2) return parts;
+    return [name, name];
+}
+
+function postTrip(url, jsonPath, tripData) {
+    return new Promise(function(resolve, reject) {
+        $.post({
+            url: url,
+            data: {
+                jsonPath: JSON.stringify(jsonPath),
+                newTrip: JSON.stringify(tripData),
+                fromApp: fromApp
+            },
+            success: resolve,
+            error: function(xhr, status, error) { reject(error || 'Save failed'); }
+        });
+    });
+}
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+function formatLocalDatetime(date) {
+    return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}`;
+}
+
+// Approximate per-leg timing by apportioning the whole trip's user-entered timing
+// across legs, weighted by each leg's OSRM-estimated duration. This is a best-effort
+// guess (no real ferry timetable available) — it preserves the overall departure/
+// arrival the user entered while giving each leg a plausible sequential timestamp.
+function apportionLegTimings(legs, segments) {
+    var totalDurationS = segments.reduce(function(a, s) { return a + s.time; }, 0);
+    if (totalDurationS <= 0) return;
+
+    if (newTrip.precision === "preciseDates" &&
+        newTrip.newTripStart && newTrip.newTripStart.length === 16 &&
+        newTrip.newTripEnd && newTrip.newTripEnd.length === 16) {
+        var startMs = new Date(newTrip.newTripStart).getTime();
+        var endMs = new Date(newTrip.newTripEnd).getTime();
+        var totalMs = endMs - startMs;
+        if (isFinite(totalMs) && totalMs > 0) {
+            var cursorMs = startMs;
+            legs.forEach(function(leg, i) {
+                var segEndMs = (i === legs.length - 1)
+                    ? endMs
+                    : cursorMs + (segments[i].time / totalDurationS) * totalMs;
+                leg.newTripStart = formatLocalDatetime(new Date(cursorMs));
+                leg.newTripEnd = formatLocalDatetime(new Date(segEndMs));
+                cursorMs = segEndMs;
+            });
+        }
+    } else if (newTrip.precision === "onlyDate" &&
+               isNumber(newTrip.onlyDateDuration) && newTrip.onlyDateDuration !== "") {
+        var totalManS = Number(newTrip.onlyDateDuration);
+        var remaining = totalManS;
+        legs.forEach(function(leg, i) {
+            var share = (i === legs.length - 1)
+                ? remaining
+                : Math.round((segments[i].time / totalDurationS) * totalManS);
+            remaining -= share;
+            leg.onlyDateDuration = share;
+        });
+    } else if (newTrip.precision === "relative" &&
+               newTrip.planStartTime && newTrip.planEndTime) {
+        // Plan legs: day offset + "HH:MM", materialised against an arbitrary fixed
+        // reference date purely so we can do date arithmetic; only the resulting day
+        // offset and time-of-day are kept.
+        var startDate = relativeToDate(newTrip.planStartDay, newTrip.planStartTime);
+        var endDate = relativeToDate(newTrip.planEndDay, newTrip.planEndTime);
+        var totalMs2 = endDate - startDate;
+        if (isFinite(totalMs2) && totalMs2 > 0) {
+            var cursorMs2 = startDate.getTime();
+            legs.forEach(function(leg, i) {
+                var segEndMs2 = (i === legs.length - 1)
+                    ? endDate.getTime()
+                    : cursorMs2 + (segments[i].time / totalDurationS) * totalMs2;
+                var segStart = dateToRelative(new Date(cursorMs2));
+                var segEnd = dateToRelative(new Date(segEndMs2));
+                leg.planStartDay = segStart.day;
+                leg.planStartTime = segStart.time;
+                leg.planEndDay = segEnd.day;
+                leg.planEndTime = segEnd.time;
+                cursorMs2 = segEndMs2;
+            });
+        }
+    }
+}
+
+// Relative plan-leg timing helpers: day offset (1-based) + "HH:MM" <-> a JS Date on
+// an arbitrary fixed reference date (only elapsed time and day-of-week-independent
+// arithmetic matter, not the actual calendar date).
+var RELATIVE_REF = new Date(2000, 0, 1);
+function relativeToDate(day, timeStr) {
+    var parts = (timeStr || "00:00").split(":").map(Number);
+    var d = new Date(RELATIVE_REF);
+    d.setDate(d.getDate() + ((Number(day) || 1) - 1));
+    d.setHours(parts[0] || 0, parts[1] || 0, 0, 0);
+    return d;
+}
+function dateToRelative(date) {
+    var startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    var dayOffset = Math.round((startOfDay - RELATIVE_REF) / 86400000) + 1;
+    return { day: dayOffset, time: `${pad2(date.getHours())}:${pad2(date.getMinutes())}` };
+}
+
+// Split the entered price across the non-ferry ("initial type") legs, weighted by
+// distance; the ferry leg(s) get no price of their own (left blank, same as "no
+// price entered" -> excluded from expenditure stats), so the total isn't inflated by
+// duplicating the whole price onto every leg.
+function apportionPrice(legs, segments) {
+    if (!isNumber(newTrip.price) || newTrip.price === "") return;
+    var originalPrice = Number(newTrip.price);
+    var nonFerryIndices = [];
+    segments.forEach(function(s, i) { if (s.mode !== 'ferry') nonFerryIndices.push(i); });
+    if (nonFerryIndices.length === 0) return; // all-ferry route: leave price untouched
+    var totalNonFerryDistance = nonFerryIndices.reduce(function(a, i) { return a + segments[i].distance; }, 0);
+    if (totalNonFerryDistance <= 0) return;
+    var remaining = originalPrice;
+    nonFerryIndices.forEach(function(i, k) {
+        var isLast = k === nonFerryIndices.length - 1;
+        var share = isLast
+            ? remaining
+            : Math.round((segments[i].distance / totalNonFerryDistance) * originalPrice * 100) / 100;
+        remaining = Math.round((remaining - share) * 100) / 100;
+        legs[i].price = share;
+    });
+    segments.forEach(function(s, i) { if (s.mode === 'ferry') legs[i].price = ""; });
+}
+
+async function saveTripSplit(continueTrip) {
+    var segments = window.modeSegments;
+    var isPlan = !!newTrip.plan_uuid;
+    var saveUrl = isPlan
+        ? '{{url_for("savePlanTrip", username=username)}}'
+        : '{{url_for("saveTrip", username=username)}}';
+
+    // Precompute boundary origin/destination labels for every segment.
+    var legs = segments.map(function(seg, i) {
+        var origin, destination;
+        if (i === 0) {
+            origin = [origCoord, origLabel];
+        }
+        if (i === segments.length - 1) {
+            destination = [destCoord, destLabel];
+        }
+        if (seg.mode === 'ferry') {
+            var terminals = splitFerryTerminals(seg.roadName);
+            if (!origin) origin = [{lat: seg.coordinates[0].lat, lng: seg.coordinates[0].lng}, terminals[0]];
+            if (!destination) destination = [{lat: seg.coordinates[seg.coordinates.length - 1].lat, lng: seg.coordinates[seg.coordinates.length - 1].lng}, terminals[1]];
+        } else {
+            // Driving segment adjacent to a ferry: reuse that ferry's terminal label
+            // for whichever end touches it.
+            var nextSeg = segments[i + 1];
+            var prevSeg = segments[i - 1];
+            if (!origin && prevSeg && prevSeg.mode === 'ferry') {
+                origin = [{lat: seg.coordinates[0].lat, lng: seg.coordinates[0].lng}, splitFerryTerminals(prevSeg.roadName)[1]];
+            }
+            if (!destination && nextSeg && nextSeg.mode === 'ferry') {
+                destination = [{lat: seg.coordinates[seg.coordinates.length - 1].lat, lng: seg.coordinates[seg.coordinates.length - 1].lng}, splitFerryTerminals(nextSeg.roadName)[0]];
+            }
+        }
+        return {
+            type: seg.mode === 'ferry' ? 'ferry' : type,
+            originStation: origin,
+            destinationStation: destination,
+            trip_length: seg.distance,
+            estimated_trip_duration: seg.time,
+            coordinates: seg.coordinates
+        };
+    });
+
+    apportionLegTimings(legs, segments);
+    apportionPrice(legs, segments);
+
+    sidebar.setContent(spinnerContent);
+    flutterBridge.loading(true);
+
+    var results = [];
+    var lastSegTrip = newTrip;
+    for (var i = 0; i < legs.length; i++) {
+        var leg = legs[i];
+        var segTrip = Object.assign({}, newTrip);
+        segTrip.type = leg.type;
+        segTrip.originStation = leg.originStation;
+        segTrip.destinationStation = leg.destinationStation;
+        segTrip.trip_length = leg.trip_length;
+        segTrip.estimated_trip_duration = leg.estimated_trip_duration;
+        segTrip.route_source = "router";
+        segTrip.details = null;
+        delete segTrip.waypoints;
+        delete segTrip.freehandSegments;
+        if (leg.newTripStart) segTrip.newTripStart = leg.newTripStart;
+        if (leg.newTripEnd) segTrip.newTripEnd = leg.newTripEnd;
+        if (leg.onlyDateDuration !== undefined) segTrip.onlyDateDuration = leg.onlyDateDuration;
+        if (leg.planStartDay !== undefined) {
+            segTrip.planStartDay = leg.planStartDay;
+            segTrip.planStartTime = leg.planStartTime;
+            segTrip.planEndDay = leg.planEndDay;
+            segTrip.planEndTime = leg.planEndTime;
+        }
+        if (leg.price !== undefined) segTrip.price = leg.price;
+        if (leg.type === 'ferry') {
+            // Vehicle-specific fields entered for the initial (car/bus/train/...) type
+            // don't apply to a ferry leg — blank them rather than duplicating them.
+            segTrip.operator = "";
+            segTrip.material_type = "";
+            segTrip.material_type_advanced = "";
+            segTrip.seat = "";
+            segTrip.reg = "";
+            segTrip.powerType = "";
+        }
+
+        sidebar.setContent(spinnerContent + `<p>${texts.savingTripProgress.replace('{current}', i + 1).replace('{total}', legs.length)}</p>`);
+
+        try {
+            var res = await postTrip(saveUrl, leg.coordinates, segTrip);
+            results.push(res);
+            lastSegTrip = segTrip;
+        } catch (err) {
+            flutterBridge.loading(false);
+            if (i === 0) {
+                flutterBridge.saveError(err);
+                sidebar.setContent(saveErrorContent);
+            } else {
+                flutterBridge.saveError(err);
+                var recoveryUrl = isPlan
+                    ? "/u/{{ username }}/plan/" + encodeURIComponent(newTrip.plan_uuid)
+                    : "{{ url_for('landing') }}";
+                sidebar.setContent(
+                    `<h4 id="save-error">${texts.saveError}</h4>` +
+                    `<p>${i} / ${legs.length} ${isPlan ? 'legs' : 'trips'} saved. Leg ${i + 1} (${leg.type}) failed to save.</p>` +
+                    `<p><a href="${recoveryUrl}">${texts.tripList}</a></p>`
+                );
+            }
+            return;
+        }
+    }
+
+    flutterBridge.loading(false);
+    if (isPlan) {
+        navigateAfterSave(continueTrip, true, lastSegTrip);
+        return;
+    }
+    if (fromApp) {
+        flutterBridge.saveTripDone(true, {segments: results});
+        return;
+    }
+    navigateAfterSave(continueTrip, false, newTrip);
 }
 </script>
 {% endblock %}

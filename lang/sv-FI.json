@@ -495,6 +495,7 @@
     "tools": "Verktyg",
     "automatedRouters": "Automatiserade routrar",
     "routeTitle": "{origLabel} till {destLabel}",
+    "ferrySplitNote": "Dela upp i separata resor vid varje färjeövergång ({n} färjesträcka upptäckt)",
     "fineTuneNote": "Observera: Routern är densamma för tåg, spårvagn och metro. Du kan behöva finjustera pluggens placering för att den ska ta den önskade vägen.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Ladda ner GeoJSON",

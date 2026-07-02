@@ -495,6 +495,7 @@
     "tools": "도구",
     "automatedRouters": "자동화된 라우터",
     "routeTitle": "{origLabel}에서 {destLabel}으로/로",
+    "ferrySplitNote": "각 페리 횡단마다 별도의 여정으로 분할 (페리 구간 {n}개 감지됨)",
     "fineTuneNote": "참고: 라우터는 기차, 트램 및 지하철에 대해 동일합니다. 원하는 경로로 라우팅하기 위해 핀의 위치를 미세 조정해야 할 수도 있습니다.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON 다운로드",

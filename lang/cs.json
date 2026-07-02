@@ -495,6 +495,7 @@
     "tools": "Nástroje",
     "automatedRouters": "Automatizované směrovače",
     "routeTitle": "{origLabel} do {destLabel}",
+    "ferrySplitNote": "Rozdělit na samostatné jízdy při každém přejezdu trajektem ({n} trajektový úsek zjištěn)",
     "fineTuneNote": "Poznámka: Směrovač je stejný pro vlak, tramvaj a metro. Možná budete muset jemně doladit umístění kolíku, aby směřoval po požadované trase.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Stáhnout GeoJSON",

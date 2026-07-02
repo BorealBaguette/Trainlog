@@ -495,6 +495,7 @@
     "tools": "Herramientas",
     "automatedRouters": "Enrutadores automatizados",
     "routeTitle": "{origLabel} a {destLabel}",
+    "ferrySplitNote": "Dividir en viajes separados en cada travesía en ferry ({n} tramo(s) de ferry detectado(s))",
     "fineTuneNote": "Nota: El enrutador es el mismo para tren, tranvía y metro. Es posible que necesite ajustar la colocación del pasador para que lo enrute en el camino deseado.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Descargar GeoJSON",

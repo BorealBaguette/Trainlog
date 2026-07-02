@@ -495,6 +495,7 @@
     "tools": "Araçlar",
     "automatedRouters": "Otomatik Yönlendiriciler",
     "routeTitle": "{origLabel} - {destLabel}",
+    "ferrySplitNote": "Her feribot geçişinde ayrı seyahatlere böl ({n} feribot bacağı tespit edildi)",
     "fineTuneNote": "Not: Yönlendirici, tren, tramvay ve metro için aynıdır. İstediğiniz yolda yönlendirme yapmak için kazığın yerleştirmesini hassas ayarlamanız gerekebilir.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON indir",

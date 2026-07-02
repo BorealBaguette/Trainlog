@@ -495,6 +495,7 @@
     "tools": "Verktøy",
     "automatedRouters": "Automatiserte rutere",
     "routeTitle": "{origLabel} til {destLabel}",
+    "ferrySplitNote": "Del opp i separate turer ved hver fergeoverfart ({n} fergestrekning(er) oppdaget)",
     "fineTuneNote": "Merk: Ruteren er den samme for tog, trikk og metro. Du må kanskje finjustere plasseringen av pinnen for å få den til å rute på ønsket vei.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Last ned GeoJSON",

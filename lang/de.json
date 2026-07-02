@@ -495,6 +495,7 @@
     "tools": "Werkzeuge",
     "automatedRouters": "Automatisierte Router",
     "routeTitle": "{origLabel} bis {destLabel}",
+    "ferrySplitNote": "In separate Fahrten bei jeder Fährüberfahrt aufteilen ({n} Fährabschnitt(e) erkannt)",
     "fineTuneNote": "Hinweis: Der Router ist derselbe für Zug, Straßenbahn und U-Bahn. Möglicherweise müssen Sie die Platzierung des Stifts feinabstimmen, um die Route auf dem gewünschten Pfad zu leiten.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON herunterladen",
