@@ -24,14 +24,17 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from flask import Blueprint, Response, request
 
 import uuid as _uuid
 from datetime import datetime
 
-from src.ai import create_trip_from_parsed
+from py.utils import getCountriesFromPath, getCountryFromCoordinates
+from src.ai import create_trip_from_parsed, enrich_parsed_trip
 from src.consts import TripTypes
+from src.paths import geom_geojson_to_coords
 from src.photon import photonRequest
 from src.pg import pg_session
 from src.sql.stations import get_airports_query
@@ -39,6 +42,9 @@ from src.plans.create_from_parsed import create_plan_trip_from_parsed
 from src.plans.delete_plan import delete_plan as _delete_plan
 from src.plans.delete_plan import delete_plan_trip as _delete_plan_trip
 from src.plans.import_trips import import_trips_to_plan
+from src.plans.plan_trip import PlanTrip
+from src.plans.process_plan_dates import process_plan_dates
+from src.plans.update_plan_trip_full import update_plan_trip_full
 from src.sql.plans import (
     archive_plan_query,
     delete_plan_cost_query,
@@ -142,6 +148,35 @@ def _owned_plan(plan_uuid: str, uid: int) -> dict:
     if plan["user_id"] != uid:
         raise ValueError("Plan not found.")
     return plan
+
+
+def _owned_plan_trip(plan: dict, plan_trip_uid) -> dict:
+    """Fetch one leg (with its path as GeoJSON) of an already-ownership-checked plan.
+    ValueError if it isn't in that plan."""
+    with pg_session() as pg:
+        row = pg.execute(
+            "SELECT *, ST_AsGeoJSON(geom) AS geojson FROM plan_trips"
+            " WHERE uid = :uid AND plan_id = :pid",
+            {"uid": plan_trip_uid, "pid": plan["uid"]},
+        ).fetchone()
+    if row is None:
+        raise ValueError("Plan leg not found.")
+    return dict(row._mapping)
+
+
+# Stored station names carry a leading flag emoji ("🇫🇷 Paris Gare de Lyon"), added
+# by enrich_parsed_trip. Strip it before feeding the name back as a geocoding query.
+_FLAG_RE = re.compile(r"^[\U0001F1E6-\U0001F1FF]{2}\s*")
+
+
+def _strip_flag(name):
+    return _FLAG_RE.sub("", name or "")
+
+
+def _iata_from_name(name):
+    """Recover the IATA code from a stored air-leg station name '… (CDG)'."""
+    m = re.search(r"\(([A-Za-z]{3})\)\s*$", name or "")
+    return m.group(1) if m else None
 
 
 # ── tool schemas ──────────────────────────────────────────────────────────────
@@ -447,22 +482,53 @@ def _build_tools() -> list:
         {
             "name": "update_plan_trip",
             "description": (
-                "Update light metadata on a plan leg without re-routing: booked "
-                "flag (mark ordered/purchased), price/currency, seat, operator, "
-                "line_name, notes. Only supplied fields change. To change the route "
-                "or timing, delete the leg and add it again."
+                "Update any field of a plan leg. Only supplied fields change; "
+                "everything else is kept.\n\n"
+                "Route: supplying any of origin/destination (name, lat/lng or "
+                "iata) or `type` re-geocodes and re-routes the leg — call "
+                "search_stations FIRST for the endpoint you are changing; the "
+                "unchanged endpoint is reused as stored.\n\n"
+                "Timing: supplying any timing field re-times the leg, in the same "
+                "modes as add_plan_trip (relative start_day/end_day/start_time/"
+                "end_time, precise start_datetime/end_datetime, or date-only "
+                "`date`). Give fields from one mode only; when the leg is already "
+                "in that mode, missing fields keep their current values (e.g. "
+                "sending only start_time keeps the day), and shifting start_day "
+                "alone shifts end_day with it. Pass an empty string to drop a "
+                "start_time/end_time. Set clear_timing=true to make the leg "
+                "undated.\n\n"
+                "Metadata: booked, price/currency, seat, operator, line_name, "
+                "aircraft_icao, notes."
             ),
             "inputSchema": {
                 "type": "object",
                 "properties": {
                     "plan_uuid": {"type": "string"},
                     "plan_trip_uid": {"type": "integer"},
-                    "booked": {"type": "boolean"},
-                    "price": {"type": "number"},
-                    "currency": {"type": "string"},
-                    "seat": {"type": "string"},
+                    "type": {"type": "string", "enum": TRIP_TYPE_VALUES},
+                    "origin": {"type": "string"},
+                    "origin_iata": {"type": "string", "description": "Airport IATA (flights)."},
+                    "origin_lat": {"type": "number"},
+                    "origin_lng": {"type": "number"},
+                    "destination": {"type": "string"},
+                    "destination_iata": {"type": "string", "description": "Airport IATA (flights)."},
+                    "destination_lat": {"type": "number"},
+                    "destination_lng": {"type": "number"},
+                    "start_day": {"type": "integer", "description": "Relative day of departure (1 = anchor_date)."},
+                    "end_day": {"type": "integer", "description": "Relative day of arrival."},
+                    "start_time": {"type": "string", "description": "Local departure time HH:MM (relative mode). Empty string clears it."},
+                    "end_time": {"type": "string", "description": "Local arrival time HH:MM (relative mode). Empty string clears it."},
+                    "start_datetime": {"type": "string", "description": "Precise departure YYYY-MM-DD HH:MM."},
+                    "end_datetime": {"type": "string", "description": "Precise arrival YYYY-MM-DD HH:MM."},
+                    "date": {"type": "string", "description": "Date-only YYYY-MM-DD."},
+                    "clear_timing": {"type": "boolean", "description": "Remove all timing (undated leg)."},
                     "operator": {"type": "string"},
                     "line_name": {"type": "string"},
+                    "aircraft_icao": {"type": "string"},
+                    "seat": {"type": "string"},
+                    "price": {"type": "number"},
+                    "currency": {"type": "string"},
+                    "booked": {"type": "boolean", "description": "Ticket already purchased/ordered."},
                     "notes": {"type": "string"},
                 },
                 "required": ["plan_uuid", "plan_trip_uid"],
@@ -988,33 +1054,190 @@ def _call_tool(name: str, args: dict, user) -> str:
 
     if name == "update_plan_trip":
         plan = _owned_plan(args["plan_uuid"], uid)
-        fields = {
-            "booked": ("booked", lambda v: bool(v)),
-            "price": ("price", lambda v: v),
-            "currency": ("currency", lambda v: v),
-            "seat": ("seat", lambda v: v),
-            "operator": ("operator", lambda v: v),
-            "line_name": ("line_name", lambda v: v),
-            "notes": ("notes", lambda v: v),
-        }
-        sets, params = [], {"uid": args["plan_trip_uid"], "plan_id": plan["uid"],
-                            "last_modified": datetime.now()}
-        for arg_key, (col, conv) in fields.items():
-            if arg_key in args:
-                sets.append(f"{col} = :{col}")
-                params[col] = conv(args[arg_key])
-        if not sets:
+        pt = _owned_plan_trip(plan, args["plan_trip_uid"])
+
+        route_keys = ("type", "origin", "origin_iata", "origin_lat", "origin_lng",
+                      "destination", "destination_iata", "destination_lat",
+                      "destination_lng")
+        relative_keys = ("start_day", "end_day", "start_time", "end_time")
+        precise_keys = ("start_datetime", "end_datetime")
+        meta_keys = ("operator", "line_name", "aircraft_icao", "seat", "price",
+                     "currency", "booked", "notes")
+        if not any(k in args for k in
+                   route_keys + relative_keys + precise_keys + meta_keys
+                   + ("date", "clear_timing")):
             raise ValueError("Nothing to update.")
-        sets.append("last_modified = :last_modified")
-        with pg_session() as pg:
-            res = pg.execute(
-                f"UPDATE plan_trips SET {', '.join(sets)} "
-                "WHERE uid = :uid AND plan_id = :plan_id",
-                params,
+
+        trip_type = args.get("type") or pt["trip_type"]
+        if trip_type not in TRIP_TYPE_VALUES:
+            raise ValueError(f"Unknown trip type: {trip_type}")
+
+        stored_path = [
+            {"lat": c[0], "lng": c[1]} for c in geom_geojson_to_coords(pt["geojson"])
+        ]
+
+        # ── route: re-geocode/re-route when any endpoint (or the type) changes,
+        # reusing the stored endpoint for the side that wasn't supplied.
+        reroute = any(k in args for k in route_keys)
+        if reroute:
+            parsed = enrich_parsed_trip({
+                "type": trip_type,
+                "origin": args.get("origin") or _strip_flag(pt["origin_station"]),
+                "origin_iata": args.get("origin_iata")
+                    or _iata_from_name(pt["origin_station"]),
+                "origin_lat": args.get("origin_lat")
+                    or (stored_path[0]["lat"] if stored_path else None),
+                "origin_lng": args.get("origin_lng")
+                    or (stored_path[0]["lng"] if stored_path else None),
+                "destination": args.get("destination")
+                    or _strip_flag(pt["destination_station"]),
+                "destination_iata": args.get("destination_iata")
+                    or _iata_from_name(pt["destination_station"]),
+                "destination_lat": args.get("destination_lat")
+                    or (stored_path[-1]["lat"] if stored_path else None),
+                "destination_lng": args.get("destination_lng")
+                    or (stored_path[-1]["lng"] if stored_path else None),
+            })
+            if not parsed:
+                raise ValueError(
+                    "Could not update the leg (geocoding/routing failed). "
+                    "Check the station names and coordinates."
+                )
+            path = parsed["_path"]
+            trip_length = parsed["_distance"]
+            if trip_type in ("air", "helicopter"):
+                countries = json.dumps({
+                    getCountryFromCoordinates(path[0]["lat"], path[0]["lng"])["countryCode"]: trip_length / 2,
+                    getCountryFromCoordinates(path[-1]["lat"], path[-1]["lng"])["countryCode"]: trip_length / 2,
+                })
+            else:
+                countries = getCountriesFromPath(path, trip_type, None, None)
+            origin_station = parsed["_resolved_origin"]
+            destination_station = parsed["_resolved_destination"]
+        else:
+            path = stored_path or [{"lat": 0.0, "lng": 0.0}, {"lat": 0.0, "lng": 0.0}]
+            trip_length = pt["trip_length"]
+            countries = pt["countries"]
+            origin_station = pt["origin_station"]
+            destination_station = pt["destination_station"]
+
+        # ── timing: rebuild when any timing field is supplied, filling gaps from
+        # the current values when the leg is already in that mode.
+        modes_given = [m for m, keys in (
+            ("relative", relative_keys), ("preciseDates", precise_keys), ("onlyDate", ("date",)),
+        ) if any(k in args for k in keys)]
+        if len(modes_given) > 1 or (modes_given and args.get("clear_timing")):
+            raise ValueError("Give timing fields from one mode only.")
+
+        if args.get("clear_timing"):
+            timing_input = {"precision": "unknown", "unknownType": "future"}
+        elif modes_given == ["relative"]:
+            was_relative = pt["timing_mode"] == "relative"
+            old_start = pt["start_day"] if was_relative else None
+            old_end = pt["end_day"] if was_relative else None
+            start_day = args.get("start_day") or old_start or 1
+            if args.get("end_day"):
+                end_day = args["end_day"]
+            elif "start_day" in args and old_start and old_end:
+                end_day = old_end + (start_day - old_start)  # keep the leg's span
+            else:
+                end_day = old_end or start_day
+
+            def _fmt_time(t):
+                return t.strftime("%H:%M") if t else ""
+
+            timing_input = {
+                "precision": "relative",
+                "planStartDay": start_day,
+                "planEndDay": end_day,
+                "planStartTime": (args["start_time"] if "start_time" in args
+                                  else _fmt_time(was_relative and pt["start_time"])) or "",
+                "planEndTime": (args["end_time"] if "end_time" in args
+                                else _fmt_time(was_relative and pt["end_time"])) or "",
+            }
+        elif modes_given == ["preciseDates"]:
+            was_precise = pt["timing_mode"] == "preciseDates"
+
+            def _fmt_dt(d):
+                return d.strftime("%Y-%m-%dT%H:%M") if d else None
+
+            start = args.get("start_datetime") or (
+                _fmt_dt(pt["start_datetime"]) if was_precise else None
             )
-            if res.rowcount == 0:
-                raise ValueError("Plan leg not found.")
-        return json.dumps({"ok": True})
+            if not start:
+                raise ValueError("start_datetime is required to switch to precise timing.")
+            end = args.get("end_datetime") or (
+                _fmt_dt(pt["end_datetime"]) if was_precise else None
+            ) or start
+            timing_input = {
+                "precision": "preciseDates",
+                "newTripStart": str(start).replace(" ", "T"),
+                "newTripEnd": str(end).replace(" ", "T"),
+            }
+        elif modes_given == ["onlyDate"]:
+            timing_input = {"precision": "onlyDate", "onlyDate": args["date"],
+                            "onlyDateDuration": ""}
+        else:
+            timing_input = None  # timing untouched
+
+        if timing_input is not None:
+            timing = process_plan_dates(timing_input, path)
+        else:
+            timing = {k: pt[k] for k in (
+                "timing_mode", "start_day", "end_day", "start_time", "end_time",
+                "start_datetime", "end_datetime", "utc_start_datetime",
+                "utc_end_datetime", "manual_trip_duration",
+            )}
+
+        # Concrete UTC instants give a precise scheduled duration (as in
+        # create_plan_trip_from_parsed); a reroute invalidates the old one.
+        estimated = None if reroute else pt["estimated_trip_duration"]
+        if timing.get("utc_start_datetime") and timing.get("utc_end_datetime"):
+            diff = int((timing["utc_end_datetime"] - timing["utc_start_datetime"]).total_seconds())
+            if diff >= 0:
+                estimated = diff
+
+        def merged(key):
+            return args[key] if key in args else pt[key]
+
+        plan_trip = PlanTrip(
+            plan_id=plan["uid"],
+            user_id=plan["user_id"],
+            origin_station=origin_station,
+            destination_station=destination_station,
+            trip_type=trip_type,
+            operator=merged("operator"),
+            line_name=merged("line_name"),
+            material_type=(args.get("aircraft_icao") if "aircraft_icao" in args
+                           else pt["material_type"]),
+            material_type_advanced=pt["material_type_advanced"],
+            reg=pt["reg"],
+            seat=merged("seat"),
+            notes=merged("notes"),
+            trip_length=trip_length,
+            estimated_trip_duration=estimated,
+            countries=countries,
+            price=merged("price"),
+            currency=merged("currency"),
+            waypoints=None if reroute else pt["waypoints"],
+            visibility=pt["visibility"],
+            path=path,
+            timing=timing,
+            purchase_date=pt["purchase_date"],
+            booked=bool(merged("booked")),
+            power_type=pt["power_type"],
+            co2_override=pt["co2_override"],
+            sort_order=pt["sort_order"],
+            created=pt["created"],
+            last_modified=datetime.now(),
+        )
+        update_plan_trip_full(args["plan_trip_uid"], plan_trip)
+        return json.dumps({
+            "ok": True,
+            "plan_trip_uid": args["plan_trip_uid"],
+            "origin": plan_trip.origin_station,
+            "destination": plan_trip.destination_station,
+        })
 
     if name == "reorder_plan_trips":
         plan = _owned_plan(args["plan_uuid"], uid)
