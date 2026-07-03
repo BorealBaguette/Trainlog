@@ -1080,5 +1080,7 @@
     "showArchived": "Mostrar arquivados",
     "noMatch": "Nenhum plano correspondente.",
     "bookedLabel": "Já reservado",
-    "impossibleConnection": "Parte antes de chegar o trecho anterior"
+    "impossibleConnection": "Parte antes de chegar o trecho anterior",
+    "manage_manual_stations": "Manual stations",
+    "confirm_delete_manual_station": "Are you sure you want to delete this manual station?"
 }

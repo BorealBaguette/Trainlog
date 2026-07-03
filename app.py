@@ -1070,27 +1070,21 @@ def user_exists(username):
     return user is not None
 
 def saveManualStation(creator, name, lat, lng, station_type):
-    if station_type in (
-        "train",
-        "bus",
-        "helicopter",
-        "ferry",
-        "aerialway",
-        "tram",
-        "metro",
-    ):
-        with pg_session() as pg:
-            pg.execute(
-                "INSERT INTO manual_stations (creator, name, lat, lng, station_type)"
-                " VALUES (:creator, :name, :lat, :lng, :station_type)",
-                {
-                    "creator": creator,
-                    "name": name,
-                    "lat": lat,
-                    "lng": lng,
-                    "station_type": station_type,
-                },
-            )
+    # Manual stations are now scoped per-user (filtered by creator), so there is
+    # no longer any privacy concern with persisting them for every trip type
+    # (car, walk, cycle, ...).
+    with pg_session() as pg:
+        pg.execute(
+            "INSERT INTO manual_stations (creator, name, lat, lng, station_type)"
+            " VALUES (:creator, :name, :lat, :lng, :station_type)",
+            {
+                "creator": creator,
+                "name": name,
+                "lat": lat,
+                "lng": lng,
+                "station_type": station_type,
+            },
+        )
 
 
 def airlineLogoProcess(newTrip):
@@ -6533,12 +6527,14 @@ def stationAutocomplete():
     return jsonify(responseJson)
 
 @app.route("/u/<username>/getManAndOps/<station_type>", methods=["GET", "POST"])
+@login_required
 def getManAndOps(username, station_type):
     manualStations = {}
     visitedStations = {}
     with pg_session() as pg:
         for station in pg.execute(
-            get_manual_stations_query(), {"station_type": station_type}
+            get_manual_stations_query(),
+            {"station_type": station_type, "creator": username},
         ).fetchall():
             manualStations[station["name"]] = [
                 [station["lat"], station["lng"]],
@@ -9093,7 +9089,7 @@ def detect_precision(start_date, end_date):
 
 
 @app.route("/admin/manual")
-@admin_required
+@owner_required
 def adminManual():
     with pg_session() as pg:
         stationsList = [
@@ -9307,11 +9303,72 @@ def upload_image(username):
 
 
 @app.route("/deleteManual/<int:id>", methods=["POST"])
-@admin_required
+@owner_required
 def deleteManual(id):
     with pg_session() as pg:
         pg.execute("DELETE FROM manual_stations WHERE uid = :uid", {"uid": id})
     return redirect(url_for("adminManual"))
+
+
+@app.route("/u/<username>/manualStations")
+@login_required
+def userManualStations(username):
+    with pg_session() as pg:
+        stationsList = [
+            dict(row._mapping)
+            for row in pg.execute(
+                "SELECT * FROM manual_stations WHERE creator = :creator"
+                " ORDER BY station_type, name",
+                {"creator": username},
+            ).fetchall()
+        ]
+    return render_template(
+        "manual_stations.html",
+        stationsList=stationsList,
+        username=username,
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id()),
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/u/<username>/manualStations/<int:id>/update", methods=["POST"])
+@login_required
+def updateUserManualStation(username, id):
+    with pg_session() as pg:
+        owner_row = pg.execute(
+            "SELECT creator FROM manual_stations WHERE uid = :uid", {"uid": id}
+        ).fetchone()
+        if owner_row is None or owner_row["creator"] != username:
+            abort(401)
+        pg.execute(
+            """
+            UPDATE manual_stations
+            SET name = :name, lat = :lat, lng = :lng
+            WHERE uid = :uid
+            """,
+            {
+                "name": request.form.get("name"),
+                "lat": request.form.get("lat"),
+                "lng": request.form.get("lng"),
+                "uid": id,
+            },
+        )
+    return redirect(url_for("userManualStations", username=username))
+
+
+@app.route("/u/<username>/manualStations/<int:id>/delete", methods=["POST"])
+@login_required
+def deleteUserManualStation(username, id):
+    with pg_session() as pg:
+        owner_row = pg.execute(
+            "SELECT creator FROM manual_stations WHERE uid = :uid", {"uid": id}
+        ).fetchone()
+        if owner_row is None or owner_row["creator"] != username:
+            abort(401)
+        pg.execute("DELETE FROM manual_stations WHERE uid = :uid", {"uid": id})
+    return redirect(url_for("userManualStations", username=username))
 
 
 @app.route("/editStation/<int:id>", methods=["GET", "POST"])
@@ -9458,7 +9515,7 @@ def stations():
 
 
 @app.route("/editManual/<int:id>", methods=["GET", "POST"])
-@admin_required
+@owner_required
 def editManual(id):
     with pg_session() as pg:
         if request.method == "POST":

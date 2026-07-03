@@ -1080,5 +1080,7 @@
     "settingsSectionPrivacy": "Confidentialité et partage",
     "settingsSectionAppearance": "Apparence et carte",
     "settingsSectionGeneral": "Général",
-    "settingsSectionData": "Données"
+    "settingsSectionData": "Données",
+    "manage_manual_stations": "Gares manuelles",
+    "confirm_delete_manual_station": "Voulez-vous vraiment supprimer cette gare manuelle ?"
 }
