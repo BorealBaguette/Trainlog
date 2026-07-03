@@ -38,7 +38,6 @@
     "hello": "Hallo",
     "delete": "Löschen",
     "trips": "Reisen",
-    "slavTrips24": "",
     "singularTrip": "Reise",
     "pTrips": "Reisen (öffentlich)",
     "tripList": "Reiseübersicht",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "Keine Daten in der Tabelle verfügbar",
     "dtOneLineSelected": "1 Zeile ausgewählt",
     "dtMultipleLineSelected": "%d Zeilen ausgewählt",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} Zeile ausgewählt",
+        "other": "{n} Zeilen ausgewählt"
+    },
     "dtLengthMenu": "_MENU_ Einträge anzeigen",
     "dtAll": "Alle",
     "dtSearch": "Suchen:",
@@ -495,7 +497,11 @@
     "tools": "Werkzeuge",
     "automatedRouters": "Automatisierte Router",
     "routeTitle": "{origLabel} bis {destLabel}",
-    "ferrySplitNote": "In separate Fahrten bei jeder Fährüberfahrt aufteilen ({n} Fährabschnitt(e) erkannt)",
+    "ferrySplitNote": {
+        "one": "Diese Fahrt enthält eine Fährüberfahrt.",
+        "other": "Diese Fahrt enthält {n} Fährüberfahrten."
+    },
+    "ferrySplitOption": "Die Fahrt bei jeder Fährüberfahrt aufteilen",
     "fineTuneNote": "Hinweis: Der Router ist derselbe für Zug, Straßenbahn und U-Bahn. Möglicherweise müssen Sie die Platzierung des Stifts feinabstimmen, um die Route auf dem gewünschten Pfad zu leiten.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON herunterladen",

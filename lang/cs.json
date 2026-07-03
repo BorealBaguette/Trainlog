@@ -38,7 +38,6 @@
     "hello": "Ahoj",
     "delete": "Smazat",
     "trips": "Cest",
-    "slavTrips24": "Cesty",
     "singularTrip": "Cesta",
     "pTrips": "Cesty (veřejné)",
     "tripList": "Přehled cest",
@@ -160,7 +159,11 @@
     "dtEmptyTable": "V tabulce nejsou k dispozici žádná data",
     "dtOneLineSelected": "1 řádek vybrán",
     "dtMultipleLineSelected": "%d řádků vybráno",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} řádek vybrán",
+        "few": "{n} řádky vybrány",
+        "other": "{n} řádků vybráno"
+    },
     "dtLengthMenu": "Zobraz _MENU_ záznamů",
     "dtAll": "Vše",
     "dtSearch": "Hledat:",
@@ -495,7 +498,12 @@
     "tools": "Nástroje",
     "automatedRouters": "Automatizované směrovače",
     "routeTitle": "{origLabel} do {destLabel}",
-    "ferrySplitNote": "Rozdělit na samostatné jízdy při každém přejezdu trajektem ({n} trajektový úsek zjištěn)",
+    "ferrySplitNote": {
+        "one": "Tato trasa obsahuje {n} přejezd trajektem.",
+        "few": "Tato trasa obsahuje {n} přejezdy trajektem.",
+        "other": "Tato trasa obsahuje {n} přejezdů trajektem."
+    },
+    "ferrySplitOption": "Rozdělit trasu při každém přejezdu trajektem",
     "fineTuneNote": "Poznámka: Směrovač je stejný pro vlak, tramvaj a metro. Možná budete muset jemně doladit umístění kolíku, aby směřoval po požadované trase.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Stáhnout GeoJSON",

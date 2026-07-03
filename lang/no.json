@@ -38,7 +38,6 @@
     "hello": "Hallo",
     "delete": "Slett",
     "trips": "Reiser",
-    "slavTrips24": "",
     "singularTrip": "Reis",
     "pTrips": "Reiser (offentlig)",
     "tripList": "Reiseoversikt",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "Ingen data er tilgjengelig i tabellen",
     "dtOneLineSelected": "1 rad valgt",
     "dtMultipleLineSelected": "%d rader valgt",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} rad valgt",
+        "other": "{n} rader valgt"
+    },
     "dtLengthMenu": "Vis _MENU_ oppføringer",
     "dtAll": "Alle",
     "dtSearch": "Søk:",
@@ -495,7 +497,11 @@
     "tools": "Verktøy",
     "automatedRouters": "Automatiserte rutere",
     "routeTitle": "{origLabel} til {destLabel}",
-    "ferrySplitNote": "Del opp i separate turer ved hver fergeoverfart ({n} fergestrekning(er) oppdaget)",
+    "ferrySplitNote": {
+        "one": "Denne reisen inneholder en fergeoverfart.",
+        "other": "Denne reisen inneholder {n} fergeoverfarter."
+    },
+    "ferrySplitOption": "Del opp reisen ved hver fergeoverfart",
     "fineTuneNote": "Merk: Ruteren er den samme for tog, trikk og metro. Du må kanskje finjustere plasseringen av pinnen for å få den til å rute på ønsket vei.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Last ned GeoJSON",

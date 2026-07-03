@@ -38,7 +38,6 @@
     "hello": "Ciao",
     "delete": "Elimina",
     "trips": "Viaggi",
-    "slavTrips24": "",
     "singularTrip": "Viaggio",
     "pTrips": "Viaggi (pubblici)",
     "tripList": "Elenco viaggi",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "Nessun dato disponibile nella tabella",
     "dtOneLineSelected": "1 riga selezionata",
     "dtMultipleLineSelected": "%d righe selezionate",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} riga selezionata",
+        "other": "{n} righe selezionate"
+    },
     "dtLengthMenu": "Mostra _MENU_ voci",
     "dtAll": "Tutto",
     "dtSearch": "Ricerca: ",
@@ -495,7 +497,11 @@
     "tools": "Strumenti",
     "automatedRouters": "Router automatizzati",
     "routeTitle": "{origLabel} a {destLabel}",
-    "ferrySplitNote": "Dividi in viaggi separati a ogni traversata in traghetto ({n} tratta/e in traghetto rilevata/e)",
+    "ferrySplitNote": {
+        "one": "Questo viaggio include una traversata in traghetto.",
+        "other": "Questo viaggio include {n} traversate in traghetto."
+    },
+    "ferrySplitOption": "Dividi il viaggio a ogni traversata in traghetto",
     "fineTuneNote": "Nota: Il router è lo stesso per treno, tram e metropolitana. Potrebbe essere necessario perfezionare il posizionamento del perno per instradarlo sul percorso desiderato.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Scarica GeoJSON",

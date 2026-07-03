@@ -38,7 +38,6 @@
     "hello": "Merhabalar",
     "delete": "Sil",
     "trips": "Yolculuklar",
-    "slavTrips24": "",
     "singularTrip": "Yolculuk",
     "pTrips": "Yolculuklar (herkese açık)",
     "tripList": "Yolculuklara genel bakış",
@@ -160,7 +159,9 @@
     "dtEmptyTable": "Tabloda veri yok",
     "dtOneLineSelected": "Bir satır seçildi",
     "dtMultipleLineSelected": "%d satır seçildi",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "other": "{n} satır seçildi"
+    },
     "dtLengthMenu": "Tek seferde _MENU_ yolculuk göster",
     "dtAll": "Hepsi",
     "dtSearch": "Ara:",
@@ -495,7 +496,10 @@
     "tools": "Araçlar",
     "automatedRouters": "Otomatik Yönlendiriciler",
     "routeTitle": "{origLabel} - {destLabel}",
-    "ferrySplitNote": "Her feribot geçişinde ayrı seyahatlere böl ({n} feribot bacağı tespit edildi)",
+    "ferrySplitNote": {
+        "other": "Bu seyahat {n} feribot geçişi içeriyor."
+    },
+    "ferrySplitOption": "Her feribot geçişinde seyahati böl",
     "fineTuneNote": "Not: Yönlendirici, tren, tramvay ve metro için aynıdır. İstediğiniz yolda yönlendirme yapmak için kazığın yerleştirmesini hassas ayarlamanız gerekebilir.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON indir",

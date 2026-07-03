@@ -38,7 +38,6 @@
     "hello": "Olá",
     "delete": "Eliminar",
     "trips": "Viagens",
-    "slavTrips24": "",
     "singularTrip": "Viagem",
     "pTrips": "Viagens (públicas)",
     "tripList": "Visão geral das viagens",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "Não existem dados na tabela",
     "dtOneLineSelected": "1 linha selecionada",
     "dtMultipleLineSelected": "%d linhas selecionadas",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} linha selecionada",
+        "other": "{n} linhas selecionadas"
+    },
     "dtLengthMenu": "Mostrar _MENU_ entradas",
     "dtAll": "Tudo",
     "dtSearch": "Procurar:",
@@ -495,7 +497,11 @@
     "tools": "Ferramentas",
     "automatedRouters": "Calculadoras de itinerário automatizadas",
     "routeTitle": "{origLabel} para {destLabel}",
-    "ferrySplitNote": "Dividir em viagens separadas em cada travessia de ferry ({n} troço(s) de ferry detetado(s))",
+    "ferrySplitNote": {
+        "one": "Esta viagem inclui uma travessia de ferry.",
+        "other": "Esta viagem inclui {n} travessias de ferry."
+    },
+    "ferrySplitOption": "Dividir a viagem em cada travessia de ferry",
     "fineTuneNote": "Nota: A calculadora de itinerário é a mesma para o comboio, o elétrico e o metro. Podes ter que ajustar finamente a localização do alfinete para o itinerário calcular o caminho desejado.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Transferir GeoJSON",

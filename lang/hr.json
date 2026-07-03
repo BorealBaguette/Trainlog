@@ -38,7 +38,6 @@
     "hello": "Bok",
     "delete": "Izbriši",
     "trips": "Putovanja",
-    "slavTrips24": "",
     "singularTrip": "Putovanje",
     "pTrips": "Putovanja (javnost)",
     "tripList": "Pregled putovanja",
@@ -160,7 +159,11 @@
     "dtEmptyTable": "Nema dostupnih podataka u tablici",
     "dtOneLineSelected": "Odabran je 1 redak",
     "dtMultipleLineSelected": "Odabrano je %d redaka",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "Odabran je {n} redak",
+        "few": "Odabrana su {n} retka",
+        "other": "Odabrano je {n} redaka"
+    },
     "dtLengthMenu": "Prikaži _MENU_ unosa",
     "dtAll": "Svi",
     "dtSearch": "Pretraži:",
@@ -495,7 +498,12 @@
     "tools": "Alati",
     "automatedRouters": "Automatizirani usmjerivači",
     "routeTitle": "{origLabel} do {destLabel}",
-    "ferrySplitNote": "Podijeli na zasebna putovanja na svakom trajektnom prijelazu ({n} trajektna dionica otkrivena)",
+    "ferrySplitNote": {
+        "one": "Ova ruta uključuje {n} trajektni prijelaz.",
+        "few": "Ova ruta uključuje {n} trajektna prijelaza.",
+        "other": "Ova ruta uključuje {n} trajektnih prijelaza."
+    },
+    "ferrySplitOption": "Podijeli rutu na svakom trajektnom prijelazu",
     "fineTuneNote": "Napomena: Usmjerivač je isti za vlak, tramvaj i metro. Možda ćete trebati precizno podesiti postavljanje klinova kako bi ih usmjerili na željeni put.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Preuzmi GeoJSON",

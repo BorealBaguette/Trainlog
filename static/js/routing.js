@@ -621,6 +621,8 @@ function combineRoutes(routes, waypoints, callback, context) {
 var FERRY_SPLIT_TYPES = ['car', 'bus', 'train', 'cycle', 'walk'];
 window.FERRY_SPLIT_TYPES = FERRY_SPLIT_TYPES;
 
+// Plural form selection lives in util.js as window.pluralize (shared, CLDR-based).
+
 // Group a route's instructions into contiguous driving/ferry segments, using each
 // instruction's coordinate-array `index` to slice out per-segment coordinates.
 // Freehand placeholder instructions carry no `.mode`, so they're treated as
@@ -922,6 +924,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
         var ferryCount = window.modeSegments.filter(function(s) { return s.mode === 'ferry'; }).length;
         content += `
           <div style="margin: 10px 0; padding: 10px; background-color: #eef6ff; border-radius: 4px;">
+            <p style="margin: 0 0 8px 0;">${pluralize(texts.ferrySplitNote, ferryCount)}</p>
             <label style="display: flex; align-items: center; cursor: pointer;">
               <input
                 type="checkbox"
@@ -930,7 +933,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
                 ${ferrySplitEnabled ? 'checked' : ''}
                 style="margin-right: 8px;"
               >
-              <span>${texts.ferrySplitNote.replace("{n}", ferryCount)}</span>
+              <span>${texts.ferrySplitOption}</span>
             </label>
           </div>
         `;

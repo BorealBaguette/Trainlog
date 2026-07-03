@@ -38,7 +38,6 @@
     "hello": "Olá",
     "delete": "Excluir",
     "trips": "Viagens",
-    "slavTrips24": "",
     "singularTrip": "Viagem",
     "pTrips": "Viagens (público)",
     "tripList": "Visão geral das Viagens",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "Nenhum dado disponível na tabela",
     "dtOneLineSelected": "1 linha selecionada",
     "dtMultipleLineSelected": "%d linhas selecionadas",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} linha selecionada",
+        "other": "{n} linhas selecionadas"
+    },
     "dtLengthMenu": "Mostrar _MENU_ entradas",
     "dtAll": "Todos",
     "dtSearch": "Pesquisar:",
@@ -495,7 +497,11 @@
     "tools": "Ferramentas",
     "automatedRouters": "Roteadores Automatizados",
     "routeTitle": "{origLabel} a {destLabel}",
-    "ferrySplitNote": "Dividir em viagens separadas em cada travessia de balsa ({n} trecho(s) de balsa detectado(s))",
+    "ferrySplitNote": {
+        "one": "Esta viagem inclui uma travessia de balsa.",
+        "other": "Esta viagem inclui {n} travessias de balsa."
+    },
+    "ferrySplitOption": "Dividir a viagem em cada travessia de balsa",
     "fineTuneNote": "Nota: O roteador é o mesmo para trem, bonde e metrô. Você pode precisar ajustar o posicionamento do pino para que ele siga a rota desejada.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Baixar GeoJSON",

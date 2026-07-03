@@ -38,7 +38,6 @@
     "hello": "Cześć",
     "delete": "Usuń",
     "trips": "Podróże",
-    "slavTrips24": "Podróże",
     "singularTrip": "Podróż",
     "pTrips": "Podróże (publiczne)",
     "tripList": "Lista podróży",
@@ -160,7 +159,11 @@
     "dtEmptyTable": "Dane niedostępne w tabeli",
     "dtOneLineSelected": "Wybrano 1 wiersz",
     "dtMultipleLineSelected": "Wybrano %d wierszy",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "Wybrano {n} wiersz",
+        "few": "Wybrano {n} wiersze",
+        "many": "Wybrano {n} wierszy"
+    },
     "dtLengthMenu": "Pokaż wpisy _MENU_",
     "dtAll": "Wszystko",
     "dtSearch": "Szukaj:",
@@ -495,7 +498,12 @@
     "tools": "Narzędzia",
     "automatedRouters": "Automatyczne routery",
     "routeTitle": "{origLabel} do {destLabel}",
-    "ferrySplitNote": "Podziel na osobne podróże przy każdym przejściu promem ({n} odcinek promu wykryty)",
+    "ferrySplitNote": {
+        "one": "Ta trasa obejmuje {n} przeprawę promową.",
+        "few": "Ta trasa obejmuje {n} przeprawy promowe.",
+        "many": "Ta trasa obejmuje {n} przepraw promowych."
+    },
+    "ferrySplitOption": "Podziel trasę na każdej przeprawie promowej",
     "fineTuneNote": "Uwaga: Router jest ten sam dla pociągu, tramwaju i metra. Może być konieczne dostosowanie umiejscowienia pinu, aby poprowadzić trasę na żądanej ścieżce.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Pobierz GeoJSON",

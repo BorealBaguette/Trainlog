@@ -38,7 +38,6 @@
     "hello": "こんにちは",
     "delete": "削除",
     "trips": "記録",
-    "slavTrips24": "",
     "singularTrip": "記録",
     "pTrips": "記録（公開）",
     "tripList": "記録の概要",
@@ -160,7 +159,9 @@
     "dtEmptyTable": "表に利用可能なデータがありません",
     "dtOneLineSelected": "1行が選択されました",
     "dtMultipleLineSelected": "%d行が選択されました",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "other": "{n}行が選択されました"
+    },
     "dtLengthMenu": "_MENU_ 件を表示",
     "dtAll": "すべて",
     "dtSearch": "検索：",
@@ -495,7 +496,10 @@
     "tools": "ツール",
     "automatedRouters": "自動経路",
     "routeTitle": "{origLabel} から {destLabel}",
-    "ferrySplitNote": "フェリー横断ごとに別々の旅程に分割（フェリー区間を{n}件検出）",
+    "ferrySplitNote": {
+        "other": "この旅程には{n}回のフェリー横断が含まれます。"
+    },
+    "ferrySplitOption": "フェリー横断ごとに旅程を分割",
     "fineTuneNote": "注意：経路設定はどのタイプの鉄道も同じです。目的の経路にするには、ピンの配置を微調整する必要があるかもしれません。",
     "distanceTime": "{km} km、{time}",
     "downloadGeoJSONButton": "GeoJSONをダウンロード",

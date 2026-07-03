@@ -38,7 +38,6 @@
     "hello": "Bonjour",
     "delete": "Supprimer",
     "trips": "Trajets",
-    "slavTrips24": "",
     "singularTrip": "Trajet",
     "pTrips": "Trajets (publics)",
     "tripList": "Trajets",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "Aucune donnée disponible dans le tableau",
     "dtOneLineSelected": "1 ligne sélectionnée",
     "dtMultipleLineSelected": "%d lignes sélectionnées",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} ligne sélectionnée",
+        "other": "{n} lignes sélectionnées"
+    },
     "dtLengthMenu": "Afficher _MENU_ entrées",
     "dtAll": "Tout",
     "dtSearch": "Recherche : ",
@@ -495,7 +497,11 @@
     "tools": "Outils",
     "automatedRouters": "Routeurs Automatisés",
     "routeTitle": "{origLabel} à {destLabel}",
-    "ferrySplitNote": "Diviser en trajets distincts à chaque traversée en ferry ({n} traversée(s) détectée(s))",
+    "ferrySplitNote": {
+        "one": "Ce trajet comprend une traversée en ferry.",
+        "other": "Ce trajet comprend {n} traversées en ferry."
+    },
+    "ferrySplitOption": "Scinder le trajet à chaque traversée en ferry",
     "fineTuneNote": "Remarque : Le routeur est le même pour le train, le tramway et le métro. Vous devrez peut-être ajuster la position des marqueurs pour que le trajet suive le parcours souhaité.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Télécharger GeoJSON",

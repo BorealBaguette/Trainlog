@@ -38,7 +38,6 @@
     "hello": "Hallo",
     "delete": "Verwijderen",
     "trips": "Ritten",
-    "slavTrips24": "",
     "singularTrip": "Rit",
     "pTrips": "Ritten (openbaar)",
     "tripList": "Reisoverzicht",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "Geen informatie beschikbaar in tabel",
     "dtOneLineSelected": "1 rij geselecteerd",
     "dtMultipleLineSelected": "%d rijen geselecteerd",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} rij geselecteerd",
+        "other": "{n} rijen geselecteerd"
+    },
     "dtLengthMenu": "Laat _MENU_ ingevoerde reizen zien",
     "dtAll": "Alle",
     "dtSearch": "Zoeken:",
@@ -495,7 +497,11 @@
     "tools": "Hulpmiddelen",
     "automatedRouters": "Geautomatiseerde routers",
     "routeTitle": "{origLabel} naar {destLabel}",
-    "ferrySplitNote": "Splits op in aparte trips bij elke veeroversteek ({n} veerdienst(en) gedetecteerd)",
+    "ferrySplitNote": {
+        "one": "Deze reis bevat een veeroversteek.",
+        "other": "Deze reis bevat {n} veeroversteken."
+    },
+    "ferrySplitOption": "Splits de reis bij elke veeroversteek",
     "fineTuneNote": "Opmerking: De router is hetzelfde voor trein, tram en metro. Mogelijk moet je de plaatsing van de pen fijn afstellen om de route op het gewenste pad te leiden.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON downloaden",

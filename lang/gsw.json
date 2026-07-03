@@ -38,7 +38,6 @@
     "hello": "Hallo",
     "delete": "Lösche",
     "trips": "Reise",
-    "slavTrips24": "",
     "singularTrip": "Reis",
     "pTrips": "Reise (öffentlich)",
     "tripList": "Reisübersicht",
@@ -160,7 +159,9 @@
     "dtEmptyTable": "Kei Date in de Tabelle verfüegbar",
     "dtOneLineSelected": "1 Zeile usgwählt",
     "dtMultipleLineSelected": "%d Zeile usgwählt",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "other": "{n} Zeile usgwählt"
+    },
     "dtLengthMenu": "_MENU_-Iträg azeige",
     "dtAll": "Alli",
     "dtSearch": "Sueche:",
@@ -495,7 +496,11 @@
     "tools": "Werchzüüg",
     "automatedRouters": "Automatisierti Router",
     "routeTitle": "{origLabel} bis {destLabel}",
-    "ferrySplitNote": "In separati Fahrte uftaile bi jedere Fährifahrt ({n} Fähriabschnitt erkennt)",
+    "ferrySplitNote": {
+        "one": "Die Fahrt het ei Fährifahrt.",
+        "other": "Die Fahrt het {n} Fährifahrte."
+    },
+    "ferrySplitOption": "D Fahrt bi jedere Fährifahrt uftaile",
     "fineTuneNote": "Hiwiis: De Router isch de gliich für Zug, Tram und Metro. Möglicherwiis müend Sie d Platzierig vom Pin gnau justiere, um d Route an richtige Ort z leite.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON abelade",

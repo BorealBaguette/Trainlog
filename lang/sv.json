@@ -38,7 +38,6 @@
     "hello": "Hej",
     "delete": "Radera",
     "trips": "Resor",
-    "slavTrips24": "",
     "singularTrip": "Resa",
     "pTrips": "Resor (offentliga)",
     "tripList": "Resöversikt",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "Ingen data tillgänglig i tabellen",
     "dtOneLineSelected": "1 rad vald",
     "dtMultipleLineSelected": "%d rader valda",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} rad vald",
+        "other": "{n} rader valda"
+    },
     "dtLengthMenu": "Visa _MENU_ poster",
     "dtAll": "Alla",
     "dtSearch": "Sök:",
@@ -495,7 +497,11 @@
     "tools": "Verktyg",
     "automatedRouters": "Automatiserade routrar",
     "routeTitle": "{origLabel} till {destLabel}",
-    "ferrySplitNote": "Dela upp i separata resor vid varje färjeövergång ({n} färjesträcka upptäckt)",
+    "ferrySplitNote": {
+        "one": "Den här resan innehåller en färjeövergång.",
+        "other": "Den här resan innehåller {n} färjeövergångar."
+    },
+    "ferrySplitOption": "Dela upp resan vid varje färjeövergång",
     "fineTuneNote": "Observera: Routern är densamma för tåg, spårvagn och tunnelbana. Du kan behöva finjustera pluggens placering för att den ska ta den önskade vägen.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Ladda ner GeoJSON",

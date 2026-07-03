@@ -38,7 +38,6 @@
     "hello": "你好",
     "delete": "删除",
     "trips": "旅行",
-    "slavTrips24": "",
     "singularTrip": "单次旅行",
     "pTrips": "公共旅行",
     "tripList": "旅行概览",
@@ -160,7 +159,9 @@
     "dtEmptyTable": "表中无数据",
     "dtOneLineSelected": "已选择 1 行",
     "dtMultipleLineSelected": "已选择 %d 行",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "other": "已选择 {n} 行"
+    },
     "dtLengthMenu": "显示 _MENU_ 条目",
     "dtAll": "全部",
     "dtSearch": "搜索：",
@@ -495,7 +496,10 @@
     "tools": "工具",
     "automatedRouters": "自动路由器",
     "routeTitle": "{origLabel} 到 {destLabel}",
-    "ferrySplitNote": "在每次渡轮穿越处拆分为单独的行程（检测到 {n} 段渡轮）",
+    "ferrySplitNote": {
+        "other": "此行程包含 {n} 次渡轮穿越。"
+    },
+    "ferrySplitOption": "在每次渡轮穿越处拆分行程",
     "fineTuneNote": "注意：路由器对于火车、电车和地铁是相同的。您可能需要微调桩的位置，以便它在所需路径上路由。",
     "distanceTime": "{km} 公里，{time}",
     "downloadGeoJSONButton": "下载GeoJSON",

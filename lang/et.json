@@ -38,7 +38,6 @@
     "hello": "Tere",
     "delete": "Kustuta",
     "trips": "Reisid",
-    "slavTrips24": "",
     "singularTrip": "Reis",
     "pTrips": "Reisid (avalik)",
     "tripList": "Reiside ülevaade",
@@ -160,7 +159,9 @@
     "dtEmptyTable": "Andmed tabelis puuduvad",
     "dtOneLineSelected": "1 rida valitud",
     "dtMultipleLineSelected": "%d rida valitud",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "other": "{n} rida valitud"
+    },
     "dtLengthMenu": "Näita _MENU_ kirjet",
     "dtAll": "Kõik",
     "dtSearch": "Otsing:",
@@ -495,7 +496,10 @@
     "tools": "Tööriistad",
     "automatedRouters": "Automaatruuterid",
     "routeTitle": "{origLabel} kuni {destLabel}",
-    "ferrySplitNote": "Jaga eraldi reisideks igal parvlaevaga ületusel ({n} parvlaevalõiku tuvastatud)",
+    "ferrySplitNote": {
+        "other": "See reis sisaldab {n} parvlaevaületust."
+    },
+    "ferrySplitOption": "Jaga reis igal parvlaevaületusel",
     "fineTuneNote": "Märkus: Marsruuter on sama rongi, trammi ja metro jaoks. Võib olla vaja tihvti asukohta peenhäälestada, et see soovitud teele suunata.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Laadi alla GeoJSON",

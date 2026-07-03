@@ -1309,3 +1309,23 @@ function hideLoading() {
 Date.prototype.toTimezonedISOString = function() {
   return new Date(this.getTime() - (this.getTimezoneOffset() * 60000)).toISOString()
 }
+
+// Pick the grammatically correct plural form for the page's locale (read from
+// <html lang>). `forms` is a {category: string} map keyed by CLDR plural
+// categories (one/few/many/other/…) as returned by Intl.PluralRules, so Slavic
+// languages get proper few/many agreement, not just singular/plural. Any category
+// a language omits falls back to `other`. A plain string is accepted too (legacy).
+function pluralize(forms, n) {
+  if (typeof forms === 'string') return forms.replace('{n}', n);
+  if (!forms) return '';
+  var locale = document.documentElement.lang || 'en';
+  var category;
+  try {
+    category = new Intl.PluralRules(locale).select(n);
+  } catch (e) {
+    category = new Intl.PluralRules('en').select(n);
+  }
+  var form = forms[category] || forms.other || forms.one || '';
+  return form.replace('{n}', n);
+}
+window.pluralize = pluralize;

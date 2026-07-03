@@ -38,7 +38,6 @@
     "hello": "Hej",
     "delete": "Slet",
     "trips": "Rejser",
-    "slavTrips24": "",
     "singularTrip": "Rejse",
     "pTrips": "Rejser (offentlige)",
     "tripList": "Overblik over rejser",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "Ingen data tilgængelige i tabellen",
     "dtOneLineSelected": "1 række valgt",
     "dtMultipleLineSelected": "%d rækker valgt",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} række valgt",
+        "other": "{n} rækker valgt"
+    },
     "dtLengthMenu": "Vis _MENU_ poster",
     "dtAll": "Alle",
     "dtSearch": "Søg:",
@@ -495,7 +497,11 @@
     "tools": "Værktøjer",
     "automatedRouters": "Automatiserede routere",
     "routeTitle": "{origLabel} til {destLabel}",
-    "ferrySplitNote": "Opdel i separate ture ved hver færgeoverfart ({n} færgeetape(r) fundet)",
+    "ferrySplitNote": {
+        "one": "Denne rejse indeholder en færgeoverfart.",
+        "other": "Denne rejse indeholder {n} færgeoverfarter."
+    },
+    "ferrySplitOption": "Opdel rejsen ved hver færgeoverfart",
     "fineTuneNote": "Bemærk: Routeren er den samme for tog, sporvogn og metro. Du skal muligvis finjustere placeringen af pinden for at få den til at rute på den ønskede vej.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Download GeoJSON",

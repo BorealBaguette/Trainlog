@@ -35,7 +35,9 @@ var currentRoute;
 var routeDetails = null;
 const texts = {
   "routeTitle": "{{routeTitle}}",
-  "ferrySplitNote": "{{ferrySplitNote}}",
+  "ferrySplitNote": {{ ferrySplitNote | tojson }},
+  "ferrySplitOption": "{{ferrySplitOption}}",
+  "ferry": "{{ferry}}",
   "savingTripProgress": "{{saving_trip_progress}}",
   "fineTuneNote": "{{fineTuneNote}}",
   "distanceTime": "{{distanceTime}}",
@@ -236,7 +238,7 @@ async function saveTrip(continueTrip=false) {
 // name (e.g. "Halhjem - Sandvikvåg"). Falls back to using the full name for both
 // ends if it doesn't split cleanly into exactly two parts.
 function splitFerryTerminals(roadName) {
-    var name = roadName || texts.ferrySplitNote;
+    var name = roadName || texts.ferry;
     var parts = name.split(/ [-–] /).map(function(p) { return p.trim(); }).filter(Boolean);
     if (parts.length === 2) return parts;
     return [name, name];

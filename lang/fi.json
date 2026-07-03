@@ -38,7 +38,6 @@
     "hello": "Hei",
     "delete": "Poista",
     "trips": "Matkat",
-    "slavTrips24": "",
     "singularTrip": "Matka",
     "pTrips": "Matkat (julkiset)",
     "tripList": "Matkojen yleiskatsaus",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "Taulukossa ei ole tietoja",
     "dtOneLineSelected": "1 rivi valittu",
     "dtMultipleLineSelected": "%d riviä valittu",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} rivi valittu",
+        "other": "{n} riviä valittu"
+    },
     "dtLengthMenu": "Näytä _MENU_ merkintää",
     "dtAll": "Kaikki",
     "dtSearch": "Haku:",
@@ -495,7 +497,10 @@
     "tools": "Työkalut",
     "automatedRouters": "Automaattiset reitittimet",
     "routeTitle": "{origLabel} - {destLabel}",
-    "ferrySplitNote": "Jaa erillisiin matkoihin jokaisella lauttaylityksellä ({n} lauttaosuus havaittu)",
+    "ferrySplitNote": {
+        "other": "Tämä matka sisältää {n} lauttaylitystä."
+    },
+    "ferrySplitOption": "Jaa matka jokaisella lauttaylityksellä",
     "fineTuneNote": "Huomautus: Reititin on sama junalle, raitiovaunulle ja metrolle. Saattaa olla tarpeen hienosäätää tapin sijoittelua, jotta se reitittää halutulla reitillä.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Lataa GeoJSON",

@@ -38,7 +38,6 @@
     "hello": "Hola",
     "delete": "Eliminar",
     "trips": "Viajes",
-    "slavTrips24": "",
     "singularTrip": "Viaje",
     "pTrips": "Viajes (públicos)",
     "tripList": "Resumen de Viajes",
@@ -160,7 +159,10 @@
     "dtEmptyTable": "No hay datos disponibles en la tabla",
     "dtOneLineSelected": "1 fila seleccionada",
     "dtMultipleLineSelected": "%d filas seleccionadas",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "one": "{n} fila seleccionada",
+        "other": "{n} filas seleccionadas"
+    },
     "dtLengthMenu": "Mostrar _MENU_ entradas",
     "dtAll": "Todo",
     "dtSearch": "Buscar:",
@@ -495,7 +497,11 @@
     "tools": "Herramientas",
     "automatedRouters": "Enrutadores automatizados",
     "routeTitle": "{origLabel} a {destLabel}",
-    "ferrySplitNote": "Dividir en viajes separados en cada travesía en ferry ({n} tramo(s) de ferry detectado(s))",
+    "ferrySplitNote": {
+        "one": "Este viaje incluye una travesía en ferry.",
+        "other": "Este viaje incluye {n} travesías en ferry."
+    },
+    "ferrySplitOption": "Dividir el viaje en cada travesía en ferry",
     "fineTuneNote": "Nota: El enrutador es el mismo para tren, tranvía y metro. Es posible que necesite ajustar la colocación del pasador para que lo enrute en el camino deseado.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Descargar GeoJSON",

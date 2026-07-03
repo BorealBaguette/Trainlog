@@ -471,6 +471,8 @@
 <script type="text/javascript">
 const checkedTrips = [];
 const checkedTripData = {};
+// CLDR plural map for the "N rows selected" message (see window.pluralize in util.js).
+const dtRowsSelected = {{ dtRowsSelected | tojson }};
 
 var _trainsetNames = new Set();
 $.getJSON('/api/trainsets').done(function(rows) {
@@ -1511,14 +1513,9 @@ function hideMultilink() {
 
 function updateSelectionMessage() {
     if (new URLSearchParams(window.location.search).get('scroll') != 'true') {
-        var message;
-        if (checkedTrips.length === 0) {
-            message = "";
-        } else if (checkedTrips.length === 1) {
-            message = "{{dtOneLineSelected}}";
-        } else {
-            message = "{{dtMultipleLineSelected}}".replace('%d', checkedTrips.length);
-        }
+        var message = checkedTrips.length === 0
+            ? ""
+            : pluralize(dtRowsSelected, checkedTrips.length);
 
         var $dataTablesInfo = $('.dataTables_info');
 

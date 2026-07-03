@@ -38,7 +38,6 @@
     "hello": "Helló",
     "delete": "Töröl",
     "trips": "Utazások",
-    "slavTrips24": "",
     "singularTrip": "Utazás",
     "pTrips": "Utazások (nyilvános)",
     "tripList": "Utazások áttekintése",
@@ -160,7 +159,9 @@
     "dtEmptyTable": "Nincs rendelkezésre álló adat a táblázatban",
     "dtOneLineSelected": "1 sor kiválasztva",
     "dtMultipleLineSelected": "%d sor kiválasztva",
-    "dtSlav24LineSelected": "",
+    "dtRowsSelected": {
+        "other": "{n} sor kiválasztva"
+    },
     "dtLengthMenu": "_MENU_ bejegyzés megjelenítése",
     "dtAll": "Minden",
     "dtSearch": "Keresés:",
@@ -495,7 +496,10 @@
     "tools": "Eszközök",
     "automatedRouters": "Automatizált útválasztók",
     "routeTitle": "{origLabel} - {destLabel}",
-    "ferrySplitNote": "Külön utakra bontás minden komp-átkelésnél ({n} komp szakasz észlelve)",
+    "ferrySplitNote": {
+        "other": "Ez az utazás {n} kompátkelést tartalmaz."
+    },
+    "ferrySplitOption": "Az utazás felosztása minden kompátkelésnél",
     "fineTuneNote": "Megjegyzés: Az útválasztó ugyanaz a vonat, a villamos és a metró esetében. Lehet, hogy finomhangolnia kell a pecek elhelyezését, hogy a kívánt útvonalon haladjon.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON letöltése",
