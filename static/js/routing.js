@@ -56,7 +56,7 @@ var useNewRouter = false;
 // Persists the ferry-split checkbox's state across re-renders (routeWhileDragging
 // fires routeselected repeatedly, which fully re-creates the sidebar HTML — without
 // this, an unchecked box would silently reset to checked on the next drag/reroute).
-var ferrySplitEnabled = true;
+var ferrySplitEnabled = false;
 
 var markergroup = new L.featureGroup(markerIconStart, markerIconEnd);
 
