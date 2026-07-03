@@ -500,6 +500,10 @@
         "other": "この旅程には{n}回のフェリー横断が含まれます。"
     },
     "ferrySplitOption": "フェリー横断ごとに旅程を分割",
+    "trainSplitNote": {
+        "other": "この旅程には{n}件のカートレインが含まれます。"
+    },
+    "trainSplitOption": "カートレインごとに旅程を分割",
     "fineTuneNote": "注意：経路設定はどのタイプの鉄道も同じです。目的の経路にするには、ピンの配置を微調整する必要があるかもしれません。",
     "distanceTime": "{km} km、{time}",
     "downloadGeoJSONButton": "GeoJSONをダウンロード",

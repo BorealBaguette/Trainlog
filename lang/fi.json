@@ -501,6 +501,10 @@
         "other": "Tämä matka sisältää {n} lauttaylitystä."
     },
     "ferrySplitOption": "Jaa matka jokaisella lauttaylityksellä",
+    "trainSplitNote": {
+        "other": "Tämä matka sisältää {n} autojunaa."
+    },
+    "trainSplitOption": "Jaa matka jokaisella autojunalla",
     "fineTuneNote": "Huomautus: Reititin on sama junalle, raitiovaunulle ja metrolle. Saattaa olla tarpeen hienosäätää tapin sijoittelua, jotta se reitittää halutulla reitillä.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Lataa GeoJSON",

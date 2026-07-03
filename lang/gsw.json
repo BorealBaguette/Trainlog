@@ -501,6 +501,10 @@
         "other": "Die Fahrt het {n} Fährifahrte."
     },
     "ferrySplitOption": "D Fahrt bi jedere Fährifahrt uftaile",
+    "trainSplitNote": {
+        "other": "Die Fahrt het {n} Autoverlad."
+    },
+    "trainSplitOption": "D Fahrt bi jedem Autoverlad uftaile",
     "fineTuneNote": "Hiwiis: De Router isch de gliich für Zug, Tram und Metro. Möglicherwiis müend Sie d Platzierig vom Pin gnau justiere, um d Route an richtige Ort z leite.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON abelade",

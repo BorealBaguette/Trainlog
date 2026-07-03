@@ -504,6 +504,12 @@
         "many": "Ta trasa obejmuje {n} przepraw promowych."
     },
     "ferrySplitOption": "Podziel trasę na każdej przeprawie promowej",
+    "trainSplitNote": {
+        "one": "Ta trasa obejmuje {n} pociąg samochodowy.",
+        "few": "Ta trasa obejmuje {n} pociągi samochodowe.",
+        "many": "Ta trasa obejmuje {n} pociągów samochodowych."
+    },
+    "trainSplitOption": "Podziel trasę na każdym pociągu samochodowym",
     "fineTuneNote": "Uwaga: Router jest ten sam dla pociągu, tramwaju i metra. Może być konieczne dostosowanie umiejscowienia pinu, aby poprowadzić trasę na żądanej ścieżce.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Pobierz GeoJSON",

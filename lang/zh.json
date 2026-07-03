@@ -500,6 +500,10 @@
         "other": "此行程包含 {n} 次渡轮穿越。"
     },
     "ferrySplitOption": "在每次渡轮穿越处拆分行程",
+    "trainSplitNote": {
+        "other": "此行程包含 {n} 段载车列车。"
+    },
+    "trainSplitOption": "在每段载车列车处拆分行程",
     "fineTuneNote": "注意：路由器对于火车、电车和地铁是相同的。您可能需要微调桩的位置，以便它在所需路径上路由。",
     "distanceTime": "{km} 公里，{time}",
     "downloadGeoJSONButton": "下载GeoJSON",

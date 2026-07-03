@@ -500,6 +500,10 @@
         "other": "이 여정에는 페리 횡단이 {n}회 포함됩니다."
     },
     "ferrySplitOption": "각 페리 횡단에서 여정 분할",
+    "trainSplitNote": {
+        "other": "이 여정에는 자동차 열차가 {n}회 포함됩니다."
+    },
+    "trainSplitOption": "각 자동차 열차에서 여정 분할",
     "fineTuneNote": "참고: 라우터는 기차, 트램 및 지하철에 대해 동일합니다. 원하는 경로로 라우팅하기 위해 핀의 위치를 미세 조정해야 할 수도 있습니다.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON 다운로드",

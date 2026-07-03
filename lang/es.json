@@ -502,6 +502,11 @@
         "other": "Este viaje incluye {n} travesías en ferry."
     },
     "ferrySplitOption": "Dividir el viaje en cada travesía en ferry",
+    "trainSplitNote": {
+        "one": "Este viaje incluye una lanzadera ferroviaria.",
+        "other": "Este viaje incluye {n} lanzaderas ferroviarias."
+    },
+    "trainSplitOption": "Dividir el viaje en cada lanzadera ferroviaria",
     "fineTuneNote": "Nota: El enrutador es el mismo para tren, tranvía y metro. Es posible que necesite ajustar la colocación del pasador para que lo enrute en el camino deseado.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Descargar GeoJSON",

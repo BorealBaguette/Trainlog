@@ -502,6 +502,11 @@
         "other": "Questo viaggio include {n} traversate in traghetto."
     },
     "ferrySplitOption": "Dividi il viaggio a ogni traversata in traghetto",
+    "trainSplitNote": {
+        "one": "Questo viaggio include una navetta ferroviaria.",
+        "other": "Questo viaggio include {n} navette ferroviarie."
+    },
+    "trainSplitOption": "Dividi il viaggio a ogni navetta ferroviaria",
     "fineTuneNote": "Nota: Il router è lo stesso per treno, tram e metropolitana. Potrebbe essere necessario perfezionare il posizionamento del perno per instradarlo sul percorso desiderato.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Scarica GeoJSON",

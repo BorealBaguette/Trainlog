@@ -504,6 +504,12 @@
         "other": "Ova ruta uključuje {n} trajektnih prijelaza."
     },
     "ferrySplitOption": "Podijeli rutu na svakom trajektnom prijelazu",
+    "trainSplitNote": {
+        "one": "Ova ruta uključuje {n} autovlak.",
+        "few": "Ova ruta uključuje {n} autovlaka.",
+        "other": "Ova ruta uključuje {n} autovlakova."
+    },
+    "trainSplitOption": "Podijeli rutu na svakom autovlaku",
     "fineTuneNote": "Napomena: Usmjerivač je isti za vlak, tramvaj i metro. Možda ćete trebati precizno podesiti postavljanje klinova kako bi ih usmjerili na željeni put.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Preuzmi GeoJSON",

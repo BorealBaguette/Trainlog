@@ -500,6 +500,10 @@
         "other": "See reis sisaldab {n} parvlaevaületust."
     },
     "ferrySplitOption": "Jaga reis igal parvlaevaületusel",
+    "trainSplitNote": {
+        "other": "See reis sisaldab {n} autorongi."
+    },
+    "trainSplitOption": "Jaga reis igal autorongil",
     "fineTuneNote": "Märkus: Marsruuter on sama rongi, trammi ja metro jaoks. Võib olla vaja tihvti asukohta peenhäälestada, et see soovitud teele suunata.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Laadi alla GeoJSON",

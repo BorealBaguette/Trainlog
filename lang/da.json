@@ -502,6 +502,11 @@
         "other": "Denne rejse indeholder {n} færgeoverfarter."
     },
     "ferrySplitOption": "Opdel rejsen ved hver færgeoverfart",
+    "trainSplitNote": {
+        "one": "Denne rejse indeholder et biltog.",
+        "other": "Denne rejse indeholder {n} biltog."
+    },
+    "trainSplitOption": "Opdel rejsen ved hvert biltog",
     "fineTuneNote": "Bemærk: Routeren er den samme for tog, sporvogn og metro. Du skal muligvis finjustere placeringen af pinden for at få den til at rute på den ønskede vej.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Download GeoJSON",

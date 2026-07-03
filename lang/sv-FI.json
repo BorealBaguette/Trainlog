@@ -502,6 +502,11 @@
         "other": "Den här resan innehåller {n} färjeövergångar."
     },
     "ferrySplitOption": "Dela upp resan vid varje färjeövergång",
+    "trainSplitNote": {
+        "one": "Den här resan innehåller ett biltåg.",
+        "other": "Den här resan innehåller {n} biltåg."
+    },
+    "trainSplitOption": "Dela upp resan vid varje biltåg",
     "fineTuneNote": "Observera: Routern är densamma för tåg, spårvagn och metro. Du kan behöva finjustera pluggens placering för att den ska ta den önskade vägen.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Ladda ner GeoJSON",

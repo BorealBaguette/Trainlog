@@ -500,6 +500,10 @@
         "other": "Ez az utazás {n} kompátkelést tartalmaz."
     },
     "ferrySplitOption": "Az utazás felosztása minden kompátkelésnél",
+    "trainSplitNote": {
+        "other": "Ez az utazás {n} autóvonatot tartalmaz."
+    },
+    "trainSplitOption": "Az utazás felosztása minden autóvonatnál",
     "fineTuneNote": "Megjegyzés: Az útválasztó ugyanaz a vonat, a villamos és a metró esetében. Lehet, hogy finomhangolnia kell a pecek elhelyezését, hogy a kívánt útvonalon haladjon.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON letöltése",

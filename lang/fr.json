@@ -502,6 +502,11 @@
         "other": "Ce trajet comprend {n} traversées en ferry."
     },
     "ferrySplitOption": "Scinder le trajet à chaque traversée en ferry",
+    "trainSplitNote": {
+        "one": "Ce trajet comprend une navette ferroviaire.",
+        "other": "Ce trajet comprend {n} navettes ferroviaires."
+    },
+    "trainSplitOption": "Scinder le trajet à chaque navette ferroviaire",
     "fineTuneNote": "Remarque : Le routeur est le même pour le train, le tramway et le métro. Vous devrez peut-être ajuster la position des marqueurs pour que le trajet suive le parcours souhaité.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Télécharger GeoJSON",

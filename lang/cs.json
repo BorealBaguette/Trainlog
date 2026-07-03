@@ -504,6 +504,12 @@
         "other": "Tato trasa obsahuje {n} přejezdů trajektem."
     },
     "ferrySplitOption": "Rozdělit trasu při každém přejezdu trajektem",
+    "trainSplitNote": {
+        "one": "Tato trasa obsahuje {n} autovlak.",
+        "few": "Tato trasa obsahuje {n} autovlaky.",
+        "other": "Tato trasa obsahuje {n} autovlaků."
+    },
+    "trainSplitOption": "Rozdělit trasu při každém autovlaku",
     "fineTuneNote": "Poznámka: Směrovač je stejný pro vlak, tramvaj a metro. Možná budete muset jemně doladit umístění kolíku, aby směřoval po požadované trase.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Stáhnout GeoJSON",

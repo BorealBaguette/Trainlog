@@ -502,6 +502,11 @@
         "other": "Esta viagem inclui {n} travessias de balsa."
     },
     "ferrySplitOption": "Dividir a viagem em cada travessia de balsa",
+    "trainSplitNote": {
+        "one": "Esta viagem inclui uma travessia de trem.",
+        "other": "Esta viagem inclui {n} travessias de trem."
+    },
+    "trainSplitOption": "Dividir a viagem em cada travessia de trem",
     "fineTuneNote": "Nota: O roteador é o mesmo para trem, bonde e metrô. Você pode precisar ajustar o posicionamento do pino para que ele siga a rota desejada.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Baixar GeoJSON",

@@ -502,6 +502,11 @@
         "other": "Denne reisen inneholder {n} fergeoverfarter."
     },
     "ferrySplitOption": "Del opp reisen ved hver fergeoverfart",
+    "trainSplitNote": {
+        "one": "Denne reisen inneholder et biltog.",
+        "other": "Denne reisen inneholder {n} biltog."
+    },
+    "trainSplitOption": "Del opp reisen ved hvert biltog",
     "fineTuneNote": "Merk: Ruteren er den samme for tog, trikk og metro. Du må kanskje finjustere plasseringen av pinnen for å få den til å rute på ønsket vei.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Last ned GeoJSON",

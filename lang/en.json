@@ -502,6 +502,11 @@
         "other": "This trip includes {n} ferry crossings."
     },
     "ferrySplitOption": "Split the trip at each ferry crossing",
+    "trainSplitNote": {
+        "one": "This trip includes a rail shuttle.",
+        "other": "This trip includes {n} rail shuttles."
+    },
+    "trainSplitOption": "Split the trip at each rail shuttle",
     "fineTuneNote": "Note: The router is the same for train, tram, and metro. You may need to fine-tune the peg placement to get it to route on the desired path.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "Download GeoJSON",

@@ -502,6 +502,11 @@
         "other": "Diese Fahrt enthält {n} Fährüberfahrten."
     },
     "ferrySplitOption": "Die Fahrt bei jeder Fährüberfahrt aufteilen",
+    "trainSplitNote": {
+        "one": "Diese Fahrt enthält einen Autozug.",
+        "other": "Diese Fahrt enthält {n} Autozüge."
+    },
+    "trainSplitOption": "Die Fahrt bei jedem Autozug aufteilen",
     "fineTuneNote": "Hinweis: Der Router ist derselbe für Zug, Straßenbahn und U-Bahn. Möglicherweise müssen Sie die Platzierung des Stifts feinabstimmen, um die Route auf dem gewünschten Pfad zu leiten.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON herunterladen",

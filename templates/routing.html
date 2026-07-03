@@ -37,6 +37,8 @@ const texts = {
   "routeTitle": "{{routeTitle}}",
   "ferrySplitNote": {{ ferrySplitNote | tojson }},
   "ferrySplitOption": "{{ferrySplitOption}}",
+  "trainSplitNote": {{ trainSplitNote | tojson }},
+  "trainSplitOption": "{{trainSplitOption}}",
   "ferry": "{{ferry}}",
   "savingTripProgress": "{{saving_trip_progress}}",
   "fineTuneNote": "{{fineTuneNote}}",
@@ -343,16 +345,16 @@ function dateToRelative(date) {
     return { day: dayOffset, time: `${pad2(date.getHours())}:${pad2(date.getMinutes())}` };
 }
 
-// Split the entered price across the non-ferry ("initial type") legs, weighted by
-// distance; the ferry leg(s) get no price of their own (left blank, same as "no
-// price entered" -> excluded from expenditure stats), so the total isn't inflated by
-// duplicating the whole price onto every leg.
+// Split the entered price across the road ("initial type") legs, weighted by
+// distance; the crossing leg(s) — ferry or rail shuttle — get no price of their own
+// (left blank, same as "no price entered" -> excluded from expenditure stats), so the
+// total isn't inflated by duplicating the whole price onto every leg.
 function apportionPrice(legs, segments) {
     if (!isNumber(newTrip.price) || newTrip.price === "") return;
     var originalPrice = Number(newTrip.price);
     var nonFerryIndices = [];
-    segments.forEach(function(s, i) { if (s.mode !== 'ferry') nonFerryIndices.push(i); });
-    if (nonFerryIndices.length === 0) return; // all-ferry route: leave price untouched
+    segments.forEach(function(s, i) { if (s.mode === 'driving') nonFerryIndices.push(i); });
+    if (nonFerryIndices.length === 0) return; // all-crossing route: leave price untouched
     var totalNonFerryDistance = nonFerryIndices.reduce(function(a, i) { return a + segments[i].distance; }, 0);
     if (totalNonFerryDistance <= 0) return;
     var remaining = originalPrice;
@@ -364,7 +366,7 @@ function apportionPrice(legs, segments) {
         remaining = Math.round((remaining - share) * 100) / 100;
         legs[i].price = share;
     });
-    segments.forEach(function(s, i) { if (s.mode === 'ferry') legs[i].price = ""; });
+    segments.forEach(function(s, i) { if (s.mode !== 'driving') legs[i].price = ""; });
 }
 
 async function saveTripSplit(continueTrip) {
@@ -383,24 +385,26 @@ async function saveTripSplit(continueTrip) {
         if (i === segments.length - 1) {
             destination = [destCoord, destLabel];
         }
-        if (seg.mode === 'ferry') {
+        if (seg.mode !== 'driving') {
+            // Crossing leg (ferry or rail shuttle): derive its terminal labels from
+            // the OSRM step name, and save it as its own trip type (ferry / train).
             var terminals = splitFerryTerminals(seg.roadName);
             if (!origin) origin = [{lat: seg.coordinates[0].lat, lng: seg.coordinates[0].lng}, terminals[0]];
             if (!destination) destination = [{lat: seg.coordinates[seg.coordinates.length - 1].lat, lng: seg.coordinates[seg.coordinates.length - 1].lng}, terminals[1]];
         } else {
-            // Driving segment adjacent to a ferry: reuse that ferry's terminal label
-            // for whichever end touches it.
+            // Road segment adjacent to a crossing: reuse that crossing's terminal
+            // label for whichever end touches it.
             var nextSeg = segments[i + 1];
             var prevSeg = segments[i - 1];
-            if (!origin && prevSeg && prevSeg.mode === 'ferry') {
+            if (!origin && prevSeg && prevSeg.mode !== 'driving') {
                 origin = [{lat: seg.coordinates[0].lat, lng: seg.coordinates[0].lng}, splitFerryTerminals(prevSeg.roadName)[1]];
             }
-            if (!destination && nextSeg && nextSeg.mode === 'ferry') {
+            if (!destination && nextSeg && nextSeg.mode !== 'driving') {
                 destination = [{lat: seg.coordinates[seg.coordinates.length - 1].lat, lng: seg.coordinates[seg.coordinates.length - 1].lng}, splitFerryTerminals(nextSeg.roadName)[0]];
             }
         }
         return {
-            type: seg.mode === 'ferry' ? 'ferry' : type,
+            type: seg.mode === 'driving' ? type : seg.mode,
             originStation: origin,
             destinationStation: destination,
             trip_length: seg.distance,

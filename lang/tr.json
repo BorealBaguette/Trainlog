@@ -500,6 +500,10 @@
         "other": "Bu seyahat {n} feribot geçişi içeriyor."
     },
     "ferrySplitOption": "Her feribot geçişinde seyahati böl",
+    "trainSplitNote": {
+        "other": "Bu seyahat {n} araba treni içeriyor."
+    },
+    "trainSplitOption": "Her araba treninde seyahati böl",
     "fineTuneNote": "Not: Yönlendirici, tren, tramvay ve metro için aynıdır. İstediğiniz yolda yönlendirme yapmak için kazığın yerleştirmesini hassas ayarlamanız gerekebilir.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON indir",

@@ -502,6 +502,11 @@
         "other": "Deze reis bevat {n} veeroversteken."
     },
     "ferrySplitOption": "Splits de reis bij elke veeroversteek",
+    "trainSplitNote": {
+        "one": "Deze reis bevat een autotrein.",
+        "other": "Deze reis bevat {n} autotreinen."
+    },
+    "trainSplitOption": "Splits de reis bij elke autotrein",
     "fineTuneNote": "Opmerking: De router is hetzelfde voor trein, tram en metro. Mogelijk moet je de plaatsing van de pen fijn afstellen om de route op het gewenste pad te leiden.",
     "distanceTime": "{km} km, {time}",
     "downloadGeoJSONButton": "GeoJSON downloaden",
