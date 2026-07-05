@@ -1747,9 +1747,9 @@
                         else if (redirectToProjects) location.href = "{{ url_for('dynamic_trips', time='projects', username=username) }}";
                         else location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}";
                     }
-                    // Sync tags (edit mode only — copy creates a new unknown trip id)
-                    if (!copy && typeof _tagSetup !== 'undefined') {
-                        var tripId = location.pathname.split('/').pop();
+                    // Sync tags (copy mode: new trip id comes back from the copyTrip response)
+                    if (typeof _tagSetup !== 'undefined') {
+                        var tripId = copy ? res : location.pathname.split('/').pop();
                         var currentIds = new Set(
                             Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(el => el.dataset.tagId)
                         );

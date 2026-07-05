@@ -5937,6 +5937,7 @@ def copyTrip(username):
         new_trip = update_trip_values_from_form_data(new_trip_id, formData)
 
         update_trip(new_trip_id, new_trip, formData)
+        return jsonify(new_trip_id)
     return ""
 
 
