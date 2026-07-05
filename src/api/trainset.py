@@ -248,11 +248,14 @@ def update_trainset(tid):
                     "UPDATE trips SET material_type_advanced = :new WHERE material_type_advanced = :old",
                     {"new": name, "old": old_name},
                 )
+                _rename_in_composites(pg, old_name, name)
             else:
+                user_id = get_user_id(username)
                 pg.execute(
                     "UPDATE trips SET material_type_advanced = :new WHERE user_id = :user AND material_type_advanced = :old",
-                    {"new": name, "old": old_name, "user": get_user_id(username)},
+                    {"new": name, "old": old_name, "user": user_id},
                 )
+                _rename_in_composites(pg, old_name, name, user_id)
 
     return jsonify({'id': tid, 'name': name})
 
@@ -298,31 +301,98 @@ def resolve_material_type_advanced():
         return jsonify([])
 
     with pg_session() as pg:
-        # Try JSON array first
+        # Try JSON first: array of slim units, or composite {"trainsets": [names]}
         try:
             parsed = json.loads(value)
             if isinstance(parsed, list):
                 slim = _slim_units(parsed)
                 return jsonify(_enrich_units(pg, slim))
+            if isinstance(parsed, dict) and isinstance(parsed.get('trainsets'), list):
+                units = []
+                for name in parsed['trainsets']:
+                    units.extend(_units_by_name(pg, name, username))
+                return jsonify(units)
         except (json.JSONDecodeError, TypeError):
             pass
 
         # Fall back to trainset name lookup
-        result = pg.execute(
-            """
-            SELECT units_json FROM trainsets
-            WHERE name = :name AND (is_admin OR username = :username)
-            """,
-            {"name": value, "username": username},
-        )
-        row = result.fetchone()
-        if not row:
-            return jsonify([])
-        slim_units = json.loads(row['units_json'] or '[]')
-        return jsonify(_enrich_units(pg, slim_units))
+        return jsonify(_units_by_name(pg, value, username))
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
+def public_trainset_info(pg, value, owner_username):
+    """Resolve a trip's material_type_advanced for public display, using the
+    trip owner's trainset visibility (public pages may be viewed logged out).
+
+    Returns {'label': str|None, 'units': [slim units]} or None if nothing to show.
+    Units are slimmed to display/attribution fields.
+    """
+    if not value:
+        return None
+    label = None
+    units = []
+    try:
+        parsed = json.loads(value)
+    except (json.JSONDecodeError, TypeError):
+        parsed = None
+    if isinstance(parsed, list):
+        units = _enrich_units(pg, _slim_units(parsed))
+    elif isinstance(parsed, dict) and isinstance(parsed.get('trainsets'), list):
+        names = parsed['trainsets']
+        label = ' + '.join(names)
+        for name in names:
+            units.extend(_units_by_name(pg, name, owner_username))
+    else:
+        label = value
+        units = _units_by_name(pg, value, owner_username)
+    if not units:
+        return None
+    display_fields = ('name', 'label', 'image', 'image_type', '_side', '_phType',
+                      'author', 'license', 'source')
+    slim = [{k: u[k] for k in display_fields if u.get(k) is not None} for u in units]
+    return {'label': label, 'units': slim}
+
+
+def _units_by_name(pg, name, username):
+    """Enriched units of a trainset visible to `username`, or [] if not found."""
+    result = pg.execute(
+        """
+        SELECT units_json FROM trainsets
+        WHERE name = :name AND (is_admin OR username = :username)
+        """,
+        {"name": name, "username": username},
+    )
+    row = result.fetchone()
+    if not row:
+        return []
+    return _enrich_units(pg, json.loads(row['units_json'] or '[]'))
+
+
+def _rename_in_composites(pg, old_name, new_name, user_id=None):
+    """Rewrite composite {"trainsets": [...]} references in trips when a set is renamed."""
+    where = "material_type_advanced LIKE '{\"trainsets\"%'"
+    params = {}
+    if user_id is not None:
+        where += " AND user_id = :user"
+        params["user"] = user_id
+    rows = pg.execute(
+        f"SELECT trip_id, material_type_advanced FROM trips WHERE {where}", params
+    ).fetchall()
+    for row in rows:
+        try:
+            parsed = json.loads(row['material_type_advanced'])
+        except (json.JSONDecodeError, TypeError):
+            continue
+        names = parsed.get('trainsets') if isinstance(parsed, dict) else None
+        if not isinstance(names, list) or old_name not in names:
+            continue
+        parsed['trainsets'] = [new_name if n == old_name else n for n in names]
+        pg.execute(
+            "UPDATE trips SET material_type_advanced = :val WHERE trip_id = :tid",
+            {"val": json.dumps(parsed), "tid": row['trip_id']},
+        )
+
 
 def _slim_units(units):
     """Keep only wagon name, flip-side, and placeholder type — all other data lives in the wagons table."""

@@ -153,7 +153,7 @@ from src.api.wrapped import wrapped_blueprint, DISTANCE_COMPARISONS, DURATION_CO
 from src.api.stats import stats_blueprint, fetch_stats, get_distinct_stat_years
 from src.api.ai import ai_blueprint
 from src.api.mcp import blueprint as mcp_blueprint
-from src.api.trainset import trainset_blueprint
+from src.api.trainset import public_trainset_info, trainset_blueprint
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
@@ -7256,6 +7256,11 @@ def processPublicTrips(tripIds):
             and getattr(user, "premium", False)
             and getattr(user, "flight_3d", False)
         )
+        if trip.get("material_type_advanced"):
+            with pg_session() as pg:
+                trip["trainset"] = public_trainset_info(
+                    pg, trip["material_type_advanced"], trip["username"]
+                )
         tripList.append(
             {
                 "time": trip["time"],
@@ -11012,17 +11017,23 @@ def get_current_trips_data(public_only=True):
     paths = {path["trip_id"]: path["path"] for path in pathResult}
     
     result = []
-    for trip in filtered_trips:
-        path = json.loads(paths.get(trip["uid"], "[]"))
-        result.append(
-            {
-                "username": trip["username"],
-                "trip": dict(trip),
-                "path": path,
-                "distances": getDistanceFromPath(path),
-            }
-        )
-    
+    with pg_session() as pg:
+        for trip in filtered_trips:
+            path = json.loads(paths.get(trip["uid"], "[]"))
+            trip = dict(trip)
+            if trip.get("material_type_advanced"):
+                trip["trainset"] = public_trainset_info(
+                    pg, trip["material_type_advanced"], trip["username"]
+                )
+            result.append(
+                {
+                    "username": trip["username"],
+                    "trip": trip,
+                    "path": path,
+                    "distances": getDistanceFromPath(path),
+                }
+            )
+
     return result
 
 

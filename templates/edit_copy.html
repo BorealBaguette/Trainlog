@@ -1977,6 +1977,11 @@
         $display.show();
         return;
       }
+      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets) && parsed.trainsets.length > 0) {
+        $('#ts-active-label').text(parsed.trainsets.join(' + '));
+        $display.show();
+        return;
+      }
     } catch(e) {}
     if (val) {
       $('#ts-active-label').text(val);

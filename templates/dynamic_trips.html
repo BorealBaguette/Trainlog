@@ -483,7 +483,8 @@ function _isValidMaterial(mat) {
     if (!mat) return false;
     try {
         var arr = JSON.parse(mat);
-        return Array.isArray(arr) && arr.length > 0;
+        if (Array.isArray(arr)) return arr.length > 0;
+        if (arr && Array.isArray(arr.trainsets)) return arr.trainsets.length > 0;
     } catch(e) {}
     return _trainsetNames.has(mat);
 }
@@ -1038,6 +1039,9 @@ function renderPrices(data, type, row) {
 function _formatTrainsetStr(mat) {
     try {
         var units = JSON.parse(mat);
+        if (units && !Array.isArray(units) && Array.isArray(units.trainsets)) {
+            return units.trainsets.join(' + ');
+        }
         if (Array.isArray(units) && units.length > 0) {
             var result = [], i = 0;
             while (i < units.length) {
@@ -1841,6 +1845,7 @@ function openMassEditTsb() {
         try {
             var units = JSON.parse(value);
             if (Array.isArray(units)) label = units.map(function(u) { return u.label || u.nom || u.name; }).join(' + ');
+            else if (units && Array.isArray(units.trainsets)) label = units.trainsets.join(' + ');
         } catch (e) {
             label = value;
             _trainsetNames.add(value); // keep cache current so the icon renders after table reload

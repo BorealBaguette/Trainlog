@@ -669,6 +669,7 @@ const i18n = {
 };
 
 let currentTs = null;   // { id, name, is_admin, username, units[] }
+let allSetsCache = []; // saved trainsets, for stacking via autocomplete
 let dragSrcIdx = null;
 let modalMode = 'new';  // 'new' | 'save-as'
 
@@ -698,7 +699,7 @@ searchInput.addEventListener('keydown', e => {
     renderAcSelected(); scrollAcSelected(); e.preventDefault();
   }
   if (e.key === 'Enter' && acSelected >= 0) {
-    addUnit(acItems[acSelected]);
+    pickAcItem(acItems[acSelected]);
     renderAcSelected();
     positionAcList();
     e.preventDefault();
@@ -713,10 +714,36 @@ document.addEventListener('click', e => {
 async function doSearch(q) {
   try {
     const res = await fetch(`${BASE}/api/wagons/search?q=${encodeURIComponent(q)}&limit=100`);
-    acItems = await res.json();
+    const wagons = await res.json();
+    const ql = q.toLowerCase();
+    const setMatches = allSetsCache
+      .filter(ts => ts.name.toLowerCase().includes(ql) && !(currentTs && currentTs.id === ts.id))
+      .slice(0, 8)
+      .map(ts => ({ _tsId: ts.id, label: ts.name, is_admin: ts.is_admin }));
+    acItems = setMatches.concat(wagons);
     acSelected = -1;
     renderAc();
   } catch(e) { setStatus(i18n.searchError + ': ' + e.message, true); }
+}
+
+function pickAcItem(item) {
+  if (!item) return;
+  if (item._tsId) appendTrainset(item._tsId);
+  else addUnit(item);
+}
+
+async function appendTrainset(id) {
+  try {
+    const res = await fetch(`${BASE}/api/trainsets/${id}`);
+    if (!res.ok) { const d = await res.json(); setStatus(d.error || i18n.loadFailed, true); return; }
+    const ts = await res.json();
+    if (!currentTs) newTrainset(i18n.modalNewTitle, false);
+    const appended = ts.units.map(u => ({ ...u, _uid: Date.now() + Math.random(), _side: u._side || 'L' }));
+    currentTs.units.push(...appended);
+    renderStrip();
+    if (acList.classList.contains('open')) positionAcList();
+    setStatus(ts.name + ': ' + appended.length + ' ' + (appended.length !== 1 ? i18n.units : i18n.unit) + ' ' + i18n.unitsAppended);
+  } catch(e) { setStatus(i18n.failedLoadTrainset, true); }
 }
 
 function positionAcList() {
@@ -740,6 +767,16 @@ function renderAc() {
   if (!acItems.length && !searchInput.value.trim()) { closeAc(); return; }
   const q = searchInput.value.trim();
   acList.innerHTML = acItems.map((w, i) => {
+    if (w._tsId) {
+      return `
+    <div class="ac-item" data-i="${i}">
+      <div class="ac-thumb"><span class="ac-thumb-none">🚆</span></div>
+      <div class="ac-text">
+        <div class="ac-nom">${esc(w.label)}</div>
+        <div class="ac-cat">${esc(w.is_admin ? i18n.publicTrainsets : i18n.myTrainsets)}</div>
+      </div>
+    </div>`;
+    }
     const thumb = w.image
       ? `<img src="${smartImgSrc(w.image, 'L', w.image_type)}" onerror="${smartImgOnerror()}" alt="${esc(w.label)}">`
       : `<span class="ac-thumb-none">🚃</span>`;
@@ -763,7 +800,7 @@ function renderAc() {
     </div>`;
   }
   acList.querySelectorAll('.ac-item:not(.ac-add-unknown)').forEach(el => {
-    el.addEventListener('mousedown', e => { e.preventDefault(); addUnit(acItems[+el.dataset.i]); });
+    el.addEventListener('mousedown', e => { e.preventDefault(); pickAcItem(acItems[+el.dataset.i]); });
     el.addEventListener('mouseenter', () => { acSelected = +el.dataset.i; renderAcSelected(); });
   });
   acList.querySelectorAll('.ac-add-unknown').forEach(el => {
@@ -976,6 +1013,7 @@ async function loadTrainsets() {
   try {
     const res = await fetch(`${BASE}/api/trainsets`);
     const list = await res.json();
+    allSetsCache = list;
     renderTsList(list);
   } catch(e) { setStatus(i18n.failedLoadTrainsets, true); }
 }
