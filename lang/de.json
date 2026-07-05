@@ -602,7 +602,7 @@
     "noFlightDataFound": "Keine Flugdaten für diese Nummer und dieses Datum gefunden.",
     "errorFetchingFlightData": "Fehler beim Abrufen der Flugdaten.",
     "leg": "Abschnitt",
-    "departure": "Abflug",
+    "departure": "Abfahrt",
     "arrival": "Ankunft",
     "aircraft": "Flugzeug",
     "noPathDataAvailable": "Keine Pfaddaten für diesen Flug verfügbar.",
