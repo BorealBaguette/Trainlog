@@ -16,6 +16,43 @@
      default 16px scroll padding keeps the scrollbar clear of the name pills. */
   .publicTrainset .compo-strip { min-width: 0; }
   .publicTrainset .wagon-placeholder-img { height: 22px; }
+
+  /* Keep popups within the viewport on narrow/mobile screens — the fixed
+     460px maxWidth passed to maplibregl.Popup otherwise overflows small
+     screens and the popup content itself needs to shrink & scroll with it. */
+  .maplibregl-popup {
+    max-width: calc(100vw - 20px) !important;
+  }
+  .maplibregl-popup-content {
+    max-width: calc(100vw - 20px);
+    max-height: 70vh;
+    overflow-y: auto;
+    box-sizing: border-box;
+  }
+  @media (max-width: 700px) {
+    .maplibregl-popup-content { min-width: 0; }
+    .publicTrainset .trainset-inline-scroll { max-width: 100% !important; }
+
+    /* Pin the popup to the top of the screen so it's fully visible and
+       spans the width of the viewport (minus a small margin) instead of
+       being squeezed against the marker/screen edges. It stays put (no
+       anchor/tip, doesn't follow the map) until closed via the ×. */
+    .maplibregl-popup {
+      position: fixed !important;
+      top: 10px !important;
+      left: 10px !important;
+      right: 10px !important;
+      width: auto !important;
+      max-width: none !important;
+      transform: none !important;
+    }
+    .maplibregl-popup-tip { display: none !important; }
+    .maplibregl-popup-content {
+      width: 100%;
+      max-width: none;
+      max-height: calc(100vh - 20px);
+    }
+  }
 </style>
 
 <div class="spinner-container">
@@ -207,8 +244,21 @@ let map;
 let markers       = [];
 let lastSignature = null;
 let firstLoad     = true;
+let activePopup   = null;
 
 const emptyFC = () => ({ type: 'FeatureCollection', features: [] });
+
+/* ── popup handling ──────────────────────────────────────────────────────── */
+// Only one popup is ever shown at a time: opening a new one always closes
+// the previous one. closeOnClick (default) lets clicking elsewhere on the
+// map dismiss it too; closeOnMove is disabled so panning doesn't close it.
+function openPopup(lngLat, tripObj) {
+  if (activePopup) activePopup.remove();
+  activePopup = new maplibregl.Popup({ offset: 25, maxWidth: '460px', closeOnMove: false })
+    .setLngLat(lngLat)
+    .setHTML(getPopupContent(tripObj))
+    .addTo(map);
+}
 
 /* ── rendering ───────────────────────────────────────────────────────────── */
 function addMarker(tripObj) {
@@ -220,15 +270,15 @@ function addMarker(tripObj) {
     const pegIdx           = Math.min(Math.floor(progress * (coords.length - 1)), coords.length - 1);
     const [pegLng, pegLat] = coords[pegIdx];
 
-    const popup = new maplibregl.Popup({ offset: 25, maxWidth: '460px' })
-      .setHTML(getPopupContent(tripObj));
+    const marker = new maplibregl.Marker({ color })
+      .setLngLat([pegLng, pegLat])
+      .addTo(map);
+    marker.getElement().addEventListener('click', e => {
+      e.stopPropagation();
+      openPopup([pegLng, pegLat], tripObj);
+    });
 
-    markers.push(
-      new maplibregl.Marker({ color })
-        .setLngLat([pegLng, pegLat])
-        .setPopup(popup)
-        .addTo(map)
-    );
+    markers.push(marker);
 }
 
 function renderTrips(trips) {
@@ -364,10 +414,7 @@ MapLibreUtils.initializeMapLibre({
     // Click on a trip line to open popup
     map.on('click', 'live-static', e => {
       const tripObj = JSON.parse(e.features[0].properties.tripData);
-      new maplibregl.Popup({ maxWidth: '460px' })
-        .setLngLat(e.lngLat)
-        .setHTML(getPopupContent(tripObj))
-        .addTo(map);
+      openPopup(e.lngLat, tripObj);
     });
     map.on('mouseenter', 'live-static', () => { map.getCanvas().style.cursor = 'pointer'; });
     map.on('mouseleave', 'live-static', () => { map.getCanvas().style.cursor = ''; });
