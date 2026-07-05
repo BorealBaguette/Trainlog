@@ -62,6 +62,11 @@
 
 /* freehand mode toggle: no default margin (placement handled by .route-meta) */
 #sidebar .freehand-toggle-btn { margin: 0; }
+/* on routing error the toggle sits right-aligned above the retry button,
+   mirroring its spot on the route-meta row in the found state */
+#sidebar .freehand-toggle-btn.fh-error {
+  display: flex; width: fit-content; margin: 0 0 12px auto;
+}
 
 /* action buttons (everything except the freehand mode toggle) */
 #sidebar button:not(.freehand-toggle-btn) {

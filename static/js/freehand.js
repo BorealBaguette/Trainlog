@@ -78,6 +78,7 @@
     });
 
     var routeLine = null;
+    var hitLine = null; // invisible, much wider twin of routeLine for easy tapping
     var waypointMarkers = [];
     var path = [];
 
@@ -95,8 +96,15 @@
       return idx;
     }
 
+    function insertWaypoint(e) {
+      var i = closestSegmentIndex(e.latlng);
+      points.splice(i + 1, 0, e.latlng);
+      refresh();
+    }
+
     function refresh() {
       if (routeLine) map.removeLayer(routeLine);
+      if (hitLine) map.removeLayer(hitLine);
       waypointMarkers.forEach(function (m) { map.removeLayer(m); });
       waypointMarkers = [];
 
@@ -104,12 +112,13 @@
       // This exact array is both what we draw and what we save (WYSIWYG).
       path = buildSavePath(points);
 
-      routeLine = L.polyline(splitAtDateline(path), { className: lineClassName }).addTo(map);
-      routeLine.on('click', function (e) {
-        var i = closestSegmentIndex(e.latlng);
-        points.splice(i + 1, 0, e.latlng);
-        refresh();
-      });
+      var drawLines = splitAtDateline(path);
+      routeLine = L.polyline(drawLines, { className: lineClassName }).addTo(map);
+      routeLine.on('click', insertWaypoint);
+      // Transparent wide twin drawn on top of the visible line: gives a finger-sized
+      // tap target for inserting waypoints, especially on mobile.
+      hitLine = L.polyline(drawLines, { weight: 25, opacity: 0, interactive: true }).addTo(map);
+      hitLine.on('click', insertWaypoint);
 
       for (var i = 1; i < points.length - 1; i++) {
         (function (idx) {
@@ -137,6 +146,7 @@
       refresh: refresh,
       destroy: function () {
         if (routeLine) map.removeLayer(routeLine);
+        if (hitLine) map.removeLayer(hitLine);
         waypointMarkers.forEach(function (m) { map.removeLayer(m); });
         waypointMarkers = [];
         map.removeLayer(origMarker);
