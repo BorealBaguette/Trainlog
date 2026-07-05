@@ -478,7 +478,7 @@ const checkedTripData = {};
 const dtRowsSelected = {{ dtRowsSelected | tojson }};
 
 var _trainsetNames = new Set();
-$.getJSON('/api/trainsets').done(function(rows) {
+$.getJSON('/api/trainsets', { owner: '{{ username }}' }).done(function(rows) {
     rows.forEach(function(r) { _trainsetNames.add(r.name); });
 });
 
@@ -504,7 +504,7 @@ function openCompositionModal(trainName, dateStr, materialType) {
     $('#compositionModal').modal('show');
 
     if (materialType) {
-        _resolveUnits(materialType)
+        _resolveUnits(materialType, '{{ username }}')
             .done(function(r) { _renderTrainset($modalBody, r.units, r.name); })
             .fail(function()  { $modalBody.html('<div class="alert alert-warning">No composition data found.</div>'); });
     } else {
@@ -702,7 +702,7 @@ function processHiddenData(rowIdx, columns){
                         setTimeout(function() {
                             var labels = {};
                             if (personal) labels.personal = personal;
-                            _resolveUnits(mat)
+                            _resolveUnits(mat, '{{ username }}')
                                 .done(function(r) {
                                     if (r.name && r.name !== labels.personal) labels.saved = r.name;
                                     _renderTrainsetInline(rowId, r.units, labels);

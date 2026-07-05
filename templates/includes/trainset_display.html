@@ -207,17 +207,20 @@ window.tsbCompositeNames = window.tsbCompositeNames || function (val) {
     return null;
 };
 
-/* Resolve a material_type_advanced value to enriched units (Promise-based) */
-function _resolveUnits(value) {
+/* Resolve a material_type_advanced value to enriched units (Promise-based).
+   `owner` is the trip owner's username — required for logged-out visitors on
+   public pages so the backend can scope visibility to that owner's own
+   trainsets plus admin (public) ones, since there is no session to scope to. */
+function _resolveUnits(value, owner) {
     var isInline = false;
     try { isInline = Array.isArray(JSON.parse(value)); } catch(e) {}
     var composite = tsbCompositeNames(value);
     if (isInline || composite) {
-        return $.getJSON('/api/trainsets/resolve', { value: value }).then(function(units) {
+        return $.getJSON('/api/trainsets/resolve', { value: value, owner: owner || '' }).then(function(units) {
             return { units: units, name: composite ? composite.join(' + ') : null };
         });
     }
-    return $.getJSON('/api/trainsets/by-name', { name: value }).then(function(ts) {
+    return $.getJSON('/api/trainsets/by-name', { name: value, owner: owner || '' }).then(function(ts) {
         return { units: ts.units, name: ts.name };
     });
 }

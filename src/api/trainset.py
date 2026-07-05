@@ -16,6 +16,25 @@ def _session_user():
     return username, is_admin
 
 
+def _visibility_username():
+    """Username to scope trainset visibility to for read-only GET endpoints.
+
+    Visibility for a trainset follows the trip page it's being shown on, not
+    who's viewing it — the same rule public_trainset_info already applies for
+    the single-trip public page (it resolves against the trip owner, so a
+    personal trainset the owner built still renders on their own public trip
+    for any visitor, logged in or not). So an explicit `owner` query param
+    (the page/trip owner) always wins when given, whether the caller is
+    logged in or anonymous. Only when no owner is supplied (e.g. the
+    trainset-builder tools) do we scope to the caller's own session.
+    """
+    owner = request.args.get('owner', '').strip()
+    if owner:
+        return owner
+    username, _ = _session_user()
+    return username or ''
+
+
 @trainset_blueprint.route('/trainset-builder')
 def trainset_builder():
     username, is_admin = _session_user()
@@ -101,9 +120,7 @@ def list_trainsets():
        - public (is_admin=true) sets are visible to everyone
        - personal (is_admin=false) sets are only visible to their creator
     """
-    username, _ = _session_user()
-    if not username:
-        return jsonify({'error': 'Unauthorized'}), 401
+    username = _visibility_username()
 
     with pg_session() as pg:
         result = pg.execute(
@@ -154,9 +171,7 @@ def create_trainset():
 
 @trainset_blueprint.route('/api/trainsets/by-name')
 def get_trainset_by_name():
-    username, _ = _session_user()
-    if not username:
-        return jsonify({'error': 'Unauthorized'}), 401
+    username = _visibility_username()
 
     name = request.args.get('name', '').strip()
     if not name:
@@ -292,9 +307,7 @@ def resolve_material_type_advanced():
     - A JSON array of slim units (from "use once") → enriched directly
     - A trainset name (from "save & use") → looked up by name
     """
-    username, _ = _session_user()
-    if not username:
-        return jsonify({'error': 'Unauthorized'}), 401
+    username = _visibility_username()
 
     value = request.args.get('value', '').strip()
     if not value:
