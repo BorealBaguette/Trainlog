@@ -1,5 +1,24 @@
 {% extends "layout.html" %}
 {% block content %}
+{% include "includes/trainset_display.html" %}
+<style>
+.publicTsToggle {
+  cursor: pointer;
+  color: #0d6efd;
+  margin-left: 7px;
+  text-decoration: none;
+  vertical-align: baseline;
+}
+.publicTsToggle:hover,
+.publicTsToggle.open { color: #0a58ca; }
+/* Wagon images are scaled to half their natural size in JS (uniform factor, so
+   the catalogue's relative proportions are preserved); the scroll wrapper's
+   default 16px bottom padding keeps the scrollbar clear of the name pills. */
+.publicTrainset .compo-strip { min-width: 0; }
+.publicTrainset .wagon-placeholder-img { height: 22px; }
+/* Re-assert the pill padding: the global ".events span" rule inflates it */
+.publicTrainset .ts-nom { padding: 1px 5px; }
+</style>
 <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static',filename='styles/new_map.css') }}">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
@@ -654,6 +673,53 @@ function tripGroup(t) {
   return 1;                 // dated
 }
 
+/* Render a trainset strip (light style) into a leg's collapsed container.
+   Uses _wagonImgSrc/_makePlaceholder/_attributionText from trainset_display.html. */
+function renderPublicTrainset($container, ts) {
+    var units = ts.units || [];
+    var strip = $('<div class="compo-strip ts-strip"></div>');
+    units.forEach(function(u, i) {
+        var isFirst = (i === 0), isLast = (i === units.length - 1);
+        var wagon = $('<div class="compo-wagon ts-unit"></div>');
+        if (u.image) {
+            var img = $('<img>').attr({ src: _wagonImgSrc(u), title: u.label || '' });
+            img.on('error', (function(iF, iL, pT) { return function() { $(this).replaceWith(_makePlaceholder(true, iF, iL, pT)); }; })(isFirst, isLast, u._phType));
+            wagon.append(img);
+        } else {
+            wagon.append(_makePlaceholder(true, isFirst, isLast, u._phType));
+        }
+        wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline">' + esc(u.label || '') + '</span>');
+        strip.append(wagon);
+    });
+    if (!strip.children().length) return;
+    // The itinerary span shrink-wraps its content, so max-width:100% can't
+    // constrain the strip — measure the leg and set an explicit pixel width.
+    var legW = $container.closest('li').width() || 360;
+    var scroller = $('<div class="trainset-inline-scroll"></div>')
+        .css('max-width', Math.max(legW - 120, 160) + 'px')
+        .append(strip);
+    var attr = _attributionText(units);
+    if (attr) scroller.attr('title', attr);
+    $container.addClass('ts-inline-wrapper').append(scroller);
+    if (ts.label) {
+        $container.append($('<div class="ts-inline-label"></div>').text(ts.label));
+    }
+    // Scale each image to half its natural size (uniform factor keeps the
+    // catalogue's relative proportions), then re-fit the highlight card since
+    // the leg's height settles only once images load.
+    strip.find('img').each(function() {
+        var el = this;
+        function done() {
+            if (el.naturalHeight) el.style.height = Math.round(el.naturalHeight / 2) + 'px';
+            if (typeof highlightedTripUid !== 'undefined' && highlightedTripUid != null) {
+                positionTripCard(highlightedTripUid);
+            }
+        }
+        if (el.complete) done();
+        else $(el).on('load error', done);
+    });
+}
+
 function createCarbonInfo(carbonFootprint, tripLength, langId) {
   if (!carbonFootprint || carbonFootprint <= 0) {
     return null;
@@ -974,6 +1040,31 @@ function buildItinerary(trips, prices) {
         
         let operatorDisplay = $("<div>").append(trip.trip.operator != "" ? lineOrNot : null);
 
+        // Trainset: discreet toggle icon + collapsed strip
+        var tsInfo = trip.trip.trainset;
+        var tsContainer = $(); // empty jQuery object → .append() no-op when no trainset
+        var tsToggle = null;   // appended to the duration line below
+        if (tsInfo && tsInfo.units && tsInfo.units.length) {
+            tsContainer = $('<div>').addClass('publicTrainset').hide();
+            tsToggle = $('<a href="javascript:void(0);" class="publicTsToggle"><i class="fas fa-train"></i></a>')
+                .attr('title', tsInfo.label || '');
+            tsToggle.on('click', (function(container, info, toggle) {
+                return function(e) {
+                    e.stopPropagation(); // don't toggle the leg highlight
+                    if (!container.data('rendered')) {
+                        renderPublicTrainset(container, info);
+                        container.data('rendered', 1);
+                    }
+                    container.toggle();
+                    toggle.toggleClass('open');
+                    // The leg's height changed — re-fit the white highlight card
+                    if (typeof highlightedTripUid !== 'undefined' && highlightedTripUid != null) {
+                        positionTripCard(highlightedTripUid);
+                    }
+                };
+            })(tsContainer, tsInfo, tsToggle));
+        }
+
         let endTimeDisplay, startTimeDisplay;
         if (dayChangeTrip) {
           var endBase = trip.trip.end_time.replace(/\(\+\d+\)/, '').trim();
@@ -1068,8 +1159,10 @@ function buildItinerary(trips, prices) {
                 $('<span>').attr("class", trip.trip.type).append(
                     $('<strong>').text(trip.trip.origin_station)
                 ).append('<br>').append(operatorDisplay).append(
-                    $("<div>").attr("class", "duration " + trip.trip.trip_duration[0]).append($('<div>').html(durationDisplay))
-                ).append('<br>').append(
+                    $("<div>").attr("class", "duration " + trip.trip.trip_duration[0]).append(
+                        tsToggle ? $('<div>').html(durationDisplay).append(tsToggle)
+                                 : $('<div>').html(durationDisplay))
+                ).append(tsContainer).append('<br>').append(
                     {% if 'price' in request.args and 'carbon' in request.args %} // Modified conditional
                         $("<div>").append($('<div>').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? ' ' : '') + (formattedCarbon || '')))
                     {% elif 'price' in request.args %} // Modified conditional
@@ -1729,6 +1822,26 @@ function setHighlightFilter(filter) {
 // (but not including) the "Transfert" text under the arrival station, so it reads
 // as a single lifted box around the trip.
 let tripCardEl = null;
+// Screen x of the first visible glyph in a leg's <time> cell, or null.
+// Delay display stacks two times with <br>, so measure the longest rendered line.
+let _timeMeasureCtx = null;
+function timeGlyphLeft(li) {
+    const t = li.querySelector('time');
+    if (!t) return null;
+    const r = t.getBoundingClientRect();
+    const cs = getComputedStyle(t);
+    let longest = 0;
+    (t.innerText || '').split('\n').forEach(line => {
+        const len = line.trim().length; // trim() also strips the nbsp padding
+        if (len > longest) longest = len;
+    });
+    longest = Math.min(longest, 10); // the box is 10ch — glyphs can't start left of it
+    if (!_timeMeasureCtx) _timeMeasureCtx = document.createElement('canvas').getContext('2d');
+    _timeMeasureCtx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const chW = _timeMeasureCtx.measureText('0').width;
+    return r.right - (parseFloat(cs.paddingRight) || 0) - longest * chW;
+}
+
 function positionTripCard(uid) {
     const itin = document.getElementById('itinerary');
     if (!itin) return;
@@ -1749,13 +1862,18 @@ function positionTripCard(uid) {
     const stationBottom = (arrStrong || arrLi).getBoundingClientRect().bottom;
 
     const PAD_V = 18;        // breathing room above/below the content inside the box
-    const INSET_LEFT = 35;   // left margin off the row edge (+ = inset right)
     const INSET_RIGHT = 0;  // right margin off the row edge (smaller = further right; - = past edge)
+
+    // Left edge: just left of the widest time's first glyph. Times are
+    // right-aligned in a fixed 10ch monospace box padded with nbsp, so the card
+    // may cross the blank padding but not real glyphs ("07:08(+31)" fills the box).
+    let anchorLeft = Math.min(timeGlyphLeft(depLi) ?? Infinity, timeGlyphLeft(arrLi) ?? Infinity);
+    if (!isFinite(anchorLeft)) anchorLeft = dRect.left + 35;
 
     // Position from the row's real rect (the #itinerary box is shifted off-screen
     // on the left by .itineraryWrapper{left:-60px}, so CSS left/right can't be used).
-    tripCardEl.style.left = (dRect.left - iRect.left + INSET_LEFT) + 'px';
-    tripCardEl.style.width = Math.max(0, dRect.width - INSET_LEFT - INSET_RIGHT) + 'px';
+    tripCardEl.style.left = (anchorLeft - iRect.left - 6) + 'px';
+    tripCardEl.style.width = Math.max(0, dRect.right - anchorLeft + 6 - INSET_RIGHT) + 'px';
     tripCardEl.style.top = (dRect.top - iRect.top - PAD_V) + 'px';
     const cardBottom = stationBottom + PAD_V;
     tripCardEl.style.height = Math.max(0, cardBottom - dRect.top + PAD_V) + 'px';

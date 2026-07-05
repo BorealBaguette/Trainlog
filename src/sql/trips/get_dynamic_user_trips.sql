@@ -126,4 +126,11 @@ FilteredTrips AS (
                  AND (sub.utc_filtered_start_datetime IS NULL OR NOW() > sub.utc_filtered_start_datetime)
             THEN 1 ELSE 0
         END) = :past
+        -- Past page's "show upcoming" toggle: also include dated future trips
+        -- (plannedFuture). With the default temporal desc sort they land on top.
+        OR (
+            :include_planned = 1
+            AND sub.utc_filtered_start_datetime IS NOT NULL
+            AND NOW() <= sub.utc_filtered_start_datetime
+        )
 )

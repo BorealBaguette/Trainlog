@@ -7700,6 +7700,11 @@ def get_trips_api_internal(username, is_public=False):
     draw = request.form.get("draw", type=int, default=1)
     past = int(request.args.get("projects") == "False")
     filter_types = request.form.get("filterTypes", type=int, default=0)
+    # Past page's "show upcoming" toggle: fold dated future trips into the past
+    # listing (they sort on top with the default temporal desc order).
+    include_planned = int(
+        past == 1 and request.form.get("includeFuture", type=int, default=0) == 1
+    )
 
     is_friend = current_user_is_friend_with(username)
 
@@ -7742,7 +7747,11 @@ def get_trips_api_internal(username, is_public=False):
 
     # Build additional WHERE conditions for column-specific searches
     additional_conditions = []
-    search_params = {"username": username, "past": past}
+    search_params = {
+        "username": username,
+        "past": past,
+        "include_planned": include_planned,
+    }
     
     # Add column-specific search conditions
     for column_index, search_data in column_searches.items():

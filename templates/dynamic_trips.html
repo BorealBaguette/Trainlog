@@ -66,6 +66,9 @@
         opacity: 0.9;
     }
 
+    /* Dated future trips shown on the past page via the "show upcoming" toggle */
+    tr.upcoming-trip > td { opacity: 0.65; }
+
 </style>
 
 {% include "includes/trainset_display.html" %}
@@ -513,6 +516,12 @@ function openCompositionModal(trainName, dateStr, materialType) {
 function toggleTypeFilter() {
     const switchState = document.getElementById('filterTypeSwitch').checked;
     setCookie('filterTypeSwitch', switchState, 7);
+    tableObject.ajax.reload();
+}
+
+function toggleIncludeFuture() {
+    const switchState = document.getElementById('includeFutureSwitch').checked;
+    setCookie('includeFutureSwitch', switchState, 7);
     tableObject.ajax.reload();
 }
 
@@ -1170,6 +1179,7 @@ var table = $('#tripRows');
         "type": "POST",
         "data": function(d) {
             d.filterTypes = (getCookie('filterTypeSwitch') === 'true') ? 0 : 1;
+            d.includeFuture = (isPast && getCookie('includeFutureSwitch') === 'true') ? 1 : 0;
             
             // Parse smart search
             const searchValue = d.search.value || '';
@@ -1268,6 +1278,9 @@ var table = $('#tripRows');
     },
     createdRow: function(row, data, dataIndex) {
         $(row).attr('id', data.uid).attr("origDest", `${data.origin_station} - ${data.destination_station}`);
+        if (isPast && data.plannedFuture == 1) {
+            $(row).addClass('upcoming-trip');
+        }
     },
     order: [],
     lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "{{dtAll}}"]],
@@ -1376,6 +1389,14 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
         <label class="form-check-label" for="filterTypeSwitch">{{showPlaces}}</label>
     </div>`);
     $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($switch);
+{% endif %}
+
+{% if not projects %}
+    var $futureSwitch = $(`<div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="includeFutureSwitch" onchange="toggleIncludeFuture()">
+        <label class="form-check-label" for="includeFutureSwitch">{{showUpcoming}}</label>
+    </div>`);
+    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($futureSwitch);
 {% endif %}
 
 // Sort modal
@@ -2178,6 +2199,11 @@ $('#submitBtn').on('click', function() {
         if (filterSwitch) {
             const savedState = (typeof getCookie === 'function' && getCookie('filterTypeSwitch') === 'true');
             filterSwitch.checked = savedState;
+        }
+
+        const futureSwitch = document.getElementById('includeFutureSwitch');
+        if (futureSwitch) {
+            futureSwitch.checked = (typeof getCookie === 'function' && getCookie('includeFutureSwitch') === 'true');
         }
 
         setTimeout(function() {

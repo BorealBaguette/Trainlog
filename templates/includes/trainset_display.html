@@ -198,13 +198,23 @@ function _attributionText(units) {
     return parts.join(' · ');
 }
 
+/* Parse a composite material_type_advanced value ({"trainsets": [names]}) → names array or null */
+window.tsbCompositeNames = window.tsbCompositeNames || function (val) {
+    try {
+        var parsed = JSON.parse(val);
+        if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets)) return parsed.trainsets;
+    } catch(e) {}
+    return null;
+};
+
 /* Resolve a material_type_advanced value to enriched units (Promise-based) */
 function _resolveUnits(value) {
     var isInline = false;
     try { isInline = Array.isArray(JSON.parse(value)); } catch(e) {}
-    if (isInline) {
+    var composite = tsbCompositeNames(value);
+    if (isInline || composite) {
         return $.getJSON('/api/trainsets/resolve', { value: value }).then(function(units) {
-            return { units: units, name: null };
+            return { units: units, name: composite ? composite.join(' + ') : null };
         });
     }
     return $.getJSON('/api/trainsets/by-name', { name: value }).then(function(ts) {

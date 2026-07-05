@@ -1,6 +1,8 @@
 {% extends "layout.html" %}
 {% block content %}
 
+{% include "includes/trainset_display.html" %}
+
 <link href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet">
 
 <style>
@@ -9,6 +11,11 @@
   .delay-time { color: #dc3545; }
   .early-time  { color: #28a745; }
 
+  /* Trainset strip in popups — same look as the public trip pages: images
+     scaled to half natural size (uniform factor preserves relative proportions),
+     default 16px scroll padding keeps the scrollbar clear of the name pills. */
+  .publicTrainset .compo-strip { min-width: 0; }
+  .publicTrainset .wagon-placeholder-img { height: 22px; }
 </style>
 
 <div class="spinner-container">
@@ -58,6 +65,41 @@ function withDelayDisplay(iso, delaySec, startDT) {
   const actual = formatDT(actualISO).time + formatDayDiff(actualISO, startDT);
   const cls = delay > 0 ? 'delay-time' : 'early-time';
   return `<s>${scheduled}</s> <span class="${cls}">${actual}</span>`;
+}
+
+/* ── trainset display ────────────────────────────────────────────────────── */
+const WAGONS_BASE = "{{ url_for('static', filename='images/wagons') }}";
+
+function wagonImgSrc(u) {
+  const side = u._side || 'L';
+  if (u.image_type === 'sides')   return `${WAGONS_BASE}/${u.image}${side === 'R' ? '_R' : '_L'}.gif`;
+  if (u.image_type === 'sides_L') return `${WAGONS_BASE}/${u.image}_L.gif`;
+  if (u.image_type === 'sides_R') return `${WAGONS_BASE}/${u.image}_R.gif`;
+  return `${WAGONS_BASE}/${u.image}.gif`;
+}
+
+function wagonPlaceholderSrc(isFirst, isLast, phType) {
+  const suffix = phType || ((isFirst && isLast) ? 'loco_both' : isFirst ? 'loco_l' : isLast ? 'loco_r' : 'mid');
+  return `${WAGONS_BASE}/placeholder_${suffix}.svg`;
+}
+
+function trainsetHTML(trip) {
+  const ts = trip.trainset;
+  if (!ts || !ts.units || !ts.units.length) return '';
+  const wagons = ts.units.map((u, i) => {
+    const isFirst = i === 0, isLast = i === ts.units.length - 1;
+    const ph = wagonPlaceholderSrc(isFirst, isLast, u._phType);
+    const img = u.image
+      ? `<img src="${wagonImgSrc(u)}" title="${esc(u.label || '')}" onload="if(this.naturalHeight)this.style.height=Math.round(this.naturalHeight/2)+'px';" onerror="this.src='${ph}';this.className='wagon-placeholder-img';this.style.height='';this.onerror=null;this.onload=null;">`
+      : `<img class="wagon-placeholder-img" src="${ph}">`;
+    return `<div class="compo-wagon ts-unit">${img}<span class="compo-coach-no ts-nom ts-nom-inline">${esc(u.label || '')}</span></div>`;
+  }).join('');
+  const attr = _attributionText(ts.units);
+  const label = ts.label ? `<div class="ts-inline-label">${esc(ts.label)}</div>` : '';
+  return `<div class="publicTrainset ts-inline-wrapper" style="margin-top:6px;">
+      <div class="trainset-inline-scroll" style="max-width:420px"${attr ? ` title="${attr}"` : ''}>
+        <div class="compo-strip ts-strip">${wagons}</div>
+      </div>${label}</div>`;
 }
 
 /* ── trip helpers ────────────────────────────────────────────────────────── */
@@ -135,6 +177,7 @@ function getPopupContent(tripObj) {
         <div><strong>Date:</strong> ${startDate}</div>
         <div><strong>Time:</strong> ${startTime} – ${endTime}</div>
         ${trip.line_name ? `<div><strong>Line:</strong> ${trip.line_name}</div>` : ''}
+        ${trainsetHTML(trip)}
       </div>
       ${logoHTML}
     </div>`;

@@ -1,6 +1,8 @@
 {% extends "layout.html" %}
 {% block content %}
 
+{% include "includes/trainset_display.html" %}
+
 <div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>
 
 <div id="sidebar">
@@ -105,6 +107,24 @@
   display: inline-block;
   margin-left: 5px;
 }
+
+.publicTsToggle {
+  cursor: pointer;
+  color: #0d6efd;
+  margin-left: 7px;
+  text-decoration: none;
+  vertical-align: baseline;
+}
+.publicTsToggle:hover,
+.publicTsToggle.open { color: #0a58ca; }
+
+/* Wagon images are scaled to half their natural size in JS (uniform factor, so
+   the catalogue's relative proportions are preserved); the scroll wrapper's
+   default 16px bottom padding keeps the scrollbar clear of the name pills. */
+.publicTrainset .compo-strip { min-width: 0; }
+.publicTrainset .wagon-placeholder-img { height: 22px; }
+/* Re-assert the pill padding: the global ".events span" rule inflates it */
+.publicTrainset .ts-nom { padding: 1px 5px; }
 </style>
 <script>
 
@@ -396,6 +416,27 @@ if (operatorContents.length) {
     
       lineOrNot = trip.trip.line_name != "" ? (typeof operatorLogoOrText === 'object' ? operatorLogoOrText.append(document.createTextNode(" - " + trip.trip.line_name)) : operatorLogoOrText + " - " + esc(trip.trip.line_name)) : operatorLogoOrText
     operatorDisplay = $("<div>").append( trip.trip.operator != "" ?  lineOrNot : null);
+
+    // Trainset: discreet toggle icon + collapsed strip
+    var tsInfo = trip.trip.trainset;
+    var tsContainer = $(); // empty jQuery object → .append() no-op when no trainset
+    var tsToggle = null;   // appended to the duration line below
+    if (tsInfo && tsInfo.units && tsInfo.units.length) {
+      tsContainer = $('<div>').addClass('publicTrainset').hide();
+      tsToggle = $('<a href="javascript:void(0);" class="publicTsToggle"><i class="fas fa-train"></i></a>')
+        .attr('title', tsInfo.label || '');
+      tsToggle.on('click', (function(container, info, toggle) {
+        return function(e) {
+          e.stopPropagation();
+          if (!container.data('rendered')) {
+            renderPublicTrainset(container, info);
+            container.data('rendered', 1);
+          }
+          container.toggle();
+          toggle.toggleClass('open');
+        };
+      })(tsContainer, tsInfo, tsToggle));
+    }
       
       if(dayChangeTrip){
         var endBase = trip.trip.end_time.replace(/\(\+\d+\)/, '').trim();
@@ -484,8 +525,10 @@ if (operatorContents.length) {
     $('<span>').attr("class", trip.trip.type).append(
       $('<strong>').text(trip.trip.origin_station)
     ).append('<br>').append(operatorDisplay).append(
-      $("<div>").attr("class", "duration "+trip.trip.trip_duration[0]).append($('<div>').html(durationDisplay))
-    ).append('<br>').append(
+      $("<div>").attr("class", "duration "+trip.trip.trip_duration[0]).append(
+        tsToggle ? $('<div>').html(durationDisplay).append(tsToggle)
+                 : $('<div>').html(durationDisplay))
+    ).append(tsContainer).append('<br>').append(
       {% if 'price' in request.args and 'carbon' in request.args %}
         $("<div>").append($('<div>').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? ' ' : '') + (formattedCarbon || '')))
       {% elif 'price' in request.args %}
@@ -536,6 +579,49 @@ if (operatorContents.length) {
       )
     );
     if(trips.length > 1 && changeTime > 43200 && trip != trips[trips.length -1]){$('#itinerary').append('<div id="tripDetails">'+ capitalizeFirstLetter(new Date(trips[index + 1].trip.start_date + "T12:00:00Z").toLocaleDateString('{{langId}}', dateOptions))+'</div><br>');} // "T12:00:00Z" top offset the TZ of ToLocaleDateString
+  });
+}
+
+/* Render a trainset strip (light style) into a leg's collapsed container.
+   Uses _wagonImgSrc/_makePlaceholder/_attributionText from trainset_display.html. */
+function renderPublicTrainset($container, ts) {
+  var units = ts.units || [];
+  var strip = $('<div class="compo-strip ts-strip"></div>');
+  units.forEach(function(u, i) {
+    var isFirst = (i === 0), isLast = (i === units.length - 1);
+    var wagon = $('<div class="compo-wagon ts-unit"></div>');
+    if (u.image) {
+      var img = $('<img>').attr({ src: _wagonImgSrc(u), title: u.label || '' });
+      img.on('error', (function(iF, iL, pT) { return function() { $(this).replaceWith(_makePlaceholder(true, iF, iL, pT)); }; })(isFirst, isLast, u._phType));
+      wagon.append(img);
+    } else {
+      wagon.append(_makePlaceholder(true, isFirst, isLast, u._phType));
+    }
+    wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline">' + esc(u.label || '') + '</span>');
+    strip.append(wagon);
+  });
+  if (!strip.children().length) return;
+  // The itinerary span shrink-wraps its content, so max-width:100% can't
+  // constrain the strip — measure the leg and set an explicit pixel width.
+  var legW = $container.closest('li').width() || 360;
+  var scroller = $('<div class="trainset-inline-scroll"></div>')
+    .css('max-width', Math.max(legW - 120, 160) + 'px')
+    .append(strip);
+  var attr = _attributionText(units);
+  if (attr) scroller.attr('title', attr);
+  $container.addClass('ts-inline-wrapper').append(scroller);
+  if (ts.label) {
+    $container.append($('<div class="ts-inline-label"></div>').text(ts.label));
+  }
+  // Scale each image to half its natural size — uniform factor keeps the
+  // catalogue's relative proportions.
+  strip.find('img').each(function() {
+    var el = this;
+    function done() {
+      if (el.naturalHeight) el.style.height = Math.round(el.naturalHeight / 2) + 'px';
+    }
+    if (el.complete) done();
+    else $(el).on('load', done);
   });
 }
 
