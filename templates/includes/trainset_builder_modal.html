@@ -109,19 +109,23 @@
     var sourceEl = document.getElementById(sourceId);
     var val = sourceEl ? sourceEl.value : '';
     var composite = tsbCompositeNames(val);
+    var isInlineArray = false;
+    try { isInlineArray = Array.isArray(JSON.parse(val)); } catch (e) {}
     if (composite) {
       _loadRefStack(composite);
-    } else {
-      try {
-        var saved = JSON.parse(val);
-        if (Array.isArray(saved)) {
-          _refNames = null;
-          saved.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
-        }
-      } catch(e) {
-        // val is a trainset name — load in reference mode
-        if (val) _loadRefStack([val]);
-      }
+    } else if (isInlineArray) {
+      // Inline array of units — re-enrich from the catalogue via the API so fields like
+      // image_ext are current (fixes e.g. PNG wagons whose stored value predates image_ext).
+      _refNames = null;
+      fetch('/api/trainsets/resolve?value=' + encodeURIComponent(val))
+        .then(function (r) { return r.json(); })
+        .then(function (units) {
+          units.forEach(function (u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
+          _render();
+        });
+    } else if (val) {
+      // val is a trainset name — load in reference mode
+      _loadRefStack([val]);
     }
     document.getElementById('tsb-q').value = '';
     document.getElementById('tsb-results').innerHTML = '';
@@ -505,7 +509,8 @@
       return;
     }
     var json = JSON.stringify(_units.map(function (u) {
-      var o = { name: u.name, image: u.image, label: u.label, _side: u._side, image_type: u.image_type };
+      var o = { name: u.name, image: u.image, label: u.label, _side: u._side,
+                image_type: u.image_type, image_ext: u.image_ext };
       if (u._phType) o._phType = u._phType;
       return o;
     }));

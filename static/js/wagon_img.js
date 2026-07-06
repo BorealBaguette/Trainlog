@@ -14,11 +14,14 @@
  *   sits on one absolute metres-per-pixel scale. Images without data-ppm fall back to
  *   the strip's OWN median height, so a source's arbitrary pixels-per-metre cancels out:
  *       displayed = target * (naturalHeight / median) ^ gamma
- *   Both paths are clamped to [min, max]. gamma in [0,1] controls how much real height
- *   matters for the fallback: 1 = fully proportional, 0 = every unit identical,
- *   ~0.4 = double-deckers still read as taller but outliers are compressed.
+ *   Both paths are clamped to [min, max]. gamma defaults to 1 = ONE uniform scale factor
+ *   for the whole strip (target/median). Keep it there: a uniform factor bottom-aligns every
+ *   car's body while taller artwork (e.g. a raised pantograph) simply protrudes above. gamma<1
+ *   compresses the spread but, because it scales each image by its total bounding box, it also
+ *   shrinks the BODY of any image with roof equipment out of line with its neighbours. The
+ *   median reference already normalizes absolute scale BETWEEN strips.
  *   Dimensions are read at runtime (naturalHeight) and it re-runs as images load.
- *   opts: { target=30, gamma=0.4, min=0, max=Infinity, refMeters=4, selector='img',
+ *   opts: { target=30, gamma=1, min=0, max=Infinity, refMeters=4, selector='img',
  *           skipClass='wagon-placeholder-img', onApply } — refMeters is the real height
  *   (metres) a target-sized wagon represents, tying data-ppm scale to the median scale;
  *   onApply fires after each (re)size, e.g. to re-fit a container whose height changed.
@@ -42,7 +45,7 @@
     var selector = opts.selector || 'img';
     var skip     = opts.skipClass || 'wagon-placeholder-img';
     var target   = opts.target    != null ? opts.target    : 30;
-    var gamma    = opts.gamma     != null ? opts.gamma     : 0.4;
+    var gamma    = opts.gamma     != null ? opts.gamma     : 1;
     var minH     = opts.min       != null ? opts.min       : 0;
     var maxH     = opts.max       != null ? opts.max       : Infinity;
     var refM     = opts.refMeters != null ? opts.refMeters : 4;
