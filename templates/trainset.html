@@ -1,6 +1,7 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
 {% include nav %}
+<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
@@ -778,7 +779,7 @@ function renderAc() {
     </div>`;
     }
     const thumb = w.image
-      ? `<img src="${smartImgSrc(w.image, 'L', w.image_type)}" onerror="${smartImgOnerror()}" alt="${esc(w.label)}">`
+      ? `<img src="${smartImgSrc(w.image, 'L', w.image_type, w.image_ext)}" onerror="${smartImgOnerror()}" alt="${esc(w.label)}">`
       : `<span class="ac-thumb-none">🚃</span>`;
     return `
     <div class="ac-item" data-i="${i}">
@@ -831,12 +832,8 @@ window.addEventListener('resize', () => {
 
 // ── SMART IMAGE ──
 const WAGONS_URL = `{{url_for("static", filename="images/wagons")}}`;
-function smartImgSrc(imagePath, side = 'L', imageType = 'sides') {
-  if (!imagePath) return '';
-  if (imageType === 'sides') return `${WAGONS_URL}/${imagePath}${side === 'R' ? '_R' : '_L'}.gif`;
-  if (imageType === 'sides_L') return `${WAGONS_URL}/${imagePath}_L.gif`;
-  if (imageType === 'sides_R') return `${WAGONS_URL}/${imagePath}_R.gif`;
-  return `${WAGONS_URL}/${imagePath}.gif`;
+function smartImgSrc(imagePath, side = 'L', imageType = 'sides', ext = 'gif') {
+  return wagonImgSrc(WAGONS_URL, { image: imagePath, image_type: imageType, image_ext: ext }, side);
 }
 function _placeholderSrc(isFirst, isLast, phType) {
   const suffix = phType || ((isFirst && isLast) ? 'loco_both' : isFirst ? 'loco_l' : isLast ? 'loco_r' : 'mid');
@@ -925,7 +922,7 @@ function renderStrip() {
     el.dataset.side = side;
     const isFirst = (i === 0), isLast = (i === units.length - 1);
     const phType  = u._phType || null;
-    const imgSrc  = u.image ? smartImgSrc(u.image, side, u.image_type) : _placeholderSrc(isFirst, isLast, phType);
+    const imgSrc  = u.image ? smartImgSrc(u.image, side, u.image_type, u.image_ext) : _placeholderSrc(isFirst, isLast, phType);
     const imgErr  = `this.src='${_placeholderSrc(isFirst, isLast, phType)}';this.className='wagon-placeholder-img';this.onerror=null;`;
     const canFlip = u.image_type === 'sides';
     const phLabels = { 'loco_l': '◀—', 'loco_both': '◀▶', 'loco_r': '—▶', 'mid': '■' };
@@ -997,7 +994,7 @@ function showDetail(u) {
   document.getElementById('dpNotes').textContent = u.notes || '—';
   const img = document.getElementById('dpImg');
   if (u.image) {
-    img.src = smartImgSrc(u.image, u._side || 'L', u.image_type);
+    img.src = smartImgSrc(u.image, u._side || 'L', u.image_type, u.image_ext);
     img.onerror = function() { this.style.display = 'none'; };
     img.style.display = 'block';
   } else { img.style.display = 'none'; }

@@ -10,6 +10,7 @@
   .tsb-unit.tsb-drag-over-left  { border-left: 3px solid #0d6efd; }
   .tsb-unit.tsb-drag-over-right { border-right: 3px solid #0d6efd; }
 </style>
+<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 
 <div class="modal fade" id="tsbModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -225,7 +226,7 @@
         /* thumbnail */
         if (w.image) {
           var thumb = document.createElement('img');
-          thumb.src = _imgSrc(w.image, 'L', w.image_type);
+          thumb.src = _imgSrc(w.image, 'L', w.image_type, w.image_ext);
           thumb.style.cssText = 'height:28px;width:auto;flex-shrink:0;object-fit:contain';
           thumb.onerror = function () { this.remove(); };
           btn.appendChild(thumb);
@@ -327,12 +328,8 @@
   };
 
   /* ── render strip ── */
-  function _imgSrc(image, side, imageType) {
-    if (!image) return '';
-    if (imageType === 'sides') return WAGONS + '/' + image + (side === 'R' ? '_R' : '_L') + '.gif';
-    if (imageType === 'sides_L') return WAGONS + '/' + image + '_L.gif';
-    if (imageType === 'sides_R') return WAGONS + '/' + image + '_R.gif';
-    return WAGONS + '/' + image + '.gif';
+  function _imgSrc(image, side, imageType, ext) {
+    return wagonImgSrc(WAGONS, { image: image, image_type: imageType, image_ext: ext }, side);
   }
 
   function _render() {
@@ -393,7 +390,7 @@
       card.className = 'tsb-unit';
 
       var img = document.createElement('img');
-      img.src = u.image ? _imgSrc(u.image, u._side, u.image_type) : phSrc;
+      img.src = u.image ? _imgSrc(u.image, u._side, u.image_type, u.image_ext) : phSrc;
       img.title = u.label || '';
       if (!u.image) img.className = 'tsb-ph';
       img.onerror = function () { this.src = phSrc; this.className = 'tsb-ph'; this.onerror = null; };

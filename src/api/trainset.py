@@ -97,7 +97,7 @@ def search_wagons():
     params["q_starts"] = f"{q}%"
 
     sql = f"""
-        SELECT source, category, subcategory, label, era, updated_on, image, name, notes, line_type, image_type
+        SELECT source, category, subcategory, label, era, updated_on, image, name, notes, line_type, image_type, image_ext, px_per_meter
         FROM wagons
         WHERE {where_sql}
         ORDER BY
@@ -361,8 +361,8 @@ def public_trainset_info(pg, value, owner_username):
         units = _units_by_name(pg, value, owner_username)
     if not units:
         return None
-    display_fields = ('name', 'label', 'image', 'image_type', '_side', '_phType',
-                      'author', 'license', 'source')
+    display_fields = ('name', 'label', 'image', 'image_type', 'image_ext', 'px_per_meter',
+                      '_side', '_phType', 'author', 'license', 'source')
     slim = [{k: u[k] for k in display_fields if u.get(k) is not None} for u in units]
     return {'label': label, 'units': slim}
 
@@ -425,7 +425,7 @@ def _enrich_units(pg, slim_units):
     enriched = []
     for u in slim_units:
         result = pg.execute(
-            "SELECT category, subcategory, label, era, image, name, notes, image_type, author, license, source FROM wagons WHERE name = :name",
+            "SELECT category, subcategory, label, era, image, name, notes, image_type, image_ext, px_per_meter, author, license, source FROM wagons WHERE name = :name",
             {"name": u['name']},
         )
         wagon = result.fetchone()
@@ -434,7 +434,7 @@ def _enrich_units(pg, slim_units):
         else:
             unit = {
                 'name': u['name'], 'label': u.get('label', u['name']),
-                'image': None, 'image_type': 'plain',
+                'image': None, 'image_type': 'plain', 'image_ext': 'gif', 'px_per_meter': None,
                 'category': None, 'subcategory': None, 'era': None,
                 'notes': None, 'source': None, 'author': None, 'license': None,
             }

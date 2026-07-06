@@ -109,10 +109,11 @@ const WAGONS_BASE = "{{ url_for('static', filename='images/wagons') }}";
 
 function wagonImgSrc(u) {
   const side = u._side || 'L';
-  if (u.image_type === 'sides')   return `${WAGONS_BASE}/${u.image}${side === 'R' ? '_R' : '_L'}.gif`;
-  if (u.image_type === 'sides_L') return `${WAGONS_BASE}/${u.image}_L.gif`;
-  if (u.image_type === 'sides_R') return `${WAGONS_BASE}/${u.image}_R.gif`;
-  return `${WAGONS_BASE}/${u.image}.gif`;
+  const ext  = u.image_ext || 'gif';
+  if (u.image_type === 'sides')   return `${WAGONS_BASE}/${u.image}${side === 'R' ? '_R' : '_L'}.${ext}`;
+  if (u.image_type === 'sides_L') return `${WAGONS_BASE}/${u.image}_L.${ext}`;
+  if (u.image_type === 'sides_R') return `${WAGONS_BASE}/${u.image}_R.${ext}`;
+  return `${WAGONS_BASE}/${u.image}.${ext}`;
 }
 
 function wagonPlaceholderSrc(isFirst, isLast, phType) {
@@ -127,7 +128,7 @@ function trainsetHTML(trip) {
     const isFirst = i === 0, isLast = i === ts.units.length - 1;
     const ph = wagonPlaceholderSrc(isFirst, isLast, u._phType);
     const img = u.image
-      ? `<img src="${wagonImgSrc(u)}" title="${esc(u.label || '')}" onload="if(this.naturalHeight)this.style.height=Math.round(this.naturalHeight/2)+'px';" onerror="this.src='${ph}';this.className='wagon-placeholder-img';this.style.height='';this.onerror=null;this.onload=null;">`
+      ? `<img src="${wagonImgSrc(u)}"${u.px_per_meter ? ` data-ppm="${u.px_per_meter}"` : ''} title="${esc(u.label || '')}" onerror="this.src='${ph}';this.className='wagon-placeholder-img';this.style.height='';this.onerror=null;">`
       : `<img class="wagon-placeholder-img" src="${ph}">`;
     return `<div class="compo-wagon ts-unit">${img}<span class="compo-coach-no ts-nom ts-nom-inline">${esc(u.label || '')}</span></div>`;
   }).join('');
@@ -258,6 +259,13 @@ function openPopup(lngLat, tripObj) {
     .setLngLat(lngLat)
     .setHTML(getPopupContent(tripObj))
     .addTo(map);
+  // Size the trainset strip against its own median height (see normalizeStrip).
+  const popupEl = activePopup.getElement();
+  if (popupEl) {
+    popupEl.querySelectorAll('.compo-strip').forEach(function (strip) {
+      normalizeStrip(strip, { target: 22, min: 15, max: 38 });
+    });
+  }
 }
 
 /* ── rendering ───────────────────────────────────────────────────────────── */

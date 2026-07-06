@@ -15,9 +15,6 @@
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
       <i class="fas fa-plus me-1"></i>Add Wagon
     </button>
-    <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#vwModal" disabled hidden>
-      <i class="fas fa-train me-1"></i>Import from VagonWeb
-    </button>
     <a class="btn btn-outline-secondary"  href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i> {{tsBuilderTitle}}</a>
   </div>
   <table id="wagonsTable" class="table table-striped table-bordered" style="width:100%">
@@ -36,28 +33,6 @@
   </table>
 </div>
 
-
-<!-- ══════════════════════════════════ VagonWeb Import Modal -->
-<div class="modal fade" id="vwModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-train me-2"></i>Import from VagonWeb</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <label class="form-label">VagonWeb composition URL</label>
-        <input type="url" id="vwUrl" class="form-control"
-               placeholder="https://www.vagonweb.cz/razeni/vlak.php?zeme=ZSSK&amp;cislo=186&amp;rok=2026">
-        <div id="vwResult" class="small mt-2"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" id="vwImport">Import</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- ══════════════════════════════════ Add Modal -->
 <div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true">
@@ -100,6 +75,11 @@
             <div class="col-md-2">
               <label class="form-label fw-semibold">Gauge (mm)</label>
               <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Scale (px/m)</label>
+              <input type="number" step="any" min="0" class="form-control" name="px_per_meter"
+                     placeholder="auto" title="Pixels per real metre. Blank = auto-scale by strip median.">
             </div>
           </div>
           <div class="row g-2 mb-2">
@@ -180,6 +160,11 @@
               <label class="form-label fw-semibold">Gauge (mm)</label>
               <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
             </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Scale (px/m)</label>
+              <input type="number" step="any" min="0" class="form-control" name="px_per_meter"
+                     placeholder="auto" title="Pixels per real metre. Blank = auto-scale by strip median.">
+            </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-6">
@@ -234,15 +219,13 @@
 </div>
 
 
+<script defer src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 <script defer>
 const WAGONS_URL = '{{ url_for("static", filename="images/wagons") }}';
 const API        = '/api/admin/wagons';
 
-function imgSrc(image, itype) {
-  if (!image) return '';
-  if (itype === 'sides' || itype === 'sides_L') return `${WAGONS_URL}/${image}_L.gif`;
-  if (itype === 'sides_R') return `${WAGONS_URL}/${image}_R.gif`;
-  return `${WAGONS_URL}/${image}.gif`;
+function imgSrc(image, itype, ext) {
+  return wagonImgSrc(WAGONS_URL, { image: image, image_type: itype, image_ext: ext }, 'L');
 }
 function esc(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -271,7 +254,7 @@ const table = $('#wagonsTable').DataTable({
       data: 'image', orderable: false,
       render(d, t, row) {
         if (t !== 'display') return d||'';
-        const src = imgSrc(d, row.image_type);
+        const src = imgSrc(d, row.image_type, row.image_ext);
         const inner = src
           ? `<img src="${src}" class="wagon-img" onerror="this.style.opacity='.2'" title="${esc(d)}">`
           : `<span class="text-muted small fst-italic">no image</span>`;
@@ -312,18 +295,18 @@ function renderAddUpload(itype) {
       <div class="row g-2">
         <div class="col-md-6">
           <label class="form-label small">L view <span class="text-muted">(optional)</span></label>
-          <input type="file" name="file_l" class="form-control form-control-sm" accept=".gif,image/gif">
+          <input type="file" name="file_l" class="form-control form-control-sm" accept=".gif,.png,image/gif,image/png">
         </div>
         <div class="col-md-6">
           <label class="form-label small">R view <span class="text-muted">(optional)</span></label>
-          <input type="file" name="file_r" class="form-control form-control-sm" accept=".gif,image/gif">
+          <input type="file" name="file_r" class="form-control form-control-sm" accept=".gif,.png,image/gif,image/png">
         </div>
       </div>`;
   } else {
     const label = itype === 'sides_L' ? 'L view' : itype === 'sides_R' ? 'R view' : 'Image';
     sec.innerHTML = `
       <label class="form-label small">${label} <span class="text-muted">(optional)</span></label>
-      <input type="file" name="file" class="form-control form-control-sm" accept=".gif,image/gif">`;
+      <input type="file" name="file" class="form-control form-control-sm" accept=".gif,.png,image/gif,image/png">`;
   }
 }
 
@@ -360,7 +343,7 @@ document.getElementById('addForm').addEventListener('keydown', e => {
 /* ── edit modal ─────────────────────────────────────────────────── */
 let _editWagon = null;
 const _editFields = ['label','category','subcategory','era','image_type','line_type',
-                     'gauge','author','license','source','notes'];
+                     'gauge','px_per_meter','author','license','source','notes'];
 
 function openEditModal(wname) {
   const r = _cache[wname];
@@ -416,12 +399,12 @@ function openImgModal(wname) {
     preview.innerHTML = `
       <div class="d-flex justify-content-center gap-4 flex-wrap">
         <div><div class="small text-muted mb-1">L view</div>
-          <img src="${WAGONS_URL}/${r.image}_L.gif" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
+          <img src="${WAGONS_URL}/${r.image}_L.${r.image_ext || 'gif'}" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
         <div><div class="small text-muted mb-1">R view</div>
-          <img src="${WAGONS_URL}/${r.image}_R.gif" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
+          <img src="${WAGONS_URL}/${r.image}_R.${r.image_ext || 'gif'}" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
       </div>`;
   } else {
-    const src = imgSrc(r.image, r.image_type);
+    const src = imgSrc(r.image, r.image_type, r.image_ext);
     preview.innerHTML = src
       ? `<img src="${src}" style="max-height:280px;max-width:80vw" onerror="${onErr}">`
       : `<span class="text-muted fst-italic">No image set</span>`;
@@ -435,14 +418,14 @@ function openImgModal(wname) {
         <div class="col-md-6">
           <label class="form-label small">L view</label>
           <div class="input-group input-group-sm">
-            <input type="file" id="fileL" class="form-control" accept=".gif,image/gif">
+            <input type="file" id="fileL" class="form-control" accept=".gif,.png,image/gif,image/png">
             <button class="btn btn-outline-secondary" onclick="uploadFile('L')">Upload</button>
           </div>
         </div>
         <div class="col-md-6">
           <label class="form-label small">R view</label>
           <div class="input-group input-group-sm">
-            <input type="file" id="fileR" class="form-control" accept=".gif,image/gif">
+            <input type="file" id="fileR" class="form-control" accept=".gif,.png,image/gif,image/png">
             <button class="btn btn-outline-secondary" onclick="uploadFile('R')">Upload</button>
           </div>
         </div>
@@ -453,7 +436,7 @@ function openImgModal(wname) {
       <p class="small fw-semibold mb-2">Replace image file</p>
       <div class="input-group input-group-sm">
         <label class="input-group-text">${lbl}</label>
-        <input type="file" id="filePlain" class="form-control" accept=".gif,image/gif">
+        <input type="file" id="filePlain" class="form-control" accept=".gif,.png,image/gif,image/png">
         <button class="btn btn-outline-secondary" onclick="uploadFile('')">Upload</button>
       </div>`;
   }
@@ -511,42 +494,6 @@ function toast(msg, type = 'success') {
   t.show();
   el.addEventListener('hidden.bs.toast', () => el.remove());
 }
-
-// ── VagonWeb import ────────────────────────────────────────────────────────
-document.getElementById('vwImport').addEventListener('click', async () => {
-  const url = document.getElementById('vwUrl').value.trim();
-  if (!url) return;
-  const btn = document.getElementById('vwImport');
-  const out = document.getElementById('vwResult');
-  btn.disabled = true;
-  btn.textContent = 'Importing…';
-  out.innerHTML = '';
-  try {
-    const resp = await fetch('/api/admin/vagonweb/import', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({url}),
-    });
-    const data = await resp.json();
-    if (resp.ok) {
-      const warn = data.errors && data.errors.length
-        ? ` — ${data.errors.length} warning(s): ${data.errors.slice(0, 3).join('; ')}`
-        : '';
-      out.innerHTML = `<span class="text-success">`
-        + `&#10003; ${data.wagons_imported} wagons imported, `
-        + `${data.wagons_skipped} already existed, `
-        + `${data.trainsets_created} compositions created${warn}</span>`;
-      table.ajax.reload();
-    } else {
-      out.innerHTML = `<span class="text-danger">Error: ${data.error}</span>`;
-    }
-  } catch (e) {
-    out.textContent = 'Network error';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Import';
-  }
-});
 </script>
 
 {% endblock %}

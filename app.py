@@ -154,7 +154,6 @@ from src.api.stats import stats_blueprint, fetch_stats, get_distinct_stat_years
 from src.api.ai import ai_blueprint
 from src.api.mcp import blueprint as mcp_blueprint
 from src.api.trainset import public_trainset_info, trainset_blueprint
-from src.api.vagonweb import vagonweb_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src import visualisations as viz_module
@@ -281,7 +280,6 @@ app.register_blueprint(wrapped_blueprint)
 app.register_blueprint(ai_blueprint)
 app.register_blueprint(mcp_blueprint)
 app.register_blueprint(trainset_blueprint)
-app.register_blueprint(vagonweb_blueprint)
 app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
 app.register_blueprint(trips_blueprint)

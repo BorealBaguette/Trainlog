@@ -136,6 +136,7 @@
 </style>
 
 {# ── JavaScript ───────────────────────────────────────────────────────────── #}
+<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 <script>
 var _wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
 
@@ -144,12 +145,7 @@ function esc(s) {
 }
 
 function _wagonImgSrc(u) {
-    if (!u.image) return '';
-    var side = u._side || 'L';
-    if (u.image_type === 'sides')   return _wagonsBase + '/' + u.image + (side === 'R' ? '_R' : '_L') + '.gif';
-    if (u.image_type === 'sides_L') return _wagonsBase + '/' + u.image + '_L.gif';
-    if (u.image_type === 'sides_R') return _wagonsBase + '/' + u.image + '_R.gif';
-    return _wagonsBase + '/' + u.image + '.gif';
+    return wagonImgSrc(_wagonsBase, u, u._side);
 }
 
 function _makePlaceholder(isLight, isFirst, isLast, phType) {
@@ -236,6 +232,7 @@ function _renderTrainset($modalBody, units, setName) {
         if (u.image) {
             var img = $('<img>').attr({src: _wagonImgSrc(u), title: u.label || u.nom || '',
                 'data-toggle': 'tooltip', 'data-placement': 'top'});
+            if (u.px_per_meter) img.attr('data-ppm', u.px_per_meter);
             img.on('error', (function(iF,iL,pT) { return function() { $(this).replaceWith(_makePlaceholder(false, iF, iL, pT)); }; })(isFirst, isLast, u._phType));
             wagon.append(img);
         } else {
@@ -250,6 +247,7 @@ function _renderTrainset($modalBody, units, setName) {
     }
     var container = $('<div class="compo-container"></div>').append(strip);
     $modalBody.empty().append(container);
+    normalizeStrip(strip[0], { target: 46, min: 26, max: 72 });
     var sourceLines = [];
     if (setName) sourceLines.push('Trainset: ' + esc(setName));
     var attr = _attributionHtml(units);
@@ -271,6 +269,7 @@ function _renderTrainsetInline(rowId, units, labels) {
         if (u.image) {
             var img = $('<img>').attr({src: _wagonImgSrc(u), title: u.label || u.nom || '',
                 'data-toggle': 'tooltip', 'data-placement': 'top'});
+            if (u.px_per_meter) img.attr('data-ppm', u.px_per_meter);
             img.on('error', (function(iF,iL,pT) { return function() { $(this).replaceWith(_makePlaceholder(true, iF, iL, pT)); }; })(isFirst, isLast, u._phType));
             wagon.append(img);
         } else {
@@ -292,6 +291,7 @@ function _renderTrainsetInline(rowId, units, labels) {
     var $scroller = $('<div class="trainset-inline-scroll"></div>')
         .css('max-width', (tableW - 160) + 'px').append(strip);
     $container.append($scroller);
+    normalizeStrip(strip[0], { target: 46, min: 26, max: 72 });
     if (labelHtml) {
         $container.append($('<div class="ts-inline-label"></div>').html(labelHtml));
     }

@@ -11,8 +11,9 @@ wagons_admin_blueprint = Blueprint("admin_wagons", __name__)
 
 _EDITABLE_FIELDS = {"label", "category", "subcategory", "era", "source", "notes",
                     "image_type", "line_type", "image", "author", "license",
-                    "gauge", "updated_on"}
+                    "gauge", "updated_on", "image_ext", "px_per_meter"}
 _VALID_IMAGE_TYPES = {"plain", "sides", "sides_L", "sides_R"}
+_VALID_IMAGE_EXTS  = {"gif", "png"}
 _COL_MAP = {0: "name", 1: "label", 2: "category", 3: "subcategory",
             4: "era", 5: "image_type", 6: "image"}
 
@@ -40,16 +41,30 @@ def _unique_name(pg, base: str) -> str:
     return f"{base}_{counter}"
 
 
-def _save_gif(f, rel_path: str) -> None:
-    """Validate and save an uploaded GIF to WAGONS_ROOT/rel_path."""
-    header = f.read(6)
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def _detect_ext(f) -> str:
+    """Sniff an uploaded image's format from its magic bytes; return 'gif' or 'png'."""
+    header = f.read(8)
     f.seek(0)
-    if header[:6] not in (b"GIF87a", b"GIF89a"):
-        raise ValueError("not a valid GIF file")
+    if header[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if header[:8] == _PNG_MAGIC:
+        return "png"
+    raise ValueError("not a valid GIF or PNG file")
+
+
+def _save_image(f, rel_path_noext: str) -> str:
+    """Validate and save an uploaded GIF/PNG under WAGONS_ROOT, appending the detected
+    extension to rel_path_noext. Returns the extension ('gif' | 'png')."""
+    ext = _detect_ext(f)
+    rel_path = f"{rel_path_noext}.{ext}"
     target = (WAGONS_ROOT / rel_path).resolve()
     target.relative_to(WAGONS_ROOT)          # path-traversal guard
     target.parent.mkdir(parents=True, exist_ok=True)
     f.save(str(target))
+    return ext
 
 
 @wagons_admin_blueprint.route("", methods=["GET"])
@@ -94,7 +109,8 @@ def list_wagons():
         data = [dict(r) for r in pg.execute(
             f"""
             SELECT name, label, category, subcategory, era, image, notes,
-                   source, line_type, image_type, author, license, gauge
+                   source, line_type, image_type, image_ext, px_per_meter,
+                   author, license, gauge
             FROM wagons
             {where}
             ORDER BY {order_col} {order_dir} NULLS LAST
@@ -119,6 +135,9 @@ def update_wagon(wname: str):
     if "image_type" in updates and updates["image_type"] not in _VALID_IMAGE_TYPES:
         return jsonify({"error": "invalid image_type"}), 400
 
+    if "image_ext" in updates and updates["image_ext"] not in _VALID_IMAGE_EXTS:
+        return jsonify({"error": "invalid image_ext"}), 400
+
     if "gauge" in updates:
         g = updates["gauge"]
         if g == "" or g is None:
@@ -128,6 +147,18 @@ def update_wagon(wname: str):
                 updates["gauge"] = int(g)
             except (ValueError, TypeError):
                 return jsonify({"error": "gauge must be an integer"}), 400
+
+    if "px_per_meter" in updates:
+        p = updates["px_per_meter"]
+        if p == "" or p is None:
+            updates["px_per_meter"] = None
+        else:
+            try:
+                updates["px_per_meter"] = float(p)
+            except (ValueError, TypeError):
+                return jsonify({"error": "px_per_meter must be a number"}), 400
+            if updates["px_per_meter"] <= 0:
+                return jsonify({"error": "px_per_meter must be positive"}), 400
 
     # Coerce empty strings → NULL for text fields
     for k, v in updates.items():
@@ -155,12 +186,24 @@ def update_wagon_field(wname: str, field: str):
     if field == "image_type" and value not in _VALID_IMAGE_TYPES:
         return jsonify({"error": "invalid image_type"}), 400
 
+    if field == "image_ext" and value not in _VALID_IMAGE_EXTS:
+        return jsonify({"error": "invalid image_ext"}), 400
+
+    new_value = value or None
+    if field == "px_per_meter" and new_value is not None:
+        try:
+            new_value = float(new_value)
+        except (ValueError, TypeError):
+            return jsonify({"error": "px_per_meter must be a number"}), 400
+        if new_value <= 0:
+            return jsonify({"error": "px_per_meter must be positive"}), 400
+
     with pg_session() as pg:
         if not pg.execute("SELECT 1 FROM wagons WHERE name = :n", {"n": wname}).fetchone():
             return jsonify({"error": "not found"}), 404
         pg.execute(
             f"UPDATE wagons SET {field} = :value WHERE name = :n",
-            {"value": value or None, "n": wname},
+            {"value": new_value, "n": wname},
         )
 
     return "", 204
@@ -188,16 +231,22 @@ def upload_wagon_image(wname: str):
     if not image_path:
         return jsonify({"error": "wagon has no image path — set one first"}), 400
 
-    rel = f"{image_path}_L.gif" if side == "L" else \
-          f"{image_path}_R.gif" if side == "R" else \
-          f"{image_path}.gif"
+    rel_noext = f"{image_path}_L" if side == "L" else \
+                f"{image_path}_R" if side == "R" else \
+                image_path
 
     try:
-        _save_gif(f, rel)
+        ext = _save_image(f, rel_noext)
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
 
-    return jsonify({"saved": rel}), 200
+    with pg_session() as pg:
+        pg.execute(
+            "UPDATE wagons SET image_ext = :e WHERE name = :n",
+            {"e": ext, "n": wname},
+        )
+
+    return jsonify({"saved": f"{rel_noext}.{ext}", "image_ext": ext}), 200
 
 
 @wagons_admin_blueprint.route("", methods=["POST"])
@@ -212,6 +261,7 @@ def create_wagon():
     author     = (request.form.get("author")      or "").strip()
     license_   = (request.form.get("license")     or "").strip()
     gauge_str  = (request.form.get("gauge")       or "").strip()
+    ppm_str    = (request.form.get("px_per_meter") or "").strip()
     image_type = (request.form.get("image_type")  or "sides").strip()
 
     if not label:
@@ -226,41 +276,52 @@ def create_wagon():
         except ValueError:
             return jsonify({"error": "gauge must be an integer"}), 400
 
+    px_per_meter = None
+    if ppm_str:
+        try:
+            px_per_meter = float(ppm_str)
+        except ValueError:
+            return jsonify({"error": "px_per_meter must be a number"}), 400
+        if px_per_meter <= 0:
+            return jsonify({"error": "px_per_meter must be positive"}), 400
+
     # Auto-derive a unique PK / image base path
     with pg_session() as pg:
         name = _unique_name(pg, _sanitize_name(label))
 
     image_path = f"{CUSTOM_FOLDER}/{name}"
 
-    # Save uploaded files
+    # Save uploaded files. All sides of one wagon share a single format; the last
+    # detected extension wins for the row (defaulting to 'gif' if nothing was uploaded).
     errors = []
+    image_ext = "gif"
     if image_type == "sides":
         for side, key in (("L", "file_l"), ("R", "file_r")):
             f = request.files.get(key)
             if f and f.filename:
                 try:
-                    _save_gif(f, f"{image_path}_{side}.gif")
+                    image_ext = _save_image(f, f"{image_path}_{side}")
                 except ValueError as e:
                     errors.append(f"{key}: {e}")
     elif image_type == "sides_L":
         f = request.files.get("file")
         if f and f.filename:
             try:
-                _save_gif(f, f"{image_path}_L.gif")
+                image_ext = _save_image(f, f"{image_path}_L")
             except ValueError as e:
                 errors.append(f"file: {e}")
     elif image_type == "sides_R":
         f = request.files.get("file")
         if f and f.filename:
             try:
-                _save_gif(f, f"{image_path}_R.gif")
+                image_ext = _save_image(f, f"{image_path}_R")
             except ValueError as e:
                 errors.append(f"file: {e}")
     else:
         f = request.files.get("file")
         if f and f.filename:
             try:
-                _save_gif(f, f"{image_path}.gif")
+                image_ext = _save_image(f, image_path)
             except ValueError as e:
                 errors.append(f"file: {e}")
 
@@ -271,22 +332,24 @@ def create_wagon():
         pg.execute(
             """
             INSERT INTO wagons (category, subcategory, label, era, image, name,
-                                notes, image_type, author, license, gauge)
+                                notes, image_type, image_ext, px_per_meter, author, license, gauge)
             VALUES (:category, :subcategory, :label, :era, :image, :name,
-                    :notes, :image_type, :author, :license, :gauge)
+                    :notes, :image_type, :image_ext, :px_per_meter, :author, :license, :gauge)
             """,
             {
-                "category":    category or None,
-                "subcategory": subcategory or None,
-                "label":       label,
-                "era":         era or None,
-                "image":       image_path,
-                "name":        name,
-                "notes":       notes or None,
-                "image_type":  image_type,
-                "author":      author or None,
-                "license":     license_ or None,
-                "gauge":       gauge,
+                "category":     category or None,
+                "subcategory":  subcategory or None,
+                "label":        label,
+                "era":          era or None,
+                "image":        image_path,
+                "name":         name,
+                "notes":        notes or None,
+                "image_type":   image_type,
+                "image_ext":    image_ext,
+                "px_per_meter": px_per_meter,
+                "author":       author or None,
+                "license":      license_ or None,
+                "gauge":        gauge,
             },
         )
 

@@ -11,11 +11,11 @@
 }
 .publicTsToggle:hover,
 .publicTsToggle.open { color: #0a58ca; }
-/* Wagon images are scaled to half their natural size in JS (uniform factor, so
-   the catalogue's relative proportions are preserved); the scroll wrapper's
-   default 16px bottom padding keeps the scrollbar clear of the name pills. */
+/* Wagon images are sized in JS against the strip's median height (normalizeStrip), so
+   each source's px-per-metre cancels out and relative proportions are gently preserved;
+   the scroll wrapper's default 16px bottom padding keeps the scrollbar clear of the pills. */
 .publicTrainset .compo-strip { min-width: 0; }
-.publicTrainset .wagon-placeholder-img { height: 22px; }
+.publicTrainset .wagon-placeholder-img { height: 19px; }
 /* Re-assert the pill padding: the global ".events span" rule inflates it */
 .publicTrainset .ts-nom { padding: 1px 5px; }
 </style>
@@ -683,6 +683,7 @@ function renderPublicTrainset($container, ts) {
         var wagon = $('<div class="compo-wagon ts-unit"></div>');
         if (u.image) {
             var img = $('<img>').attr({ src: _wagonImgSrc(u), title: u.label || '' });
+            if (u.px_per_meter) img.attr('data-ppm', u.px_per_meter);
             img.on('error', (function(iF, iL, pT) { return function() { $(this).replaceWith(_makePlaceholder(true, iF, iL, pT)); }; })(isFirst, isLast, u._phType));
             wagon.append(img);
         } else {
@@ -704,19 +705,16 @@ function renderPublicTrainset($container, ts) {
     if (ts.label) {
         $container.append($('<div class="ts-inline-label"></div>').text(ts.label));
     }
-    // Scale each image to half its natural size (uniform factor keeps the
-    // catalogue's relative proportions), then re-fit the highlight card since
-    // the leg's height settles only once images load.
-    strip.find('img').each(function() {
-        var el = this;
-        function done() {
-            if (el.naturalHeight) el.style.height = Math.round(el.naturalHeight / 2) + 'px';
+    // Size images against the strip's median (cancels each source's px-per-metre) with a
+    // gentle proportional exponent + clamp, then re-fit the highlight card since the leg's
+    // height settles only once images load.
+    normalizeStrip(strip[0], {
+        target: 20, min: 14, max: 34,
+        onApply: function() {
             if (typeof highlightedTripUid !== 'undefined' && highlightedTripUid != null) {
                 positionTripCard(highlightedTripUid);
             }
         }
-        if (el.complete) done();
-        else $(el).on('load error', done);
     });
 }
 
