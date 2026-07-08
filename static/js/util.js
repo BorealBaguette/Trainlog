@@ -1097,6 +1097,7 @@ function setupTagAutocomplete(url, tripId) {
     select: function(event, ui) {
       const selectedTag = tags.find(t => t.name === ui.item.value);
       if (selectedTag) $('#tagList').append(makeTagChip(selectedTag));
+      $(this).val('');
       return false;
     }
   });
