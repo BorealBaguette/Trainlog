@@ -492,6 +492,24 @@ function _isValidMaterial(mat) {
     return _trainsetNames.has(mat);
 }
 
+// Whether a trip's ADVANCED material holds a resolvable trainset. The advanced field
+// is only ever written by the trainset builder — a saved-set name, an inline unit
+// array, or a {trainsets:[...]} composite — so its shape is authoritative. Unlike
+// _isValidMaterial's name path, this does NOT depend on the async _trainsetNames cache
+// (which loads from a separate request with no redraw, so the icon intermittently
+// failed to render on first draw for name-based sets).
+function _advancedHasTrainset(adv) {
+    if (!adv) return false;
+    try {
+        var v = JSON.parse(adv);
+        if (Array.isArray(v)) return v.length > 0;                          // inline units
+        if (v && Array.isArray(v.trainsets)) return v.trainsets.length > 0; // composite
+        return true;                                                        // other JSON → a reference
+    } catch(e) {
+        return true;                                                        // non-JSON string → saved set name
+    }
+}
+
 function openCompositionModal(trainName, dateStr, materialType) {
     $('#compositionModalTitle').text(trainName + (dateStr ? ` (${dateStr})` : ''));
     var $modalBody = $('#compositionModal .modal-body');
@@ -506,9 +524,9 @@ function openCompositionModal(trainName, dateStr, materialType) {
     if (materialType) {
         _resolveUnits(materialType, '{{ username }}')
             .done(function(r) { _renderTrainset($modalBody, r.units, r.name); })
-            .fail(function()  { $modalBody.html('<div class="alert alert-warning">No composition data found.</div>'); });
+            .fail(function()  { $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>'); });
     } else {
-        $modalBody.html('<div class="alert alert-warning">No composition data found.</div>');
+        $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>');
     }
 }
 
@@ -687,7 +705,7 @@ function processHiddenData(rowIdx, columns){
             var rawMat = rowData.material_type || '';
             var primary = rawAdv || rawMat;
             if (primary) {
-                var isValid = _isValidMaterial(primary);
+                var isValid = rawAdv ? _advancedHasTrainset(rawAdv) : _isValidMaterial(rawMat);
                 var formatted;
                 if (isValid) {
                     formatted = '';
@@ -878,11 +896,14 @@ function renderLineName(data, type, row) {
     if (type === 'display') {
         // Only show for trains
         if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
-            var mat      = row.material_type_advanced || row.material_type || '';
+            var adv      = row.material_type_advanced || '';
+            var mat      = adv || row.material_type || '';
             var dateStr  = row.start_date || '';
             var safeName = (data || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
             var safeMat  = mat.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
-            var btn = _isValidMaterial(mat) ? `
+            // Icon only when the advanced field has a resolvable trainset (race-free);
+            // fall back to the name cache only for a legacy plain material_type match.
+            var btn = (adv ? _advancedHasTrainset(adv) : _isValidMaterial(mat)) ? `
                     <a href="javascript:void(0);"
                        onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}')"
                        class="text-decoration-none ms-2"
@@ -1226,7 +1247,7 @@ var table = $('#tripRows');
             orderable: false
         },
         { data: 'operator', render: renderOperators },
-        {data: 'line_name',{% if is_alpha %} render: renderLineName,{% endif %}},
+        {data: 'line_name', render: renderLineName},
         { data: 'countries', render: renderFlags },
         {
             data: 'carbon_footprint',
@@ -2277,7 +2298,7 @@ $('#submitBtn').on('click', function() {
         var params = { train: trainName };
         if (dateStr) params.date = dateStr;
 
-        container.html('<div class="compo-error">No composition data found.</div>');
+        container.html('<div class="compo-error">' + {{ tsNoComposition | tojson }} + '</div>');
         container.data('loaded', true);
     }
 </script>

@@ -16,6 +16,22 @@ def _session_user():
     return username, is_admin
 
 
+def _view_as_username():
+    """Admin debug helper: an admin may pass ?as=<username> to browse the
+    trainset builder exactly as that user sees it (their personal sets plus
+    public sets), read-only. Returns the username whose visibility applies.
+
+    Only honoured for admins; for anyone else it collapses to their own
+    session, so the param can never widen a non-admin's visibility.
+    """
+    username, is_admin = _session_user()
+    if is_admin:
+        as_user = request.args.get('as', '').strip()
+        if as_user:
+            return as_user
+    return username or ''
+
+
 def _visibility_username():
     """Username to scope trainset visibility to for read-only GET endpoints.
 
@@ -40,10 +56,14 @@ def trainset_builder():
     username, is_admin = _session_user()
     if not username:
         return redirect(url_for("login", next=request.path))
+    # Admin debug: ?as=<username> renders the builder read-only from that
+    # user's perspective (their personal sets + public sets).
+    view_as = request.args.get('as', '').strip() if is_admin else ''
     return render_template(
         'trainset.html',
         nav="bootstrap/navigation.html",
         username=username,
+        view_as=view_as,
         title="Trainset Builder",
         isCurrent=has_current_trip(),
         **session["userinfo"],
@@ -119,8 +139,10 @@ def list_trainsets():
     """List trainsets visible to the current user:
        - public (is_admin=true) sets are visible to everyone
        - personal (is_admin=false) sets are only visible to their creator
+
+    Admins may pass ?as=<username> to list what that user would see.
     """
-    username = _visibility_username()
+    username = _view_as_username()
 
     with pg_session() as pg:
         result = pg.execute(
@@ -151,6 +173,8 @@ def create_trainset():
     units           = _slim_units(data.get('units', []))
 
     with pg_session() as pg:
+        if _name_taken(pg, name, username, set_is_admin):
+            return jsonify({'error': _dup_name_error(name, set_is_admin)}), 409
         result = pg.execute(
             """
             INSERT INTO trainsets (name, username, is_admin, units_json)
@@ -184,6 +208,8 @@ def get_trainset_by_name():
                    created_at, updated_at, units_json
             FROM trainsets WHERE name = :name
               AND (is_admin OR username = :username)
+            ORDER BY (username = :username AND NOT is_admin) DESC
+            LIMIT 1
             """,
             {"name": name, "username": username},
         )
@@ -203,6 +229,9 @@ def get_trainset(tid):
     if not username:
         return jsonify({'error': 'Unauthorized'}), 401
 
+    # Admin ?as=<username> resolves visibility to that user (read-only debug view).
+    visible_to = _view_as_username()
+
     with pg_session() as pg:
         result = pg.execute(
             """
@@ -216,7 +245,7 @@ def get_trainset(tid):
         if not row:
             return jsonify({'error': 'Not found'}), 404
         d = dict(row)
-        if not d['is_admin'] and d['username'] != username:
+        if not d['is_admin'] and d['username'] != visible_to:
             return jsonify({'error': 'Forbidden'}), 403
         slim_units = json.loads(d.pop('units_json') or '[]')
         d['units'] = _enrich_units(pg, slim_units)
@@ -248,6 +277,8 @@ def update_trainset(tid):
             return jsonify({'error': 'Only admins can edit public trainsets'}), 403
         if not row['is_admin'] and row['username'] != username:
             return jsonify({'error': 'Forbidden'}), 403
+        if _name_taken(pg, name, row['username'], bool(row['is_admin']), exclude_id=tid):
+            return jsonify({'error': _dup_name_error(name, bool(row['is_admin']))}), 409
         old_name = row['old_name']
         pg.execute(
             """
@@ -334,6 +365,34 @@ def resolve_material_type_advanced():
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+def _name_taken(pg, name, username, is_admin_set, exclude_id=None):
+    """Would saving `name` collide with an existing set of the same scope?
+
+    Trainsets are referenced by name (trips.material_type_advanced), so names
+    must be unique within a scope: personal sets are unique per owner; public
+    (admin) sets are unique globally. A personal set is allowed to share a name
+    with a public one — display resolves the personal one first (see
+    `_units_by_name`).
+    """
+    if is_admin_set:
+        sql = "SELECT 1 FROM trainsets WHERE is_admin AND name = :name"
+        params = {"name": name}
+    else:
+        sql = "SELECT 1 FROM trainsets WHERE NOT is_admin AND username = :username AND name = :name"
+        params = {"name": name, "username": username}
+    if exclude_id is not None:
+        sql += " AND id <> :id"
+        params["id"] = exclude_id
+    return pg.execute(sql + " LIMIT 1", params).fetchone() is not None
+
+
+def _dup_name_error(name, is_admin_set):
+    l = lang.get(session.get("userinfo", {}).get("lang", "en"), lang["en"])
+    key = "tsDupNamePublic" if is_admin_set else "tsDupNamePersonal"
+    return l.get(key, lang["en"][key]).format(name=name)
+
+
+
 def public_trainset_info(pg, value, owner_username):
     """Resolve a trip's material_type_advanced for public display, using the
     trip owner's trainset visibility (public pages may be viewed logged out).
@@ -373,6 +432,8 @@ def _units_by_name(pg, name, username):
         """
         SELECT units_json FROM trainsets
         WHERE name = :name AND (is_admin OR username = :username)
+        ORDER BY (username = :username AND NOT is_admin) DESC
+        LIMIT 1
         """,
         {"name": name, "username": username},
     )

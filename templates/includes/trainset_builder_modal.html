@@ -1,11 +1,13 @@
 <!-- Trainset Builder Modal — include in forms that have a #material_type input -->
 <style>
-  .tsb-unit { min-width:68px; max-width:84px; font-size:.7rem; background:#f8f9fa;
+  .tsb-unit { min-width:44px; font-size:.7rem; background:#f8f9fa;
               border:1px solid #dee2e6; border-radius:4px; padding:4px; text-align:center; }
-  .tsb-unit img { max-height:38px; max-width:76px; display:block; margin:0 auto 2px; }
-  .tsb-unit .tsb-ph { max-height:30px; opacity:0.5; }
+  /* Image size (height + width:auto) is set at runtime by normalizeStrip so every car
+     shares one metres-per-pixel scale, matching the public trainset display. */
+  .tsb-unit img { display:block; width:auto; margin:0 auto 2px; }
+  .tsb-unit .tsb-ph { height:22px; width:auto; opacity:0.5; }
   .tsb-unit .tsb-nom { display:block; overflow:hidden; text-overflow:ellipsis;
-                       white-space:nowrap; width:100%; }
+                       white-space:nowrap; max-width:96px; margin:0 auto; }
   .tsb-unit[draggable="true"] { cursor: grab; }
   .tsb-unit.tsb-drag-over-left  { border-left: 3px solid #0d6efd; }
   .tsb-unit.tsb-drag-over-right { border-right: 3px solid #0d6efd; }
@@ -34,7 +36,7 @@
                   cursor:pointer; color:#999; font-size:.9rem; line-height:1; padding:0"
                   title="Edit / break reference">✎</button>
         </div>
-        <div id="tsb-strip" class="d-flex flex-wrap gap-2 py-1" style="min-height:60px">
+        <div id="tsb-strip" class="d-flex flex-wrap align-items-end gap-2 py-1" style="min-height:60px">
           <span id="tsb-empty" class="text-muted fst-italic small m-auto">{{tsEmptyHint}}</span>
         </div>
       </div>
@@ -397,7 +399,9 @@
       img.src = u.image ? _imgSrc(u.image, u._side, u.image_type, u.image_ext) : phSrc;
       img.title = u.label || '';
       if (!u.image) img.className = 'tsb-ph';
-      img.onerror = function () { this.src = phSrc; this.className = 'tsb-ph'; this.onerror = null; };
+      // Calibrated stock renders to true scale (normalizeStrip reads data-ppm).
+      else if (u.px_per_meter) img.setAttribute('data-ppm', u.px_per_meter);
+      img.onerror = function () { this.src = phSrc; this.className = 'tsb-ph'; this.removeAttribute('data-ppm'); this.onerror = null; };
       card.appendChild(img);
 
       var nom = document.createElement('span');
@@ -481,6 +485,12 @@
 
       strip.appendChild(card);
     });
+
+    // Size + baseline-align the row like the public trainset display.
+    // Placeholders here carry .tsb-ph (not the default skip class), so pass it explicitly.
+    if (window.normalizeStrip) {
+      normalizeStrip(strip, { target: 20, min: 13, max: 30, skipClass: 'tsb-ph' });
+    }
 
     var any = _units.length > 0;
     document.getElementById('tsb-use-btn').disabled  = !any;
