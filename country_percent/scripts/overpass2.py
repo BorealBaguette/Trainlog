@@ -158,8 +158,8 @@ def buffer_linestring(line_coords):
 def process_railway_geometry(iso_code, iso_spec):
     print(f"Fetching railway geometry for {iso_code} using ISO 3166-{iso_spec}")
 
-    preprocessed_path = "countries/preprocessed/" + country_code + ".json"
-    processed_path = "countries/processed/" + country_code + ".geojson"
+    preprocessed_path = "countries/preprocessed/" + iso_code + ".json"
+    processed_path = "countries/processed/" + iso_code + ".geojson"
 
     os.makedirs("countries/preprocessed", exist_ok=True)
     os.makedirs("countries/processed", exist_ok=True)
