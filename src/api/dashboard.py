@@ -608,11 +608,24 @@ def dashboard_year(username):
 
         # ── Streak ────────────────────────────────────────────────────────────
         _streak_cte = """
-            WITH travel_days AS (
-                SELECT DISTINCT DATE(COALESCE(utc_start_datetime, start_datetime)) AS travel_date
+            WITH trip_spans AS (
+                SELECT DATE(COALESCE(utc_start_datetime, start_datetime)) AS start_date,
+                       DATE(COALESCE(utc_end_datetime, end_datetime,
+                                     utc_start_datetime, start_datetime)) AS end_date
                 FROM trips
                 WHERE user_id = :uid AND NOT is_project
                   {date_filter}
+            ),
+            travel_days AS (
+                -- Expand each trip to every calendar day it spans so multi-day
+                -- rides (e.g. overnight/long-distance trains) don't break streaks.
+                SELECT DISTINCT gs::date AS travel_date
+                FROM trip_spans,
+                     LATERAL generate_series(
+                         start_date,
+                         GREATEST(end_date, start_date),
+                         INTERVAL '1 day'
+                     ) AS gs
             ),
             with_gaps AS (
                 SELECT travel_date,
