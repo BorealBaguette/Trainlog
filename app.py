@@ -3478,7 +3478,7 @@ def vector_style(language, style):
         file_contents = file_contents.replace(
             "{{mapPinUrl}}",
             url_for(
-                "static", filename="styles/vector_maps", _scheme=request.scheme, _external=True
+                "static", filename="styles/vector_maps", _scheme="https", _external=True
             ),
         )
         template_url = "https://tiles.trainlog.me/tile/streets-v2+landcover-v1.1+hillshade-v1/{x}/{y}/{z}/{language}"
