@@ -544,9 +544,12 @@
 
   }
   else{
-    coords = [searchParams.get('prevDest').split(',')[0],searchParams.get('prevDest').split(',')[1]];
-    $("#originStation").val(searchParams.get('prevDest').split(',')[2]);
-    globalStationDict[searchParams.get('prevDest').split(',')[2]] = [coords, searchParams.get('prevDest').split(',')[2]];
+    // prevDest is "lat,lng,label" — the label itself may contain commas.
+    const prevDestParts = searchParams.get('prevDest').split(',');
+    coords = [parseFloat(prevDestParts[0]), parseFloat(prevDestParts[1])];
+    const prevDestLabel = prevDestParts.slice(2).join(',');
+    $("#originStation").val(prevDestLabel);
+    globalStationDict[prevDestLabel] = [coords, prevDestLabel];
     {% if plan_uuid %}
     // Plan "save & continue": carry forward the previous leg's timing MODE.
     if (searchParams.has('prevEndDate')) {

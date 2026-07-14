@@ -179,7 +179,7 @@ function navigateAfterSave(continueTrip, isPlan, lastTrip) {
         if (continueTrip) {
             // Keep building the plan: prefill origin from this leg's destination and
             // carry forward the SAME timing mode this leg used (relative or precise).
-            var contUrl = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${lastTrip["destinationStation"]}`;
+            var contUrl = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${encodeURIComponent(lastTrip["destinationStation"])}`;
             if (lastTrip.precision == "preciseDates") {
                 contUrl += `&prevEndDate=${lastTrip["newTripEndDate"] || ''}&prevEndTime=${lastTrip["newTripEndTime"] || ''}`;
             } else if (lastTrip.precision == "onlyDate") {
@@ -196,7 +196,7 @@ function navigateAfterSave(continueTrip, isPlan, lastTrip) {
     if (!continueTrip || lastTrip.precision != "preciseDates") {
         location.href = "{{ url_for('landing') }}";
     } else {
-        location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?prevDest=${lastTrip["destinationStation"]}&prevEndDate=${lastTrip["newTripEndDate"]}&prevEndTime=${lastTrip["newTripEndTime"]}`;
+        location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?prevDest=${encodeURIComponent(lastTrip["destinationStation"])}&prevEndDate=${lastTrip["newTripEndDate"]}&prevEndTime=${lastTrip["newTripEndTime"]}`;
     }
 }
 
