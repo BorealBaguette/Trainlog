@@ -347,14 +347,16 @@ function createGeodesicLine(start, end, numPoints = 100, splitSegments = false) 
 // and estimate only the remainder.
 // ---------------------------------------------------------------------------
 
-// Replace the stored path of each trip that has a live track with the real flown path.
+// Attach the real flown-so-far path to each trip that has a live track, as `livePath`.
 //
-// Mutating trip.path (rather than emitting the flown part as a new feature) is
-// deliberate: it keeps live trips flowing through the existing layer machinery
-// untouched, so they still honour transport-type filters and the current-trip pulse.
+// `trip.path` is deliberately left alone. It is the trip's stored route and the rest of
+// the page reads it as such — the destination marker, for one, takes its position from
+// the last point of it. Overwriting it with a track that stops at the aircraft dragged
+// the end of the journey along with the plane. Anything that wants the live geometry
+// opts in by reading livePath; everything else keeps seeing the real route.
+//
 // Both map surfaces already split an in-progress trip into travelled and remaining
-// portions, so they render the estimated remainder with their own existing styling —
-// this only has to supply the real geometry and say where the trip still has to get to.
+// portions, so they render the estimated remainder with their own existing styling.
 //
 // `features` is optional. When given (the array returned by buildTripLayers), the
 // matching feature's geometry is updated in place. In place matters: buildTripLayers
@@ -368,21 +370,20 @@ function applyLiveTracks(trips, liveTracks, features) {
         if (!live || !live.path || live.path.length < 2) return;
 
         const original = trip.path || [];
-        // Where the flight is actually meant to end. Taken from the stored path rather
-        // than the live feed so a diversion doesn't silently retarget the estimate at
-        // an airport the user never logged.
-        //
-        // Read from a previous run first: this function replaces trip.path, so from the
-        // second refresh onwards the last point of trip.path is the aircraft's current
-        // position, not the destination. Recomputing it would walk the endpoint forward
-        // with the plane and shrink the remaining leg away to nothing.
-        const destination = trip.liveDestination
-            || (original.length ? original[original.length - 1] : null);
+        // Where the flight is meant to end. Taken from the stored route rather than the
+        // live feed, so a diversion cannot silently retarget the estimate at an airport
+        // the user never logged. Safe to recompute every refresh now that trip.path is
+        // never overwritten.
+        const destination = original.length ? original[original.length - 1] : null;
+        // The origin, for the same reason plus one of its own: FR24's public track often
+        // starts at the first airborne radar contact rather than at the gate — several km
+        // into the climb-out — so without this the route appears to begin in mid-air near
+        // the airport instead of at it.
+        const origin = original.length ? original[0] : null;
 
-        trip.path = live.path;
+        trip.livePath = live.path;
         trip.liveTracked = true;
-        // Kept because trip.path no longer reaches the destination: anything that needs
-        // to draw the not-yet-flown remainder has to know where the trip actually ends.
+        trip.liveOrigin = origin;
         trip.liveDestination = destination;
         trip.liveUpdated = live.updated || null;
         if (live.altitude) trip.altitude = live.altitude;
@@ -394,8 +395,13 @@ function applyLiveTracks(trips, liveTracks, features) {
                 // The whole route, not just the flown part: this feature stands for the
                 // entire trip, and its layers include the drop shadow. Giving it only
                 // the flown portion would end the shadow at the aircraft and leave the
-                // remaining leg looking detached from the rest of the map.
+                // remaining leg looking detached from the rest of the map. Bridged to
+                // both airports so the line still runs terminal to terminal.
                 let coords = live.path.map(c => [c[1], c[0]]);
+                if (origin) {
+                    coords = createGeodesicLine([origin[1], origin[0]], coords[0])
+                        .concat(coords);
+                }
                 if (destination) {
                     coords = coords.concat(
                         createGeodesicLine(coords[coords.length - 1],
@@ -939,7 +945,9 @@ async function build3DFlightLayer(map, trips, options = {}) {
     const dropLines = [];  // vertical segments {source:[lng,lat,alt], target:[lng,lat,0]}
     const aircraft = [];   // live positions, drawn at their real altitude
     trips.forEach(trip => {
-        const path = _coerceArray(trip.path);          // [[lat, lng], ...]
+        // livePath when the flight is being tracked: the altitude array is parallel to
+        // the live track, not to the stored two-point route.
+        const path = _coerceArray(trip.livePath || trip.path);   // [[lat, lng], ...]
         const altitude = _coerceArray(trip.altitude);  // [m, ...] parallel to path
         if (!path || !altitude || altitude.length < 2) return;
         const n = Math.min(path.length, altitude.length);

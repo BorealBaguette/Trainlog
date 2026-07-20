@@ -36,11 +36,17 @@ live_tracks_blueprint = Blueprint("live_tracks", __name__)
 # so an in-process guard would let every worker poll independently.
 LIVE_POLL_INTERVAL = timedelta(minutes=5)
 
+# Slower retry for a trip FR24 currently has no record of. Not "never again": a delayed
+# departure is unknown to FR24 at its scheduled time and only appears once it is airborne,
+# so giving up permanently would mean delayed flights are the ones never tracked. Slow
+# enough that a genuinely untrackable trip (wrong number, private charter) stays cheap.
+UNRESOLVED_RETRY_INTERVAL = timedelta(minutes=30)
+
 # Polling window, expressed relative to the trip's own times rather than as a poll count so
-# that a long-haul leg is never cut off mid-flight. The grace period absorbs unlogged delays
-# so a flight is still tracked to touchdown; the hard ceiling exists only to bound a trip
-# whose arrival was mistyped days into the future.
-ARRIVAL_GRACE = timedelta(hours=2)
+# that a long-haul leg is never cut off mid-flight. The grace period is generous because
+# delays are normal and the real cost bound is the hard ceiling below, which exists to
+# catch a trip whose arrival was mistyped days into the future.
+ARRIVAL_GRACE = timedelta(hours=6)
 MAX_FLIGHT_WINDOW = timedelta(hours=20)
 
 FR24_BASE = "https://fr24api.flightradar24.com"
@@ -285,15 +291,18 @@ def _as_utc(value):
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
-def _has_landed(trip, altitude, timestamps):
-    """Landed if the aircraft is on the ground at the end of the trail, or if we are past
-    the scheduled arrival (the grace period in the eligibility window means we keep
-    polling a little beyond it, which is what gives us a final complete track)."""
-    now = datetime.now(timezone.utc)
-    arrival = _as_utc(trip.get("arr"))
-    if arrival and now > arrival:
-        return True
-    # Guard against the first points of the trail, which are also at ground level.
+def _has_landed(altitude):
+    """Has the aircraft actually reached the ground at the end of the trail?
+
+    Deliberately based only on the observed track, never on the clock. Landing triggers
+    promotion, which overwrites the trip's stored path, so a false positive truncates a
+    real journey: treating "past scheduled arrival" as landed did exactly that to any
+    delayed flight, freezing its route at wherever the aircraft happened to be.
+
+    If a landing is never observed, nothing is promoted and the trip simply keeps the
+    original route it was saved with — a safe failure, unlike a corrupted one.
+    """
+    # The trail starts on the ground too, so require evidence it went up and came back.
     if altitude and len(altitude) > 10 and altitude[-1] <= GROUND_ALT_M:
         return max(altitude) > GROUND_ALT_M
     return False
@@ -340,14 +349,17 @@ def _claim_due_trips(pg, trips):
         UPDATE live_flight_tracks
         SET last_polled = NOW(), poll_count = poll_count + 1
         WHERE trip_id = ANY(CAST(:ids AS integer[]))
-          AND NOW() - last_polled >= :interval
-          -- Never retry a flight FR24 has no record of: it would cost a call every
-          -- interval for the whole trip, and can only start working if the user edits
-          -- the trip, which is handled by the reset above.
-          AND status <> 'unresolved'
+          -- A flight FR24 has no record of backs off to a slow retry rather than being
+          -- abandoned, so a delayed departure is picked up once it actually takes off.
+          AND NOW() - last_polled >= (CASE WHEN status = 'unresolved'
+                                           THEN :slow_interval ELSE :interval END)
         RETURNING trip_id, fr24_id
         """,
-        {"ids": list(by_id), "interval": LIVE_POLL_INTERVAL},
+        {
+            "ids": list(by_id),
+            "interval": LIVE_POLL_INTERVAL,
+            "slow_interval": UNRESOLVED_RETRY_INTERVAL,
+        },
     ).fetchall()
     claimed = []
     for row in rows:
@@ -377,7 +389,7 @@ def _fetch_update(trip, username):
 
     coords, altitude, timestamps = track
     return {
-        "status": "landed" if _has_landed(trip, altitude, timestamps) else "live",
+        "status": "landed" if _has_landed(altitude) else "live",
         "fr24_id": fr24_id,
         "coords": coords,
         "altitude": altitude,

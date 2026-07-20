@@ -11061,8 +11061,11 @@ def get_current_trips_data(public_only=True):
             trip = dict(trip)
             live = live_tracks.get(trip["uid"])
             if live and live.get("path"):
-                # Keep the logged destination as the final point so the client can draw
-                # the not-yet-flown remainder to where the trip actually ends.
+                # Keep the logged endpoints so the client can bridge the track back to
+                # the real airports: the not-yet-flown remainder at the end, and at the
+                # start the gap left because FR24's public track usually begins at the
+                # first airborne contact rather than on the runway.
+                trip["live_origin"] = path[0] if path else None
                 trip["live_destination"] = path[-1] if path else None
                 path = live["path"]
                 trip["live_tracked"] = True

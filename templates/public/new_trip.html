@@ -1484,17 +1484,55 @@ function calculatePosition(trip) {
 // still to come. Kept as a function so a live flight track can re-run it with real data.
 let currentPositionMarkers = {};
 
+// How long past its scheduled arrival a flight may still be in the air. Matches the
+// server's own grace period.
+const LIVE_GRACE_HOURS = 6;
+
+// Flights that might currently be airborne.
+//
+// Deliberately not just `time === 'current'`: computeTimeStatus reads the timetable, and
+// a delayed flight is marked 'past' the instant its scheduled arrival passes even though
+// it is still flying — which is exactly when live tracking matters most. The server owns
+// the real decision and ignores anything outside its own window, so asking about a
+// recently-landed-on-paper flight costs nothing when it has genuinely landed.
+function liveCandidates(trips) {
+    const now = moment.utc();
+    return trips.filter(t => {
+        if (!t.trip) return false;
+        const type = t.trip.type;
+        if (type !== 'air' && type !== 'helicopter') return false;
+        if (t.time === 'current') return true;
+        const end = t.trip.utc_filtered_end_datetime;
+        if (typeof end !== 'string') return false;
+        const ended = moment.utc(end);
+        return now.isAfter(ended) && now.diff(ended, 'hours', true) <= LIVE_GRACE_HOURS;
+    });
+}
+
 function buildCurrentTripFeatures(trips) {
     const features = [];
     trips.forEach(trip => {
-        if (trip.time !== 'current') return;
+        // liveTracked overrides the timetable: if the server handed us a live track the
+        // aircraft is provably still flying, whatever computeTimeStatus decided from the
+        // scheduled arrival time.
+        if (trip.time !== 'current' && !trip.liveTracked) return;
 
+        const isTracked = !!(trip.liveTracked && trip.liveDestination && trip.livePath);
         // Convert to [lng, lat] and expand air routes to geodesic before splitting
-        let fullCoords = trip.path.map(c => [c[1], c[0]]);
+        let fullCoords = (isTracked ? trip.livePath : trip.path).map(c => [c[1], c[0]]);
         let splitIndex;
 
-        if (trip.liveTracked && trip.liveDestination && fullCoords.length >= 2) {
-            // trip.path is the real flown-so-far track, so the split point is the
+        if (isTracked && fullCoords.length >= 2) {
+            // FR24's public track usually begins at the first airborne radar contact,
+            // a few km into the climb-out, so bridge back to the departure airport or
+            // the route appears to start in mid-air beside it. Counts as already
+            // travelled: the aircraft is demonstrably past it.
+            if (trip.liveOrigin) {
+                const orig = [trip.liveOrigin[1], trip.liveOrigin[0]];
+                fullCoords = MapLibreUtils.createGeodesicLine(orig, fullCoords[0])
+                    .concat(fullCoords);
+            }
+            // livePath is the real flown-so-far track, so the split point is the
             // aircraft's actual position rather than a guess from the timetable, and
             // only the leftover leg to the destination has to be estimated.
             splitIndex = fullCoords.length - 1;
@@ -1542,7 +1580,7 @@ function buildCurrentTripFeatures(trips) {
         // Marker at the current position. Reused rather than recreated, otherwise every
         // live refresh would stack another pin on the map.
         const pegPosition = pastCoords[pastCoords.length - 1]; // already [lng, lat]
-        const isLive = !!(trip.liveTracked && trip.liveDestination);
+        const isLive = isTracked;
         const kind = isLive ? 'live' : 'calc';
         // Measured over several points, not the last two: consecutive track samples can
         // be metres apart, and a bearing taken across that jitters the aircraft around
@@ -1612,9 +1650,7 @@ function livePositionLabel(trip) {
 // Cost is bounded server-side, not here: the refresh floor is per trip and shared by
 // every viewer, so polling on a timer cannot run up the FR24 bill.
 function startLiveTracking(trips, features) {
-    const candidates = trips.filter(t =>
-        t.trip && (t.trip.type === 'air' || t.trip.type === 'helicopter') && t.time === 'current'
-    );
+    const candidates = liveCandidates(trips);
     if (!candidates.length) return;
     const ids = candidates.map(t => t.trip.uid).join(',');
 
@@ -1935,8 +1971,11 @@ if (numberedMarkers.length > 0) {
     // Handle current trips with position markers
     const currentTripFeatures = buildCurrentTripFeatures(trips);
 
-        // Add current trip features to the map
-        if (currentTripFeatures.length > 0) {
+        // Add current trip features to the map. Also set up when a flight merely *might*
+        // be airborne: a delayed one reads as 'past' at load, so it contributes no
+        // features yet, but the source and layers have to exist for the live refresh to
+        // have somewhere to put its track.
+        if (currentTripFeatures.length > 0 || liveCandidates(trips).length > 0) {
             // Add source for current trips
             map.addSource('current-trips', {
                 type: 'geojson',
