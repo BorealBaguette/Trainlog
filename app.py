@@ -158,6 +158,7 @@ from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src import visualisations as viz_module
 from src.api.trips import trips_blueprint
+from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
 from src.consts import DbNames, TripTypes
 from src.global_map import (
     available_bins,
@@ -283,6 +284,7 @@ app.register_blueprint(trainset_blueprint)
 app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
 app.register_blueprint(trips_blueprint)
+app.register_blueprint(live_tracks_blueprint)
 
 app.config["CACHE_TYPE"] = "SimpleCache"
 app.config["CACHE_DEFAULT_TIMEOUT"] = 864000
@@ -8125,6 +8127,7 @@ def user_settings(username):
         # Premium-only toggle: only honour it for premium users so a crafted POST
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
+        params["live_tracking"] = ("live_tracking" in request.form) and bool(user.premium)
 
         for param in params:
             if getattr(user, param) != params[param]:
@@ -8142,6 +8145,7 @@ def user_settings(username):
     appear_on_global_checked = "checked" if user.appear_on_global else ""
     colorblind_checked = "checked" if user.colorblind else ""
     flight_3d_checked = "checked" if user.flight_3d else ""
+    live_tracking_checked = "checked" if user.live_tracking else ""
 
     # Temporary: preview the redesigned settings page with ?v2=1 (owner only).
     template = (
@@ -8162,6 +8166,7 @@ def user_settings(username):
         appear_on_global_checked=appear_on_global_checked,
         colorblind_checked=colorblind_checked,
         flight_3d_checked=flight_3d_checked,
+        live_tracking_checked=live_tracking_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
@@ -11037,12 +11042,30 @@ def get_current_trips_data(public_only=True):
         ).fetchall()
 
     paths = {path["trip_id"]: path["path"] for path in pathResult}
-    
+
+    # Every trip here is in progress by definition, so this is the natural home for live
+    # flight tracks: any flight whose owner opted in gets its real flown-so-far path
+    # instead of a straight geodesic. Failures are swallowed because a live overlay must
+    # never take down the global map. Cost is bounded inside get_live_tracks by a
+    # per-trip, globally shared refresh floor.
+    try:
+        live_tracks = get_live_tracks(trip_ids)
+    except Exception:
+        app.logger.exception("Live track lookup failed for the current-trips map")
+        live_tracks = {}
+
     result = []
     with pg_session() as pg:
         for trip in filtered_trips:
             path = json.loads(paths.get(trip["uid"], "[]"))
             trip = dict(trip)
+            live = live_tracks.get(trip["uid"])
+            if live and live.get("path"):
+                # Keep the logged destination as the final point so the client can draw
+                # the not-yet-flown remainder to where the trip actually ends.
+                trip["live_destination"] = path[-1] if path else None
+                path = live["path"]
+                trip["live_tracked"] = True
             if trip.get("material_type_advanced"):
                 trip["trainset"] = public_trainset_info(
                     pg, trip["material_type_advanced"], trip["username"]
@@ -11337,6 +11360,13 @@ def ensure_auth_db_columns():
     if "mcp_token" not in existing:
         authDb.session.execute(
             sqlalchemy.text("ALTER TABLE user ADD COLUMN mcp_token VARCHAR(100) DEFAULT ''")
+        )
+        authDb.session.commit()
+    if "live_tracking" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN live_tracking BOOLEAN NOT NULL DEFAULT 0"
+            )
         )
         authDb.session.commit()
 

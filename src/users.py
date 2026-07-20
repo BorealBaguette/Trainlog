@@ -40,6 +40,10 @@ class User(authDb.Model):
     feature_admin = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Premium-only: render flight tracks as a 3D altitude profile on trip pages.
     flight_3d = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    # Premium-only: while a flight is in the air, draw its flown-so-far track from FR24
+    # instead of a geodesic. Off by default even for premium, because broadcasting a
+    # real-time position is a materially different disclosure from a historical log.
+    live_tracking = authDb.Column(authDb.Boolean, nullable=False, default=False)
 
     def toDict(self):
         return {
@@ -64,6 +68,7 @@ class User(authDb.Model):
             "premium": self.premium,
             "feature_admin": self.feature_admin,
             "flight_3d": self.flight_3d,
+            "live_tracking": self.live_tracking,
         }
 
     def is_public(self):

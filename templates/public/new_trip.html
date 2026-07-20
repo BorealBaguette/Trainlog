@@ -1470,6 +1470,187 @@ function calculatePosition(trip) {
     return Math.min(Math.max(progress, 0), 1);
 }
 
+// While a flight is actually in the air, replace its straight geodesic with the real
+// flown-so-far track and estimate only the remainder.
+//
+// This is fetched separately from the trip data on purpose: trip paths are cached
+// client-side in IndexedDB, so a live track served through that route would freeze at
+// whatever point the page first loaded and never update.
+//
+// Cost is bounded server-side, not here: the refresh floor is per trip and shared by
+// every viewer, so polling on a timer cannot run up the FR24 bill.
+// In-progress trips are drawn from their own `current-trips` source (the main source's
+// red current line is hidden below), split into the part already travelled and the part
+// still to come. Kept as a function so a live flight track can re-run it with real data.
+let currentPositionMarkers = {};
+
+function buildCurrentTripFeatures(trips) {
+    const features = [];
+    trips.forEach(trip => {
+        if (trip.time !== 'current') return;
+
+        // Convert to [lng, lat] and expand air routes to geodesic before splitting
+        let fullCoords = trip.path.map(c => [c[1], c[0]]);
+        let splitIndex;
+
+        if (trip.liveTracked && trip.liveDestination && fullCoords.length >= 2) {
+            // trip.path is the real flown-so-far track, so the split point is the
+            // aircraft's actual position rather than a guess from the timetable, and
+            // only the leftover leg to the destination has to be estimated.
+            splitIndex = fullCoords.length - 1;
+            const dest = [trip.liveDestination[1], trip.liveDestination[0]];
+            fullCoords = fullCoords.concat(
+                MapLibreUtils.createGeodesicLine(fullCoords[splitIndex], dest)
+            );
+        } else {
+            if (trip.trip.type === 'air' && fullCoords.length === 2) {
+                fullCoords = MapLibreUtils.createGeodesicLine(fullCoords[0], fullCoords[1]);
+            }
+            splitIndex = Math.floor(calculatePosition(trip) * fullCoords.length);
+        }
+
+        const pastCoords = fullCoords.slice(0, splitIndex + 1);
+        const futureCoords = fullCoords.slice(splitIndex);
+
+        const props = (suffix, time) => ({
+            id: trip.trip.uid + suffix,
+            type: trip.trip.type,
+            time: time,
+            year: trip.trip.start_datetime !== 1 && trip.trip.start_datetime !== -1
+                ? trip.trip.start_datetime.substring(0, 4)
+                : null,
+            origin: trip.trip.origin_station,
+            destination: trip.trip.destination_station
+        });
+
+        // Future path feature (styled as plannedFuture), pushed first so the full
+        // trip line draws over it.
+        if (futureCoords.length > 1) {
+            features.push({
+                type: 'Feature',
+                geometry: { type: 'LineString', coordinates: futureCoords },
+                properties: props('_future', 'plannedFuture')
+            });
+        }
+        // Full trip feature (styled as past)
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: fullCoords },
+            properties: props('_full', 'past')
+        });
+
+        // Marker at the current position. Reused rather than recreated, otherwise every
+        // live refresh would stack another pin on the map.
+        const pegPosition = pastCoords[pastCoords.length - 1]; // already [lng, lat]
+        const isLive = !!(trip.liveTracked && trip.liveDestination);
+        const kind = isLive ? 'live' : 'calc';
+        // Measured over several points, not the last two: consecutive track samples can
+        // be metres apart, and a bearing taken across that jitters the aircraft around
+        // wildly on every refresh.
+        const heading = isLive && pastCoords.length >= 2
+            ? bearingBetween(
+                pastCoords[Math.max(0, pastCoords.length - 6)], pegPosition)
+            : 0;
+
+        const existing = currentPositionMarkers[trip.trip.uid];
+        if (existing && existing.kind === kind) {
+            existing.marker.setLngLat(pegPosition);
+            if (isLive) {
+                setMarkerHeading(existing.marker, heading);
+                existing.marker.setPopup(
+                    new maplibregl.Popup({ offset: 25 }).setText(livePositionLabel(trip))
+                );
+            }
+        } else {
+            // A trip starts out estimated and becomes live once the first track arrives,
+            // so the marker has to be swapped rather than just moved.
+            if (existing) existing.marker.remove();
+            currentPositionMarkers[trip.trip.uid] = {
+                kind: kind,
+                marker: createCustomMarker(
+                    pegPosition,
+                    kind,
+                    isLive ? livePositionLabel(trip) : {{ currentPosition|tojson }},
+                    heading
+                )
+            };
+        }
+    });
+    return features;
+}
+
+// Initial compass bearing from a to b, both [lng, lat].
+function bearingBetween(a, b) {
+    const toRad = d => d * Math.PI / 180;
+    const lat1 = toRad(a[1]), lat2 = toRad(b[1]), dLng = toRad(b[0] - a[0]);
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2)
+            - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// "Live position · 09:42" — the clock time of the fix rather than "x minutes ago",
+// which would need plural rules in every language for no real gain. A stored fix can
+// be up to one refresh interval old, so showing when it was taken is the honest form.
+function livePositionLabel(trip) {
+    // tojson, not a bare quoted substitution: an apostrophe in a translation would
+    // otherwise terminate the string literal and break the page.
+    const label = {{ livePosition|tojson }};
+    if (!trip.liveUpdated) return label;
+    const when = new Date(trip.liveUpdated * 1000)
+        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `${label} · ${when}`;
+}
+
+// While a flight is actually in the air, replace its straight geodesic with the real
+// flown-so-far track and estimate only the remainder.
+//
+// This is fetched separately from the trip data on purpose: trip paths are cached
+// client-side in IndexedDB, so a live track served through that route would freeze at
+// whatever point the page first loaded and never update.
+//
+// Cost is bounded server-side, not here: the refresh floor is per trip and shared by
+// every viewer, so polling on a timer cannot run up the FR24 bill.
+function startLiveTracking(trips, features) {
+    const candidates = trips.filter(t =>
+        t.trip && (t.trip.type === 'air' || t.trip.type === 'helicopter') && t.time === 'current'
+    );
+    if (!candidates.length) return;
+    const ids = candidates.map(t => t.trip.uid).join(',');
+
+    const refresh = () => {
+        fetch(`/live_tracks/${ids}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(liveTracks => {
+                if (!liveTracks || !Object.keys(liveTracks).length) return;
+                // Updates the main source (and its shadow) to follow the real track...
+                MapLibreUtils.applyLiveTracks(trips, liveTracks, features);
+                const tripsSource = map.getSource('trips');
+                if (tripsSource) tripsSource.setData({ type: 'FeatureCollection', features });
+                // ...and rebuilds the visible current-trip lines from the same data, so
+                // the two sources cannot disagree about where the aircraft is.
+                const currentSource = map.getSource('current-trips');
+                if (currentSource) {
+                    currentSource.setData({
+                        type: 'FeatureCollection',
+                        features: buildCurrentTripFeatures(trips)
+                    });
+                }
+                // The live feed is the first altitude this trip has ever had (a flight
+                // logged in advance is a flat 2-point line), so the 3D layer had nothing
+                // to draw at first render and has to be rebuilt now.
+                MapLibreUtils.build3DFlightLayer(map, trips, {
+                    toggleTitle: {{ flight3dToggle|tojson }}
+                }).catch(err => console.warn('3D flight layer failed:', err));
+            })
+            // A live overlay is decoration; never let it break the map it sits on.
+            .catch(err => console.warn('Live track refresh failed:', err));
+    };
+
+    refresh();
+    setInterval(refresh, 60000);
+}
+
 // Place polylines using MapLibre
 function placePolylines(trips) {
     if (trips.length === 0) {
@@ -1496,6 +1677,8 @@ function placePolylines(trips) {
     MapLibreUtils.build3DFlightLayer(map, trips, { toggleTitle: {{ flight3dToggle|tojson }} }).catch(err =>
         console.warn('3D flight layer failed:', err)
     );
+
+    startLiveTracking(trips, features);
 
     // Click an itinerary leg to highlight (and zoom to) that trip on the map.
     $('#itinerary').off('click.highlight').on('click.highlight', '.itinerary-trip', function() {
@@ -1750,70 +1933,7 @@ if (numberedMarkers.length > 0) {
     }
 {% endif %}
     // Handle current trips with position markers
-    const currentTripFeatures = [];
-        trips.forEach(trip => {
-            if (trip.time === 'current') {
-                const progress = calculatePosition(trip);
-
-                // Convert to [lng, lat] and expand air routes to geodesic before splitting
-                let fullCoords = trip.path.map(c => [c[1], c[0]]);
-                if (trip.trip.type === 'air' && fullCoords.length === 2) {
-                    fullCoords = MapLibreUtils.createGeodesicLine(fullCoords[0], fullCoords[1]);
-                }
-
-                // Split the expanded path
-                const splitIndex = Math.floor(progress * fullCoords.length);
-                const pastCoords = fullCoords.slice(0, splitIndex + 1);
-                const futureCoords = fullCoords.slice(splitIndex);
-                
-                // Create full trip feature (will be styled as past)
-                const fullTripFeature = {
-                    type: 'Feature',
-                    geometry: {
-                        type: 'LineString',
-                        coordinates: fullCoords
-                    },
-                    properties: {
-                        id: trip.trip.uid + '_full',
-                        type: trip.trip.type,
-                        time: 'past',
-                        year: trip.trip.start_datetime !== 1 && trip.trip.start_datetime !== -1
-                            ? trip.trip.start_datetime.substring(0, 4)
-                            : null,
-                        origin: trip.trip.origin_station,
-                        destination: trip.trip.destination_station
-                    }
-                };
-                
-                // Create future path feature (will be styled as plannedFuture)
-                if (futureCoords.length > 1) {
-                    const futureFeature = {
-                        type: 'Feature',
-                        geometry: {
-                            type: 'LineString',
-                            coordinates: futureCoords
-                        },
-                        properties: {
-                            id: trip.trip.uid + '_future',
-                            type: trip.trip.type,
-                            time: 'plannedFuture',
-                            year: trip.trip.start_datetime !== 1 && trip.trip.start_datetime !== -1
-                                ? trip.trip.start_datetime.substring(0, 4)
-                                : null,
-                            origin: trip.trip.origin_station,
-                            destination: trip.trip.destination_station
-                        }
-                    };
-                    currentTripFeatures.push(futureFeature);
-                }
-                
-                currentTripFeatures.push(fullTripFeature);
-                
-                // Place marker at current position
-                const pegPosition = pastCoords[pastCoords.length - 1]; // already [lng, lat]
-                createCustomMarker(pegPosition, 'calc', 'Current Position');
-            }
-        });
+    const currentTripFeatures = buildCurrentTripFeatures(trips);
 
         // Add current trip features to the map
         if (currentTripFeatures.length > 0) {
@@ -2155,10 +2275,23 @@ function highlightTrip(uid, opts) {
 }
 const colorblindMode = {{ 'true' if colorblind else 'false' }};
 // Create custom markers
-function createCustomMarker(coordinates, type, popupText) {
+// Aim a live-position marker along a compass bearing.
+//
+// Uses MapLibre's own marker rotation rather than a CSS transform on the element: a CSS
+// rotation is fixed in screen space, so rotating the map would swing the track around
+// underneath a plane that stubbornly kept pointing the same way on screen. setRotation
+// combined with rotationAlignment:'map' (set at construction) is measured against the
+// map, so the aircraft stays glued to its heading however the map is turned.
+//
+// The Font Awesome plane glyph points east, hence the -90.
+function setMarkerHeading(marker, bearing) {
+    marker.setRotation((bearing || 0) - 90);
+}
+
+function createCustomMarker(coordinates, type, popupText, rotation) {
     const el = document.createElement('div');
     el.className = `marker-icon marker-${type}`;
-    
+
     // Set marker styles based on type
     let anchorY = 41; // Default anchor for bottom-pointed markers
     switch(type) {
@@ -2191,15 +2324,41 @@ function createCustomMarker(coordinates, type, popupText) {
             el.style.width = '25px';
             el.style.height = '41px';
             break;
+
+        // Real observed position from the live flight feed. calc.png means "we worked
+        // this out from the timetable", which would be actively misleading here, so an
+        // aircraft pointed along its actual heading is used instead.
+        case 'live':
+            el.innerHTML = '<i class="fa-solid fa-plane"></i>';
+            el.style.width = '28px';
+            el.style.height = '28px';
+            el.style.display = 'flex';
+            el.style.alignItems = 'center';
+            el.style.justifyContent = 'center';
+            el.style.fontSize = '18px';
+            // A darker shade of the air green: same family as the route it sits on,
+            // dark enough not to disappear into it.
+            el.style.color = '#2b7a12';
+            // Outline so the aircraft stays legible over both land and sea.
+            el.style.textShadow = '0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff';
+            break;
     }
     
     el.style.backgroundSize = '100% 100%';
     el.style.cursor = 'pointer';
-    
+
+    const isLive = type === 'live';
     // Create marker with proper anchor point (bottom center of the icon)
-    const marker = new maplibregl.Marker({ 
+    const marker = new maplibregl.Marker({
         element: el,
-        anchor: 'bottom' // This ensures the bottom of the marker points to the location
+        // A pin points at its location from above; an aircraft sits ON it, so it centres.
+        anchor: isLive ? 'center' : 'bottom', // pin tips point at the location
+        // Heading is a property of the world, not of the screen: aligning rotation to
+        // the map means turning the map turns the aircraft along with its track. Pitch
+        // stays viewport-aligned so the silhouette doesn't flatten away when tilted.
+        rotationAlignment: isLive ? 'map' : 'auto',
+        pitchAlignment: isLive ? 'viewport' : 'auto',
+        rotation: isLive ? (rotation || 0) - 90 : 0
     })
         .setLngLat(coordinates)
         .addTo(map);

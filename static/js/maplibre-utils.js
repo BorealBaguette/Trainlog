@@ -338,6 +338,76 @@ function createGeodesicLine(start, end, numPoints = 100, splitSegments = false) 
     return splitSegments ? segments : segments.flat();
 }
 
+// ---------------------------------------------------------------------------
+// Live flight tracks
+//
+// A flight logged before it happens is stored as a 2-point line and drawn as a
+// geodesic, which looks obviously fake next to a completed leg's real track.
+// While it is airborne we have the flown-so-far path from FR24, so we swap it in
+// and estimate only the remainder.
+// ---------------------------------------------------------------------------
+
+// Replace the stored path of each trip that has a live track with the real flown path.
+//
+// Mutating trip.path (rather than emitting the flown part as a new feature) is
+// deliberate: it keeps live trips flowing through the existing layer machinery
+// untouched, so they still honour transport-type filters and the current-trip pulse.
+// Both map surfaces already split an in-progress trip into travelled and remaining
+// portions, so they render the estimated remainder with their own existing styling —
+// this only has to supply the real geometry and say where the trip still has to get to.
+//
+// `features` is optional. When given (the array returned by buildTripLayers), the
+// matching feature's geometry is updated in place. In place matters: buildTripLayers
+// installs a pulse animation that addresses features by array index, so the array
+// must keep its identity, order and length across a refresh.
+function applyLiveTracks(trips, liveTracks, features) {
+    if (!liveTracks) return;
+
+    trips.forEach(trip => {
+        const live = liveTracks[trip.trip.uid];
+        if (!live || !live.path || live.path.length < 2) return;
+
+        const original = trip.path || [];
+        // Where the flight is actually meant to end. Taken from the stored path rather
+        // than the live feed so a diversion doesn't silently retarget the estimate at
+        // an airport the user never logged.
+        //
+        // Read from a previous run first: this function replaces trip.path, so from the
+        // second refresh onwards the last point of trip.path is the aircraft's current
+        // position, not the destination. Recomputing it would walk the endpoint forward
+        // with the plane and shrink the remaining leg away to nothing.
+        const destination = trip.liveDestination
+            || (original.length ? original[original.length - 1] : null);
+
+        trip.path = live.path;
+        trip.liveTracked = true;
+        // Kept because trip.path no longer reaches the destination: anything that needs
+        // to draw the not-yet-flown remainder has to know where the trip actually ends.
+        trip.liveDestination = destination;
+        trip.liveUpdated = live.updated || null;
+        if (live.altitude) trip.altitude = live.altitude;
+        if (live.timestamps) trip.timestamps = live.timestamps;
+
+        if (features) {
+            const feature = features.find(f => f && f.properties.id === trip.trip.uid);
+            if (feature) {
+                // The whole route, not just the flown part: this feature stands for the
+                // entire trip, and its layers include the drop shadow. Giving it only
+                // the flown portion would end the shadow at the aircraft and leave the
+                // remaining leg looking detached from the rest of the map.
+                let coords = live.path.map(c => [c[1], c[0]]);
+                if (destination) {
+                    coords = coords.concat(
+                        createGeodesicLine(coords[coords.length - 1],
+                                           [destination[1], destination[0]])
+                    );
+                }
+                feature.geometry.coordinates = normalizePathCoords(coords);
+            }
+        }
+    });
+}
+
 // Build trip layers for the map
 function buildTripLayers(map, trips, transportTypes, options = {}) {
     const {
@@ -721,6 +791,16 @@ function setFlight3DViewEnabled(on) {
 // handle, which both occupy the top-right corner stack.
 function _addFlight3DToggleControl(map, onToggle, title) {
     const container = map.getContainer();
+    // Reuse the existing button if the layer is rebuilt (a live flight track arrives
+    // after first render), otherwise every rebuild would stack another toggle.
+    if (map._flight3dToggleBtn) {
+        const existing = map._flight3dToggleBtn;
+        existing.onclick = () => {
+            onToggle(!flight3DViewEnabled());
+            existing.style.opacity = flight3DViewEnabled() ? '1' : '0.45';
+        };
+        return existing;
+    }
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.title = title || 'Toggle 3D flight altitude';
@@ -753,9 +833,82 @@ function _addFlight3DToggleControl(map, onToggle, title) {
     window.addEventListener('resize', place);
 
     const sync = () => { btn.style.opacity = flight3DViewEnabled() ? '1' : '0.45'; };
-    btn.addEventListener('click', () => { onToggle(!flight3DViewEnabled()); sync(); });
+    // onclick (not addEventListener) so a rebuild can replace the handler outright
+    // instead of leaving the previous one attached and firing the toggle twice.
+    btn.onclick = () => { onToggle(!flight3DViewEnabled()); sync(); };
     sync();
+    map._flight3dToggleBtn = btn;
     return btn;
+}
+
+// deck.gl runs in its own canvas stacked on top of the map (interleaved mode shares
+// MapLibre's WebGL context and can blank a raster base map, so it is not an option).
+// Left alone that canvas is added last and paints over everything, including the
+// station pins and the current-position marker. Drop it to its own low layer and lift
+// the markers above it, so the altitude profile floats over the map lines but still
+// passes under the pins.
+// Initial compass bearing between two [lng, lat, ...] points, degrees clockwise from north.
+function _bearingDeg(a, b) {
+    const toRad = d => d * Math.PI / 180;
+    const lat1 = toRad(a[1]), lat2 = toRad(b[1]), dLng = toRad(b[0] - a[0]);
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2)
+            - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// Plane silhouette pointing north, as a data URI so no asset request is needed.
+// Drawn as a deck.gl icon mask, so getColor tints it.
+//
+// The explicit width/height are required, not decorative: deck rasterises icons with
+// createImageBitmap, which throws InvalidStateError on an SVG carrying only a viewBox
+// ("image without natural dimensions"). The icon then never reaches the atlas and
+// nothing is drawn at all.
+const _PLANE_SVG = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
+    '<path fill="#fff" d="M12 2c-.8 0-1.4.9-1.4 2v5.3L2 14.4v2.1l8.6-2.7v4.6l-2.4 1.7V22l3.8-1.1 3.8 1.1v-1.9l-2.4-1.7v-4.6l8.6 2.7v-2.1l-8.6-5.1V4c0-1.1-.6-2-1.4-2z"/>' +
+    '</svg>'
+);
+
+function _lowerDeckCanvas(map) {
+    const container = map.getContainer();
+    // deck.gl's canvas id has moved around between versions, so identify it by
+    // elimination instead: any canvas in the container that isn't MapLibre's own.
+    const mapCanvas = map.getCanvas();
+    container.querySelectorAll('canvas').forEach(canvas => {
+        if (canvas === mapCanvas) return;
+        // deck.gl is installed with map.addControl, which drops its canvas inside
+        // MapLibre's control container. That container stacks above the markers on
+        // purpose (controls must stay clickable) and forms its own stacking context,
+        // so restyling the canvas in place cannot bring it below anything. Reparent
+        // deck's wrapper to the map container instead, where its z-index competes with
+        // the markers directly. deck positions the wrapper absolutely at 0,0/100%x100%,
+        // so moving it does not change where it draws.
+        const wrapper = canvas.parentElement;
+        const node = (wrapper && wrapper !== container) ? wrapper : canvas;
+        if (node.parentElement !== container) container.appendChild(node);
+        node.style.zIndex = '1';
+        node.style.pointerEvents = 'none';
+    });
+    if (!document.getElementById('deck-marker-stacking')) {
+        const style = document.createElement('style');
+        style.id = 'deck-marker-stacking';
+        style.textContent = '.maplibregl-marker { z-index: 2; }';
+        document.head.appendChild(style);
+    }
+}
+
+// Show or hide the flat ground marker for a live position. While the 3D overlay is up
+// the aircraft is drawn at its real altitude, so the ground copy is a duplicate sitting
+// directly beneath it.
+//
+// Toggled directly rather than through a CSS class: the marker's own inline styles make
+// a stylesheet rule an unreliable lever here. visibility, not display, because the
+// element relies on an inline `display: flex` to centre its glyph.
+function _setGroundAircraftVisible(map, visible) {
+    map.getContainer().querySelectorAll('.marker-live').forEach(el => {
+        el.style.visibility = visible ? 'visible' : 'hidden';
+    });
 }
 
 // Render flights that carry an altitude array as a 3D deck.gl PathLayer. At pitch
@@ -770,12 +923,21 @@ async function build3DFlightLayer(map, trips, options = {}) {
     const proj = map.getProjection && map.getProjection();
     if (proj && proj.type === 'globe') return null;
 
+    // A live flight track arrives after first render and carries the altitude this
+    // layer needs, so the layer gets rebuilt. Drop the previous overlay first or the
+    // old (shorter) track would stay on the map underneath the new one.
+    if (map._flight3dRemove) {
+        map._flight3dRemove();
+        map._flight3dRemove = null;
+    }
+
     const exaggeration = options.exaggeration ?? MapConfig.altitudeExaggeration;
     // Draw a vertical line from every Nth track point down to the ground track.
     const dropStep = options.dropLineStep ?? 1;
 
     const flights = [];
     const dropLines = [];  // vertical segments {source:[lng,lat,alt], target:[lng,lat,0]}
+    const aircraft = [];   // live positions, drawn at their real altitude
     trips.forEach(trip => {
         const path = _coerceArray(trip.path);          // [[lat, lng], ...]
         const altitude = _coerceArray(trip.altitude);  // [m, ...] parallel to path
@@ -791,6 +953,17 @@ async function build3DFlightLayer(map, trips, options = {}) {
             }
         }
         flights.push({ uid: trip.trip.uid, coords });
+
+        // An in-flight aircraft belongs at the tip of its own altitude profile, not on
+        // the ground below it. A DOM marker cannot carry a z coordinate, so the live
+        // position is drawn here instead and the flat marker hides while 3D is on.
+        if (trip.liveTracked && coords.length >= 2) {
+            const tip = coords[coords.length - 1];
+            // Measured over several points: consecutive samples can be metres apart and
+            // a bearing across those jitters the aircraft on every refresh.
+            const back = coords[Math.max(0, coords.length - 6)];
+            aircraft.push({ position: tip, angle: _bearingDeg(back, tip) });
+        }
     });
 
     // No premium 3D flights on this page -> no overlay, no toggle, no nagging.
@@ -830,12 +1003,43 @@ async function build3DFlightLayer(map, trips, options = {}) {
         // Overlaid (not interleaved): deck.gl draws in its own canvas on top of the
         // map and still camera-syncs pitch for the 3D effect. Interleaved mode shares
         // MapLibre's WebGL context and can blank the (raster) base map.
-        overlay = new deck.MapboxOverlay({ interleaved: false, layers: [dropLayer, pathLayer] });
+        // The live aircraft, sitting on top of its altitude profile. IconLayer angles
+        // counter-clockwise from the icon's own orientation, and the silhouette points
+        // north, so a clockwise compass bearing goes in negated.
+        const aircraftLayer = new deck.IconLayer({
+            id: 'flight-3d-aircraft',
+            data: aircraft,
+            getPosition: d => d.position,
+            getAngle: d => -d.angle,
+            getColor: [43, 122, 18],
+            getSize: 26,
+            sizeUnits: 'pixels',
+            // Laid in the map plane, not billboarded at the camera: a billboarded icon
+            // is angled in screen space, so rotating the map would leave the aircraft
+            // pointing the same way on screen while its track turned underneath it.
+            billboard: false,
+            // The `id` is not optional in practice: deck caches icons by it, and
+            // without one the icon can silently fail to rasterise and nothing draws.
+            getIcon: () => ({
+                id: 'live-plane', url: _PLANE_SVG, width: 24, height: 24, mask: true
+            })
+        });
+        overlay = new deck.MapboxOverlay({
+            interleaved: false,
+            layers: [dropLayer, pathLayer, aircraftLayer]
+        });
         map.addControl(overlay);
+        _lowerDeckCanvas(map);
+        // Conditional on there actually being one: if no live aircraft is drawn up
+        // here, hiding the ground marker would leave the flight with no marker at all.
+        if (aircraft.length) _setGroundAircraftVisible(map, false);
     }
     function removeOverlay() {
         if (overlay) { map.removeControl(overlay); overlay = null; }
+        // Back to 2D: the ground marker is the only aircraft left, so restore it.
+        _setGroundAircraftVisible(map, true);
     }
+    map._flight3dRemove = removeOverlay;
 
     _addFlight3DToggleControl(map, async (on) => {
         setFlight3DViewEnabled(on);
@@ -856,6 +1060,7 @@ window.MapLibreUtils = {
     getTileServerConfig,
     createGeodesicLine,
     computeTimeStatus,
+    applyLiveTracks,
     buildTripLayers,
     updateLayerVisibility,
     fitBoundsToVisibleFeatures,

@@ -455,12 +455,17 @@ function pegIndex(progress, len) {
 
 // `coords` must be the same [lng, lat] array that was drawn (geodesic-expanded
 // for air routes), otherwise the pin lands on the raw 2-point path start.
-function addMarker(tripObj, coords) {
+// `pegOverride` is the index of the aircraft's real position, known only for a
+// live-tracked flight. When present it beats calculateProgress, which can only
+// interpolate against the timetable.
+function addMarker(tripObj, coords, pegOverride) {
     const type     = (tripObj.trip.type === 'helicopter') ? 'air' : tripObj.trip.type;
     const color = getTypeColor(type);
     const progress = calculateProgress(tripObj);
 
-    const pegIdx           = pegIndex(progress, coords.length);
+    const pegIdx = (pegOverride !== null && pegOverride !== undefined)
+      ? pegOverride
+      : pegIndex(progress, coords.length);
     const [pegLng, pegLat] = coords[pegIdx];
 
     const marker = new maplibregl.Marker({ color })
@@ -490,8 +495,20 @@ function renderTrips(trips) {
     // API returns [[lat, lng], ...]; MapLibre needs [[lng, lat], ...]
     let coords = path.map(([lat, lng]) => [lng, lat]);
 
-    // Great-circle line for air routes
-    if (type === 'air' && coords.length === 2) {
+    // For a live-tracked flight the server sends the real flown-so-far track as `path`
+    // and carries the logged destination separately, so append the estimated remainder.
+    // The junction is the aircraft's actual position, which is both where the dashed
+    // "not yet flown" overlay should start and where the pin belongs — better than
+    // interpolating either from the timetable.
+    let liveJunction = null;
+    if (trip.live_tracked && trip.live_destination && coords.length >= 2) {
+      const [destLat, destLng] = trip.live_destination;
+      liveJunction = coords.length - 1;
+      coords = coords.concat(
+        MapLibreUtils.createGeodesicLine(coords[liveJunction], [destLng, destLat])
+      );
+    } else if (type === 'air' && coords.length === 2) {
+      // Great-circle line for air routes
       coords = MapLibreUtils.createGeodesicLine(coords[0], coords[1]);
     }
 
@@ -508,8 +525,10 @@ function renderTrips(trips) {
     });
 
     // Future segment (animated white dashes overlay)
-    const future  = coords.slice(pegIndex(progress, coords.length));
-    if (future.length >= 2 && progress < 1) {
+    const future  = coords.slice(
+      liveJunction !== null ? liveJunction : pegIndex(progress, coords.length)
+    );
+    if (future.length >= 2 && (liveJunction !== null || progress < 1)) {
       futureFeatures.push({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: future },
@@ -518,7 +537,7 @@ function renderTrips(trips) {
     }
 
     // Current-position pin marker
-    addMarker(tripObj, coords)
+    addMarker(tripObj, coords, liveJunction)
   });
 
   map.getSource('live-static').setData({ type: 'FeatureCollection', features: staticFeatures });
