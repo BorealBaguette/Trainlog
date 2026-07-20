@@ -18,6 +18,79 @@
 .publicTrainset .wagon-placeholder-img { height: 19px; }
 /* Re-assert the pill padding: the global ".events span" rule inflates it */
 .publicTrainset .ts-nom { padding: 1px 5px; }
+/* ── Itinerary leg rhythm ───────────────────────────────────────────────────
+   A leg stacks station / operator / duration / vehicle / price with nothing but
+   <br>s between them, so it reads as one dense block. Drop the <br>s and drive
+   the spacing from margins instead, which gives an even rhythm regardless of
+   which rows a given trip actually has. */
+.events .itinerary-trip > span { line-height: 1.45; }
+.events .itinerary-trip > span > br { display: none; }
+.events .itinerary-trip > span > strong { display: block; margin-bottom: 6px; }
+.events .itinerary-trip > span > div { margin-top: 6px; }
+.events .itinerary-trip > span > div:first-of-type { margin-top: 0; }
+/* The vehicle/trainset panel is its own group — set it slightly further apart. */
+.events .publicVehicle,
+.events .publicTrainset { margin-top: 9px; }
+.events .duration { color: #8a8a8a; }
+
+.publicVehicle {
+  font-size: 0.82em;
+  line-height: 1.3;
+  color: #666;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+/* The itinerary's global `.events span` rule pads EVERY span it contains by
+   1.5em and gives it a connector ::before. Both wreck an inline layout built from
+   spans (that 1.5em is the gap that pushed the registration away from its flag),
+   so reset them panel-wide. Scoped under .events to outrank the global rule. */
+.events .publicVehicle span { padding: 0; position: static; }
+.events .publicVehicle span::before { content: none; }
+/* Type and registration share one line, wrapping only if the leg is narrow. */
+.publicVehicleHead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 7px; }
+/* Re-assert the separator AFTER the blanket ::before reset above, which would
+   otherwise blank it out too (it is a span inside .publicVehicle). */
+.events .publicVehicle .publicVehicleType + .publicVehicleReg::before {
+  content: "·"; color: #bbb; margin-right: 3px;
+}
+.publicVehicleReg { display: inline-flex; align-items: baseline; gap: 4px; }
+.publicVehicleRegText {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+  color: #555;
+}
+/* The global .flag rule jumps to 26px above 1500px — sized for table rows, far too
+   big for this panel. Pin it to the panel's own text size. */
+.publicVehicle .flag { font-size: 1.15em !important; line-height: 1; vertical-align: baseline !important; }
+/* The global .airframe rule offsets it for a table row's baseline; here it is a
+   block of its own and must stay modest next to the itinerary text. */
+.publicVehicle .airframe {
+  position: static;
+  margin-left: 0;
+  display: block;
+  height: auto;
+  max-height: 34px;
+  max-width: 100%;
+  width: auto;
+}
+/* The shape doubles as the photo's click target; the photo replaces it in place. */
+.publicVehicleMedia.is-clickable { cursor: pointer; }
+.publicVehicleMedia.is-clickable:hover { opacity: 0.85; }
+.publicVehicleMedia.is-loading { opacity: 0.5; }
+.publicVehiclePhotoBtn { color: #0d6efd; text-decoration: none; font-size: 0.95em; }
+.publicVehiclePhotoBtn:hover, .publicVehiclePhotoBtn.open { color: #0a58ca; }
+/* Third-party thumbnails vary wildly in size — cap and frame them so every leg
+   looks the same regardless of what comes back. */
+.publicVehicle .vehiclePhotoContainer {
+  max-width: min(240px, 100%);
+  border-radius: 4px;
+  overflow: hidden;
+  line-height: 0;
+}
+.publicVehicle .vehiclePhotoContainer img { display: block; width: 100%; height: auto; }
+.publicVehicle .vehiclePhotoAttr { font-size: 0.72em; padding: .15em .3em; line-height: 1.2; }
 </style>
 <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static',filename='styles/new_map.css') }}">
@@ -573,6 +646,7 @@ function planValidate() {
 
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
 <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
 
 <script>
@@ -715,6 +789,140 @@ function renderPublicTrainset($container, ts) {
                 positionTripCard(highlightedTripUid);
             }
         }
+    });
+}
+
+/* Air/ferry counterparts of renderPublicTrainset. Both are rendered lazily, on the
+   first expand of a leg, because the photo lookups are deliberate user-triggered
+   requests (see the fetch* notes in vehicle_display.js). */
+var AIRLINERS_BASE = "{{ url_for('static', filename='images/airliners') }}".replace(/\/$/, '');
+var REGISTRATIONS_URL = "{{ url_for('static', filename='data/registrations.json') }}";
+var VESSEL_PHOTO_URL = "{{ url_for('getVesselPhoto') }}";
+
+// Content arriving async (shape, photo) changes the leg's height, so the white
+// highlight card has to be re-fitted whenever anything lands.
+function refitTripCard() {
+    if (typeof highlightedTripUid !== 'undefined' && highlightedTripUid != null) {
+        positionTripCard(highlightedTripUid);
+    }
+}
+
+/* The panel is one header line (type · flag reg) followed by the shape and the
+   photo, so a leg stays compact whichever of those three actually resolve. */
+function vehiclePanel($container, label) {
+    var $head = $('<div class="publicVehicleHead"></div>');
+    if (label) $head.append($('<span class="publicVehicleType"></span>').text(label));
+    $container.append($head);
+    return $head;
+}
+
+// Flag + registration, appended to the header line. The flag arrives later.
+function appendReg($head, reg) {
+    var $reg = $('<span class="publicVehicleReg"></span>')
+        .append('<span class="publicVehicleFlag"></span>')
+        .append($('<span class="publicVehicleRegText"></span>').text(reg));
+    $head.append($reg);
+    return function showFlag(country) {
+        if (!country) return;
+        $reg.find('.publicVehicleFlag').html(getTooltipNew(country))
+            .find('[data-toggle="tooltip"]').tooltip();
+        refitTripCard();
+    };
+}
+
+/* The photo sits behind a click, swapping in for the airframe shape rather than
+   stacking beside it (the two say the same thing). Deferring it also keeps the
+   external lookup on a deliberate user action. The click target is the shape
+   itself; with no shape to click (no artwork, or a ship) a camera button in the
+   header takes its place. */
+function enablePhotoToggle($head, $media, fetchPhoto) {
+    var hasShape = $media.children().length > 0;
+    // No tooltip text: every lang file is kept fully in sync (1085 keys) and there is
+    // no existing photo string to reuse, so the camera icon and the pointer cursor
+    // carry the affordance rather than shipping an untranslated English label.
+    // The icon shows for aircraft and ships alike so the two read identically; where
+    // a shape exists it becomes an additional, larger click target for the same action.
+    var $btn = $('<a href="javascript:void(0);" class="publicVehiclePhotoBtn"><i class="fas fa-camera"></i></a>');
+    $head.append($btn);
+    if (hasShape) $media.addClass('is-clickable');
+
+    var $photo = null, showingPhoto = false, pending = false;
+
+    function render(photo) {
+        if (!photo) {                       // nothing found — retire the affordance
+            $media.removeClass('is-clickable').removeAttr('title');
+            $btn.remove();
+            refitTripCard();
+            return;
+        }
+        $photo = $(photoHTML(photo)).hide();
+        $media.append($photo);
+        $photo.find('img')
+            .on('load', refitTripCard)
+            // ship_pictures rows can outlive their file on disk (the whole local
+            // cache is absent in dev) — drop the frame rather than show a broken icon.
+            .on('error', function() {
+                $photo.remove(); $photo = null; showingPhoto = false;
+                $media.children().show(); $btn.remove(); refitTripCard();
+            });
+        swap(true);
+    }
+
+    function swap(toPhoto) {
+        showingPhoto = toPhoto;
+        if (!$photo) return;
+        $media.children().not($photo).toggle(!toPhoto);
+        $photo.toggle(toPhoto);
+        $btn.toggleClass('open', toPhoto);
+        refitTripCard();
+    }
+
+    function toggle(e) {
+        if (e) e.stopPropagation();         // don't toggle the leg highlight
+        if ($photo) { swap(!showingPhoto); return; }
+        if (pending) return;
+        pending = true;
+        $media.addClass('is-loading');
+        fetchPhoto().then(function(photo) {
+            pending = false;
+            $media.removeClass('is-loading');
+            render(photo);
+        });
+    }
+
+    $btn.on('click', toggle);
+    if (hasShape) $media.on('click', toggle);
+}
+
+// `info` may be null: a flight can be logged with only a registration and no type.
+function renderPublicAirframe($container, info, reg) {
+    var $head = vehiclePanel($container, info && info.label);
+    var $media = $('<div class="publicVehicleMedia"></div>').appendTo($container);
+    if (info) {
+        // The shape's height is only known once it decodes (or it removed itself on
+        // a miss) — re-fit either way.
+        var img = loadAirframe(AIRLINERS_BASE, info.code, refitTripCard);
+        if (img) $media.append(img);
+    }
+    if (!reg) return;
+    var showFlag = appendReg($head, reg);
+    loadRegistrations(REGISTRATIONS_URL).then(function(registrations) {
+        showFlag(regCountry(reg, registrations));
+    });
+    enablePhotoToggle($head, $media, function() { return fetchAircraftPhoto(reg); });
+}
+
+function renderPublicVessel($container, reg, country) {
+    var $head = vehiclePanel($container, null);
+    var $media = $('<div class="publicVehicleMedia"></div>').appendTo($container);
+    var showFlag = appendReg($head, reg);
+    // Flag up front from the ship_pictures join. Vessels not yet in that cache have
+    // no country until something fetches them, so fall back to the photo response.
+    showFlag(country);
+    enablePhotoToggle($head, $media, function() {
+        var promise = fetchVesselPhoto(VESSEL_PHOTO_URL, reg);
+        if (!country) promise.then(function(photo) { if (photo) showFlag(photo.country); });
+        return promise;
     });
 }
 
@@ -1038,29 +1246,41 @@ function buildItinerary(trips, prices) {
         
         let operatorDisplay = $("<div>").append(trip.trip.operator != "" ? lineOrNot : null);
 
-        // Trainset: discreet toggle icon + collapsed strip
-        var tsInfo = trip.trip.trainset;
-        var tsContainer = $(); // empty jQuery object → .append() no-op when no trainset
+        // Vehicle detail panel, appended under the duration line. A wagon strip is
+        // heavy, so trains stay behind a toggle and render on first open; air and
+        // ferry are light enough to show inline (only their photo is click-gated).
+        var tsContainer = $(); // empty jQuery object → .append() no-op when nothing to show
         var tsToggle = null;   // appended to the duration line below
+
+        var tsInfo = trip.trip.trainset;
+        var tripReg = (trip.trip.reg || '').trim();
+        var isAir = ['air', 'helicopter'].includes(trip.trip.type);
+        var airInfo = isAir ? airframeInfo(trip.trip) : null;
         if (tsInfo && tsInfo.units && tsInfo.units.length) {
             tsContainer = $('<div>').addClass('publicTrainset').hide();
             tsToggle = $('<a href="javascript:void(0);" class="publicTsToggle"><i class="fas fa-train"></i></a>')
                 .attr('title', tsInfo.label || '');
-            tsToggle.on('click', (function(container, info, toggle) {
+            tsToggle.on('click', (function(container, toggle) {
                 return function(e) {
                     e.stopPropagation(); // don't toggle the leg highlight
                     if (!container.data('rendered')) {
-                        renderPublicTrainset(container, info);
+                        renderPublicTrainset(container, tsInfo);
                         container.data('rendered', 1);
                     }
                     container.toggle();
                     toggle.toggleClass('open');
-                    // The leg's height changed — re-fit the white highlight card
-                    if (typeof highlightedTripUid !== 'undefined' && highlightedTripUid != null) {
-                        positionTripCard(highlightedTripUid);
-                    }
+                    refitTripCard(); // the leg's height changed
                 };
-            })(tsContainer, tsInfo, tsToggle));
+            })(tsContainer, tsToggle));
+        } else if (isAir && (airInfo || tripReg)) {
+            // Air and ferry render inline rather than behind a toggle: the aircraft
+            // type, registration and shape are cheap and always worth showing. Only
+            // the photo is click-gated, from inside the panel.
+            tsContainer = $('<div>').addClass('publicVehicle');
+            renderPublicAirframe(tsContainer, airInfo, tripReg);
+        } else if (trip.trip.type === 'ferry' && tripReg) {
+            tsContainer = $('<div>').addClass('publicVehicle');
+            renderPublicVessel(tsContainer, tripReg, trip.trip.vessel_country);
         }
 
         let endTimeDisplay, startTimeDisplay;

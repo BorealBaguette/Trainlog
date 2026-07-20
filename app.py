@@ -10975,8 +10975,22 @@ def get_current_trips_data(public_only=True):
     # 1. Get all trips that are currently in progress
     with pg_session() as pg:
         rows = pg.execute("""
-            SELECT *
+            SELECT trips.*, airliners.manufacturer, airliners.model,
+                   sp.country_code AS vessel_country
             FROM trips
+            -- Air trips store the ICAO type code in material_type; airliners carries
+            -- the readable manufacturer/model shown in the popup.
+            LEFT JOIN airliners ON trips.material_type = airliners.iata
+            -- A ship's flag state only lives in ship_pictures, so surface it here or
+            -- the flag could not appear until the photo had been fetched. vessel_name
+            -- is not unique, hence the lateral pick (duplicates agree on country).
+            LEFT JOIN LATERAL (
+                SELECT country_code
+                FROM ship_pictures
+                WHERE vessel_name = trips.reg
+                ORDER BY fetch_date DESC NULLS LAST, uid DESC
+                LIMIT 1
+            ) sp ON TRUE
             WHERE (utc_start_datetime + COALESCE(departure_delay, 0) * interval '1 second') <= NOW()
               AND (utc_end_datetime + COALESCE(arrival_delay, 0) * interval '1 second') >= NOW()
               AND (visibility = 'public' OR (visibility IS NULL AND trip_type NOT IN ('poi', 'accommodation', 'restaurant', 'walk', 'cycle', 'car')))

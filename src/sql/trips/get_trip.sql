@@ -10,6 +10,14 @@ WITH base AS (
 )
 SELECT
     base.*,
+    -- Air trips store the ICAO type code in material_type; the readable name lives
+    -- in `airliners` (matches ~95% of logged types, NULL for the rest).
+    airliners.manufacturer,
+    airliners.model,
+    -- Ferry flag state. Aircraft derive their country from the registration prefix
+    -- client-side, but a ship's only lives in ship_pictures, so surface it here —
+    -- otherwise the flag could not appear until the photo had been fetched.
+    sp.country_code AS vessel_country,
     CASE
         WHEN NOW() > base.utc_filtered_end_datetime
              OR (base.utc_filtered_start_datetime IS NULL AND NOT base.is_project)
@@ -51,6 +59,17 @@ SELECT
         )
     END AS logo_url
 FROM base
+LEFT JOIN airliners ON base.material_type = airliners.iata
+-- vessel_name is not unique (559 rows / 536 names), so a plain join would return
+-- duplicate rows for one trip. Duplicates agree on country_code, so any one row will
+-- do — pick the newest deterministically. Matched exactly, like get_vessel_picture.
+LEFT JOIN LATERAL (
+    SELECT country_code
+    FROM ship_pictures
+    WHERE vessel_name = base.reg
+    ORDER BY fetch_date DESC NULLS LAST, uid DESC
+    LIMIT 1
+) sp ON TRUE
 -- short_name is not unique (e.g. two "SNCB" rows), so a plain join would return
 -- duplicate rows for one trip. Pick one operator deterministically.
 LEFT JOIN LATERAL (

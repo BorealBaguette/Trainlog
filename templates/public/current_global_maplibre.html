@@ -17,6 +17,49 @@
   .publicTrainset .compo-strip { min-width: 0; }
   .publicTrainset .wagon-placeholder-img { height: 22px; }
 
+  /* Aircraft shape. The global .airframe rule offsets it for a table row's
+     baseline; in the popup it stands on its own line and must shrink to fit. */
+  /* The shape doubles as the photo's click target; the photo replaces it in place. */
+  .popup-media.is-clickable { cursor: pointer; }
+  .popup-media.is-clickable:hover { opacity: 0.85; }
+  .popup-media.is-loading { opacity: 0.5; }
+  .popup-photo-btn { color: #0d6efd; text-decoration: none; font-size: 0.95em; }
+  .popup-photo-btn:hover, .popup-photo-btn.open { color: #0a58ca; }
+
+  /* The global .airframe rule offsets it for a table row's baseline; in the popup
+     it is a block of its own. */
+  .popup-media .airframe {
+    position: static;
+    margin-left: 0;
+    display: block;
+    height: auto;
+    width: auto;
+    max-height: 38px;
+    max-width: 100%;
+  }
+
+  /* Type and registration read as one line; the flag lands in .popup-reg-flag later. */
+  .popup-vehicle { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; margin-top: 4px; }
+  .popup-vehicle-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 3px 7px; }
+  .popup-reg { display: inline-flex; align-items: baseline; gap: 4px; }
+  .popup-reg-text {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    letter-spacing: 0.02em;
+  }
+  /* The global .flag rule jumps to 26px above 1500px — sized for table rows, not
+     for a popup line. */
+  .popup-vehicle .flag { font-size: 1.15em !important; line-height: 1; vertical-align: baseline !important; }
+  .popup-vehicle-type + .popup-reg::before { content: "·"; color: #bbb; margin-right: 3px; }
+  /* Third-party thumbnails vary in size — cap and frame them so every popup matches. */
+  .popup-media .vehiclePhotoContainer {
+    max-width: min(260px, 100%);
+    border-radius: 4px;
+    overflow: hidden;
+    line-height: 0;
+  }
+  .popup-media .vehiclePhotoContainer img { display: block; width: 100%; height: auto; }
+  .popup-media .vehiclePhotoAttr { font-size: 0.72em; padding: .15em .3em; line-height: 1.2; }
+
   /* Keep popups within the viewport on narrow/mobile screens — the fixed
      460px maxWidth passed to maplibregl.Popup otherwise overflows small
      screens and the popup content itself needs to shrink & scroll with it. */
@@ -67,6 +110,7 @@
 <script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/util.js') }}"></script>
+<script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
 
 <script>
 var logosList   = {{ logosList | safe }};
@@ -138,6 +182,137 @@ function trainsetHTML(trip) {
       <div class="trainset-inline-scroll" style="max-width:420px"${attr ? ` title="${attr}"` : ''}>
         <div class="compo-strip ts-strip">${wagons}</div>
       </div>${label}</div>`;
+}
+
+/* ── vehicle display (aircraft / vessel) ─────────────────────────────────── */
+const AIRLINERS_BASE = "{{ url_for('static', filename='images/airliners') }}".replace(/\/$/, '');
+const REGISTRATIONS_URL = "{{ url_for('static', filename='data/registrations.json') }}";
+const VESSEL_PHOTO_URL = "{{ url_for('getVesselPhoto') }}";
+
+// The popup body is built as a string, so anything async (the shape, the photo, the
+// registration flag) is emitted as an empty slot and filled by hydrateVehicle once
+// the popup is in the DOM. Photo lookups therefore only ever run on a real click.
+function vehicleHTML(trip) {
+  const isAir = ['air', 'helicopter'].includes(trip.type);
+  const isFerry = trip.type === 'ferry';
+  if (!isAir && !isFerry) return '';
+
+  const reg = (trip.reg || '').trim();
+  const info = isAir ? airframeInfo(trip) : null;
+  if (!info && !reg) return '';
+
+  const type = info ? `<span class="popup-vehicle-type">${esc(info.label)}</span>` : '';
+  const regEl = reg
+    ? `<span class="popup-reg" data-reg="${esc(reg)}" data-kind="${isAir ? 'air' : 'ship'}"
+             data-country="${esc(trip.vessel_country || '')}">
+         <span class="popup-reg-flag"></span><span class="popup-reg-text">${esc(reg)}</span>
+       </span>`
+    : '';
+  // The shape shows by default and doubles as the photo's click target; with no
+  // shape (no artwork, or a ship) a camera button in the header stands in.
+  const media = `<div class="popup-media" data-code="${info ? esc(info.code) : ''}"></div>`;
+  return `<div class="popup-vehicle">
+            <div class="popup-vehicle-head">${type}${regEl}</div>
+            ${media}
+          </div>`;
+}
+
+function hydrateVehicle(popupEl) {
+  popupEl.querySelectorAll('.popup-media').forEach(media => {
+    const code = media.getAttribute('data-code');
+    if (!code) return;
+    const img = loadAirframe(AIRLINERS_BASE, code);
+    if (img) media.appendChild(img);
+  });
+
+  popupEl.querySelectorAll('.popup-reg').forEach(regEl => {
+    const reg = regEl.getAttribute('data-reg');
+    const isAir = regEl.getAttribute('data-kind') === 'air';
+    const flagEl = regEl.querySelector('.popup-reg-flag');
+    const media = regEl.closest('.popup-vehicle').querySelector('.popup-media');
+    const hasShape = !!media.getAttribute('data-code');
+
+    // getTooltipNew only emits the markup; Bootstrap still has to bind it.
+    const showFlag = (country) => {
+      if (!country || !flagEl || !flagEl.isConnected) return;
+      flagEl.innerHTML = getTooltipNew(country);
+      $(flagEl).find('[data-toggle="tooltip"]').tooltip();
+    };
+
+    // Both kinds get their flag up front: aircraft from the registration prefix,
+    // ships from the ship_pictures join. A vessel absent from that cache has no
+    // country until something fetches it — the photo response fills it in below.
+    const knownCountry = regEl.getAttribute('data-country');
+    if (isAir) {
+      loadRegistrations(REGISTRATIONS_URL)
+        .then(registrations => showFlag(regCountry(reg, registrations)));
+    } else {
+      showFlag(knownCountry);
+    }
+
+    // The photo replaces the shape on click rather than stacking beside it (they
+    // say the same thing), which also keeps the lookup off the popup-open path.
+    // The camera icon shows for aircraft and ships alike so the two read identically;
+    // where a shape exists it becomes an additional, larger target for the same action.
+    const btn = document.createElement('a');
+    btn.href = 'javascript:void(0);';
+    btn.className = 'popup-photo-btn';
+    btn.innerHTML = '<i class="fas fa-camera"></i>';
+    regEl.parentNode.appendChild(btn);
+    if (hasShape) media.classList.add('is-clickable');
+
+    let photoEl = null, showingPhoto = false, pending = false;
+
+    const siblings = () => Array.from(media.children).filter(el => el !== photoEl);
+
+    const swap = (toPhoto) => {
+      showingPhoto = toPhoto;
+      if (!photoEl) return;
+      siblings().forEach(el => { el.style.display = toPhoto ? 'none' : ''; });
+      photoEl.style.display = toPhoto ? '' : 'none';
+      btn.classList.toggle('open', toPhoto);
+    };
+
+    const toggle = (e) => {
+      if (e) e.stopPropagation();
+      if (photoEl) { swap(!showingPhoto); return; }
+      if (pending) return;
+      pending = true;
+      media.classList.add('is-loading');
+      const promise = isAir ? fetchAircraftPhoto(reg)
+                            : fetchVesselPhoto(VESSEL_PHOTO_URL, reg);
+      promise.then(photo => {
+        pending = false;
+        media.classList.remove('is-loading');
+        // The popup may have been closed/replaced while the request was in flight.
+        if (!media.isConnected) return;
+        if (!isAir && !knownCountry && photo) showFlag(photo.country);
+        if (!photo) {                       // nothing found — retire the affordance
+          media.classList.remove('is-clickable');
+          btn.remove();
+          return;
+        }
+        photoEl = document.createElement('div');
+        photoEl.innerHTML = photoHTML(photo);
+        media.appendChild(photoEl);
+        // ship_pictures rows can outlive their file on disk (the whole local cache
+        // is absent in dev) — drop the frame rather than show a broken icon.
+        const pic = photoEl.querySelector('img');
+        if (pic) pic.addEventListener('error', () => {
+          const orphans = siblings();
+          photoEl.remove();
+          photoEl = null;
+          showingPhoto = false;
+          orphans.forEach(el => { el.style.display = ''; });
+          btn.remove();
+        });
+        swap(true);
+      });
+    };
+
+    btn.addEventListener('click', toggle);
+    if (hasShape) media.addEventListener('click', toggle);
+  });
 }
 
 /* ── trip helpers ────────────────────────────────────────────────────────── */
@@ -215,6 +390,7 @@ function getPopupContent(tripObj) {
         <div><strong>Date:</strong> ${startDate}</div>
         <div><strong>Time:</strong> ${startTime} – ${endTime}</div>
         ${trip.line_name ? `<div><strong>Line:</strong> ${trip.line_name}</div>` : ''}
+        ${vehicleHTML(trip)}
         ${trainsetHTML(trip)}
       </div>
       ${logoHTML}
@@ -265,17 +441,26 @@ function openPopup(lngLat, tripObj) {
     popupEl.querySelectorAll('.compo-strip').forEach(function (strip) {
       normalizeStrip(strip, { target: 22, min: 15, max: 38 });
     });
+    hydrateVehicle(popupEl);
   }
 }
 
 /* ── rendering ───────────────────────────────────────────────────────────── */
-function addMarker(tripObj) {
+// Single source of truth for "where along the path are we": used both for the
+// pin and for the start of the animated future segment so the two always agree.
+function pegIndex(progress, len) {
+  if (len < 2) return 0;
+  return Math.min(Math.floor(progress * (len - 1)), len - 1);
+}
+
+// `coords` must be the same [lng, lat] array that was drawn (geodesic-expanded
+// for air routes), otherwise the pin lands on the raw 2-point path start.
+function addMarker(tripObj, coords) {
     const type     = (tripObj.trip.type === 'helicopter') ? 'air' : tripObj.trip.type;
-    const coords = tripObj.path.map(([lat, lng]) => [lng, lat]);
     const color = getTypeColor(type);
     const progress = calculateProgress(tripObj);
 
-    const pegIdx           = Math.min(Math.floor(progress * (coords.length - 1)), coords.length - 1);
+    const pegIdx           = pegIndex(progress, coords.length);
     const [pegLng, pegLat] = coords[pegIdx];
 
     const marker = new maplibregl.Marker({ color })
@@ -311,7 +496,7 @@ function renderTrips(trips) {
     }
 
     if (coords.length === 1 && ['accommodation', 'poi', 'restaurant'].includes(type)) {
-        addMarker(tripObj);
+        addMarker(tripObj, coords);
         return;
     }
 
@@ -323,8 +508,7 @@ function renderTrips(trips) {
     });
 
     // Future segment (animated white dashes overlay)
-    const fromIdx = Math.floor(progress * coords.length);
-    const future  = coords.slice(Math.max(0, fromIdx));
+    const future  = coords.slice(pegIndex(progress, coords.length));
     if (future.length >= 2 && progress < 1) {
       futureFeatures.push({
         type: 'Feature',
@@ -334,7 +518,7 @@ function renderTrips(trips) {
     }
 
     // Current-position pin marker
-    addMarker(tripObj)
+    addMarker(tripObj, coords)
   });
 
   map.getSource('live-static').setData({ type: 'FeatureCollection', features: staticFeatures });
