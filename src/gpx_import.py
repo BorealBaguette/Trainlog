@@ -145,7 +145,13 @@ def parse_gpx_files(files, source, username, notes=""):
         if not file.filename.endswith(".gpx"):
             raise GpxIngestError(f"{file.filename} is not a valid GPX file")
 
-        gpx = gpxpy.parse(file.stream)
+        try:
+            gpx = gpxpy.parse(file.stream)
+        except gpxpy.gpx.GPXException as e:
+            # A GPSLogger run killed mid-recording leaves the closing tags
+            # unwritten. Report it as bad input (400) rather than letting the
+            # XML error surface as a 500, so the uploader can retire the file.
+            raise GpxIngestError(f"{file.filename} is not readable GPX: {e}") from e
 
         points = None
         start_time = None
