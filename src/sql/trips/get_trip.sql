@@ -70,13 +70,19 @@ LEFT JOIN LATERAL (
     ORDER BY fetch_date DESC NULLS LAST, uid DESC
     LIMIT 1
 ) sp ON TRUE
--- short_name is not unique (e.g. two "SNCB" rows), so a plain join would return
--- duplicate rows for one trip. Pick one operator deterministically.
+-- The trip's first operator, resolved through operator_aliases. Replaces an exact
+-- match of operators.short_name against the whole `operator` text, which needed an
+-- ORDER BY ... LIMIT 1 guard because short_name was not unique and which missed any
+-- spelling variant. Note the old form compared against the entire field, so a
+-- multi-operator trip ('NS, DB') never matched at all; it now resolves the first
+-- name, and the per-operator logo strip is still built in Python for such trips.
 LEFT JOIN LATERAL (
-    SELECT operator_id, short_name
-    FROM operators
-    WHERE short_name = base.operator
-    ORDER BY operator_id
+    SELECT a.operator_id, op.short_name
+    FROM operator_aliases a
+    JOIN operators op ON op.operator_id = a.operator_id
+    WHERE a.normalized = operator_normalize(split_part(base.operator, ',', 1))
+    -- Prefer the trip's own pool, falling back to any pool, as everywhere else.
+    ORDER BY (a.operator_type = operator_type_bucket(base.trip_type)) DESC, a.operator_id
     LIMIT 1
 ) o ON TRUE
 WHERE base.trip_id = :trip_id;

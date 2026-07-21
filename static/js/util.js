@@ -926,6 +926,208 @@ function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
   });
 }
 
+/**
+ * Operator field as removable pills, each showing the operator's logo when one is
+ * known and the typed name otherwise.
+ *
+ * A trip's operator is stored as free comma-separated text, and that stays true:
+ * `hiddenInput` (the field the form serialises) is kept as "A, B". The pills are
+ * only a nicer way to see and edit that list — anything can still be typed, whether
+ * or not it matches a known operator.
+ *
+ * manAndOps.operators maps every known spelling, including aliases, to a logo path
+ * or null, so typing CFF or FFS finds the SBB logo just as SBB does.
+ */
+// Client-side twin of the SQL operator_normalize(): fold case and diacritics, then
+// drop everything that is not a letter or digit. Two spellings with the same result
+// are the same operator, so "C.F.F", "cff" and "CFF" all resolve alike here exactly
+// as they do server-side.
+//
+// \p{L}\p{N} rather than a-z0-9 for the same reason the SQL uses [:alnum:]: Cyrillic,
+// Greek and CJK operator names must survive normalisation instead of collapsing to
+// the empty string.
+function normalizeOperatorName(value) {
+  return String(value == null ? '' : value)
+    // Approximates unaccent(): NFD splits off combining marks, and the few Latin
+    // letters that have no decomposition are mapped by hand.
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[øØ]/g, 'o').replace(/[æÆ]/g, 'ae').replace(/[đĐðÐ]/g, 'd')
+    .replace(/[łŁ]/g, 'l').replace(/[þÞ]/g, 'th').replace(/ß/g, 'ss')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, logosUrl, type) {
+  var names = [];
+  // Built once: every known spelling in its normalised form, so a pill can find its
+  // logo without rescanning thousands of names on each render.
+  var logosByNormalized = {};
+  Object.keys(manAndOps.operators).forEach(function (name) {
+    var key = normalizeOperatorName(name);
+    if (key && !(key in logosByNormalized)) logosByNormalized[key] = manAndOps.operators[name];
+  });
+
+  function logoFor(name) {
+    // Exact spelling first, then the normalised form — the user may have typed a
+    // punctuated or accented variant of a name we know.
+    if (Object.prototype.hasOwnProperty.call(manAndOps.operators, name)) {
+      return manAndOps.operators[name];
+    }
+    var key = normalizeOperatorName(name);
+    return key && key in logosByNormalized ? logosByNormalized[key] : null;
+  }
+
+  function sync() {
+    hiddenInput.val(names.join(', ')).trigger('change');
+    pillContainer.find('.op-pill').remove();
+    names.forEach(function (name, index) {
+      var logo = logoFor(name);
+      var $pill = $('<span class="op-pill"></span>').attr('title', name);
+      if (logo) {
+        $pill.addClass('op-pill-logo').append(
+          $('<img>').attr('src', logosUrl + logo).attr('alt', name)
+        );
+      } else {
+        // Unknown operator: still a pill, just with its name instead of a logo.
+        $pill.append($('<span class="op-pill-text"></span>').text(name));
+      }
+      $pill.append(
+        $('<button type="button" class="op-pill-x" aria-label="Remove">&times;</button>')
+          .on('click', function () { names.splice(index, 1); sync(); })
+      );
+      pillContainer.find('.op-pill-placeholder').before($pill);
+    });
+    // The placeholder only makes sense while nothing is selected.
+    searchInput.attr('placeholder', names.length ? '' : searchInput.data('placeholder'));
+  }
+
+  function add(name) {
+    name = (name || '').trim();
+    if (!name) return;
+    // Case-insensitive duplicate guard, keeping whichever spelling came first.
+    var exists = names.some(function (n) { return normalizeForSearch(n) === normalizeForSearch(name); });
+    if (!exists) names.push(name);
+    searchInput.val('');
+    sync();
+  }
+
+  function setFromText(text) {
+    names = String(text || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    sync();
+  }
+
+  // Remember the placeholder before the first sync(), which is what hides it.
+  searchInput.data('placeholder', searchInput.attr('placeholder') || '');
+  // Seed from whatever the field already holds (FR24 import, query params).
+  setFromText(hiddenInput.val());
+
+  searchInput.autocomplete({
+    minLength: 1,
+    source: function (request, response) {
+      var term = normalizeForSearch(request.term);
+      // Punctuation-free form as well, so "C.F.F" finds CFF. Kept alongside the
+      // loose form rather than replacing it: stripping spaces would stop a
+      // multi-word term like "sncf nouvelle" matching "SNCF TER Nouvelle-Aquitaine".
+      var strictTerm = normalizeOperatorName(request.term);
+      var chosen = names.map(normalizeOperatorName);
+      var matches = [];
+      Object.keys(manAndOps.operators).forEach(function (name) {
+        var norm = normalizeForSearch(name);
+        if (chosen.indexOf(normalizeOperatorName(name)) !== -1) return;   // already a pill
+        var at = norm.indexOf(term);
+        if (at === -1) {
+          // No loose match: fall back to the normalised comparison.
+          var strictName = normalizeOperatorName(name);
+          if (!strictTerm || strictName.indexOf(strictTerm) === -1) return;
+          matches.push({
+            label: name, value: name,
+            rank: strictName === strictTerm ? 0 : 3,
+            len: strictName.length
+          });
+          return;
+        }
+        // Rank: exact, then prefix, then start-of-word, then anywhere. Within a
+        // rank prefer the shorter name, so "SNCF" beats "SNCF Intercités".
+        var rank;
+        if (norm === term) rank = 0;
+        else if (at === 0) rank = 1;
+        else if (norm[at - 1] === ' ' || norm[at - 1] === '-') rank = 2;
+        else rank = 3;
+        matches.push({ label: name, value: name, rank: rank, len: norm.length });
+      });
+      matches.sort(function (a, b) { return a.rank - b.rank || a.len - b.len || a.label.localeCompare(b.label); });
+      // The operator list runs to thousands of names; an uncapped menu is unusable.
+      response(matches.slice(0, 10));
+    },
+    select: function (event, ui) {
+      add(ui.item.value);
+      return false;   // don't write the raw value back into the search box
+    },
+    focus: function () { return false; }
+  });
+
+  var instance = searchInput.data('ui-autocomplete');
+  if (instance) {
+    // Show the logo next to each suggestion, so the right operator is pickable by
+    // sight when several spellings look alike.
+    instance._renderItem = function (ul, item) {
+      var logo = logoFor(item.value);
+      var $li = $('<li class="op-suggestion"></li>');
+      var $div = $('<div></div>');
+      if (logo) {
+        $div.append($('<img class="op-suggestion-logo">').attr('src', logosUrl + logo).attr('alt', ''));
+      } else {
+        $div.append($('<span class="op-suggestion-logo op-suggestion-nologo"></span>'));
+      }
+      $div.append($('<span></span>').text(item.label));
+      // The operator's other name, so a spelling says what it maps to: "SBB" is
+      // followed by Schweizerische Bundesbahnen, an alias by the operator it
+      // resolves to. Absent for names that would only repeat themselves.
+      var hint = (manAndOps.operatorHints || {})[item.value];
+      if (hint) $div.append($('<span class="op-suggestion-hint"></span>').text(hint));
+      return $li.append($div).appendTo(ul);
+    };
+  }
+
+  searchInput.on('keydown', function (e) {
+    if (e.key === ',' ) {
+      // Comma is the separator in the stored value, so it commits instead of typing.
+      e.preventDefault();
+      add(searchInput.val());
+      searchInput.autocomplete('close');
+    } else if (e.key === 'Enter') {
+      // Only swallow Enter when there is text to commit, so an empty field still
+      // submits the form as before.
+      if (searchInput.val().trim()) {
+        e.preventDefault();
+        add(searchInput.val());
+        searchInput.autocomplete('close');
+      }
+    } else if (e.key === 'Backspace' && !searchInput.val() && names.length) {
+      names.pop();
+      sync();
+    }
+  });
+
+  // Clicking anywhere in the field focuses the text input, like a real input would.
+  pillContainer.on('click', function (e) {
+    if (!$(e.target).closest('.op-pill').length) searchInput.focus();
+  });
+
+  // A name typed but never committed would otherwise be silently dropped. Commit on
+  // blur rather than on form submit: the submit button serialises the form from its
+  // own click handler, which runs before the form's submit event. Blur fires first,
+  // as focus leaves the field on that click. Clicking an autocomplete suggestion does
+  // not blur the input (jQuery UI suppresses it), so this cannot double-add.
+  searchInput.on('blur', function () {
+    if (searchInput.val().trim()) add(searchInput.val());
+  });
+
+  // Let callers that set the operator programmatically (FR24 import, boarding-pass
+  // query params) refresh the pills.
+  return { set: setFromText, add: add };
+}
+
 function materialTypeAutocomplete(select, manAndOps, type) {
   select.autocomplete({
     source: function (request, response) {
@@ -1182,6 +1384,76 @@ function processCountryCode(cc, positions = null, mode = "auto") {
   return { flag, name };
 }
 
+// Height a single operator logo occupies in a trip-list cell, matching
+// `td .operatorLogo` in style2.css. The multi-operator grid below divides this
+// budget between its rows so that the table row never grows taller, whether it
+// shows one operator or four.
+const OPERATOR_CELL_HEIGHT = 38;
+const OPERATOR_CELL_WIDTH = 100;
+const OPERATOR_GRID_GAP = 2;
+
+// Lay a trip's operators out in a grid that always fits OPERATOR_CELL_HEIGHT:
+//   1 -> A        2 -> A B        3 -> A B      4 -> A B
+//                                      C             C D
+// Anything past the fourth is dropped (the query already caps at 4).
+function renderOperatorGrid(operators) {
+    const shown = operators.slice(0, 4);
+    const cols = shown.length > 1 ? 2 : 1;
+    const rows = Math.ceil(shown.length / cols);
+    // Split the fixed budget across the rows, leaving room for the gaps, so two
+    // stacked rows get roughly half-height logos instead of doubling the row.
+    const cellH = (OPERATOR_CELL_HEIGHT - OPERATOR_GRID_GAP * (rows - 1)) / rows;
+    const cellW = (OPERATOR_CELL_WIDTH - OPERATOR_GRID_GAP * (cols - 1)) / cols;
+
+    const items = shown.map(op => {
+        const name = sanitize(op.name || '');
+        if (op.logo) {
+            return `<img class="operatorGridLogo" src="/static/${sanitize(op.logo)}"`
+                 + ` style="max-height:${cellH}px;max-width:${cellW}px"`
+                 + ` data-toggle="tooltip" data-placement="top" title=""`
+                 + ` data-bs-original-title="${name}" aria-label="${name}">`;
+        }
+        // No logo: a text stand-in, scaled down when stacked so it stays on one
+        // line and keeps the same height as a logo would.
+        const fontSize = rows > 1 ? 0.62 : 0.8;
+        return `<span class="operatorGridText" style="max-width:${cellW}px;`
+             + `line-height:${cellH}px;font-size:${fontSize}rem" title="${name}">${name}</span>`;
+    }).join('');
+
+    return `<div class="operatorGrid" style="grid-template-columns:repeat(${cols},auto);`
+         + `gap:${OPERATOR_GRID_GAP}px;height:${OPERATOR_CELL_HEIGHT}px">${items}</div>`;
+}
+
+// Expanded form for the responsive detail row, where there is room: every operator on
+// its own line at a readable size, rather than the compact cell's four-item grid.
+//
+// Each line is the operator's logo, or its name when it has none. Operator logos are
+// nearly always wordmarks, so printing the name beside one just echoes it; the name
+// earns its place only when there is no logo to read. That is the same rule the
+// compact cell and the single-operator rendering already follow.
+//
+// Returns null when there is nothing to expand (one operator, or none), leaving the
+// default cell rendering in place.
+function renderOperatorList(row) {
+    const operators = Array.isArray(row.operator_logos) ? row.operator_logos : null;
+    if (!operators || operators.length < 2) return null;
+
+    const items = operators.map(op => {
+        const name = sanitize(op.name || '');
+        // The logo keeps a tooltip carrying the name — reachable by tap on the touch
+        // devices this view is for. resetObjects() re-initialises tooltips whenever a
+        // detail row opens, so these are live.
+        const content = op.logo
+            ? `<img class="operatorListLogo" src="/static/${sanitize(op.logo)}" alt="${name}"`
+              + ` data-toggle="tooltip" data-placement="top" title=""`
+              + ` data-bs-original-title="${name}" aria-label="${name}">`
+            : `<span class="operatorListName">${name}</span>`;
+        return `<div class="operatorListItem">${content}</div>`;
+    }).join('');
+
+    return `<div class="operatorList">${items}</div>`;
+}
+
 function renderOperators(data, type, row) {
     if (type !== 'display') return data;
 
@@ -1196,6 +1468,11 @@ function renderOperators(data, type, row) {
     if (iconMap[row.type] && !row.operator) {
         const { icon, label } = iconMap[row.type];
         return `<i class="fas ${icon}" title="${label}" data-toggle="tooltip" data-placement="top" aria-label="${label}"></i>`;
+    }
+
+    // Multi-operator trips: show every operator, logo or name, in one cell.
+    if (Array.isArray(row.operator_logos) && row.operator_logos.length > 1) {
+        return renderOperatorGrid(row.operator_logos);
     }
 
     // Show logo if available

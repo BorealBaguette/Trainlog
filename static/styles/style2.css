@@ -230,6 +230,70 @@ td .operatorLogo{
   margin-right: 5px;
  }
 
+/* Multi-operator cell: up to four operators in a 2-column grid whose total height
+   is fixed to that of a single logo, so rows never change height. The per-item
+   max-height/max-width are set inline by renderOperatorGrid(), which divides that
+   budget by the number of rows and columns actually used. */
+td .operatorGrid{
+  display: inline-grid;
+  align-items: center;
+  justify-items: center;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+
+td .operatorGrid .operatorGridLogo{
+  /* Overrides the generic `td img` sizing; the real limits are inline. */
+  max-height: none;
+  max-width: none;
+  object-fit: contain;
+}
+
+/* Stand-in for an operator that has no logo, so it still reads as one of the set. */
+td .operatorGrid .operatorGridText{
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* Expanded operator list in the responsive detail row. Unlike the compact cell this
+   is not height-constrained, so every operator gets its own line, a larger logo and
+   its name — the row is scrollable and on touch devices there is no tooltip. */
+td .operatorList{
+  display: flex;
+  flex-direction: column;
+  /* Rows are separated by hairlines rather than a gap, so the list reads as one
+     block instead of floating items. */
+  gap: 0;
+}
+
+td .operatorList .operatorListItem{
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 5px 0;
+}
+
+td .operatorList .operatorListItem + .operatorListItem{
+  border-top: 1px solid rgba(0, 0, 0, 0.07);
+}
+
+td .operatorList .operatorListLogo{
+  /* No fixed slot: with the name gone from the line there is no second column to
+     align to, so the logo simply starts at the left edge like every other value in
+     the panel. Wider than the compact cell allows, since there is room here. */
+  max-height: 26px;
+  max-width: 150px;
+  object-fit: contain;
+}
+
+td .operatorList .operatorListName{
+  /* Shown only when an operator has no logo, so it stands in for one — it is the
+     value on that line and inherits the panel's normal text colour and size. */
+  line-height: 1.2;
+}
+
 .multiLink{
    bottom: 30px;
    width:50%;
@@ -449,6 +513,114 @@ body::before {
   display:inline;
   width: calc(100% - 37px);
   right:0px;
+}
+
+/* Operator pills — the field behaves like one input containing removable chips.
+   Styled to match the flat #form inputs (same background, no border, 32px tall)
+   but grows to as many rows as the selected operators need. */
+#operatorGroup .operatorPillsField{
+  position: relative;
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  width: calc(100% - 37px);
+  min-height: 32px;
+  padding: 3px 8px;
+  margin: 0 0 1rem;
+  background-color: #f3f3f3;
+  cursor: text;
+}
+
+/* Align the trip-type icon with the field. Both are inline-level boxes, and
+   vertical-align:middle centres their *margin* boxes — the field's 1rem bottom
+   margin would push the icon down relative to what you actually see. (The plain
+   input this replaced was display:inline, where vertical margins have no layout
+   effect, so the issue did not arise.) Aligning both to the top also keeps the icon
+   beside the first row once enough pills are added to wrap the field. */
+#operatorGroup .operatorLogoWrapper,
+#operatorGroup .operatorPillsField{
+  vertical-align: top;
+}
+
+#operatorGroup .op-pill{
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 4px 0 6px;
+  background-color: #fff;
+  border-radius: 4px;
+  max-width: 100%;
+}
+
+#operatorGroup .op-pill img{
+  max-height: 20px;
+  max-width: 90px;
+  object-fit: contain;
+}
+
+#operatorGroup .op-pill-text{
+  font-size: 0.8rem;
+  line-height: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 140px;
+}
+
+#operatorGroup .op-pill-x{
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  color: #999;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+#operatorGroup .op-pill-x:hover{ color: #333; }
+
+/* The text input shares the field with the pills, so it has no chrome of its own
+   and takes only the space left on the current row. */
+#operatorGroup input.op-pill-placeholder,
+#form #operatorGroup input.op-pill-placeholder{
+  flex: 1 1 60px;
+  width: auto;
+  min-width: 60px;
+  height: 24px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+}
+
+/* Suggestion menu: logo (or a blank slot of the same width, so the names stay
+   aligned when only some operators have one) next to each name. */
+.ui-autocomplete .op-suggestion > div{
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.op-suggestion-logo{
+  flex: 0 0 34px;
+  width: 34px;
+  max-height: 22px;
+  object-fit: contain;
+}
+
+/* The operator's other name, subordinate to the spelling being matched: it is
+   context, not the thing being picked. Truncated rather than wrapped so every
+   suggestion stays one row high and the list is scannable. */
+.op-suggestion-hint{
+  margin-left: auto;
+  padding-left: 12px;
+  color: #888;
+  font-size: 0.8em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 

@@ -309,8 +309,14 @@
             <div class="operatorLogoWrapper">
                 <img class="operatorLogo" />
             </div>
-            <label for="operator" class="sr-only">{{operator}}</label>
-            <input type="text" name="operator" id="operator" placeholder="{{operator}}" value="{{tripOperator}}" />
+            <label for="operatorSearch" class="sr-only">{{operator}}</label>
+            {# The submitted value stays free comma-separated text; the pills are a
+               view of it, seeded here from the trip being edited. #}
+            <input type="hidden" name="operator" id="operator" value="{{tripOperator}}" />
+            <div class="operatorPillsField" id="operatorPills">
+              <input type="text" id="operatorSearch" class="op-pill-placeholder"
+                     placeholder="{{operator}}" autocomplete="off" />
+            </div>
         </group>
         <label for="lineName" class="sr-only">{{lineName}}</label>
         <input type="text" name="lineName" id="lineName" placeholder="{{lineName}}" value="{{tripLineName}}" />
@@ -687,6 +693,15 @@
 
 
 <script>
+
+    // Built once getManAndOps returns. Anything setting the operator programmatically
+    // goes through setOperatorValue() so the pills follow the hidden field — before
+    // the pills exist, seeding the hidden field is enough, as they initialise from it.
+    var operatorPills = null;
+    function setOperatorValue(value) {
+        $('#operator').val(value);
+        if (operatorPills) operatorPills.set(value);
+    }
 
     /*
     TODO: load different fields for edit POI, of a different page
@@ -1463,20 +1478,15 @@
                     console.log(airlineRes)
                     if (airlineRes.length > 0) {
                         const airline = airlineRes[0];
-                        document.getElementById('operator').value = airline.name;
-
-                        // Update operator logo
-                        if (airline.logo_url) {
-                            $(".operatorLogo").attr("src", airline.logo_url);
-                        } else {
-                            $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}");
-                        }
+                        // The pill picks up the logo itself, so the icon stays the
+                        // trip type rather than being swapped for the airline's.
+                        setOperatorValue(airline.name);
                     } else {
-                        document.getElementById('operator').value = flight.operating_as;
+                        setOperatorValue(flight.operating_as);
                     }
                 } catch (error) {
                     console.error('Error fetching airline data:', error);
-                    document.getElementById('operator').value = flight.operating_as;
+                    setOperatorValue(flight.operating_as);
                 }
             }
 
@@ -1780,13 +1790,17 @@
     }
 
 
-    var origFilepath = "{{ url_for('static',filename='images/operator_logos/')}}" + "{{tripOperator}}" + ".png";
-    $.ajax(origFilepath)
-        .done(function () { $(".operatorLogo").attr("src", origFilepath); })
-        .fail(function () { $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}"); });
+    // The operator's logo is now shown on its pill — and for every operator of a
+    // multi-operator trip, resolved through aliases — so this icon is just the trip
+    // type, as on the new-trip form. It previously guessed a legacy
+    // images/operator_logos/<name>.png path, which only ever matched exact spellings
+    // that happened to have a file under that old naming convention.
+    $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}");
 
     $.get('{{url_for("getManAndOps", username=username, station_type=tripType)}}', function (manAndOps, status) {
-        operatorAutocomplete($("#operator"), manAndOps, "{{ url_for('static',filename='')}}", "{{ url_for('static',filename='images/icons/trip_logos/' + tripType + '.png')}}", "{{tripType}}");
+        operatorPills = operatorPillsInput(
+            $("#operator"), $("#operatorSearch"), $("#operatorPills"), manAndOps,
+            "{{ url_for('static',filename='')}}", "{{tripType}}");
         if (tripType != 'air') {
             materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
         }

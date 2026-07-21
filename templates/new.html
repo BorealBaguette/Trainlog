@@ -196,8 +196,14 @@
             {% endfor %}
           </ul>
         </div>
-        <label for="operator" class="sr-only">{{operator}}</label>
-        <input type="text" name="operator" id="operator" placeholder="{{operator}}"/>
+        <label for="operatorSearch" class="sr-only">{{operator}}</label>
+        {# The submitted value stays free comma-separated text; the pills are a view
+           of it, built by operatorPillsInput(). #}
+        <input type="hidden" name="operator" id="operator"/>
+        <div class="operatorPillsField" id="operatorPills">
+          <input type="text" id="operatorSearch" class="op-pill-placeholder"
+                 placeholder="{{operator}}" autocomplete="off"/>
+        </div>
       </group>
 
       <label for="lineName" class="sr-only">{{lineName}}</label>
@@ -513,6 +519,14 @@
   {% endif %}
   var globalStationDict = {};
   var manualStationsList = [];
+  // Built once getManAndOps returns. Anything setting the operator programmatically
+  // goes through setOperatorValue() so the pills follow the hidden field — before
+  // the pills exist, seeding the hidden field is enough, as they initialise from it.
+  var operatorPills = null;
+  function setOperatorValue(value) {
+    $('#operator').val(value);
+    if (operatorPills) operatorPills.set(value);
+  }
   var visitedStations = {};
   var routingURL = "{{url_for('routing', username=username)}}";
   var airRoutingURL = "{{url_for('air_routing', username=username, type=('air' if vehicle_type == 'air' else 'helicopter'))}}";
@@ -526,7 +540,9 @@
     })
 
 
-    operatorAutocomplete( $("#operator"), manAndOps, "{{ url_for('static',filename='')}}",  "{{ url_for('static',filename='images/icons/trip_logos/' + vehicle_type + '.png')}}", "{{vehicle_type}}");
+    operatorPills = operatorPillsInput(
+      $("#operator"), $("#operatorSearch"), $("#operatorPills"), manAndOps,
+      "{{ url_for('static',filename='')}}", "{{vehicle_type}}");
     {% if vehicle_type != 'air' %}
     materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
     {% endif %}
@@ -977,7 +993,7 @@
     if ([...qp.keys()].length === 0) return;
     if (qp.get('origin')) fillFromBarcode($('#originStation'), qp.get('origin'));
     if (qp.get('destination')) fillFromBarcode($('#destinationStation'), qp.get('destination'));
-    if (qp.get('operator')) $('#operator').val(qp.get('operator'));
+    if (qp.get('operator')) setOperatorValue(qp.get('operator'));
     if (qp.get('flight_number')) $('#lineName').val(qp.get('flight_number'));
     if (qp.get('start_datetime')) {
       var startDateTime = qp.get('start_datetime').split('+')[0];
@@ -1167,15 +1183,15 @@
         const airlineRes = await $.get("/api/airlines", { icao: flight.operating_as });
         if (airlineRes.length > 0) {
           const airline = airlineRes[0];
-          $('#operator').val(airline.name);
+          setOperatorValue(airline.name);
           if (airline.logo_url) {
             $(".operatorLogo").attr("src", airline.logo_url);
           }
         } else {
-          $('#operator').val(flight.operating_as);
+          setOperatorValue(flight.operating_as);
         }
       } catch {
-        $('#operator').val(flight.operating_as);
+        setOperatorValue(flight.operating_as);
       }
     }
 
@@ -1236,15 +1252,15 @@
         const airlineRes = await $.get("/api/airlines", { icao: flight.operating_as });
         if (airlineRes.length > 0) {
           const airline = airlineRes[0];
-          $('#operator').val(airline.name);
+          setOperatorValue(airline.name);
           if (airline.logo_url) {
             $(".operatorLogo").attr("src", airline.logo_url);
           }
         } else {
-          $('#operator').val(flight.operating_as);
+          setOperatorValue(flight.operating_as);
         }
       } catch {
-        $('#operator').val(flight.operating_as);
+        setOperatorValue(flight.operating_as);
       }
     }
 

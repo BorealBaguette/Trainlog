@@ -5,6 +5,7 @@ from sqlalchemy import text
 
 from src.carbon import calculate_carbon_footprint_for_trip
 from src.consts import TripTypes
+from src.operators import sync_trip_operators
 from src.paths import fetch_path
 from src.pg import pg_session
 from src.sql.trips import (
@@ -108,6 +109,8 @@ def update_trip_type(trip_id, new_type: TripTypes):
         pg.execute(
             update_trip_type_query(), {"trip_id": trip_id, "trip_type": new_type.value}
         )
+        # The trip type selects which pool of operators the name resolves against.
+        sync_trip_operators(trip_id, pg_session_=pg)
 
 
 def bulk_edit_trips(
@@ -161,6 +164,9 @@ def bulk_edit_trips(
                         {"offset": offset_secs, "trip_id": int(trip_id)},
                     )
 
+            if "operator" in safe_fields:
+                sync_trip_operators(trip_ids, pg_session_=pg)
+
         return True, None
     except Exception as e:
         return False, str(e)
@@ -178,6 +184,8 @@ def bulk_change_type(username, trip_ids, new_type: TripTypes):
                     text("UPDATE trips SET trip_type = :t, last_modified = :lm WHERE trip_id = :id"),
                     {"t": new_type.value, "lm": last_modified, "id": int(trip_id)},
                 )
+            # The trip type selects which pool of operators names resolve against.
+            sync_trip_operators(trip_ids, pg_session_=pg)
         return True, None
     except Exception as e:
         return False, str(e)

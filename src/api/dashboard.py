@@ -19,25 +19,6 @@ _cache = {}
 _CACHE_TTL = 300  # 5 minutes
 
 
-def _operator_logo(operator_name: str) -> str | None:
-    """Return the latest logo_url for an operator by short_name, or None."""
-    if not operator_name:
-        return None
-    with pg_session() as pg:
-        row = pg.execute(
-            """
-            SELECT l.logo_url
-            FROM operators o
-            JOIN operator_logos l ON l.operator_id = o.operator_id
-            WHERE o.short_name = :name
-            ORDER BY l.effective_date DESC NULLS LAST
-            LIMIT 1
-            """,
-            {"name": operator_name},
-        ).fetchone()
-    return row["logo_url"] if row else None
-
-
 def _cache_get(key):
     entry = _cache.get(key)
     if entry and time.time() - entry[0] < _CACHE_TTL:
@@ -459,43 +440,96 @@ def dashboard_year(username):
         ).fetchone()
 
         # ── Top operators ─────────────────────────────────────────────────────
+        # Read from the pre-resolved trip_operators rather than re-splitting the
+        # comma-separated text, so SBB/CFF/FFS count as one operator. Grouping is by
+        # operator_id, with unresolved spellings falling back to their own text; the
+        # display name and logo are resolved afterwards, for the three rows that
+        # survive the LIMIT rather than for every trip.
         top_ops_alltime = pg.execute(
             """
-            WITH ops AS (
-                SELECT TRIM(op) AS operator
-                FROM trips
-                CROSS JOIN LATERAL regexp_split_to_table(operator, '\\s*,\\s*') AS op
-                WHERE user_id = :uid
-                  AND operator IS NOT NULL
-                  AND TRIM(operator) != ''
-                  AND COALESCE(utc_start_datetime, start_datetime) < NOW()
-                  AND NOT is_project
+            WITH per_member AS (
+                SELECT COALESCE(-o.group_id, tv.operator_id) AS grouping_id,
+                       tv.operator_id,
+                       CASE WHEN tv.operator_id IS NULL THEN tv.raw_name END AS unresolved_name,
+                       COUNT(*) AS trips
+                FROM trip_operators tv
+                JOIN trips t ON t.trip_id = tv.trip_id
+                LEFT JOIN operators o ON o.operator_id = tv.operator_id
+                WHERE tv.user_id = :uid
+                  AND COALESCE(t.utc_start_datetime, t.start_datetime) < NOW()
+                  AND NOT t.is_project
+                GROUP BY 1, 2, 3
+            ),
+            totals AS (
+                SELECT grouping_id, unresolved_name, SUM(trips) AS trips
+                FROM per_member
+                GROUP BY grouping_id, unresolved_name
+                ORDER BY trips DESC
+                LIMIT 3
+            ),
+            display AS (
+                -- Grouped operators are named after the member this user logs most,
+                -- so the row reads in their own flavour (CFF rather than SBB).
+                SELECT DISTINCT ON (grouping_id) grouping_id, operator_id
+                FROM per_member
+                WHERE operator_id IS NOT NULL
+                ORDER BY grouping_id, trips DESC, operator_id
             )
-            SELECT operator, COUNT(*) AS trips
-            FROM ops
-            WHERE operator != ''
-            GROUP BY operator ORDER BY trips DESC LIMIT 3
+            SELECT COALESCE(o.short_name, totals.unresolved_name) AS operator,
+                   totals.trips,
+                   (SELECT l.logo_url FROM operator_logos l
+                    WHERE l.operator_id = d.operator_id
+                    ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
+                    LIMIT 1) AS logo
+            FROM totals
+            LEFT JOIN display d ON d.grouping_id = totals.grouping_id
+            LEFT JOIN operators o ON o.operator_id = d.operator_id
+            ORDER BY totals.trips DESC
             """,
             p,
         ).fetchall()
 
         top_ops_ytd = pg.execute(
             """
-            WITH ops AS (
-                SELECT TRIM(op) AS operator
-                FROM trips
-                CROSS JOIN LATERAL regexp_split_to_table(operator, '\\s*,\\s*') AS op
-                WHERE user_id = :uid
-                  AND operator IS NOT NULL
-                  AND TRIM(operator) != ''
-                  AND EXTRACT(YEAR FROM COALESCE(utc_start_datetime, start_datetime)) = :yr
-                  AND COALESCE(utc_start_datetime, start_datetime) <= :cutoff
-                  AND NOT is_project
+            WITH per_member AS (
+                SELECT COALESCE(-o.group_id, tv.operator_id) AS grouping_id,
+                       tv.operator_id,
+                       CASE WHEN tv.operator_id IS NULL THEN tv.raw_name END AS unresolved_name,
+                       COUNT(*) AS trips
+                FROM trip_operators tv
+                JOIN trips t ON t.trip_id = tv.trip_id
+                LEFT JOIN operators o ON o.operator_id = tv.operator_id
+                WHERE tv.user_id = :uid
+                  AND EXTRACT(YEAR FROM COALESCE(t.utc_start_datetime, t.start_datetime)) = :yr
+                  AND COALESCE(t.utc_start_datetime, t.start_datetime) <= :cutoff
+                  AND NOT t.is_project
+                GROUP BY 1, 2, 3
+            ),
+            totals AS (
+                SELECT grouping_id, unresolved_name, SUM(trips) AS trips
+                FROM per_member
+                GROUP BY grouping_id, unresolved_name
+                ORDER BY trips DESC
+                LIMIT 3
+            ),
+            display AS (
+                -- Grouped operators are named after the member this user logs most,
+                -- so the row reads in their own flavour (CFF rather than SBB).
+                SELECT DISTINCT ON (grouping_id) grouping_id, operator_id
+                FROM per_member
+                WHERE operator_id IS NOT NULL
+                ORDER BY grouping_id, trips DESC, operator_id
             )
-            SELECT operator, COUNT(*) AS trips
-            FROM ops
-            WHERE operator != ''
-            GROUP BY operator ORDER BY trips DESC LIMIT 3
+            SELECT COALESCE(o.short_name, totals.unresolved_name) AS operator,
+                   totals.trips,
+                   (SELECT l.logo_url FROM operator_logos l
+                    WHERE l.operator_id = d.operator_id
+                    ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
+                    LIMIT 1) AS logo
+            FROM totals
+            LEFT JOIN display d ON d.grouping_id = totals.grouping_id
+            LEFT JOIN operators o ON o.operator_id = d.operator_id
+            ORDER BY totals.trips DESC
             """,
             p,
         ).fetchall()
@@ -916,12 +950,11 @@ def dashboard_year(username):
         "duration_hours": data.get("duration_hours"),
         # Highlights
         "top_operators_alltime": [
-            {"name": r.operator, "trips": r.trips, "logo": _operator_logo(r.operator)}
+            {"name": r.operator, "trips": r.trips, "logo": r.logo}
             for r in top_ops_alltime
         ],
         "top_operators_ytd": [
-            {"name": r.operator, "trips": r.trips, "logo": _operator_logo(r.operator)}
-            for r in top_ops_ytd
+            {"name": r.operator, "trips": r.trips, "logo": r.logo} for r in top_ops_ytd
         ],
         "top_routes_alltime": [
             {"name": r.name, "count": r.count} for r in top_routes_alltime

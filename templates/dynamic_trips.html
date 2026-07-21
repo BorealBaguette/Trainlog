@@ -699,6 +699,13 @@ function processHiddenData(rowIdx, columns){
                 col.data = `<span id=airframe${rowIdx} >${full_name}</span>`
             }
         }
+        if (col.title == "{{operator}}") {
+            // Multi-operator trips get the roomier one-per-line list here. col.hidden
+            // is deliberately left alone: this only reshapes the operator column when
+            // responsive has already moved it into the detail row.
+            var expandedOperators = renderOperatorList(tableObject.row(rowIdx).data());
+            if (expandedOperators) col.data = expandedOperators;
+        }
         if (col.title == "{{material_type}}" && isTrain) {
             var rowData = tableObject.row(rowIdx).data();
             var rawAdv = rowData.material_type_advanced || '';

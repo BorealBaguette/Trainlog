@@ -1,5 +1,6 @@
 import logging
 
+from src.operators import sync_trip_operators
 from src.pg import pg_session
 from src.sql.trips import duplicate_trip_new_user_query, duplicate_trip_query
 
@@ -26,6 +27,7 @@ def _duplicate_trip(trip_id: int, owner_id: int) -> int:
             " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps",
             {"new_id": new_trip_id, "old_id": trip_id},
         )
+        sync_trip_operators(new_trip_id, pg_session_=pg)
 
     logger.info(f"Successfully duplicated trip {trip_id} into {new_trip_id}")
     return new_trip_id
@@ -45,6 +47,7 @@ def duplicate_trip(trip_id: int):
             " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps",
             {"new_id": new_trip_id, "old_id": trip_id},
         )
+        sync_trip_operators(new_trip_id, pg_session_=pg)
 
     logger.info(f"Successfully duplicated trip {trip_id} into {new_trip_id}")
     return new_trip_id

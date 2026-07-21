@@ -111,7 +111,12 @@
     <h1 class="mt-3">Operators and Logos</h1>
     <div class="mb-3">
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#operatorModal" onclick="clearForm()">Add Operator</button>
-        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#missingOperatorsModal" onclick="loadMissingOperators()">View Missing Operators</button>
+        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#missingOperatorsModal" onclick="loadMissingOperators()">Unresolved Spellings</button>
+        <a class="btn btn-outline-secondary" href="/api/admin/operators/export.csv">Export CSV</a>
+        <button type="button" class="btn btn-outline-secondary" onclick="$('#importCsvFile').click()">Import CSV</button>
+        <input type="file" id="importCsvFile" accept=".csv" style="display:none" onchange="importOperatorsCsv(this)">
+        <button type="button" class="btn btn-outline-secondary" onclick="checkTripOperators()">Check resolution</button>
+        <span id="consistencyStatus" class="ms-2"></span>
     </div>
     <table id="operatorTable" class="mt-3">
         <thead>
@@ -120,6 +125,7 @@
                 <th scope="col" data-priority=2>Short Name</th>
                 <th scope="col" data-priority=3>Long Name</th>
                 <th scope="col" data-priority=4>Operator Type</th> <!-- New column for Operator Type -->
+                <th scope="col" data-priority=6 data-orderable="false">Aliases</th>
                 <th scope="col" data-priority=5 data-orderable="false">Logo</th>
                 <th scope="col" data-orderable="false" data-priority=1>Actions</th>
             </tr>
@@ -232,6 +238,78 @@
 </div>
 
   
+  <!-- Aliases + merge for one operator -->
+  <div class="modal fade" id="aliasModal" tabindex="-1" aria-labelledby="aliasModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="aliasModalLabel">Aliases</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">
+            Every spelling listed here resolves to this operator: its trips group together
+            in the stats and pick up its logo. Trips keep displaying whatever the user typed.
+          </p>
+          <div id="aliasList" class="mb-3"></div>
+
+          <div class="input-group mb-2">
+            <input type="text" class="form-control" id="newAliasInput" placeholder="Another spelling, e.g. CFF">
+            <button class="btn btn-primary" type="button" onclick="addAlias()">Add alias</button>
+          </div>
+          <div id="aliasError"></div>
+
+          <hr class="my-4">
+          <h6>Counted as one with</h6>
+          <p class="text-muted small">
+            For a company with several official names — SBB, CFF and FFS. Each stays a
+            separate operator with its own name and logo; they only add up together in
+            the stats, and every user sees the group under whichever name they log
+            most. Nothing is deleted and no trip changes.
+          </p>
+          <div id="groupMembers" class="mb-2"></div>
+          <div class="input-group">
+            <input type="text" class="form-control" id="groupSearchInput"
+                   placeholder="Search an operator to count as the same company"
+                   oninput="searchGroupCandidates()">
+          </div>
+          <div id="groupCandidates" class="mt-2"></div>
+
+          <hr class="my-4">
+          <h6>Merge another operator into this one</h6>
+          <p class="text-muted small">
+            Only for genuine duplicates — the same operator entered twice. The other
+            operator's logos and spellings move here and it is <strong>deleted</strong>.
+            For a company with several legitimate names, group them above instead.
+          </p>
+          <div class="input-group">
+            <input type="text" class="form-control" id="mergeSearchInput" placeholder="Search the operator to absorb"
+                   oninput="searchMergeCandidates()">
+          </div>
+          <div id="mergeCandidates" class="mt-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assign an unresolved spelling to an operator -->
+  <div class="modal fade" id="assignAliasModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Assign spelling</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Attach <strong id="assignAliasName"></strong> to an existing operator:</p>
+          <input type="text" class="form-control mb-2" id="assignSearchInput" oninput="searchAssignCandidates()">
+          <div id="assignCandidates"></div>
+          <div id="assignError"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Error Modal -->
   <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -302,6 +380,25 @@
               }
             },
             {
+              // Searchable so that looking up a spelling that was merged away finds
+              // the operator that absorbed it — searching "CFF" lands on SBB.
+              data: 'aliases',
+              searchable: true,
+              orderable: false,
+              render(data, type, row) {
+                // Sort/filter on both, so searching a spelling that was aliased away
+                // or an operator it is grouped with finds this row.
+                if (type !== 'display') return (data || '') + ' ' + (row.group_with || '');
+                let html = (data || '') ? data.split(', ').map(a =>
+                    `<span class="badge bg-light text-dark me-1">${escapeHtml(a)}</span>`).join('') : '';
+                if (row.group_with) {
+                    html += row.group_with.split(', ').map(g =>
+                        `<span class="badge bg-info text-dark me-1" title="Counted as one operator">= ${escapeHtml(g)}</span>`).join('');
+                }
+                return html;
+              }
+            },
+            {
               data: 'logo_url',
               searchable: false,
               orderable: false,
@@ -319,7 +416,11 @@
                 orderable: false,
                 render(data, type, row) {
                     if (type === 'display')
-                        return `<button class="btn btn-danger btn-sm" onclick="deleteOperator(${ row.operator_id })">
+                        return `<button class="btn btn-secondary btn-sm me-1" title="Aliases"
+                                  onclick="showAliases(${ row.operator_id })">
+                          <i class="fa-solid fa-tags"></i>
+                        </button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteOperator(${ row.operator_id })">
                           <i class="fa-regular fa-trash-can"></i>
                         </button>`
                     else
@@ -494,10 +595,16 @@
                 `;
 
                 operators.forEach(op => {
+                    // Each spelling is actionable: attach it to an operator as an
+                    // alias and every trip using it resolves from then on.
                     html += `
                         <div class="operator-list-item">
-                            <strong>${op.operator}</strong>
-                            <span class="badge bg-light text-dark">${op.occurrences} occurrences</span>
+                            <strong>${escapeHtml(op.operator)}</strong>
+                            <span>
+                                <span class="badge bg-light text-dark">${op.occurrences} occurrences</span>
+                                <button class="btn btn-sm btn-outline-primary ms-2"
+                                        onclick="assignAlias(${escapeHtml(JSON.stringify(op.operator))})">Assign</button>
+                            </span>
                         </div>
                     `;
                 });
@@ -662,6 +769,307 @@ function bootstrapToast(message, type='success') {
   } catch(e) {
     setTimeout(() => $toast.remove(), 3000);
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Aliases, merging, and the unresolved-spelling queue.
+
+   An operator's identity is the set of spellings that resolve to it. Editing that
+   set re-resolves the affected trips server-side, so the stats and logos follow
+   immediately — which is why each action reports how many trips it touched.
+   --------------------------------------------------------------------------- */
+
+let aliasOperatorId = null;
+let assignAliasValue = null;
+
+function escapeHtml(s) {
+    return $('<div>').text(s == null ? '' : s).html();
+}
+
+function operatorById(id) {
+    return table.rows().data().toArray().find(o => o.operator_id === id);
+}
+
+function showAliases(operatorId) {
+    aliasOperatorId = operatorId;
+    const operator = operatorById(operatorId);
+    $('#aliasModalLabel').text('Aliases — ' + (operator ? operator.short_name : operatorId));
+    $('#newAliasInput').val('');
+    $('#aliasError').empty();
+    $('#mergeSearchInput').val('');
+    $('#mergeCandidates').empty();
+    $('#groupSearchInput').val('');
+    $('#groupCandidates').empty();
+    $('#aliasList').html('<div class="spinner-border spinner-border-sm" role="status"></div>');
+    $('#aliasModal').modal('show');
+    loadAliases();
+    loadGroup();
+}
+
+function loadGroup() {
+    fetch(`/api/admin/operators/${aliasOperatorId}/group`)
+        .then(res => res.json())
+        .then(({ members }) => {
+            const others = members.filter(m => m.operator_id !== aliasOperatorId);
+            if (!others.length) {
+                $('#groupMembers').html('<em class="text-muted">Not grouped with any other operator</em>');
+                return;
+            }
+            $('#groupMembers').html(others.map(m => `
+                <span class="badge bg-info text-dark me-2 mb-2 d-inline-flex align-items-center">
+                  ${escapeHtml(m.short_name)}
+                  <button type="button" class="btn-close ms-2" style="font-size:.6rem"
+                          title="Stop counting as one" aria-label="Ungroup"
+                          onclick="unlinkOperator(${m.operator_id})"></button>
+                </span>`).join(''));
+        });
+}
+
+let groupSearchTimer = null;
+function searchGroupCandidates() {
+    clearTimeout(groupSearchTimer);
+    const name = $('#groupSearchInput').val().trim();
+    if (!name) { $('#groupCandidates').empty(); return; }
+    groupSearchTimer = setTimeout(() => {
+        fetch('/api/admin/operators/suggest?name=' + encodeURIComponent(name))
+            .then(res => res.json())
+            .then(({ suggestions }) => renderCandidates(
+                '#groupCandidates',
+                suggestions.filter(s => s.operator_id !== aliasOperatorId),
+                'linkOperator'));
+    }, 250);
+}
+
+function linkOperator(otherId) {
+    fetch(`/api/admin/operators/${aliasOperatorId}/group`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operator_id: otherId })
+    }).then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.description || 'could not group');
+        $('#groupSearchInput').val('');
+        $('#groupCandidates').empty();
+        loadGroup();
+        table.ajax.reload(null, false);
+        bootstrapToast(`Grouped — ${body.members} operators now count as one`);
+    }).catch(err => bootstrapToast(err.message, 'danger'));
+}
+
+function unlinkOperator(operatorId) {
+    fetch(`/api/admin/operators/${operatorId}/group`, { method: 'DELETE' })
+        .then(async res => {
+            if (!res.ok) throw new Error('could not ungroup');
+            loadGroup();
+            table.ajax.reload(null, false);
+            bootstrapToast('Ungrouped');
+        })
+        .catch(err => bootstrapToast(err.message, 'danger'));
+}
+
+function loadAliases() {
+    fetch(`/api/admin/operators/${aliasOperatorId}/aliases`)
+        .then(res => res.json())
+        .then(({ aliases }) => {
+            if (!aliases.length) { $('#aliasList').html('<em>No aliases</em>'); return; }
+            // short/long mirror the operator's own name fields — they are edited in
+            // the table, not here, so they are shown without a delete control.
+            const html = aliases.map(a => {
+                const fixed = a.kind !== 'alias';
+                const badge = fixed ? 'bg-secondary' : 'bg-primary';
+                const remove = fixed ? '' :
+                    `<button type="button" class="btn-close btn-close-white ms-2"
+                       style="font-size:.6rem" aria-label="Remove"
+                       onclick="deleteAlias(${a.alias_id})"></button>`;
+                return `<span class="badge ${badge} me-2 mb-2 d-inline-flex align-items-center">
+                          ${escapeHtml(a.alias)}
+                          <span class="ms-1 opacity-75">(${a.kind})</span>${remove}
+                        </span>`;
+            }).join('');
+            $('#aliasList').html(html);
+        });
+}
+
+function addAlias() {
+    const alias = $('#newAliasInput').val().trim();
+    if (!alias) return;
+    $('#aliasError').empty();
+
+    fetch(`/api/admin/operators/${aliasOperatorId}/aliases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias })
+    }).then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+            // The spelling already belongs to someone. Offer the merge, which is the
+            // only correct way to take it over.
+            const other = body.operator;
+            $('#aliasError').html(`
+                <div class="alert alert-warning py-2">
+                    ${escapeHtml(body.message)}
+                    ${other ? `<button class="btn btn-sm btn-warning ms-2"
+                        onclick="mergeOperator(${other.operator_id})">
+                        Merge ${escapeHtml(other.short_name)} into this operator</button>` : ''}
+                </div>`);
+            return;
+        }
+        if (!res.ok) throw new Error(body.message || 'failed');
+        $('#newAliasInput').val('');
+        loadAliases();
+        bootstrapToast(`Alias added — ${body.alias.trips_resynced} trips re-resolved`);
+    }).catch(err => {
+        $('#aliasError').html(`<div class="alert alert-danger py-2">${escapeHtml(err.message)}</div>`);
+    });
+}
+
+function deleteAlias(aliasId) {
+    fetch(`/api/admin/operators/aliases/${aliasId}`, { method: 'DELETE' })
+        .then(async res => {
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error('failed');
+            loadAliases();
+            bootstrapToast(`Alias removed — ${body.trips_resynced} trips re-resolved`);
+        })
+        .catch(() => bootstrapToast('Could not remove alias', 'danger'));
+}
+
+function renderCandidates(containerId, suggestions, onPickJs) {
+    if (!suggestions.length) {
+        $(containerId).html('<em class="text-muted">No match</em>');
+        return;
+    }
+    $(containerId).html(suggestions.map(s => `
+        <div class="d-flex justify-content-between align-items-center border-bottom py-1">
+            <span>
+                <strong>${escapeHtml(s.short_name)}</strong>
+                <span class="text-muted small ms-2">${escapeHtml(s.long_name)}</span>
+                <span class="badge bg-light text-dark ms-2">${s.operator_type}</span>
+            </span>
+            <button class="btn btn-sm btn-outline-primary" onclick="${onPickJs}(${s.operator_id})">Select</button>
+        </div>`).join(''));
+}
+
+let mergeSearchTimer = null;
+function searchMergeCandidates() {
+    clearTimeout(mergeSearchTimer);
+    const name = $('#mergeSearchInput').val().trim();
+    if (!name) { $('#mergeCandidates').empty(); return; }
+    mergeSearchTimer = setTimeout(() => {
+        fetch('/api/admin/operators/suggest?name=' + encodeURIComponent(name))
+            .then(res => res.json())
+            .then(({ suggestions }) => renderCandidates(
+                '#mergeCandidates',
+                suggestions.filter(s => s.operator_id !== aliasOperatorId),
+                'mergeOperator'));
+    }, 250);
+}
+
+function mergeOperator(sourceId) {
+    const target = operatorById(aliasOperatorId);
+    if (!confirm(`Merge operator #${sourceId} into ${target ? target.short_name : aliasOperatorId}?\n\n`
+                 + 'Its logos and spellings move across and it is deleted.')) return;
+
+    fetch(`/api/admin/operators/${sourceId}/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_id: aliasOperatorId })
+    }).then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.description || 'merge failed');
+        $('#mergeSearchInput').val('');
+        $('#mergeCandidates').empty();
+        $('#aliasError').empty();
+        loadAliases();
+        table.ajax.reload(null, false);
+        bootstrapToast(`Merged — ${body.trips_resynced} trips re-resolved`);
+    }).catch(err => bootstrapToast(err.message, 'danger'));
+}
+
+/* Assigning a spelling straight from the unresolved queue. */
+function assignAlias(name) {
+    assignAliasValue = name;
+    $('#assignAliasName').text(name);
+    $('#assignSearchInput').val(name);
+    $('#assignError').empty();
+    $('#assignAliasModal').modal('show');
+    searchAssignCandidates();
+}
+
+let assignSearchTimer = null;
+function searchAssignCandidates() {
+    clearTimeout(assignSearchTimer);
+    const name = $('#assignSearchInput').val().trim();
+    if (!name) { $('#assignCandidates').empty(); return; }
+    assignSearchTimer = setTimeout(() => {
+        fetch('/api/admin/operators/suggest?name=' + encodeURIComponent(name))
+            .then(res => res.json())
+            .then(({ suggestions }) => renderCandidates('#assignCandidates', suggestions, 'assignToOperator'));
+    }, 250);
+}
+
+function assignToOperator(operatorId) {
+    fetch(`/api/admin/operators/${operatorId}/aliases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias: assignAliasValue })
+    }).then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.message || 'failed');
+        $('#assignAliasModal').modal('hide');
+        bootstrapToast(`"${assignAliasValue}" assigned — ${body.alias.trips_resynced} trips re-resolved`);
+        loadMissingOperators();
+    }).catch(err => {
+        $('#assignError').html(`<div class="alert alert-danger py-2 mt-2">${escapeHtml(err.message)}</div>`);
+    });
+}
+
+/* Maintenance: trip_operators is derived, so it can be checked and rebuilt. */
+function checkTripOperators() {
+    $('#consistencyStatus').text('checking…');
+    fetch('/api/admin/operators/trip-operators/check')
+        .then(res => res.json())
+        .then(r => {
+            if (r.consistent) {
+                $('#consistencyStatus').html('<span class="badge bg-success">resolution up to date</span>');
+                return;
+            }
+            $('#consistencyStatus').html(
+                `<span class="badge bg-danger">${r.missing} missing / ${r.stale} stale</span>
+                 <button class="btn btn-sm btn-danger ms-2" onclick="rebuildTripOperators()">Rebuild</button>`);
+        })
+        .catch(() => $('#consistencyStatus').html('<span class="badge bg-danger">check failed</span>'));
+}
+
+function rebuildTripOperators() {
+    $('#consistencyStatus').text('rebuilding… (this takes ~30s)');
+    fetch('/api/admin/operators/trip-operators/rebuild', { method: 'POST' })
+        .then(res => res.json())
+        .then(r => {
+            $('#consistencyStatus').html(`<span class="badge bg-success">rebuilt: ${r.rows} rows</span>`);
+            bootstrapToast(`Resolution rebuilt — ${r.rows} rows`);
+        })
+        .catch(() => $('#consistencyStatus').html('<span class="badge bg-danger">rebuild failed</span>'));
+}
+
+function importOperatorsCsv(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const data = new FormData();
+    data.append('file', file);
+    input.value = '';
+
+    fetch('/api/admin/operators/import.csv', { method: 'POST', body: data })
+        .then(async res => {
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body.description || 'import failed');
+            table.ajax.reload(null, false);
+            let msg = `${body.renamed} renamed, ${body.aliases_added} aliases added`;
+            if (body.unknown_slugs.length) msg += `, ${body.unknown_slugs.length} unknown slugs skipped`;
+            if (body.skipped_aliases.length) msg += `, ${body.skipped_aliases.length} aliases already taken`;
+            bootstrapToast(msg);
+        })
+        .catch(err => bootstrapToast(err.message, 'danger'));
 }
 </script>
 

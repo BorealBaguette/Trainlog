@@ -166,6 +166,7 @@ from src.global_map import (
     build_status,
     get_cache_path,
 )
+from src.operators import find_operator_ids, get_trip_operator_logos
 from src.pg import setup_db, pg_session
 from src.suspicious_activity import (
     check_denied_login,
@@ -4251,11 +4252,14 @@ def listOperatorsLogos(tripType=None):
 
     with pg_session() as pg:
         for logo_type in selected_types:
-            # Fetch logos based on operator_type field
+            # Keyed by every alias, not just short_name, so a user typing CFF or FFS
+            # is offered the SBB logo just as one typing SBB is. The stats chart and
+            # the trip-form autocomplete both look names up in this dict directly.
             rows = pg.execute(
                 """
-                SELECT o.short_name, l.logo_url
+                SELECT a.alias, l.logo_url
                 FROM operators o
+                JOIN operator_aliases a ON a.operator_id = o.operator_id
                 JOIN operator_logos l ON o.operator_id = l.operator_id
                 WHERE o.operator_type = :logo_type
             """,
@@ -4263,7 +4267,7 @@ def listOperatorsLogos(tripType=None):
             ).fetchall()
 
             for row in rows:
-                logoURLs[row["short_name"]] = row["logo_url"]
+                logoURLs[row["alias"]] = row["logo_url"]
 
     return logoURLs
 
@@ -6587,11 +6591,51 @@ def getManAndOps(username, station_type):
 
     manAndOps = {
         "operators": result,
+        "operatorHints": operator_hints(tripType),
         "manualStations": manualStations,
         "materialTypes": material_types,
         "visitedStations": visitedStations,
     }
     return jsonify(manAndOps)
+
+
+def operator_hints(operator_type):
+    """Muted subtitle for each spelling in the operator autocomplete.
+
+    A suggestion on its own does not say what it maps to: "CFF" gives no clue that it
+    is the Chemins de fer fédéraux suisses, and an alias gives no clue which operator
+    owns it. The hint is whichever of the operator's names the spelling is *not*.
+
+    Computed here rather than shipping short/long names for all ~4,700 operators: only
+    entries with something to add are included, and for the great majority long_name
+    equals short_name, so the map stays small.
+    """
+    with pg_session() as pg:
+        rows = pg.execute(
+            """
+            SELECT a.alias, o.short_name, o.long_name
+            FROM operator_aliases a
+            JOIN operators o ON o.operator_id = a.operator_id
+            WHERE o.operator_type = :operator_type
+            """,
+            {"operator_type": operator_type},
+        ).fetchall()
+
+    hints = {}
+    for alias, short_name, long_name in rows:
+        has_long = long_name and long_name != short_name
+        if alias == short_name:
+            # Canonical spelling: the long name is the only thing left to add.
+            hint = long_name if has_long else None
+        elif alias == long_name:
+            hint = short_name
+        else:
+            # An alias: say which operator it resolves to, with its long name when
+            # that adds anything.
+            hint = f"{short_name} — {long_name}" if has_long else short_name
+        if hint:
+            hints[alias] = hint
+    return hints
 
 
 @app.route("/getAdminUsersData", methods=["POST"])
@@ -7173,29 +7217,22 @@ def processPublicTrips(tripIds):
     for tripId in tripIds:
         trip = formatTrip(get_trip_pg(tripId))
 
-        # Process multi operator logos
+        # Process multi operator logos. One query for the whole trip, resolved through
+        # operator_aliases, instead of two per operator matched on exact short_name.
         if "," in str(trip["operator"]):
-            operator_names = trip["operator"]
-            operator_list = [op.strip() for op in operator_names.split(",")]
+            operator_logos = get_trip_operator_logos(
+                tripId, trip["utc_filtered_start_datetime"]
+            )
 
-            operator_logos = []
-            for op_name in operator_list:
-                with pg_session() as pg:
-                    operator = pg.execute(
-                        "SELECT * FROM operators WHERE short_name = :sn", {"sn": op_name}
-                    ).fetchone()
-                if operator:
-                    operator = dict(operator._mapping)
-                    logo_url = get_logo_url(operator, trip)
-                    operator_logos.append(
-                        {"operator_name": operator["short_name"], "logo_url": logo_url}
-                    )
+            # Only take over the single-operator display when at least one logo was
+            # found: the template treats an empty list as "logos present" and would
+            # then render neither a logo nor the operator text.
+            if operator_logos:
+                trip["multi_operators"] = operator_logos
 
-            trip["multi_operators"] = operator_logos
-
-            # Remove operator_name and logo_url from trip if they exist
-            trip.pop("operator_name", None)
-            trip.pop("logo_url", None)
+                # Remove operator_name and logo_url from trip if they exist
+                trip.pop("operator_name", None)
+                trip.pop("logo_url", None)
 
         # Process pricing
         if trip["ticket_id"] not in (None, ""):
@@ -7796,9 +7833,23 @@ def get_trips_api_internal(username, is_public=False):
                     additional_conditions.append(f"COALESCE(to_char(start_datetime, 'YYYY-MM-DD'), '') LIKE :{param_name}")
             elif column_name == "operator":
                 if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(operator, '')) = LOWER(:{param_name})")
+                    operator_match = f"LOWER(COALESCE(operator, '')) = LOWER(:{param_name})"
                 else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(operator, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
+                    operator_match = f"remove_diacritics(LOWER(COALESCE(operator, ''))) LIKE remove_diacritics(LOWER(:{param_name}))"
+                # Also match trips whose operator resolves to the same company under a
+                # different spelling, so "operator:SBB" finds one logged as CFF. The
+                # names are resolved to ids once here rather than per row, leaving an
+                # indexed integer lookup in the correlated subquery.
+                operator_ids = find_operator_ids(search_term, exact=is_exact)
+                if operator_ids:
+                    ids_param = f"{param_name}_operator_ids"
+                    search_params[ids_param] = operator_ids
+                    operator_match = (
+                        f"({operator_match} OR EXISTS (SELECT 1 FROM trip_operators tvs"
+                        f" WHERE tvs.trip_id = FilteredTrips.uid"
+                        f" AND tvs.operator_id = ANY(:{ids_param})))"
+                    )
+                additional_conditions.append(operator_match)
             elif column_name == "line_name":
                 if is_exact:
                     additional_conditions.append(f"LOWER(COALESCE(line_name, '')) = LOWER(:{param_name})")
@@ -7856,7 +7907,7 @@ def get_trips_api_internal(username, is_public=False):
     # elide the airliners join (count query) and avoids the tickets join entirely.
     # Columns are referenced at the FilteredTrips level; ticket name and tags are
     # correlated EXISTS subqueries (the CTE no longer joins tickets).
-    def _global_search_predicate(param):
+    def _global_search_predicate(param, operator_ids=None):
         like = (
             "remove_diacritics(LOWER({col})) LIKE remove_diacritics(LOWER(:" + param + "))"
         )
@@ -7886,19 +7937,36 @@ def get_trips_api_internal(username, is_public=False):
             "EXISTS (SELECT 1 FROM tags_associations fta JOIN tags ft ON fta.tag_id = ft.uid"
             f" WHERE fta.trip_id = FilteredTrips.uid AND remove_diacritics(LOWER(ft.name)) LIKE remove_diacritics(LOWER(:{param})))"
         )
+        # Trips whose operator matches under another spelling — searching "SBB" finds
+        # one logged as CFF. Only added when the term actually names a known operator.
+        if operator_ids:
+            terms.append(
+                "EXISTS (SELECT 1 FROM trip_operators tvg"
+                f" WHERE tvg.trip_id = FilteredTrips.uid AND tvg.operator_id = ANY(:{param}_operator_ids))"
+            )
         return "(" + " OR ".join(terms) + ")"
 
     if search_value:
         search_params["search"] = f"%{search_value}%"
-        additional_conditions.append(_global_search_predicate("search"))
+        global_operator_ids = find_operator_ids(search_value)
+        if global_operator_ids:
+            search_params["search_operator_ids"] = global_operator_ids
+        additional_conditions.append(
+            _global_search_predicate("search", global_operator_ids)
+        )
 
     # Negative global terms ("!term"): keep only trips where NO field matches the
     # term. COALESCE(..., FALSE) so a trip with all-NULL fields still passes the NOT.
     for idx, neg_term in enumerate(global_not_terms):
         neg_param = f"search_not_{idx}"
         search_params[neg_param] = f"%{neg_term}%"
+        # Exclude by alias too, so "!SBB" also drops trips logged as CFF — otherwise
+        # a negative filter would leave behind the spellings it looks equivalent to.
+        neg_operator_ids = find_operator_ids(neg_term)
+        if neg_operator_ids:
+            search_params[f"{neg_param}_operator_ids"] = neg_operator_ids
         additional_conditions.append(
-            f"NOT COALESCE({_global_search_predicate(neg_param)}, FALSE)"
+            f"NOT COALESCE({_global_search_predicate(neg_param, neg_operator_ids)}, FALSE)"
         )
 
     # Build the queries
