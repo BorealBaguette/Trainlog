@@ -516,34 +516,24 @@ body::before {
 }
 
 /* Operator pills — the field behaves like one input containing removable chips.
-   Styled to match the flat #form inputs (same background, no border, 32px tall)
-   but grows to as many rows as the selected operators need. */
-#operatorGroup .operatorPillsField{
+   Scoped to the field class, not to #operatorGroup: the same widget is used by the
+   new-trip form, the edit form and the mass-edit modal, and the modal has no
+   #operatorGroup ancestor — under which none of this applied and logos rendered at
+   their natural size. Layout specific to the trip form stays below. */
+.operatorPillsField{
   position: relative;
   display: inline-flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 4px;
-  width: calc(100% - 37px);
+  width: 100%;
   min-height: 32px;
   padding: 3px 8px;
-  margin: 0 0 1rem;
   background-color: #f3f3f3;
   cursor: text;
 }
 
-/* Align the trip-type icon with the field. Both are inline-level boxes, and
-   vertical-align:middle centres their *margin* boxes — the field's 1rem bottom
-   margin would push the icon down relative to what you actually see. (The plain
-   input this replaced was display:inline, where vertical margins have no layout
-   effect, so the issue did not arise.) Aligning both to the top also keeps the icon
-   beside the first row once enough pills are added to wrap the field. */
-#operatorGroup .operatorLogoWrapper,
-#operatorGroup .operatorPillsField{
-  vertical-align: top;
-}
-
-#operatorGroup .op-pill{
+.operatorPillsField .op-pill{
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -554,13 +544,13 @@ body::before {
   max-width: 100%;
 }
 
-#operatorGroup .op-pill img{
+.operatorPillsField .op-pill img{
   max-height: 20px;
   max-width: 90px;
   object-fit: contain;
 }
 
-#operatorGroup .op-pill-text{
+.operatorPillsField .op-pill-text{
   font-size: 0.8rem;
   line-height: 1;
   white-space: nowrap;
@@ -569,7 +559,7 @@ body::before {
   max-width: 140px;
 }
 
-#operatorGroup .op-pill-x{
+.operatorPillsField .op-pill-x{
   border: 0;
   background: none;
   padding: 0 2px;
@@ -577,13 +567,15 @@ body::before {
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
+  flex-shrink: 0;
 }
-#operatorGroup .op-pill-x:hover{ color: #333; }
+.operatorPillsField .op-pill-x:hover{ color: #333; }
 
 /* The text input shares the field with the pills, so it has no chrome of its own
-   and takes only the space left on the current row. */
-#operatorGroup input.op-pill-placeholder,
-#form #operatorGroup input.op-pill-placeholder{
+   and takes only the space left on the current row. The #form variant outranks the
+   generic #form input[type=text] rule on the trip pages. */
+.operatorPillsField input.op-pill-placeholder,
+#form .operatorPillsField input.op-pill-placeholder{
   flex: 1 1 60px;
   width: auto;
   min-width: 60px;
@@ -592,6 +584,32 @@ body::before {
   margin: 0;
   border: 0;
   background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+/* Trip form only: the field sits beside the trip-type icon and carries the spacing
+   below it. Both are inline-level boxes, and vertical-align:middle centres their
+   *margin* boxes — the field's 1rem bottom margin would push the icon down relative
+   to what you actually see. Aligning both to the top also keeps the icon beside the
+   first row once enough pills are added to wrap the field. */
+#operatorGroup .operatorPillsField{
+  width: calc(100% - 37px);
+  margin: 0 0 1rem;
+}
+
+#operatorGroup .operatorLogoWrapper,
+#operatorGroup .operatorPillsField{
+  vertical-align: top;
+}
+
+/* In a modal the neighbours are Bootstrap .form-control inputs, so match those
+   instead of the trip form's flat grey. */
+.modal .operatorPillsField{
+  background-color: #fff;
+  border: 1px solid #ced4da;
+  border-radius: 0.375rem;
+  min-height: 38px;
 }
 
 /* Suggestion menu: logo (or a blank slot of the same width, so the names stay

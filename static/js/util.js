@@ -451,8 +451,18 @@ function truncate(input, length) {
 };
 
 function normalizeForSearch(string) {
-  // Normalize the comparison (for instance, replace 'č' with 'c')
-  return string.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim()
+  // Normalize the comparison (for instance, replace 'č' with 'c'), so "Ceske"
+  // finds "Ceskě" and "Rugensche" finds "Rügensche". Spaces are kept, so
+  // multi-word searches still work.
+  return String(string == null ? '' : string)
+    .toLowerCase()
+    // NFD splits a letter from its accent, which the range below then drops.
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, "")
+    // These have no decomposition, so NFD leaves them untouched: without this,
+    // "Oresundstag" would never find "Øresundståg".
+    .replace(/ø/g, 'o').replace(/æ/g, 'ae').replace(/[đð]/g, 'd')
+    .replace(/ł/g, 'l').replace(/þ/g, 'th').replace(/ß/g, 'ss')
+    .trim()
 }
 
 function getTooltipFromStationNew(station){
@@ -947,18 +957,26 @@ function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
 // Greek and CJK operator names must survive normalisation instead of collapsing to
 // the empty string.
 function normalizeOperatorName(value) {
-  return String(value == null ? '' : value)
-    // Approximates unaccent(): NFD splits off combining marks, and the few Latin
-    // letters that have no decomposition are mapped by hand.
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/[øØ]/g, 'o').replace(/[æÆ]/g, 'ae').replace(/[đĐðÐ]/g, 'd')
-    .replace(/[łŁ]/g, 'l').replace(/[þÞ]/g, 'th').replace(/ß/g, 'ss')
-    .toLowerCase()
-    .replace(/[^\p{L}\p{N}]+/gu, '');
+  // Builds on normalizeForSearch (case + accent folding) and additionally drops
+  // everything that is not a letter or digit, so "C.F.F", "cff" and "CFF" all come
+  // out alike — the same rule as the SQL operator_normalize().
+  //
+  // \p{L}\p{N} rather than a-z0-9 for the same reason the SQL uses [:alnum:]:
+  // Cyrillic, Greek and CJK operator names must survive instead of collapsing to
+  // the empty string.
+  return normalizeForSearch(value).replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
 function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, logosUrl, type) {
   var names = [];
+
+  // Safe to call again on the same elements: the mass-edit form rebuilds the field
+  // each time it opens, because the suggestion pool depends on the selected trips.
+  // Handlers are namespaced so a rebuild replaces them instead of stacking a second
+  // copy that would commit every typed name twice.
+  if (searchInput.data('ui-autocomplete')) searchInput.autocomplete('destroy');
+  searchInput.off('.opPills');
+  pillContainer.off('.opPills');
   // Built once: every known spelling in its normalised form, so a pill can find its
   // logo without rescanning thousands of names on each render.
   var logosByNormalized = {};
@@ -977,8 +995,16 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
     return key && key in logosByNormalized ? logosByNormalized[key] : null;
   }
 
-  function sync() {
-    hiddenInput.val(names.join(', ')).trigger('change');
+  // `silent` skips the change event. Seeding the field from existing data is not a
+  // user edit, and callers like the mass-edit form treat a change event as "the user
+  // touched this, submit it" — firing it on populate would rewrite the operator of
+  // every selected trip.
+  function sync(silent) {
+    hiddenInput.val(names.join(', '));
+    // A native event rather than jQuery's .trigger(): jQuery's only reaches handlers
+    // it bound itself, and the mass-edit form tracks edits with addEventListener.
+    // Dispatching natively reaches both, since jQuery binds through addEventListener.
+    if (!silent) hiddenInput[0].dispatchEvent(new Event('change', { bubbles: true }));
     pillContainer.find('.op-pill').remove();
     names.forEach(function (name, index) {
       var logo = logoFor(name);
@@ -1013,7 +1039,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
 
   function setFromText(text) {
     names = String(text || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-    sync();
+    sync(true);
   }
 
   // Remember the placeholder before the first sync(), which is what hides it.
@@ -1089,7 +1115,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
     };
   }
 
-  searchInput.on('keydown', function (e) {
+  searchInput.on('keydown.opPills', function (e) {
     if (e.key === ',' ) {
       // Comma is the separator in the stored value, so it commits instead of typing.
       e.preventDefault();
@@ -1110,7 +1136,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
   });
 
   // Clicking anywhere in the field focuses the text input, like a real input would.
-  pillContainer.on('click', function (e) {
+  pillContainer.on('click.opPills', function (e) {
     if (!$(e.target).closest('.op-pill').length) searchInput.focus();
   });
 
@@ -1119,7 +1145,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
   // own click handler, which runs before the form's submit event. Blur fires first,
   // as focus leaves the field on that click. Clicking an autocomplete suggestion does
   // not blur the input (jQuery UI suppresses it), so this cannot double-add.
-  searchInput.on('blur', function () {
+  searchInput.on('blur.opPills', function () {
     if (searchInput.val().trim()) add(searchInput.val());
   });
 
@@ -1391,13 +1417,22 @@ function processCountryCode(cc, positions = null, mode = "auto") {
 const OPERATOR_CELL_HEIGHT = 38;
 const OPERATOR_CELL_WIDTH = 100;
 const OPERATOR_GRID_GAP = 2;
+// How many operators the compact cell can show (a 2x2 grid). Beyond this the cell
+// cannot represent the trip, so the column is pushed into the responsive detail row
+// where every operator is listed — see processHiddenData in dynamic_trips.html.
+const OPERATOR_GRID_MAX = 4;
+
+// True when the compact cell would silently drop operators.
+function operatorsOverflow(row) {
+    return Array.isArray(row.operator_logos) && row.operator_logos.length > OPERATOR_GRID_MAX;
+}
 
 // Lay a trip's operators out in a grid that always fits OPERATOR_CELL_HEIGHT:
 //   1 -> A        2 -> A B        3 -> A B      4 -> A B
 //                                      C             C D
 // Anything past the fourth is dropped (the query already caps at 4).
 function renderOperatorGrid(operators) {
-    const shown = operators.slice(0, 4);
+    const shown = operators.slice(0, OPERATOR_GRID_MAX);
     const cols = shown.length > 1 ? 2 : 1;
     const rows = Math.ceil(shown.length / cols);
     // Split the fixed budget across the rows, leaving room for the gaps, so two

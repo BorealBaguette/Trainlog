@@ -464,6 +464,21 @@
         },
     });
 
+    /* Diacritic-insensitive search, so "Ceske" finds "České dráhy" and "Rugensche"
+       finds "Rügensche BäderBahn" — operator names are full of accents an admin will
+       not type.
+
+       Both sides are folded with the same function the operator resolution uses.
+       DataTables' own hook only folds the table's data, which would leave the reverse
+       (typing an accented term) matching nothing, so the typed term is folded too by
+       taking over the search box. Spaces are kept, so multi-word search still works. */
+    $.fn.dataTable.ext.type.search.string = function (data) {
+        return typeof data === 'string' ? normalizeForSearch(data) : data;
+    };
+    $('#operatorTable_filter input').off().on('input', function () {
+        table.search(normalizeForSearch(this.value)).draw();
+    });
+
     const operatorForm = document.getElementById('operatorForm');
     operatorForm.addEventListener('submit', (e) => {
         e.preventDefault();
