@@ -54,6 +54,23 @@ def add_operator():
     if len(long_name) == 0:
         abort(400, description="long_name is required")
 
+    # A name identifies one operator per pool. Two real companies sharing a name must
+    # be distinguished in the name itself ("Scottish Citylink"), so say so up front
+    # rather than failing on the unique index deeper in.
+    conflict = OperatorsRepository.name_conflict(short_name, operator_type)
+    if conflict is not None:
+        return jsonify(
+            {
+                "status": "conflict",
+                "message": (
+                    f"'{short_name}' already resolves to {conflict['short_name']}."
+                    " Give this operator a distinguishing name, or add the spelling"
+                    " as an alias of the existing one."
+                ),
+                "operator": conflict,
+            }
+        ), 409
+
     try:
         validate_png_file(logo)
 

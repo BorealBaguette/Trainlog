@@ -298,21 +298,92 @@ class OperatorsRepository:
 
     @classmethod
     def add(cls, short_name: str, long_name: str, operator_type: str):
+        """Create an operator, with the slug and alias rows it needs to be usable.
+
+        An operator is only ever found through operator_aliases, so creating one
+        without its own names recorded there would make it invisible to resolution:
+        trips naming it would stay unresolved and it would never show its logo.
+        """
         with pg_session() as pg:
+            # Slugs are the natural key for the CSV round-trip and must be unique;
+            # disambiguate with a counter exactly as migration 0042 did.
+            base = pg.execute(
+                "SELECT COALESCE(operator_normalize(:n), 'operator')", {"n": short_name}
+            ).scalar()
+            slug, n = base, 1
+            while pg.execute(
+                "SELECT 1 FROM operators WHERE slug = :s", {"s": slug}
+            ).fetchone():
+                n += 1
+                slug = f"{base}-{n}"
+
             result = pg.execute(
                 """
-                INSERT INTO operators (short_name, long_name, operator_type)
-                VALUES (:short_name, :long_name, :operator_type)
-                RETURNING operator_id, short_name, long_name, operator_type
+                INSERT INTO operators (short_name, long_name, operator_type, slug)
+                VALUES (:short_name, :long_name, :operator_type, :slug)
+                RETURNING operator_id, short_name, long_name, operator_type, slug
             """,
                 {
                     "short_name": short_name,
                     "long_name": long_name,
                     "operator_type": operator_type,
+                    "slug": slug,
                 },
             )
-            columns = ["operator_id", "short_name", "long_name", "operator_type"]
-            return dict(zip(columns, result.fetchone()))
+            columns = [
+                "operator_id",
+                "short_name",
+                "long_name",
+                "operator_type",
+                "slug",
+            ]
+            operator = dict(zip(columns, result.fetchone()))
+
+            operator_id = operator["operator_id"]
+            pg.execute(
+                "INSERT INTO operator_aliases (operator_id, operator_type, alias, kind)"
+                " VALUES (:id, :type, :alias, 'short')",
+                {"id": operator_id, "type": operator_type, "alias": short_name},
+            )
+            if long_name and long_name != short_name:
+                pg.execute(
+                    "INSERT INTO operator_aliases (operator_id, operator_type, alias, kind)"
+                    " VALUES (:id, :type, :alias, 'long') ON CONFLICT DO NOTHING",
+                    {"id": operator_id, "type": operator_type, "alias": long_name},
+                )
+            # Trips already spelling it this way resolve to it from now on.
+            operator["trips_resynced"] = resync_operator_aliases(
+                operator_id, alias=short_name, pg_session_=pg
+            )
+        return operator
+
+    @classmethod
+    def name_conflict(cls, short_name: str, operator_type: str, exclude_id: int = None):
+        """The operator already using this name in the same pool, if any.
+
+        A name identifies exactly one operator per pool, so two genuinely different
+        companies called "Citylink" must be told apart in their names ("Scottish
+        Citylink"). This reports the clash up front instead of letting the unique
+        index fail, or — worse — creating a second operator that silently never
+        resolves.
+        """
+        with pg_session() as pg:
+            row = pg.execute(
+                """
+                SELECT o.operator_id, o.short_name, o.long_name, a.alias
+                FROM operator_aliases a
+                JOIN operators o ON o.operator_id = a.operator_id
+                WHERE a.operator_type = :operator_type
+                  AND a.normalized = operator_normalize(:short_name)
+                  AND (:exclude_id IS NULL OR o.operator_id <> :exclude_id)
+                """,
+                {
+                    "short_name": short_name,
+                    "operator_type": operator_type,
+                    "exclude_id": exclude_id,
+                },
+            ).fetchone()
+        return dict(row._mapping) if row else None
 
     class UpdateOperatorFieldResult(TypedDict):
         success: bool
@@ -334,10 +405,52 @@ class OperatorsRepository:
             return {"success": False, "error": "invalid operator_type"}
 
         with pg_session() as pg:
+            if field in ("short_name", "long_name"):
+                # The operator's own names are also alias rows — that is how trips
+                # find it. Renaming must move the alias with it, or the operator
+                # would keep answering to its old name and not to its new one.
+                kind = "short" if field == "short_name" else "long"
+                operator_type = pg.execute(
+                    "SELECT operator_type FROM operators WHERE operator_id = :id",
+                    {"id": operator_id},
+                ).scalar()
+                taken = pg.execute(
+                    """
+                    SELECT o.short_name FROM operator_aliases a
+                    JOIN operators o ON o.operator_id = a.operator_id
+                    WHERE a.operator_type = :type
+                      AND a.normalized = operator_normalize(:value)
+                      AND a.operator_id <> :id
+                    """,
+                    {"type": operator_type, "value": value, "id": operator_id},
+                ).fetchone()
+                if taken is not None:
+                    return {
+                        "success": False,
+                        "error": f"'{value}' already resolves to {taken['short_name']}",
+                    }
+
+                pg.execute(
+                    "DELETE FROM operator_aliases WHERE operator_id = :id AND kind = :kind",
+                    {"id": operator_id, "kind": kind},
+                )
+                pg.execute(
+                    "INSERT INTO operator_aliases (operator_id, operator_type, alias, kind)"
+                    " VALUES (:id, :type, :alias, :kind) ON CONFLICT DO NOTHING",
+                    {
+                        "id": operator_id,
+                        "type": operator_type,
+                        "alias": value,
+                        "kind": kind,
+                    },
+                )
+
             pg.execute(
                 f"UPDATE operators SET {field} = :value WHERE operator_id = :operator_id",
                 {"value": value, "operator_id": operator_id},
             )
+            if field in ("short_name", "long_name"):
+                resync_operator_aliases(operator_id, alias=value, pg_session_=pg)
             return {"success": True}
 
     @classmethod
