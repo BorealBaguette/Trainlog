@@ -98,6 +98,18 @@
         background-color: #f8f9fa;
     }
 
+    /* Keep the two action buttons on one line — the column is narrow enough
+       that they otherwise wrap and stack. */
+    .operator-actions {
+        display: flex;
+        gap: .25rem;
+        flex-wrap: nowrap;
+    }
+
+    #operatorTable td:last-child {
+        white-space: nowrap;
+    }
+
     .collapse-icon {
         transition: transform 0.2s;
     }
@@ -416,13 +428,15 @@
                 orderable: false,
                 render(data, type, row) {
                     if (type === 'display')
-                        return `<button class="btn btn-secondary btn-sm me-1" title="Aliases"
+                        return `<div class="operator-actions">
+                          <button class="btn btn-secondary btn-sm" title="Aliases"
                                   onclick="showAliases(${ row.operator_id })">
-                          <i class="fa-solid fa-tags"></i>
-                        </button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteOperator(${ row.operator_id })">
-                          <i class="fa-regular fa-trash-can"></i>
-                        </button>`
+                            <i class="fa-solid fa-tags"></i>
+                          </button>
+                          <button class="btn btn-danger btn-sm" onclick="deleteOperator(${ row.operator_id })">
+                            <i class="fa-regular fa-trash-can"></i>
+                          </button>
+                        </div>`
                     else
                         return data;
                 }
