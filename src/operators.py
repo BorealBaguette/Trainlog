@@ -119,14 +119,13 @@ def get_trip_operator_logos(
 
     `trip_start` is the adapted trip's utc_filtered_start_datetime: the sentinel -1
     for a past trip with an unknown date, 1 for a project/future trip, otherwise a
-    real datetime (see adapt_pg_trip_row).
+    real datetime (see adapt_pg_trip_row). Both sentinels mean "no date to choose
+    by", so both take the current logo.
 
     Operators with no logo are left out: the trip page renders an <img> for every
     entry it is given, so an entry without a URL would show a broken image.
     """
-    if trip_start == -1:
-        mode, start = "oldest", None
-    elif trip_start == 1:
+    if trip_start in (-1, 1):
         mode, start = "latest", None
     else:
         mode, start = "at_date", trip_start

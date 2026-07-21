@@ -5,9 +5,8 @@
 -- operator up by exact short_name, one for its logo).
 --
 -- :mode picks the era rule, matching get_trip.sql:
---   'oldest'  — trip in the past with an unknown date: earliest logo
---   'latest'  — project/future trip: most recent logo
---   'at_date' — real date: newest logo not effective after the trip start
+--   'latest'  — the trip has no date to choose by: the current logo
+--   'at_date' — real date: newest logo in force at the trip start
 SELECT tv.position,
        tv.raw_name,
        tv.operator_id,
@@ -24,12 +23,7 @@ LEFT JOIN LATERAL (
           OR l.effective_date <= CAST(:start AS timestamp)
           OR l.effective_date IS NULL
       )
-    ORDER BY
-        -- Only one of these two keys is active for a given :mode; the other is a
-        -- constant NULL and so does not affect the ordering.
-        CASE WHEN :mode = 'oldest' THEN l.effective_date END ASC NULLS FIRST,
-        CASE WHEN :mode <> 'oldest' THEN l.effective_date END DESC NULLS LAST,
-        l.uid DESC
+    ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
     LIMIT 1
 ) l ON TRUE
 WHERE tv.trip_id = :trip_id

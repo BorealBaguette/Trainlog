@@ -31,30 +31,26 @@ SELECT
         THEN 'future'
     END AS "time",
     o.short_name AS operator_name,
+    -- An operator can have one logo per era. The rule everywhere is: use the current
+    -- logo, unless the trip carries a date to choose by — then use the one in force
+    -- then. A trip with no date (sentinel -1 or 1) has nothing to choose by, so it
+    -- gets the current logo like every other dateless context; it used to get the
+    -- *oldest* one, which showed a 1937 SNCF logo on a trip merely missing its date.
     CASE
-        -- Unknown past date (sentinel -1): oldest logo.
-        WHEN base.utc_filtered_start_datetime IS NULL AND NOT base.is_project THEN (
+        WHEN base.utc_filtered_start_datetime IS NULL THEN (
             SELECT l.logo_url
             FROM operator_logos l
             WHERE l.operator_id = o.operator_id
-            ORDER BY l.effective_date ASC NULLS FIRST
+            ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
             LIMIT 1
         )
-        -- Project/future (sentinel 1): latest logo.
-        WHEN base.utc_filtered_start_datetime IS NULL AND base.is_project THEN (
-            SELECT l.logo_url
-            FROM operator_logos l
-            WHERE l.operator_id = o.operator_id
-            ORDER BY l.effective_date DESC NULLS LAST
-            LIMIT 1
-        )
-        -- Real date: logo closest to (and not after) the trip start.
+        -- Real date: newest logo in force at the trip's start.
         ELSE (
             SELECT l.logo_url
             FROM operator_logos l
             WHERE l.operator_id = o.operator_id
               AND (l.effective_date <= base.utc_filtered_start_datetime OR l.effective_date IS NULL)
-            ORDER BY l.effective_date DESC NULLS LAST
+            ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
             LIMIT 1
         )
     END AS logo_url

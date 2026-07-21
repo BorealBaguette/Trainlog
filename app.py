@@ -4255,13 +4255,19 @@ def listOperatorsLogos(tripType=None):
             # Keyed by every alias, not just short_name, so a user typing CFF or FFS
             # is offered the SBB logo just as one typing SBB is. The stats chart and
             # the trip-form autocomplete both look names up in this dict directly.
+            #
+            # DISTINCT ON picks the current logo. Operators can have several, one per
+            # era (SNCF has seven, 1937 to 2011), and neither the stats chart nor the
+            # autocomplete has a date to choose by — without this the last row to
+            # arrive won, so the chart showed an arbitrary historical logo.
             rows = pg.execute(
                 """
-                SELECT a.alias, l.logo_url
+                SELECT DISTINCT ON (a.alias) a.alias, l.logo_url
                 FROM operators o
                 JOIN operator_aliases a ON a.operator_id = o.operator_id
                 JOIN operator_logos l ON o.operator_id = l.operator_id
                 WHERE o.operator_type = :logo_type
+                ORDER BY a.alias, l.effective_date DESC NULLS LAST, l.uid DESC
             """,
                 {"logo_type": logo_type},
             ).fetchall()
@@ -7122,53 +7128,6 @@ def get_current_trip_path(username):
         sorted_trip_list, key=lambda d: d["trip"]["start_datetime"], reverse=True
     )
     return jsonify(sorted_trip_list)
-
-
-def get_logo_url(operator, trip):
-    operator_id = operator["operator_id"]
-    utc_filtered_start_datetime = trip["utc_filtered_start_datetime"]
-    with pg_session() as pg:
-        if utc_filtered_start_datetime == -1:
-            # Fetch the oldest logo
-            logo = pg.execute(
-                """
-                SELECT l.logo_url
-                FROM operator_logos l
-                WHERE l.operator_id = :operator_id
-                ORDER BY l.effective_date ASC NULLS FIRST
-                LIMIT 1
-            """,
-                {"operator_id": operator_id},
-            ).fetchone()
-        elif utc_filtered_start_datetime == 1:
-            # Fetch the latest logo
-            logo = pg.execute(
-                """
-                SELECT l.logo_url
-                FROM operator_logos l
-                WHERE l.operator_id = :operator_id
-                ORDER BY l.effective_date DESC NULLS LAST
-                LIMIT 1
-            """,
-                {"operator_id": operator_id},
-            ).fetchone()
-        else:
-            # Fetch the logo closest to the trip start date
-            logo = pg.execute(
-                """
-                SELECT l.logo_url
-                FROM operator_logos l
-                WHERE l.operator_id = :operator_id
-                  AND (l.effective_date <= :start OR l.effective_date IS NULL)
-                ORDER BY l.effective_date DESC NULLS LAST
-                LIMIT 1
-            """,
-                {"operator_id": operator_id, "start": utc_filtered_start_datetime},
-            ).fetchone()
-    if logo:
-        return logo["logo_url"]
-    else:
-        return None
 
 
 def processPublicTrips(tripIds):
