@@ -91,6 +91,12 @@
         white-space: nowrap;
     }
 
+    /* style2.css sets .popover{max-width:80%} for the big vehicle-photo popovers in
+       the trips table. This one is explanatory text, so keep it a readable column. */
+    .popover.operator-help {
+        max-width: 24rem;
+    }
+
     .collapse-icon {
         transition: transform 0.2s;
     }
@@ -102,14 +108,70 @@
 
 <div class="container">
     <h1 class="mt-3">Operators and Logos</h1>
-    <div class="mb-3">
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#operatorModal" onclick="clearForm()">Add Operator</button>
-        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#missingOperatorsModal" onclick="loadMissingOperators()">Unresolved Spellings</button>
-        <a class="btn btn-outline-secondary" href="/api/admin/operators/export.csv">Export CSV</a>
-        <button type="button" class="btn btn-outline-secondary" onclick="$('#importCsvFile').click()">Import CSV</button>
+    <div class="mb-3 d-flex align-items-center gap-2 flex-wrap">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#operatorModal" onclick="clearForm()">
+            <i class="fa-solid fa-plus me-1"></i>Add Operator
+        </button>
+        <!-- Everything except "Add Operator" lives here: the work queue is used often
+             but is still a task rather than a control, and the rest is bulk/maintenance.
+             The menu has a definite min-width so the trailing info icon is laid out
+             inside it — an absolutely positioned menu sizes to its widest item, and the
+             icon kept falling outside that measurement. -->
+        <div class="dropdown">
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fa-solid fa-screwdriver-wrench"></i> Tools
+            </button>
+            <ul class="dropdown-menu" style="min-width:17rem">
+                <li>
+                    <button type="button" class="dropdown-item" data-bs-toggle="modal"
+                            data-bs-target="#missingOperatorsModal" onclick="loadMissingOperators()"
+                            title="Operator names used on trips that match no operator yet.">
+                        <i class="fa-solid fa-circle-question me-2"></i>Unresolved spellings
+                    </button>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item" href="/api/admin/operators/export.csv"
+                       title="Download all operators and their aliases, keyed on slug.">
+                        <i class="fa-solid fa-download me-2"></i>Export CSV
+                    </a>
+                </li>
+                <li>
+                    <button type="button" class="dropdown-item" onclick="$('#importCsvFile').click()"
+                            title="Apply an edited export: renames operators and adds aliases. Never deletes.">
+                        <i class="fa-solid fa-upload me-2"></i>Import CSV
+                    </button>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <button type="button" class="dropdown-item d-flex align-items-center justify-content-between"
+                            onclick="checkTripOperators()">
+                        <span><i class="fa-solid fa-stethoscope me-2"></i>Check operator matching</span>
+                        <!-- stopPropagation so reading the help does not run the check. -->
+                        <i class="fa-solid fa-circle-info text-muted ms-2" tabindex="0"
+                           style="cursor:help" onclick="event.stopPropagation()"
+                           data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-html="true"
+                           data-bs-custom-class="operator-help"
+                           data-bs-placement="right" data-bs-title="What this checks"
+                           data-bs-content="
+                             <p class='mb-2'>A trip stores its operator as free text. That text is matched to an
+                             operator <strong>once, when the trip is saved</strong>, and the result is kept in a
+                             lookup table, which is what makes stats and logos fast.</p>
+                             <p class='mb-2'>This compares that lookup against what every trip's text would match
+                             today. It should always say <em>up to date</em>. If it does not, something changed a
+                             trip without going through the app, and <strong>Rebuild</strong> recomputes the lookup
+                             for every trip (about 30 seconds).</p>
+                             <p class='mb-0 text-muted'>It cannot tell you an alias is <em>missing</em>, only
+                             that the lookup disagrees with the trips. A spelling that matches no operator appears
+                             under <em>Unresolved spellings</em> instead.</p>"></i>
+                    </button>
+                </li>
+            </ul>
+        </div>
+
         <input type="file" id="importCsvFile" accept=".csv" style="display:none" onchange="importOperatorsCsv(this)">
-        <button type="button" class="btn btn-outline-secondary" onclick="checkTripOperators()">Check resolution</button>
-        <span id="consistencyStatus" class="ms-2"></span>
+        <span id="consistencyStatus"></span>
     </div>
     <table id="operatorTable" class="mt-3">
         <thead>
@@ -262,7 +324,7 @@
           <hr class="my-4">
           <h6>Counted as one with</h6>
           <p class="text-muted small">
-            For a company with several official names — SBB, CFF and FFS. Each stays a
+            For a company with several official names, such as SBB, CFF and FFS. Each stays a
             separate operator with its own name and logo; they only add up together in
             the stats, and every user sees the group under whichever name they log
             most. Nothing is deleted and no trip changes.
@@ -278,7 +340,7 @@
           <hr class="my-4">
           <h6>Merge another operator into this one</h6>
           <p class="text-muted small">
-            Only for genuine duplicates — the same operator entered twice. The other
+            Only for genuine duplicates, the same operator entered twice. The other
             operator's logos and spellings move here and it is <strong>deleted</strong>.
             For a company with several legitimate names, group them above instead.
           </p>
@@ -461,6 +523,10 @@
         table.search(normalizeForSearch(this.value)).draw();
     });
 
+    // Bootstrap popovers are opt-in; nothing else on this page initialises them.
+    document.querySelectorAll('[data-bs-toggle="popover"]')
+        .forEach(el => new bootstrap.Popover(el, { container: 'body' }));
+
     const operatorForm = document.getElementById('operatorForm');
     operatorForm.addEventListener('submit', (e) => {
         e.preventDefault();
@@ -609,7 +675,7 @@
         $('#short_name').val(op.short_name);
         $('#long_name').val(op.long_name);
         $('#operator_type').val(op.operator_type);
-        $('#operatorModalLabel').text('Edit Operator — ' + op.short_name);
+        $('#operatorModalLabel').text('Edit Operator: ' + op.short_name);
         // Logos are managed through the carousel, not this modal.
         $('#operatorLogoGroup').hide();
         $('#operatorFormError').empty();
@@ -914,7 +980,7 @@ function operatorById(id) {
 function showAliases(operatorId) {
     aliasOperatorId = operatorId;
     const operator = operatorById(operatorId);
-    $('#aliasModalLabel').text('Aliases — ' + (operator ? operator.short_name : operatorId));
+    $('#aliasModalLabel').text('Aliases: ' + (operator ? operator.short_name : operatorId));
     $('#newAliasInput').val('');
     $('#aliasError').empty();
     $('#mergeSearchInput').val('');
@@ -973,7 +1039,7 @@ function linkOperator(otherId) {
         $('#groupCandidates').empty();
         loadGroup();
         table.ajax.reload(null, false);
-        bootstrapToast(`Grouped — ${body.members} operators now count as one`);
+        bootstrapToast(`Grouped: ${body.members} operators now count as one`);
     }).catch(err => bootstrapToast(err.message, 'danger'));
 }
 
@@ -1031,7 +1097,7 @@ function addAlias() {
         if (!res.ok) throw new Error(body.message || 'failed');
         $('#newAliasInput').val('');
         loadAliases();
-        bootstrapToast(`Alias added — now resolves ${body.alias.trips_resynced} previously unmatched trip(s)`);
+        bootstrapToast(`Alias added: now resolves ${body.alias.trips_resynced} previously unmatched trip(s)`);
     }).catch(err => {
         $('#aliasError').html(`<div class="alert alert-danger py-2">${escapeHtml(err.message)}</div>`);
     });
@@ -1043,7 +1109,7 @@ function deleteAlias(aliasId) {
             const body = await res.json().catch(() => ({}));
             if (!res.ok) throw new Error('failed');
             loadAliases();
-            bootstrapToast(`Alias removed — ${body.trips_resynced} trip(s) no longer resolve here`);
+            bootstrapToast(`Alias removed: ${body.trips_resynced} trip(s) no longer resolve here`);
         })
         .catch(() => bootstrapToast('Could not remove alias', 'danger'));
 }
@@ -1101,7 +1167,7 @@ function mergeOperator(sourceId, targetId = aliasOperatorId) {
         $('#operatorModal').modal('hide');
         if ($('#aliasModal').hasClass('show')) loadAliases();
         table.ajax.reload(null, false);
-        bootstrapToast(`Merged — ${body.trips_resynced} trips re-resolved`);
+        bootstrapToast(`Merged: ${body.trips_resynced} trips re-resolved`);
     }).catch(err => bootstrapToast(err.message, 'danger'));
 }
 
@@ -1136,7 +1202,7 @@ function assignToOperator(operatorId) {
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body.message || 'failed');
         $('#assignAliasModal').modal('hide');
-        bootstrapToast(`"${assignAliasValue}" assigned — now resolves ${body.alias.trips_resynced} previously unmatched trip(s)`);
+        bootstrapToast(`"${assignAliasValue}" assigned: now resolves ${body.alias.trips_resynced} previously unmatched trip(s)`);
         loadMissingOperators();
     }).catch(err => {
         $('#assignError').html(`<div class="alert alert-danger py-2 mt-2">${escapeHtml(err.message)}</div>`);
@@ -1166,7 +1232,7 @@ function rebuildTripOperators() {
         .then(res => res.json())
         .then(r => {
             $('#consistencyStatus').html(`<span class="badge bg-success">rebuilt: ${r.rows} rows</span>`);
-            bootstrapToast(`Resolution rebuilt — ${r.rows} rows`);
+            bootstrapToast(`Operator matching rebuilt: ${r.rows} rows`);
         })
         .catch(() => $('#consistencyStatus').html('<span class="badge bg-danger">rebuild failed</span>'));
 }
