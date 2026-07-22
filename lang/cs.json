@@ -99,6 +99,8 @@
     "hours": "Hodiny",
     "minutes": "Minuty",
     "operator": "Provozovatel",
+    "operatorPlainText": "Upravit jako prostý text",
+    "operatorPillsMode": "Zpět na seznam provozovatelů",
     "crossedCountries": "Projeté země",
     "stats": "Statistiky",
     "email": "E-mailová adresa",

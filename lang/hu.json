@@ -99,6 +99,8 @@
     "hours": "Óra",
     "minutes": "Perc",
     "operator": "Operátor",
+    "operatorPlainText": "Szerkesztés egyszerű szövegként",
+    "operatorPillsMode": "Vissza az üzemeltetők listájához",
     "crossedCountries": "Érintett országok",
     "stats": "Statisztika",
     "email": "Email cím",

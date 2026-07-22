@@ -542,7 +542,10 @@
 
     operatorPills = operatorPillsInput(
       $("#operator"), $("#operatorSearch"), $("#operatorPills"), manAndOps,
-      "{{ url_for('static',filename='')}}", "{{vehicle_type}}");
+      "{{ url_for('static',filename='')}}", "{{vehicle_type}}",
+      { plainToggle: true,
+        plainLabel: "{{ operatorPlainText|default('Edit as plain text') }}",
+        pillsLabel: "{{ operatorPillsMode|default('Back to operator list') }}" });
     {% if vehicle_type != 'air' %}
     materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
     {% endif %}

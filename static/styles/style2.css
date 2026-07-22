@@ -588,6 +588,37 @@ body::before {
   outline: none;
 }
 
+/* Plain-text mode: the raw comma-separated value, shown in place of the pills so a
+   list can be pasted in or copied out. Same chrome-less styling as the search input,
+   and the same flex basis so the mode button stays on its row instead of wrapping. */
+.operatorPillsField input.op-plain,
+#form .operatorPillsField input.op-plain{
+  flex: 1 1 60px;
+  width: auto;
+  min-width: 60px;
+  height: 24px;
+  padding: 0;
+  margin: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  outline: none;
+}
+
+/* Mode button: pinned to the right of the field, whichever mode is showing. */
+.operatorPillsField .op-mode-toggle{
+  border: 0;
+  background: none;
+  padding: 0 2px;
+  margin-left: auto;
+  color: #999;
+  font-size: 0.85rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.operatorPillsField .op-mode-toggle:hover{ color: #333; }
+
 /* Trip form only: the field sits beside the trip-type icon and carries the spacing
    below it. Both are inline-level boxes, and vertical-align:middle centres their
    *margin* boxes — the field's 1rem bottom margin would push the icon down relative

@@ -99,6 +99,8 @@
     "hours": "시간",
     "minutes": "분",
     "operator": "운영사",
+    "operatorPlainText": "일반 텍스트로 편집",
+    "operatorPillsMode": "운영사 목록으로 돌아가기",
     "crossedCountries": "국가",
     "stats": "통계",
     "email": "이메일 주소",

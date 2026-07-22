@@ -99,6 +99,8 @@
     "hours": "Tunnid",
     "minutes": "Minutid",
     "operator": "Vedaja",
+    "operatorPlainText": "Muuda tekstina",
+    "operatorPillsMode": "Tagasi vedajate loendisse",
     "crossedCountries": "Riigid",
     "stats": "Statistika",
     "email": "E-posti aadress",

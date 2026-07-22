@@ -930,8 +930,12 @@ function normalizeOperatorName(value) {
   return normalizeForSearch(value).replace(/[^\p{L}\p{N}]+/gu, '');
 }
 
-function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, logosUrl, type) {
+// `opts.plainToggle` adds a button that swaps the pills for the raw comma-separated
+// value, so a whole list of operators can be pasted in or copied out at once —
+// something the pills alone made impossible.
+function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, logosUrl, type, opts) {
   var names = [];
+  opts = opts || {};
 
   // Safe to call again on the same elements: the mass-edit form rebuilds the field
   // each time it opens, because the suggestion pool depends on the selected trips.
@@ -940,6 +944,9 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
   if (searchInput.data('ui-autocomplete')) searchInput.autocomplete('destroy');
   searchInput.off('.opPills');
   pillContainer.off('.opPills');
+  // A rebuild starts from the pills, so drop any controls a previous call added.
+  pillContainer.find('.op-plain, .op-mode-toggle').remove();
+  pillContainer.find('.op-pill-placeholder').show();
   // Built once: every known spelling in its normalised form, so a pill can find its
   // logo without rescanning thousands of names on each render.
   var logosByNormalized = {};
@@ -988,6 +995,9 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
     });
     // The placeholder only makes sense while nothing is selected.
     searchInput.attr('placeholder', names.length ? '' : searchInput.data('placeholder'));
+    // Pills rebuilt while plain mode is showing (a programmatic set) must stay out
+    // of sight until the user switches back.
+    if (plainInput && plainInput.is(':visible')) pillContainer.find('.op-pill').hide();
   }
 
   function add(name) {
@@ -1098,9 +1108,46 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
     }
   });
 
+  // Plain-text mode: the same value, shown as the comma-separated text that is
+  // actually submitted, so it can be pasted in or copied out in one go. It lives
+  // inside the pills field and replaces its contents, leaving the field's own
+  // chrome — and the mode button — where they are.
+  var plainInput = null;
+  if (opts.plainToggle) {
+    plainInput = $('<input type="text" class="op-plain" autocomplete="off">')
+      .attr('placeholder', searchInput.data('placeholder'))
+      .hide();
+    var modeBtn = $('<button type="button" class="op-mode-toggle"></button>')
+      .attr('title', opts.plainLabel || 'Plain text')
+      .append($('<i class="fas fa-keyboard"></i>'));
+    pillContainer.append(plainInput, modeBtn);
+
+    modeBtn.on('click.opPills', function () {
+      if (plainInput.is(':visible')) {
+        // Back to pills: the text is the source of truth, so rebuild from it.
+        setFromText(plainInput.val());
+        plainInput.hide();
+        pillContainer.find('.op-pill, .op-pill-placeholder').show();
+        modeBtn.attr('title', opts.plainLabel || 'Plain text')
+               .find('i').attr('class', 'fas fa-keyboard');
+      } else {
+        plainInput.val(hiddenInput.val());
+        pillContainer.find('.op-pill, .op-pill-placeholder').hide();
+        plainInput.show().focus();
+        modeBtn.attr('title', opts.pillsLabel || 'Operator list')
+               .find('i').attr('class', 'fas fa-tags');
+      }
+    });
+
+    // Typing in plain mode edits the submitted value directly — the field can be
+    // left in this mode and submitted without ever switching back.
+    plainInput.on('input.opPills', function () { hiddenInput.val(plainInput.val()); });
+  }
+
   // Clicking anywhere in the field focuses the text input, like a real input would.
   pillContainer.on('click.opPills', function (e) {
-    if (!$(e.target).closest('.op-pill').length) searchInput.focus();
+    if ($(e.target).closest('.op-pill, .op-plain, .op-mode-toggle').length) return;
+    (plainInput && plainInput.is(':visible') ? plainInput : searchInput).focus();
   });
 
   // A name typed but never committed would otherwise be silently dropped. Commit on
@@ -1114,7 +1161,13 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
 
   // Let callers that set the operator programmatically (FR24 import, boarding-pass
   // query params) refresh the pills.
-  return { set: setFromText, add: add };
+  return {
+    set: function (text) {
+      setFromText(text);
+      if (plainInput && plainInput.is(':visible')) plainInput.val(hiddenInput.val());
+    },
+    add: add
+  };
 }
 
 function materialTypeAutocomplete(select, manAndOps, type) {

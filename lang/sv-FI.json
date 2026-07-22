@@ -99,6 +99,8 @@
     "hours": "Timmar",
     "minutes": "Minuter",
     "operator": "Trafikidkare",
+    "operatorPlainText": "Redigera som text",
+    "operatorPillsMode": "Tillbaka till listan över trafikidkare",
     "crossedCountries": "Korsade länder",
     "stats": "Statistik",
     "email": "E-postadress",

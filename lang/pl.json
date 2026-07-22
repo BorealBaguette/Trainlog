@@ -99,6 +99,8 @@
     "hours": "Godziny",
     "minutes": "Minuty",
     "operator": "Operator",
+    "operatorPlainText": "Edytuj jako zwykły tekst",
+    "operatorPillsMode": "Powrót do listy operatorów",
     "crossedCountries": "Kraje na trasie podróży",
     "stats": "Statystyki",
     "email": "Adres e-mail",
