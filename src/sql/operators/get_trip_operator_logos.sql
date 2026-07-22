@@ -13,7 +13,9 @@ SELECT tv.position,
        op.short_name,
        l.logo_url
 FROM trip_operators tv
-JOIN operators op ON op.operator_id = tv.operator_id
+-- LEFT: a name that resolved to no operator at all (free text the user typed) still
+-- belongs in the list — it is rendered as plain text instead of a logo.
+LEFT JOIN operators op ON op.operator_id = tv.operator_id
 LEFT JOIN LATERAL (
     SELECT l.logo_url
     FROM operator_logos l

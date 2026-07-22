@@ -2,15 +2,18 @@
 {% block content %}
 {% include "includes/trainset_display.html" %}
 <style>
+/* Controls, not facts: at rest they sit at the meta line's own weight (the primary
+   blue read as a third coloured fact next to the coins and the leaf), and take the
+   accent colour only on hover or once open, where it means "active". */
 .publicTsToggle {
   cursor: pointer;
-  color: #0d6efd;
+  color: #a8adb3;
   margin-left: 7px;
   text-decoration: none;
   vertical-align: baseline;
 }
 .publicTsToggle:hover,
-.publicTsToggle.open { color: #0a58ca; }
+.publicTsToggle.open { color: #0d6efd; }
 /* Wagon images are sized in JS against the strip's median height (normalizeStrip), so
    each source's px-per-metre cancels out and relative proportions are gently preserved;
    the scroll wrapper's default 16px bottom padding keeps the scrollbar clear of the pills. */
@@ -32,6 +35,53 @@
 .events .publicVehicle,
 .events .publicTrainset { margin-top: 9px; }
 .events .duration { color: #8a8a8a; }
+
+/* ── Leg facts: operators + line, then a meta line of icon/value pairs ───────
+   Every one of these rows is built from spans, which the blanket `.events span`
+   rule pads by 1.5em and hangs the leg connector ::before off. Reset both here,
+   then let flex + gap do the spacing (so an empty fact simply disappears). */
+.events .legOperators,
+.events .legMeta { display: flex; flex-wrap: wrap; align-items: center; }
+.events .legOperators { gap: 5px 7px; }
+.events .legMeta { gap: 2px 6px; }
+.events .legOperators span,
+.events .legMeta span { padding: 0; position: static; }
+.events .legOperators span::before,
+.events .legMeta span::before { content: none; }
+/* The logo/name adjacency margins would double up on top of the flex gap. */
+.events .legOperators > * { margin-left: 0; }
+
+.events .legMetaItem { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.legMetaIcon { color: #b6b6b6; font-size: 0.9em; }
+.legMetaSep { color: #d5d5d5; }
+/* The icons keep their identity colours, desaturated so they read as a family and
+   sit below the station names in the hierarchy rather than above them. */
+.legIconLine   { color: #8c9bb0; }
+.legIconTicket { color: #6f9e6f; }
+.legIconPrice  { color: #bfa055; }
+/* Line name: same icon+value shape as the measurements, but a shade darker and a
+   touch heavier — it names the service rather than measuring it. */
+.events .legLine {
+  color: #5f5f5f;
+  font-weight: 500;
+  white-space: normal;
+  max-width: 100%;
+  overflow-wrap: anywhere;   /* a long line name wraps, never widens the leg */
+}
+
+/* Money and carbon: icon-only while the leg is at rest, short value revealed when
+   it is selected. The tooltip keeps the full figure (original currency, g/km) in
+   both states — this is the touch-reachable half of it, shown one leg at a time so
+   the itinerary stays as calm as it is collapsed. */
+/* `.popupInfo` sets 1.2em, which made the money/carbon icons out-shout the row
+   they sit in — normalise them to the meta line's own size. */
+.events .legMeta .popupInfo { font-size: 1em; }
+/* The leaf's colour is computed from the carbon intensity, so it can't be set
+   here — desaturate it instead, to the same level as the fixed icons above. */
+.events .legMeta .carbon-icon { font-size: 1em; filter: saturate(0.7); }
+.legValue { display: none; }
+.events .itinerary-trip.active .legValue { display: inline; }
+.events .itinerary-trip.active .legMeta { color: #7a7a7a; }
 
 .publicVehicle {
   font-size: 0.82em;
@@ -79,8 +129,8 @@
 .publicVehicleMedia.is-clickable { cursor: pointer; }
 .publicVehicleMedia.is-clickable:hover { opacity: 0.85; }
 .publicVehicleMedia.is-loading { opacity: 0.5; }
-.publicVehiclePhotoBtn { color: #0d6efd; text-decoration: none; font-size: 0.95em; }
-.publicVehiclePhotoBtn:hover, .publicVehiclePhotoBtn.open { color: #0a58ca; }
+.publicVehiclePhotoBtn { color: #a8adb3; text-decoration: none; font-size: 0.95em; }
+.publicVehiclePhotoBtn:hover, .publicVehiclePhotoBtn.open { color: #0d6efd; }
 /* Third-party thumbnails vary wildly in size — cap and frame them so every leg
    looks the same regardless of what comes back. */
 .publicVehicle .vehiclePhotoContainer {
@@ -423,6 +473,20 @@
   position: relative;   /* anchors the badge; no layout change */
   z-index: 1;           /* keep rows above the trip-card overlay below */
   cursor: pointer;
+  max-width: 100%;
+}
+/* `.events li` is a flex row, so the leg's <span> is a flex item and sizes to
+   max-content: ONE over-wide child (an open trainset strip) stretched the whole
+   leg, which stopped the chip rows wrapping and made the sidebar scroll sideways.
+   Cap the item at the row width — nothing may grow the leg past the panel; the
+   strip's own scroll box is the only thing allowed to scroll. */
+.events .itinerary-trip > span { flex: 1 1 auto; min-width: 0; max-width: 100%; }
+.events .itinerary-trip .publicTrainset,
+.events .itinerary-trip .publicVehicle { max-width: 100%; }
+.events .itinerary-trip .trainset-inline-scroll {
+  max-width: 100%;
+  align-self: stretch;  /* .ts-inline-wrapper is align-items:flex-start, which
+                           would otherwise shrink-wrap it to the strip's width */
 }
 
 /* "Transfert" is wrapped in a span, which would otherwise inherit the
@@ -767,12 +831,10 @@ function renderPublicTrainset($container, ts) {
         strip.append(wagon);
     });
     if (!strip.children().length) return;
-    // The itinerary span shrink-wraps its content, so max-width:100% can't
-    // constrain the strip — measure the leg and set an explicit pixel width.
-    var legW = $container.closest('li').width() || 360;
-    var scroller = $('<div class="trainset-inline-scroll"></div>')
-        .css('max-width', Math.max(legW - 120, 160) + 'px')
-        .append(strip);
+    // No pixel measuring: the leg's flex item is capped at the row width (see the
+    // .itinerary-trip > span rules above), so max-width:100% here is both correct
+    // and resize-proof — the strip scrolls inside the leg, never widening it.
+    var scroller = $('<div class="trainset-inline-scroll"></div>').append(strip);
     var attr = _attributionText(units);
     if (attr) scroller.attr('title', attr);
     $container.addClass('ts-inline-wrapper').append(scroller);
@@ -937,8 +999,13 @@ function createCarbonInfo(carbonFootprint, tripLength, langId) {
   const co2PerKmText = formatCO2PerKm(co2PerKm, langId);
   const tooltipText = `${totalCarbonText} (${co2PerKmText})`;
   
-  return `<div class="popupInfo carbon_popupInfo" popupinfo_content="${tooltipText}">
-            <i class="fas fa-leaf carbon-icon" style="color: ${color};"></i>
+  // "1.2 kg CO₂eq" → "1.2 kg" inline: the leaf already says what is being measured,
+  // and the full figure (plus the per-km rate) stays in the tooltip. The leaf keeps
+  // its colour — unlike the other icons here, it encodes carbon intensity.
+  const shortCarbonText = totalCarbonText.replace(' CO₂eq', '');
+
+  return `<div class="popupInfo carbon_popupInfo legMetaItem" popupinfo_content="${tooltipText}">
+            <i class="fas fa-leaf carbon-icon" style="color: ${color};"></i><span class="legValue">${shortCarbonText}</span>
           </div>`;
 }
 
@@ -1207,6 +1274,16 @@ function buildItinerary(trips, prices) {
         let operatorContents = [];
         if (trip.trip.multi_operators) {
             trip.trip.multi_operators.forEach(multiOperator => {
+                // An operator without a logo (free text, or one whose logo isn't in
+                // the DB) is listed by name — dropping it would silently lose it.
+                if (!multiOperator.logo_url) {
+                    operatorContents.push(
+                        $('<span>').addClass('itineraryOperatorName')
+                                   .text(multiOperator.operator_name || '')
+                    );
+                    return;
+                }
+
                 let imgElement = $("<img>")
                     .attr("src", "/static/" + multiOperator.logo_url)
                     .attr("class", "itineraryOperatorLogo");
@@ -1215,7 +1292,7 @@ function buildItinerary(trips, prices) {
                     .attr("class", "popupInfo operator_popupInfo")
                     .attr("popupInfo_content", multiOperator.operator_name)
                     .append(imgElement);
-                    
+
                 operatorContents.push(divElement);
             });
         } else if (trip.trip.logo_url) {
@@ -1230,21 +1307,20 @@ function buildItinerary(trips, prices) {
                 
             operatorContents.push(divElement);
         } else {
-            operatorContents.push(document.createTextNode(trip.trip.operator || ''));
+            // No logo at all: one name chip per comma-separated operator.
+            String(trip.trip.operator || '').split(',').forEach(function(name) {
+                name = name.trim();
+                if (name) {
+                    operatorContents.push($('<span>').addClass('itineraryOperatorName').text(name));
+                }
+            });
         }
 
-        let operatorLogoOrText;
-        if (operatorContents.length) {
-            operatorLogoOrText = $('<div>').append(operatorContents);
-        }
-
-        let lineOrNot = trip.trip.line_name != "" ?
-            (typeof operatorLogoOrText === 'object' ?
-                operatorLogoOrText.append(document.createTextNode(" - " + trip.trip.line_name)) :
-                operatorLogoOrText) :
-            operatorLogoOrText;
-        
-        let operatorDisplay = $("<div>").append(trip.trip.operator != "" ? lineOrNot : null);
+        // The operator row is purely "who ran it": logos, plus a name chip for each
+        // operator with no logo. The line name is a different category and lives in
+        // the meta line below, where its icon identifies it.
+        let operatorDisplay = $('<div>').addClass('legOperators');
+        if (trip.trip.operator) operatorDisplay.append(operatorContents);
 
         // Vehicle detail panel, appended under the duration line. A wagon strip is
         // heavy, so trains stay behind a toggle and render on first open; air and
@@ -1333,7 +1409,10 @@ function buildItinerary(trips, prices) {
                 let originalCurrency = formatCurrency("{{langId}}", trip.trip.ticket_price, trip.trip.ticket_currency);
                 formattedTicketPrice += ` (${originalCurrency})`;
             }
-            formattedTicketInfo = `<div class="popupInfo ticket_popupInfo" popupinfo_content="${formattedTicketPrice}"><i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i></div>`;
+            // Inline value is the ticket's share of the price alone — its *name* is
+            // free text with no short form, so that stays in the tooltip.
+            let shortTicketPrice = formatCurrency("{{langId}}", trip.trip.ticket_price_in_user_currency, trip.trip.user_currency);
+            formattedTicketInfo = `<div class="popupInfo ticket_popupInfo legMetaItem" popupinfo_content="${formattedTicketPrice}"><i class="fa-solid fa-ticket legMetaIcon legIconTicket"></i><span class="legValue">${shortTicketPrice}</span></div>`;
         }
         if (isNumber(trip.trip.price_in_user_currency)) {
             formattedTripPrice = formatCurrency("{{langId}}", trip.trip.price_in_user_currency, trip.trip.user_currency);
@@ -1341,11 +1420,16 @@ function buildItinerary(trips, prices) {
                 let originalCurrency = formatCurrency("{{langId}}", trip.trip.price, trip.trip.currency);
                 formattedTripPrice += ` (${originalCurrency})`;
             }
-            formattedTripInfo = `<div class="popupInfo trip_popupInfo" popupinfo_content="${formattedTripPrice}"><i style="color:#D4AF37;" class="fa-solid fa-coins"></i></div>`;
+            // Inline value is the user-currency amount alone; the tooltip keeps the
+            // original currency too. `.legValue` shows only on the selected leg.
+            let shortTripPrice = formatCurrency("{{langId}}", trip.trip.price_in_user_currency, trip.trip.user_currency);
+            formattedTripInfo = `<div class="popupInfo trip_popupInfo legMetaItem" popupinfo_content="${formattedTripPrice}"><i class="fa-solid fa-coins legMetaIcon legIconPrice"></i><span class="legValue">${shortTripPrice}</span></div>`;
         }
         
         if (formattedTicketInfo || formattedTripInfo) {
-            formattedPrice = (formattedTicketInfo || '') + (formattedTicketInfo && formattedTripInfo ? '  ' : '') + (formattedTripInfo || '');
+            // The dot separators are themselves `.legValue`s: with the values hidden
+            // the row is bare icons spaced by the flex gap, exactly as before.
+            formattedPrice = (formattedTicketInfo || '') + (formattedTicketInfo && formattedTripInfo ? '<span class="legValue legMetaSep">·</span>' : '') + (formattedTripInfo || '');
         }
 {% endif %}
 
@@ -1353,15 +1437,29 @@ function buildItinerary(trips, prices) {
         var formattedCarbon = createCarbonInfo(trip.trip.carbon_footprint, trip.trip.trip_length, "{{langId}}");
 {% endif %}
 
+        // Meta line: each fact is an icon + its value, joined by thin dots, so the
+        // leg reads as facts rather than as one run-on "10min - 70km" string.
         var actualDuration = getActualTripDuration(trip.trip);
-        var kmPart = trip.trip.trip_length > 0 ? " - " + mToKm(trip.trip.trip_length) + "km" : "";
-        var durationDisplay;
+        var durationValue;
         if (actualDuration !== trip.trip.trip_duration[1]) {
           var durationClass = actualDuration > trip.trip.trip_duration[1] ? 'delay-time' : 'early-time';
-          durationDisplay = '<s>' + secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + '</s> <span class="' + durationClass + '">' + secondsToDhm(actualDuration, "{{langId}}") + '</span>' + kmPart;
+          durationValue = '<s>' + secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + '</s> <span class="' + durationClass + '">' + secondsToDhm(actualDuration, "{{langId}}") + '</span>';
         } else {
-          durationDisplay = secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + kmPart;
+          durationValue = secondsToDhm(trip.trip.trip_duration[1], "{{langId}}");
         }
+        // The line name gets its own row: it is the only variable-length fact here,
+        // and inline it pushed the duration and distance onto separate lines.
+        var lineDisplay = trip.trip.line_name
+            ? $('<div>').addClass('legMeta').html(
+                '<span class="legMetaItem legLine"><i class="fa-solid fa-signs-post legMetaIcon legIconLine"></i>' + esc(trip.trip.line_name) + '</span>')
+            : $();
+
+        var metaParts = [];
+        metaParts.push('<span class="legMetaItem"><i class="fa-regular fa-clock legMetaIcon"></i>' + durationValue + '</span>');
+        if (trip.trip.trip_length > 0) {
+          metaParts.push('<span class="legMetaItem"><i class="fa-solid fa-arrows-left-right legMetaIcon"></i>' + mToKm(trip.trip.trip_length) + ' km</span>');
+        }
+        var durationDisplay = metaParts.join('<span class="legMetaSep">·</span>');
 
         // Badge numbers matching the map's numbered markers (hidden in collection mode)
         var originBadge = (!isCollection && markerNumbersByIndex[index] && markerNumbersByIndex[index].originNumber != null)
@@ -1376,17 +1474,17 @@ function buildItinerary(trips, prices) {
             ).append(
                 $('<span>').attr("class", trip.trip.type).append(
                     $('<strong>').text(trip.trip.origin_station)
-                ).append('<br>').append(operatorDisplay).append(
+                ).append('<br>').append(operatorDisplay).append(lineDisplay).append(
                     $("<div>").attr("class", "duration " + trip.trip.trip_duration[0]).append(
-                        tsToggle ? $('<div>').html(durationDisplay).append(tsToggle)
-                                 : $('<div>').html(durationDisplay))
+                        tsToggle ? $('<div>').addClass('legMeta').html(durationDisplay).append(tsToggle)
+                                 : $('<div>').addClass('legMeta').html(durationDisplay))
                 ).append(tsContainer).append('<br>').append(
                     {% if 'price' in request.args and 'carbon' in request.args %} // Modified conditional
-                        $("<div>").append($('<div>').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? ' ' : '') + (formattedCarbon || '')))
+                        $("<div>").append($('<div>').addClass('legMeta').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? '<span class="legValue legMetaSep">·</span>' : '') + (formattedCarbon || '')))
                     {% elif 'price' in request.args %} // Modified conditional
-                        $("<div>").append($('<div>').html(formattedPrice || ''))
+                        $("<div>").append($('<div>').addClass('legMeta').html(formattedPrice || ''))
                     {% elif 'carbon' in request.args %} // Added conditional
-                        $("<div>").append($('<div>').html(formattedCarbon || ''))
+                        $("<div>").append($('<div>').addClass('legMeta').html(formattedCarbon || ''))
                     {% else %}
                         $("<div>").append($('<div>').html(''))
                     {% endif %}

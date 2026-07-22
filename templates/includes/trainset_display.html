@@ -37,7 +37,11 @@
     .ts-inline-personal + .ts-inline-saved::before { content: ' · '; font-style: normal; font-weight: normal; color: #aaa; }
     .ts-attr-icon { cursor: pointer; color: rgba(0,0,0,0.4); font-size: 0.7em; position: absolute; top: 1px; left: 2px; z-index: 5; line-height: 1; }
     @media (max-width: 767px) {
-        .ts-inline-wrapper .trainset-inline-scroll { max-width: calc(100vw - 24px) !important; }
+        /* Fallback for callers that don't measure the row themselves. Deliberately
+           NOT !important: where the renderer sets an exact pixel max-width (the
+           itinerary legs), that measurement is tighter and must win — the viewport
+           width ignores the leg's left offset and let strips spill past the card. */
+        .ts-inline-wrapper .trainset-inline-scroll { max-width: calc(100vw - 24px); }
     }
 
     /* The Train Strip */
@@ -165,9 +169,16 @@ function _attributionParts(units) {
     return { authors: distinct('author'), licenses: distinct('license'), sources: distinct('source') };
 }
 
+/* Profile URLs we can shorten to a username: Trainlog public pages and MediaWiki
+   user pages. Returns null for anything else (plain names, other URLs). */
+function _authorLinkName(a) {
+    var m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/)
+         || a.match(/^https?:\/\/[^/]+\/wiki\/User:(.+)$/i);
+    return m ? m[1] : null;
+}
+
 function _authorName(a) {
-    var m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/);
-    return m ? m[1] : a;
+    return _authorLinkName(a) || a;
 }
 
 /* HTML version with clickable author links — for modal display */
@@ -175,8 +186,8 @@ function _attributionHtml(units) {
     var p = _attributionParts(units);
     var parts = [];
     if (p.authors.length)  parts.push(p.authors.map(function(a) {
-        var m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/);
-        return m ? '© <a href="' + esc(a) + '" target="_blank" rel="noopener">' + esc(m[1]) + '</a>'
+        var n = _authorLinkName(a);
+        return n ? '© <a href="' + esc(a) + '" target="_blank" rel="noopener">' + esc(n) + '</a>'
                  : '© ' + esc(a);
     }).join(', '));
     if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(l); }).join(', '));

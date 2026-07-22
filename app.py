@@ -7177,9 +7177,10 @@ def processPublicTrips(tripIds):
                 tripId, trip["utc_filtered_start_datetime"]
             )
 
-            # Only take over the single-operator display when at least one logo was
-            # found: the template treats an empty list as "logos present" and would
-            # then render neither a logo nor the operator text.
+            # An empty list would read as "logos present" downstream and render
+            # neither logo nor operator text, so only take over when there is
+            # something to show. Entries without a logo are kept — the templates
+            # fall back to the operator's name.
             if operator_logos:
                 trip["multi_operators"] = operator_logos
 
