@@ -99,6 +99,8 @@
     "hours": "Stunden",
     "minutes": "Minuten",
     "operator": "Betreiber",
+    "operatorPlainText": "Als Text bearbeiten",
+    "operatorPillsMode": "Zurück zur Betreiberliste",
     "crossedCountries": "Durchquerte Länder",
     "stats": "Statistiken",
     "email": "E-Mail-Adresse",

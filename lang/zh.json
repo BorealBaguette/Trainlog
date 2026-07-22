@@ -99,6 +99,8 @@
     "hours": "小时",
     "minutes": "分钟",
     "operator": "运营商",
+    "operatorPlainText": "以纯文本编辑",
+    "operatorPillsMode": "返回运营商列表",
     "crossedCountries": "跨越国家",
     "stats": "统计",
     "email": "电子邮箱地址",

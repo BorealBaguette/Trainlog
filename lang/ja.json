@@ -99,6 +99,8 @@
     "hours": "時間",
     "minutes": "分",
     "operator": "運行会社",
+    "operatorPlainText": "テキストとして編集",
+    "operatorPillsMode": "運行会社の一覧に戻る",
     "crossedCountries": "国",
     "stats": "統計",
     "email": "メールアドレス",

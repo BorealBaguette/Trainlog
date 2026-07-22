@@ -1800,7 +1800,10 @@
     $.get('{{url_for("getManAndOps", username=username, station_type=tripType)}}', function (manAndOps, status) {
         operatorPills = operatorPillsInput(
             $("#operator"), $("#operatorSearch"), $("#operatorPills"), manAndOps,
-            "{{ url_for('static',filename='')}}", "{{tripType}}");
+            "{{ url_for('static',filename='')}}", "{{tripType}}",
+            { plainToggle: true,
+              plainLabel: "{{ operatorPlainText|default('Edit as plain text') }}",
+              pillsLabel: "{{ operatorPillsMode|default('Back to operator list') }}" });
         if (tripType != 'air') {
             materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
         }

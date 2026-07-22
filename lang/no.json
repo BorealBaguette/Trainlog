@@ -99,6 +99,8 @@
     "hours": "Timer",
     "minutes": "Minutter",
     "operator": "Operatør",
+    "operatorPlainText": "Rediger som ren tekst",
+    "operatorPillsMode": "Tilbake til operatørlisten",
     "crossedCountries": "Krysset land",
     "stats": "Statistikk",
     "email": "E-postadresse",

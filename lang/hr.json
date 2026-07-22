@@ -99,6 +99,8 @@
     "hours": "Sati",
     "minutes": "Minute",
     "operator": "Operator",
+    "operatorPlainText": "Uredi kao obični tekst",
+    "operatorPillsMode": "Natrag na popis operatora",
     "crossedCountries": "Države",
     "stats": "Statistike",
     "email": "Adresa e-pošte",

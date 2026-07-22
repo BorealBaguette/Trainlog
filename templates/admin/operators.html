@@ -1216,7 +1216,7 @@ function checkTripOperators() {
         .then(res => res.json())
         .then(r => {
             if (r.consistent) {
-                $('#consistencyStatus').html('<span class="badge bg-success">resolution up to date</span>');
+                $('#consistencyStatus').html('<span class="badge bg-success">operator matching up to date</span>');
                 return;
             }
             $('#consistencyStatus').html(
@@ -1227,7 +1227,7 @@ function checkTripOperators() {
 }
 
 function rebuildTripOperators() {
-    $('#consistencyStatus').text('rebuilding… (this takes ~30s)');
+    $('#consistencyStatus').text('rebuilding, this takes about 30s…');
     fetch('/api/admin/operators/trip-operators/rebuild', { method: 'POST' })
         .then(res => res.json())
         .then(r => {

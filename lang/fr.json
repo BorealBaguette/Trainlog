@@ -99,6 +99,8 @@
     "hours": "Heures",
     "minutes": "Minutes",
     "operator": "Transporteur",
+    "operatorPlainText": "Modifier en texte brut",
+    "operatorPillsMode": "Revenir à la liste des transporteurs",
     "crossedCountries": "Pays",
     "stats": "Statistiques",
     "email": "Adresse e-mail",

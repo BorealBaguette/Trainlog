@@ -99,6 +99,8 @@
     "hours": "Години",
     "minutes": "Хвилини",
     "operator": "Оператор",
+    "operatorPlainText": "Редагувати як текст",
+    "operatorPillsMode": "Повернутися до списку операторів",
     "crossedCountries": "Країни",
     "stats": "Статистика",
     "email": "Електронна адреса",

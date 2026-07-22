@@ -99,6 +99,8 @@
     "hours": "Ore",
     "minutes": "Minuti",
     "operator": "Operatore",
+    "operatorPlainText": "Modifica come testo",
+    "operatorPillsMode": "Torna all'elenco degli operatori",
     "crossedCountries": "Paesi",
     "stats": "Statistiche",
     "email": "Indirizzo e-mail",

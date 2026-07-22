@@ -99,6 +99,8 @@
     "hours": "Tunnit",
     "minutes": "Minuutit",
     "operator": "Liikennöitsijä",
+    "operatorPlainText": "Muokkaa tekstinä",
+    "operatorPillsMode": "Takaisin liikennöitsijäluetteloon",
     "crossedCountries": "Kuljetut maat",
     "stats": "Tilastot",
     "email": "Sähköpostiosoite",

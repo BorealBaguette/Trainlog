@@ -99,6 +99,8 @@
     "hours": "Saat",
     "minutes": "Dakika",
     "operator": "İşletmeci",
+    "operatorPlainText": "Düz metin olarak düzenle",
+    "operatorPillsMode": "İşletmeci listesine dön",
     "crossedCountries": "İçinden geçilen ülkeler",
     "stats": "İstatistikler",
     "email": "E-posta adresi",

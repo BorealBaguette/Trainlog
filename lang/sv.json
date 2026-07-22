@@ -99,6 +99,8 @@
     "hours": "Timmar",
     "minutes": "Minuter",
     "operator": "Operatör",
+    "operatorPlainText": "Redigera som text",
+    "operatorPillsMode": "Tillbaka till operatörslistan",
     "crossedCountries": "Korsade länder",
     "stats": "Statistik",
     "email": "E-postadress",

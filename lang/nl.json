@@ -99,6 +99,8 @@
     "hours": "Uren",
     "minutes": "Minuten",
     "operator": "Vervoerder",
+    "operatorPlainText": "Als platte tekst bewerken",
+    "operatorPillsMode": "Terug naar de vervoerderslijst",
     "crossedCountries": "Doorkruiste landen",
     "stats": "Statistieken",
     "email": "E-mailadres",
