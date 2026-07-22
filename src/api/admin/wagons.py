@@ -254,6 +254,7 @@ def upload_wagon_image(wname: str):
 def create_wagon():
     """Create a wagon from multipart form data (image upload included)."""
     label      = (request.form.get("label")      or "").strip()
+    name_in    = (request.form.get("name")       or "").strip()
     category   = (request.form.get("category")   or "").strip()
     subcategory= (request.form.get("subcategory") or "").strip()
     era        = (request.form.get("era")         or "").strip()
@@ -285,9 +286,17 @@ def create_wagon():
         if px_per_meter <= 0:
             return jsonify({"error": "px_per_meter must be positive"}), 400
 
-    # Auto-derive a unique PK / image base path
+    # PK / image base path: explicit if given, otherwise derived from the label.
+    # An explicit name must be free — silently suffixing it would surprise the caller.
     with pg_session() as pg:
-        name = _unique_name(pg, _sanitize_name(label))
+        if name_in:
+            name = _sanitize_name(name_in)
+            if pg.execute(
+                "SELECT 1 FROM wagons WHERE name = :n", {"n": name}
+            ).fetchone():
+                return jsonify({"error": f'name "{name}" already exists'}), 409
+        else:
+            name = _unique_name(pg, _sanitize_name(label))
 
     image_path = f"{CUSTOM_FOLDER}/{name}"
 

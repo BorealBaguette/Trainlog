@@ -45,23 +45,33 @@
       <div class="modal-body">
         <form id="addForm" enctype="multipart/form-data">
           <div class="row g-2 mb-2">
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label fw-semibold">Label <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" name="label" required placeholder="e.g. TGV Duplex">
+              <input type="text" class="form-control" name="label" id="addLabel" required
+                     placeholder="e.g. Sr3 Vectron">
+              <div class="form-text">Shown to users. Free text.</div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Name (key)</label>
+              <input type="text" class="form-control font-monospace" name="name" id="addName"
+                     placeholder="e.g. VR_Sr3_Vectron">
+              <div class="form-text">Internal ID and image filename, auto-filled from the label. Cannot be changed later.</div>
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-6">
               <label class="form-label fw-semibold">Category</label>
-              <input type="text" class="form-control" name="category" placeholder="e.g. High-speed trains">
+              <input type="text" class="form-control" name="category" placeholder="e.g. Electric locomotives">
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label fw-semibold">Subcategory</label>
-              <input type="text" class="form-control" name="subcategory" placeholder="e.g. TGV Duplex">
+              <input type="text" class="form-control" name="subcategory" placeholder="e.g. Sr3">
             </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-2">
               <label class="form-label fw-semibold">Era</label>
-              <input type="text" class="form-control" name="era" placeholder="e.g. 5,6">
+              <input type="text" class="form-control" name="era" placeholder="e.g. 5b,6">
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Image type</label>
@@ -85,7 +95,8 @@
           <div class="row g-2 mb-2">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Author</label>
-              <input type="text" class="form-control" name="author" placeholder="e.g. J. Martin">
+              <input type="text" class="form-control" name="author" placeholder="e.g. https://trainlog.me/public/username">
+              <div class="form-text">A Trainlog or wiki user page URL is rendered as a link named after the user. Any other URL or name is shown as-is.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">License</label>
@@ -101,7 +112,7 @@
 
           <div>
             <label class="form-label fw-semibold">Notes</label>
-            <textarea class="form-control" name="notes" rows="2" placeholder="e.g. SNCF livery, delivered 1997"></textarea>
+            <textarea class="form-control" name="notes" rows="2" placeholder="e.g. Birthday livery"></textarea>
           </div>
         </form>
       </div>
@@ -127,21 +138,21 @@
           <div class="row g-2 mb-2">
             <div class="col-md-4">
               <label class="form-label fw-semibold">Label</label>
-              <input type="text" class="form-control" name="label" placeholder="e.g. TGV Duplex">
+              <input type="text" class="form-control" name="label" placeholder="e.g. Sr3 Vectron">
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Category</label>
-              <input type="text" class="form-control" name="category" placeholder="e.g. High-speed trains">
+              <input type="text" class="form-control" name="category" placeholder="e.g. Electric locomotives">
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Subcategory</label>
-              <input type="text" class="form-control" name="subcategory" placeholder="e.g. TGV Duplex">
+              <input type="text" class="form-control" name="subcategory" placeholder="e.g. Sr3">
             </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-2">
               <label class="form-label fw-semibold">Era</label>
-              <input type="text" class="form-control" name="era" placeholder="e.g. 5,6">
+              <input type="text" class="form-control" name="era" placeholder="e.g. 5b,6">
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Image type</label>
@@ -154,7 +165,7 @@
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Line type</label>
-              <input type="text" class="form-control" name="line_type" placeholder="e.g. 1">
+              <input type="text" class="form-control" name="line_type" placeholder="e.g. 2">
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Gauge (mm)</label>
@@ -169,7 +180,8 @@
           <div class="row g-2 mb-2">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Author</label>
-              <input type="text" class="form-control" name="author" placeholder="e.g. J. Martin">
+              <input type="text" class="form-control" name="author" placeholder="e.g. https://trainlog.me/public/username">
+              <div class="form-text">A Trainlog or wiki user page URL is rendered as a link named after the user. Any other URL or name is shown as-is.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">License</label>
@@ -184,7 +196,7 @@
           </div>
           <div>
             <label class="form-label fw-semibold">Notes</label>
-            <textarea class="form-control" name="notes" rows="3" placeholder="e.g. SNCF livery, delivered 1997"></textarea>
+            <textarea class="form-control" name="notes" rows="3" placeholder="e.g. Birthday livery"></textarea>
           </div>
         </form>
       </div>
@@ -315,8 +327,25 @@ document.getElementById('addImageType').addEventListener('change', function () {
 });
 renderAddUpload('sides');
 
+/* Name (key) mirrors the label — sanitised like _sanitize_name() server-side —
+   until the admin types their own, after which it is left alone. */
+let _nameTouched = false;
+const _addLabel = document.getElementById('addLabel');
+const _addName  = document.getElementById('addName');
+
+function slugify(s) {
+  return s.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+_addLabel.addEventListener('input', () => {
+  if (!_nameTouched) _addName.value = slugify(_addLabel.value);
+});
+_addName.addEventListener('input', () => { _nameTouched = _addName.value !== ''; });
+_addName.addEventListener('blur', () => { _addName.value = slugify(_addName.value); });
+
 document.getElementById('addModal').addEventListener('show.bs.modal', function () {
   document.getElementById('addForm').reset();
+  _nameTouched = false;
   renderAddUpload('sides');
 });
 
@@ -331,7 +360,7 @@ function submitAdd() {
     .then(j => {
       $('#addModal').modal('hide');
       table.ajax.reload();
-      toast(`Wagon "${j.label}" added`);
+      toast(`Wagon "${j.label}" added (${j.name})`);
     })
     .catch(err => toast(`Error: ${err}`, 'danger'));
 }
