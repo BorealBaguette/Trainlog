@@ -523,7 +523,7 @@ def import_operators_csv():
                 added_aliases.append((operator_id, alias))
 
         for operator_id, alias in added_aliases:
-            resync_operator_aliases(operator_id, alias=alias, pg_session_=pg)
+            resync_operator_aliases(operator_id, pg_session_=pg)
 
     logger.info(
         "operators CSV imported by %s: %s renamed, %s aliases added",

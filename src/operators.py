@@ -186,17 +186,20 @@ def rebuild_trip_operators(pg_session_=None) -> int:
         return pg.execute("SELECT count(*) FROM trip_operators").scalar()
 
 
-def resync_operator_aliases(
-    operator_id: int, alias: str | None = None, pg_session_=None
-) -> int:
+def resync_operator_aliases(operator_id: int, pg_session_=None) -> int:
     """Re-resolve the trips affected by an alias change on one operator.
 
-    Deliberately narrow, so editing an alias never costs a full rebuild:
+    Deliberately narrow, so editing an operator's spellings never costs a full
+    rebuild:
 
     - trips already pointing at this operator (an alias may have been removed from
       under them, or the operator merged away), plus
-    - when `alias` is given, the still-unresolved trips spelling it that way — the
-      ones the new alias is meant to capture.
+    - still-unresolved trips whose spelling matches *any* of the operator's current
+      aliases — the trips its spellings are meant to capture.
+
+    Matching against the whole alias set, not a single passed-in name, is what makes
+    a rename safe: reinstating a long name the operator had lost must re-resolve the
+    trips using it, even when the field just edited was the short name.
 
     Returns the number of trips re-synced.
     """
@@ -208,12 +211,14 @@ def resync_operator_aliases(
                 SELECT DISTINCT trip_id FROM trip_operators
                 WHERE operator_id = :operator_id
                    OR (
-                        :alias IS NOT NULL
-                        AND operator_id IS NULL
-                        AND operator_normalize(raw_name) = operator_normalize(:alias)
+                        operator_id IS NULL
+                        AND operator_normalize(raw_name) IN (
+                            SELECT normalized FROM operator_aliases
+                            WHERE operator_id = :operator_id
+                        )
                    )
                 """,
-                {"operator_id": operator_id, "alias": alias},
+                {"operator_id": operator_id},
             ).fetchall()
         ]
         sync_trip_operators(trip_ids, pg_session_=pg)
@@ -339,20 +344,12 @@ class OperatorsRepository:
             operator = dict(zip(columns, result.fetchone()))
 
             operator_id = operator["operator_id"]
-            pg.execute(
-                "INSERT INTO operator_aliases (operator_id, operator_type, alias, kind)"
-                " VALUES (:id, :type, :alias, 'short')",
-                {"id": operator_id, "type": operator_type, "alias": short_name},
-            )
-            if long_name and long_name != short_name:
-                pg.execute(
-                    "INSERT INTO operator_aliases (operator_id, operator_type, alias, kind)"
-                    " VALUES (:id, :type, :alias, 'long') ON CONFLICT DO NOTHING",
-                    {"id": operator_id, "type": operator_type, "alias": long_name},
-                )
+            # Same reconcile the rename path uses, so the short/long alias rows are
+            # created one way only.
+            cls._reconcile_name_aliases(pg, operator_id, operator_type)
             # Trips already spelling it this way resolve to it from now on.
             operator["trips_resynced"] = resync_operator_aliases(
-                operator_id, alias=short_name, pg_session_=pg
+                operator_id, pg_session_=pg
             )
         return operator
 
@@ -404,15 +401,14 @@ class OperatorsRepository:
             return {"success": False, "error": "invalid operator_type"}
 
         with pg_session() as pg:
+            operator_type = pg.execute(
+                "SELECT operator_type FROM operators WHERE operator_id = :id",
+                {"id": operator_id},
+            ).scalar()
+
             if field in ("short_name", "long_name"):
-                # The operator's own names are also alias rows — that is how trips
-                # find it. Renaming must move the alias with it, or the operator
-                # would keep answering to its old name and not to its new one.
-                kind = "short" if field == "short_name" else "long"
-                operator_type = pg.execute(
-                    "SELECT operator_type FROM operators WHERE operator_id = :id",
-                    {"id": operator_id},
-                ).scalar()
+                # Reject a name already resolving to a different operator, before
+                # writing anything.
                 taken = pg.execute(
                     """
                     SELECT o.short_name FROM operator_aliases a
@@ -429,28 +425,74 @@ class OperatorsRepository:
                         "error": f"'{value}' already resolves to {taken['short_name']}",
                     }
 
-                pg.execute(
-                    "DELETE FROM operator_aliases WHERE operator_id = :id AND kind = :kind",
-                    {"id": operator_id, "kind": kind},
-                )
-                pg.execute(
-                    "INSERT INTO operator_aliases (operator_id, operator_type, alias, kind)"
-                    " VALUES (:id, :type, :alias, :kind) ON CONFLICT DO NOTHING",
-                    {
-                        "id": operator_id,
-                        "type": operator_type,
-                        "alias": value,
-                        "kind": kind,
-                    },
-                )
-
             pg.execute(
                 f"UPDATE operators SET {field} = :value WHERE operator_id = :operator_id",
                 {"value": value, "operator_id": operator_id},
             )
+
             if field in ("short_name", "long_name"):
-                resync_operator_aliases(operator_id, alias=value, pg_session_=pg)
+                # The operator's own names are alias rows — that is how trips find it.
+                # Reconcile both from the current values rather than editing the one
+                # field's alias: when short and long share a spelling they share a
+                # single alias row, so editing one name in isolation could delete the
+                # spelling the *other* still uses. (This is the bug that stranded
+                # trips logged "České dráhy" when its short name changed to "ČD".)
+                cls._reconcile_name_aliases(pg, operator_id, operator_type)
+                resync_operator_aliases(operator_id, pg_session_=pg)
             return {"success": True}
+
+    @staticmethod
+    def _reconcile_name_aliases(pg, operator_id, operator_type):
+        """Make the operator's short/long alias rows match its current names.
+
+        Drops any short/long alias no longer equal to either name, then ensures a
+        'short' alias for short_name and a 'long' alias for long_name. Admin-added
+        'alias' rows are never touched. When the two names normalise alike only one
+        row can exist (the unique index), and it is kept as 'short'.
+        """
+        names = pg.execute(
+            "SELECT short_name, long_name FROM operators WHERE operator_id = :id",
+            {"id": operator_id},
+        ).fetchone()
+
+        pg.execute(
+            """
+            DELETE FROM operator_aliases
+            WHERE operator_id = :id AND kind IN ('short', 'long')
+              AND normalized NOT IN (
+                  operator_normalize(:short_name), operator_normalize(:long_name)
+              )
+            """,
+            {"id": operator_id, "short_name": names["short_name"], "long_name": names["long_name"]},
+        )
+
+        # Short first, so if short and long collide the surviving row is 'short'.
+        pg.execute(
+            "INSERT INTO operator_aliases (operator_id, operator_type, alias, kind)"
+            " VALUES (:id, :type, :alias, 'short') ON CONFLICT DO NOTHING",
+            {"id": operator_id, "type": operator_type, "alias": names["short_name"]},
+        )
+        long_is_distinct = pg.execute(
+            "SELECT operator_normalize(:short_name) IS DISTINCT FROM operator_normalize(:long_name)"
+            " AND operator_normalize(:long_name) IS NOT NULL",
+            {"short_name": names["short_name"], "long_name": names["long_name"]},
+        ).scalar()
+        if long_is_distinct:
+            # An old row for this spelling may survive under the wrong kind (it was
+            # the short name before the rename); realign it to 'long'.
+            pg.execute(
+                """
+                UPDATE operator_aliases SET kind = 'long'
+                WHERE operator_id = :id AND kind = 'short'
+                  AND normalized = operator_normalize(:long_name)
+                """,
+                {"id": operator_id, "long_name": names["long_name"]},
+            )
+            pg.execute(
+                "INSERT INTO operator_aliases (operator_id, operator_type, alias, kind)"
+                " VALUES (:id, :type, :alias, 'long') ON CONFLICT DO NOTHING",
+                {"id": operator_id, "type": operator_type, "alias": names["long_name"]},
+            )
 
     @classmethod
     def delete(cls, operator_id: int):
@@ -524,7 +566,7 @@ class OperatorsRepository:
                 {"operator_id": operator_id, "alias": alias, "lang": lang},
             ).fetchone()
             # Trips spelling it this way resolve to this operator from now on.
-            resynced = resync_operator_aliases(operator_id, alias=alias, pg_session_=pg)
+            resynced = resync_operator_aliases(operator_id, pg_session_=pg)
         result = dict(row._mapping)
         result["trips_resynced"] = resynced
         return result
