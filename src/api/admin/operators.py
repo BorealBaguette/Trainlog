@@ -118,7 +118,16 @@ def update_operator_field(
 
     result = OperatorsRepository.update_operator_field(operator_id, field, new_value)
     if not result["success"]:
-        abort(400, description=result["error"])
+        # Return JSON (not an abort HTML page) so the admin UI can surface the exact
+        # reason — e.g. the new short name already resolving to another operator, whose
+        # id is passed back so the UI can show its logo and long name.
+        return jsonify(
+            {
+                "status": "error",
+                "message": result["error"],
+                "conflict": result.get("conflict"),
+            }
+        ), 400
     return "", 204
 
 
@@ -302,10 +311,12 @@ def add_operator_alias(operator_id: int):
             return jsonify(
                 {"status": "error", "message": "this operator already has that alias"}
             ), 409
+        # Don't name the holder in the text — the UI shows its logo and long name below,
+        # which also avoids the tautology when the spelling is that operator's own name.
         return jsonify(
             {
                 "status": "conflict",
-                "message": f"'{alias}' already resolves to {conflict['short_name']}",
+                "message": f"'{alias}' is already taken by another operator.",
                 "operator": conflict,
             }
         ), 409

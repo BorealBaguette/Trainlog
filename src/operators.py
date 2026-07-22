@@ -384,6 +384,7 @@ class OperatorsRepository:
     class UpdateOperatorFieldResult(TypedDict):
         success: bool
         error: NotRequired[str]
+        conflict: NotRequired[dict]
 
     @classmethod
     def update_operator_field(
@@ -411,7 +412,8 @@ class OperatorsRepository:
                 # writing anything.
                 taken = pg.execute(
                     """
-                    SELECT o.short_name FROM operator_aliases a
+                    SELECT o.operator_id, o.short_name, o.long_name
+                    FROM operator_aliases a
                     JOIN operators o ON o.operator_id = a.operator_id
                     WHERE a.operator_type = :type
                       AND a.normalized = operator_normalize(:value)
@@ -422,7 +424,11 @@ class OperatorsRepository:
                 if taken is not None:
                     return {
                         "success": False,
-                        "error": f"'{value}' already resolves to {taken['short_name']}",
+                        # Don't name the clashing operator here — when the new value *is*
+                        # its short name the sentence reads tautologically ("'CP' resolves
+                        # to CP"). The UI shows the operator's logo and long name instead.
+                        "error": f"'{value}' is already taken by another operator.",
+                        "conflict": dict(taken._mapping),
                     }
 
             pg.execute(
@@ -565,10 +571,25 @@ class OperatorsRepository:
                 """,
                 {"operator_id": operator_id, "alias": alias, "lang": lang},
             ).fetchone()
-            # Trips spelling it this way resolve to this operator from now on.
-            resynced = resync_operator_aliases(operator_id, pg_session_=pg)
+            # What this spelling newly captures: trips that were unresolved and match
+            # it. Measured before the resync and reported to the admin instead of the
+            # total re-synced — that total also counts the operator's existing trips,
+            # so adding a spelling that matches nothing still showed the operator's
+            # own trip count. (An unresolved trip has one row per normalized spelling,
+            # so this equals the "occurrences" figure in the unresolved-spelling list.)
+            captured = pg.execute(
+                """
+                SELECT count(DISTINCT trip_id) FROM trip_operators
+                WHERE operator_id IS NULL
+                  AND operator_normalize(raw_name) = operator_normalize(:alias)
+                """,
+                {"alias": alias},
+            ).scalar()
+            # Still resync the full set (existing trips + newly captured) so the
+            # derived table is correct; only the reported number is the narrower one.
+            resync_operator_aliases(operator_id, pg_session_=pg)
         result = dict(row._mapping)
-        result["trips_resynced"] = resynced
+        result["trips_resynced"] = captured
         return result
 
     @classmethod
@@ -577,13 +598,24 @@ class OperatorsRepository:
         with pg_session() as pg:
             row = pg.execute(
                 "DELETE FROM operator_aliases WHERE alias_id = :alias_id"
-                " RETURNING operator_id, alias",
+                " RETURNING operator_id, alias, normalized",
                 {"alias_id": alias_id},
             ).fetchone()
             if row is None:
                 return None
-            resynced = resync_operator_aliases(row["operator_id"], pg_session_=pg)
-        return {"operator_id": row["operator_id"], "trips_resynced": resynced}
+            # Trips that were resolving through this spelling and will now fall back —
+            # the meaningful figure, not the operator's whole re-synced trip count.
+            # Counted before the resync, while they still point at the operator.
+            affected = pg.execute(
+                """
+                SELECT count(DISTINCT trip_id) FROM trip_operators
+                WHERE operator_id = :operator_id
+                  AND operator_normalize(raw_name) = :normalized
+                """,
+                {"operator_id": row["operator_id"], "normalized": row["normalized"]},
+            ).scalar()
+            resync_operator_aliases(row["operator_id"], pg_session_=pg)
+        return {"operator_id": row["operator_id"], "trips_resynced": affected}
 
     @classmethod
     def merge(cls, source_id: int, target_id: int):
