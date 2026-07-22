@@ -122,8 +122,9 @@ def get_trip_operator_logos(
     real datetime (see adapt_pg_trip_row). Both sentinels mean "no date to choose
     by", so both take the current logo.
 
-    Operators with no logo are left out: the trip page renders an <img> for every
-    entry it is given, so an entry without a URL would show a broken image.
+    Every operator of the trip is returned, in the order typed, whether or not it
+    has a logo — an entry with `logo_url` None is rendered as its plain name by the
+    callers, so free text and logo-less operators are no longer silently dropped.
     """
     if trip_start in (-1, 1):
         mode, start = "latest", None
@@ -141,7 +142,6 @@ def get_trip_operator_logos(
         # logged as CFF shows the SBB logo but is still labelled CFF.
         {"operator_name": row["raw_name"], "logo_url": row["logo_url"]}
         for row in rows
-        if row["logo_url"]
     ]
 
 

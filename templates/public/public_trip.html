@@ -373,7 +373,13 @@ if (prices.total_carbon != 0){
 let operatorContents = [];
 if (trip.trip.multi_operators) {
   trip.trip.multi_operators.forEach(multiOperator => {
-      console.log(multiOperator);
+      // No logo (free text, or an operator with no logo on file) → show the name.
+      if (!multiOperator.logo_url) {
+        operatorContents.push(
+          $('<span>').addClass('itineraryOperatorName').text(multiOperator.operator_name || '')
+        );
+        return;
+      }
       let imgElement = $("<img>")
         .attr("src", "/static/"+multiOperator.logo_url)
         .attr("class", "itineraryOperatorLogo");

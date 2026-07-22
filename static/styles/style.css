@@ -454,6 +454,31 @@ nav .current{
   margin-left: 5px;
 }
 
+/* Operator without a logo: its name, styled as a chip so it sits at the same
+   weight as the logos beside it. The blanket ".events span" rule pads every span
+   in a leg by 1.5em and hangs the connector ::before off it — both have to go. */
+.itineraryOperatorName {
+  display: inline-block;
+  vertical-align: middle;
+  padding: 1px 7px !important;
+  border: 1px solid #e2e2e2;
+  border-radius: 999px;
+  background: #f7f7f8;
+  color: #444;
+  font-size: 0.82em;
+  line-height: 1.5;
+  /* A long name wraps inside its chip rather than pushing the leg wider. */
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+.events .itineraryOperatorName { position: static; }
+.events .itineraryOperatorName::before { content: none; }
+.itineraryOperatorName + .itineraryOperatorName,
+.operator_popupInfo + .itineraryOperatorName,
+.itineraryOperatorName + .operator_popupInfo {
+  margin-left: 5px;
+}
+
 #tripDetails {
   position: relative;
   left:30px;
