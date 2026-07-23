@@ -1451,7 +1451,7 @@ function buildItinerary(trips, prices) {
         // and inline it pushed the duration and distance onto separate lines.
         var lineDisplay = trip.trip.line_name
             ? $('<div>').addClass('legMeta').html(
-                '<span class="legMetaItem legLine"><i class="fa-solid fa-signs-post legMetaIcon legIconLine"></i>' + esc(trip.trip.line_name) + '</span>')
+                '<span class="legMetaItem legLine"><i class="fa-solid fa-route legMetaIcon legIconLine"></i>' + esc(trip.trip.line_name) + '</span>')
             : $();
 
         var metaParts = [];
