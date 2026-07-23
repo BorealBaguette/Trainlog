@@ -303,14 +303,13 @@ def add_operator_alias(operator_id: int):
     if not alias:
         abort(400, description="alias is required")
 
-    # One spelling means one operator per pool. Report who holds it rather than
-    # letting the unique index surface as a 500 — the admin's next step is a merge.
+    # One spelling means one operator per pool. Only a *different* operator holding it
+    # is a conflict; the admin's next step there is a merge, so report who holds it
+    # rather than letting the unique index surface as a 500. The spelling already
+    # belonging to *this* operator is not an error — it flows into add_alias, which is
+    # idempotent and re-resolves the trips, repairing any that were left stale.
     conflict = OperatorsRepository.find_alias_conflict(operator_id, alias)
-    if conflict is not None:
-        if conflict["operator_id"] == operator_id:
-            return jsonify(
-                {"status": "error", "message": "this operator already has that alias"}
-            ), 409
+    if conflict is not None and conflict["operator_id"] != operator_id:
         # Don't name the holder in the text — the UI shows its logo and long name below,
         # which also avoids the tautology when the spelling is that operator's own name.
         return jsonify(
