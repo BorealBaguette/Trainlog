@@ -503,6 +503,18 @@ class OperatorsRepository:
     @classmethod
     def delete(cls, operator_id: int):
         with pg_session() as pg:
+            # The trips currently resolving to this operator. Captured before the
+            # delete, because the FK is ON DELETE SET NULL: deleting the operator
+            # nulls these rows in place, and without re-resolving them any whose
+            # spelling still matches another operator would be left as stale orphans
+            # (unresolved in the derived table though resolvable from the alias table).
+            affected = [
+                row[0]
+                for row in pg.execute(
+                    "SELECT DISTINCT trip_id FROM trip_operators WHERE operator_id = :operator_id",
+                    {"operator_id": operator_id},
+                ).fetchall()
+            ]
             pg.execute(
                 "DELETE FROM operator_logos WHERE operator_id = :operator_id",
                 {"operator_id": operator_id},
@@ -511,6 +523,7 @@ class OperatorsRepository:
                 "DELETE FROM operators WHERE operator_id = :operator_id",
                 {"operator_id": operator_id},
             )
+            sync_trip_operators(affected, pg_session_=pg)
         # Remove logo files for this operator.
         for file in os.listdir(LOGO_UPLOAD_FOLDER):
             if file.startswith(f"{operator_id}_"):
@@ -560,17 +573,16 @@ class OperatorsRepository:
 
     @classmethod
     def add_alias(cls, operator_id: int, alias: str, lang: str | None = None):
-        """Record another spelling for this operator and re-resolve affected trips."""
+        """Record a spelling for this operator and re-resolve affected trips.
+
+        Idempotent: if this operator already has the spelling, no row is inserted but
+        the trips are still re-resolved. That matters for "assign" from the unresolved
+        queue — a spelling can be unresolved in the derived table yet already an alias
+        of the operator (a stale row from, say, a past delete), and the admin's action
+        must repair it rather than fail. Callers must ensure the spelling does not
+        belong to a *different* operator first (see find_alias_conflict).
+        """
         with pg_session() as pg:
-            row = pg.execute(
-                """
-                INSERT INTO operator_aliases (operator_id, operator_type, alias, lang, kind)
-                SELECT :operator_id, o.operator_type, :alias, :lang, 'alias'
-                FROM operators o WHERE o.operator_id = :operator_id
-                RETURNING alias_id, alias, normalized, kind, lang
-                """,
-                {"operator_id": operator_id, "alias": alias, "lang": lang},
-            ).fetchone()
             # What this spelling newly captures: trips that were unresolved and match
             # it. Measured before the resync and reported to the admin instead of the
             # total re-synced — that total also counts the operator's existing trips,
@@ -585,8 +597,31 @@ class OperatorsRepository:
                 """,
                 {"alias": alias},
             ).scalar()
-            # Still resync the full set (existing trips + newly captured) so the
-            # derived table is correct; only the reported number is the narrower one.
+            row = pg.execute(
+                """
+                INSERT INTO operator_aliases (operator_id, operator_type, alias, lang, kind)
+                SELECT :operator_id, o.operator_type, :alias, :lang, 'alias'
+                FROM operators o WHERE o.operator_id = :operator_id
+                ON CONFLICT (operator_type, normalized) DO NOTHING
+                RETURNING alias_id, alias, normalized, kind, lang
+                """,
+                {"operator_id": operator_id, "alias": alias, "lang": lang},
+            ).fetchone()
+            if row is None:
+                # Already an alias of this operator (the caller ruled out other
+                # operators). Return the existing row and fall through to the resync,
+                # which repairs any stale orphans the spelling should already match.
+                row = pg.execute(
+                    """
+                    SELECT alias_id, alias, normalized, kind, lang
+                    FROM operator_aliases
+                    WHERE operator_id = :operator_id
+                      AND normalized = operator_normalize(:alias)
+                    """,
+                    {"operator_id": operator_id, "alias": alias},
+                ).fetchone()
+            # Resync the full set (existing trips + newly captured) so the derived
+            # table is correct; only the reported number is the narrower one.
             resync_operator_aliases(operator_id, pg_session_=pg)
         result = dict(row._mapping)
         result["trips_resynced"] = captured
