@@ -1028,32 +1028,51 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
       // loose form rather than replacing it: stripping spaces would stop a
       // multi-word term like "sncf nouvelle" matching "SNCF TER Nouvelle-Aquitaine".
       var strictTerm = normalizeOperatorName(request.term);
-      var chosen = names.map(normalizeOperatorName);
-      var matches = [];
+      var canonicalMap = manAndOps.operatorCanonical || {};
+
+      // The suggestion for a match is the operator's canonical (short) name, not the
+      // spelling that matched — so typing "Eth" collapses ETHIAD and "Ethiad airways"
+      // into the single "Etihad Airways" rather than listing every alias. Matching
+      // still happens against every spelling, so an alias-only term ("ETHIAD") still
+      // finds its operator. An unresolved free-text spelling is its own canonical.
+      function canonical(name) { return canonicalMap[name] || name; }
+
+      var chosen = names.map(function (n) { return normalizeOperatorName(canonical(n)); });
+
+      // Best match per canonical operator, keyed by its normalised name.
+      var best = {};
+      function offer(canonName, rank, len) {
+        var key = normalizeOperatorName(canonName);
+        if (chosen.indexOf(key) !== -1) return;            // operator already a pill
+        var prev = best[key];
+        if (!prev || rank < prev.rank || (rank === prev.rank && len < prev.len)) {
+          best[key] = { label: canonName, value: canonName, rank: rank, len: len };
+        }
+      }
+
       Object.keys(manAndOps.operators).forEach(function (name) {
+        var canonName = canonical(name);
+        var canonLen = normalizeForSearch(canonName).length;
         var norm = normalizeForSearch(name);
-        if (chosen.indexOf(normalizeOperatorName(name)) !== -1) return;   // already a pill
         var at = norm.indexOf(term);
         if (at === -1) {
-          // No loose match: fall back to the normalised comparison.
+          // No loose match: fall back to the punctuation-free comparison.
           var strictName = normalizeOperatorName(name);
           if (!strictTerm || strictName.indexOf(strictTerm) === -1) return;
-          matches.push({
-            label: name, value: name,
-            rank: strictName === strictTerm ? 0 : 3,
-            len: strictName.length
-          });
+          offer(canonName, strictName === strictTerm ? 0 : 3, canonLen);
           return;
         }
         // Rank: exact, then prefix, then start-of-word, then anywhere. Within a
-        // rank prefer the shorter name, so "SNCF" beats "SNCF Intercités".
+        // rank prefer the shorter operator name, so "SNCF" beats "SNCF Intercités".
         var rank;
         if (norm === term) rank = 0;
         else if (at === 0) rank = 1;
         else if (norm[at - 1] === ' ' || norm[at - 1] === '-') rank = 2;
         else rank = 3;
-        matches.push({ label: name, value: name, rank: rank, len: norm.length });
+        offer(canonName, rank, canonLen);
       });
+
+      var matches = Object.keys(best).map(function (k) { return best[k]; });
       matches.sort(function (a, b) { return a.rank - b.rank || a.len - b.len || a.label.localeCompare(b.label); });
       // The operator list runs to thousands of names; an uncapped menu is unusable.
       response(matches.slice(0, 10));

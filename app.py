@@ -6589,9 +6589,13 @@ def getManAndOps(username, station_type):
 
     material_types = {material_type: None for material_type in material_types_from_db if material_type}
 
+    hints, canonical = operator_autocomplete_meta(tripType)
     manAndOps = {
         "operators": result,
-        "operatorHints": operator_hints(tripType),
+        "operatorHints": hints,
+        # Every alias -> its operator's short_name, so the autocomplete can collapse
+        # an operator's spellings to a single suggestion (see operatorPillsInput).
+        "operatorCanonical": canonical,
         "manualStations": manualStations,
         "materialTypes": material_types,
         "visitedStations": visitedStations,
@@ -6599,16 +6603,20 @@ def getManAndOps(username, station_type):
     return jsonify(manAndOps)
 
 
-def operator_hints(operator_type):
-    """Muted subtitle for each spelling in the operator autocomplete.
+def operator_autocomplete_meta(operator_type):
+    """Per-spelling metadata for the operator autocomplete, in one pass over aliases.
 
-    A suggestion on its own does not say what it maps to: "CFF" gives no clue that it
-    is the Chemins de fer fédéraux suisses, and an alias gives no clue which operator
-    owns it. The hint is whichever of the operator's names the spelling is *not*.
+    Returns (hints, canonical):
 
-    Computed here rather than shipping short/long names for all ~4,700 operators: only
-    entries with something to add are included, and for the great majority long_name
-    equals short_name, so the map stays small.
+    - hints: {alias -> muted subtitle}. A suggestion on its own does not say what it
+      maps to ("CFF" gives no clue it is the Chemins de fer fédéraux suisses); the hint
+      is whichever of the operator's names the spelling is *not*. Only entries that add
+      something are included, so for the majority where long_name == short_name the map
+      stays small.
+    - canonical: {alias -> short_name}, every spelling included. Lets the autocomplete
+      show one suggestion per operator (its short_name) even when several of its
+      spellings match the term, instead of listing ETHIAD, "Ethiad airways", etc.
+      separately.
     """
     with pg_session() as pg:
         rows = pg.execute(
@@ -6622,7 +6630,9 @@ def operator_hints(operator_type):
         ).fetchall()
 
     hints = {}
+    canonical = {}
     for alias, short_name, long_name in rows:
+        canonical[alias] = short_name
         has_long = long_name and long_name != short_name
         if alias == short_name:
             # Canonical spelling: the long name is the only thing left to add.
@@ -6635,7 +6645,7 @@ def operator_hints(operator_type):
             hint = f"{short_name} — {long_name}" if has_long else short_name
         if hint:
             hints[alias] = hint
-    return hints
+    return hints, canonical
 
 
 @app.route("/getAdminUsersData", methods=["POST"])
