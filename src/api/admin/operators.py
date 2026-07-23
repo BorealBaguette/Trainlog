@@ -128,7 +128,8 @@ def update_operator_field(
                 "conflict": result.get("conflict"),
             }
         ), 400
-    return "", 204
+    # trips_resynced is the count a name change newly matched (0 for operator_type).
+    return jsonify({"trips_resynced": result.get("trips_resynced", 0)}), 200
 
 
 @operators_api_blueprint.route("<int:operator_id>", methods=["DELETE"])

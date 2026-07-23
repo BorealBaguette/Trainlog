@@ -104,6 +104,46 @@
     .collapsed .collapse-icon {
         transform: rotate(-90deg);
     }
+
+    /* Trip counts. The operator's own count reads as a plain figure (tabular so the
+       column lines up); a zero is dimmed so the eye lands on operators that carry
+       trips. The group total sits beside it as a distinct pill — it is a different
+       number (what the stats sum together), so it should not look like the same one. */
+    .trip-count {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        color: #343a40;
+    }
+    .trip-count-zero { color: #adb5bd; font-weight: 500; }
+
+    .trip-count-group {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        margin-left: .5rem;
+        padding: .1rem .5rem;
+        border-radius: 999px;
+        font-size: .75rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: #0c5460;
+        background: #d1ecf1;
+    }
+    .trip-count-group i { font-size: .85em; opacity: .8; }
+
+    /* A count nested inside a coloured badge (alias spellings, group members). The
+       tint is mixed from the badge's own text colour, so it reads correctly on both
+       the dark-text and white-text badges without a per-colour override. */
+    .count-chip {
+        margin-left: .45rem;
+        padding: 0 .4rem;
+        border-radius: 999px;
+        font-size: .9em;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        background: color-mix(in srgb, currentColor 16%, transparent);
+    }
+    .count-chip-zero { opacity: .55; }
 </style>
 
 <div class="container">
@@ -180,6 +220,7 @@
                 <th scope="col" data-priority=2>Short Name</th>
                 <th scope="col" data-priority=3>Long Name</th>
                 <th scope="col" data-priority=4>Operator Type</th> <!-- New column for Operator Type -->
+                <th scope="col" data-priority=3>Trips</th>
                 <th scope="col" data-priority=6 data-orderable="false">Aliases</th>
                 <th scope="col" data-priority=5 data-orderable="false">Logo</th>
                 <th scope="col" data-orderable="false" data-priority=1>Actions</th>
@@ -431,6 +472,24 @@
               }
             },
             {
+              // How many trips resolve here. When the operator is grouped, the group
+              // total (the number the stats actually add up together) is shown alongside.
+              data: 'trip_count',
+              searchable: false,
+              orderable: true,
+              render(data, type, row) {
+                if (type !== 'display') return data;
+                const n = Number(data);
+                const cls = 'trip-count' + (n === 0 ? ' trip-count-zero' : '');
+                let html = `<span class="${cls}" title="Trips resolving to this operator">${fmtNum(n)}</span>`;
+                if (row.group_trip_count != null) {
+                    html += `<span class="trip-count-group" title="Trips counted together across the whole group">` +
+                            `<i class="fa-solid fa-layer-group"></i>${fmtNum(row.group_trip_count)}</span>`;
+                }
+                return html;
+              }
+            },
+            {
               // Searchable so that looking up a spelling that was merged away finds
               // the operator that absorbed it — searching "CFF" lands on SBB.
               data: 'aliases',
@@ -591,6 +650,10 @@
         $('#operatorFormError').empty();
 
         try {
+            // A name change can newly match trips that were unresolved (users had
+            // logged the new spelling). The PUTs run in sequence, each resyncing, so
+            // their counts don't overlap — summing gives the trips this edit picked up.
+            let matched = 0;
             for (const [field, value] of changed) {
                 const res = await fetch(`/api/admin/operators/${operatorId}/${field}`, {
                     method: 'PUT',
@@ -603,10 +666,14 @@
                     e.conflict = body.conflict;
                     throw e;
                 }
+                const body = await res.json().catch(() => ({}));
+                matched += body.trips_resynced || 0;
             }
             $('#operatorModal').modal('hide');
             table.ajax.reload(null, false);
-            bootstrapToast(`Operator ${fields.short_name} updated successfully`);
+            bootstrapToast(matched
+                ? `Operator ${fields.short_name} updated — now resolves ${matched} previously unmatched trip(s)`
+                : `Operator ${fields.short_name} updated successfully`);
         } catch (err) {
             // Keep the modal open; show the reason inline so the admin can correct the
             // value or merge. A name clash is the same situation as an alias clash and
@@ -959,6 +1026,18 @@ function escapeHtml(s) {
     return $('<div>').text(s == null ? '' : s).html();
 }
 
+// Thousands separators for the trip counts — the busy operators run to five figures.
+function fmtNum(n) {
+    return Number(n).toLocaleString();
+}
+
+// A trip count rendered inside a coloured badge (alias spellings, group members):
+// "N trips", dimmed when zero. `label` lets the tooltip name what is being counted.
+function countChip(n, label) {
+    const cls = 'count-chip' + (n === 0 ? ' count-chip-zero' : '');
+    return `<span class="${cls}" title="${label}">${fmtNum(n)} trip${n === 1 ? '' : 's'}</span>`;
+}
+
 // escapeHtml is for element text and does not escape quotes, so it is unsafe for a
 // double-quoted attribute value. This escapes the quote too. An operator spelling
 // carrying a " (or a JSON-quoted one) is exactly what broke the Assign button.
@@ -1005,6 +1084,7 @@ function loadGroup() {
             $('#groupMembers').html(others.map(m => `
                 <span class="badge bg-info text-dark me-2 mb-2 d-inline-flex align-items-center">
                   ${escapeHtml(m.short_name)}
+                  ${countChip(m.trip_count, 'Trips resolving to this member')}
                   <button type="button" class="btn-close ms-2" style="font-size:.6rem"
                           title="Stop counting as one" aria-label="Ungroup"
                           onclick="unlinkOperator(${m.operator_id})"></button>
@@ -1068,9 +1148,12 @@ function loadAliases() {
                     `<button type="button" class="btn-close btn-close-white ms-2"
                        style="font-size:.6rem" aria-label="Remove"
                        onclick="deleteAlias(${a.alias_id})"></button>`;
+                // Trips logged with this exact spelling — a quick sense of which
+                // spellings actually carry the operator's trips.
+                const count = countChip(a.trip_count, 'Trips logged with this spelling');
                 return `<span class="badge ${badge} me-2 mb-2 d-inline-flex align-items-center">
                           ${escapeHtml(a.alias)}
-                          <span class="ms-1 opacity-75">(${a.kind})</span>${remove}
+                          <span class="ms-1 opacity-75">(${a.kind})</span>${count}${remove}
                         </span>`;
             }).join('');
             $('#aliasList').html(html);
@@ -1107,11 +1190,15 @@ function deleteAlias(aliasId) {
     fetch(`/api/admin/operators/aliases/${aliasId}`, { method: 'DELETE' })
         .then(async res => {
             const body = await res.json().catch(() => ({}));
-            if (!res.ok) throw new Error('failed');
+            if (!res.ok) throw new Error(body.description || body.message || 'Could not remove alias');
             loadAliases();
-            bootstrapToast(`Alias removed: ${body.trips_resynced} trip(s) no longer resolve here`);
+            // A row that was the operator's own name is reclassified, not deleted, so
+            // nothing stops resolving — a different message from a real alias removal.
+            bootstrapToast(body.reclassified
+                ? 'Removed from aliases (it is the operator\'s own name)'
+                : `Alias removed: ${body.trips_resynced} trip(s) no longer resolve here`);
         })
-        .catch(() => bootstrapToast('Could not remove alias', 'danger'));
+        .catch(err => bootstrapToast(err.message, 'danger'));
 }
 
 function renderCandidates(containerId, suggestions, onPickJs) {
