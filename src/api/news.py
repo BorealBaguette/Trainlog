@@ -1,6 +1,7 @@
 import logging
 from datetime import datetime
 
+import markdown
 from flask import (
     Blueprint,
     jsonify,
@@ -59,25 +60,28 @@ def get_news_count_app(date_last_visit):
         return jsonify({"count": 0})
 
 
+def news_row_to_dict(item):
+    """Build a news dict from a list_news row, with markdown-rendered HTML"""
+    return {
+        "id": item[0],
+        "title": item[1],
+        "content": item[2],
+        "content_html": markdown.markdown(
+            item[2], extensions=["nl2br", "fenced_code", "tables"]
+        ),
+        "author_display": "admin" if item[3] == owner else item[3],
+        "created": item[4],
+        "last_modified": item[5],
+    }
+
+
 @news_blueprint.route("/api/news/app")
 def news_app():
     """Get news list for app"""
 
     with pg_session() as pg:
         result = pg.execute(news_sql.list_news()).fetchall()
-
-        news_list = []
-        for item in result:
-            author_display = "admin" if item[3] == owner else item[3]
-            news_dict = {
-                "id": item[0],
-                "title": item[1],
-                "content": item[2],
-                "author_display": author_display,
-                "created": item[4],
-                "last_modified": item[5],
-            }
-            news_list.append(news_dict)
+        news_list = [news_row_to_dict(item) for item in result]
 
     return jsonify(news_list), 200
 
@@ -90,19 +94,7 @@ def news(username=None):
 
     with pg_session() as pg:
         result = pg.execute(news_sql.list_news()).fetchall()
-
-        news_list = []
-        for item in result:
-            author_display = "admin" if item[3] == owner else item[3]
-            news_dict = {
-                "id": item[0],
-                "title": item[1],
-                "content": item[2],
-                "author_display": author_display,
-                "created": item[4],
-                "last_modified": item[5],
-            }
-            news_list.append(news_dict)
+        news_list = [news_row_to_dict(item) for item in result]
 
         if current_user and current_user != "public":
             pg.execute(
