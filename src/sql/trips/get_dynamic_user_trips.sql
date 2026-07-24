@@ -42,6 +42,14 @@ WITH base AS (
         COALESCE(utc_end_datetime, end_datetime) AS utc_filtered_end_datetime
     FROM trips
     WHERE user_id = :user_id
+    {%- if base_type_filter %}
+    -- Exact trip-type filter pushed down from the display filters so the
+    -- (user_id, trip_type) index narrows the scan here, instead of the CTE
+    -- materialising every one of the user's trips and filtering afterwards. Only
+    -- injected when the search names a real type exactly; the equivalent LIKE is
+    -- still applied on the outer query, so this is a pure narrowing.
+    AND trip_type = :base_type
+    {%- endif %}
 ),
 sub AS (
     SELECT
