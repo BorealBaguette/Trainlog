@@ -14,25 +14,20 @@
 
 <div id="statsSelectWrapper" class="d-flex flex-wrap mb-3">
     <select id="statsSelectTripType" class="form-select statsSelect mr-2">
-        {%if is_public %}
-            <option value="combined" {% if tripType == 'combined' %}selected{% endif %}>
-                {{all}}
+        {% set statTypes = publicDistinctTypes if is_public else distinctTypes %}
+        <option value="combined" {% if tripType == 'combined' %}selected{% endif %}>
+            {{all}}
+        </option>
+        {% set ns = namespace(group=none) %}
+        {% for type, data in statTypes.items() %}
+            {% if data.group != ns.group %}
+                <option disabled>──────────</option>
+            {% endif %}
+            {% set ns.group = data.group %}
+            <option value="{{ type }}" {% if tripType == type %}selected{% endif %}>
+            {{ data.label }}
             </option>
-            {% for type, data in publicDistinctTypes.items() %}
-                <option value="{{ type }}" {% if tripType == type %}selected{% endif %}>
-                {{ data }}
-                </option>
-            {% endfor %}       
-        {%else%}
-            <option value="combined" {% if tripType == 'combined' %}selected{% endif %}>
-                {{all}}
-            </option>
-            {% for type, data in distinctTypes.items() %}
-                <option value="{{ type }}" {% if tripType == type %}selected{% endif %}>
-                {{ data.label }}
-                </option>
-            {% endfor %}
-        {% endif %}
+        {% endfor %}
     </select>
 
     <select id="statsSelectYear" class="form-select statsSelect mr-2">
