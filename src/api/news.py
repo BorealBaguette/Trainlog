@@ -23,30 +23,18 @@ news_blueprint = Blueprint("news", __name__)
 
 @news_blueprint.route("/api/news/count")
 def get_news_count():
-    """Get count of news items since last visit"""
-    last_visit = request.cookies.get("last_news_visit")
-    if not last_visit:
-        # First visit, create cookie with current timestamp and return all news count
-        with pg_session() as pg:
-            response = jsonify({"count": 0})
-            response.set_cookie(
-                "last_news_visit",
-                datetime.now().isoformat(),
-                max_age=31536000,  # 1 year in seconds
-            )
-            return response
-
-    try:
-        last_visit_date = datetime.fromisoformat(last_visit)
-        with pg_session() as pg:
-            result = pg.execute(
-                news_sql.count_news_since_date(), {"last_visit": last_visit_date}
-            ).fetchone()
-
-            count = result[0] if result else 0
-            return jsonify({"count": count})
-    except (ValueError, TypeError):
+    """Get count of news items since the user's last visit of the news page"""
+    current_user = session.get("userinfo", {}).get("logged_in_user")
+    if not current_user or current_user == "public":
         return jsonify({"count": 0})
+
+    with pg_session() as pg:
+        result = pg.execute(
+            news_sql.count_unseen_news(), {"username": current_user}
+        ).fetchone()
+        count = result[0] if result else 0
+
+    return jsonify({"count": count})
 
 
 @news_blueprint.route("/api/news/count/app/<date_last_visit>")
@@ -116,6 +104,11 @@ def news(username=None):
             }
             news_list.append(news_dict)
 
+        if current_user and current_user != "public":
+            pg.execute(
+                news_sql.upsert_news_visit(), {"username": current_user}
+            )
+
     response = make_response(
         render_template(
             "news.html",
@@ -130,13 +123,6 @@ def news(username=None):
             if current_user != "public"
             else False,
         )
-    )
-
-    # Set cookie to current timestamp, expires in 1 year
-    response.set_cookie(
-        "last_news_visit",
-        datetime.now().isoformat(),
-        max_age=31536000,  # 1 year in seconds
     )
 
     return response
