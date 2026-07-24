@@ -1,4 +1,5 @@
 import logging
+import re
 from datetime import datetime
 
 import markdown
@@ -86,6 +87,29 @@ def news_app():
     return jsonify(news_list), 200
 
 
+def visible_reactors(users):
+    """Reactor names shown in the tooltip, with the owner hidden."""
+    return [u for u in (users or []) if u != owner]
+
+
+def attach_reactions(pg, news_list, current_user):
+    """Attach a per-item list of {emoji, count, reacted[, users]} to each news
+    dict. The list of who reacted (``users``) is shown to logged-in users only,
+    and always excludes the owner."""
+    show_users = bool(current_user and current_user != "public")
+    by_news = {}
+    rows = pg.execute(
+        news_sql.list_all_reactions(), {"username": current_user or ""}
+    ).fetchall()
+    for news_id, emoji, cnt, reacted, users in rows:
+        reaction = {"emoji": emoji, "count": cnt, "reacted": bool(reacted)}
+        if show_users:
+            reaction["users"] = visible_reactors(users)
+        by_news.setdefault(news_id, []).append(reaction)
+    for item in news_list:
+        item["reactions"] = by_news.get(item["id"], [])
+
+
 @news_blueprint.route("/news")
 def news(username=None):
     """Display news page"""
@@ -95,6 +119,7 @@ def news(username=None):
     with pg_session() as pg:
         result = pg.execute(news_sql.list_news()).fetchall()
         news_list = [news_row_to_dict(item) for item in result]
+        attach_reactions(pg, news_list, current_user)
 
         if current_user and current_user != "public":
             pg.execute(
@@ -164,6 +189,42 @@ def delete_news(username):
         pg.execute(news_sql.delete_news(), {"news_id": news_id})
 
     return redirect(url_for("news.news"))
+
+
+@news_blueprint.route("/api/news/<int:news_id>/react", methods=["POST"])
+def react_news(news_id):
+    """Toggle the current user's emoji reaction on a news item"""
+    current_user = session.get("userinfo", {}).get("logged_in_user")
+    if not current_user or current_user == "public":
+        return jsonify({"error": "Authentication required"}), 401
+
+    emoji = (request.form.get("emoji") or "").strip()
+    # Guard against storing arbitrary text: must be short and non-ASCII (i.e. an
+    # actual emoji, including multi-codepoint ZWJ sequences and flags).
+    if not emoji or len(emoji) > 32 or re.fullmatch(r"[\x00-\x7F]+", emoji):
+        return jsonify({"error": "Invalid emoji"}), 400
+
+    with pg_session() as pg:
+        params = {"news_id": news_id, "username": current_user, "emoji": emoji}
+        removed = pg.execute(news_sql.remove_reaction(), params).rowcount
+        if not removed:
+            pg.execute(news_sql.add_reaction(), params)
+
+        rows = pg.execute(
+            news_sql.list_reactions(),
+            {"news_id": news_id, "username": current_user},
+        ).fetchall()
+
+    reactions = [
+        {
+            "emoji": r[0],
+            "count": r[1],
+            "reacted": bool(r[2]),
+            "users": visible_reactors(r[3]),  # who reacted, owner hidden
+        }
+        for r in rows
+    ]
+    return jsonify({"reactions": reactions})
 
 
 @news_blueprint.route("/news/<int:news_id>/details")

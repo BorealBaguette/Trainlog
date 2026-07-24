@@ -5279,12 +5279,15 @@ def _plan_chrono_key(pt):
     """Chronological anchor key for a plan-trip, or None when the leg is unanchored
     (no day and no date) and therefore freely reorderable. Relative (Day N) legs sort
     before absolute dated ones (mirrors the historical ordering); within a day,
-    untimed legs come after timed ones."""
+    untimed legs come after timed ones. Arrival day/time is the final tie-break so an
+    overnight leg (it arrives on a later day) always sinks to the end of its departure
+    day — nothing can depart on that day after you've already travelled into the next."""
     if pt["start_day"] is not None:  # relative leg
         st = pt["start_time"]
-        return (0, pt["start_day"], (1,) if st is None else (0, st))
+        ed = pt["end_day"] or pt["start_day"]
+        return (0, pt["start_day"], (1,) if st is None else (0, st), ed)
     if pt["start_datetime"] is not None:  # absolute dated leg (precise / onlyDate)
-        return (1, pt["start_datetime"])
+        return (1, pt["start_datetime"], pt["end_datetime"] or pt["start_datetime"])
     return None  # undated (unknown) -> no anchor
 
 
