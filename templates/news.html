@@ -28,7 +28,7 @@
                             <div class="flex-grow-1">
                                 <h4 class="card-title mb-2">{{ item.title }}</h4>
                                 <div class="card-text">
-                                    {{ item.content|replace('**', '')|replace('\n', '<br>')|safe }}
+                                    {{ item.content_html|safe }}
                                 </div>
                                 <div class="mt-3">
                                     <small class="text-muted">

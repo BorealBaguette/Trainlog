@@ -494,6 +494,7 @@
   .news-item:last-child { border-bottom: none; }
   .news-title { font-weight: 500; font-size: 0.9rem; color: #1f2937; margin-bottom: 0.2rem; }
   .news-preview { font-size: 0.82rem; color: var(--text-muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
+  .news-preview p { margin: 0; }
   .news-date { font-size: 0.75rem; color: #9ca3af; margin-top: 0.2rem; }
 
   /* ── Skeleton loader ── */
@@ -1585,7 +1586,7 @@ fetch("/api/news/app")
     el.innerHTML = items.slice(0, 3).map(n => `
       <div class="news-item">
         <div class="news-title">${n.title}</div>
-        <div class="news-preview">${n.content}</div>
+        <div class="news-preview">${n.content_html || n.content}</div>
         <div class="news-date">${fmtDate(n.created)}</div>
       </div>`).join("");
   })
