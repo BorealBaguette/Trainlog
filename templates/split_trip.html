@@ -1,0 +1,354 @@
+{% extends "bootstrap/layout.html" %}
+
+{% block content %}
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<style>
+  #split-wrap { max-width: 1100px; margin: 0 auto; padding: 12px; }
+  #split-map { width: 100%; height: 55vh; min-height: 340px; border-radius: 8px; }
+  #elev { width: 100%; height: 170px; margin-top: 10px; }
+  #elev svg { width: 100%; height: 100%; display: block; cursor: crosshair;
+              background: rgba(127,127,127,.06); border-radius: 8px; }
+  .elev-track { fill: none; stroke: #6c757d; stroke-width: 1.5; }
+  .elev-leg1 { fill: none; stroke: #2b6cb0; stroke-width: 2.5; }
+  .elev-leg2 { fill: none; stroke: #e8590c; stroke-width: 2.5; }
+  .elev-cursor { stroke: #888; stroke-width: 1; stroke-dasharray: 3 3; }
+  .elev-split { stroke: #212529; stroke-width: 1.5; }
+  .elev-lbl { font-size: 11px; fill: currentColor; opacity: .7; }
+  #split-panel { margin-top: 12px; padding: 12px; border: 1px solid rgba(127,127,127,.3);
+                 border-radius: 8px; }
+  #split-panel.disabled { opacity: .55; }
+  .node-pill { display: inline-block; padding: 2px 8px; border-radius: 999px;
+               background: rgba(127,127,127,.15); font-variant-numeric: tabular-nums; margin-right: 6px; }
+  #split-result a { font-weight: 600; }
+  .ml-popup-body { font-size: 12px; line-height: 1.4; font-variant-numeric: tabular-nums; }
+</style>
+
+<div id="split-wrap">
+  <h4 class="mb-1">Split trip #{{ trip_id }}</h4>
+  <div class="text-muted mb-2" style="font-size:.95em">
+    {{ trip.origin_station }} → {{ trip.destination_station }}
+    <span class="node-pill">{{ trip.trip_type }}</span>
+  </div>
+  <p class="mb-2" style="font-size:.9em">
+    Hover the track or the elevation profile to inspect each GPS point, then
+    <strong>click the point where the trip lands</strong> to choose the cut. The clicked
+    point becomes the end of leg&nbsp;1 and the start of leg&nbsp;2.
+  </p>
+
+  <div id="split-map"></div>
+  <div id="elev"></div>
+
+  <div id="split-panel" class="disabled">
+    <div id="split-selection" class="mb-2 text-muted">No split point selected yet.</div>
+    <div class="row g-2 align-items-end">
+      <div class="col-sm-8">
+        <label for="mid-station" class="form-label mb-1" style="font-size:.9em">
+          Intermediate station (destination of leg&nbsp;1 &amp; origin of leg&nbsp;2)
+        </label>
+        <div class="d-flex align-items-center">
+          <div class="flagDropdownWrapper">
+            <select id="mid-country" class="custom-select-flag" disabled>
+              {% for code, emoji in country_list.items() %}
+              <option value="{{ emoji }}" data-code="{{ code }}"
+                {% if trip.origin_station.startswith(emoji) %}selected{% endif %}>{{ emoji }} {{ code }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <input type="text" id="mid-station" class="form-control" placeholder="e.g. Vieste Heliport" disabled>
+        </div>
+      </div>
+      <div class="col-sm-4">
+        <button id="split-btn" class="btn btn-primary w-100" disabled>Split here</button>
+      </div>
+    </div>
+    <div id="split-result" class="mt-2"></div>
+  </div>
+</div>
+
+<script>
+const NODES = {{ nodes|tojson }};
+const TRIP_ID = {{ trip_id|tojson }};
+const SPLIT_URL = {{ url_for('split_trip_action', username=username, trip_id=trip_id)|tojson }};
+const PUBLIC_TRIP_BASE = "{{ url_for('public_trip', tripIds='__ID__') }}";
+
+const COL_LEG1 = '#2b6cb0';
+const COL_LEG2 = '#e8590c';
+
+let splitIndex = null;   // chosen cut node
+let map = null;
+
+// ── helpers ──────────────────────────────────────────────────────────────
+const coords = NODES.map(n => [n.lng, n.lat]);
+const alts = NODES.map(n => n.alt);
+const hasAlt = alts.filter(a => a != null).length >= 2;
+
+function fmtTime(ts) {
+  if (ts == null) return '—';
+  const d = new Date(ts * 1000);
+  const p = x => String(x).padStart(2, '0');
+  return `${d.getUTCFullYear()}-${p(d.getUTCMonth()+1)}-${p(d.getUTCDate())} `
+       + `${p(d.getUTCHours())}:${p(d.getUTCMinutes())}:${p(d.getUTCSeconds())} UTC`;
+}
+function fmtAlt(a) { return a == null ? '—' : `${Math.round(a)} m`; }
+
+function nodeInfoHtml(i) {
+  const n = NODES[i];
+  const t0 = NODES[0].ts, el = (n.ts != null && t0 != null) ? `, +${n.ts - t0}s` : '';
+  return `<div class="ml-popup-body"><strong>Point ${i}</strong>${el}<br>`
+       + `Alt: ${fmtAlt(n.alt)}<br>${fmtTime(n.ts)}</div>`;
+}
+
+// A trip needs at least 3 nodes to yield two ≥2-point legs.
+if (NODES.length < 3) {
+  document.getElementById('split-map').outerHTML =
+    '<div class="alert alert-warning">This trip has too few recorded GPS points to split.</div>';
+  document.getElementById('elev').remove();
+  document.getElementById('split-panel').remove();
+}
+
+// ── MapLibre map ─────────────────────────────────────────────────────────
+if (NODES.length >= 3) (async function () {
+  map = await MapLibreUtils.initializeMapLibre({
+    container: 'split-map',
+    tileserver: 'osm',
+    center: coords[Math.floor(coords.length / 2)],
+    zoom: 7
+  });
+
+  map.on('load', () => {
+    map.addSource('track', { type: 'geojson',
+      data: { type: 'Feature', geometry: { type: 'LineString', coordinates: coords } } });
+    map.addSource('leg1', { type: 'geojson', data: emptyLine() });
+    map.addSource('leg2', { type: 'geojson', data: emptyLine() });
+    map.addSource('nodes', { type: 'geojson', data: nodesFC() });
+    map.addSource('split-pt', { type: 'geojson', data: emptyFC() });
+
+    map.addLayer({ id: 'track', type: 'line', source: 'track',
+      paint: { 'line-color': '#6c757d', 'line-width': 3 } });
+    map.addLayer({ id: 'leg1', type: 'line', source: 'leg1',
+      paint: { 'line-color': COL_LEG1, 'line-width': 4 } });
+    map.addLayer({ id: 'leg2', type: 'line', source: 'leg2',
+      paint: { 'line-color': COL_LEG2, 'line-width': 4 } });
+    map.addLayer({ id: 'nodes', type: 'circle', source: 'nodes',
+      paint: {
+        'circle-radius': 4,
+        'circle-color': '#6c757d',
+        'circle-stroke-width': 1, 'circle-stroke-color': 'rgba(255,255,255,.8)'
+      } });
+    map.addLayer({ id: 'split-pt', type: 'circle', source: 'split-pt',
+      paint: { 'circle-radius': 8, 'circle-color': '#212529',
+               'circle-stroke-width': 2, 'circle-stroke-color': '#fff' } });
+
+    // Fit to the whole track.
+    const b = coords.reduce((bb, c) => bb.extend(c),
+      new maplibregl.LngLatBounds(coords[0], coords[0]));
+    map.fitBounds(b, { padding: 40, duration: 0 });
+
+    const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
+    map.on('mousemove', 'nodes', e => {
+      map.getCanvas().style.cursor = 'pointer';
+      const i = e.features[0].properties.i;
+      popup.setLngLat(coords[i]).setHTML(nodeInfoHtml(i)).addTo(map);
+      showCursor(i);
+    });
+    map.on('mouseleave', 'nodes', () => {
+      map.getCanvas().style.cursor = '';
+      popup.remove(); showCursor(null);
+    });
+    map.on('click', 'nodes', e => selectSplit(e.features[0].properties.i));
+
+    // 3D altitude toggle (same overlay as the public trip page).
+    if (hasAlt) {
+      MapLibreUtils.build3DFlightLayer(map, [{
+        trip: { uid: TRIP_ID }, path: NODES.map(n => [n.lat, n.lng]), altitude: alts
+      }], { toggleTitle: 'Toggle 3D altitude' }).catch(err => console.warn('3D layer:', err));
+    }
+  });
+})();
+
+function emptyLine() { return { type: 'Feature', geometry: { type: 'LineString', coordinates: [] } }; }
+function emptyFC() { return { type: 'FeatureCollection', features: [] }; }
+function nodesFC() {
+  return { type: 'FeatureCollection', features: NODES.map(n => ({
+    type: 'Feature', properties: { i: n.i },
+    geometry: { type: 'Point', coordinates: [n.lng, n.lat] } })) };
+}
+
+// ── selecting a split point ──────────────────────────────────────────────
+function selectSplit(i) {
+  // Both legs keep the cut node, so each needs at least one more point.
+  if (i < 1 || i > NODES.length - 2) {
+    document.getElementById('split-selection').innerHTML =
+      `<span class="text-danger">Point ${i} is too close to an end — pick a point with track on both sides.</span>`;
+    return;
+  }
+  splitIndex = i;
+
+  map.getSource('track').setData(emptyLine());
+  map.getSource('leg1').setData({ type: 'Feature',
+    geometry: { type: 'LineString', coordinates: coords.slice(0, i + 1) } });
+  map.getSource('leg2').setData({ type: 'Feature',
+    geometry: { type: 'LineString', coordinates: coords.slice(i) } });
+  map.getSource('split-pt').setData({ type: 'FeatureCollection', features: [
+    { type: 'Feature', geometry: { type: 'Point', coordinates: coords[i] } } ] });
+  map.setPaintProperty('nodes', 'circle-color',
+    ['case', ['<=', ['get', 'i'], ['literal', i]], COL_LEG1, COL_LEG2]);
+
+  const n = NODES[i];
+  document.getElementById('split-selection').innerHTML =
+    `<span class="node-pill">Point ${i}</span>` +
+    `<span class="node-pill">${fmtAlt(n.alt)}</span>` +
+    `<span class="node-pill">${fmtTime(n.ts)}</span>`;
+  const panel = document.getElementById('split-panel');
+  panel.classList.remove('disabled');
+  document.getElementById('mid-station').disabled = false;
+  document.getElementById('mid-country').disabled = false;
+  document.getElementById('split-btn').disabled = false;
+  drawSplitLine();
+}
+
+// ── elevation profile (SVG) ──────────────────────────────────────────────
+const SVGNS = 'http://www.w3.org/2000/svg';
+const PAD = { l: 44, r: 10, t: 12, b: 20 };
+let elevGeom = null;  // {W, H, x(i), y(a)}
+
+function buildProfile() {
+  const host = document.getElementById('elev');
+  host.innerHTML = '';
+  if (!hasAlt) { host.innerHTML = '<div class="text-muted p-2">No altitude data for this trip.</div>'; return; }
+  const W = host.clientWidth, H = host.clientHeight;
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+  const valid = alts.filter(a => a != null);
+  const minA = Math.min(...valid), maxA = Math.max(...valid);
+  const span = (maxA - minA) || 1;
+  const x = i => PAD.l + (i / (NODES.length - 1)) * (W - PAD.l - PAD.r);
+  const y = a => H - PAD.b - ((a - minA) / span) * (H - PAD.t - PAD.b);
+  elevGeom = { W, H, x, y };
+
+  // axis labels (min / max altitude)
+  for (const [a, txt] of [[maxA, `${Math.round(maxA)} m`], [minA, `${Math.round(minA)} m`]]) {
+    const t = document.createElementNS(SVGNS, 'text');
+    t.setAttribute('class', 'elev-lbl'); t.setAttribute('x', 4); t.setAttribute('y', y(a) + 3);
+    t.textContent = txt; svg.appendChild(t);
+    const gl = document.createElementNS(SVGNS, 'line');
+    gl.setAttribute('x1', PAD.l); gl.setAttribute('x2', W - PAD.r);
+    gl.setAttribute('y1', y(a)); gl.setAttribute('y2', y(a));
+    gl.setAttribute('stroke', 'currentColor'); gl.setAttribute('stroke-opacity', '.08');
+    svg.appendChild(gl);
+  }
+
+  const d = NODES.map((n, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)} ${y(n.alt == null ? minA : n.alt).toFixed(1)}`).join(' ');
+  addPath(svg, d, 'elev-track', 'track-path');
+  addPath(svg, '', 'elev-leg1', 'leg1-path');
+  addPath(svg, '', 'elev-leg2', 'leg2-path');
+
+  // cursor + split markers
+  addLine(svg, 'elev-cursor', 'cursor-line'); hide(svg, 'cursor-line');
+  addLine(svg, 'elev-split', 'split-line'); hide(svg, 'split-line');
+
+  // interaction overlay
+  const rect = document.createElementNS(SVGNS, 'rect');
+  rect.setAttribute('x', 0); rect.setAttribute('y', 0);
+  rect.setAttribute('width', W); rect.setAttribute('height', H);
+  rect.setAttribute('fill', 'transparent');
+  const idxFromEvt = ev => {
+    const r = svg.getBoundingClientRect();
+    const px = (ev.clientX - r.left) * (W / r.width);
+    let i = Math.round(((px - PAD.l) / (W - PAD.l - PAD.r)) * (NODES.length - 1));
+    return Math.max(0, Math.min(NODES.length - 1, i));
+  };
+  rect.addEventListener('mousemove', ev => showCursor(idxFromEvt(ev)));
+  rect.addEventListener('mouseleave', () => showCursor(null));
+  rect.addEventListener('click', ev => selectSplit(idxFromEvt(ev)));
+  svg.appendChild(rect);
+  host.appendChild(svg);
+
+  if (splitIndex != null) drawSplitLine();
+}
+
+function addPath(svg, d, cls, id) {
+  const p = document.createElementNS(SVGNS, 'path');
+  p.setAttribute('class', cls); p.setAttribute('id', id); if (d) p.setAttribute('d', d);
+  svg.appendChild(p); return p;
+}
+function addLine(svg, cls, id) {
+  const l = document.createElementNS(SVGNS, 'line');
+  l.setAttribute('class', cls); l.setAttribute('id', id);
+  svg.appendChild(l); return l;
+}
+function hide(ctx, id) { const el = (ctx || document).querySelector('#' + id); if (el) el.style.display = 'none'; }
+
+// Shared cursor between map and profile.
+let hoverMarker = null;
+function showCursor(i) {
+  const line = document.getElementById('cursor-line');
+  if (i == null) { if (line) line.style.display = 'none'; if (hoverMarker) { hoverMarker.remove(); hoverMarker = null; } return; }
+  if (elevGeom && line) {
+    const gx = elevGeom.x(i);
+    line.setAttribute('x1', gx); line.setAttribute('x2', gx);
+    line.setAttribute('y1', PAD.t); line.setAttribute('y2', elevGeom.H - PAD.b);
+    line.style.display = '';
+  }
+  if (map && map.getSource) {
+    if (!hoverMarker) {
+      const el = document.createElement('div');
+      el.style.cssText = 'width:12px;height:12px;border-radius:50%;background:#212529;border:2px solid #fff';
+      hoverMarker = new maplibregl.Marker({ element: el });
+    }
+    hoverMarker.setLngLat(coords[i]).addTo(map);
+  }
+}
+
+function drawSplitLine() {
+  if (!elevGeom || splitIndex == null) return;
+  const sx = elevGeom.x(splitIndex);
+  const sl = document.getElementById('split-line');
+  if (sl) {
+    sl.setAttribute('x1', sx); sl.setAttribute('x2', sx);
+    sl.setAttribute('y1', PAD.t); sl.setAttribute('y2', elevGeom.H - PAD.b);
+    sl.style.display = '';
+  }
+  const seg = (from, to) => NODES.slice(from, to).map((n, k) =>
+    `${k ? 'L' : 'M'}${elevGeom.x(from + k).toFixed(1)} ${elevGeom.y(n.alt == null ? 0 : n.alt).toFixed(1)}`).join(' ');
+  document.getElementById('track-path').setAttribute('d', '');
+  document.getElementById('leg1-path').setAttribute('d', seg(0, splitIndex + 1));
+  document.getElementById('leg2-path').setAttribute('d', seg(splitIndex, NODES.length));
+}
+
+if (NODES.length >= 3) {
+buildProfile();
+let _rz; window.addEventListener('resize', () => { clearTimeout(_rz); _rz = setTimeout(buildProfile, 150); });
+
+// ── submit ───────────────────────────────────────────────────────────────
+document.getElementById('split-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('split-btn');
+  const name = document.getElementById('mid-station').value.trim();
+  const flag = document.getElementById('mid-country').value;
+  const out = document.getElementById('split-result');
+  if (splitIndex == null) return;
+  if (!name) { out.innerHTML = '<span class="text-danger">Enter an intermediate station name first.</span>'; return; }
+  // Stations are stored flag-first ("🇮🇹 Vieste") — always prepend the picked flag.
+  const mid = `${flag} ${name}`;
+  btn.disabled = true; out.textContent = 'Splitting…';
+  try {
+    const resp = await fetch(SPLIT_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ split_index: splitIndex, mid_station: mid })
+    });
+    const data = await resp.json();
+    if (!resp.ok || !data.success) throw new Error(data.message || 'Split failed');
+    const link = id => `<a href="${PUBLIC_TRIP_BASE.replace('__ID__', id)}" target="_blank">#${id}</a>`;
+    out.innerHTML = `<span class="text-success">Done.</span> Leg 1: ${link(data.leg1_id)} · Leg 2: ${link(data.leg2_id)}`;
+  } catch (e) {
+    out.innerHTML = `<span class="text-danger">${e.message}</span>`;
+    btn.disabled = false;
+  }
+});
+}
+</script>
+{% endblock %}
