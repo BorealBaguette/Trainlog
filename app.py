@@ -5246,6 +5246,37 @@ def savePlanTrip(username):
 # itinerary+map (new_trip.html), validatable into real trips.
 # ---------------------------------------------------------------------------
 
+def _plan_chrono_key(pt):
+    """Chronological anchor key for a plan-trip, or None when the leg is unanchored
+    (no day and no date) and therefore freely reorderable. Relative (Day N) legs sort
+    before absolute dated ones (mirrors the historical ordering); within a day,
+    untimed legs come after timed ones."""
+    if pt["start_day"] is not None:  # relative leg
+        st = pt["start_time"]
+        return (0, pt["start_day"], (1,) if st is None else (0, st))
+    if pt["start_datetime"] is not None:  # absolute dated leg (precise / onlyDate)
+        return (1, pt["start_datetime"])
+    return None  # undated (unknown) -> no anchor
+
+
+def _plan_display_order(rows):
+    """Display order for plan legs. `rows` arrive in user order (sort_order, uid).
+    Anchored legs are re-sorted chronologically among themselves — their relative
+    order is dictated by their day/time, not by the arrows — while unanchored legs
+    keep exactly the slot the user put them in. The sort is stable, so legs with an
+    identical key (e.g. two untimed legs on the same day) still follow the user
+    order and thus stay swappable."""
+    keyed = [(_plan_chrono_key(r._mapping), r) for r in rows]
+    anchored_slots = [i for i, (k, _) in enumerate(keyed) if k is not None]
+    anchored_sorted = sorted(
+        (keyed[i] for i in anchored_slots), key=lambda kr: kr[0]
+    )
+    ordered = list(keyed)
+    for slot, kr in zip(anchored_slots, anchored_sorted):
+        ordered[slot] = kr
+    return ordered
+
+
 def build_plan_trip_list(plan_uuid):
     """(tripList, priceDict) in the SAME shape as processPublicTrips, built from
     plan_trips so new_trip.html renders a plan unchanged. Reuses formatTrip."""
@@ -5286,7 +5317,8 @@ def build_plan_trip_list(plan_uuid):
     tripList = []
     total_price = total_carbon = total_distance = 0
     prev_end_pos = None  # arrival position of the previous timed leg, for connection checks
-    for r in rows:
+    ordered = _plan_display_order(rows)
+    for idx, (chrono_key, r) in enumerate(ordered):
         pt = r._mapping
         coords = geom_geojson_to_coords(pt["geojson"])
         # Impossible connection: this timed leg departs before the previous one arrives.
@@ -5346,6 +5378,7 @@ def build_plan_trip_list(plan_uuid):
         trip["time"] = "plannedFuture"
         trip["day_number"] = pt["start_day"]
         trip["end_day_number"] = pt["end_day"]
+        trip["weekdays"] = pt["weekdays"]
         trip["cost_id"] = pt["cost_id"]
         # A leg on a shared cost renders like a ticketed trip (reuse the ticket UI).
         cinfo = cost_by_id.get(pt["cost_id"])
@@ -5364,9 +5397,24 @@ def build_plan_trip_list(plan_uuid):
         if trip.get("price_in_user_currency") is not None:
             trip["user_currency"] = user_currency
             total_price += trip["price_in_user_currency"]
+        # Weekday check: with Day 1 previewed at the plan's anchor_date, does this
+        # leg's day fall on a weekday its service actually runs on? (weekdays is a
+        # bitmask, bit 0 = Monday; NULL = runs daily.)
+        weekday_mismatch = False
+        if pt["weekdays"] is not None and pt["start_day"] is not None:
+            leg_date = plan._mapping["anchor_date"] + timedelta(days=pt["start_day"] - 1)
+            weekday_mismatch = not (pt["weekdays"] >> leg_date.weekday()) & 1
+        # A leg can trade places with a neighbour when at least one of the two is
+        # unanchored (no day/date), or when their anchors tie (e.g. two untimed legs
+        # on the same day) — otherwise the chronology dictates the order and the
+        # move buttons would be no-ops (the template hides them).
+        can_swap = lambda a, b: a is None or b is None or a == b
         tripList.append(
             {"time": trip["time"], "trip": trip, "path": coords, "altitude": None,
              "timestamps": None, "lockTime": True, "impossible": impossible,
+             "weekday_mismatch": weekday_mismatch,
+             "can_up": idx > 0 and can_swap(chrono_key, ordered[idx - 1][0]),
+             "can_down": idx < len(ordered) - 1 and can_swap(chrono_key, ordered[idx + 1][0]),
              # UTC-epoch departure/arrival used by compute_plan_stats for the span
              # (timezone-correct, anchor-independent — see _plan_leg_positions).
              "pos_start": cur_start_pos, "pos_end": cur_end_pos}
@@ -5753,6 +5801,7 @@ def update_plan_trip_route(username, plan_uuid, plan_trip_uid):
         "planStartTime": request.form.get("planStartTime"),
         "planEndDay": request.form.get("planEndDay"),
         "planEndTime": request.form.get("planEndTime"),
+        "planWeekdays": request.form.get("planWeekdays"),
         "newTripStart": request.form.get("newTripStart"),
         "newTripEnd": request.form.get("newTripEnd"),
         "onlyDate": request.form.get("onlyDate"),
@@ -5772,6 +5821,7 @@ def update_plan_trip_route(username, plan_uuid, plan_trip_uid):
                 "end_day": timing["end_day"],
                 "start_time": timing["start_time"],
                 "end_time": timing["end_time"],
+                "weekdays": timing["weekdays"],
                 "start_datetime": timing["start_datetime"],
                 "end_datetime": timing["end_datetime"],
                 "utc_start_datetime": timing["utc_start_datetime"],
@@ -5910,6 +5960,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         planEndDay=plan_end_day,
         planStartTime=plan_start_time,
         planEndTime=plan_end_time,
+        planWeekdays=pt["weekdays"] or 0,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

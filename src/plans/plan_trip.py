@@ -91,6 +91,8 @@ class PlanTrip:
         self.utc_start_datetime = timing["utc_start_datetime"]
         self.utc_end_datetime = timing["utc_end_datetime"]
         self.manual_trip_duration = _int_seconds(timing["manual_trip_duration"])
+        # Weekday bitmask (bit 0 = Monday) for relative legs; None = runs daily.
+        self.weekdays = timing.get("weekdays")
 
         # carbon — best-effort (calculate_carbon_footprint_for_trip uses .get()).
         carbon_input = {

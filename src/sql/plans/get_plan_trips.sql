@@ -18,12 +18,8 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) o ON TRUE
 WHERE pt.plan_id = :plan_id
--- Relative trips carry durable start_day/start_time columns that are immune to
--- anchor_date drift; sort those first so the day number always wins.  Absolute
--- trips (start_day IS NULL) fall back to start_datetime.  Within a day,
--- timed legs sort by start_time; untimed legs fall back to sort_order then uid.
-ORDER BY pt.start_day NULLS LAST,
-         pt.start_time NULLS LAST,
-         pt.start_datetime NULLS LAST,
-         pt.sort_order,
+-- User order only. The chronological interleaving (anchored legs sorted by day/time,
+-- unanchored legs staying where the user put them) happens in Python — see
+-- build_plan_trip_list / _plan_display_order in app.py.
+ORDER BY pt.sort_order,
          pt.uid

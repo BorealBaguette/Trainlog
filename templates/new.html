@@ -431,23 +431,47 @@
       <style>
         #form #relativeDates { display: none; }
         #form:has(input[id=radioRelative]:checked) #relativeDates { display: grid; gap: 0 0.3rem; }
+        /* Day-only relative leg: no times to derive a duration from -> offer the
+           manual duration inputs (JS toggles the class). */
+        #form #manDuration.rel-duration { display: grid; }
+        /* Duration mode hides the time column -> let the day input take the full row. */
+        #form #relativeDates.rel-dur .fieldset-datetime { grid-template-columns: 1fr; }
+        .wd-toggle { border: 1px solid #cbd2db; background: transparent; border-radius: 6px;
+                     padding: .15rem .45rem; font-size: .8rem; cursor: pointer; }
+        .wd-toggle.on { background: #4b78d6; border-color: #4b78d6; color: #fff; }
       </style>
       <group id="relativeDates">
+        {# Either/or: a leg is timed (Day + time) OR duration-based (Day + duration) —
+           never both, so the two can't contradict each other. #}
+        <div style="grid-column:1/-1; display:flex; gap:1.2rem; margin-bottom:.3rem;">
+          <div class="radio-group">
+            <input type="radio" id="relModeTime" name="relTimeMode" value="time" checked/>
+            <label for="relModeTime" class="checkboxLabel">{{ planModeTime|default('Time') }}</label>
+          </div>
+          <div class="radio-group">
+            <input type="radio" id="relModeDuration" name="relTimeMode" value="duration"/>
+            <label for="relModeDuration" class="checkboxLabel">{{ tripDuration|default('Duration') }}</label>
+          </div>
+        </div>
         <fieldset class="fieldset-datetime">
           <legend><span class="legend">{{ newTripStart }}</span></legend>
           <label class="sr-only" for="planStartDay">{{ day|default('Day') }}</label>
           <input type="number" min="1" value="1" name="planStartDay" id="planStartDay" placeholder="{{ day|default('Day') }}"/>
           <label class="sr-only" for="planStartTime">{{ time }}</label>
-          <input type="time" name="planStartTime" id="planStartTime" placeholder=" " title="{{ timeOptional|default('Time (optional)') }}"/>
+          <input type="time" name="planStartTime" id="planStartTime" placeholder=" "/>
         </fieldset>
         <fieldset class="fieldset-datetime">
           <legend><span class="legend">{{ newTripEnd }}</span></legend>
           <label class="sr-only" for="planEndDay">{{ day|default('Day') }}</label>
           <input type="number" min="1" value="1" name="planEndDay" id="planEndDay" placeholder="{{ day|default('Day') }}"/>
           <label class="sr-only" for="planEndTime">{{ time }}</label>
-          <input type="time" name="planEndTime" id="planEndTime" placeholder=" " title="{{ timeOptional|default('Time (optional)') }}"/>
+          <input type="time" name="planEndTime" id="planEndTime" placeholder=" "/>
         </fieldset>
-        <small class="text-muted" style="grid-column:1/-1;">{{ planTimeHint|default('Times are optional — leave blank to plan by day only.') }}</small>
+        <div id="planWeekdaysGroup" style="grid-column:1/-1; margin:.4rem 0 .2rem;">
+          <span class="legend">{{ planWeekdaysLabel|default('Runs on') }} <i class="fa-solid fa-circle-info text-muted" style="cursor:help;" title="{{ planWeekdaysHint|default('For services with less-than-daily frequencies. Leave empty if it runs daily.') }}"></i></span>
+          <div id="planWeekdayBtns" style="display:flex; gap:.25rem; margin-top:.25rem;"></div>
+          <input type="hidden" name="planWeekdays" id="planWeekdays" value="0"/>
+        </div>
       </group>
       {% endif %}
 
@@ -516,6 +540,57 @@
   // Plans have no tickets or delays — hide the delay section (its init then self-skips
   // because #delayToggle is hidden). The ticket selector isn't rendered in plan mode.
   $('#delayToggleWrapper, #delayModeSwitchWrapper, #delayMinutesInputs, #depActualGroup, #arrActualGroup').hide();
+
+  // Relative legs are timed (Day + time) OR duration-based (Day + duration), never
+  // both: the switch shows one set of inputs and clears the other, so conflicting
+  // values can't be submitted. The duration travels as onlyDateDuration.
+  // #manDuration is shared with the onlyDate precision further down the form, so in
+  // relative-duration mode it is MOVED up into #relativeDates (before the weekday
+  // row) and restored to its original slot (marker) for the other modes.
+  var _md = document.getElementById('manDuration');
+  var _mdHome = document.createElement('span');
+  _mdHome.style.display = 'none';
+  _md.parentNode.insertBefore(_mdHome, _md);
+  function updateRelTimeMode() {
+    var rel = $('#radioRelative').is(':checked');
+    var dur = $('#relModeDuration').is(':checked');
+    $('#planStartTime, #planEndTime').toggle(!(rel && dur));
+    $('#manDuration').toggleClass('rel-duration', rel && dur);
+    $('#relativeDates').toggleClass('rel-dur', rel && dur);
+    if (rel && dur) {
+      var wd = document.getElementById('planWeekdaysGroup');
+      wd.parentNode.insertBefore(_md, wd);
+    } else {
+      _mdHome.parentNode.insertBefore(_md, _mdHome.nextSibling);
+    }
+    if (rel) {
+      if (dur) $('#planStartTime, #planEndTime').val('');
+      else $('#manDurationHours, #manDurationMinutes').val('');
+    }
+  }
+  $('input[name="precision"], input[name="relTimeMode"]').on('change', updateRelTimeMode);
+  updateRelTimeMode();
+
+  // Weekday-constraint toggles (bitmask, bit 0 = Monday), localised via Intl.
+  (function initPlanWeekdays() {
+    var hidden = document.getElementById('planWeekdays');
+    var wrap = document.getElementById('planWeekdayBtns');
+    if (!hidden || !wrap) return;
+    var mask = parseInt(hidden.value, 10) || 0;
+    var fmt = new Intl.DateTimeFormat("{{ langId }}" || 'en', { weekday: 'short', timeZone: 'UTC' });
+    for (var i = 0; i < 7; i++) (function (i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'wd-toggle' + (((mask >> i) & 1) ? ' on' : '');
+      b.textContent = fmt.format(new Date(Date.UTC(2024, 0, 1 + i))); // 2024-01-01 = Monday
+      b.addEventListener('click', function () {
+        mask ^= (1 << i);
+        b.classList.toggle('on', !!((mask >> i) & 1));
+        hidden.value = mask;
+      });
+      wrap.appendChild(b);
+    })(i);
+  })();
   {% endif %}
   var globalStationDict = {};
   var manualStationsList = [];

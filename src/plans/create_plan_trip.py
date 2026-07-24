@@ -31,6 +31,7 @@ def create_plan_trip(plan_trip: PlanTrip, pg_session=None):
                 "end_day": plan_trip.end_day,
                 "start_time": plan_trip.start_time,
                 "end_time": plan_trip.end_time,
+                "weekdays": plan_trip.weekdays,
                 "start_datetime": plan_trip.start_datetime,
                 "end_datetime": plan_trip.end_datetime,
                 "utc_start_datetime": plan_trip.utc_start_datetime,
