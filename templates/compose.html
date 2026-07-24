@@ -204,12 +204,17 @@
           <img src="{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}" onerror="this.style.display='none'">
         </div>
         <ul class="dropdown-menu" id="typeSwitchMenu" aria-labelledby="typeSwitchIcon" style="max-height:60vh;overflow:auto;">
-          {% for t, label in new_trip_types.items() %}
+          {% set ns = namespace(group=none) %}
+          {% for t, data in new_trip_types.items() %}
+          {% if ns.group is not none and data.group != ns.group %}
+          <li><hr class="dropdown-divider"></li>
+          {% endif %}
+          {% set ns.group = data.group %}
           <li>
             <a class="dropdown-item d-flex align-items-center gap-2 {% if t == vehicle_type %}active{% endif %}"
                href="{{ url_for('compose', username=username, vehicle_type=t) }}{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">
               <img src="{{ url_for('static', filename='images/icons/trip_logos/' + t + '.png') }}" width="20" height="20" onerror="this.style.display='none'">
-              <span>{{ label }}</span>
+              <span>{{ data.label }}</span>
             </a>
           </li>
           {% endfor %}

@@ -1232,6 +1232,29 @@ def before_request():
     changeLang(language, session)
 
 
+# Canonical trip-type display order, grouped as in the navbar "New" menu.
+# Templates draw a divider whenever the group index changes.
+TRIP_TYPE_GROUPS = [
+    ["train", "tram", "metro", "funicular", "rail"],
+    ["air", "bus", "ferry", "helicopter", "aerialway"],
+    ["walk", "cycle", "ski", "scooter", "car", "other"],
+    ["accommodation", "poi", "restaurant"],
+]
+TRIP_TYPE_GROUP_INDEX = {
+    t: i for i, group in enumerate(TRIP_TYPE_GROUPS) for t in group
+}
+TRIP_TYPE_SORT_KEY = {
+    t: i for i, t in enumerate(t for group in TRIP_TYPE_GROUPS for t in group)
+}
+
+
+def order_trip_types(types):
+    """Sort trip types into the canonical grouped order; unknown types last."""
+    return sorted(
+        types, key=lambda t: TRIP_TYPE_SORT_KEY.get(t, len(TRIP_TYPE_SORT_KEY))
+    )
+
+
 @app.context_processor
 def inject_distinct_types():
     # 1) If we’re rendering an error page, don’t touch the DB
@@ -1286,14 +1309,15 @@ def inject_distinct_types():
         g.distinct_types_ctx = {}  # cache the empty fallback to avoid retries
         return {"distinctTypes": {}}
 
-    # 6) Build the dict with localized labels
+    # 6) Build the dict with localized labels, in canonical grouped order
     lang_dict = lang.get(lang_code, {})
     types = {
-        r[0]: {
-            "label": lang_dict.get(r[0], r[0]),
-            "icon": icon_map.get(r[0], "fa-solid fa-question"),
+        t: {
+            "label": lang_dict.get(t, t),
+            "icon": icon_map.get(t, "fa-solid fa-question"),
+            "group": TRIP_TYPE_GROUP_INDEX.get(t, len(TRIP_TYPE_GROUPS)),
         }
-        for r in rows
+        for t in order_trip_types(r[0] for r in rows)
     }
 
     g.distinct_types_ctx = types
@@ -1338,18 +1362,19 @@ def new_auto(username):
 
 
 def get_new_trip_types(user_lang):
-    """Ordered {type: label} of the vehicle types the new-trip form supports.
+    """Ordered {type: {label, group}} of the vehicle types the new-trip form supports.
 
     Used to populate the in-form type switcher (click the header icon to swap
-    type, e.g. follow a train trip with a bus trip). Only types that ``new()``
-    can actually render are listed (``other`` has no form branch).
+    type, e.g. follow a train trip with a bus trip). Same grouped order as the
+    navbar "New" menu; only types that ``new()`` can actually render are listed
+    (``other`` has no form branch).
     """
-    order = [
-        "train", "rail", "tram", "metro", "funicular", "bus", "ferry",
-        "car", "cycle", "scooter", "walk", "aerialway", "ski",
-        "air", "helicopter", "accommodation", "poi", "restaurant",
-    ]
-    return {t: user_lang[t] for t in order}
+    return {
+        t: {"label": user_lang[t], "group": group_index}
+        for group_index, group in enumerate(TRIP_TYPE_GROUPS)
+        for t in group
+        if t != "other"
+    }
 
 
 @app.route("/u/<username>/compose/<vehicle_type>")
@@ -5084,7 +5109,11 @@ def public_stats(username, tripType=None, year=None):
             {"user_id": get_user_id(username)},
         ).fetchall()
     types = {
-        row[0]: lang[session["userinfo"]["lang"]][row[0]] for row in rows
+        t: {
+            "label": lang[session["userinfo"]["lang"]][t],
+            "group": TRIP_TYPE_GROUP_INDEX.get(t, len(TRIP_TYPE_GROUPS)),
+        }
+        for t in order_trip_types(row[0] for row in rows)
     }
 
     if tripType is None:
