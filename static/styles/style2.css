@@ -1729,6 +1729,12 @@ table.dataTable.dtr-column>tbody>tr>th.control:before {
   margin-bottom: 5px;
   text-align: center;
 }
+.dataTables_wrapper .dataTables_filter input {
+  /* The body font is FlagEmojis-first; that flag-only font makes the browser
+     mis-measure this search box's `size`-based intrinsic width, ballooning it
+     to full width (notably on mobile). Reset to a normal text stack. */
+  font-family: Arial, Helvetica, sans-serif;
+}
 .dt-sort-btn {
   display: inline-block;
   padding: 0.25rem 2rem 0.25rem 0.5rem;
