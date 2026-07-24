@@ -384,6 +384,8 @@
     "tag_type": "Typ tagu",
     "collection": "Kolekcja",
     "voyage": "Podróż",
+    "tag_type_voyage_help": "Sekwencyjna podróż złożona z kilku przejazdów. Na mapie przejazdy są łączone po kolei i oznaczane ikonami. Idealna do grupowania wszystkich etapów jednej większej podróży z punktu A do B: pociągi, autobusy, promy, samoloty i wszystko pomiędzy.",
+    "tag_type_collection_help": "Grupa przejazdów, które nie muszą zachowywać żadnej kolejności. Na mapie rysowane są tylko ich trasy, bez łączenia ich ze sobą. Idealna do grupowania przejazdów, które mają coś wspólnego: nocne pociągi, podróże, na których kawa była zaskakująco dobra, albo wszystkie przejazdy do osób, które kochasz.",
     "tag_members": "Członkowie",
     "tag_owner_label": "Właściciel",
     "invite_to_tag_btn": "Zaproś",

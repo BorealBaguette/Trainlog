@@ -383,6 +383,8 @@
     "tag_type": "Mærketype",
     "collection": "Samling",
     "voyage": "Rejse",
+    "tag_type_voyage_help": "En sammenhængende rejse, der består af flere ture. På kortet forbindes turene i rækkefølge og vises med ikoner. Velegnet til at samle alle etaperne af én større rejse fra A til B: tog, busser, færger, fly og alt derimellem.",
+    "tag_type_collection_help": "En gruppe af ture, der ikke behøver at følge nogen bestemt rækkefølge. På kortet tegnes kun deres ruter, uden at de forbindes. Velegnet til at samle ture, der har noget til fælles: nattog, ture hvor kaffen faktisk var god, eller alle de ture, du har taget for at se dem, du holder af.",
     "tag_members": "Medlemmer",
     "tag_owner_label": "Ejer",
     "invite_to_tag_btn": "Invitér",

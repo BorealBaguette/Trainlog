@@ -382,6 +382,8 @@
     "tag_type": "Címketípus",
     "collection": "Gyűjtemény",
     "voyage": "Utazás",
+    "tag_type_voyage_help": "Egymást követő utazás, amely több szakaszból áll. A térképen a szakaszok sorrendben összekapcsolódnak, és ikonokkal jelennek meg. Ideális egy nagyobb, A-ból B-be tartó utazás összes szakaszának csoportosítására: vonatok, buszok, kompok, repülők és minden más.",
+    "tag_type_collection_help": "Olyan utak csoportja, amelyeknek nem kell semmilyen sorrendet követniük. A térképen csak az útvonalaik jelennek meg, összekapcsolás nélkül. Ideális olyan utak csoportosítására, amelyekben van valami közös: éjszakai vonatok, utak, ahol a kávé meglepően jó volt, vagy minden út, amelyet a szeretteid meglátogatásáért tettél meg.",
     "tag_members": "Tagok",
     "tag_owner_label": "Tulajdonos",
     "invite_to_tag_btn": "Meghívás",

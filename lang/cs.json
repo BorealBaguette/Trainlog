@@ -384,6 +384,8 @@
     "tag_type": "Typ tagu",
     "collection": "Kolekce",
     "voyage": "Plavba",
+    "tag_type_voyage_help": "Souvislá cesta složená z několika jízd. Na mapě jsou jízdy propojeny v pořadí a zobrazeny s ikonami. Hodí se pro seskupení všech úseků jedné větší cesty z bodu A do bodu B: vlaky, autobusy, trajekty, letadla a všechno mezi tím.",
+    "tag_type_collection_help": "Skupina jízd, které nemusí mít žádné pořadí. Na mapě se vykreslí pouze jejich trasy, aniž by se propojovaly. Hodí se pro seskupení jízd, které mají něco společného: noční vlaky, cesty, kde byla káva překvapivě dobrá, nebo všechny cesty za lidmi, které máte rádi.",
     "tag_members": "Členové",
     "tag_owner_label": "Vlastník",
     "invite_to_tag_btn": "Pozvat",

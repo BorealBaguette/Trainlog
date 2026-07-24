@@ -383,6 +383,8 @@
     "tag_type": "Tunnistetyyppi",
     "collection": "Kokoelma",
     "voyage": "Reissu",
+    "tag_type_voyage_help": "Peräkkäinen matka, joka koostuu useasta matkaosuudesta. Kartalla osuudet yhdistetään järjestyksessä ja näytetään kuvakkein. Sopii yhden suuremman A:sta B:hen kulkevan matkan kaikkien osuuksien ryhmittelyyn: junat, bussit, lautat, lentokoneet ja kaikki siltä väliltä.",
+    "tag_type_collection_help": "Ryhmä matkoja, joiden ei tarvitse noudattaa mitään järjestystä. Kartalle piirretään vain niiden reitit, ilman että niitä yhdistetään. Sopii sellaisten matkojen ryhmittelyyn, joilla on jotain yhteistä: yöjunat, matkat joilla kahvi oli yllättävän hyvää, tai kaikki matkat rakkaidesi luo.",
     "tag_members": "Jäsenet",
     "tag_owner_label": "Omistaja",
     "invite_to_tag_btn": "Kutsu",

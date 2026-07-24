@@ -383,6 +383,8 @@
     "tag_type": "Labeltype",
     "collection": "Collectie",
     "voyage": "Reis",
+    "tag_type_voyage_help": "Een opeenvolgende reis die uit meerdere ritten bestaat. Op de kaart worden de ritten in volgorde met elkaar verbonden en met pictogrammen weergegeven. Ideaal om alle etappes van één grotere reis van A naar B te groeperen: treinen, bussen, veerboten, vliegtuigen en alles daartussenin.",
+    "tag_type_collection_help": "Een groep ritten die geen vaste volgorde hoeven te volgen. Op de kaart worden alleen hun routes getekend, zonder ze te verbinden. Ideaal om ritten te groeperen die iets gemeen hebben: nachttreinen, ritten waar de koffie verrassend goed was, of alle ritten om de mensen te bezoeken van wie je houdt.",
     "tag_members": "Leden",
     "tag_owner_label": "Eigenaar",
     "invite_to_tag_btn": "Uitnodigen",

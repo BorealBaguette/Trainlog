@@ -27,6 +27,21 @@
   .tag-invite-form .btn {
     flex: 0 0 auto;
   }
+  /* jQuery UI selectmenu button styled to match the Bootstrap inputs around it */
+  .ui-selectmenu-button.ui-button {
+    width: 100%;
+    text-align: left;
+    padding: 0.375rem 0.75rem;
+    background: var(--bs-body-bg, #fff);
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    font-size: 1.25rem;
+    line-height: 1.5;
+  }
+  /* Sit above the Bootstrap modal (z-index ~1055) */
+  .ui-selectmenu-menu { z-index: 2000; }
+  .tag-type-help { cursor: pointer; margin-left: 0.25rem; }
+  .tag-type-popover { max-width: 340px; }
 </style>
 
 <div class="container mt-4">
@@ -153,11 +168,12 @@
                   <input id="colour{{ tag.uid }}" name="colour" type="text" class="form-control input-lg" value="{{ tag.colour }}">
                 </div>
                 <div class="form-group mb-3">
-                    <label for="type">{{ tag_type }} : </label>
+                    <label for="editTagType{{ tag.uid }}">{{ tag_type }} :</label>
+                    <i class="fas fa-circle-info text-muted tag-type-help" role="button" tabindex="0" title="{{ tag_type }}"></i>
                     <div>
-                        <select id="type" name="type" class="form-control input-lg">
-                            <option value="collection" {% if tag.type == 'collection' %}selected{% endif %}>Collection</option>
-                            <option value="voyage" {% if tag.type == 'voyage' %}selected{% endif %}>Voyage</option>
+                        <select id="editTagType{{ tag.uid }}" name="type" class="form-control input-lg">
+                            <option value="voyage" data-icon="fas fa-route" {% if tag.type == 'voyage' %}selected{% endif %}>{{voyage}}</option>
+                            <option value="collection" data-icon="fas fa-list" {% if tag.type == 'collection' %}selected{% endif %}>{{collection}}</option>
                         </select>
                     </div>
                 </div>
@@ -277,11 +293,12 @@
             </div>
           </div>
           <div class="form-group mb-3">
-            <label for="newTagType">{{ tag_type }} : </label>
+            <label for="newTagType">{{ tag_type }} :</label>
+            <i class="fas fa-circle-info text-muted tag-type-help" role="button" tabindex="0" title="{{ tag_type }}"></i>
             <div>
               <select id="newTagType" name="type" class="form-control input-lg">
-                <option value="collection">{{collection}}</option>
-                <option value="voyage">{{voyage}}</option>
+                <option value="voyage" data-icon="fas fa-route" selected>{{voyage}}</option>
+                <option value="collection" data-icon="fas fa-list">{{collection}}</option>
               </select>
             </div>
           </div>
@@ -376,9 +393,63 @@
 
     bindColorPicker($('#newTagColour'));
 
+    // Icon-enabled dropdown for the tag type, mirroring the Font Awesome
+    // icons the tag-search autocomplete uses in new.html. The native
+    // <select name="type"> stays in the DOM so the form submits as before.
+    $.widget('custom.iconselectmenu', $.ui.selectmenu, {
+      _renderItem: function (ul, item) {
+        var wrapper = $('<div>');
+        var icon = item.element.attr('data-icon');
+        if (icon) $('<i>').addClass(icon + ' me-2').appendTo(wrapper);
+        wrapper.append(document.createTextNode(item.label));
+        return $('<li>').append(wrapper).appendTo(ul);
+      }
+    });
+
+    function initTypeSelect(selectId, modalSel) {
+      var $sel = $('#' + selectId);
+      if (!$sel.length) return;
+      function syncIcon() {
+        var icon = $sel.find('option:selected').attr('data-icon') || '';
+        var $txt = $('#' + selectId + '-button .ui-selectmenu-text');
+        $txt.find('i').remove();
+        if (icon) $txt.prepend($('<i>').addClass(icon + ' me-2'));
+      }
+      $sel.iconselectmenu({
+        // Anchor the popup inside the modal so it inherits the modal stacking context
+        appendTo: modalSel + ' .modal-body',
+        // The modal is hidden at init (offsetWidth 0); let CSS width:100% govern instead
+        width: false,
+        change: syncIcon
+      });
+      syncIcon();
+    }
+
+    initTypeSelect('newTagType', '#newTagModal');
+
+    // Info popover explaining the difference between the two tag types.
+    // Content is assembled from the translated lang strings (icons match the
+    // ones shown in the type dropdown and the tags table).
+    var tagTypeHelpHtml =
+      '<p class="mb-2"><i class="fas fa-route me-1"></i><strong>' + {{ voyage | tojson }} +
+        '</strong><br>' + {{ tag_type_voyage_help | tojson }} + '</p>' +
+      '<p class="mb-0"><i class="fas fa-list me-1"></i><strong>' + {{ collection | tojson }} +
+        '</strong><br>' + {{ tag_type_collection_help | tojson }} + '</p>';
+    document.querySelectorAll('.tag-type-help').forEach(function (el) {
+      new bootstrap.Popover(el, {
+        html: true,
+        trigger: 'hover focus',
+        placement: 'right',
+        container: 'body',
+        customClass: 'tag-type-popover',
+        content: tagTypeHelpHtml
+      });
+    });
+
     {% for tag in tagsList %}
     {% if tag.is_owner %}
     bindColorPicker($('#colour{{ tag.uid }}'));
+    initTypeSelect('editTagType{{ tag.uid }}', '#editTagModal{{ tag.uid }}');
     {% endif %}
     {% endfor %}
   });

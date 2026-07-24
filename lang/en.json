@@ -383,6 +383,8 @@
     "tag_type": "Tag type",
     "collection": "Collection",
     "voyage": "Voyage",
+    "tag_type_voyage_help": "A sequential journey made up of several trips. On the map the trips are linked together in order and shown with icons. Use it to group all the legs of one bigger journey from A to B: trains, buses, ferries, planes and everything in between.",
+    "tag_type_collection_help": "A group of trips that don't have to follow any order. Only their routes are drawn on the map, and they aren't linked together. Use it to group trips that share something in common: night trains, journeys where the coffee was actually good, or all the trips you've taken to see the people you love.",
     "tag_members": "Members",
     "tag_owner_label": "Owner",
     "create_tag_option": "Create tag “{name}”",
