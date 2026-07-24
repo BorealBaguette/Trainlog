@@ -570,12 +570,20 @@ function processHiddenData(rowIdx, columns){
             tag_list.forEach(function(tagId) {
                 var tag = tags.find(t => t.uid == tagId); // Find the tag object by uid
                 if (tag) {
+                // Shared tags open the animated multiTrip view, not the
+                // single-owner public page
+                var tagHref = tag.is_shared
+                    ? "{{url_for('multi_trip', tagUuid='')}}" + tag.uuid
+                    : "{{url_for('public_trip', tagId='')}}" + tag.uuid;
                 var a = $('<a>')
-                    .attr('href', "{{url_for('public_trip', tagId='')}}" + tag.uuid)
+                    .attr('href', tagHref)
                     .addClass('tag-blob')
                     .css('background-color', tag.colour)
                     .css('color', getTextColor(tag.colour))
                     .text(tag.name);
+                if (tag.is_shared) {
+                    a.prepend($('<i>').addClass('fas fa-users').css('margin-right', '5px'));
+                }
                 tag_container.append(a);
                 }
             });
@@ -2151,10 +2159,34 @@ fetch(`{{ url_for("get_all_tags", username=username) }}`)
 function setupAutocomplete(tags) {
     $("#tagSearchInput").autocomplete({
         source: function(request, response) {
-            const results = $.ui.autocomplete.filter(tags.map(tag => tag.name).filter(tagName => !isTagAlreadyAttached(tagName)), request.term);
+            const results = $.ui.autocomplete.filter(
+                tags.filter(tag => !isTagAlreadyAttached(tag.name))
+                    .map(tag => ({ label: tag.name, value: tag.name, _shared: tag.is_shared })),
+                request.term
+            );
+            const term = request.term.trim();
+            if (term && !tags.some(tag => tag.name.toLowerCase() === term.toLowerCase())) {
+                results.push({
+                    label: {{ create_tag_option | tojson }}.replace('{name}', term),
+                    value: term,
+                    _create: true
+                });
+            }
             response(results);
         },
         select: function(event, ui) {
+            if (ui.item._create) {
+                $.post({
+                    url: `{{ url_for("quick_create_tag", username=username) }}`,
+                    contentType: 'application/json',
+                    data: JSON.stringify({ name: ui.item.value })
+                }).done(function(data) {
+                    tags.push(data.tag);
+                    selectTag(data.tag); // attach to the checked trips right away
+                });
+                $('#tagSearchInput').val('');
+                return false;
+            }
             const selectedTag = tags.find(tag => tag.name === ui.item.value);
             if (selectedTag) {
                 selectTag(selectedTag);
@@ -2162,6 +2194,9 @@ function setupAutocomplete(tags) {
             return false; // Prevent the widget from updating the input with the selected value
         }
     });
+
+    // Icons on every row (shared/plain/create) — shared renderer from util.js
+    $("#tagSearchInput").data("ui-autocomplete")._renderItem = renderTagAutocompleteItem;
 }
 
 function isTagAlreadyAttached(tagName) {
@@ -2240,11 +2275,12 @@ function displayAssociatedTags(tags) {
         const allTripsHaveTag = checkedTrips.every(tripId => tagTripIds.includes(String(tripId)));
         const icon = allTripsHaveTag ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-circle-minus"></i>';
 
+        const shared = tag.is_shared ? '<i class="fas fa-users"></i> ' : '';
         const span = $('<span>')
             .addClass('tag-blob')
             .css('background-color', tag.colour)
             .css('color', getTextColor(tag.colour))
-            .text(tag.name).append(icon) // Use .text for safety, then append icon HTML
+            .text(tag.name).prepend(shared).append(icon) // Use .text for safety, then append icon HTML
             .on('click', function() {
                 if (allTripsHaveTag) {
                     detachTag(tag.uid);

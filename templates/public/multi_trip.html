@@ -216,7 +216,13 @@ function resizeCanvas() {
 }
 
 function loadTrips() {
-    $.get('{{url_for("getMultiTrips", tripIds=tripIds)}}', function(data) {
+    // POST the ids in the body (like getPublicTrips) so long lists don't hit
+    // URL length limits.
+    $.post({
+        url: '{{url_for("getMultiTrips")}}',
+        contentType: 'application/json',
+        data: JSON.stringify({ tripIds: {{ tripIds | tojson }} })
+    }).done(function(data) {
         tripsData = data[0].reverse();
         coloursData = data[2];
         processTrips();

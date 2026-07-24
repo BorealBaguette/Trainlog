@@ -1,3 +1,5 @@
+from flask import g, has_app_context
+
 from src.pg import get_or_create_pg_session
 
 
@@ -53,22 +55,38 @@ def get_exchange_rate(price, base_currency, target_currency, date, pg=None):
     # Ensure the price is a float
     price = float(price)
 
+    # The rate for a (base, target, date) triple is constant within a request,
+    # but callers convert per trip/ticket — cache the rate on g so repeated
+    # dates cost one lookup. Scripts run without an app context and skip it.
+    cache_key = (base_currency, target_currency, str(date))
+    cache = None
+    if has_app_context():
+        cache = getattr(g, "_fx_rate_cache", None)
+        if cache is None:
+            cache = g._fx_rate_cache = {}
+        if cache_key in cache:
+            rate = cache[cache_key]
+            return round(price * rate, 2) if rate is not None else None
+
     # Reuse the caller's PG session when provided, otherwise open one. This keeps
     # the helper usable both inside and outside an existing pg_session.
     with get_or_create_pg_session(pg) as session:
         # Select the closest date for the rate, either before or after the given date
+        # Two plain MIN/MAX subqueries so each is answered from the rate_date
+        # PK index; the FILTER-aggregate form forced a full-table scan per call.
         relevant_date = session.execute(
             """
             SELECT COALESCE(
-                MAX(rate_date) FILTER (WHERE rate_date <= :date),
-                MIN(rate_date) FILTER (WHERE rate_date >= :date)
+                (SELECT MAX(rate_date) FROM exchanges WHERE rate_date <= :date),
+                (SELECT MIN(rate_date) FROM exchanges WHERE rate_date >= :date)
             ) AS relevant_date
-            FROM exchanges
             """,
             {"date": date},
         ).scalar()
 
         if not relevant_date:
+            if cache is not None:
+                cache[cache_key] = None
             return None
 
         # Currency codes map to column names; they are validated against `supported`
@@ -84,20 +102,22 @@ def get_exchange_rate(price, base_currency, target_currency, date, pg=None):
             {"rate_date": relevant_date},
         ).fetchone()
 
-    if not row:
-        return None
+    rate = None
+    if row:
+        try:
+            base_rate, target_rate = (float(row[0]), float(row[1]))
+        except (TypeError, ValueError):
+            base_rate = target_rate = None
+        if base_rate is not None:
+            if base_currency == "EUR":
+                rate = target_rate
+            elif target_currency == "EUR":
+                rate = 1 / base_rate if base_rate != 0 else None
+            else:
+                rate = (1 / base_rate * target_rate) if base_rate != 0 else None
 
-    try:
-        base_rate, target_rate = (float(row[0]), float(row[1]))
-    except (TypeError, ValueError):
-        return None
-
-    if base_currency == "EUR":
-        rate = target_rate
-    elif target_currency == "EUR":
-        rate = 1 / base_rate if base_rate != 0 else None
-    else:
-        rate = (1 / base_rate * target_rate) if base_rate != 0 else None
+    if cache is not None:
+        cache[cache_key] = rate
 
     if rate is None:
         return None
