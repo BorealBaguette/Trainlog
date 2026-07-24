@@ -384,6 +384,8 @@
     "tag_type": "Vrsta oznake",
     "collection": "Zbirka",
     "voyage": "Putovanje",
+    "tag_type_voyage_help": "Slijedno putovanje sastavljeno od nekoliko vožnji. Na karti se vožnje povezuju redom i prikazuju ikonama. Idealno za grupiranje svih etapa jednog većeg putovanja od A do B: vlakovi, autobusi, trajekti, avioni i sve između.",
+    "tag_type_collection_help": "Skupina vožnji koje ne moraju slijediti nikakav redoslijed. Na karti se crtaju samo njihove rute, bez povezivanja. Idealno za grupiranje vožnji koje imaju nešto zajedničko: noćni vlakovi, putovanja na kojima je kava bila iznenađujuće dobra ili sva putovanja na koja ste krenuli da vidite ljude koje volite.",
     "tag_members": "Članovi",
     "tag_owner_label": "Vlasnik",
     "invite_to_tag_btn": "Pozovi",

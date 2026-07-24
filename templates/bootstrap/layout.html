@@ -111,12 +111,22 @@
     };
     var flagPositions = JSON.parse('{{ getFlagPositions() | tojson | safe }}');
   </script>
+
+  <style>
+    /* Breathing room at the bottom of every regular page. A flow element rather
+       than body padding: `html, body { height: 100% }` makes the body a fixed
+       height, so overflowing content spills past it and body padding-bottom
+       never lands after the content — a real spacer in the flow always does.
+       Skipped on full-screen map pages, where the map fills the viewport. */
+    .page-bottom-spacer { height: 1.5rem; }
+  </style>
 </head>
 
 <body>
     {% block content %}
-    
+
     {% endblock %}
+    {% if not leaflet %}<div class="page-bottom-spacer" aria-hidden="true"></div>{% endif %}
 </body>
 </html>
 <script>

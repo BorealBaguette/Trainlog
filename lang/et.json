@@ -382,6 +382,8 @@
     "tag_type": "Sildi tüüp",
     "collection": "Kogumik",
     "voyage": "Reis",
+    "tag_type_voyage_help": "Järjestikune teekond, mis koosneb mitmest sõidust. Kaardil ühendatakse sõidud järjekorras ja kuvatakse ikoonidega. Sobib ühe suurema teekonna kõigi etappide koondamiseks punktist A punkti B: rongid, bussid, praamid, lennukid ja kõik muu vahepealne.",
+    "tag_type_collection_help": "Sõitude rühm, mis ei pea järgima kindlat järjekorda. Kaardil joonistatakse ainult nende marsruudid, neid omavahel ühendamata. Sobib selliste sõitude koondamiseks, millel on midagi ühist: öörongid, sõidud, kus kohv oli üllatavalt hea, või kõik sõidud, et näha inimesi, keda armastad.",
     "tag_members": "Liikmed",
     "tag_owner_label": "Omanik",
     "invite_to_tag_btn": "Kutsu",

@@ -383,6 +383,8 @@
     "tag_type": "Tipo de etiqueta",
     "collection": "Colección",
     "voyage": "Viaje",
+    "tag_type_voyage_help": "Un trayecto secuencial formado por varios viajes. En el mapa, los viajes se enlazan en orden y se muestran con iconos. Ideal para agrupar todas las etapas de un trayecto más grande de A a B: trenes, autobuses, ferris, aviones y todo lo demás.",
+    "tag_type_collection_help": "Un conjunto de viajes que no tienen que seguir ningún orden. En el mapa solo se dibujan sus recorridos, sin enlazarlos. Ideal para agrupar viajes que tienen algo en común: trenes nocturnos, viajes en los que el café estaba sorprendentemente bueno, o todos los viajes para ver a las personas que quieres.",
     "tag_members": "Miembros",
     "tag_owner_label": "Propietario",
     "invite_to_tag_btn": "Invitar",

@@ -383,6 +383,8 @@
     "tag_type": "Tag-Typ",
     "collection": "Sammlung",
     "voyage": "Reise",
+    "tag_type_voyage_help": "Eine zusammenhängende Reise aus mehreren Fahrten. Auf der Karte werden die Fahrten der Reihe nach verbunden und mit Symbolen angezeigt. Ideal, um alle Etappen einer größeren Reise von A nach B zu bündeln: Züge, Busse, Fähren, Flugzeuge und alles dazwischen.",
+    "tag_type_collection_help": "Eine Gruppe von Fahrten, die keiner bestimmten Reihenfolge folgen müssen. Auf der Karte werden nur ihre Strecken gezeichnet, ohne sie zu verbinden. Ideal, um Fahrten mit einer Gemeinsamkeit zu bündeln: Nachtzüge, Fahrten, bei denen der Kaffee überraschend gut war, oder all die Fahrten zu den Menschen, die man liebt.",
     "tag_members": "Mitglieder",
     "tag_owner_label": "Besitzer",
     "invite_to_tag_btn": "Einladen",

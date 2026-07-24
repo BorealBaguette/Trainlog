@@ -383,6 +383,8 @@
     "tag_type": "Taggtyp",
     "collection": "Samling",
     "voyage": "Resa",
+    "tag_type_voyage_help": "En sammanhängande resa som består av flera turer. På kartan kopplas turerna samman i ordning och visas med ikoner. Passar för att samla alla etapper i en större resa från A till B: tåg, bussar, färjor, flyg och allt däremellan.",
+    "tag_type_collection_help": "En grupp turer som inte behöver följa någon bestämd ordning. På kartan ritas bara deras rutter ut, utan att kopplas samman. Passar för att samla turer som har något gemensamt: nattåg, resor där kaffet faktiskt var gott, eller alla resor du gjort för att träffa dem du tycker om.",
     "tag_members": "Medlemmar",
     "tag_owner_label": "Ägare",
     "invite_to_tag_btn": "Bjud in",

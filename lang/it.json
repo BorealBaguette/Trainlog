@@ -383,6 +383,8 @@
     "tag_type": "Tipo di tag",
     "collection": "Collezione",
     "voyage": "Viaggio",
+    "tag_type_voyage_help": "Un percorso sequenziale composto da più tratte. Sulla mappa le tratte vengono collegate in ordine e mostrate con delle icone. Ideale per raggruppare tutte le tappe di un viaggio più grande da A a B: treni, autobus, traghetti, aerei e tutto il resto.",
+    "tag_type_collection_help": "Un insieme di tratte che non devono seguire alcun ordine. Sulla mappa vengono disegnati solo i loro tracciati, senza collegarli. Ideale per raggruppare tratte che hanno qualcosa in comune: treni notturni, viaggi in cui il caffè era sorprendentemente buono, o tutti i viaggi per andare a trovare le persone a cui vuoi bene.",
     "tag_members": "Membri",
     "tag_owner_label": "Proprietario",
     "invite_to_tag_btn": "Invita",

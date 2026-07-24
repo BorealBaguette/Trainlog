@@ -382,6 +382,8 @@
     "tag_type": "Tag-Typ",
     "collection": "Sammlig",
     "voyage": "Reis",
+    "tag_type_voyage_help": "E zämehängendi Reis us mehrere Fahrte. Uf dr Charte wärde d Fahrte dr Reihe nooch verbunde und mit Symbol azeigt. Ideal, zum alli Etappe vo einere grössere Reis vo A nach B zämezfasse: Züg, Büs, Fähre, Flugzüg und alles dezwüsche.",
+    "tag_type_collection_help": "E Gruppe vo Fahrte, wo kei bstimmti Reihefolg müen ha. Uf dr Charte wärde nume ihri Strecke zeichnet, ohni si z verbinde. Ideal, zum Fahrte mit ere Gmeinsamkeit zämezfasse: Nachtzüg, Fahrte wo dr Kafi überraschend guet gsi isch, oder all die Fahrte zu de Mensche wo mer gärn het.",
     "tag_members": "Mitglieder",
     "tag_owner_label": "Bsitzer",
     "invite_to_tag_btn": "Iilade",

@@ -382,6 +382,8 @@
     "tag_type": "Etiket türü",
     "collection": "Koleksiyon",
     "voyage": "Seyahat",
+    "tag_type_voyage_help": "Birden fazla seferden oluşan, sıralı bir yolculuk. Haritada seferler sırayla birbirine bağlanır ve simgelerle gösterilir. A'dan B'ye uzanan daha büyük bir yolculuğun tüm ayaklarını bir arada toplamak için idealdir: trenler, otobüsler, feribotlar, uçaklar ve arasındaki her şey.",
+    "tag_type_collection_help": "Herhangi bir sıraya uymak zorunda olmayan seferler grubu. Haritada yalnızca güzergâhları çizilir, birbirine bağlanmaz. Ortak bir yanı olan seferleri bir arada toplamak için idealdir: gece trenleri, kahvenin şaşırtıcı derecede güzel olduğu yolculuklar ya da sevdiklerinizi görmek için çıktığınız tüm yolculuklar.",
     "tag_members": "Üyeler",
     "tag_owner_label": "Sahip",
     "invite_to_tag_btn": "Davet Et",

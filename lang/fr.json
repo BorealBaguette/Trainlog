@@ -383,6 +383,8 @@
     "tag_type": "Type de tag",
     "collection": "Collection",
     "voyage": "Voyage",
+    "tag_type_voyage_help": "Un déplacement séquentiel composé de plusieurs trajets. Sur la carte, les trajets sont reliés dans l'ordre et affichés avec des icônes. Idéal pour regrouper toutes les étapes d'un même périple de A à B : trains, bus, ferries, avions et tout ce qui va avec.",
+    "tag_type_collection_help": "Un ensemble de trajets qui ne suivent aucun ordre particulier. Seuls leurs tracés sont affichés sur la carte, sans être reliés entre eux. Idéal pour regrouper des trajets ayant un point commun : trains de nuit, trajets où le café était étonnamment bon, ou tous les trajets pour aller voir ceux qu'on aime.",
     "tag_members": "Membres",
     "tag_owner_label": "Propriétaire",
     "create_tag_option": "Créer le tag « {name} »",
