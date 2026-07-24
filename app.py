@@ -220,6 +220,7 @@ from src.trips.freehand_transform import (
     purge_expired_backups,
     revert_trip,
 )
+from src.trips.split_trip import get_split_data, split_trip
 from src.sql.plans import (
     insert_plan_query,
     get_plan_query,
@@ -4533,6 +4534,48 @@ def freehandify_revert_user(username, trip_ids):
         return jsonify({"success": False, "message": "trip_ids must be integers"}), 400
     results = _run_revert(ids, restrict_user_id=get_user_id(username))
     return jsonify({"success": True, "results": results})
+
+
+# ── Split a trip in two at a chosen path node (keeps the 3D flight track) ──
+# The GPS track (geom + altitude + timestamps) is sliced at a node the user clicks on
+# the map; leg 1 reuses the original trip, leg 2 is created. See src/trips/split_trip.py.
+
+@app.route("/u/<username>/split_trip/<int:trip_id>", methods=["GET"])
+@login_required
+def split_trip_page(username, trip_id):
+    with pg_session() as pg:
+        data = get_split_data(pg, trip_id)
+    if data is None:
+        abort(404)
+    if data["trip"]["user_id"] != get_user_id(username):
+        abort(401)
+    return render_template(
+        "split_trip.html",
+        title="Split trip",
+        username=username,
+        trip_id=trip_id,
+        trip=data["trip"],
+        nodes=data["nodes"],
+        country_list=get_all_countries(),
+        colorblind=False,
+    )
+
+
+@app.route("/u/<username>/split_trip/<int:trip_id>", methods=["POST"])
+@login_required
+def split_trip_action(username, trip_id):
+    data = request.get_json(silent=True) or {}
+    try:
+        split_index = int(data.get("split_index"))
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "message": "split_index must be an integer"}), 400
+    mid_station = data.get("mid_station", "")
+    try:
+        result = split_trip(trip_id, split_index, mid_station, get_user_id(username))
+    except ValueError as e:
+        return jsonify({"success": False, "message": str(e)}), 400
+    return jsonify({"success": True, **result})
+
 
 def listOperatorsLogos(tripType=None):
     """
