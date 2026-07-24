@@ -14,7 +14,7 @@
     margin-right: 4px;
     box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
   }
-  /* Invite row: select and button side by side, whatever else is loaded */
+  /* Invite row: friend list and button side by side, whatever else is loaded */
   .tag-invite-form {
     display: flex !important;
     align-items: center;
@@ -26,6 +26,25 @@
   }
   .tag-invite-form .btn {
     flex: 0 0 auto;
+  }
+  /* Scrollable friend list so a long list doesn't blow up the modal */
+  .tag-invite-friends {
+    max-height: 14rem;
+    overflow-y: auto;
+  }
+  .tag-invite-item {
+    cursor: pointer;
+    margin-bottom: 0;
+    font-weight: normal;
+  }
+  /* Tick only shows for a selected friend */
+  .tag-invite-tick {
+    visibility: hidden;
+    color: var(--bs-primary, #0d6efd);
+  }
+  .tag-invite-check:checked ~ .tag-invite-tick { visibility: visible; }
+  .tag-invite-item:has(.tag-invite-check:checked) {
+    background-color: rgba(13, 110, 253, 0.08);
   }
   /* jQuery UI selectmenu button styled to match the Bootstrap inputs around it */
   .ui-selectmenu-button.ui-button {
@@ -220,11 +239,15 @@
                 {% if invitable %}
                 <div class="small text-muted mb-2">{{ invite_friend_to_tag }}</div>
                 <form action="{{ url_for('invite_to_tag', username=username, tag_id=tag.uid) }}" method="post" class="tag-invite-form">
-                  <select name="friend_username" class="form-select" required>
+                  <div class="tag-invite-friends list-group flex-grow-1">
                     {% for friend in invitable %}
-                    <option value="{{ friend }}">{{ friend }}</option>
+                    <label class="list-group-item tag-invite-item d-flex justify-content-between align-items-center py-2">
+                      <span><i class="bi bi-person-fill text-muted me-1"></i> {{ friend }}</span>
+                      <input class="tag-invite-check d-none" type="checkbox" name="friend_username" value="{{ friend }}">
+                      <i class="bi bi-check-lg tag-invite-tick"></i>
+                    </label>
                     {% endfor %}
-                  </select>
+                  </div>
                   <button type="submit" class="btn btn-primary text-nowrap"><i class="bi bi-person-plus"></i> {{ invite_to_tag_btn }}</button>
                 </form>
                 {% else %}
@@ -426,6 +449,13 @@
     }
 
     initTypeSelect('newTagType', '#newTagModal');
+
+    // Require at least one friend checked before an invite form can submit
+    $('.tag-invite-form').on('submit', function (e) {
+      if (!$(this).find('input[name="friend_username"]:checked').length) {
+        e.preventDefault();
+      }
+    });
 
     // Info popover explaining the difference between the two tag types.
     // Content is assembled from the translated lang strings (icons match the

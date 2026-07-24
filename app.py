@@ -1773,7 +1773,7 @@ def detach_member_trips(pg, tag_id, member_username):
 @app.route("/u/<username>/tag/<int:tag_id>/invite", methods=["POST"])
 @login_required
 def invite_to_tag(username, tag_id):
-    invitee = (request.form.get("friend_username") or "").strip()
+    invitees = [u.strip() for u in request.form.getlist("friend_username") if u.strip()]
     userLang = lang[session["userinfo"]["lang"]]
 
     with pg_session() as pg:
@@ -1788,26 +1788,30 @@ def invite_to_tag(username, tag_id):
             .filter(Friendship.user_id == owner_uid, Friendship.accepted != None)  # noqa: E711
             .all()
         }
-        if invitee not in friend_usernames:
+        if not invitees or any(invitee not in friend_usernames for invitee in invitees):
             flash(userLang["tagInviteNotFriend"], "danger")
             return redirect(url_for("tag_list", username=username))
 
-        existing = pg.execute(
-            "SELECT status FROM tag_members"
-            " WHERE tag_id = :tag_id AND username = :username",
-            {"tag_id": tag_id, "username": invitee},
-        ).fetchone()
-        if existing:
-            flash(userLang["tagInviteExists"], "info")
-            return redirect(url_for("tag_list", username=username))
+        existing = {
+            row.username
+            for row in pg.execute(
+                "SELECT username FROM tag_members WHERE tag_id = :tag_id",
+                {"tag_id": tag_id},
+            ).fetchall()
+        }
+        to_invite = [invitee for invitee in invitees if invitee not in existing]
 
-        pg.execute(
-            "INSERT INTO tag_members (tag_id, username)"
-            " VALUES (:tag_id, :username) ON CONFLICT DO NOTHING",
-            {"tag_id": tag_id, "username": invitee},
-        )
+        for invitee in to_invite:
+            pg.execute(
+                "INSERT INTO tag_members (tag_id, username)"
+                " VALUES (:tag_id, :username) ON CONFLICT DO NOTHING",
+                {"tag_id": tag_id, "username": invitee},
+            )
 
-    flash(userLang["tagInviteSent"], "success")
+    if to_invite:
+        flash(userLang["tagInviteSent"], "success")
+    else:
+        flash(userLang["tagInviteExists"], "info")
     return redirect(url_for("tag_list", username=username))
 
 
