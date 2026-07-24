@@ -10,6 +10,8 @@ of its deep coupling there; everything that can live outside app.py lives here.
 import json
 import logging
 import re
+import xml.etree.ElementTree as ET
+from datetime import datetime, timezone
 from io import BytesIO
 
 import gpxpy
@@ -134,6 +136,81 @@ def clean_tasker_gpx_files(files):
     return cleaned
 
 
+class _TrackPoint:
+    """Uniform track point (GPX and KML share this). `time` is a tz-aware UTC
+    datetime or None; `elevation` is metres or None."""
+
+    __slots__ = ("latitude", "longitude", "elevation", "time")
+
+    def __init__(self, latitude, longitude, elevation=None, time=None):
+        self.latitude = latitude
+        self.longitude = longitude
+        self.elevation = elevation
+        self.time = time
+
+
+def _path_distance(points):
+    """Sum of great-circle distances (metres) between consecutive points."""
+    total = 0.0
+    for i in range(1, len(points)):
+        total += getDistance(
+            {"lat": points[i - 1].latitude, "lng": points[i - 1].longitude},
+            {"lat": points[i].latitude, "lng": points[i].longitude},
+        )
+    return total
+
+
+def _finalize_row(points, source, username, notes):
+    """Build a staging-row dict from an ordered point list.
+
+    Captures per-point elevation/time as `altitude`/`timestamps` JSON arrays
+    (parallel to `path`, None when the source carries none), so a later unrouted
+    import can persist a full 3D track. Shared by the GPX and KML parsers.
+    """
+    path = json.dumps([[p.latitude, p.longitude] for p in points])
+
+    altitude = [p.elevation for p in points]
+    timestamps = [int(p.time.timestamp()) if p.time else None for p in points]
+    altitude = json.dumps(altitude) if any(a is not None for a in altitude) else None
+    timestamps = (
+        json.dumps(timestamps) if any(t is not None for t in timestamps) else None
+    )
+
+    start_point, end_point = points[0], points[-1]
+    origin = getAddressFromCoords(lat=start_point.latitude, lng=start_point.longitude)
+    destination = getAddressFromCoords(lat=end_point.latitude, lng=end_point.longitude)
+
+    start_time = start_point.time
+    end_time = end_point.time
+    duration = 0
+    if start_time and end_time:
+        duration = int((end_time - start_time).total_seconds())
+        # Store the local wall-clock time at each endpoint, "YYYY-MM-DD HH:MM".
+        start_time = getLocalDatetime(
+            start_point.latitude, start_point.longitude, start_time
+        ).strftime("%Y-%m-%d %H:%M")
+        end_time = getLocalDatetime(
+            end_point.latitude, end_point.longitude, end_time
+        ).strftime("%Y-%m-%d %H:%M")
+    else:
+        start_time = end_time = None
+
+    return {
+        "source": source,
+        "username": username,
+        "origin": origin,
+        "destination": destination,
+        "start_time": start_time,
+        "end_time": end_time,
+        "duration": duration,
+        "distance": int(_path_distance(points)),
+        "path": path,
+        "altitude": altitude,
+        "timestamps": timestamps,
+        "notes": notes,
+    }
+
+
 def parse_gpx_files(files, source, username, notes=""):
     """Parse GPX files into staging-row dicts (origin/destination/times/path/...).
 
@@ -142,7 +219,7 @@ def parse_gpx_files(files, source, username, notes=""):
     """
     gpx_rows = []
     for file in files:
-        if not file.filename.endswith(".gpx"):
+        if not file.filename.lower().endswith(".gpx"):
             raise GpxIngestError(f"{file.filename} is not a valid GPX file")
 
         try:
@@ -150,116 +227,131 @@ def parse_gpx_files(files, source, username, notes=""):
         except gpxpy.gpx.GPXException as e:
             raise GpxIngestError(f"{file.filename} is not readable GPX: {e}") from e
 
-        points = None
-        start_time = None
-        end_time = None
-        distance = 0
-
-        # Handle Tracks
+        points = []
+        # Tracks (usually timed): concatenate every segment of every track.
         if gpx.tracks and any(track.segments for track in gpx.tracks):
-            all_points = []
-            total_distance = 0
-            first_time = None
-            last_time = None
-
-            # 1. Gather all points from all segments
             for track in gpx.tracks:
                 for segment in track.segments:
-                    if segment.points:
-                        if first_time is None:
-                            first_time = segment.points[0].time  # Only set start once
-                        last_time = segment.points[-1].time  # Continuously update end
-                        all_points.extend(segment.points)
-
-            # 2. Compute total distance across *all* points (including "gaps" between segments)
-            for i in range(1, len(all_points)):
-                total_distance += getDistance(
-                    {
-                        "lat": all_points[i - 1].latitude,
-                        "lng": all_points[i - 1].longitude,
-                    },
-                    {"lat": all_points[i].latitude, "lng": all_points[i].longitude},
-                )
-
-            points = all_points
-            start_time = first_time
-            end_time = last_time
-            distance = total_distance
-
-        # Handle Routes
+                    points.extend(segment.points)
+        # Routes (usually untimed) as a fallback.
         elif gpx.routes and gpx.routes[0].points:
-            points = gpx.routes[0].points
-            # Routes typically don't include timestamps; set start/end times to None
-            start_time = None
-            end_time = None
-            # Approximate route distance by summing distances between consecutive points
-            for i in range(len(points) - 1):
-                distance += gpxpy.geo.distance(
-                    points[i].latitude,
-                    points[i].longitude,
-                    0,
-                    points[i + 1].latitude,
-                    points[i + 1].longitude,
-                    0,
-                )
+            points = list(gpx.routes[0].points)
 
         if not points:
             raise GpxIngestError(f"No points found in {file.filename}")
 
-        # Generate path in [[lat, lng], [lat, lng]] format
-        path = json.dumps([[point.latitude, point.longitude] for point in points])
-
-        start_point = points[0]
-        end_point = points[-1]
-
-        origin = getAddressFromCoords(lat=start_point.latitude, lng=start_point.longitude)
-        destination = getAddressFromCoords(lat=end_point.latitude, lng=end_point.longitude)
-
-        # Calculate duration (only for tracks with timestamps)
-        duration = 0
-        if start_time and end_time:
-            duration = int((end_time - start_time).total_seconds())
-
-            # Convert to local time and format to "YYYY-MM-DD HH:MM"
-            start_time = getLocalDatetime(
-                start_point.latitude, start_point.longitude, start_time
-            ).strftime("%Y-%m-%d %H:%M")
-            end_time = getLocalDatetime(
-                end_point.latitude, end_point.longitude, end_time
-            ).strftime("%Y-%m-%d %H:%M")
-
-        gpx_rows.append(
-            {
-                "source": source,
-                "username": username,
-                "origin": origin,
-                "destination": destination,
-                "start_time": start_time,
-                "end_time": end_time,
-                "duration": duration,
-                "distance": int(distance),
-                "path": path,
-                "notes": notes,
-            }
-        )
+        gpx_rows.append(_finalize_row(points, source, username, notes))
 
     return gpx_rows
 
 
+# KML local tag names we care about; matched namespace-agnostically (Google's gx:
+# extension and the default KML namespace both appear, sometimes mixed).
+def _local(tag):
+    return tag.rsplit("}", 1)[-1]
+
+
+def _parse_kml_time(text):
+    """Parse a KML <when> ISO-8601 timestamp into a tz-aware UTC datetime, or None."""
+    if not text:
+        return None
+    text = text.strip().replace("Z", "+00:00")
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _kml_points(root):
+    """Extract an ordered point list from a KML document.
+
+    Prefers gx:Track (which carries <when> times paired with <gx:coord> triples);
+    falls back to LineString <coordinates> (untimed). KML orders coordinates
+    lng,lat[,ele] — the reverse of Trainlog's [lat, lng]."""
+    points = []
+    # gx:Track — timed. <when> and <coord> children are parallel by position.
+    for el in root.iter():
+        if _local(el.tag) != "Track":
+            continue
+        whens = [c.text for c in el if _local(c.tag) == "when"]
+        coords = [c.text for c in el if _local(c.tag) == "coord"]
+        for i, coord in enumerate(coords):
+            parts = (coord or "").split()
+            if len(parts) < 2:
+                continue
+            lng, lat = float(parts[0]), float(parts[1])
+            ele = float(parts[2]) if len(parts) >= 3 else None
+            t = _parse_kml_time(whens[i]) if i < len(whens) else None
+            points.append(_TrackPoint(lat, lng, ele, t))
+    if points:
+        return points
+
+    # LineString coordinates — untimed. Scan only inside a LineString so Point/
+    # Polygon coordinates elsewhere aren't swept in.
+    for el in root.iter():
+        if _local(el.tag) != "LineString":
+            continue
+        for child in el:
+            if _local(child.tag) != "coordinates" or not child.text:
+                continue
+            for tok in child.text.split():
+                parts = tok.split(",")
+                if len(parts) < 2:
+                    continue
+                lng, lat = float(parts[0]), float(parts[1])
+                ele = float(parts[2]) if len(parts) >= 3 else None
+                points.append(_TrackPoint(lat, lng, ele, None))
+    return points
+
+
+def parse_kml_files(files, source, username, notes=""):
+    """Parse KML files into the same staging-row dicts as parse_gpx_files."""
+    rows = []
+    for file in files:
+        if not file.filename.lower().endswith(".kml"):
+            raise GpxIngestError(f"{file.filename} is not a valid KML file")
+        file.stream.seek(0)
+        try:
+            root = ET.fromstring(file.stream.read())
+        except ET.ParseError as e:
+            raise GpxIngestError(f"{file.filename} is not readable KML: {e}") from e
+        points = _kml_points(root)
+        if not points:
+            raise GpxIngestError(f"No track points found in {file.filename}")
+        rows.append(_finalize_row(points, source, username, notes))
+    return rows
+
+
+def parse_track_files(files, source, username, notes=""):
+    """Parse a mixed batch of .gpx/.kml uploads by extension into staging rows."""
+    rows = []
+    for file in files:
+        name = (file.filename or "").lower()
+        if name.endswith(".kml"):
+            rows.extend(parse_kml_files([file], source, username, notes))
+        else:
+            rows.extend(parse_gpx_files([file], source, username, notes))
+    return rows
+
+
 def ingest_gpx_files(username, source, files, notes=""):
-    """Parse GPX files and insert one staging row per file into the `gpx` table.
+    """Parse GPX/KML files and insert one staging row per file into the `gpx` table.
 
     Shared by the browser upload form (handle_gpx_upload) and the
-    token-authenticated GPSLogger endpoint. Returns the inserted rows.
+    token-authenticated GPSLogger endpoint. Returns the inserted rows. Accepts a
+    mixed .gpx/.kml batch; elevation/time are staged when the source carries them.
     """
-    gpx_rows = parse_gpx_files(files, source, username, notes)
+    gpx_rows = parse_track_files(files, source, username, notes)
 
     with pg_session() as pg:
         for gpx_row in gpx_rows:
             pg.execute(
                 """
-                INSERT INTO gpx (source, username, origin, destination, start_time, end_time, duration, distance, path, notes)
-                VALUES (:source, :username, :origin, :destination, :start_time, :end_time, :duration, :distance, :path, :notes)
+                INSERT INTO gpx (source, username, origin, destination, start_time, end_time, duration, distance, path, altitude, timestamps, notes)
+                VALUES (:source, :username, :origin, :destination, :start_time, :end_time, :duration, :distance, :path, CAST(:altitude AS jsonb), CAST(:timestamps AS jsonb), :notes)
                 """,
                 gpx_row,
             )
@@ -348,6 +440,18 @@ def build_trip_payload(row, trip_type, params, use_routing, flask_request):
     coords = json.loads(raw_path) if isinstance(raw_path, str) else raw_path
     raw_waypoints = [{"lat": point[0], "lng": point[1]} for point in coords]
 
+    # Per-point elevation/time captured at parse time, aligned to the raw track.
+    # Normalized to JSON strings (staging returns jsonb as lists). They only stay
+    # valid while the raw track is the stored path — routing rewrites the geometry,
+    # so they are dropped in that branch below.
+    def _as_json(v):
+        if v is None or isinstance(v, str):
+            return v
+        return json.dumps(v)
+
+    altitude = _as_json(row.get("altitude"))
+    timestamps = _as_json(row.get("timestamps"))
+
     newTrip = {
         "type": trip_type,
         "originStation": [None, row.get("origin") or ""],
@@ -401,6 +505,8 @@ def build_trip_payload(row, trip_type, params, use_routing, flask_request):
             newTrip["trip_length"] = cleaning_result["distance"]
             newTrip["estimated_trip_duration"] = cleaning_result["duration"]
             newTrip["waypoints"] = json.dumps(cleaning_result["waypoints"])
+            # Routing resampled the geometry — the raw-track arrays no longer align.
+            altitude = timestamps = None
         else:
             logger.warning(
                 "Smart routing failed (%s); using basic clustering.",
@@ -412,4 +518,4 @@ def build_trip_payload(row, trip_type, params, use_routing, flask_request):
         path = raw_waypoints
         newTrip["waypoints"] = json.dumps(cluster_waypoints(raw_waypoints, 20))
 
-    return newTrip, path
+    return newTrip, path, altitude, timestamps

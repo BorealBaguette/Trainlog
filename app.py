@@ -1991,7 +1991,7 @@ def gps_logger_upload(token=None, trip_type=None, routing=None):
             params = parse_trip_params(request.args)
             rows = parse_gpx_files(cleaned_files, source="gpslogger", username=user.username)
             for row in rows:
-                newTrip, path = build_trip_payload(
+                newTrip, path, altitude, timestamps = build_trip_payload(
                     row, trip_type, params, use_routing, request
                 )
                 saveTripToDb(
@@ -1999,6 +1999,8 @@ def gps_logger_upload(token=None, trip_type=None, routing=None):
                     newTrip=newTrip,
                     newPath=path,
                     trip_type=trip_type,
+                    altitude=altitude,
+                    timestamps=timestamps,
                 )
             return (f"OK (imported {len(rows)} trip(s))", 200)
         except GpxIngestError as e:
@@ -2233,7 +2235,7 @@ def saveTripFromGPX(username, gpx_id):
 
     row = dict(gpx._mapping)
     raw_count = len(json.loads(row["path"]))
-    newTrip, path = build_trip_payload(
+    newTrip, path, altitude, timestamps = build_trip_payload(
         row, trip_type, parse_trip_params(request.args), use_routing, request
     )
 
@@ -2245,7 +2247,14 @@ def saveTripFromGPX(username, gpx_id):
         )
 
     newTrip["route_source"] = "gpx_routed" if use_routing else "gpx"
-    saveTripToDb(username=username, newTrip=newTrip, newPath=path, trip_type=trip_type)
+    saveTripToDb(
+        username=username,
+        newTrip=newTrip,
+        newPath=path,
+        trip_type=trip_type,
+        altitude=altitude,
+        timestamps=timestamps,
+    )
 
     return jsonify({
         "success": True,
@@ -4397,6 +4406,18 @@ def borked_trips(username=None):
         }
     )
 
+@app.route("/admin/realign_flight_tracks", methods=["GET"])
+@owner_required
+def realign_flight_tracks():
+    """Owner-only: find (and, with ?apply=1, repair) paths whose geometry vertex
+    count no longer matches their altitude/timestamp arrays — a legacy FR24 import
+    artifact. Returns JSON; defaults to a dry run so it is safe to hit first."""
+    from scripts.realign_flight_tracks import find_and_fix
+
+    apply = request.args.get("apply") in ("1", "true", "yes")
+    return jsonify(find_and_fix(apply=apply))
+
+
 @app.route("/admin/add_dummy_path/<trip_id>", methods=["GET"])
 @owner_required
 def add_dummy_path(trip_id):
@@ -4949,12 +4970,18 @@ def multi_trip(tripIds=None, tagUuid=None):
     )
 
 
-def convert_path_to_format(path, output_format):
+def convert_path_to_format(path, output_format, altitude=None, timestamps=None):
     """
     Convert the path data to the specified format (GPX or GeoJSON).
+
+    `altitude` (metres) and `timestamps` (epoch seconds) are optional per-vertex
+    arrays parallel to the path; when present, each GPX trackpoint gets an <ele>
+    and/or an ISO-8601 UTC <time>, so a track imported with them round-trips.
     """
     # Load path data from JSON
     coordinates = json.loads(path)
+    altitude = altitude if isinstance(altitude, list) else []
+    timestamps = timestamps if isinstance(timestamps, list) else []
 
     if output_format == "gpx":
         # Create the GPX root element
@@ -4968,13 +4995,18 @@ def convert_path_to_format(path, output_format):
         # Create a 'trkseg' (track segment) and add 'trkpt' (track points) elements
         trkseg = ET.SubElement(trk, "trkseg")
 
-        # Assuming 'coordinates' contains a list of lat, lon pairs
-        # TODO check if this code is needed, it looks like it does nothing as the
-        # variable is not read anywhere
-        for point in coordinates:
-            _trkpt = ET.SubElement(
+        for i, point in enumerate(coordinates):
+            trkpt = ET.SubElement(
                 trkseg, "trkpt", lat=str(point[0]), lon=str(point[1])
             )
+            ele = altitude[i] if i < len(altitude) else None
+            if ele is not None:
+                ET.SubElement(trkpt, "ele").text = str(ele)
+            ts = timestamps[i] if i < len(timestamps) else None
+            if ts is not None:
+                ET.SubElement(trkpt, "time").text = datetime.utcfromtimestamp(
+                    int(ts)
+                ).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         # Convert the ElementTree to a string in GPX format
         output = ET.tostring(gpx, encoding="utf-8", method="xml").decode("utf-8")
@@ -5055,17 +5087,26 @@ def download_path(trip_ids):
         else:
             abort(410, description=f"Trip with id={trip_id} is gone")
 
-        # 2) Retrieve the path from the database
+        # 2) Retrieve the path (and any 3D track) from the database
         with pg_session() as pg:
             path = pg.execute(
                 get_user_lines_query(), {"ids": [int(trip_id)]}
+            ).fetchone()
+            track = pg.execute(
+                "SELECT altitude, timestamps FROM paths WHERE trip_id = :id",
+                {"id": int(trip_id)},
             ).fetchone()
 
         if path is None:
             abort(404, description=f"Path not found for trip_id={trip_id}")
 
-        # 3) Convert the path to the requested format
-        output_data = convert_path_to_format(path["path"], format_type)
+        # 3) Convert the path to the requested format (with ele/time when present)
+        output_data = convert_path_to_format(
+            path["path"],
+            format_type,
+            altitude=track["altitude"] if track else None,
+            timestamps=track["timestamps"] if track else None,
+        )
 
         # 4) Store (trip_id, file contents) for later use
         files_to_zip.append(
