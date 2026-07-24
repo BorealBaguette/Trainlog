@@ -8,6 +8,21 @@
 <style>
   #map { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
 
+  /* Loading veil while the first trips fetch is in flight. The map (position:
+     fixed) paints over in-flow content, so the spinner must sit above it. */
+  .spinner-container {
+    position: fixed;
+    inset: 0;
+    z-index: 10;
+    align-items: center;
+    background: rgba(255, 255, 255, 0.55);
+    pointer-events: none;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+  }
+  .spinner-container.hidden { opacity: 0; }
+  .spinner-container .lds-spinner { top: auto; margin-top: 0; }
+
   .delay-time { color: #dc3545; }
   .early-time  { color: #28a745; }
 
@@ -549,7 +564,16 @@ function renderTrips(trips) {
   map.getSource('live-static').setData({ type: 'FeatureCollection', features: staticFeatures });
   map.getSource('live-future').setData({ type: 'FeatureCollection', features: futureFeatures });
 
-  document.querySelector('.spinner-container').style.display = 'none';
+  hideLoading();
+}
+
+// Fade the veil out, then drop it from the paint tree. Idempotent — renderTrips
+// runs on every refresh cycle.
+function hideLoading() {
+  const el = document.querySelector('.spinner-container');
+  if (!el || el.classList.contains('hidden')) return;
+  el.classList.add('hidden');
+  el.addEventListener('transitionend', () => { el.style.display = 'none'; }, { once: true });
 }
 
 function fitToTrips() {
@@ -571,7 +595,7 @@ function loadTrips() {
         if (firstLoad) { fitToTrips(); firstLoad = false; }
       }
     })
-    .catch(console.error);
+    .catch(err => { console.error(err); hideLoading(); });
 }
 
 /* ── initialise ──────────────────────────────────────────────────────────── */

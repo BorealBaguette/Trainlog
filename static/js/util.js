@@ -586,7 +586,6 @@ function toRouting(data, routingUrl, type){
     // Store data locally with ID
     sessionStorage.setItem(id, JSON.stringify(newTrip));
     // Redirect with ID as param
-    console.log(newTrip);
     location.href = `${routingUrl}?id=${id}&type=${type}`;
   } 
 }
@@ -1299,7 +1298,6 @@ function fetchTickets(url, none_text, ticket_id=null) {
       noneOption.textContent = none_text; // Set text from function parameter
       noneOption.value = ""; 
       ticketSearchInput.add(noneOption);
-      console.log(ticketSearchInput);
 
       // Create an option element for each ticket
       data.tickets.forEach(ticket => {

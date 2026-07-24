@@ -30,7 +30,7 @@
 @font-face {
   font-family: FlagEmojis;
   src: url(fonts/Twemoji.Mozilla.ttf);
-  unicode-range: U+1F1E6-U+1F1FF; /* Flags */
+  unicode-range: U+1F1E6-1F1FF; /* Flags */
 }
 
 .flagPNG {
@@ -1083,7 +1083,6 @@ input[type=number] {
     background: -moz-linear-gradient(left, #207cca 0%, #9f58a3 100%); /* FF3.6-15 */
     background: -webkit-linear-gradient(left, #207cca 0%,#9f58a3 100%); /* Chrome10-25,Safari5.1-6 */
     background: linear-gradient(to right, #207cca 0%,#9f58a3 100%); /* W3C, IE10+, FF16+, Chrome26+, Opera12+, Safari7+ */
-    filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#207cca', endColorstr='#9f58a3',GradientType=1 ); /* IE6-9 */
 }
 
 #form button[id=signup]{
@@ -1091,7 +1090,6 @@ input[type=number] {
     background: -moz-linear-gradient(left, #207cca 0%, #007f26 100%); /* FF3.6-15 */
     background: -webkit-linear-gradient(left, #207cca 0%,#007f26 100%); /* Chrome10-25,Safari5.1-6 */
     background: linear-gradient(to right, #207cca 0%,#007f26 100%); /* W3C, IE10+, FF16+, Chrome26+, Opera12+, Safari7+ */
-    filter: progid:DXImageTransform.Microsoft.gradient( startColorstr='#207cca', endColorstr='#007f26',GradientType=1 ); /* IE6-9 */
 }
 
 @media screen and (max-width: 600px) {
@@ -1152,7 +1150,6 @@ html, body {
   justify-content: center;
 }
 .lds-spinner {
-  color: official;
   display: inline-block;
   position: relative;
   width: 80px;
