@@ -7866,6 +7866,22 @@ def get_trips_api_internal(username, is_public=False):
 
             search_params[param_name] = search_pattern
 
+    # Push an exact trip-type filter down into the base CTE. The column-specific
+    # "type" search above is a diacritics-insensitive LIKE, which no index can
+    # serve, so the CTE would materialise every one of the user's trips and only
+    # then drop the other types. When the value names a real trip type exactly
+    # (a partial "type:fer" still falls back to the LIKE) and isn't negated, we
+    # also constrain base by trip_type = :base_type, letting the
+    # (user_id, trip_type) index fetch just those rows. The LIKE stays on the
+    # outer query, so results are identical — this only narrows the scan.
+    base_type = None
+    type_search = column_searches.get(0)
+    if type_search and type_search["value"] and not type_search["negate"]:
+        candidate = type_search["value"].strip().lower()
+        if candidate in {t.value for t in TripTypes}:
+            base_type = candidate
+            search_params["base_type"] = base_type
+
     # Global free-text search across every field. Appended to the outer query only
     # when there is something to match, so the common empty-search case lets Postgres
     # elide the airliners join (count query) and avoids the tickets join entirely.
@@ -7934,8 +7950,9 @@ def get_trips_api_internal(username, is_public=False):
         )
 
     # Build the queries
-    base_count_query = get_dynamic_user_trips_query() + "SELECT COUNT(*) FROM FilteredTrips"
-    base_data_query = get_dynamic_user_trips_query() + "SELECT * FROM FilteredTrips"
+    cte = get_dynamic_user_trips_query(base_type_filter=base_type is not None)
+    base_count_query = cte + "SELECT COUNT(*) FROM FilteredTrips"
+    base_data_query = cte + "SELECT * FROM FilteredTrips"
     
     # Add type filtering if needed
     if is_public and is_friend:
