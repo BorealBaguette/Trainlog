@@ -696,6 +696,22 @@ nav .current{
   padding: 0 1.5em 0 1.5em;
 }
 
+/* "Play" link on shared tag pages: opens the animated multiTrip time-lapse */
+.itinerary_tag_description .tagPlayButton {
+  display: inline-block;
+  margin: 6px 1.5em 0 1.5em;
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: #0d6efd;
+  color: #fff;
+  text-decoration: none;
+  font-size: 0.85em;
+}
+.itinerary_tag_description .tagPlayButton:hover {
+  background: #0b5ed7;
+  color: #fff;
+}
+
 .dayChange {
   color: #fff;
   font-family: arial;

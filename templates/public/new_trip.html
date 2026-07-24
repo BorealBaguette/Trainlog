@@ -582,6 +582,9 @@
             {% elif collection_voyage == 'voyage' %}
                 <span class="text-nowrap"><i class="fas fa-route"></i> {{tag_description}}</span>
             {% endif %}
+            {% if tag_uuid %}
+                <a class="tagPlayButton" href="{{ url_for('multi_trip', tagUuid=tag_uuid) }}"><i class="fa-solid fa-play"></i> {{ play_tag }}</a>
+            {% endif %}
             </div>
         {% endif %}
             <div class="modeProportionContainer">

@@ -1884,7 +1884,11 @@
     {% endif %}
     var _tagSetup = setupTagAutocomplete(
         '{{ url_for("get_all_tags", username=username) }}',
-        {{ tripId if edit_copy_type == 'edit' else 'null' }}
+        {{ tripId if edit_copy_type == 'edit' else 'null' }},
+        {
+            url: '{{ url_for("quick_create_tag", username=username) }}',
+            label: {{ create_tag_option | tojson }}
+        }
     );
 
     var editCopyType = "{{ edit_copy_type }}";

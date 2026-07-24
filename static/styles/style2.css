@@ -159,6 +159,27 @@
   margin-left: 5px;
 }
 
+/* Tag autocomplete rows: every entry carries an icon (tag / shared / plus) so
+   they read as one consistent list; the "create" action is a muted row with a
+   very light tint and a separator */
+.tag-option i,
+.tag-create-option i {
+  margin-right: 6px;
+  opacity: 0.55;
+  width: 1em;
+  text-align: center;
+}
+.ui-menu .ui-menu-item .tag-create-option {
+  background-color: rgba(13, 110, 253, 0.04);
+  color: #6c757d;
+  border-top: 1px solid #e9ecef;
+}
+.ui-menu .ui-menu-item .tag-create-option.ui-state-active {
+  background-color: rgba(13, 110, 253, 0.1);
+  color: #495057;
+  border-color: #e9ecef;
+}
+
 .airframe{
   position: relative;
   top: -10px;

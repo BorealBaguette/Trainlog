@@ -1345,8 +1345,24 @@ function getTextColor(bgColor) {
   return luminance > 0.5 ? '#000000' : '#FFFFFF';
 }
 
+// Shared renderer for tag autocomplete rows: every row gets an icon (shared
+// tags the multi-user one, plain tags a tag, the create action a plus) so
+// they read as one consistent list.
+function renderTagAutocompleteItem(ul, item) {
+  const iconClass = item._create ? 'fas fa-plus'
+    : (item._shared ? 'fas fa-users' : 'fas fa-tag');
+  return $('<li>')
+    .append(
+      $('<div>')
+        .addClass(item._create ? 'tag-create-option' : 'tag-option')
+        .append($('<i>').addClass(iconClass))
+        .append(document.createTextNode(' ' + item.label))
+    )
+    .appendTo(ul);
+}
+
 function makeTagChip(tag) {
-  return $('<span>')
+  const chip = $('<span>')
     .addClass('tag-blob')
     .attr('data-tag-id', tag.uid)
     .css('background-color', tag.colour)
@@ -1356,12 +1372,19 @@ function makeTagChip(tag) {
       event.stopPropagation();
       $(this).remove();
     });
+  if (tag.is_shared) {
+    chip.prepend('<i class="fas fa-users"></i> ');
+  }
+  return chip;
 }
 
-// setupTagAutocomplete(url, tripId=null)
+// setupTagAutocomplete(url, tripId=null, createOpts=null)
 // tripId: when editing, pre-populate chips for tags already attached to this trip.
+// createOpts: {url, label} — when set, an unmatched search term offers a
+// "create tag" entry ({name} in label is replaced by the term); the tag is
+// created server-side (voyage type, auto colour) and chipped immediately.
 // Returns a function getOriginalTagIds() so callers can diff for edit-mode sync.
-function setupTagAutocomplete(url, tripId) {
+function setupTagAutocomplete(url, tripId, createOpts) {
   let tags = [];
   let originalTagIds = new Set();
 
@@ -1387,17 +1410,41 @@ function setupTagAutocomplete(url, tripId) {
         Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(el => el.dataset.tagId)
       );
       const results = $.ui.autocomplete.filter(
-        tags.filter(t => !alreadyIn.has(String(t.uid))).map(t => t.name),
+        tags.filter(t => !alreadyIn.has(String(t.uid)))
+          .map(t => ({ label: t.name, value: t.name, _shared: t.is_shared })),
         request.term
       );
+      const term = request.term.trim();
+      if (createOpts && term &&
+          !tags.some(t => t.name.toLowerCase() === term.toLowerCase())) {
+        results.push({
+          label: createOpts.label.replace('{name}', term),
+          value: term,
+          _create: true
+        });
+      }
       response(results);
     },
     select: function(event, ui) {
+      if (ui.item._create) {
+        $.post({
+          url: createOpts.url,
+          contentType: 'application/json',
+          data: JSON.stringify({ name: ui.item.value })
+        }).done(function(data) {
+          tags.push(data.tag);
+          $('#tagList').append(makeTagChip(data.tag));
+        });
+        $("#tagSearchInput").val('');
+        return false;
+      }
       const selectedTag = tags.find(t => t.name === ui.item.value);
       if (selectedTag) $('#tagList').append(makeTagChip(selectedTag));
       return false;
     }
   });
+
+  $("#tagSearchInput").data("ui-autocomplete")._renderItem = renderTagAutocompleteItem;
 
   return { getOriginalTagIds: () => originalTagIds };
 }

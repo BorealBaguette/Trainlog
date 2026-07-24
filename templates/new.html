@@ -742,7 +742,10 @@
   {% if not plan_uuid %}
   fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}");
   {% endif %}
-  setupTagAutocomplete(`{{ url_for("get_all_tags", username=username) }}`);
+  setupTagAutocomplete(`{{ url_for("get_all_tags", username=username) }}`, null, {
+    url: `{{ url_for("quick_create_tag", username=username) }}`,
+    label: {{ create_tag_option | tojson }}
+  });
 
 
   if(!CSS.supports("contain:strict")) {
