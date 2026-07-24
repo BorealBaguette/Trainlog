@@ -14,6 +14,27 @@
 }
 .publicTsToggle:hover,
 .publicTsToggle.open { color: #0d6efd; }
+/* Action row under the proportion bars: ride-along and tag Play share one style */
+.tripActionButtons {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 2px;
+}
+.tripActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #fff;
+  text-decoration: none;
+}
+.tripActionBtn:hover { color: #fff; filter: brightness(0.92); }
+.tripActionBtn.rideAlongBtn { background: #4caf50; }
+.tripActionBtn.playBtn { background: #0d6efd; }
 /* Wagon images are sized in JS against the strip's median height (normalizeStrip), so
    each source's px-per-metre cancels out and relative proportions are gently preserved;
    the scroll wrapper's default 16px bottom padding keeps the scrollbar clear of the pills. */
@@ -555,17 +576,6 @@
     <div class="itineraryWrapper">
       <ul class="events" id="itinerary">
         <div id="tripDetails">
-        {% if show_ride_along %}
-        <button
-          id="rideAlong"
-          onClick="showRideAlongModal()"
-          style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px;margin-bottom:8px;"
-        >
-          <i class="fa-solid fa-copy"></i>
-          {{ rideAlong }}
-        </button>
-        {% endif %}
-
         <div id="rideAlongModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
           <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
             <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
@@ -581,9 +591,6 @@
                 <span class="text-nowrap"><i class="fas fa-list"></i> {{tag_description}}</span>
             {% elif collection_voyage == 'voyage' %}
                 <span class="text-nowrap"><i class="fas fa-route"></i> {{tag_description}}</span>
-            {% endif %}
-            {% if tag_uuid %}
-                <a class="tagPlayButton" href="{{ url_for('multi_trip', tagUuid=tag_uuid) }}"><i class="fa-solid fa-play"></i> {{ play_tag }}</a>
             {% endif %}
             </div>
         {% endif %}
@@ -609,6 +616,20 @@
             </div>
           {% if num_hidden_trips > 0 %}
             <div id="hiddenTripsInfo">(+{{ num_hidden_trips }} {% if num_hidden_trips == 1 %}{{ trip_view_hidden_trips_singular }}{% else %}{{ trip_view_hidden_trips_plural }}{% endif %})</div>
+          {% endif %}
+          {% if show_ride_along or tag_uuid %}
+            <div class="tripActionButtons">
+              {% if show_ride_along %}
+              <button id="rideAlong" onClick="showRideAlongModal()" class="tripActionBtn rideAlongBtn">
+                <i class="fa-solid fa-copy"></i> {{ rideAlong }}
+              </button>
+              {% endif %}
+              {% if tag_uuid %}
+              <a class="tripActionBtn playBtn" href="{{ url_for('multi_trip', tagUuid=tag_uuid) }}">
+                <i class="fa-solid fa-play"></i> {{ play_tag }}
+              </a>
+              {% endif %}
+            </div>
           {% endif %}
           <br>
           <div id="tripDate"></div>              
