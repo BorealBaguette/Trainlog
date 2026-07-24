@@ -1138,7 +1138,10 @@ input[type=number] {
 /* Map style */
 
 body {
-  font-family: Arial, Helvetica, sans-serif;
+  /* FlagEmojis first: its unicode-range covers ONLY the regional-indicator pair
+     (U+1F1E6-1F1FF), so it renders country flags via the bundled Twemoji glyphs
+     (Windows has none) and falls through to Arial for everything else. */
+  font-family: FlagEmojis, Arial, Helvetica, sans-serif;
   padding: 0;
   margin: 0;
 }

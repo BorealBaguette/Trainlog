@@ -302,7 +302,10 @@ function apportionLegTimings(legs, segments) {
                 cursorMs = segEndMs;
             });
         }
-    } else if (newTrip.precision === "onlyDate" &&
+    } else if ((newTrip.precision === "onlyDate" ||
+                // Day-only relative plan leg (no times) with a manual duration.
+                (newTrip.precision === "relative" &&
+                 !(newTrip.planStartTime && newTrip.planEndTime))) &&
                isNumber(newTrip.onlyDateDuration) && newTrip.onlyDateDuration !== "") {
         var totalManS = Number(newTrip.onlyDateDuration);
         var remaining = totalManS;

@@ -36,6 +36,16 @@ def _parse_time(value):
     return None
 
 
+def _parse_weekdays(value):
+    """planWeekdays bitmask (bit 0 = Monday ... bit 6 = Sunday) -> int or None.
+    0 / empty / malformed all mean "no constraint" (runs daily) -> NULL."""
+    try:
+        mask = int(value) & 0b1111111
+    except (TypeError, ValueError):
+        return None
+    return mask or None
+
+
 def process_plan_dates(new_trip, new_path):
     """Return the timing column dict for a plan_trip given the builder payload."""
     mode = new_trip.get("precision", "relative")
@@ -45,6 +55,7 @@ def process_plan_dates(new_trip, new_path):
         end_day = int(new_trip.get("planEndDay") or start_day)
         start_time = _parse_time(new_trip.get("planStartTime"))
         end_time = _parse_time(new_trip.get("planEndTime"))
+        manual_duration = None
         if start_time is not None and end_time is not None:
             # Timed leg: local datetimes on the fixed reference date -> timezone-correct
             # UTC (so the elapsed duration, and the cross-leg ordering, are right even
@@ -59,8 +70,11 @@ def process_plan_dates(new_trip, new_path):
             utc_end = getUtcDatetime(dateTime=local_end, **new_path[-1])
         else:
             # Untimed leg: just the day(s). Materialise at the date-only marker
-            # (00:00:01) so formatTrip shows no clock time; duration falls back to the
-            # routed estimate. No UTC (there is no concrete time).
+            # (00:00:01) so formatTrip shows no clock time; duration is the manual one
+            # when given (Day + duration mode), else falls back to the routed estimate.
+            # No UTC (there is no concrete time).
+            if new_trip.get("onlyDateDuration") not in (None, ""):
+                manual_duration = new_trip["onlyDateDuration"]
             local_start = datetime.combine(
                 RELATIVE_REF_DATE + timedelta(days=start_day - 1), dtime(0, 0, 1)
             )
@@ -79,7 +93,10 @@ def process_plan_dates(new_trip, new_path):
             "end_datetime": local_end,
             "utc_start_datetime": utc_start,
             "utc_end_datetime": utc_end,
-            "manual_trip_duration": None,
+            "manual_trip_duration": manual_duration,
+            # Which weekdays the service runs (less-than-daily frequencies); only
+            # meaningful for relative legs, where the calendar date isn't fixed yet.
+            "weekdays": _parse_weekdays(new_trip.get("planWeekdays")),
         }
 
     # preciseDates / onlyDate / unknown -> reuse trips date logic verbatim.
@@ -95,4 +112,5 @@ def process_plan_dates(new_trip, new_path):
         "utc_start_datetime": usdt,
         "utc_end_datetime": uedt,
         "manual_trip_duration": man,
+        "weekdays": None,
     }

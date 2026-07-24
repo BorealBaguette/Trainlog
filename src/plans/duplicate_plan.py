@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 # Columns copied verbatim from the source legs (everything except the identity/
 # plan_id/cost_id/timestamps, which are set explicitly below).
 _PLAN_TRIP_COPY_COLS = (
-    "user_id, sort_order, timing_mode, start_day, end_day, start_time, end_time, "
+    "user_id, sort_order, timing_mode, start_day, end_day, start_time, end_time, weekdays, "
     "start_datetime, end_datetime, utc_start_datetime, utc_end_datetime, "
     "estimated_trip_duration, manual_trip_duration, origin_station, destination_station, "
     "trip_type, operator, line_name, material_type, material_type_advanced, reg, seat, "

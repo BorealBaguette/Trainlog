@@ -34,6 +34,11 @@
   .plan-leg.leg-impossible { border-color: #dc3545; background: rgba(220,53,69,.05); }
   .leg-warning { font-size: .78rem; font-weight: 600; color: #dc3545; margin-top: .12rem; }
   .leg-warning i { margin-right: .25rem; }
+  /* Weekday constraint: with Day 1 = anchor date, this leg lands on a day the
+     service doesn't run. Softer than the impossible-connection red. */
+  .leg-warning.leg-warning-weekday { color: #b45309; }
+  .wd-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: #7c5eb4;
+             background: rgba(124,94,180,.12); border-radius: 999px; padding: .05rem .5rem; }
   .leg-icon { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 10px;
               background: rgba(0,0,0,.04); display: flex; align-items: center; justify-content: center; }
   .leg-icon img { height: 24px; }
@@ -207,6 +212,9 @@
         {% if item.impossible %}
         <div class="leg-warning"><i class="bi bi-exclamation-triangle-fill"></i> {{ impossibleConnection|default('Departs before the previous leg arrives') }}</div>
         {% endif %}
+        {% if item.weekday_mismatch %}
+        <div class="leg-warning leg-warning-weekday"><i class="bi bi-calendar-x"></i> {{ planWeekdayMismatch|default('With Day 1 on the chosen date, this leg falls on a day this service does not run') }}</div>
+        {% endif %}
         <div class="leg-meta text-truncate">
           {% if t.day_number is not none %}
             {# Relative leg: "Day N", optionally with a clock time. Collapse to one
@@ -217,6 +225,7 @@
           {% elif t.start_date %}
             {{ t.start_date }}{% if t.start_time %} {{ t.start_time }}{% endif %}{% if t.end_time and t.end_time != t.start_time %} &rarr; {{ t.end_time }}{% endif %}
           {% else %}—{% endif %}
+          {% if t.weekdays %} <span class="wd-pill fmt-wd" data-wd="{{ t.weekdays }}"></span>{% endif %}
           {% if t.duration_h %} · <span class="fmt-dur" data-s="{{ t.duration_seconds }}">{{ t.duration_h }}</span>{% endif %}
           {% if t.trip_length %} · <span class="fmt-num" data-n="{{ (t.trip_length / 1000)|round|int }}">{{ (t.trip_length / 1000)|round|int }}</span> km{% endif %}
           {% if t.price_in_user_currency %} · <span class="fmt-num" data-n="{{ t.price_in_user_currency|round|int }}">{{ t.price_in_user_currency|round|int }}</span> {{ t.user_currency }}{% endif %}
@@ -240,8 +249,14 @@
         {% endif %}
       </div>
       <div class="leg-actions d-flex gap-1 align-items-center">
+        {# Anchored legs (with a day or a date) are ordered by their chronology, not
+           by the arrows — a move would be a no-op, so the arrows are hidden. #}
+        {% if item.can_up %}
         <button class="btn btn-sm plan-move" data-dir="-1" title="{{ moveUp|default('Move up') }}"><i class="bi bi-arrow-up"></i></button>
+        {% endif %}
+        {% if item.can_down %}
         <button class="btn btn-sm plan-move" data-dir="1" title="{{ moveDown|default('Move down') }}"><i class="bi bi-arrow-down"></i></button>
+        {% endif %}
         <a class="btn btn-sm" title="{{ edit|default('Edit') }}"
            href="{{ url_for('plan_trip_editor', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}"><i class="bi bi-pencil"></i></a>
         <form method="post" action="{{ url_for('delete_plan_trip_route', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}" onsubmit="return confirm('{{ confirmDeletePlanTrip|default('Delete this trip?') }}');">
@@ -329,6 +344,18 @@
       try { el.textContent = secondsToDhm(s, LOC); } catch (e) { /* keep server fallback */ }
     }
   });
+  // Weekday-constraint pills: bitmask (bit 0 = Monday) -> localised short day names.
+  var wdFmt = new Intl.DateTimeFormat(LOC, { weekday: 'short', timeZone: 'UTC' });
+  document.querySelectorAll('.fmt-wd').forEach(function(el){
+    var mask = parseInt(el.dataset.wd, 10);
+    if (isNaN(mask)) return;
+    var names = [];
+    for (var i = 0; i < 7; i++) {
+      // 2024-01-01 is a Monday
+      if ((mask >> i) & 1) names.push(wdFmt.format(new Date(Date.UTC(2024, 0, 1 + i))));
+    }
+    el.textContent = names.join('·');
+  });
 })();
 
 function planValidate() {
@@ -359,7 +386,8 @@ function planEdit(t) {
   planEditModal.show();
 }
 
-// Reorder: up/down swap, then POST the new uid order.
+// Reorder: up/down swap, then POST the new uid order. Reload afterwards so the
+// server recomputes the chronological interleaving and which arrows still apply.
 document.querySelectorAll('.plan-move').forEach(function(btn){
   btn.addEventListener('click', function(){
     var li = btn.closest('li'), dir = parseInt(btn.dataset.dir, 10);
@@ -368,7 +396,7 @@ document.querySelectorAll('.plan-move').forEach(function(btn){
     var order = Array.from(document.querySelectorAll('#plan-trip-list li')).map(function(x){ return x.dataset.uid; });
     fetch("{{ url_for('reorder_plan_trips_route', username=username, plan_uuid=plan.uuid) }}", {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({order: order})
-    });
+    }).then(function(){ location.reload(); });
   });
 });
 
