@@ -1,4 +1,5 @@
 import csv
+import json
 import logging
 import os
 from datetime import datetime
@@ -206,25 +207,78 @@ def get_missing_operators():
     batches of 999; resolution now lives in trip_operators, so an unresolved name is
     simply operator_id IS NULL and the whole thing is one grouped query.
 
-    Response shape is unchanged so the existing UI keeps working.
+    Each spelling also carries its two most common countries, so an admin can tell
+    two same-named operators apart before assigning the alias.
+
+    Response shape is otherwise unchanged so the existing UI keeps working.
     """
     with pg_session() as pg:
         rows = pg.execute("""
-            SELECT tv.raw_name AS operator, t.trip_type, COUNT(*) AS occurrences
-            FROM trip_operators tv
-            JOIN trips t ON t.trip_id = tv.trip_id
-            WHERE tv.operator_id IS NULL
-              AND t.trip_type NOT IN
-                  ('car', 'walk', 'cycle', 'poi', 'accommodation', 'restaurant')
-            GROUP BY tv.raw_name, t.trip_type
-            ORDER BY occurrences DESC
+            WITH unresolved AS MATERIALIZED (
+                SELECT tv.raw_name AS operator, t.trip_type, t.countries
+                FROM trip_operators tv
+                JOIN trips t ON t.trip_id = tv.trip_id
+                WHERE tv.operator_id IS NULL
+                  AND t.trip_type NOT IN
+                      ('car', 'walk', 'cycle', 'poi', 'accommodation', 'restaurant')
+            ),
+            counts AS (
+                SELECT operator, trip_type, COUNT(*) AS occurrences
+                FROM unresolved
+                GROUP BY operator, trip_type
+            ),
+            -- countries is TEXT holding a {"CC": km} object; the guard keeps the
+            -- cast off anything that is not one (it runs in its own CTE so the
+            -- jsonb_each below only ever sees rows that survived it).
+            with_countries AS MATERIALIZED (
+                SELECT operator, trip_type, countries
+                FROM unresolved
+                WHERE countries ~ '^[[:space:]]*\\{'
+            ),
+            country_counts AS (
+                SELECT w.operator, w.trip_type, c.key AS country, COUNT(*) AS trips
+                FROM with_countries w
+                CROSS JOIN LATERAL jsonb_each(w.countries::jsonb) AS c
+                WHERE c.key ~ '^[A-Za-z]{2}$'
+                GROUP BY w.operator, w.trip_type, c.key
+            ),
+            ranked AS (
+                SELECT operator, trip_type, country, trips,
+                       ROW_NUMBER() OVER (
+                           PARTITION BY operator, trip_type
+                           ORDER BY trips DESC, country
+                       ) AS rn
+                FROM country_counts
+            ),
+            top_two AS (
+                SELECT operator, trip_type,
+                       json_agg(json_build_object('code', upper(country),
+                                                  'trips', trips)
+                                ORDER BY rn) AS top_countries
+                FROM ranked
+                WHERE rn <= 2
+                GROUP BY operator, trip_type
+            )
+            SELECT c.operator, c.trip_type, c.occurrences,
+                   COALESCE(tt.top_countries, '[]'::json) AS top_countries
+            FROM counts c
+            LEFT JOIN top_two tt
+                   ON tt.operator = c.operator AND tt.trip_type = c.trip_type
+            ORDER BY c.occurrences DESC
         """).fetchall()
 
     by_type = {}
     total_occurrences = 0
     for row in rows:
+        top_countries = row["top_countries"]
+        if isinstance(top_countries, str):
+            top_countries = json.loads(top_countries)
         by_type.setdefault(row["trip_type"], []).append(
-            {"operator": row["operator"], "occurrences": row["occurrences"]}
+            {
+                "operator": row["operator"],
+                "occurrences": row["occurrences"],
+                "top_countries": top_countries or [],
+            }
         )
         total_occurrences += row["occurrences"]
 
