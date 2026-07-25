@@ -376,16 +376,32 @@
 
 <script>
   $(document).ready(function() {
-    $('#tagsTable').DataTable(
-      {
-        order: [],
-        responsive:true,
-        lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]],
-        drawCallback: function(settings) {
-          updateTagColors();
-        }
-      }
-    );
+    var table = $('#tagsTable').DataTable({
+      order: [],
+      responsive: true,
+      lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]],
+      drawCallback: function(settings) {
+        updateTagColors();
+      },
+      language: {
+        info: "{{dtInfo}}",
+        paginate: {
+          next: "{{dtNext}}",
+          previous: "{{dtPrevious}}",
+        },
+        emptyTable: "{{dtEmptyTable}}",
+        select: {
+          rows: {
+            "_": "{{dtMultipleLineSelected}}",
+            "0": "",
+            "1": "{{dtOneLineSelected}}"
+          },
+        },
+        lengthMenu: "{{dtLengthMenu}}",
+        search: "{{dtSearch}}"
+      },
+    });
+    
     function updateTagColors() {
       {% for tag in tagsList %}
       $("#colour-{{ tag.uid }}").css("color", getTextColor("{{ tag.colour }}"));

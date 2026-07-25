@@ -10198,7 +10198,7 @@ def stations_data():
 def stations():
     return render_template(
         "admin/stations.html",
-        username=get_user(),
+        username=getUser(),
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id()),
         **lang[session["userinfo"]["lang"]],

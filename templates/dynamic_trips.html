@@ -7,10 +7,10 @@
     /* --- General UI --- */
     .ui-front { z-index: 9999999 !important; }
 
-    #dataTable_wrapper { min-height: 600px; }
+    .dt-container { min-height: 600px; }
 
     @media screen and (max-width: 767px) {
-        #dataTable_wrapper { margin-top: 15px; }
+        .dt-container { margin-top: 15px; }
     }
 
     /* Trainset picker in edit/new forms */
@@ -550,13 +550,42 @@ function toggleIncludeFuture() {
 
 function isEllipsisActive(el){
   if (!el) return false;
-  if (el.scrollWidth > el.clientWidth) return true;
-  const styles = getComputedStyle(el);
-  const widthEl = parseFloat(styles.width);
-  const ctx = document.createElement('canvas').getContext('2d');
-  ctx.font = `${styles.fontSize} ${styles.fontFamily}`;
-  const text = ctx.measureText(el.innerText);
-  return text.width > widthEl;
+  // Sub-pixel column widths make scrollWidth/clientWidth differ by a fraction on
+  // cells that are not actually clipped, so require a whole pixel of overflow.
+  if (el.scrollWidth > el.clientWidth + 1) return true;
+  // Only text can be ellipsed. Icon-only cells (a logo, or a hidden span holding the
+  // sort key) have nothing to truncate, so they must not be measured: their content
+  // is sized to the column and the correction below would read that as an overflow.
+  if (!el.innerText || !el.innerText.trim()) return false;
+  // Measure what is really laid out rather than re-measuring the text on a canvas:
+  // these cells start with a flag and can hold logos, and the canvas path measured
+  // el.innerText (images contribute nothing, the flag glyph is measured in the
+  // FlagEmojis-first body stack) so its widths did not reflect the rendered cell.
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    // A range only covers DOM nodes, so the responsive control arrow — a ::before
+    // on whichever column is first visible — is missed, and that cell alone reads
+    // ~18px narrower than it renders. Add the pseudo-element back in.
+    let width = range.getBoundingClientRect().width;
+    const before = getComputedStyle(el, '::before');
+    if (before && before.content !== 'none') {
+      width += (parseFloat(before.width) || 0)
+             + (parseFloat(before.borderLeftWidth) || 0)
+             + (parseFloat(before.borderRightWidth) || 0)
+             + (parseFloat(before.marginRight) || 0);
+    }
+    // clientWidth spans the padding box but the range spans only the content, so
+    // comparing them straight gives every cell a free ~20px of overflow (the
+    // theme's 10px cell padding either side) before it counts as clipped.
+    const styles = getComputedStyle(el);
+    const available = el.clientWidth
+                    - (parseFloat(styles.paddingLeft) || 0)
+                    - (parseFloat(styles.paddingRight) || 0);
+    return width > available + 1;
+  } catch (e) {
+    return false;
+  }
 }
 
 function processHiddenData(rowIdx, columns){
@@ -1219,8 +1248,16 @@ var table = $('#tripRows');
     searchDelay: 1000,
     scrollY: scroll == true ? $(window).height() - 300 : null,
     scroller: scroll,
-    dom: '<"dt-controls d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mb-2"lf>rtip',
+    dom: '<"dt-controls d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mb-2"lf>rt<"dt-controls-bottom d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mt-2"ip>',
     columnDefs: [{ orderable: false, targets: '_all' }],
+    // Every column is orderable:false and sorting runs through the "Trier" dropdown
+    // below, but DataTables 2 decides whether to draw a header sort arrow from a
+    // data-dt-order attribute rather than from the column being orderable, so it
+    // marks up an indicator on every header that nothing can act on. This has to be
+    // the object form: a top-level `orderIndicators` is overwritten during init by
+    // `else if (init.bSort === true) { init.orderIndicators = true; ... }`, which
+    // fires because ordering defaults to true.
+    ordering: { indicators: false, handler: false },
     ajax: {
         url: '{{ url_for("get_trips_api" if not isPublic else "get_trips_api_public", username=username, projects=projects) }}',
         "type": "POST",
@@ -1261,7 +1298,7 @@ var table = $('#tripRows');
         { data: 'type', render: renderType },
         { data: 'origin_station', render: renderStation },
         { data: 'destination_station', render: renderStation },
-        { data: 'start_date' },
+        { data: 'start_date', className: 'tripDate' },
         { data: 'start_time', render: renderStartTime },
         { data: 'end_time', render: renderEndTime },
         { data: 'trip_duration', render: renderDuration },
@@ -1426,7 +1463,7 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
 
 (function() {
     var $btn = $('<label>{{sortTitle}} : <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
-    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($btn);
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($btn);
     updateSortButton();
 })();
 
@@ -1435,7 +1472,7 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
         <input class="form-check-input" type="checkbox" id="filterTypeSwitch" onchange="toggleTypeFilter()">
         <label class="form-check-label" for="filterTypeSwitch">{{showPlaces}}</label>
     </div>`);
-    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($switch);
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($switch);
 {% endif %}
 
 {% if not projects %}
@@ -1588,7 +1625,7 @@ function updateSelectionMessage() {
             ? ""
             : pluralize(dtRowsSelected, checkedTrips.length);
 
-        var $dataTablesInfo = $('.dataTables_info');
+        var $dataTablesInfo = $('.dt-info');
 
         // Check if .select-info class exists
         if ($dataTablesInfo.find('.select-info').length === 0) {
@@ -1617,34 +1654,35 @@ $('.deleteButton').off('click').on('click', function() {
 });
 
     tableObject.rows().every( function ( rowIdx, tableLoop, rowLoop ) {
-        if ($(this.node()).hasClass("even") || $(this.node()).hasClass("odd")){
-            var controlElement;
-            var rowData = this.data();
-            // Seeded true when the detail row carries something that is not a cell
-            // responsive hid: a delay breakdown, or operators beyond the four the
-            // compact cell can show. Either way the control must stay usable, since
-            // the detail row is the only place that content exists.
-            var hasHidden = Boolean(rowData && (
-                rowData.departure_delay || rowData.arrival_delay || operatorsOverflow(rowData)
-            ));
-            $(this.node()).children().each(
-                function(index, element){
-                    if ($(element).hasClass("dtr-control"))
-                    {
-                      controlElement = $(element)
-                    }
-                    if($(element).is(':hidden')){
-                        if($(element).text() != ""){
-                            hasHidden = true;
-                        }
-                    }
-
+        // No even/odd guard: DataTables 2 stripes rows with CSS :nth-child instead
+        // of the odd/even classes 1.x put on every <tr>, so testing for them here
+        // skipped every row and the control was never marked as having nothing to open.
+        var controlElement;
+        var rowData = this.data();
+        // Seeded true when the detail row carries something that is not a cell
+        // responsive hid: a delay breakdown, or operators beyond the four the
+        // compact cell can show. Either way the control must stay usable, since
+        // the detail row is the only place that content exists.
+        var hasHidden = Boolean(rowData && (
+            rowData.departure_delay || rowData.arrival_delay || operatorsOverflow(rowData)
+        ));
+        $(this.node()).children().each(
+            function(index, element){
+                if ($(element).hasClass("dtr-control"))
+                {
+                  controlElement = $(element)
                 }
-            );
+                if($(element).is(':hidden')){
+                    if($(element).text() != ""){
+                        hasHidden = true;
+                    }
+                }
 
-            if(!hasHidden) {
-                controlElement.addClass("noHidden");
             }
+        );
+
+        if (controlElement) {
+            controlElement.toggleClass("noHidden", !hasHidden);
         }
     });
 }
@@ -2332,7 +2370,7 @@ $('#submitBtn').on('click', function() {
         }
 
         setTimeout(function() {
-            var searchContainer = $('.dataTables_filter');
+            var searchContainer = $('.dt-search');
             if (searchContainer.length && !searchContainer.find('.search-help-icon').length) {
                 var $input = searchContainer.find('input');
                 var $wrapper = $('<span style="display:inline-flex;align-items:center;gap:1px;"></span>');
@@ -2346,9 +2384,12 @@ $('#submitBtn').on('click', function() {
 
     function addPageJumpInput() {
         // Only add if it doesn't already exist
-        if ($('.dataTables_paginate input.page-jump-input').length === 0) {
+        if ($('.dt-paging input.page-jump-input').length === 0) {
+            // DataTables 2 wraps the buttons in a <nav> inside .dt-paging, so appending
+            // to .dt-paging itself would drop the box onto its own line below them.
+            var $pagingNav = $('.dt-paging nav');
             $('<input type="number" placeholder="#" class="form-control page-jump-input" style="width: 70px; margin-left: 10px; display: inline-block;" min="1">')
-                .appendTo($('.dataTables_paginate'))
+                .appendTo($pagingNav.length ? $pagingNav : $('.dt-paging'))
                 .on('keyup blur', function(e) {
                     if (e.type === 'keyup' && e.key !== 'Enter') return;
                     if (!this.value) return;
