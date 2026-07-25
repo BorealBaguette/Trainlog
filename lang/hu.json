@@ -272,7 +272,7 @@
     "about_adv_settings_p": "Válaszd ki a kedvenc térképstílusodat, kapcsold be a 3D földgömb nézetet, egy színvakbarát módot, vagy a pénznemedet és az alapértelmezett kezdőlapot, mindezt a beállításokból.",
     "about_adv_premium_h": "Prémium",
     "about_adv_premium_p": "Lépj a \"Trainlogger\" szint fölé a <a href='https://www.buymeacoffee.com/Trainlog'>Buy Me a Coffee</a> oldalon, hogy feloldd a prémium funkciókat: 3D magassági profilokat a repülőútjaidhoz, valamint élő repülés közbeni nyomkövetést a térképen.",
-    "about_credits_funding_p": "Az adományok a Trainlog egyetlen bevételi forrását jelentik, és teljes egészében a tárhelyköltségekre fordítódnak.",
+    "about_credits_funding_p": "Az adományok a Trainlog egyetlen bevételi forrása. Elsősorban a működési költségeket fedezik (a tárhelyet és a használt API-k előfizetéseit), a maradék pedig az oldal fejlesztésére és üzemeltetésére fordított időt támogatja.",
     "error401Title": "Kitartás! 401 - Jegyellenőrzés",
     "error401Body": "Nincs jegyed erre az oldalra. Kérjük, jelentkezzen be, vagy szerezze be a megfelelő engedélyeket.",
     "error404Title": "Hoppá! 404 - Elveszett poggyász",

@@ -273,7 +273,7 @@
     "about_adv_settings_p": "Välj din föredragna kartstil, aktivera 3D-globvyn, ett färgblindvänligt läge, eller din valuta och standardstartsida, allt från inställningarna.",
     "about_adv_premium_h": "Premium",
     "about_adv_premium_p": "Gå en nivå ovanför \"Trainlogger\" på <a href='https://www.buymeacoffee.com/Trainlog'>Buy Me a Coffee</a> för att låsa upp premiumfunktioner: 3D-höjdprofiler för dina flygningar, och direktspårning i luften på kartan.",
-    "about_credits_funding_p": "Donationer är Trainlogs enda inkomstkälla, och går helt till hostingkostnader.",
+    "about_credits_funding_p": "Donationer är Trainlogs enda inkomstkälla. De täcker i första hand driftskostnaderna (webbhotellet och prenumerationerna på de API:er som används), och det som blir över stöttar tiden som läggs på att utveckla och driva sajten.",
     "error401Title": "Nåjaa! 401 - Biljettkontroll",
     "error401Body": "Du har inte en biljett till denna sida. Var vänlig logga in eller skaffa rätt behörigheter.",
     "error404Title": "Nå nej! 404 - Förlorat Bagage",

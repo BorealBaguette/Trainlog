@@ -266,7 +266,7 @@
     "about_credits_osrm": "Le tracé des itinéraires utilise une version modifiée d'<a href='https://project-osrm.org/'>OSRM</a> pour la quasi-totalité des modes de transport (l'avion et l'hélicoptère utilisent une simple géodésique).",
     "about_credits_maps": "Les cartes sont affichées avec <a href='https://maplibre.org/'>MapLibre</a> ; certaines pages plus anciennes utilisent encore <a href='https://leafletjs.com'>Leaflet</a>.",
     "about_credits_oss": "Trainlog est un logiciel libre, disponible sur <a href='https://github.com/BorealBaguette/Trainlog'>GitHub</a> sous licence Apache 2.0.",
-    "about_credits_funding_p": "Les dons sont l'unique source de revenus de Trainlog, et financent uniquement l'hébergement.",
+    "about_credits_funding_p": "Les dons sont l'unique source de revenus de Trainlog. Ils couvrent en priorité les frais de fonctionnement (l'hébergement et les abonnements aux API utilisées), et ce qui reste soutient le temps passé à développer et faire vivre le site.",
     "about_credits_lang": "Les traductions sont majoritairement générées automatiquement, puis relues par des bénévoles de la communauté. N'hésitez pas à signaler les inexactitudes sur le Discord.",
     "about_help_h": "Aide & support",
     "about_help_discord": "Rejoignez la communauté et obtenez de l'aide sur le Discord de Trainlog, via le lien ci-dessous.",

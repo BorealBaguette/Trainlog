@@ -273,7 +273,7 @@
     "about_adv_settings_p": "Escolha seu estilo de mapa preferido, ative a visualização em globo 3D, um modo adaptado para daltônicos, ou sua moeda e página inicial padrão, tudo pelas configurações.",
     "about_adv_premium_h": "Premium",
     "about_adv_premium_p": "Suba um nível acima de «Trainlogger» no <a href='https://www.buymeacoffee.com/Trainlog'>Buy Me a Coffee</a> para desbloquear recursos premium: perfis de altitude em 3D para seus voos, e rastreamento ao vivo dos seus aviões em voo no mapa.",
-    "about_credits_funding_p": "As doações são a única fonte de renda do Trainlog, e são usadas integralmente para cobrir os custos de hospedagem.",
+    "about_credits_funding_p": "As doações são a única fonte de renda do Trainlog. Elas cobrem primeiro os custos de funcionamento (a hospedagem e as assinaturas das APIs utilizadas), e o que sobra apoia o tempo dedicado a desenvolver e manter o site no ar.",
     "error401Title": "Aguarde! 401 - Verificação de Ingresso",
     "error401Body": "Você não tem um ingresso para esta página. Por favor, faça login ou obtenha as permissões corretas.",
     "error404Title": "Opa! 404 - Bagagem Perdida",

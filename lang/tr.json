@@ -272,7 +272,7 @@
     "about_adv_settings_p": "Tercih ettiğiniz harita stilini seçin, 3D küre görünümünü, renk körlüğü dostu bir modu veya para biriminizi ve varsayılan giriş sayfanızı etkinleştirin; hepsi ayarlardan.",
     "about_adv_premium_h": "Premium",
     "about_adv_premium_p": "Premium özelliklerin kilidini açmak için <a href='https://www.buymeacoffee.com/Trainlog'>Buy Me a Coffee</a>'de \"Trainlogger\" seviyesinin bir üstüne geçin: uçuşlarınız için 3D irtifa profilleri ve haritada canlı uçuş takibi.",
-    "about_credits_funding_p": "Bağışlar, Trainlog'un tek gelir kaynağıdır ve tamamen barındırma maliyetlerine gitmektedir.",
+    "about_credits_funding_p": "Bağışlar Trainlog'un tek gelir kaynağıdır. Öncelikle işletme giderlerini (barındırma ve kullanılan API aboneliklerini) karşılar, kalanı ise sitenin geliştirilmesine ve ayakta tutulmasına harcanan zamanı destekler.",
     "error401Title": "401 - İstanbulkart denetimi",
     "error401Body": "Ne yazık ki sitenin bu kısmına erişmeye yetkiniz yok. Lütfen giriş yapın veya gerekli yetkiyi edinin",
     "error404Title": "Ah be! 404 - Bagaj Kayıp",

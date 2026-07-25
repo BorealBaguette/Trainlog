@@ -272,7 +272,7 @@
     "about_adv_settings_p": "お好みの地図スタイル、3Dグローブ表示、色覚に配慮したモード、通貨、デフォルトのランディングページなどを、すべて設定から選択できます。",
     "about_adv_premium_h": "プレミアム",
     "about_adv_premium_p": "<a href='https://www.buymeacoffee.com/Trainlog'>Buy Me a Coffee</a>で「Trainlogger」より上のレベルにアップグレードすると、プレミアム機能が利用できます。フライトの3D高度プロファイルや、地図上でのリアルタイムのフライト追跡機能です。",
-    "about_credits_funding_p": "寄付はTrainlogの唯一の収入源であり、全額ホスティング費用に充てられます。",
+    "about_credits_funding_p": "寄付はTrainlogの唯一の収入源です。まず運営費（ホスティング費用と利用している各種APIの利用料）に充てられ、残りはサイトの開発と運営に費やす時間を支えるために使われます。",
     "error401Title": "おっと！401 - 切符を拝見します",
     "error401Body": "このページへの切符をお持ちではありません。ログインするか、適切な権限を取得してください。",
     "error404Title": "おっと！404 - 荷物を紛失",

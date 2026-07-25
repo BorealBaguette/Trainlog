@@ -273,7 +273,7 @@
     "about_adv_settings_p": "Vælg din foretrukne kortstil, aktivér 3D-globevisning, en farveblindvenlig tilstand, eller din valuta og standard-startside, alt sammen fra indstillingerne.",
     "about_adv_premium_h": "Premium",
     "about_adv_premium_p": "Gå ét niveau op over \"Trainlogger\" på <a href='https://www.buymeacoffee.com/Trainlog'>Buy Me a Coffee</a> for at låse premium-funktioner op: 3D-højdeprofiler for dine fly, og live in-flight-sporing på kortet.",
-    "about_credits_funding_p": "Donationer er Trainlogs eneste indtægtskilde, og går udelukkende til hostingomkostninger.",
+    "about_credits_funding_p": "Donationer er Trainlogs eneste indtægtskilde. De dækker først driftsomkostningerne (hosting og abonnementer på de anvendte API'er), og det, der er tilbage, støtter den tid, der bruges på at udvikle og drive siden.",
     "error401Title": "Vent! 401 - Billetkontrol",
     "error401Body": "Du har ikke en billet til denne side. Log venligst ind eller få de rette tilladelser.",
     "error404Title": "Ups! 404 - Mistet bagage",

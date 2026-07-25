@@ -272,7 +272,7 @@
     "about_adv_settings_p": "선호하는 지도 스타일 선택, 3D 지구본 보기 활성화, 색맹 친화 모드, 통화 및 기본 시작 페이지 설정까지 모두 설정에서 할 수 있습니다.",
     "about_adv_premium_h": "프리미엄",
     "about_adv_premium_p": "<a href='https://www.buymeacoffee.com/Trainlog'>Buy Me a Coffee</a>에서 \"Trainlogger\" 등급보다 한 단계 높은 등급으로 올리면 프리미엄 기능이 잠금 해제됩니다: 항공편의 3D 고도 프로필과 지도상의 실시간 비행 추적 기능입니다.",
-    "about_credits_funding_p": "기부는 Trainlog의 유일한 수입원이며, 전액 호스팅 비용으로 사용됩니다.",
+    "about_credits_funding_p": "후원은 Trainlog의 유일한 수입원입니다. 우선 운영 비용(호스팅과 사용 중인 API 구독료)에 쓰이고, 남는 부분은 사이트를 개발하고 운영하는 데 들이는 시간을 뒷받침합니다.",
     "error401Title": "잠시만요! 401 - 표 검사",
     "error401Body": "이 페이지에 입장할 수 있는 표가 없으시군요. 로그인을 하거나 올바른 권한을 받으세요.",
     "error404Title": "아이쿠! 404 - 짐 분실",

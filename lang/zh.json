@@ -272,7 +272,7 @@
     "about_adv_settings_p": "在设置中选择您喜欢的地图样式、启用 3D 地球视图、色盲友好模式，或设置您的货币和默认首页。",
     "about_adv_premium_h": "高级会员",
     "about_adv_premium_p": "在 <a href='https://www.buymeacoffee.com/Trainlog'>Buy Me a Coffee</a> 上选择高于“Trainlogger”的等级，即可解锁高级功能：航班 3D 高度剖面图，以及地图上的实时飞行追踪。",
-    "about_credits_funding_p": "捐赠是 Trainlog 唯一的收入来源，全部用于支付托管费用。",
+    "about_credits_funding_p": "捐赠是 Trainlog 唯一的收入来源。它们首先用于支付运营开支（服务器托管和所用 API 的订阅费用），余下的部分则用于支持开发和维护网站所投入的时间。",
     "error401Title": "等一下！401 - 票务检查",
     "error401Body": "您没有访问此页面的票。请登录或获取正确的权限。",
     "error404Title": "哎呀！404 - 行李丢失",

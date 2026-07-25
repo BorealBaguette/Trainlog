@@ -272,7 +272,7 @@
     "about_adv_settings_p": "Vali oma eelistatud kaardistiil, luba 3D gloobuse vaade, värvipimedussõbralik režiim, või oma valuuta ja vaikimisi avaleht, kõik seadetest.",
     "about_adv_premium_h": "Premium",
     "about_adv_premium_p": "Vali <a href='https://www.buymeacoffee.com/Trainlog'>Buy Me a Coffee'l</a> tasemest \"Trainlogger\" kõrgem tase, et avada premium-funktsioonid: 3D-kõrgusprofiilid teie lendudele ning otseülekandes lennujälgimine kaardil.",
-    "about_credits_funding_p": "Annetused on Trainlogi ainus tuluallikas ja need lähevad täielikult majutuskulude katteks.",
+    "about_credits_funding_p": "Annetused on Trainlogi ainus sissetulekuallikas. Eelkõige katavad need jooksvad kulud (majutus ja kasutatavate API-de tellimused) ning ülejäänu toetab veebilehe arendamisele ja käigushoidmisele kuluvat aega.",
     "error401Title": "Oota! 401 - Piletikontroll",
     "error401Body": "Teil pole selle lehe jaoks piletit. Palun logige sisse või hankige õiged õigused.",
     "error404Title": "Ups! 404 - Kaotatud pagas",
