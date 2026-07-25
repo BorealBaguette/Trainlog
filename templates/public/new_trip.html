@@ -780,6 +780,14 @@ function planDayLabel(trip) {
     var d = trip && trip.trip ? trip.trip.day_number : null;
     return d != null ? ("{{ day|default('Day') }} " + d) : null;
 }
+// Departure-day identity of a plan leg: its Day number when relative, its date when
+// precise-dated. Legs with neither carry no key and never start a new day group.
+function planDayKey(trip) {
+    if (!trip || !trip.trip) return null;
+    if (trip.trip.day_number != null) return 'D' + trip.trip.day_number;
+    var d = trip.trip.start_date;
+    return (d && String(d).length > 2) ? 'A' + d : null;
+}
 
 function addDelayToTime(timeStr, delaySeconds) {
   if (!timeStr || !delaySeconds) return timeStr;
@@ -1234,12 +1242,15 @@ function buildItinerary(trips, prices) {
         let changeTime = 0;
         let actualChangeTime = 0;
 
-        // Plan day boundary: the next leg starts on a later "Day N". A "Jour N" header
-        // is inserted there, so we must NOT also draw a transfer connector (dangling dots).
+        // Plan day boundary: the next leg departs on a later day. A header is inserted
+        // there, so we must NOT also draw a transfer connector (dangling dots).
+        // A plan mixes relative legs (Day N) and precise-dated ones, so the grouping key
+        // is the day number when there is one and the departure date otherwise — same
+        // rule as the day separators on the plan edit page.
         var nextLeg = trips[index + 1];
         var planDayBoundary = relativeDates && nextLeg
-            && nextLeg.trip.day_number != null && trip.trip.day_number != null
-            && nextLeg.trip.day_number !== trip.trip.day_number;
+            && planDayKey(trip) != null && planDayKey(nextLeg) != null
+            && planDayKey(trip) !== planDayKey(nextLeg);
         var isLastTrip = (trip === trips[trips.length - 1]);
 
         if (trip != trips[trips.length - 1]) {
