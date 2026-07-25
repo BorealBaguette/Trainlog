@@ -9067,6 +9067,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         edit_copy_type = "edit"
     elif "copy" in request.path:
         edit_copy_type = "copy"
+        
+    from_app = request.args.get('fromApp') == 'true'
 
     trip = get_trip_pg(tripId)
     with pg_session() as pg:
@@ -9139,47 +9141,54 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     else:
         tripDepartureDelay = int(trip["departure_delay"] / 60) if trip["departure_delay"] is not None else ""
         tripArrivalDelay = int(trip["arrival_delay"] / 60) if trip["arrival_delay"] is not None else ""
-    return render_template(
-        "edit_copy.html",
-        title=lang[session["userinfo"]["lang"]][edit_copy_type],
-        start_datetime=trip["start_datetime"],
-        end_datetime=trip["end_datetime"],
-        currencyOptions=get_available_currencies(),
-        unknownType=unknownType,
-        precision=precision,
-        tripId=tripId,
-        origin=origin,
-        destination=destination,
-        trip=trip,
-        fr24_calls=fr24_usage(username),
-        edit_copy_type=edit_copy_type,
-        country_list=get_all_countries(),
-        username=username,
-        tripOperator=tripOperator or "",
-        tripHours=tripHours or "",
-        tripMinutes=tripMinutes or "",
-        tripLineName=tripLineName or "",
-        tripVisibility=tripVisibility or "",
-        tripMaterialType=tripMaterialType or "",
-        tripMaterialTypeAdvanced=tripMaterialTypeAdvanced or "",
-        tripSeat=tripSeat or "",
-        tripReg=tripReg or "",
-        tripPrice=tripPrice if tripPrice is not None else "",
-        tripCurrency=tripCurrency or "",
-        tripPurchasingDate=tripPurchasingDate or "",
-        tripType=tripType,
-        tripTicketId=tripTicketId or "",
-        wplist=wplist,
-        route_source=trip.get("route_source") or "router",
-        tripNotes=tripNotes or "",
-        colorblind=colorblind,
-        tripDepartureDelay=tripDepartureDelay,
-        tripArrivalDelay=tripArrivalDelay,
-        tripPowerType=trip.get("power_type"),
-        tripCo2Override=trip.get("co2_override"),
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-    )
+        
+    context = {
+        "title": lang[session["userinfo"]["lang"]][edit_copy_type],
+        "start_datetime": trip["start_datetime"],
+        "end_datetime": trip["end_datetime"],
+        "currencyOptions": get_available_currencies(),
+        "unknownType": unknownType,
+        "precision": precision,
+        "tripId": tripId,
+        "origin": origin,
+        "destination": destination,
+        "trip": trip,
+        "fr24_calls": fr24_usage(username),
+        "edit_copy_type": edit_copy_type,
+        "country_list": get_all_countries(),
+        "username": username,
+        "tripOperator": tripOperator or "",
+        "tripHours": tripHours or "",
+        "tripMinutes": tripMinutes or "",
+        "tripLineName": tripLineName or "",
+        "tripVisibility": tripVisibility or "",
+        "tripMaterialType": tripMaterialType or "",
+        "tripMaterialTypeAdvanced": tripMaterialTypeAdvanced or "",
+        "tripSeat": tripSeat or "",
+        "tripReg": tripReg or "",
+        "tripPrice": tripPrice if tripPrice is not None else "",
+        "tripCurrency": tripCurrency or "",
+        "tripPurchasingDate": tripPurchasingDate or "",
+        "tripType": tripType,
+        "tripTicketId": tripTicketId or "",
+        "wplist": wplist,
+        "route_source": trip.get("route_source") or "router",
+        "tripNotes": tripNotes or "",
+        "colorblind": colorblind,
+        "tripDepartureDelay": tripDepartureDelay,
+        "tripArrivalDelay": tripArrivalDelay,
+        "tripPowerType": trip.get("power_type"),
+        "tripCo2Override": trip.get("co2_override"),
+    }
+
+    if from_app:
+        return jsonify(context), 200
+    
+    # Only for the website
+    context.update(lang[session["userinfo"]["lang"]])
+    context.update(session["userinfo"])
+
+    return render_template("edit_copy.html", **context)
 
 
 @app.route("/u/<username>/export")
