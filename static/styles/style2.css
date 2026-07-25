@@ -152,6 +152,7 @@
   margin: 2px;
   user-select: none;
   text-decoration: none;
+  white-space: nowrap;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 
@@ -212,8 +213,11 @@
   color:#c9c5c5
 }
 
+/* Hidden, not removed: `display:none` would drop the arrow's box and its
+   margin, pulling this row's content left out of line with the rows that do
+   have something to expand. */
 td.noHidden::before{
-  display: none !important;
+  visibility: hidden !important;
 }
 
 td.noHidden{
@@ -228,11 +232,6 @@ td.noHidden{
 .trips select {
   color: black;
 }
-
-td.child table tr td{
-  max-width: max-content !important;
-}
-
 
 th {
   background-color: #207cca !important;
@@ -412,6 +411,50 @@ td.actionButtons{
   overflow: hidden;
 }
 
+/* The detail row and everything nested in it: both the colspan'd wrapper cell and
+   the label/value cells of the subtable inside it match `#dataTable tbody td`
+   above, so without this they inherit the 120px cap meant for real columns. */
+#dataTable tbody td.child,
+#dataTable tbody td.child table td{
+  max-width: none;
+}
+
+/* A half-shown date is useless (2026-03-… says nothing), and it is a fixed, short
+   string, so it keeps its full width instead of taking a share of the ellipsis
+   budget — including at the narrower mobile cap below. */
+#dataTable tbody td.tripDate{
+  max-width: none;
+  white-space: nowrap;
+}
+
+/* Everything below is scoped to the wrapper, not #dataTable: with scrolling on,
+   DataTables clones the header into .dt-scroll-head and drops the id from the clone,
+   so an #dataTable-scoped rule never reaches the header that is actually on screen.
+   The wrapper contains both the cloned header and the real body table. */
+
+/* DataTables 2 right-aligns whatever it detects as a date or a number, which nothing
+   else here does and which pushes those values away from their column titles. */
+#dataTable_wrapper th.dt-type-date,
+#dataTable_wrapper td.dt-type-date,
+#dataTable_wrapper th.dt-type-numeric,
+#dataTable_wrapper td.dt-type-numeric{
+  text-align: left !important;
+}
+
+/* Each header is a flex row (span.dt-column-title inside div.dt-column-header) whose
+   title is set to grow, and for the columns DataTables detects as date/numeric the
+   row is reversed. That parks those titles hard right — where this table's own
+   absolutely positioned sort arrows sit — while every other title stays left, and it
+   makes the gap to the arrows depend on how much slack the column happens to have.
+   One direction, no growing: the title sits left and clear of the arrows everywhere. */
+#dataTable_wrapper thead > tr > th div.dt-column-header{
+  flex-direction: row;
+  justify-content: flex-start;
+}
+#dataTable_wrapper thead > tr > th div.dt-column-header span.dt-column-title{
+  flex-grow: 0;
+}
+
 #dataTable tbody td.flagList{
   min-width:120px;
   text-overflow:unset ;
@@ -419,18 +462,40 @@ td.actionButtons{
   white-space: unset;
 }
 
+/* The subtable has no intrinsic width, so without this it shrink-to-fits and
+   piles every label/value against the left edge of a full-width row. */
+td.child > table{
+  width: 100%;
+}
+
+/* Label column: wide enough for the longest label, so the values line up in a
+   column instead of each row setting its own split. */
+td.child table tr td:first-child{
+  width: 1%;
+  /* Beats the `white-space: normal !important` below, which is meant for values. */
+  white-space: nowrap !important;
+  padding-right: 16px;
+}
+
+/* Content only lands in the responsive child/subtable because it didn't fit the
+   fixed-width main row; ellipsing it there again would defeat the point, so this
+   is not scoped to the mobile media query below. */
+td.child table tr td{
+  white-space: normal !important;
+  text-overflow:unset !important;
+  overflow:auto !important;
+  padding: 8px 4px;
+  /* Baseline, not top: a value starting with a flag has a taller line box than
+     its label, so top-aligning the cells leaves the two texts off by a few px. */
+  vertical-align: baseline;
+}
+td.child table tr:not(:last-child) td{
+  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+}
+
 @media screen and (max-width: 600px) {
   #dataTable tbody td{
     max-width: 100px;
-  }
-
-  td.child table tr td{
-    white-space: normal !important;
-    text-overflow:unset !important;
-    overflow:auto !important;
-  }
-  td.child table tr{
-    width:100%;
   }
 
   .trips{
@@ -1720,11 +1785,21 @@ html, body {
   margin-bottom: 5px;
   text-align: center;
 }
-.dataTables_wrapper .dataTables_filter input {
+.dt-container .dt-search input {
   /* The body font is FlagEmojis-first; that flag-only font makes the browser
      mis-measure this search box's `size`-based intrinsic width, ballooning it
      to full width (notably on mobile). Reset to a normal text stack. */
   font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Narrow screens have no room for Previous/Next beside the page numbers, and the
+   pagingType option that would drop them is only read once at init, so it cannot
+   react to a resize. Scoped to the trips table's own bottom bar. */
+@media screen and (max-width: 767px) {
+  .dt-controls-bottom .dt-paging-button.previous,
+  .dt-controls-bottom .dt-paging-button.next {
+    display: none;
+  }
 }
 .dt-sort-btn {
   display: inline-block;
