@@ -468,12 +468,14 @@ td.child > table{
   width: 100%;
 }
 
-/* Label column: wide enough for the longest label, so the values line up in a
-   column instead of each row setting its own split. */
+/* Label column: sized to the longest label so the values line up in a column instead
+   of each row setting its own split, but never past half the row. Languages with long
+   compounds — German's "Durchschnittliche Geschwindigkeit" — otherwise claim nearly
+   the whole width and push the values off a phone screen. Past the cap the label
+   wraps (the generic `white-space: normal` below applies) rather than widening. */
 td.child table tr td:first-child{
   width: 1%;
-  /* Beats the `white-space: normal !important` below, which is meant for values. */
-  white-space: nowrap !important;
+  max-width: 50%;
   padding-right: 16px;
 }
 

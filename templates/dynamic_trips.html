@@ -592,6 +592,23 @@ function processHiddenData(rowIdx, columns){
     var isAir = ["air", "helicopter"].includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
     var isFerry = $(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText == "ferry";
     var isTrain = TRAIN_TYPES.includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
+
+    // Origin and destination are read as a pair, so they move together: if either one
+    // is clipped (or was hidden outright) both drop into the detail row, rather than
+    // leaving one name up in the row and its counterpart down here.
+    var stationCols = [];
+    $('#dataTable thead th').each(function(i){
+        var field = $(this).attr('data-sort-field');
+        if (field === 'origin_station' || field === 'destination_station') {
+            stationCols.push(i);
+        }
+    });
+    var stationsBelow = stationCols.some(function(i){
+        var col = columns[i];
+        if (!col || col.data == "") return false;
+        return col.hidden || isEllipsisActive(tableObject.cell(rowIdx, i).node());
+    });
+
     var data = $.map( columns, function ( col, i ) {
         if (col.title == "{{tags}}" && col.data != ""){
             tag_list = JSON.parse(col.data).map(tag => tag.tag_id);
@@ -846,7 +863,10 @@ function processHiddenData(rowIdx, columns){
                 }
                 if (pairs.length) displayData = pairs.join('<br>');
             }
-            return (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node())) && col.data != ""?
+            var show = stationCols.indexOf(col.columnIndex) !== -1
+                ? stationsBelow
+                : (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node()));
+            return show && col.data != ""?
             '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'">'+
                 '<td><strong>'+label+':</strong>'+'</td> '+
                 '<td>'+displayData+'</td>'+
@@ -1480,7 +1500,7 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
         <input class="form-check-input" type="checkbox" id="includeFutureSwitch" onchange="toggleIncludeFuture()">
         <label class="form-check-label" for="includeFutureSwitch">{{showUpcoming}}</label>
     </div>`);
-    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($futureSwitch);
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($futureSwitch);
 {% endif %}
 
 // Sort modal
@@ -1676,6 +1696,12 @@ $('.deleteButton').off('click').on('click', function() {
                     if($(element).text() != ""){
                         hasHidden = true;
                     }
+                }
+                // A visible but clipped cell is repeated in full in the detail row by
+                // processHiddenData, so it counts as something to open — otherwise the
+                // two disagree and the control is hidden on a row that has content.
+                else if (isEllipsisActive(element)) {
+                    hasHidden = true;
                 }
 
             }
