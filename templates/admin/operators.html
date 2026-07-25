@@ -31,6 +31,13 @@
         border-radius: 4px;
     }
 
+    /* Flags of the countries a still-unresolved spelling was logged in. The body
+       font is FlagEmojis-first, so the glyphs render without extra work here. */
+    .missing-operator-flags {
+        margin-right: 4px;
+        cursor: help;
+    }
+
     .missing-operator-count {
         color: #6c757d;
         font-size: 0.875rem;
@@ -749,6 +756,18 @@
         $('#operatorModal').modal('show');
     }
 
+    /* The countries an unresolved spelling was logged in, as flags — the quickest
+       way to tell two same-named operators apart before assigning the alias. */
+    function missingCountryFlags(topCountries) {
+        if (!topCountries || !topCountries.length) return '';
+        return topCountries.map(c => {
+            const name = regionNames.of(c.code) || c.code;
+            return `<span class="missing-operator-flags"
+                          title="${escapeAttr(`${name}: ${c.trips} trip(s)`)}"
+                    >${getFlagEmoji(c.code)}</span>`;
+        }).join('');
+    }
+
     function loadMissingOperators() {
         $('#missingOperatorsContent').html(`
             <div class="text-center">
@@ -865,6 +884,7 @@
                         <div class="operator-list-item">
                             <strong>${escapeHtml(op.operator)}</strong>
                             <span>
+                                ${missingCountryFlags(op.top_countries)}
                                 <span class="badge bg-light text-dark">${op.occurrences} occurrences</span>
                                 <button class="btn btn-sm btn-outline-primary ms-2 assign-btn"
                                         data-operator="${escapeAttr(op.operator)}">Assign</button>
