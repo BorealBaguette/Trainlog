@@ -266,8 +266,8 @@ function processTrips() {
             coords = path.map(c => [c[1], c[0]]);
         }
 
-        const startTs = new Date(trip.utc_start_datetime).getTime();
-        const endTs = new Date(trip.utc_end_datetime).getTime();
+        const startTs = new Date(trip.utc_start_datetime).getTime() + (trip.departure_delay || 0) * 1000;
+        const endTs = new Date(trip.utc_end_datetime).getTime() + (trip.arrival_delay || 0) * 1000;
 
         if (startTs && endTs) {
             timestamps.push(startTs, endTs);
