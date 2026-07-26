@@ -627,7 +627,7 @@
         plainLabel: "{{ operatorPlainText|default('Edit as plain text') }}",
         pillsLabel: "{{ operatorPillsMode|default('Back to operator list') }}" });
     {% if vehicle_type != 'air' %}
-    materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
+    materialTypeAutocomplete( $("#material_type"), manAndOps);
     {% endif %}
   });
 

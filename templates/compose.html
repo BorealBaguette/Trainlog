@@ -583,7 +583,7 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
   Object.keys(manAndOps.manualStations).forEach(function(s) {
     manualStationsList.push({ label: s, value: s, manual: true });
   });
-  operatorAutocomplete($("#operator"), manAndOps, "{{ url_for('static', filename='') }}", "{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}", vehicle_type);
+  operatorAutocomplete($("#operator"), manAndOps, "{{ url_for('static', filename='') }}", "{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}");
   {% if vehicle_type == 'air' %}
   // Airport-specific autocomplete
   $(".stationSearch").autocomplete({
@@ -758,7 +758,7 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
   $('#fr24Date').val(getCurrentDate());
   {% else %}
   stationSearchAutocomplete(".stationSearch", visitedStations, stationSearchUrl, "{{ manual|default('Manual') }}");
-  materialTypeAutocomplete($("#material_type"), manAndOps, vehicle_type);
+  materialTypeAutocomplete($("#material_type"), manAndOps);
   {% endif %}
 });
 

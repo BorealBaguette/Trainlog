@@ -855,7 +855,7 @@ function getReadableAge(creationDate) {
   }
 }
 
-function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
+function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url) {
   select.autocomplete({
     source: function (request, response) {
         // Normalize the search term
@@ -1188,7 +1188,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
   };
 }
 
-function materialTypeAutocomplete(select, manAndOps, type) {
+function materialTypeAutocomplete(select, manAndOps) {
   select.autocomplete({
     source: function (request, response) {
         // Normalize the search term
