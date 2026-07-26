@@ -487,6 +487,31 @@ $.getJSON('/api/trainsets', { owner: '{{ username }}' }).done(function(rows) {
     rows.forEach(function(r) { _trainsetNames.add(r.name); });
 });
 
+function _buildMassEditAutocompleteSource(itemsMap) {
+    return function(request, response) {
+        var searchTerm = normalizeForSearch(request.term);
+        var matches = $.map(Object.keys(itemsMap || {}), function(item) {
+            var normalizedItem = normalizeForSearch(item);
+            var index = normalizedItem.indexOf(searchTerm);
+            if (index !== -1) {
+                return {
+                    value: item,
+                    index: index
+                };
+            }
+            return null;
+        });
+
+        matches.sort(function(a, b) {
+            return a.index - b.index;
+        });
+
+        response($.map(matches, function(match) {
+            return match.value;
+        }));
+    };
+}
+
 function _isValidMaterial(mat) {
     if (!mat) return false;
     try {
@@ -1994,6 +2019,18 @@ function openMassEdit() {
     } else {
         powerSection.style.display = 'none';
     }
+
+    // Fetch autocomplete data for material types
+    Promise.all(uniqueTypes.map(function(type) {
+        return $.get(`{{url_for("getManAndOps", username=username, station_type="" )}}` + type);
+    })).then(function(results) {
+        var manAndOps = { materialTypes: {} };
+        results.forEach(function(result) {
+            Object.assign(manAndOps.materialTypes, result.materialTypes || {});
+        });
+
+        materialTypeAutocomplete( $("#massEditMaterialType"), manAndOps);
+    });
 
     $('#massEditModal').modal('show');
 }
