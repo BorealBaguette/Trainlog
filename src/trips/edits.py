@@ -1,6 +1,12 @@
-from flask import abort
+import datetime
 
+from flask import abort
+from sqlalchemy import text
+
+from src.carbon import calculate_carbon_footprint_for_trip
 from src.consts import TripTypes
+from src.operators import sync_trip_operators
+from src.paths import fetch_path
 from src.pg import pg_session
 from src.sql.trips import (
     attach_ticket_query,
@@ -8,157 +14,276 @@ from src.sql.trips import (
     update_ticket_null_query,
     update_trip_type_query,
 )
-from src.utils import mainConn, managed_cursor
+from src.utils import get_user_id
 
-from .utils import compare_trip
+from .trip import _strip_tags
+
+STRIPPED_BULK_EDIT_FIELDS = frozenset([
+    "operator", "line_name", "reg", "seat", "notes",
+    "origin_station", "destination_station", "material_type",
+])
+
+ALLOWED_BULK_EDIT_FIELDS = frozenset(
+    [
+        "operator",
+        "line_name",
+        "reg",
+        "seat",
+        "notes",
+        "visibility",
+        "origin_station",
+        "destination_station",
+        "material_type",
+        "material_type_advanced",
+        "departure_delay",
+        "arrival_delay",
+    ]
+)
+
+
+def _own_all_trips(pg, user_id, trip_ids):
+    """True if all trip_ids belong to user_id (PostgreSQL)."""
+    count = pg.execute(
+        "SELECT COUNT(*) FROM trips WHERE user_id = :user_id AND trip_id = ANY(:ids)",
+        {"user_id": user_id, "ids": [int(t) for t in trip_ids]},
+    ).scalar()
+    return count == len(trip_ids)
 
 
 def attach_ticket_to_trips(username, ticket_id, trip_ids):
     try:
-        placeholders = ", ".join(["?"] * len(trip_ids))
-
-        with managed_cursor(mainConn) as cursor:
-            # Check ticket ownership
-            cursor.execute(
-                "SELECT 1 FROM tickets WHERE username = ? AND uid = ?",
-                (username, ticket_id),
-            )
-            if cursor.fetchone() is None:
-                abort(401)
-
-            # Check all trip ownership
-            cursor.execute(
-                f"""
-                SELECT COUNT(*) as c FROM trip 
-                WHERE username = ? AND uid IN ({placeholders})
-                """,
-                [username] + trip_ids,
-            )
-            count = cursor.fetchone()["c"]
-            if count != len(trip_ids):
-                abort(401)
-
-            cursor.execute(
-                f"""
-                UPDATE trip SET ticket_id = ? 
-                WHERE username = ? AND uid IN ({placeholders})
-                """,
-                [ticket_id, username] + trip_ids,
-            )
-
+        last_modified = datetime.datetime.now()
+        user_id = get_user_id(username)
         with pg_session() as pg:
+            # Ticket ownership
+            if (
+                pg.execute(
+                    "SELECT 1 FROM tickets WHERE username = :username AND uid = :ticket_id",
+                    {"username": username, "ticket_id": ticket_id},
+                ).fetchone()
+                is None
+            ):
+                abort(401)
+            # Trip ownership
+            if not _own_all_trips(pg, user_id, trip_ids):
+                abort(401)
             for trip_id in trip_ids:
                 pg.execute(
-                    attach_ticket_query(), {"trip_id": trip_id, "ticket_id": ticket_id}
+                    attach_ticket_query(),
+                    {
+                        "trip_id": trip_id,
+                        "ticket_id": ticket_id,
+                        "last_modified": last_modified,
+                    },
                 )
-        for trip_id in trip_ids:
-            compare_trip(trip_id)
-
-        mainConn.commit()
         return True, None
     except Exception as e:
-        mainConn.rollback()
         return False, str(e)
 
 
 def change_trips_visibility(username, visibility, trip_ids):
     try:
-        placeholders = ", ".join(["?"] * len(trip_ids))
-
+        last_modified = datetime.datetime.now()
         if visibility not in ("public", "friends", "private"):
             abort(401)
-
-        with managed_cursor(mainConn) as cursor:
-            # Check all trip ownership
-            cursor.execute(
-                f"""
-                SELECT COUNT(*) as c FROM trip 
-                WHERE username = ? AND uid IN ({placeholders})
-                """,
-                [username] + trip_ids,
-            )
-            count = cursor.fetchone()["c"]
-            if count != len(trip_ids):
-                abort(401)
-
-            cursor.execute(
-                f"""
-                UPDATE trip SET visibility = ? 
-                WHERE username = ? AND uid IN ({placeholders})
-                """,
-                [visibility, username] + trip_ids,
-            )
-
+        user_id = get_user_id(username)
         with pg_session() as pg:
+            if not _own_all_trips(pg, user_id, trip_ids):
+                abort(401)
             for trip_id in trip_ids:
                 pg.execute(
                     change_visibility_query(),
-                    {"trip_id": trip_id, "visibility": visibility},
+                    {
+                        "trip_id": trip_id,
+                        "visibility": visibility,
+                        "last_modified": last_modified,
+                    },
                 )
-        for trip_id in trip_ids:
-            compare_trip(trip_id)
-
-        mainConn.commit()
         return True, None
     except Exception as e:
-        mainConn.rollback()
         return False, str(e)
 
 
 def update_trip_type(trip_id, new_type: TripTypes):
     with pg_session() as pg:
-        _update_trip_type_in_sqlite(trip_id, new_type)
         pg.execute(
             update_trip_type_query(), {"trip_id": trip_id, "trip_type": new_type.value}
         )
+        # The trip type selects which pool of operators the name resolves against.
+        sync_trip_operators(trip_id, pg_session_=pg)
 
 
-def _update_trip_type_in_sqlite(trip_id, new_type: TripTypes):
-    with managed_cursor(mainConn) as cursor:
-        cursor.execute(
-            "UPDATE trip SET type = :newType WHERE uid = :tripId",
-            {"newType": new_type.value, "tripId": trip_id},
-        )
-    mainConn.commit()
+def bulk_edit_trips(
+    username, trip_ids, fields: dict, notes_append: bool = False, time_offset_minutes: int = 0
+):
+    safe_fields = {
+        k: (_strip_tags(v) if k in STRIPPED_BULK_EDIT_FIELDS else v)
+        for k, v in fields.items()
+        if k in ALLOWED_BULK_EDIT_FIELDS
+    }
+    if not safe_fields and not time_offset_minutes:
+        return False, "No valid fields to update"
+
+    last_modified = datetime.datetime.now()
+    user_id = get_user_id(username)
+
+    try:
+        with pg_session() as pg:
+            if not _own_all_trips(pg, user_id, trip_ids):
+                abort(401)
+
+            for trip_id in trip_ids:
+                pg_set_parts = ["last_modified = :last_modified"]
+                pg_params = {"trip_id": int(trip_id), "last_modified": last_modified}
+                if safe_fields:
+                    for col, val in safe_fields.items():
+                        if col == "notes" and notes_append:
+                            pg_set_parts.append(
+                                "notes = CASE WHEN (notes IS NULL OR notes = '') THEN :notes ELSE notes || chr(10) || :notes END"
+                            )
+                            pg_params["notes"] = val
+                        else:
+                            pg_set_parts.append(f"{col} = :{col}")
+                            pg_params[col] = val if val != "" else None
+                pg.execute(
+                    text(f"UPDATE trips SET {', '.join(pg_set_parts)} WHERE trip_id = :trip_id"),
+                    pg_params,
+                )
+
+                if time_offset_minutes:
+                    offset_secs = time_offset_minutes * 60
+                    pg.execute(
+                        text("""UPDATE trips SET
+                            start_datetime = start_datetime + :offset * interval '1 second',
+                            end_datetime = end_datetime + :offset * interval '1 second',
+                            utc_start_datetime = CASE WHEN utc_start_datetime IS NOT NULL
+                                THEN utc_start_datetime + :offset * interval '1 second' ELSE NULL END,
+                            utc_end_datetime = CASE WHEN utc_end_datetime IS NOT NULL
+                                THEN utc_end_datetime + :offset * interval '1 second' ELSE NULL END
+                        WHERE trip_id = :trip_id"""),
+                        {"offset": offset_secs, "trip_id": int(trip_id)},
+                    )
+
+            if "operator" in safe_fields:
+                sync_trip_operators(trip_ids, pg_session_=pg)
+
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def bulk_change_type(username, trip_ids, new_type: TripTypes):
+    last_modified = datetime.datetime.now()
+    user_id = get_user_id(username)
+    try:
+        with pg_session() as pg:
+            if not _own_all_trips(pg, user_id, trip_ids):
+                abort(401)
+            for trip_id in trip_ids:
+                pg.execute(
+                    text("UPDATE trips SET trip_type = :t, last_modified = :lm WHERE trip_id = :id"),
+                    {"t": new_type.value, "lm": last_modified, "id": int(trip_id)},
+                )
+            # The trip type selects which pool of operators names resolve against.
+            sync_trip_operators(trip_ids, pg_session_=pg)
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+
+def bulk_set_power_type(username, trip_ids, power_type: str):
+    """Recalculate carbon (and, for explicit power types, the countries elec/nonelec
+    split) for each trip based on the new power_type, and persist power_type.
+
+    'auto' needs OSM electrification data to split correctly, which isn't available
+    without a re-route, so for 'auto' the stored countries are kept (mirrors the
+    single-trip edit in update_trip_values_from_form_data)."""
+    from py.utils import getCountriesFromPath
+
+    last_modified = datetime.datetime.now()
+    user_id = get_user_id(username)
+    try:
+        with pg_session() as pg:
+            trips = {
+                row["trip_id"]: dict(row._mapping)
+                for row in pg.execute(
+                    "SELECT trip_id, trip_type AS type, trip_length, countries, start_datetime"
+                    " FROM trips WHERE user_id = :user_id AND trip_id = ANY(:ids)",
+                    {"user_id": user_id, "ids": [int(t) for t in trip_ids]},
+                ).fetchall()
+            }
+            if len(trips) != len(trip_ids):
+                abort(401)
+
+            for trip_id in trip_ids:
+                trip = trips[int(trip_id)]
+                path = fetch_path(pg, int(trip_id))
+                if not path:
+                    continue
+                path_dicts = [{"lat": p[0], "lng": p[1]} for p in path]
+
+                if power_type == "auto":
+                    # Keep the stored split (OSM-derived where present); only carbon
+                    # and power_type change. Recomputing here would lose OSM data.
+                    new_countries = trip["countries"]
+                else:
+                    new_countries = getCountriesFromPath(
+                        path_dicts, trip["type"], powerType=power_type
+                    )
+                trip_for_carbon = {
+                    "type": trip["type"],
+                    "trip_length": trip["trip_length"],
+                    "countries": new_countries,
+                    "start_datetime": trip["start_datetime"],
+                    "power_type": power_type,
+                }
+                carbon = calculate_carbon_footprint_for_trip(trip_for_carbon, path)
+                pg.execute(
+                    text(
+                        "UPDATE trips SET countries = :c, carbon = :carbon,"
+                        " power_type = :pt, last_modified = :lm WHERE trip_id = :id"
+                    ),
+                    {
+                        "c": new_countries,
+                        "carbon": carbon,
+                        "pt": power_type,
+                        "lm": last_modified,
+                        "id": int(trip_id),
+                    },
+                )
+        return True, None
+    except Exception as e:
+        return False, str(e)
 
 
 def delete_ticket_from_db(username, ticket_id):
     try:
-        trip_ids = []
-
-        with managed_cursor(mainConn) as cursor:
-            # Check ticket ownership
-            cursor.execute(
-                "SELECT 1 FROM tickets WHERE username = ? AND uid = ?",
-                (username, ticket_id),
-            )
-            if cursor.fetchone() is None:
+        with pg_session() as pg:
+            # Ticket ownership
+            if (
+                pg.execute(
+                    "SELECT 1 FROM tickets WHERE username = :username AND uid = :ticket_id",
+                    {"username": username, "ticket_id": ticket_id},
+                ).fetchone()
+                is None
+            ):
                 abort(401)
 
-            # Check trip ownership
-            cursor.execute(
-                "SELECT uid FROM trip WHERE username = ? AND ticket_id = ?",
-                (username, ticket_id),
-            )
-            trip_ids = [row["uid"] for row in cursor.fetchall()]
-
-            cursor.execute(
-                "UPDATE trip SET ticket_id = NULL WHERE username = ? AND ticket_id = ?",
-                (username, ticket_id),
-            )
-            cursor.execute(
-                "DELETE FROM tickets WHERE username = ? AND uid = ?",
-                (username, ticket_id),
-            )
-
-        with pg_session() as pg:
+            # Detach the ticket from all of the user's trips
+            trip_ids = [
+                row[0]
+                for row in pg.execute(
+                    "SELECT trip_id FROM trips WHERE user_id = :user_id AND ticket_id = :ticket_id",
+                    {"user_id": get_user_id(username), "ticket_id": ticket_id},
+                ).fetchall()
+            ]
             for trip_id in trip_ids:
                 pg.execute(update_ticket_null_query(), {"trip_id": trip_id})
-        for trip_id in trip_ids:
-            compare_trip(trip_id)
 
-        mainConn.commit()
+            pg.execute(
+                "DELETE FROM tickets WHERE username = :username AND uid = :ticket_id",
+                {"username": username, "ticket_id": ticket_id},
+            )
         return True, None
     except Exception as e:
-        mainConn.rollback()
         return False, str(e)

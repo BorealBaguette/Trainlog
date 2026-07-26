@@ -29,7 +29,10 @@ METRIC_TO_DB_COLUMN = {
 
 
 def _safe_get(d, key, default=0):
-    return d.get(key, default) if isinstance(d, dict) else default
+    retval = d.get(key, default) if isinstance(d, dict) else default
+    if retval is None:
+        return default
+    return retval
 
 
 def get_stats_countries(pg, user_id, trip_type, year=None):
@@ -243,6 +246,85 @@ def get_stats_years(
     return years
 
 
+def get_stats_months(pg, user_id, lang, trip_type, year, metrics_map=DEFAULT_METRICS):
+    """Process month statistics for a given year with gap filling; supports dynamic metrics."""
+    months = []
+    months_temp = {}
+
+    result = pg.execute(
+        stats_sql.stats_months(),
+        {"user_id": user_id, "tripType": trip_type, "year": year},
+    ).fetchall()
+
+    if not result:
+        return ""
+
+    result_list = [dict(row._mapping) for row in result]
+
+    if year is not None:
+        result_list = [row for row in result_list if str(row.get("year")) == str(year)]
+
+    if not result_list:
+        return ""
+
+    year_value = int(year) if year is not None else None
+
+    # Build temp storage for all months and all metrics
+    for month_row in result_list:
+        month_num = int(month_row["month"])
+
+        months_temp[month_num] = {}
+        months_temp[month_num]["pastTrips"] = int(_safe_get(month_row, "pastTrips", 0))
+        months_temp[month_num]["plannedFutureTrips"] = int(
+            _safe_get(month_row, "plannedFutureTrips", 0)
+        )
+        months_temp[month_num]["futureTrips"] = int(
+            _safe_get(month_row, "futureTrips", 0)
+        )
+        for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
+            if metric_name == "Trips":
+                continue
+            months_temp[month_num][past_key] = int(_safe_get(month_row, past_key, 0))
+            months_temp[month_num][planned_key] = int(
+                _safe_get(month_row, planned_key, 0)
+            )
+            months_temp[month_num][future_key] = int(
+                _safe_get(month_row, future_key, 0)
+            )
+
+    # Fill gaps for all 12 months
+    for month_num in range(1, 13):
+        if month_num in months_temp:
+            entry = {"year": year_value, "month": month_num}
+            entry["pastTrips"] = months_temp[month_num]["pastTrips"]
+            entry["plannedFutureTrips"] = months_temp[month_num]["plannedFutureTrips"]
+            entry["futureTrips"] = months_temp[month_num]["futureTrips"]
+            for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
+                if metric_name == "Trips":
+                    continue
+                entry[past_key] = months_temp[month_num].get(past_key, 0)
+                entry[planned_key] = months_temp[month_num].get(planned_key, 0)
+                entry[future_key] = months_temp[month_num].get(future_key, 0)
+            months.append(entry)
+        else:
+            entry = {
+                "year": year_value,
+                "month": month_num,
+                "pastTrips": 0,
+                "plannedFutureTrips": 0,
+                "futureTrips": 0,
+            }
+            for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
+                if metric_name == "Trips":
+                    continue
+                entry[past_key] = 0
+                entry[planned_key] = 0
+                entry[future_key] = 0
+            months.append(entry)
+
+    return months
+
+
 def get_stats_general(pg, query_func, user_id, stat_name, trip_type, year=None):
     """
     Generic stats fetcher for operators, material, routes, stations
@@ -381,6 +463,15 @@ def fetch_stats(username, trip_type, year=None):
             trip_type=trip_type,
             year=year,
         )
+
+        if year:
+            stats["months"] = get_stats_months(
+                pg=pg,
+                user_id=user_id,
+                lang=lang_dict,
+                trip_type=trip_type,
+                year=year,
+            )
 
         # Updated to use new functions
         stats["routes"] = get_stats_routes(

@@ -8,7 +8,7 @@ from dateutil.relativedelta import relativedelta
 from typing import Dict, List, Tuple
 
 from src.pg import pg_session
-from py.currency import get_exchange_rate
+from src.currency import get_exchange_rate
 from py.utils import load_config
 
 logger = logging.getLogger(__name__)
@@ -464,22 +464,23 @@ class SimpleFinanceService:
         # Get outstanding Stripe balance
         outstanding = SimpleFinanceService.get_stripe_outstanding_balance()
         
-        # Add outstanding amount to the appropriate month
-        if outstanding["total_pending"] > 0 and outstanding["next_payout_date"]:
-            payout_month_key = outstanding["next_payout_date"].strftime("%Y-%m")
-            
+        # Add outstanding amount to the current month (where it was earned),
+        # not the future payout month — it should appear as pending now.
+        if outstanding["total_pending"] > 0:
+            current_month_key = date.today().strftime("%Y-%m")
+
             # Ensure the month exists in our data
-            if payout_month_key not in monthly_data:
-                monthly_data[payout_month_key] = {"revenue": 0, "expenses": 0, "profit": 0}
-            
+            if current_month_key not in monthly_data:
+                monthly_data[current_month_key] = {"revenue": 0, "expenses": 0, "profit": 0}
+
             # Add outstanding amount to revenue
-            monthly_data[payout_month_key]["revenue"] += outstanding["total_pending"]
-            monthly_data[payout_month_key]["profit"] = (
-                monthly_data[payout_month_key]["revenue"] - 
-                monthly_data[payout_month_key]["expenses"]
+            monthly_data[current_month_key]["revenue"] += outstanding["total_pending"]
+            monthly_data[current_month_key]["profit"] = (
+                monthly_data[current_month_key]["revenue"] -
+                monthly_data[current_month_key]["expenses"]
             )
-            
-            logger.info(f"Added {outstanding['total_pending']:.2f} EUR outstanding revenue to {payout_month_key}")
+
+            logger.info(f"Added {outstanding['total_pending']:.2f} EUR outstanding revenue to {current_month_key}")
         
         return monthly_data
 

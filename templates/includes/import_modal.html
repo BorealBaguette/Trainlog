@@ -1,0 +1,355 @@
+{#
+  Shared import modal (Trainlog CSV + MFR24): markup + JS.
+  Host page must provide trigger buttons #importTrainlogBtn and #importMFR24Btn,
+  and include includes/trip_cards.html (for renderTripCards).
+  Requires jQuery + Bootstrap. Used by user_settings.html and user_settings_v2.html.
+#}
+<style>
+  #importDropZone.dragover { border-color: #0d6efd !important; background: #e7f1ff !important; }
+</style>
+
+<!-- Import modal -->
+<div class="modal fade" id="importModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="importModalTitle">Import</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- Step 1: file picker -->
+        <div id="importStep1">
+          <div id="importDropZone" class="border border-2 rounded-3 p-4 text-center bg-light"
+               style="cursor:pointer; border-style: dashed !important; transition: all 0.2s;">
+            <i class="bi bi-cloud-upload fs-1 text-secondary mb-2 d-block"></i>
+            <p class="mb-0 text-muted">{{ orClickToBrowse }}</p>
+          </div>
+          <input type="file" id="importFileInput" accept=".csv" class="d-none">
+          <div id="importFileInfo" class="mt-2 text-muted small"></div>
+        </div>
+
+        <!-- Step 2: parsing progress -->
+        <div id="importStep2" class="d-none text-center py-4">
+          <div class="spinner-border text-primary mb-3" role="status"></div>
+          <p id="importProgressText" class="mb-0">{{ processing_starting }}</p>
+          <div class="progress mt-3" style="height: 20px;">
+            <div id="importProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                 role="progressbar" style="width: 0%">0%</div>
+          </div>
+        </div>
+
+        <!-- Step 3: preview -->
+        <div id="importStep3" class="d-none">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <span>{{ trips_found }}: <strong id="importTripCount">0</strong></span>
+            <div>
+              <button class="btn btn-sm btn-outline-secondary" id="importSelectAll">{{ all }}</button>
+              <button class="btn btn-sm btn-outline-secondary ms-1" id="importSelectNone">{{ none_t }}</button>
+            </div>
+          </div>
+          <div id="importTripsList" style="max-height: 420px; overflow-y: auto;"></div>
+        </div>
+
+        <!-- Result -->
+        <div id="importResult" class="d-none mt-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal" id="importCancelBtn">{{ cancel }}</button>
+        <button type="button" class="btn btn-primary d-none" id="importParseBtn">
+          <i class="bi bi-search me-1"></i>{{ submit }}
+        </button>
+        <button type="button" class="btn btn-success d-none" id="importSaveBtn">
+          <i class="bi bi-check-circle me-1"></i>{{ save_selected }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  var urls = {
+    "MFR24":         "{{ url_for('processMFR24', username=username)}}",
+    "parseMFR24":    "{{ url_for('parse_mfr24', username=username)}}",
+    "saveMFR24":     "{{ url_for('save_parsed_mfr24', username=username)}}",
+    "trainlogImport":"{{ url_for('importAll', username=username)}}",
+    "trips":         "{{ url_for('dynamic_trips', time='trips', username=username) }}"
+  };
+
+  // ---- Import modal ----
+  let importType = null;
+  let importParsedTrips = [];
+  let importXhr = null;
+
+  function openImportModal(type) {
+    importType = type;
+    importParsedTrips = [];
+    $('#importModalTitle').text(type === 'trainlog' ? '{{ importText }}' : '{{ MFR24 }} My Flightradar 24');
+    $('#importStep1, #importStep2, #importStep3, #importResult').each(function() {
+      $(this).toggleClass('d-none', !$(this).is('#importStep1'));
+    });
+    $('#importFileInfo').text('');
+    $('#importFileInput').val('');
+    $('#importParseBtn').removeClass('d-none');
+    $('#importSaveBtn').addClass('d-none');
+    new bootstrap.Modal(document.getElementById('importModal')).show();
+  }
+
+  $('#importTrainlogBtn').on('click', function() { openImportModal('trainlog'); });
+  $('#importMFR24Btn').on('click', function() { openImportModal('mfr24'); });
+
+  document.getElementById('importModal').addEventListener('hide.bs.modal', function() {
+    if (importXhr) {
+      importXhr.abort();
+      importXhr = null;
+    }
+  });
+
+  // File drop/pick
+  const importDropZone = document.getElementById('importDropZone');
+  const importFileInput = document.getElementById('importFileInput');
+  let importDroppedFile = null;
+
+  importDropZone.addEventListener('click', () => importFileInput.click());
+  importDropZone.addEventListener('dragover', (e) => { e.preventDefault(); importDropZone.classList.add('dragover'); });
+  importDropZone.addEventListener('dragleave', () => importDropZone.classList.remove('dragover'));
+  importDropZone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    importDropZone.classList.remove('dragover');
+    const f = e.dataTransfer.files[0];
+    if (f) { importDroppedFile = f; $('#importFileInfo').text(f.name); }
+  });
+  importFileInput.addEventListener('change', function() {
+    if (this.files[0]) { importDroppedFile = null; $('#importFileInfo').text(this.files[0].name); }
+  });
+
+  function getImportFile() {
+    return importDroppedFile || (importFileInput.files[0] || null);
+  }
+
+  $('#importParseBtn').on('click', function() {
+    const file = getImportFile();
+    if (!file) { alert('{{ alert_no_file_selected }}'); return; }
+    if (importType === 'mfr24') {
+      parseMFR24File(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        parseTrainlogCSV(e.target.result);
+      };
+      reader.readAsText(file);
+    }
+  });
+
+  // Splits CSV text into records, honoring quoted fields that contain embedded
+  // newlines and commas. Returns [{ fields: [...], raw: '<original record text>' }].
+  // `raw` preserves the exact source bytes so the per-row import endpoint receives
+  // a valid single CSV record (server-side csv.DictReader re-parses it).
+  function parseCSVRecords(text) {
+    const records = [];
+    let field = '', fields = [], inQ = false, recordStart = 0;
+    const pushRecord = (raw) => {
+      fields.push(field); field = '';
+      // Skip fully blank records (e.g. trailing newline at EOF).
+      if (!(fields.length === 1 && fields[0] === '')) records.push({ fields, raw });
+      fields = [];
+    };
+    for (let i = 0; i < text.length; i++) {
+      const c = text[i];
+      if (c === '"') {
+        if (inQ && text[i + 1] === '"') { field += '"'; i++; } // escaped quote
+        else inQ = !inQ;
+      } else if (c === ',' && !inQ) {
+        fields.push(field); field = '';
+      } else if ((c === '\n' || c === '\r') && !inQ) {
+        const raw = text.slice(recordStart, i);
+        if (c === '\r' && text[i + 1] === '\n') i++;
+        pushRecord(raw);
+        recordStart = i + 1;
+      } else {
+        field += c;
+      }
+    }
+    if (field !== '' || fields.length) pushRecord(text.slice(recordStart));
+    return records;
+  }
+
+  function parseTrainlogCSV(text) {
+    const records = parseCSVRecords(text);
+    if (records.length < 2) { showImportResult('danger', 'No trips found in file.'); return; }
+    const headers = records[0].fields;
+    const rawHeaders = records[0].raw;
+    importParsedTrips = [];
+    for (let i = 1; i < records.length; i++) {
+      const cols = records[i].fields;
+      const row = {};
+      headers.forEach((h, idx) => { row[h.trim()] = (cols[idx] || '').trim(); });
+      const distM = parseInt(row['trip_length']);
+      importParsedTrips.push({
+        display: {
+          origin:      row['origin_station'] || '?',
+          destination: row['destination_station'] || '?',
+          type:        row['type'] || '',
+          date:        (row['start_datetime'] || '').substring(0, 10),
+          distance:    !isNaN(distM) ? (Math.round(distM / 100) / 10) + ' km' : '',
+          operator:    row['operator'] ? decodeURIComponent(row['operator']).replace(/&&/g, ', ') : '',
+          line_name:   row['line_name'] ? decodeURIComponent(row['line_name']) : '',
+        },
+        rawHeaders: rawHeaders,
+        rawLine: records[i].raw,
+      });
+    }
+    renderImportPreview();
+  }
+
+  function parseMFR24File(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    $('#importStep1').addClass('d-none');
+    $('#importStep2').removeClass('d-none');
+    $('#importParseBtn').addClass('d-none');
+    $('#importProgressText').text('{{ processing_starting }}');
+    $('#importProgressBar').css('width', '0%').text('0%');
+
+    importParsedTrips = [];
+    let total = 0;
+
+    importXhr = new XMLHttpRequest();
+    const xhr = importXhr;
+    let buffer = '';
+
+    xhr.onprogress = function() {
+      const newData = xhr.responseText.substring(buffer.length);
+      buffer = xhr.responseText;
+
+      for (const line of newData.split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const ev = JSON.parse(line.substring(6));
+          if (ev.type === 'total') {
+            total = ev.count;
+            $('#importProgressText').text('{{ processing_found_trips }}'.replace('{count}', total));
+          } else if (ev.type === 'progress') {
+            const pct = Math.round((ev.current / total) * 100);
+            $('#importProgressText').text('{{ processing_trip_progress }}'.replace('{current}', ev.current).replace('{total}', total).replace('{name}', '').replace(/\s*[:/]\s*$/, ''));
+            $('#importProgressBar').css('width', pct + '%').text(pct + '%');
+          } else if (ev.type === 'result') {
+            importParsedTrips.push(ev.result);
+          } else if (ev.type === 'done') {
+            importXhr = null;
+            renderImportPreview();
+          }
+        } catch (e) { /* partial line */ }
+      }
+    };
+
+    xhr.onerror = function() {
+      importXhr = null;
+      $('#importStep2').addClass('d-none');
+      $('#importStep1').removeClass('d-none');
+      $('#importParseBtn').removeClass('d-none');
+      showImportResult('danger', '{{ error_generic }}');
+    };
+
+    xhr.onabort = function() {
+      importXhr = null;
+    };
+
+    xhr.open('POST', urls['parseMFR24']);
+    xhr.send(formData);
+  }
+
+  function renderImportPreview() {
+    if (!importParsedTrips.length) { showImportResult('warning', '{{ no_trips_found }}'); return; }
+    renderTripCards(importParsedTrips, 'importTripsList', { cbClass: 'import-cb' });
+    const okCount = importParsedTrips.filter(t => t.ok !== false).length;
+    const failCount = importParsedTrips.length - okCount;
+    $('#importTripCount').text(
+      failCount > 0
+        ? `${okCount} / ${importParsedTrips.length}`
+        : importParsedTrips.length
+    );
+    $('#importStep2').addClass('d-none');
+    $('#importStep3').removeClass('d-none');
+    $('#importSaveBtn').removeClass('d-none');
+  }
+
+  $(document).on('click', '.trip-card', function(e) {
+    if ($(e.target).is('.import-cb')) return;
+    const $cb = $(this).find('.import-cb');
+    $cb.prop('checked', !$cb.prop('checked'));
+    $(this).toggleClass('selected', $cb.prop('checked'));
+  });
+  $(document).on('change', '.import-cb', function() {
+    $(this).closest('.trip-card').toggleClass('selected', this.checked);
+  });
+  $('#importSelectAll').on('click', () => $('.import-cb').prop('checked', true).closest('.trip-card').addClass('selected'));
+  $('#importSelectNone').on('click', function() {
+    $('.import-cb').prop('checked', false);
+    $('.trip-card').removeClass('selected');
+  });
+
+  $('#importSaveBtn').on('click', async function() {
+    const selected = [];
+    $('.import-cb:checked').each(function() {
+      selected.push(importParsedTrips[parseInt($(this).closest('.trip-card').data('index'))]);
+    });
+    if (!selected.length) { showImportResult('warning', '{{ select_at_least_one }}'); return; }
+
+    $('#importStep3').addClass('d-none');
+    $('#importStep2').removeClass('d-none');
+    $('#importSaveBtn').addClass('d-none');
+
+    let saved = 0;
+
+    if (importType === 'mfr24') {
+      // All parse work is already done; send pre-parsed data in one request
+      $('#importProgressText').text('{{ saving_trip_progress }}'.replace('{current}', '').replace('{total}', ''));
+      $('#importProgressBar').css('width', '100%').text('');
+      try {
+        const resp = await $.ajax({
+          type: 'POST', url: urls['saveMFR24'],
+          contentType: 'application/json',
+          data: JSON.stringify({ trips: selected.map(t => t.save_data) })
+        });
+        saved = resp.saved || 0;
+      } catch(err) { console.error('Save error:', err); }
+    } else {
+      // Trainlog CSV: send rows one by one (existing endpoint)
+      const failures = [];
+      for (let i = 0; i < selected.length; i++) {
+        const t = selected[i];
+        const pct = Math.round(((i + 1) / selected.length) * 100);
+        $('#importProgressText').text('{{ saving_trip_progress }}'.replace('{current}', i + 1).replace('{total}', selected.length));
+        $('#importProgressBar').css('width', pct + '%').text(pct + '%');
+        try {
+          const resp = await $.ajax({ type: 'POST', url: urls['trainlogImport'],
+            data: encodeURIComponent(t.rawHeaders + '\n' + t.rawLine) });
+          if (resp && resp.error) throw new Error(resp.error);
+          saved++;
+        } catch(err) {
+          console.error('Import error:', err);
+          failures.push(`${t.display.origin} → ${t.display.destination}`);
+        }
+      }
+      $('#importStep2').addClass('d-none');
+      if (failures.length) {
+        const failList = failures.map(f => `<li>${f}</li>`).join('');
+        showImportResult('warning',
+          `<strong>${saved} {{ trips_saved }}</strong><br>` +
+          `<small class="text-danger">{{ failed_upload }}:<ul class="mb-0 mt-1">${failList}</ul></small>`);
+        return;
+      }
+    }
+
+    $('#importStep2').addClass('d-none');
+    showImportResult('success', `<strong>${saved} {{ trips_saved }}</strong>`);
+    setTimeout(() => { bootstrap.Modal.getInstance(document.getElementById('importModal')).hide(); location.href = urls['trips']; }, 1500);
+  });
+
+  function showImportResult(type, msg) {
+    $('#importResult').removeClass('d-none alert-success alert-danger alert-warning')
+      .addClass('alert alert-' + type).html(msg);
+  }
+</script>

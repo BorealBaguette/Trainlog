@@ -1,6 +1,7 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
 {% include nav %}
+<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@300;400;600&display=swap');
@@ -16,7 +17,7 @@
   --text:     #e0d8cc;
   --muted:    #888;
   --unit-bg:  #1e1e1e;
-  --unit-h:   120px;
+  --unit-h:   140px;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -53,6 +54,30 @@ body {
   font-family: 'IBM Plex Mono', monospace;
   letter-spacing: 2px;
 }
+.ts-viewas-form { display: flex; gap: 6px; align-items: center; }
+.ts-viewas-input {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 5px 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  outline: none;
+  border-radius: 0;
+  width: 160px;
+}
+.ts-viewas-input:focus { border-color: var(--accent); }
+.ts-viewas-input::placeholder { color: var(--muted); }
+.ts-viewas-badge {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 11px;
+  color: var(--accent2);
+  letter-spacing: 1px;
+  padding: 4px 10px;
+  border: 1px solid var(--accent2);
+  background: rgba(192,57,43,.1);
+}
+.ts-viewas-badge strong { color: var(--text); }
 
 /* ── LAYOUT ── */
 .ts-app {
@@ -142,17 +167,53 @@ body {
   overflow-y: auto;
   padding: 4px 0;
 }
-.ts-section-hdr {
+
+/* Trainset filter */
+.ts-filter-wrap { padding: 0 16px 8px; flex-shrink: 0; }
+.ts-filter-input {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 10px;
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 12px;
+  outline: none;
+  border-radius: 0;
+}
+.ts-filter-input:focus { border-color: var(--accent); }
+.ts-filter-input::placeholder { color: var(--muted); }
+
+/* Two independent list panes */
+.ts-list-group {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  border-top: 1px solid var(--border);
+}
+.ts-list-title {
   padding: 8px 16px 4px;
   font-family: 'IBM Plex Mono', monospace;
   font-size: 9px;
   letter-spacing: 2px;
   color: var(--muted);
   text-transform: uppercase;
-  border-top: 1px solid var(--border);
-  margin-top: 2px;
+  flex-shrink: 0;
 }
-.ts-section-hdr:first-child { border-top: none; margin-top: 0; }
+.ts-sublist {
+  flex: 1 1 0;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 0 0 6px;
+}
+.ts-empty-hint {
+  padding: 8px 16px;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: 'IBM Plex Mono', monospace;
+  opacity: .6;
+}
 .ts-item {
   padding: 8px 16px;
   cursor: pointer;
@@ -309,38 +370,20 @@ body {
 /* Unit strip */
 .unit-strip {
   display: flex;
-  align-items: center;
+  align-items: flex-end;   /* bottom-align cars so wheels sit on one ground line */
   gap: 0;
   min-width: max-content;
   padding: 28px 0 10px;
   position: relative;
   z-index: 2;
 }
-.unit-connector {
-  width: 16px; height: 8px;
-  background: #555;
-  border: 1px solid #666;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 3;
-}
-.unit-connector::before, .unit-connector::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  width: 4px; height: 4px;
-  border-radius: 50%;
-  background: #888;
-  transform: translateY(-50%);
-}
-.unit-connector::before { left: 1px; }
-.unit-connector::after  { right: 1px; }
 
 /* Single wagon unit card */
 .unit {
   background: var(--unit-bg);
   border: 1px solid var(--border);
-  width: 160px;
+  width: auto;            /* shrink-wrap to the (real-scale) image width */
+  min-width: 64px;
   height: var(--unit-h);
   flex-shrink: 0;
   display: flex;
@@ -367,34 +410,33 @@ body {
   pointer-events: none;
   z-index: 5;
 }
-/* Wheels */
-.unit::before {
-  content: '';
-  position: absolute;
-  bottom: -9px;
-  left: 10px; right: 10px;
-  height: 8px;
-  background: repeating-linear-gradient(90deg, #555 0, #555 10px, transparent 10px, transparent 14px);
-  border-radius: 0 0 3px 3px;
-}
 .unit-img {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-end;    /* image sits on the bottom (its own wheels = the ground) */
   justify-content: center;
   overflow: hidden;
   padding: 6px;
   background: #161616;
 }
-.unit-img img { max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: pixelated; filter: brightness(.9) contrast(1.1); }
+/* Sizes (height, width:auto) are set at runtime by normalizeStrip so every car
+   shares one metres-per-pixel scale — matching the public trainset display. */
+.unit-img img { display: block; width: auto; image-rendering: pixelated; filter: brightness(.9) contrast(1.1); }
 .unit-img .no-img { color: var(--muted); font-size: 28px; opacity: .3; }
+.unit-img .wagon-placeholder-img { height: 52px; width: auto; object-fit: contain; opacity: 0.5; }
 .unit-info {
   padding: 5px 7px 6px;
   border-top: 1px solid var(--border);
   background: var(--surface);
+  /* Fixed height so a card with no category (empty .unit-sub) keeps the same
+     footer height as its neighbours — otherwise its image baseline shifts and
+     the wheels no longer line up on the ground. */
+  height: 40px;
+  box-sizing: border-box;
+  overflow: hidden;
 }
-.unit-nom { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.unit-sub { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.unit-nom { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
+.unit-sub { font-size: 10px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
 .unit-controls {
   position: absolute;
   top: 3px; right: 3px;
@@ -541,6 +583,18 @@ body {
 <div class="ts-header">
   <h1>{{ tsBuilderTitle }}</h1>
   <span class="ts-header-sub">mlgtraffic.net · wagon collection</span>
+  {% if is_admin %}
+  <div class="spacer"></div>
+  {% if view_as %}
+  <span class="ts-viewas-badge" title="Read-only admin debug view">👁 Viewing as <strong>{{ view_as }}</strong></span>
+  <a class="btn" href="{{ url_for('trainset.trainset_builder') }}">Exit</a>
+  {% else %}
+  <form class="ts-viewas-form" method="get" action="{{ url_for('trainset.trainset_builder') }}">
+    <input type="text" name="as" class="ts-viewas-input" placeholder="View as user…" autocomplete="off">
+    <button class="btn" type="submit">Go</button>
+  </form>
+  {% endif %}
+  {% endif %}
 </div>
 
 <div class="ts-app">
@@ -557,7 +611,17 @@ body {
 
     <div class="panel-section" style="flex:1;overflow:hidden;display:flex;flex-direction:column;border-bottom:none;padding-bottom:0;">
       <div class="panel-label">{{ tsSavedTrainsets }}</div>
-      <div class="trainsets-list" id="trainsetList"></div>
+      <div class="ts-filter-wrap">
+        <input type="text" class="ts-filter-input" id="tsFilterInput" placeholder="{{ tsFilterTrainsets }}" autocomplete="off">
+      </div>
+      <div class="ts-list-group">
+        <div class="ts-list-title" id="publicGroupTitle"></div>
+        <div class="ts-sublist" id="publicTrainsetList"></div>
+      </div>
+      <div class="ts-list-group">
+        <div class="ts-list-title" id="personalGroupTitle"></div>
+        <div class="ts-sublist" id="personalTrainsetList"></div>
+      </div>
     </div>
   </aside>
 
@@ -625,8 +689,18 @@ body {
 
 <script>
 const BASE = '';
-const tplUsername = {{ username | tojson }};
-const tplIsAdmin  = {{ is_admin | tojson }};
+const VIEW_AS = {{ view_as | tojson }};   // admin debug: username being viewed, else ''
+const READONLY = !!VIEW_AS;               // view-as is a read-only mirror
+// In view-as mode, render the panel from the target user's perspective:
+// scope "my trainsets" / edit affordances to them, not to the admin.
+const tplUsername = VIEW_AS || {{ username | tojson }};
+const tplIsAdmin  = READONLY ? false : {{ is_admin | tojson }};
+
+// Append the admin ?as=<user> scope to trainset API calls when debugging.
+function withAs(url) {
+  if (!VIEW_AS) return url;
+  return url + (url.includes('?') ? '&' : '?') + 'as=' + encodeURIComponent(VIEW_AS);
+}
 const i18n = {
   publicTrainsets:       {{ tsPublicTrainsets | tojson }},
   myTrainsets:           {{ tsMyTrainsets     | tojson }},
@@ -663,9 +737,12 @@ const i18n = {
   saved:                 {{ tsSaved           | tojson }},
   loaded:                {{ tsLoaded          | tojson }},
   ready:                 {{ tsReady           | tojson }},
+  addUnknown:            {{ addUnknownWagon   | tojson }},
+  notInCatalogue:        {{ notInCatalogue    | tojson }},
 };
 
 let currentTs = null;   // { id, name, is_admin, username, units[] }
+let allSetsCache = []; // saved trainsets, for stacking via autocomplete
 let dragSrcIdx = null;
 let modalMode = 'new';  // 'new' | 'save-as'
 
@@ -695,7 +772,7 @@ searchInput.addEventListener('keydown', e => {
     renderAcSelected(); scrollAcSelected(); e.preventDefault();
   }
   if (e.key === 'Enter' && acSelected >= 0) {
-    addUnit(acItems[acSelected]);
+    pickAcItem(acItems[acSelected]);
     renderAcSelected();
     positionAcList();
     e.preventDefault();
@@ -710,10 +787,36 @@ document.addEventListener('click', e => {
 async function doSearch(q) {
   try {
     const res = await fetch(`${BASE}/api/wagons/search?q=${encodeURIComponent(q)}&limit=100`);
-    acItems = await res.json();
+    const wagons = await res.json();
+    const ql = q.toLowerCase();
+    const setMatches = allSetsCache
+      .filter(ts => ts.name.toLowerCase().includes(ql) && !(currentTs && currentTs.id === ts.id))
+      .slice(0, 8)
+      .map(ts => ({ _tsId: ts.id, label: ts.name, is_admin: ts.is_admin }));
+    acItems = setMatches.concat(wagons);
     acSelected = -1;
     renderAc();
   } catch(e) { setStatus(i18n.searchError + ': ' + e.message, true); }
+}
+
+function pickAcItem(item) {
+  if (!item) return;
+  if (item._tsId) appendTrainset(item._tsId);
+  else addUnit(item);
+}
+
+async function appendTrainset(id) {
+  try {
+    const res = await fetch(withAs(`${BASE}/api/trainsets/${id}`));
+    if (!res.ok) { const d = await res.json(); setStatus(d.error || i18n.loadFailed, true); return; }
+    const ts = await res.json();
+    if (!currentTs) newTrainset(i18n.modalNewTitle, false);
+    const appended = ts.units.map(u => ({ ...u, _uid: Date.now() + Math.random(), _side: u._side || 'L' }));
+    currentTs.units.push(...appended);
+    renderStrip();
+    if (acList.classList.contains('open')) positionAcList();
+    setStatus(ts.name + ': ' + appended.length + ' ' + (appended.length !== 1 ? i18n.units : i18n.unit) + ' ' + i18n.unitsAppended);
+  } catch(e) { setStatus(i18n.failedLoadTrainset, true); }
 }
 
 function positionAcList() {
@@ -734,24 +837,53 @@ function positionAcList() {
 }
 
 function renderAc() {
-  if (!acItems.length) { closeAc(); return; }
+  if (!acItems.length && !searchInput.value.trim()) { closeAc(); return; }
+  const q = searchInput.value.trim();
   acList.innerHTML = acItems.map((w, i) => {
+    if (w._tsId) {
+      return `
+    <div class="ac-item" data-i="${i}">
+      <div class="ac-thumb"><span class="ac-thumb-none">🚆</span></div>
+      <div class="ac-text">
+        <div class="ac-nom">${esc(w.label)}</div>
+        <div class="ac-cat">${esc(w.is_admin ? i18n.publicTrainsets : i18n.myTrainsets)}</div>
+      </div>
+    </div>`;
+    }
     const thumb = w.image
-      ? `<img src="${smartImgSrc(w.image, 'L', w.image_type)}" onerror="${smartImgOnerror()}" alt="${esc(w.nom)}">`
+      ? `<img src="${smartImgSrc(w.image, 'L', w.image_type, w.image_ext)}" onerror="${smartImgOnerror()}" alt="${esc(w.label)}">`
       : `<span class="ac-thumb-none">🚃</span>`;
     return `
     <div class="ac-item" data-i="${i}">
       <div class="ac-thumb">${thumb}</div>
       <div class="ac-text">
-        <div class="ac-nom">${esc(w.nom)}</div>
-        <div class="ac-cat">${esc(w.titre1)}${w.titre2 ? ' › ' + esc(w.titre2) : ''}</div>
-        ${w.epo ? `<span class="ac-epo">Ep. ${esc(w.epo)}</span>` : ''}
+        <div class="ac-nom">${esc(w.label)}</div>
+        <div class="ac-cat">${esc(w.category)}${w.subcategory ? ' › ' + esc(w.subcategory) : ''}</div>
+        ${w.era ? `<span class="ac-epo">Ep. ${esc(w.era)}</span>` : ''}
       </div>
     </div>`;
   }).join('');
-  acList.querySelectorAll('.ac-item').forEach(el => {
-    el.addEventListener('mousedown', e => { e.preventDefault(); addUnit(acItems[+el.dataset.i]); });
+  if (q) {
+    acList.innerHTML += `<div class="ac-item ac-add-unknown" data-q="${esc(q)}">
+      <div class="ac-thumb"><span class="ac-thumb-none" style="opacity:.5">＋</span></div>
+      <div class="ac-text">
+        <div class="ac-nom">&#8220;${esc(q)}&#8221;</div>
+        <div class="ac-cat" style="font-style:italic">${esc(i18n.addUnknown)}</div>
+      </div>
+    </div>`;
+  }
+  acList.querySelectorAll('.ac-item:not(.ac-add-unknown)').forEach(el => {
+    el.addEventListener('mousedown', e => { e.preventDefault(); pickAcItem(acItems[+el.dataset.i]); });
     el.addEventListener('mouseenter', () => { acSelected = +el.dataset.i; renderAcSelected(); });
+  });
+  acList.querySelectorAll('.ac-add-unknown').forEach(el => {
+    el.addEventListener('mousedown', e => {
+      e.preventDefault();
+      const name = el.dataset.q;
+      addUnit({ name, label: name, image: null, image_type: 'plain',
+                category: '', subcategory: '', era: '', notes: '',
+                source: '', author: '', license: '' });
+    });
   });
   positionAcList();
   acList.classList.add('open');
@@ -772,13 +904,16 @@ window.addEventListener('resize', () => {
 
 // ── SMART IMAGE ──
 const WAGONS_URL = `{{url_for("static", filename="images/wagons")}}`;
-function smartImgSrc(imagePath, side = 'L', imageType = 'sides') {
-  if (!imagePath) return '';
-  if (imageType === 'sides') return `${WAGONS_URL}/${imagePath}${side === 'R' ? '_R' : '_L'}.gif`;
-  return `${WAGONS_URL}/${imagePath}.gif`;
+function smartImgSrc(imagePath, side = 'L', imageType = 'sides', ext = 'gif') {
+  return wagonImgSrc(WAGONS_URL, { image: imagePath, image_type: imageType, image_ext: ext }, side);
 }
-function smartImgOnerror() {
-  return `this.replaceWith(Object.assign(document.createElement('span'),{className:'no-img',textContent:'🚃'}))`;
+function _placeholderSrc(isFirst, isLast, phType) {
+  const suffix = phType || ((isFirst && isLast) ? 'loco_both' : isFirst ? 'loco_l' : isLast ? 'loco_r' : 'mid');
+  return `${WAGONS_URL}/placeholder_${suffix}.svg`;
+}
+function smartImgOnerror(isFirst, isLast, phType) {
+  const src = _placeholderSrc(isFirst, isLast, phType);
+  return `this.src='${src}';this.className='wagon-placeholder-img';this.onerror=null;`;
 }
 
 // ── PERMISSIONS ──
@@ -807,13 +942,22 @@ function addUnit(wagon) {
   currentTs.units.push({ ...wagon, _uid: Date.now() + Math.random(), _side: defaultSide });
   renderStrip();
   if (acList.classList.contains('open')) positionAcList();
-  setStatus(i18n.added + ': ' + wagon.nom);
+  setStatus(i18n.added + ': ' + wagon.label);
 }
 
 function flipUnit(uid) {
   const u = currentTs.units.find(u => u._uid === uid);
   if (!u) return;
   u._side = (u._side === 'R') ? 'L' : 'R';
+  renderStrip();
+}
+
+const _phTypes = [null, 'loco_l', 'loco_both', 'loco_r', 'mid'];
+function cyclePlaceholder(uid) {
+  const u = currentTs.units.find(u => u._uid === uid);
+  if (!u) return;
+  const idx = _phTypes.indexOf(u._phType || null);
+  u._phType = _phTypes[(idx + 1) % _phTypes.length];
   renderStrip();
 }
 
@@ -848,37 +992,49 @@ function renderStrip() {
     el.dataset.uid = u._uid;
     const side = u._side || 'L';
     el.dataset.side = side;
-    const imgSrc  = u.image ? smartImgSrc(u.image, side, u.image_type) : '';
-    const imgErr  = u.image ? smartImgOnerror() : '';
+    const isFirst = (i === 0), isLast = (i === units.length - 1);
+    const phType  = u._phType || null;
+    const imgSrc  = u.image ? smartImgSrc(u.image, side, u.image_type, u.image_ext) : _placeholderSrc(isFirst, isLast, phType);
+    const imgErr  = `this.src='${_placeholderSrc(isFirst, isLast, phType)}';this.className='wagon-placeholder-img';this.onerror=null;`;
+    // Placeholders are skipped by normalizeStrip; real images carry data-ppm so
+    // calibrated stock renders to true scale (see wagon_img.js / trainset_display.html).
+    const imgAttrs = !u.image
+      ? 'class="wagon-placeholder-img"'
+      : (u.px_per_meter ? `data-ppm="${u.px_per_meter}"` : '');
     const canFlip = u.image_type === 'sides';
+    const phLabels = { 'loco_l': '◀—', 'loco_both': '◀▶', 'loco_r': '—▶', 'mid': '■' };
     el.innerHTML = `
       <div class="unit-number">#${i + 1}</div>
       <div class="unit-controls">
         ${canFlip ? `<button class="uc-btn flip" title="${i18n.flipSide} (${side})" data-action="flip">◄►</button>` : ''}
+        ${!u.image ? `<button class="uc-btn flip" title="Change placeholder type" data-action="cycle-ph">${phType ? phLabels[phType] : '↺'}</button>` : ''}
         <button class="uc-btn" title="${i18n.info}" data-action="info">ℹ</button>
         <button class="uc-btn" title="${i18n.deleteTitle}" data-action="del">✕</button>
       </div>
       <div class="unit-img">
-        ${imgSrc ? `<img src="${esc(imgSrc)}" alt="${esc(u.nom)}" onerror="${imgErr}">` : '<span class="no-img">🚃</span>'}
+        <img src="${esc(imgSrc)}" alt="${esc(u.label)}" onerror="${imgErr}" ${imgAttrs}>
       </div>
       <div class="unit-info">
-        <div class="unit-nom">${esc(u.nom)}</div>
-        <div class="unit-sub">${esc(u.titre1 || '')}${u.epo ? ' · Ep.' + u.epo : ''}${side === 'R' ? ' · ►' : ''}</div>
+        <div class="unit-nom">${esc(u.label)}</div>
+        <div class="unit-sub">${esc(u.category || '')}${u.era ? ' · Ep.' + u.era : ''}${side === 'R' ? ' · ►' : ''}</div>
       </div>
     `;
     el.querySelector('[data-action=flip]')?.addEventListener('click', e => { e.stopPropagation(); flipUnit(u._uid); });
+    el.querySelector('[data-action=cycle-ph]')?.addEventListener('click', e => { e.stopPropagation(); cyclePlaceholder(u._uid); });
     el.querySelector('[data-action=del]').addEventListener('click', e => { e.stopPropagation(); removeUnit(u._uid); });
     el.querySelector('[data-action=info]').addEventListener('click', e => { e.stopPropagation(); showDetail(u); });
     el.addEventListener('dragstart', e => { dragSrcIdx = i; el.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
     el.addEventListener('dragend', () => { el.classList.remove('dragging'); strip.querySelectorAll('.drop-zone').forEach(z => z.classList.remove('active')); });
     strip.appendChild(el);
-    if (i < units.length - 1) {
-      const conn = document.createElement('div');
-      conn.className = 'unit-connector';
-      strip.appendChild(conn);
-    }
   });
   strip.appendChild(makeDropZone(units.length));
+  // Size + baseline-align the row the same way the public trainset display does.
+  if (window.normalizeStrip) {
+    // max raised above a raised-pantograph car's true-scale height (~78px) so it isn't
+    // clamped — clamping would shrink the whole image (body included) below its neighbours.
+    normalizeStrip(strip, { target: 54, min: 28, max: 84, onApply: positionRails });
+  }
+  positionRails();
   updateSaveState();
 }
 
@@ -899,25 +1055,29 @@ function makeDropZone(idx) {
 
 // ── RAIL POSITIONING ──
 function positionRails() {
-  const toolbar = document.querySelector('.ts-canvas-toolbar');
-  if (!toolbar) return;
-  const bottom = toolbar.getBoundingClientRect().bottom;
-  const unitH = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--unit-h'));
-  const c = bottom + 130 + unitH / 2;  // 28 = unit-strip padding-top
-  document.documentElement.style.setProperty('--rail-top', (c - 24) + 'px');
-  document.documentElement.style.setProperty('--rail-bot', (c + 20) + 'px');
+  const root = document.documentElement.style;
+  // The ground = the shared bottom edge of the (bottom-aligned) wagon images.
+  const img = document.querySelector('#unitStrip .unit-img img');
+  if (!img) {
+    root.setProperty('--rail-top', '-100px');
+    root.setProperty('--rail-bot', '-100px');
+    return;
+  }
+  const y = Math.round(img.getBoundingClientRect().bottom);
+  root.setProperty('--rail-top', y + 'px');
+  root.setProperty('--rail-bot', y + 'px');
 }
 
 // ── DETAIL PANEL ──
 
 function showDetail(u) {
-  document.getElementById('dpNom').textContent = u.nom;
-  document.getElementById('dpCat').textContent = [u.titre1, u.titre2].filter(Boolean).join(' › ') || '—';
-  document.getElementById('dpEpo').textContent = u.epo || '—';
+  document.getElementById('dpNom').textContent = u.label;
+  document.getElementById('dpCat').textContent = [u.category, u.subcategory].filter(Boolean).join(' › ') || '—';
+  document.getElementById('dpEpo').textContent = u.era || '—';
   document.getElementById('dpNotes').textContent = u.notes || '—';
   const img = document.getElementById('dpImg');
   if (u.image) {
-    img.src = smartImgSrc(u.image, u._side || 'L', u.image_type);
+    img.src = smartImgSrc(u.image, u._side || 'L', u.image_type, u.image_ext);
     img.onerror = function() { this.style.display = 'none'; };
     img.style.display = 'block';
   } else { img.style.display = 'none'; }
@@ -931,50 +1091,57 @@ document.getElementById('dpClose').addEventListener('click', () => {
 
 async function loadTrainsets() {
   try {
-    const res = await fetch(`${BASE}/api/trainsets`);
+    const res = await fetch(withAs(`${BASE}/api/trainsets`));
     const list = await res.json();
+    allSetsCache = list;
     renderTsList(list);
   } catch(e) { setStatus(i18n.failedLoadTrainsets, true); }
 }
 
+function tsFilterValue() {
+  const el = document.getElementById('tsFilterInput');
+  return el ? el.value.trim().toLowerCase() : '';
+}
+
 function renderTsList(list) {
-  const el = document.getElementById('trainsetList');
-  if (!list.length) {
-    el.innerHTML = `<div style="padding:12px 16px;color:var(--muted);font-size:11px;font-family:monospace">${esc(i18n.noSavedYet)}</div>`;
-    el.innerHTML += `<button class="btn-new-ts" style="margin:8px 16px;width:calc(100% - 32px)" id="btnNewTsInline">${esc(i18n.newTrainsetBtn)}</button>`;
-    el.querySelector('#btnNewTsInline')?.addEventListener('click', openNewTsModal);
-    return;
-  }
+  const f = tsFilterValue();
+  const match = ts => !f || ts.name.toLowerCase().includes(f);
+  const publicSets = list.filter(ts => ts.is_admin && match(ts));
+  const mySets     = list.filter(ts => !ts.is_admin && match(ts));
 
-  const publicSets = list.filter(ts => ts.is_admin);
-  const mySets     = list.filter(ts => !ts.is_admin);
-  let html = '';
+  const pubEl   = document.getElementById('publicTrainsetList');
+  const perEl   = document.getElementById('personalTrainsetList');
+  const perTitle = READONLY ? (VIEW_AS + "'s trainsets") : i18n.myTrainsets;
+  document.getElementById('publicGroupTitle').textContent   = `${i18n.publicTrainsets} (${publicSets.length})`;
+  document.getElementById('personalGroupTitle').textContent = `${perTitle} (${mySets.length})`;
 
-  if (publicSets.length) {
-    html += `<div class="ts-section-hdr">${esc(i18n.publicTrainsets)}</div>`;
-    html += publicSets.map(ts => renderTsItem(ts)).join('');
-  }
+  // Public pane
+  pubEl.innerHTML = publicSets.length
+    ? publicSets.map(renderTsItem).join('')
+    : `<div class="ts-empty-hint">—</div>`;
 
-  html += `<div class="ts-section-hdr"${publicSets.length ? '' : ' style="border-top:none"'}>${esc(i18n.myTrainsets)}</div>`;
-  html += `<button class="btn-new-ts" id="btnNewTsInline">${esc(i18n.newTrainsetBtn)}</button>`;
-  if (mySets.length) {
-    html += mySets.map(ts => renderTsItem(ts)).join('');
-  } else {
-    html += `<div style="padding:6px 16px;color:var(--muted);font-size:11px;font-family:monospace">${esc(i18n.noPersonalYet)}</div>`;
-  }
+  // Personal pane (own "+ New" button pinned at top, hidden in read-only view)
+  let perHtml = '';
+  if (!READONLY) perHtml += `<button class="btn-new-ts" id="btnNewTsInline">${esc(i18n.newTrainsetBtn)}</button>`;
+  perHtml += mySets.length
+    ? mySets.map(renderTsItem).join('')
+    : `<div class="ts-empty-hint">${esc(f ? '—' : (READONLY ? i18n.noPersonalYet : i18n.noSavedYet))}</div>`;
+  perEl.innerHTML = perHtml;
 
-  el.innerHTML = html;
+  perEl.querySelector('#btnNewTsInline')?.addEventListener('click', openNewTsModal);
+  wireTsItems(pubEl);
+  wireTsItems(perEl);
+}
 
-  el.querySelector('#btnNewTsInline')?.addEventListener('click', openNewTsModal);
-
-  el.querySelectorAll('.ts-item').forEach(item => {
+function wireTsItems(container) {
+  container.querySelectorAll('.ts-item').forEach(item => {
     item.addEventListener('click', e => {
       if (e.target.closest('[data-del],[data-saveas]')) return;
       loadTrainset(+item.dataset.id);
     });
   });
 
-  el.querySelectorAll('[data-del]').forEach(btn => {
+  container.querySelectorAll('[data-del]').forEach(btn => {
     btn.addEventListener('click', async e => {
       e.stopPropagation();
       if (!confirm(i18n.confirmDelete)) return;
@@ -989,7 +1156,7 @@ function renderTsList(list) {
     });
   });
 
-  el.querySelectorAll('[data-saveas]').forEach(btn => {
+  container.querySelectorAll('[data-saveas]').forEach(btn => {
     btn.addEventListener('click', async e => {
       e.stopPropagation();
       await loadTrainset(+btn.dataset.saveas);
@@ -1003,9 +1170,11 @@ function renderTsItem(ts) {
   const canEdit  = tplIsAdmin || (!ts.is_admin && ts.username === tplUsername);
   const badge    = ts.is_admin ? `<span class="ts-badge pub">${esc(i18n.pubBadge)}</span>` : '';
   const meta     = ts.updated_at ? ts.updated_at.slice(0, 10) : '';
-  const actions  = canEdit
-    ? `<button class="btn-icon" title="${esc(i18n.deleteTitle)}" data-del="${ts.id}">✕</button>`
-    : `<button class="btn-icon copy" title="${esc(i18n.saveAsCopyTitle)}" data-saveas="${ts.id}">⎘</button>`;
+  const actions  = READONLY
+    ? ''
+    : canEdit
+      ? `<button class="btn-icon" title="${esc(i18n.deleteTitle)}" data-del="${ts.id}">✕</button>`
+      : `<button class="btn-icon copy" title="${esc(i18n.saveAsCopyTitle)}" data-saveas="${ts.id}">⎘</button>`;
   return `
     <div class="ts-item${isActive ? ' active' : ''}${ts.is_admin ? ' public-ts' : ''}" data-id="${ts.id}">
       <div style="min-width:0">
@@ -1018,7 +1187,7 @@ function renderTsItem(ts) {
 
 async function loadTrainset(id) {
   try {
-    const res = await fetch(`${BASE}/api/trainsets/${id}`);
+    const res = await fetch(withAs(`${BASE}/api/trainsets/${id}`));
     if (!res.ok) { const d = await res.json(); setStatus(d.error || i18n.loadFailed, true); return; }
     const ts = await res.json();
     ts.units.forEach(u => { if (!u._uid) u._uid = Date.now() + Math.random(); });
@@ -1038,7 +1207,7 @@ async function saveTrainset() {
   try {
     const method = currentTs.id ? 'PUT' : 'POST';
     const url    = currentTs.id ? `${BASE}/api/trainsets/${currentTs.id}` : `${BASE}/api/trainsets`;
-    const body   = { name, units: currentTs.units.map(u => ({ name: u.name, _side: u._side || 'L' })) };
+    const body   = { name, units: currentTs.units.map(u => { const o = { name: u.name, _side: u._side || 'L' }; if (u._phType) o._phType = u._phType; return o; }) };
     if (!currentTs.id) body.is_admin = currentTs.is_admin || 0;
     const res  = await fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     if (!res.ok) { const d = await res.json(); setStatus(d.error || i18n.saveFailed, true); return; }
@@ -1129,6 +1298,9 @@ document.getElementById('tsTitleInput').addEventListener('blur', () => {
   if (currentTs) currentTs.name = document.getElementById('tsTitleInput').value.trim() || i18n.unnamed;
 });
 
+// Filter the two saved-trainset panes by name (client-side, over the cache)
+document.getElementById('tsFilterInput').addEventListener('input', () => renderTsList(allSetsCache));
+
 // ── UTILS ──
 
 function esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
@@ -1140,7 +1312,21 @@ function setStatus(msg, err = false) {
   setTimeout(() => { el.textContent = i18n.ready; el.className = ''; }, 3000);
 }
 
+// ── READ-ONLY (admin view-as debug) ──
+function applyReadonly() {
+  if (!READONLY) return;
+  ['btnSave', 'btnSaveAs', 'btnClone', 'btnClear'].forEach(id => {
+    const b = document.getElementById(id);
+    if (b) { b.disabled = true; b.style.display = 'none'; }
+  });
+  const search = document.getElementById('searchInput');
+  if (search) { search.disabled = true; search.placeholder = ''; }
+  const title = document.getElementById('tsTitleInput');
+  if (title) title.readOnly = true;
+}
+
 // ── INIT ──
+applyReadonly();
 document.addEventListener('DOMContentLoaded', () => { positionRails(); });
 window.addEventListener('load', positionRails);
 loadTrainsets();

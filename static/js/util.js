@@ -250,33 +250,40 @@ function getGetParams(){
 function mToKm(m) {
     var km = m / 1000;
     var value, suffix;
-   
+
     if (km >= 1000000) {
         value = km / 1000000;
         suffix = 'M';
-    } else if (km > 1) {
-        return new Intl.NumberFormat().format(Math.round(km));
-    } else {
         return new Intl.NumberFormat(undefined, {
             minimumFractionDigits: 0,
-            maximumFractionDigits: 2
+            maximumFractionDigits: 1
+        }).format(value) + suffix;
+    }
+
+    if (km >= 10) {
+        return new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 0
         }).format(km);
     }
-    
+
+    if (km >= 1) {
+        return new Intl.NumberFormat(undefined, {
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 1
+        }).format(km);
+    }
+
     return new Intl.NumberFormat(undefined, {
         minimumFractionDigits: 0,
-        maximumFractionDigits: 1
-    }).format(value) + suffix;
+        maximumFractionDigits: 2
+    }).format(km);
 }
+
 function isNumber(num){
-  if (!isNaN(num) && num != "" && num != " ")
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  if (num === null || num === undefined) return false;
+  if (typeof num === 'string' && num.trim() === '') return false;
+  return !isNaN(num);
 }
 
 function strToArray (str, limit) {
@@ -407,8 +414,18 @@ function truncate(input, length) {
 };
 
 function normalizeForSearch(string) {
-  // Normalize the comparison (for instance, replace 'č' with 'c')
-  return string.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, "").trim()
+  // Normalize the comparison (for instance, replace 'č' with 'c'), so "Ceske"
+  // finds "Ceskě" and "Rugensche" finds "Rügensche". Spaces are kept, so
+  // multi-word searches still work.
+  return String(string == null ? '' : string)
+    .toLowerCase()
+    // NFD splits a letter from its accent, which the range below then drops.
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, "")
+    // These have no decomposition, so NFD leaves them untouched: without this,
+    // "Oresundstag" would never find "Øresundståg".
+    .replace(/ø/g, 'o').replace(/æ/g, 'ae').replace(/[đð]/g, 'd')
+    .replace(/ł/g, 'l').replace(/þ/g, 'th').replace(/ß/g, 'ss')
+    .trim()
 }
 
 function getTooltipFromStationNew(station){
@@ -422,10 +439,10 @@ function getTooltipFromStationNew(station){
     
     content =  `
       <span class="stationName">
-        <span class="flag" data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${CountryName}">
+        <span class="flag" data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${sanitize(CountryName)}">
           ${newflag}
         </span>
-          ${stationName}
+          ${sanitize(stationName)}
       </span>
     `;
     return content
@@ -436,12 +453,28 @@ function getTooltipFromStationNew(station){
     
 }
 
-function getFlagEmojiListNew(countriesString){
+function getFlagEmojiListNew(countriesString, tripType, powerType){
   var flagList = "\u00A0";
   var countriesDict = JSON.parse(countriesString);
   var countriesList = Object.keys(countriesDict);
    
   if (countriesList.indexOf("UN") !== -1) {countriesList.splice(countriesList.indexOf("UN"), 1); countriesList.push("UN");}
+
+  // Power icon driven by the stored power_type so the display stays consistent
+  // with the trip's recorded power (rather than being re-derived from the
+  // countries elec/nonelec split). 'auto'/unknown falls back to that split.
+  // metro/tram/aerialway/funicular have no power_type and are always electric
+  // (matching force_electric=True in carbon.py), so force ⚡ for them.
+  var alwaysElectric = ['metro', 'tram', 'aerialway', 'funicular'].includes(tripType);
+  var powerIcon = (powerType === 'electric' || alwaysElectric) ? '⚡'
+                : powerType === 'manual'   ? '🦵'
+                : powerType === 'thermic'  ? '🛢️'
+                : null;
+  function totalMeters(d) {
+    if (typeof d === 'number') return d;
+    if (typeof d === 'object' && d !== null) return (d.elec || 0) + (d.nonelec || 0);
+    return 0;
+  }
   flagList = [];
   countriesList.forEach(
     function(countryCode){
@@ -451,7 +484,10 @@ function getFlagEmojiListNew(countriesString){
       
       var title;
       if (!(countriesList.length == 2 && JSON.stringify(countriesDict[countriesList[0]]) == JSON.stringify(countriesDict[countriesList[1]]))) {
-        if (typeof countryData === 'number') {
+        if (powerIcon) {
+          // Explicit power type: one icon for the whole country distance.
+          title = `${CountryName} - ${powerIcon}${mToKm(totalMeters(countryData))}km`;
+        } else if (typeof countryData === 'number') {
           // Simple distance format: {"FR": 100}
           title = `${CountryName} - ${mToKm(countryData)}km`;
         } else if (typeof countryData === 'object' && countryData !== null) {
@@ -461,7 +497,8 @@ function getFlagEmojiListNew(countriesString){
             parts.push(`⚡${mToKm(countryData.elec)}km`);
           }
           if (countryData.nonelec) {
-            parts.push(`🛢️${mToKm(countryData.nonelec)}km`);
+            var nonelecIcon = (tripType === 'cycle' || tripType === 'scooter') ? '🦵' : '🛢️';
+            parts.push(`${nonelecIcon}${mToKm(countryData.nonelec)}km`);
           }
           title = `${CountryName} - ${parts.join(' ')}`;
         }
@@ -500,6 +537,22 @@ function toRouting(data, routingUrl, type){
   if (["accommodation", "restaurant", "poi"].includes(type)){
     newTrip["destinationStation"] = newTrip["originStation"]
   }
+  // Collect intermediate "via" waypoints (resolved label -> [coord, label])
+  newTrip["viaStations"] = [];
+  $(".viaStation").each(function(){
+    var val = $(this).val();
+    if (val && globalStationDict[val]){
+      newTrip["viaStations"].push(globalStationDict[val]);
+    }
+  });
+  // Carry FR24-imported flight data through (set by the FR24 import on the air form)
+  if (typeof window.FR24 !== "undefined" && window.FR24){
+    newTrip["fr24_id"] = window.FR24["fr24_id"];
+    newTrip["fr24_duration"] = window.FR24["fr24_duration"];
+  }
+  // Collect selected tag IDs from the tag chip list
+  newTrip["tag_ids"] = Array.from(document.querySelectorAll('#tagList [data-tag-id]'))
+    .map(el => el.dataset.tagId);
   if(
       newTrip["destinationStation"]
       && newTrip["originStation"]
@@ -519,6 +572,12 @@ function toRouting(data, routingUrl, type){
           && newTrip["newTripStart"].length == 16
           && newTrip["newTripEnd"].length == 16
         )
+        ||(
+          // Plan-trip relative timing: day offsets required, times optional.
+          newTrip["precision"] == "relative"
+          && newTrip["planStartDay"]
+          && newTrip["planEndDay"]
+        )
 
       )
     ){
@@ -527,7 +586,6 @@ function toRouting(data, routingUrl, type){
     // Store data locally with ID
     sessionStorage.setItem(id, JSON.stringify(newTrip));
     // Redirect with ID as param
-    console.log(newTrip);
     location.href = `${routingUrl}?id=${id}&type=${type}`;
   } 
 }
@@ -697,9 +755,8 @@ function sanitize(string) {
     '>': '&gt;',
     '"': '&quot;',
     "'": '&#x27;',
-    "/": '&#x2F;',
   };
-  const reg = /[&<>"'/]/ig;
+  const reg = /[&<>"']/ig;
   return string.replace(reg, (match)=>(map[match]));
 }
 
@@ -740,6 +797,9 @@ function manualCopyHandler(){
 }
  
 function computeTimeStatus(data) {
+  // Plan legs carry a fixed status from the server (they are hypothetical, never
+  // "past"/"current"); don't re-derive it from the anchor-relative dates vs now.
+  if (data.lockTime) return data;
   let trip = data.trip;
   if (trip.utc_filtered_start_datetime === 1 && trip.utc_filtered_end_datetime === 1) {
     // Datetimes are both 1
@@ -838,6 +898,296 @@ function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
   });
 }
 
+/**
+ * Operator field as removable pills, each showing the operator's logo when one is
+ * known and the typed name otherwise.
+ *
+ * A trip's operator is stored as free comma-separated text, and that stays true:
+ * `hiddenInput` (the field the form serialises) is kept as "A, B". The pills are
+ * only a nicer way to see and edit that list — anything can still be typed, whether
+ * or not it matches a known operator.
+ *
+ * manAndOps.operators maps every known spelling, including aliases, to a logo path
+ * or null, so typing CFF or FFS finds the SBB logo just as SBB does.
+ */
+// Client-side twin of the SQL operator_normalize(): fold case and diacritics, then
+// drop everything that is not a letter or digit. Two spellings with the same result
+// are the same operator, so "C.F.F", "cff" and "CFF" all resolve alike here exactly
+// as they do server-side.
+//
+// \p{L}\p{N} rather than a-z0-9 for the same reason the SQL uses [:alnum:]: Cyrillic,
+// Greek and CJK operator names must survive normalisation instead of collapsing to
+// the empty string.
+function normalizeOperatorName(value) {
+  // Builds on normalizeForSearch (case + accent folding) and additionally drops
+  // everything that is not a letter or digit, so "C.F.F", "cff" and "CFF" all come
+  // out alike — the same rule as the SQL operator_normalize().
+  //
+  // \p{L}\p{N} rather than a-z0-9 for the same reason the SQL uses [:alnum:]:
+  // Cyrillic, Greek and CJK operator names must survive instead of collapsing to
+  // the empty string.
+  return normalizeForSearch(value).replace(/[^\p{L}\p{N}]+/gu, '');
+}
+
+// `opts.plainToggle` adds a button that swaps the pills for the raw comma-separated
+// value, so a whole list of operators can be pasted in or copied out at once —
+// something the pills alone made impossible.
+function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, logosUrl, type, opts) {
+  var names = [];
+  opts = opts || {};
+
+  // Safe to call again on the same elements: the mass-edit form rebuilds the field
+  // each time it opens, because the suggestion pool depends on the selected trips.
+  // Handlers are namespaced so a rebuild replaces them instead of stacking a second
+  // copy that would commit every typed name twice.
+  if (searchInput.data('ui-autocomplete')) searchInput.autocomplete('destroy');
+  searchInput.off('.opPills');
+  pillContainer.off('.opPills');
+  // A rebuild starts from the pills, so drop any controls a previous call added.
+  pillContainer.find('.op-plain, .op-mode-toggle').remove();
+  pillContainer.find('.op-pill-placeholder').show();
+  // Built once: every known spelling in its normalised form, so a pill can find its
+  // logo without rescanning thousands of names on each render.
+  var logosByNormalized = {};
+  Object.keys(manAndOps.operators).forEach(function (name) {
+    var key = normalizeOperatorName(name);
+    if (key && !(key in logosByNormalized)) logosByNormalized[key] = manAndOps.operators[name];
+  });
+
+  function logoFor(name) {
+    // Exact spelling first, then the normalised form — the user may have typed a
+    // punctuated or accented variant of a name we know.
+    if (Object.prototype.hasOwnProperty.call(manAndOps.operators, name)) {
+      return manAndOps.operators[name];
+    }
+    var key = normalizeOperatorName(name);
+    return key && key in logosByNormalized ? logosByNormalized[key] : null;
+  }
+
+  // `silent` skips the change event. Seeding the field from existing data is not a
+  // user edit, and callers like the mass-edit form treat a change event as "the user
+  // touched this, submit it" — firing it on populate would rewrite the operator of
+  // every selected trip.
+  function sync(silent) {
+    hiddenInput.val(names.join(', '));
+    // A native event rather than jQuery's .trigger(): jQuery's only reaches handlers
+    // it bound itself, and the mass-edit form tracks edits with addEventListener.
+    // Dispatching natively reaches both, since jQuery binds through addEventListener.
+    if (!silent) hiddenInput[0].dispatchEvent(new Event('change', { bubbles: true }));
+    pillContainer.find('.op-pill').remove();
+    names.forEach(function (name, index) {
+      var logo = logoFor(name);
+      var $pill = $('<span class="op-pill"></span>').attr('title', name);
+      if (logo) {
+        $pill.addClass('op-pill-logo').append(
+          $('<img>').attr('src', logosUrl + logo).attr('alt', name)
+        );
+      } else {
+        // Unknown operator: still a pill, just with its name instead of a logo.
+        $pill.append($('<span class="op-pill-text"></span>').text(name));
+      }
+      $pill.append(
+        $('<button type="button" class="op-pill-x" aria-label="Remove">&times;</button>')
+          .on('click', function () { names.splice(index, 1); sync(); })
+      );
+      pillContainer.find('.op-pill-placeholder').before($pill);
+    });
+    // The placeholder only makes sense while nothing is selected.
+    searchInput.attr('placeholder', names.length ? '' : searchInput.data('placeholder'));
+    // Pills rebuilt while plain mode is showing (a programmatic set) must stay out
+    // of sight until the user switches back.
+    if (plainInput && plainInput.is(':visible')) pillContainer.find('.op-pill').hide();
+  }
+
+  function add(name) {
+    name = (name || '').trim();
+    if (!name) return;
+    // Case-insensitive duplicate guard, keeping whichever spelling came first.
+    var exists = names.some(function (n) { return normalizeForSearch(n) === normalizeForSearch(name); });
+    if (!exists) names.push(name);
+    searchInput.val('');
+    sync();
+  }
+
+  function setFromText(text) {
+    names = String(text || '').split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+    sync(true);
+  }
+
+  // Remember the placeholder before the first sync(), which is what hides it.
+  searchInput.data('placeholder', searchInput.attr('placeholder') || '');
+  // Seed from whatever the field already holds (FR24 import, query params).
+  setFromText(hiddenInput.val());
+
+  searchInput.autocomplete({
+    minLength: 1,
+    source: function (request, response) {
+      var term = normalizeForSearch(request.term);
+      // Punctuation-free form as well, so "C.F.F" finds CFF. Kept alongside the
+      // loose form rather than replacing it: stripping spaces would stop a
+      // multi-word term like "sncf nouvelle" matching "SNCF TER Nouvelle-Aquitaine".
+      var strictTerm = normalizeOperatorName(request.term);
+      var canonicalMap = manAndOps.operatorCanonical || {};
+
+      // The suggestion for a match is the operator's canonical (short) name, not the
+      // spelling that matched — so typing "Eth" collapses ETHIAD and "Ethiad airways"
+      // into the single "Etihad Airways" rather than listing every alias. Matching
+      // still happens against every spelling, so an alias-only term ("ETHIAD") still
+      // finds its operator. An unresolved free-text spelling is its own canonical.
+      function canonical(name) { return canonicalMap[name] || name; }
+
+      var chosen = names.map(function (n) { return normalizeOperatorName(canonical(n)); });
+
+      // Best match per canonical operator, keyed by its normalised name.
+      var best = {};
+      function offer(canonName, rank, len) {
+        var key = normalizeOperatorName(canonName);
+        if (chosen.indexOf(key) !== -1) return;            // operator already a pill
+        var prev = best[key];
+        if (!prev || rank < prev.rank || (rank === prev.rank && len < prev.len)) {
+          best[key] = { label: canonName, value: canonName, rank: rank, len: len };
+        }
+      }
+
+      Object.keys(manAndOps.operators).forEach(function (name) {
+        var canonName = canonical(name);
+        var canonLen = normalizeForSearch(canonName).length;
+        var norm = normalizeForSearch(name);
+        var at = norm.indexOf(term);
+        if (at === -1) {
+          // No loose match: fall back to the punctuation-free comparison.
+          var strictName = normalizeOperatorName(name);
+          if (!strictTerm || strictName.indexOf(strictTerm) === -1) return;
+          offer(canonName, strictName === strictTerm ? 0 : 3, canonLen);
+          return;
+        }
+        // Rank: exact, then prefix, then start-of-word, then anywhere. Within a
+        // rank prefer the shorter operator name, so "SNCF" beats "SNCF Intercités".
+        var rank;
+        if (norm === term) rank = 0;
+        else if (at === 0) rank = 1;
+        else if (norm[at - 1] === ' ' || norm[at - 1] === '-') rank = 2;
+        else rank = 3;
+        offer(canonName, rank, canonLen);
+      });
+
+      var matches = Object.keys(best).map(function (k) { return best[k]; });
+      matches.sort(function (a, b) { return a.rank - b.rank || a.len - b.len || a.label.localeCompare(b.label); });
+      // The operator list runs to thousands of names; an uncapped menu is unusable.
+      response(matches.slice(0, 10));
+    },
+    select: function (event, ui) {
+      add(ui.item.value);
+      return false;   // don't write the raw value back into the search box
+    },
+    focus: function () { return false; }
+  });
+
+  var instance = searchInput.data('ui-autocomplete');
+  if (instance) {
+    // Show the logo next to each suggestion, so the right operator is pickable by
+    // sight when several spellings look alike.
+    instance._renderItem = function (ul, item) {
+      var logo = logoFor(item.value);
+      var $li = $('<li class="op-suggestion"></li>');
+      var $div = $('<div></div>');
+      if (logo) {
+        $div.append($('<img class="op-suggestion-logo">').attr('src', logosUrl + logo).attr('alt', ''));
+      } else {
+        $div.append($('<span class="op-suggestion-logo op-suggestion-nologo"></span>'));
+      }
+      $div.append($('<span></span>').text(item.label));
+      // The operator's other name, so a spelling says what it maps to: "SBB" is
+      // followed by Schweizerische Bundesbahnen, an alias by the operator it
+      // resolves to. Absent for names that would only repeat themselves.
+      var hint = (manAndOps.operatorHints || {})[item.value];
+      if (hint) $div.append($('<span class="op-suggestion-hint"></span>').text(hint));
+      return $li.append($div).appendTo(ul);
+    };
+  }
+
+  searchInput.on('keydown.opPills', function (e) {
+    if (e.key === ',' ) {
+      // Comma is the separator in the stored value, so it commits instead of typing.
+      e.preventDefault();
+      add(searchInput.val());
+      searchInput.autocomplete('close');
+    } else if (e.key === 'Enter') {
+      // Only swallow Enter when there is text to commit, so an empty field still
+      // submits the form as before.
+      if (searchInput.val().trim()) {
+        e.preventDefault();
+        add(searchInput.val());
+        searchInput.autocomplete('close');
+      }
+    } else if (e.key === 'Backspace' && !searchInput.val() && names.length) {
+      names.pop();
+      sync();
+    }
+  });
+
+  // Plain-text mode: the same value, shown as the comma-separated text that is
+  // actually submitted, so it can be pasted in or copied out in one go. It lives
+  // inside the pills field and replaces its contents, leaving the field's own
+  // chrome — and the mode button — where they are.
+  var plainInput = null;
+  if (opts.plainToggle) {
+    plainInput = $('<input type="text" class="op-plain" autocomplete="off">')
+      .attr('placeholder', searchInput.data('placeholder'))
+      .hide();
+    var modeBtn = $('<button type="button" class="op-mode-toggle"></button>')
+      .attr('title', opts.plainLabel || 'Plain text')
+      .append($('<i class="fas fa-keyboard"></i>'));
+    pillContainer.append(plainInput, modeBtn);
+
+    modeBtn.on('click.opPills', function () {
+      if (plainInput.is(':visible')) {
+        // Back to pills: the text is the source of truth, so rebuild from it.
+        setFromText(plainInput.val());
+        plainInput.hide();
+        pillContainer.find('.op-pill, .op-pill-placeholder').show();
+        modeBtn.attr('title', opts.plainLabel || 'Plain text')
+               .find('i').attr('class', 'fas fa-keyboard');
+      } else {
+        plainInput.val(hiddenInput.val());
+        pillContainer.find('.op-pill, .op-pill-placeholder').hide();
+        plainInput.show().focus();
+        modeBtn.attr('title', opts.pillsLabel || 'Operator list')
+               .find('i').attr('class', 'fas fa-tags');
+      }
+    });
+
+    // Typing in plain mode edits the submitted value directly — the field can be
+    // left in this mode and submitted without ever switching back.
+    plainInput.on('input.opPills', function () { hiddenInput.val(plainInput.val()); });
+  }
+
+  // Clicking anywhere in the field focuses the text input, like a real input would.
+  pillContainer.on('click.opPills', function (e) {
+    if ($(e.target).closest('.op-pill, .op-plain, .op-mode-toggle').length) return;
+    (plainInput && plainInput.is(':visible') ? plainInput : searchInput).focus();
+  });
+
+  // A name typed but never committed would otherwise be silently dropped. Commit on
+  // blur rather than on form submit: the submit button serialises the form from its
+  // own click handler, which runs before the form's submit event. Blur fires first,
+  // as focus leaves the field on that click. Clicking an autocomplete suggestion does
+  // not blur the input (jQuery UI suppresses it), so this cannot double-add.
+  searchInput.on('blur.opPills', function () {
+    if (searchInput.val().trim()) add(searchInput.val());
+  });
+
+  // Let callers that set the operator programmatically (FR24 import, boarding-pass
+  // query params) refresh the pills.
+  return {
+    set: function (text) {
+      setFromText(text);
+      if (plainInput && plainInput.is(':visible')) plainInput.val(hiddenInput.val());
+    },
+    add: add
+  };
+}
+
 function materialTypeAutocomplete(select, manAndOps, type) {
   select.autocomplete({
     source: function (request, response) {
@@ -896,7 +1246,9 @@ function getRegionFromCode(region_code){
     "MX-BCN": "Baja California", "MX-CAM": "Campeche", "MX-CHH": "Chihuahua", "MX-CHP": "Chiapas", "MX-CMX": "Mexico City", "MX-JAL": "Jalisco", "MX-MEX": "State of Mexico", "MX-OAX": "Oaxaca", "MX-ROO": "Quintana Roo", "MX-SIN": "Sinaloa", "MX-TAB": "Tabasco", "MX-VER": "Veracruz", "MX-YUC": "Yucatán",
     "AU-ACT": "Australian Capital Territory", "AU-NSW": "New South Wales", "AU-NT": "Northern Territory", "AU-QLD": "Queensland", "AU-SA": "South Australia", "AU-TAS": "Tasmania", "AU-VIC": "Victoria", "AU-WA": "Western Australia",
     "ES-AN": "Andalucía", "ES-AR": "Aragón", "ES-AS": "Asturias", "ES-CB": "Cantabria", "ES-CE": "Ceuta", "ES-CL": "Castilla y León", "ES-CM": "Castilla-La Mancha", "ES-CN": "Canarias", "ES-CT": "Cataluña", "ES-EX": "Extremadura", "ES-GA": "Galicia", "ES-IB": "Islas Baleares", "ES-MC": "Región de Murcia", "ES-MD": "Comunidad de Madrid", "ES-ML": "Melilla", "ES-NC": "Navarra", "ES-PV": "País Vasco", "ES-RI": "La Rioja", "ES-VC": "Comunidad Valenciana",
-    "KR-11": "Seoul", "KR-26": "Busan", "KR-27": "Daegu", "KR-28": "Incheon", "KR-29": "Gwangju", "KR-30": "Daejeon", "KR-31": "Ulsan", "KR-41": "Gyeonggi", "KR-42": "Gangwon", "KR-43": "Chungcheongbuk", "KR-44": "Chungcheongnam", "KR-45": "Jeollabuk", "KR-46": "Jeollanam", "KR-47": "Gyeongsangbuk", "KR-48": "Gyeongsangnam", "KR-49": "Jeju", "KR-50": "Sejong"
+    "KR-11": "Seoul", "KR-26": "Busan", "KR-27": "Daegu", "KR-28": "Incheon", "KR-29": "Gwangju", "KR-30": "Daejeon", "KR-31": "Ulsan", "KR-41": "Gyeonggi", "KR-42": "Gangwon", "KR-43": "Chungcheongbuk", "KR-44": "Chungcheongnam", "KR-45": "Jeollabuk", "KR-46": "Jeollanam", "KR-47": "Gyeongsangbuk", "KR-48": "Gyeongsangnam", "KR-49": "Jeju", "KR-50": "Sejong",
+    "IN-AP": "Andhra Pradesh", "IN-AR": "Arunachal Pradesh", "IN-AS": "Assam", "IN-BR": "Bihar", "IN-CG": "Chhattisgarh", "IN-CH": "Chandigarh", "IN-DL": "Delhi", "IN-GA": "Goa", "IN-GJ": "Gujarat", "IN-HP": "Himachal Pradesh", "IN-HR": "Haryana", "IN-JH": "Jharkhand", "IN-JK": "Jammu and Kashmir", "IN-KA": "Karnataka", "IN-KL": "Kerala", "IN-MH": "Maharashtra", "IN-ML": "Meghalaya", "IN-MN": "Manipur", "IN-MP": "Madhya Pradesh", "IN-MZ": "Mizoram", "IN-NL": "Nagaland", "IN-OD": "Odisha", "IN-PB": "Punjab", "IN-PY": "Puducherry", "IN-RJ": "Rajasthan", "IN-TN": "Tamil Nadu", "IN-TR": "Tripura", "IN-TS": "Telangana", "IN-UK": "Uttarakhand", "IN-UP": "Uttar Pradesh", "IN-WB": "West Bengal",
+    "RU-AD": "Respublika Adygeya", "RU-ALT": "Altayskiy kray", "RU-AMU": "Amurskaya oblast", "RU-ARK": "Arkhangelskaya oblast", "RU-AST": "Astrakhanskaya oblast", "RU-BA": "Respublika Bashkortostan", "RU-BEL": "Belgorodskaya oblast", "RU-BRY": "Bryanskaya oblast", "RU-BU": "Respublika Buryatiya", "RU-CE": "Chechenskaya Respublika", "RU-CHE": "Chelyabinskaya oblast", "RU-CHU": "Chukotskiy avtonomnyy okrug", "RU-CU": "Chuvashskaya Respublika", "RU-DA": "Respublika Dagestan", "RU-IN": "Respublika Ingushetiya", "RU-IRK": "Irkutskaya oblast", "RU-IVA": "Ivanovskaya oblast", "RU-KAM": "Kamchatskiy kray", "RU-KB": "Kabardino-Balkarskaya Respublika", "RU-KC": "Karachayevo-Cherkesskaya Respublika", "RU-KDA": "Krasnodarskiy kray", "RU-KEM": "Kemerovskaya oblast", "RU-KGD": "Kaliningradskaya oblast", "RU-KGN": "Kurganskaya oblast", "RU-KHA": "Khabarovskiy kray", "RU-KHM": "Khanty-Mansiyskiy avtonomnyy okrug", "RU-KIR": "Kirovskaya oblast", "RU-KK": "Respublika Khakasiya", "RU-KL": "Respublika Kalmykiya", "RU-KLU": "Kaluzhskaya oblast", "RU-KO": "Respublika Komi", "RU-KOS": "Kostromskaya oblast", "RU-KR": "Respublika Kareliya", "RU-KRS": "Kurskaya oblast", "RU-KYA": "Krasnoyarskiy kray", "RU-LEN": "Leningradskaya oblast", "RU-LIP": "Lipetskaya oblast", "RU-ME": "Respublika Mariy El", "RU-MO": "Respublika Mordoviya", "RU-MOS": "Moskovskaya oblast", "RU-MOW": "Moskva", "RU-MUR": "Murmanskaya oblast", "RU-NGR": "Novgorodskaya oblast", "RU-NIZ": "Nizhegorodskaya oblast", "RU-NVS": "Novosibirskaya oblast", "RU-OMS": "Omskaya oblast", "RU-ORE": "Orenburgskaya oblast", "RU-ORL": "Orlovskaya oblast", "RU-PER": "Permskiy kray", "RU-PRI": "Primorskiy kray", "RU-PSK": "Pskovskaya oblast", "RU-ROS": "Rostovskaya oblast", "RU-RYA": "Ryazanskaya oblast", "RU-SA": "Respublika Sakha", "RU-SAK": "Sakhalinskaya oblast", "RU-SAM": "Samarskaya oblast", "RU-SAR": "Saratovskaya oblast", "RU-SE": "Respublika Severnaya Osetiya", "RU-SMO": "Smolenskaya oblast", "RU-SPE": "Sankt-Peterburg", "RU-STA": "Stavropolskiy kray", "RU-SVE": "Sverdlovskaya oblast", "RU-TA": "Respublika Tatarstan", "RU-TAM": "Tambovskaya oblast", "RU-TOM": "Tomskaya oblast", "RU-TUL": "Tulskaya oblast", "RU-TVE": "Tverskaya oblast", "RU-TY": "Respublika Tyva", "RU-TYU": "Tyumenskaya oblast", "RU-UD": "Udmurtskaya Respublika", "RU-ULY": "Ulyanovskaya oblast", "RU-VGG": "Volgogradskaya oblast", "RU-VLA": "Vladimirskaya oblast", "RU-VLG": "Vologodskaya oblast", "RU-VOR": "Voronezhskaya oblast", "RU-YAN": "Yamalo-Nenetskiy avtonomnyy okrug", "RU-YAR": "Yaroslavskaya oblast", "RU-YEV": "Evreyskaya avtonomnaya oblast", "RU-ZAB": "Zabaykalskiy kray"
   };
   return regions[region_code]
 }
@@ -946,7 +1298,6 @@ function fetchTickets(url, none_text, ticket_id=null) {
       noneOption.textContent = none_text; // Set text from function parameter
       noneOption.value = ""; 
       ticketSearchInput.add(noneOption);
-      console.log(ticketSearchInput);
 
       // Create an option element for each ticket
       data.tickets.forEach(ticket => {
@@ -965,8 +1316,8 @@ function fetchTickets(url, none_text, ticket_id=null) {
             const optionText = `
               <span class="d-flex align-items-center">
                 <i class="bi bi-ticket-perforated me-2"></i>
-                <span>${ticket.name}</span>
-                <span class="ms-auto">${ticket.price} ${ticket.currency} (${ticket.purchasing_date})</span>
+                <span>${sanitize(String(ticket.name || ''))}</span>
+                <span class="ms-auto">${sanitize(String(ticket.price || ''))} ${sanitize(String(ticket.currency || ''))} (${sanitize(String(ticket.purchasing_date || ''))})</span>
               </span>
             `;
             option.innerHTML = optionText;
@@ -994,37 +1345,108 @@ function getTextColor(bgColor) {
   return luminance > 0.5 ? '#000000' : '#FFFFFF';
 }
 
-function setupTagAutocomplete(url, new_trip) {
+// Shared renderer for tag autocomplete rows: every row gets an icon (shared
+// tags the multi-user one, plain tags a tag, the create action a plus) so
+// they read as one consistent list.
+function renderTagAutocompleteItem(ul, item) {
+  const iconClass = item._create ? 'fas fa-plus'
+    : (item._shared ? 'fas fa-users' : 'fas fa-tag');
+  return $('<li>')
+    .append(
+      $('<div>')
+        .addClass(item._create ? 'tag-create-option' : 'tag-option')
+        .append($('<i>').addClass(iconClass))
+        .append(document.createTextNode(' ' + item.label))
+    )
+    .appendTo(ul);
+}
+
+function makeTagChip(tag) {
+  const chip = $('<span>')
+    .addClass('tag-blob')
+    .attr('data-tag-id', tag.uid)
+    .css('background-color', tag.colour)
+    .css('color', getTextColor(tag.colour))
+    .text(tag.name)
+    .on('click', function(event) {
+      event.stopPropagation();
+      $(this).remove();
+    });
+  if (tag.is_shared) {
+    chip.prepend('<i class="fas fa-users"></i> ');
+  }
+  return chip;
+}
+
+// setupTagAutocomplete(url, tripId=null, createOpts=null)
+// tripId: when editing, pre-populate chips for tags already attached to this trip.
+// createOpts: {url, label} — when set, an unmatched search term offers a
+// "create tag" entry ({name} in label is replaced by the term); the tag is
+// created server-side (voyage type, auto colour) and chipped immediately.
+// Returns a function getOriginalTagIds() so callers can diff for edit-mode sync.
+function setupTagAutocomplete(url, tripId, createOpts) {
   let tags = [];
+  let originalTagIds = new Set();
 
   fetch(url)
     .then(response => response.json())
     .then(data => {
-        tags = data.tags;
+      tags = data.tags;
+      if (tripId != null) {
+        tags.filter(t => {
+          const ids = t.trip_ids ? t.trip_ids.split(',') : [];
+          return ids.includes(String(tripId));
+        }).forEach(t => {
+          $('#tagList').append(makeTagChip(t));
+          originalTagIds.add(String(t.uid));
+        });
+      }
     })
     .catch(error => console.error('Failed to fetch tags:', error));
-    $("#tagSearchInput").autocomplete({
-        source: function(request, response) {
-            const results = $.ui.autocomplete.filter(tags.map(tag => tag.name), request.term);
-            response(results);
-        },
-        select: function(event, ui) {
-            const selectedTag = tags.find(tag => tag.name === ui.item.value);
-            if (selectedTag) {
-              const span = $('<span>')
-                .addClass('tag-blob')
-                .css('background-color', selectedTag.colour)
-                .css('color', getTextColor(selectedTag.colour))
-                .html(`${selectedTag.name}`)
-                .on('click', function(event) {
-                    event.stopPropagation();
-                    $(this).parent().remove();
-                });
-              $('#tagList').append(span);
-          }
-            return false; 
-        }
-    });
+
+  $("#tagSearchInput").autocomplete({
+    source: function(request, response) {
+      const alreadyIn = new Set(
+        Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(el => el.dataset.tagId)
+      );
+      const results = $.ui.autocomplete.filter(
+        tags.filter(t => !alreadyIn.has(String(t.uid)))
+          .map(t => ({ label: t.name, value: t.name, _shared: t.is_shared })),
+        request.term
+      );
+      const term = request.term.trim();
+      if (createOpts && term &&
+          !tags.some(t => t.name.toLowerCase() === term.toLowerCase())) {
+        results.push({
+          label: createOpts.label.replace('{name}', term),
+          value: term,
+          _create: true
+        });
+      }
+      response(results);
+    },
+    select: function(event, ui) {
+      if (ui.item._create) {
+        $.post({
+          url: createOpts.url,
+          contentType: 'application/json',
+          data: JSON.stringify({ name: ui.item.value })
+        }).done(function(data) {
+          tags.push(data.tag);
+          $('#tagList').append(makeTagChip(data.tag));
+        });
+        $("#tagSearchInput").val('');
+        return false;
+      }
+      const selectedTag = tags.find(t => t.name === ui.item.value);
+      if (selectedTag) $('#tagList').append(makeTagChip(selectedTag));
+      return false;
+    }
+  });
+
+  $("#tagSearchInput").data("ui-autocomplete")._renderItem = renderTagAutocompleteItem;
+
+  return { getOriginalTagIds: () => originalTagIds };
 }
 
 
@@ -1068,6 +1490,85 @@ function processCountryCode(cc, positions = null, mode = "auto") {
   return { flag, name };
 }
 
+// Height a single operator logo occupies in a trip-list cell, matching
+// `td .operatorLogo` in style2.css. The multi-operator grid below divides this
+// budget between its rows so that the table row never grows taller, whether it
+// shows one operator or four.
+const OPERATOR_CELL_HEIGHT = 38;
+const OPERATOR_CELL_WIDTH = 100;
+const OPERATOR_GRID_GAP = 2;
+// How many operators the compact cell can show (a 2x2 grid). Beyond this the cell
+// cannot represent the trip, so the column is pushed into the responsive detail row
+// where every operator is listed — see processHiddenData in dynamic_trips.html.
+const OPERATOR_GRID_MAX = 4;
+
+// True when the compact cell would silently drop operators.
+function operatorsOverflow(row) {
+    return Array.isArray(row.operator_logos) && row.operator_logos.length > OPERATOR_GRID_MAX;
+}
+
+// Lay a trip's operators out in a grid that always fits OPERATOR_CELL_HEIGHT:
+//   1 -> A        2 -> A B        3 -> A B      4 -> A B
+//                                      C             C D
+// Anything past the fourth is dropped (the query already caps at 4).
+function renderOperatorGrid(operators) {
+    const shown = operators.slice(0, OPERATOR_GRID_MAX);
+    const cols = shown.length > 1 ? 2 : 1;
+    const rows = Math.ceil(shown.length / cols);
+    // Split the fixed budget across the rows, leaving room for the gaps, so two
+    // stacked rows get roughly half-height logos instead of doubling the row.
+    const cellH = (OPERATOR_CELL_HEIGHT - OPERATOR_GRID_GAP * (rows - 1)) / rows;
+    const cellW = (OPERATOR_CELL_WIDTH - OPERATOR_GRID_GAP * (cols - 1)) / cols;
+
+    const items = shown.map(op => {
+        const name = sanitize(op.name || '');
+        if (op.logo) {
+            return `<img class="operatorGridLogo" src="/static/${sanitize(op.logo)}"`
+                 + ` style="max-height:${cellH}px;max-width:${cellW}px"`
+                 + ` data-toggle="tooltip" data-placement="top" title=""`
+                 + ` data-bs-original-title="${name}" aria-label="${name}">`;
+        }
+        // No logo: a text stand-in, scaled down when stacked so it stays on one
+        // line and keeps the same height as a logo would.
+        const fontSize = rows > 1 ? 0.62 : 0.8;
+        return `<span class="operatorGridText" style="max-width:${cellW}px;`
+             + `line-height:${cellH}px;font-size:${fontSize}rem" title="${name}">${name}</span>`;
+    }).join('');
+
+    return `<div class="operatorGrid" style="grid-template-columns:repeat(${cols},auto);`
+         + `gap:${OPERATOR_GRID_GAP}px;height:${OPERATOR_CELL_HEIGHT}px">${items}</div>`;
+}
+
+// Expanded form for the responsive detail row, where there is room: every operator on
+// its own line at a readable size, rather than the compact cell's four-item grid.
+//
+// Each line is the operator's logo, or its name when it has none. Operator logos are
+// nearly always wordmarks, so printing the name beside one just echoes it; the name
+// earns its place only when there is no logo to read. That is the same rule the
+// compact cell and the single-operator rendering already follow.
+//
+// Returns null when there is nothing to expand (one operator, or none), leaving the
+// default cell rendering in place.
+function renderOperatorList(row) {
+    const operators = Array.isArray(row.operator_logos) ? row.operator_logos : null;
+    if (!operators || operators.length < 2) return null;
+
+    const items = operators.map(op => {
+        const name = sanitize(op.name || '');
+        // The logo keeps a tooltip carrying the name — reachable by tap on the touch
+        // devices this view is for. resetObjects() re-initialises tooltips whenever a
+        // detail row opens, so these are live.
+        const content = op.logo
+            ? `<img class="operatorListLogo" src="/static/${sanitize(op.logo)}" alt="${name}"`
+              + ` data-toggle="tooltip" data-placement="top" title=""`
+              + ` data-bs-original-title="${name}" aria-label="${name}">`
+            : `<span class="operatorListName">${name}</span>`;
+        return `<div class="operatorListItem">${content}</div>`;
+    }).join('');
+
+    return `<div class="operatorList">${items}</div>`;
+}
+
 function renderOperators(data, type, row) {
     if (type !== 'display') return data;
 
@@ -1084,13 +1585,18 @@ function renderOperators(data, type, row) {
         return `<i class="fas ${icon}" title="${label}" data-toggle="tooltip" data-placement="top" aria-label="${label}"></i>`;
     }
 
+    // Multi-operator trips: show every operator, logo or name, in one cell.
+    if (Array.isArray(row.operator_logos) && row.operator_logos.length > 1) {
+        return renderOperatorGrid(row.operator_logos);
+    }
+
     // Show logo if available
     if (row.logo_url) {
-        return `<img title="" data-toggle="tooltip" data-placement="top" class="operatorLogo" src="/static/${row.logo_url}" data-bs-original-title="${row.operator}" aria-label="${row.operator}">`;
+        return `<img title="" data-toggle="tooltip" data-placement="top" class="operatorLogo" src="/static/${sanitize(row.logo_url)}" data-bs-original-title="${sanitize(row.operator)}" aria-label="${sanitize(row.operator)}">`;
     }
 
     // Fallback to operator name
-    return row.operator;
+    return sanitize(row.operator || '');
 }
 
 // Function to calculate CO2 per kilometer
@@ -1190,3 +1696,28 @@ function showLoading() {
 function hideLoading() {
     document.getElementById('loadingScreen').style.display = 'none';
 }
+
+// date.toISOString() returns the date in UTC, we want to return it in local time but in the same format
+Date.prototype.toTimezonedISOString = function() {
+  return new Date(this.getTime() - (this.getTimezoneOffset() * 60000)).toISOString()
+}
+
+// Pick the grammatically correct plural form for the page's locale (read from
+// <html lang>). `forms` is a {category: string} map keyed by CLDR plural
+// categories (one/few/many/other/…) as returned by Intl.PluralRules, so Slavic
+// languages get proper few/many agreement, not just singular/plural. Any category
+// a language omits falls back to `other`. A plain string is accepted too (legacy).
+function pluralize(forms, n) {
+  if (typeof forms === 'string') return forms.replace('{n}', n);
+  if (!forms) return '';
+  var locale = document.documentElement.lang || 'en';
+  var category;
+  try {
+    category = new Intl.PluralRules(locale).select(n);
+  } catch (e) {
+    category = new Intl.PluralRules('en').select(n);
+  }
+  var form = forms[category] || forms.other || forms.one || '';
+  return form.replace('{n}', n);
+}
+window.pluralize = pluralize;

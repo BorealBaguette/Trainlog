@@ -351,7 +351,7 @@ function updateSegmentSummary(segmentId) {
 
   const $card = $(`#segment-${segmentId}`);
   $card.find('.seg-summary-chip').css('background', color).text(idx);
-  $card.find('.seg-summary-text').html(`<strong>${meta.name}</strong> — ${from} <i class="fa-solid fa-arrow-right-long mx-1"></i> ${to}`);
+  $card.find('.seg-summary-text').html(`<strong>${sanitize(meta.name)}</strong> — ${sanitize(from)} <i class="fa-solid fa-arrow-right-long mx-1"></i> ${sanitize(to)}`);
 }
 
 /* Renumber visual order and store displayIndex */

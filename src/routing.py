@@ -8,10 +8,12 @@ from py.utils import getCountryFromCoordinates          # example
 from src.graphhopper import convert_graphhopper_to_osrm     # example
 
 
-def forward_routing_core(routingType, path, flask_request):
+def forward_routing_core(routingType, path, flask_request, extra_args=None):
     # Normalize routing type
-    if routingType in ("train", "tram", "metro"):
+    if routingType in ("train", "tram", "metro", "funicular", "rail"):
         routingType = "train"
+    elif routingType == "scooter":
+        routingType = "cycle"
 
     radiuses = None
     use_new_router = False  # defined for all paths
@@ -21,10 +23,10 @@ def forward_routing_core(routingType, path, flask_request):
 
     if routingType == "train":
         use_new_router = flask_request.args.get("use_new_router", "false").lower() == "true"
-        base = "http://train-gh.srv.trainlog.me" if use_new_router else "http://train.srv.trainlog.me"
+        base = "https://train-gh.srv.trainlog.me" if use_new_router else "https://train.srv.trainlog.me"
 
     elif routingType == "ferry":
-        base = "http://ferry.srv.trainlog.me"
+        base = "https://ferry.srv.trainlog.me"
         coord_pairs = [
             {"lng": float(coord.split(",")[0]), "lat": float(coord.split(",")[1])}
             for coord in path.replace("route/v1/ferry/", "").split(";")
@@ -32,7 +34,10 @@ def forward_routing_core(routingType, path, flask_request):
         radiuses = ";".join(["10000"] * len(coord_pairs))
 
     elif routingType == "aerialway":
-        base = "http://aerialway.srv.trainlog.me"
+        base = "https://aerialway.srv.trainlog.me"
+        
+    elif routingType == "ski":
+        base = "https://ski.srv.trainlog.me"
 
     elif routingType == "car":
         base = "https://routing.openstreetmap.de/routed-car"
@@ -45,7 +50,7 @@ def forward_routing_core(routingType, path, flask_request):
 
     elif routingType == "bus":
         routers = {
-            "trainlog": ("http://bus.srv.trainlog.me", 231),
+            "trainlog": ("https://bus.srv.trainlog.me", 231),
             "jkimb": ("https://busrouter.jkimball.dev", 233),
             "fallback": ("https://routing.openstreetmap.de/routed-car", 234),
         }
@@ -85,8 +90,11 @@ def forward_routing_core(routingType, path, flask_request):
         # Optional: make unknown routing types explicit
         return make_response({"error": f"Unsupported routingType: {routingType}"}, 400)
 
-    # Build args from incoming request
-    args = flask_request.query_string.decode("utf-8") if flask_request.query_string else ""
+    # Build args from extra_args or incoming request
+    if extra_args is not None:
+        args = extra_args
+    else:
+        args = flask_request.query_string.decode("utf-8") if flask_request.query_string else ""
     # remove use_new_router=true from forwarded query string
     args = (
         args.replace("&use_new_router=true", "")
@@ -118,11 +126,14 @@ def forward_routing_core(routingType, path, flask_request):
             full_url += f"&radiuses={radiuses}"
         return full_url
 
+    # (connect, read) timeouts — connect failures fail fast; reads cap at 8s
+    TIMEOUT = (3, 8)
+
     # Behavior per type
     if routingType == "bus":
         routers_fallback_base = "https://routing.openstreetmap.de/routed-car"
         try:
-            response = requests.get(build_url(base), timeout=5)
+            response = requests.get(build_url(base), timeout=(3, 5))
             if response.status_code != 200:
                 raise Exception("Non-200 response")
 
@@ -131,13 +142,22 @@ def forward_routing_core(routingType, path, flask_request):
                 raise Exception("Router responded with NoRoute")
 
             return make_response(data, return_code)
-        except Exception as e:
+        except Exception:
             fallback_url = build_url(routers_fallback_base)
-            return make_response(requests.get(fallback_url).json(), 235)
+            try:
+                return make_response(requests.get(fallback_url, timeout=TIMEOUT).json(), 235)
+            except requests.RequestException as e:
+                return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
 
     if routingType == "train" and use_new_router:
-        gh_json = requests.get(build_gh_url(base), timeout=10).json()
+        try:
+            gh_json = requests.get(build_gh_url(base), timeout=TIMEOUT).json()
+        except requests.RequestException as e:
+            return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)
         return convert_graphhopper_to_osrm(gh_json)
 
     # All other types: just proxy text
-    return requests.get(build_url(base), timeout=10).text
+    try:
+        return requests.get(build_url(base), timeout=TIMEOUT).text
+    except requests.RequestException as e:
+        return make_response({"error": "routing upstream unavailable", "detail": str(e)}, 502)

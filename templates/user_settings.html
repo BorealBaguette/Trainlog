@@ -2,8 +2,16 @@
 {% block content %}
 {% include "bootstrap/navigation.html"%}
 
+{% include "includes/trip_cards.html" %}
+
 <div id="form">
   <h2 class="header">{{user_settings}} {{username}}</h2>
+  {% if is_owner %}
+  <div class="alert alert-info d-flex justify-content-between align-items-center py-2 px-3">
+    <span><i class="fa-solid fa-wand-magic-sparkles me-1"></i> {{ settingsRedesignNote }}</span>
+    <a class="btn btn-sm btn-primary" href="{{ url_for('user_settings', username=username, v2=1) }}">{{ settingsRedesignPreview }}</a>
+  </div>
+  {% endif %}
   <div>
     <form autocomplete="off" method="POST">
 
@@ -55,8 +63,8 @@
       <hr>
       <label for="default_landing">{{defaultLanding}}</label>
       <select class="form-select" name="default_landing" id="default_landing">
-        <option value="map" {% if default_landing=="map" %}selected{% endif %}>🗺️ {{map}}</option>
-        <option value="new_map" {% if default_landing=="new_map" %}selected{% endif %}>🌍 {{map}} β</option>
+        <option value="dashboard" {% if default_landing=="dashboard" %}selected{% endif %}>🏠 {{user_dashboard}}</option>
+        <option value="map" {% if default_landing=="map" or default_landing=="new_map" %}selected{% endif %}>🗺️ {{map}}</option>
         <option value="trips" {% if default_landing=="trips" %}selected{% endif %}>🕰️ {{trips}}</option>
         <option value="projects" {% if default_landing=="projects" %}selected{% endif %}>🕒 {{projectList}}</option>
       </select>
@@ -77,42 +85,11 @@
         {% endfor %}
       </select>
       <hr>
-      <label for="tileserver">{{ tilesetLabel }}</label>
-      <select class="form-select tileserver-select" name="tileserver" id="tileserver">
-        <!-- General -->
-        <option value="osm" {% if user_tileserver=="osm" %}selected{% endif %}>🗺️ {{ tileserver_default }}
-        </option>
-
-        <!-- Country-specific -->
-        <option value="de" {% if user_tileserver=="de" %}selected{% endif %}>🇩🇪 {{ tileserver_de }}</option>
-        <option value="fr" {% if user_tileserver=="fr" %}selected{% endif %}>🇫🇷 {{ tileserver_fr }}</option>
-
-        <!-- Jawg Raster -->
-        <option value="jawg-streets" {% if user_tileserver=="jawg-streets" %}selected{% endif %}>🛣️ {{
-          tileserver_jawg_streets }}</option>
-        <option value="jawg-light" {% if user_tileserver=="jawg-light" %}selected{% endif %}>☀️ {{ tileserver_jawg_light
-          }}</option>
-        <option value="jawg-dark" {% if user_tileserver=="jawg-dark" %}selected{% endif %}>🌙 {{ tileserver_jawg_dark }}
-        </option>
-        <option value="jawg-sunny" {% if user_tileserver=="jawg-sunny" %}selected{% endif %}>🌞 {{ tileserver_jawg_sunny
-          }}</option>
-        <option value="jawg-terrain" {% if user_tileserver=="jawg-terrain" %}selected{% endif %}>⛰️ {{
-          tileserver_jawg_terrain }}</option>
-        <option value="jawg-lagoon" {% if user_tileserver=="jawg-lagoon" %}selected{% endif %}>🏖️ {{
-          tileserver_jawg_lagoon }}</option>
-
-        <!-- Thunderforest -->
-        <option value="thunderforest-transport" {% if user_tileserver=="thunderforest-transport" %}selected{% endif %}>
-          🚌 {{ tileserver_thunderforest_transport }}</option>
-
-        {% if is_premium %}
-        <!-- Jawg Vector Versions (distinct but thematically tied) -->
-        <option value="jawg-streets-v2" class="vector-map" {% if user_tileserver=="jawg-streets-v2" %}selected{% endif
-          %}>🛣️💎 Streets V2 (vector)</option>
-        <option value="jawg-lagoon-v2" class="vector-map" {% if user_tileserver=="jawg-lagoon-v2" %}selected{% endif %}>
-          🏖️💎 Lagoon V2 (vector)</option>
-        {% endif %}
-      </select>
+      <label>{{ tilesetLabel }}</label>
+      <button type="button" class="form-select text-start" id="tileserverPickerBtn" style="cursor:pointer;">
+        <i class="fa-solid fa-map me-2" id="tileserverPickerIcon"></i><span id="tileserverPickerLabel"></span>
+      </button>
+      <input type="hidden" id="tileserver" name="tileserver" value="{{ user_tileserver }}">
 
       {% if is_premium %}
       <div class="form-check form-switch mt-2">
@@ -132,6 +109,20 @@
           <option value="gauge">📏 Track Gauge</option>
         </select>
       </div>
+
+      <div class="form-check form-switch mt-2">
+        <input class="form-check-input" type="checkbox" id="flight_3d" name="flight_3d" {{ flight_3d_checked }}>
+        <label class="form-check-label" for="flight_3d">
+          <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ flight3dSetting }}
+        </label>
+      </div>
+
+      <div class="form-check form-switch mt-2">
+        <input class="form-check-input" type="checkbox" id="live_tracking" name="live_tracking" {{ live_tracking_checked }}>
+        <label class="form-check-label" for="live_tracking">
+          <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ liveTrackingSetting }}
+        </label>
+      </div>
       {% endif %}
 
       <div class="form-check form-switch mt-2">
@@ -144,23 +135,14 @@
       <a class="btn btn-labeled btn-primary" href="{{ url_for('export', username=username)}}"><span
           class="btn-label "><i class="fa-solid fa-file-export"></i></span>{{export}}</a>
       <label>{{importText}}</label>
-      <label>
-        <span class="btn btn-labeled btn-primary"><span class="btn-label "><i
-              class="fa-solid fa-file-import"></i></span>{{import}}</span>
-        <input type="file" class="form-control" name="trainlogImport" id="trainlogImport" style="display:none">
-      </label>
+      <button type="button" class="btn btn-labeled btn-primary" id="importTrainlogBtn">
+        <span class="btn-label"><i class="fa-solid fa-file-import"></i></span>{{import}}
+      </button>
       <hr>
       <label for="filename">{{MFR24}} <a href="https://my.flightradar24.com/settings/export">My Flightradar</a></label>
-      <label>
-        <span class="btn btn-labeled btn-primary"><span class="btn-label "><i
-              class="fa-solid fa-plane"></i></span>{{import}} MFR24</span>
-        <input type="file" class="form-control" name="MFR24" id="MFR24" style="display:none">
-      </label>
-
-      <div class="progress invisible">
-        <div class="progress-bar progress-bar-striped progress-bar-animated" role="progressbar" style="width: 0%"></div>
-        <br><br>
-      </div>
+      <button type="button" class="btn btn-labeled btn-primary" id="importMFR24Btn">
+        <span class="btn-label"><i class="fa-solid fa-plane"></i></span>{{import}} MFR24
+      </button>
 
       <hr>
       <label for="clear-cache">{{clearCacheLabel | safe}}</label>
@@ -171,215 +153,36 @@
 
 
       <button id=submit type="submit" onclick="">{{submit}}</button>
-      <div id="importErrors"></div>
     </form>
   </div>
 </div>
 
+{% include "includes/import_modal.html" %}
+{% include "includes/tileserver_picker.html" %}
 
 <script>
-
-  document.getElementById("clear-cache").addEventListener("click", function () {
-    localforage.clear().then(function () {
-      alert("{{cacheCleared}}");
-    }).catch(function (err) {
-      alert("{{cacheError}}");
-    });
-  });
-
-  const currencySelect = document.getElementById('user_currency');
-  for (let option of currencySelect.options) {
-    const countryCode = option.dataset.country; // Assuming you're using a data attribute for the country code
-    const emoji = getFlagEmoji(countryCode);
-    option.text = `${emoji} ${option.text}`; // Prepend the emoji to the option text
-  }
-
-  $(document).ready(function () {
-    // Initial display based on the selected value
-    updateDetails();
-
-    // Event listener for when the select changes
-    $('#share_level').on('change', updateDetails);
-
-    {% if is_premium %}
-    // On page load, check if current tileserver is an ORM map
-    const currentTileserver = "{{ user_tileserver }}";
-    const ormMatch = currentTileserver.match(/^openrailwaymap-(.+)\.(.+)$/);
-    
-    if (ormMatch) {
-        $('#orm-enabled').prop('checked', true);
-        $('#orm-type').val(ormMatch[1]);
-        $('#tileserver').val(ormMatch[2]);
-        $('#orm-options').show();
-        $('.vector-map').prop('disabled', true);
-        // Store the original base map
-        $('#tileserver').data('base-map', ormMatch[2]);
-    }
-    {% endif %}
-  });
-
-  // Function to update the displayed details
+  // Share-level help text + icon
   function updateDetails() {
-
     let selectedIconClass = $('#share_level option:selected').data('icon');
-    // Clear previous icons and apply the new one to the label
     $('.input-group-text i').attr('class', selectedIconClass);
-
-    const selectedDetails = $('#share_level option:selected').data('details').replace("{public_link}", "{{ url_for('public', username=username, _external=True,  _scheme='https')}}");
+    const selectedDetails = $('#share_level option:selected').data('details')
+      .replace("{public_link}", "{{ url_for('public', username=username, _external=True, _scheme='https') }}");
     $('#share-level-details').html(selectedDetails);
   }
-
-  var urls = {
-    "MFR24": "{{ url_for('processMFR24', username=username)}}",
-    "trainlogImport": "{{ url_for('importAll', username=username)}}"
-  }
-
-  function uploadFile(input, e) {
-    var ext = $(`input#${input}`).val().split(".").pop().toLowerCase();
-    if ($.inArray(ext, ["csv"]) == -1) {
-      alert('Upload CSV');
-      return false;
-    }
-    if (e.target.files != undefined) {
-      var reader = new FileReader();
-      reader.onload = function (e) {
-        var lines = e.target.result.split('\n');
-        $('.progress').removeClass("invisible")
-
-        function processNextItem(i) {
-
-          var newProgress = (i / lines.length) * 100 + 1;
-          $('.progress-bar').width(newProgress + "%");
-
-          $.ajax({
-            type: "POST",
-            url: urls[input],
-            data: encodeURIComponent(input === "trainlogImport" ? lines[0] + "\n" + lines[i] : lines[i]), // Send headers alongside data if trainlogImport
-            error: function (xhr, status, error) {
-              console.error("Upload failed:", error);
-              // Display the offending line in an alert div
-              $('#importErrors').append(`<div class="alert alert-danger" role="alert">Error uploading line: ${i} - ${error}</div>`);
-              // Scroll to the bottom of the page to ensure the alert is visible
-            },
-            complete: function () {
-              i++; // Increment i for the next iteration
-
-              // Conditionally check the termination condition based on the input
-              if (input === "MFR24" && i < lines.length) { // For MFR24, process all lines including the last one
-                processNextItem(i);
-              } else if (input === "trainlogImport" && i < lines.length - 1) { // For trainlogImport, omit the last line
-                processNextItem(i);
-              } else {
-                // Once all relevant lines are processed, redirect
-                location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}";
-              }
-            }
-          });
-        }
-        if (input == "MFR24") processNextItem(2)
-        else processNextItem(1)
-      };
-      reader.readAsText(e.target.files.item(0));
-    }
-    return false;
-  }
-
-  $("#MFR24").change(function (e) {
-    uploadFile("MFR24", e);
+  $(document).ready(function () {
+    updateDetails();
+    $('#share_level').on('change', updateDetails);
   });
 
-  $("#trainlogImport").change(function (e) {
-    uploadFile("trainlogImport", e);
+  // Currency flags
+  const currencySelect = document.getElementById('user_currency');
+  for (let option of currencySelect.options) {
+    option.text = `${getFlagEmoji(option.dataset.country)} ${option.text}`;
+  }
+
+  // Clear cache
+  document.getElementById("clear-cache").addEventListener("click", function () {
+    localforage.clear().then(() => alert("{{cacheCleared}}")).catch(() => alert("{{cacheError}}"));
   });
-
-  {% if is_premium %}
-    // Store the original value
-    let originalTileserver = $('#tileserver').val();
-    
-    // Handle ORM checkbox and vector map compatibility
-    $('#orm-enabled').on('change', function() {
-        const isChecked = $(this).is(':checked');
-        
-        if (isChecked) {
-            // Store current base map
-            const currentMap = $('#tileserver').val();
-            if (!currentMap.endsWith('-v2')) {
-                $('#tileserver').data('base-map', currentMap);
-            }
-            
-            // Show ORM options
-            $('#orm-options').slideDown();
-            
-            // Disable vector maps
-            $('.vector-map').prop('disabled', true).each(function() {
-                if ($(this).is(':selected')) {
-                    // If a vector map was selected, switch to default
-                    $('#tileserver').val('osm');
-                    $('#tileserver').data('base-map', 'osm');
-                }
-            });
-            
-            // Update the tileserver value with ORM
-            updateORMValue();
-        } else {
-            // Hide ORM options
-            $('#orm-options').slideUp();
-            
-            // Re-enable vector maps
-            $('.vector-map').prop('disabled', false);
-            
-            // Restore the base map
-            const baseMap = $('#tileserver').data('base-map') || 'default';
-            $('#tileserver').val(baseMap);
-        }
-    });
-
-    // Update ORM value when type changes
-    $('#orm-type').on('change', updateORMValue);
-    
-    // Update ORM value when base map changes (but only if ORM is enabled)
-    $('#tileserver').on('change', function() {
-        if ($('#orm-enabled').is(':checked') && !$(this).val().endsWith('-v2')) {
-            $('#tileserver').data('base-map', $(this).val());
-            updateORMValue();
-        }
-    });
-
-    function updateORMValue() {
-        if ($('#orm-enabled').is(':checked')) {
-            const ormType = $('#orm-type').val();
-            const baseMap = $('#tileserver').data('base-map') || $('#tileserver').val();
-            
-            // Only use raster maps as base
-            if (!baseMap.endsWith('-v2') && baseMap !== '') {
-                const combinedValue = `openrailwaymap-${ormType}.${baseMap}`;
-                // Create or update hidden input
-                if ($('#orm-combined-value').length === 0) {
-                    $('<input>').attr({
-                        type: 'hidden',
-                        id: 'orm-combined-value',
-                        name: 'tileserver',
-                        value: combinedValue
-                    }).appendTo('form');
-                } else {
-                    $('#orm-combined-value').val(combinedValue);
-                }
-            }
-        } else {
-            // Remove hidden input if ORM is disabled
-            $('#orm-combined-value').remove();
-        }
-    }
-
-    // Before form submission, set the correct value
-    $('form').on('submit', function(e) {
-        if ($('#orm-enabled').is(':checked')) {
-            const ormCombined = $('#orm-combined-value').val();
-            if (ormCombined) {
-                $('#tileserver').val(ormCombined);
-            }
-        }
-    });
-  {% endif %}
 </script>
 {% endblock %}

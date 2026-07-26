@@ -8,17 +8,17 @@
 </div>
 
 <div id="leaderboard-container" class="container mt-3">
-    <h2>
+    <h1>
         {{ leaderboardCountries }}
-    </h2>
-    
+    </h1>
+
     <br>
     {% include "leaderboardNav.html"%}
 
     <br>
 
     <table id="leaderboard" class="table table-bordered display nowrap">
-        <thead class="thead">
+        <thead>
             <tr>
                 <th></th>
                 <th class="all">{{ leaderboardCountry }}</th>
@@ -44,12 +44,14 @@ const countriesWithRegions = new Set();
 
 $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(countries, status){
     function generateLink(username, highlighted=false) {
+        const safe = sanitize(username);
+        const encoded = encodeURIComponent(username);
         if (countries.non_public_users.includes(username)) {
-            return `${username}`;
+            return safe;
         } else if (highlighted) {
-            return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+            return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${encoded}">${safe}</a>`;
         } else {
-            return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+            return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${encoded}">${safe}</a>`;
         }
     }
 
@@ -144,12 +146,13 @@ $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(countries, statu
     });
 
     const dTable = $('#leaderboard').DataTable({
-        paging: false, // Don't want paging                
-        bPaginate: false, // Don't want paging   
+        paging: false, // Don't want paging
+        bPaginate: false, // Don't want paging
         columnDefs: [
             {
                 className: 'dtr-control',
                 orderable: false,
+                width: '1em',
                 target: 0
             },
             {
@@ -174,7 +177,24 @@ $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(countries, statu
                 }
             }
         },
-        order: [[3, 'desc']]  // Order by percent in descending order
+        order: [[3, 'desc']],  // Order by percent in descending order
+        language: {
+            info: "{{dtInfo}}",
+            paginate: {
+                next: "{{dtNext}}",
+                previous: "{{dtPrevious}}",
+            },
+            emptyTable: "{{dtEmptyTable}}",
+            select: {
+                rows: {
+                    "_": "{{dtMultipleLineSelected}}",
+                    "0": "",
+                    "1": "{{dtOneLineSelected}}"
+                },
+            },
+            lengthMenu: "{{dtLengthMenu}}",
+            search: "{{dtSearch}}"
+        },
     });
 
     dTable.rows().every(function() {

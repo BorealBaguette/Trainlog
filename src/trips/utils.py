@@ -4,15 +4,15 @@ import traceback
 
 from flask import request
 
+from src.error_reporter import report_error
 from src.pg import pg_session
 from src.sql.trips import get_current_trip_query
+from src.sqlite_legacy import mainConn
 from src.utils import (
     get_user_id,
     get_username,
-    mainConn,
     managed_cursor,
     parse_date,
-    sendOwnerEmail,
 )
 
 from .trip import Trip
@@ -170,9 +170,12 @@ def compare_trip(trip_id: int):
         """
         logger.error(msg)
 
-        if "127.0.0.1" not in request.url and "localhost" not in request.url:
-            msg = ""
-            sendOwnerEmail("Error : " + str(e), msg)
+        report_error(
+            subject="Trip drift: " + str(e),
+            message=msg,
+            url=request.url,
+            user=str(get_username() or ""),
+        )
 
 
 def get_current_trip_id() -> Trip | None:

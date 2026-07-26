@@ -1,10 +1,13 @@
 import csv
 import io
+import json
 import logging.config
 
+from src.paths import coords_to_ewkt
 from src.pg import get_or_create_pg_session, pg_session
+from src.sqlite_legacy import mainConn, pathConn
 from src.trips import Trip, compare_trip
-from src.utils import authConn, mainConn, managed_cursor, parse_date
+from src.utils import authConn, managed_cursor, parse_date
 
 logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
@@ -31,9 +34,215 @@ def sync_db_from_sqlite():
     """
 
     logger.info("Syncing SQLite database with PostgreSQL...")
-    with pg_session() as pg:
-        sync_trips_from_sqlite(pg)
-        sync_operators_from_sqlite(pg)
+    # Each group runs in its own transaction (committed independently) so the
+    # one-shot server migration doesn't build a single enormous transaction
+    # (paths alone is ~14GB of geometry).
+    sync_trips_from_sqlite()
+    sync_operators_from_sqlite()
+    sync_aux_tables_from_sqlite()
+    sync_trip_related_tables_from_sqlite()
+    sync_reference_tables_from_sqlite()
+    sync_paths_from_sqlite()
+    sync_carbon()
+
+
+def sync_carbon():
+    """Recompute the carbon footprint for every trip.
+
+    Carbon is not stored in SQLite (it is computed from the route geometry), so a
+    fresh trips sync writes carbon = NULL for every row. This recomputes it from
+    the paths now present in PG, and must therefore run after sync_paths.
+    """
+    logger.info("Backfilling carbon footprints in PostgreSQL...")
+    # Imported lazily to avoid a src -> scripts import at module load.
+    from scripts.backfill_carbon import backfill_carbon_for_all_trips
+
+    backfill_carbon_for_all_trips()
+
+
+def _clean_coord(value):
+    """Coerce a possibly-dirty SQLite coordinate (stored as text in a FLOAT column)
+    to a float. Handles European decimal commas ('12,25' -> 12.25) and the couple
+    of corrupt values that carry both a period and a trailing comma fragment
+    ('-8.433632,293' -> -8.433632)."""
+    if value is None or value == "":
+        return None
+    s = str(value).strip().replace("−", "-")  # normalise unicode minus
+    if "," in s and "." in s:
+        s = s.split(",")[0]
+    else:
+        s = s.replace(",", ".")
+    try:
+        return float(s)
+    except ValueError:
+        return None
+
+
+def _copy_full_table(
+    pg, sqlite_conn, table, *, drop_col=None, reset_serial=None, bool_cols=(),
+    coord_cols=(),
+):
+    """Copy every row of a SQLite table into the identically-named PG table.
+
+    Column names are read from SQLite and reused verbatim (quoted) so case is
+    preserved (needed for the upper-case currency columns in `exchanges`).
+    Existing PG rows are removed first, making this idempotent.
+
+    - `drop_col`: exclude this column from the copy and let Postgres' SERIAL
+      default generate it. Use for ids SQLite stores as meaningless/NULL (e.g.
+      the fake `SERIAL` columns of fr24_usage/ai_usage) that nothing references.
+    - `reset_serial`: after copying (preserving the id), realign this SERIAL
+      sequence to MAX(id). Use for ids that ARE referenced elsewhere (e.g.
+      tickets.uid, tags.uid) so they must be kept and future inserts not collide.
+    - `bool_cols`: SQLite stores booleans as 0/1; coerce these columns to Python
+      bool so they fit PG BOOLEAN columns.
+    """
+    with managed_cursor(sqlite_conn) as cursor:
+        cursor.execute(f"SELECT COUNT(*) FROM {table}")
+        count = cursor.fetchone()[0]
+        logger.info(f"Syncing {count} rows from SQLite table '{table}'")
+        cursor.execute(f"SELECT * FROM {table}")
+        columns = [d[0] for d in cursor.description]
+        rows = cursor.fetchall()
+
+    keep_idx = [i for i, c in enumerate(columns) if c != drop_col]
+    keep_cols = [columns[i] for i in keep_idx]
+    bool_idx = {i for i, c in enumerate(columns) if c in bool_cols}
+    coord_idx = {i for i, c in enumerate(columns) if c in coord_cols}
+
+    def conv(value, idx):
+        if idx in bool_idx and value is not None:
+            return bool(value)
+        if idx in coord_idx:
+            return _clean_coord(value)
+        return value
+
+    # Build converted rows, skipping any whose coordinate columns are missing /
+    # unparseable (trash data we don't want to carry into PG's NOT NULL columns).
+    converted = []
+    skipped = 0
+    for r in rows:
+        values = tuple(conv(r[i], i) for i in keep_idx)
+        if coord_idx and any(
+            values[pos] is None for pos, i in enumerate(keep_idx) if i in coord_idx
+        ):
+            skipped += 1
+            continue
+        converted.append(values)
+    if skipped:
+        logger.warning(f"Skipped {skipped} '{table}' rows with invalid coordinates")
+
+    raw = pg.connection().connection.cursor()
+    raw.execute(f"DELETE FROM {table};")
+    if converted:
+        col_idents = ", ".join(f'"{c}"' for c in keep_cols)
+        placeholders = ", ".join(["%s"] * len(keep_cols))
+        raw.executemany(
+            f"INSERT INTO {table} ({col_idents}) VALUES ({placeholders})",
+            converted,
+        )
+
+    if reset_serial is not None:
+        pg.execute(
+            f"SELECT setval(pg_get_serial_sequence('{table}', '{reset_serial}'),"
+            f" COALESCE((SELECT MAX({reset_serial}) FROM {table}), 0), true)"
+        )
+
+
+def sync_aux_tables_from_sqlite(pg_session=None):
+    """Sync the stats/auxiliary tables (Phase 1) from SQLite main.db to PG."""
+    logger.info("Syncing auxiliary tables from SQLite to PostgreSQL...")
+    with get_or_create_pg_session(pg_session) as pg:
+        _copy_full_table(pg, mainConn, "percents", drop_col="uid")
+        _copy_full_table(pg, mainConn, "exchanges")
+        _copy_full_table(pg, mainConn, "daily_active_users")
+        _copy_full_table(pg, mainConn, "fr24_usage", drop_col="uid")
+        _copy_full_table(pg, mainConn, "ai_usage", drop_col="uid")
+    logger.info("Finished migrating auxiliary tables from sqlite to pg!")
+
+
+def sync_trip_related_tables_from_sqlite(pg_session=None):
+    """Sync trip-adjacent tables (Phase 2) from SQLite main.db to PG.
+
+    tickets.uid and tags.uid are referenced (trips.ticket_id, tags_associations.tag_id)
+    so their ids are preserved and the sequences realigned afterwards.
+    """
+    logger.info("Syncing trip-related tables from SQLite to PostgreSQL...")
+    with get_or_create_pg_session(pg_session) as pg:
+        # tags_associations FK-references tags/trips, so load tickets & tags first.
+        _copy_full_table(
+            pg, mainConn, "tickets", reset_serial="uid", bool_cols=("active",)
+        )
+        _copy_full_table(pg, mainConn, "tags", reset_serial="uid")
+        _copy_full_table(pg, mainConn, "tags_associations")
+        _copy_full_table(pg, mainConn, "gpx", reset_serial="uid")
+        _copy_full_table(pg, mainConn, "ship_pictures", reset_serial="uid")
+    logger.info("Finished migrating trip-related tables from sqlite to pg!")
+
+
+def sync_paths_from_sqlite(pg_session=None):
+    """Stream the (large) SQLite path.db `paths` table into the PostGIS `paths`
+    table, converting each JSON [[lat,lng],...] route to a geometry. Streamed in
+    batches via COPY to keep memory bounded; rows with empty/invalid coordinates
+    are skipped.
+    """
+    logger.info("Syncing paths from SQLite to PostGIS...")
+    with get_or_create_pg_session(pg_session) as pg:
+        raw = pg.connection().connection.cursor()
+        raw.execute("DELETE FROM paths;")
+
+        with managed_cursor(pathConn) as cursor:
+            cursor.execute("SELECT COUNT(*) FROM paths")
+            total = cursor.fetchone()[0]
+            logger.info(f"Syncing {total} paths from SQLite to PostGIS")
+            cursor.execute("SELECT trip_id, path FROM paths")
+
+            seen = inserted = skipped = 0
+            while True:
+                rows = cursor.fetchmany(2000)
+                if not rows:
+                    break
+                buf = io.StringIO()
+                writer = csv.writer(buf, delimiter="\t")
+                batch_n = 0
+                for row in rows:
+                    seen += 1
+                    try:
+                        coords = json.loads(row["path"])
+                    except (TypeError, ValueError):
+                        skipped += 1
+                        continue
+                    ewkt = coords_to_ewkt(coords)
+                    if ewkt is None:
+                        skipped += 1
+                        continue
+                    writer.writerow([row["trip_id"], ewkt])
+                    batch_n += 1
+                if batch_n:
+                    buf.seek(0)
+                    raw.copy_expert(
+                        "COPY paths (trip_id, geom) FROM STDIN WITH (FORMAT csv, DELIMITER E'\t')",
+                        buf,
+                    )
+                    inserted += batch_n
+                if seen % 50000 == 0:
+                    logger.info(f"paths {seen}/{total} (inserted {inserted})")
+
+    logger.info(f"Finished migrating paths: inserted {inserted}, skipped {skipped}")
+
+
+def sync_reference_tables_from_sqlite(pg_session=None):
+    """Sync reference/geo tables (Phase 3) from SQLite main.db to PG."""
+    logger.info("Syncing reference tables from SQLite to PostgreSQL...")
+    with get_or_create_pg_session(pg_session) as pg:
+        _copy_full_table(pg, mainConn, "airports")
+        _copy_full_table(pg, mainConn, "train_stations")
+        _copy_full_table(
+            pg, mainConn, "manual_stations", reset_serial="uid",
+            coord_cols=("lat", "lng"),
+        )
+        _copy_full_table(pg, mainConn, "here_api_operators")
+    logger.info("Finished migrating reference tables from sqlite to pg!")
 
 
 def trip_to_csv(trip: Trip):
@@ -67,8 +276,23 @@ def trip_to_csv(trip: Trip):
         trip.ticket_id,
         trip.purchasing_date,
         trip.visibility,
+        _delay_to_int(trip.departure_delay),
+        _delay_to_int(trip.arrival_delay),
     ]
     return items
+
+
+def _delay_to_int(value):
+    """Delays are seconds. SQLite stored some as floats (e.g. 792.6) but the PG
+    column is integer, so round to the nearest whole second. A few rows hold
+    corrupt out-of-range values (e.g. -57559935420 s ≈ -1825 years) that don't
+    fit a PG integer — discard those (NULL)."""
+    if value is None or value == "":
+        return None
+    n = int(round(float(value)))
+    if not (-2147483648 <= n <= 2147483647):
+        return None
+    return n
 
 
 def sync_trips_from_sqlite(pg_session=None):
@@ -137,6 +361,8 @@ def sync_trips_from_sqlite(pg_session=None):
             ticket_id=row["ticket_id"] if row["ticket_id"] != "" else None,
             is_project=row["start_datetime"] == 1 or row["end_datetime"] == 1,
             visibility=row["visibility"],
+            departure_delay=row["departure_delay"],
+            arrival_delay=row["arrival_delay"],
             path=None,  # not needed when inserting trips
         )
         csv_writer.writerow(trip_to_csv(trip))
@@ -179,7 +405,9 @@ def sync_trips_from_sqlite(pg_session=None):
                 currency,
                 ticket_id,
                 purchase_date,
-                visibility
+                visibility,
+                departure_delay,
+                arrival_delay
             ) FROM STDIN WITH (
                 FORMAT csv,
                 DELIMITER E'\t',

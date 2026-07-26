@@ -5,8 +5,8 @@
 
 <div class="container">
     <h1 class="mt-3">Ships</h1>
-    <button type="button" class="btn btn-primary mb-3" data-bs-toggle="modal" data-bs-target="#shipModal" onclick="clearForm()">Add Ship</button>
-    <table id="shipTable" class="mt-3">
+    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#shipModal" onclick="clearForm()">Add Ship</button>
+    <table id="shipTable">
         <thead>
             <tr>
                 <th scope="col">Vessel Name</th>
@@ -66,7 +66,24 @@
 <script>
     $(document).ready(function() {
         $('#shipTable').DataTable({
-            responsive: true
+            responsive: true,
+            language: {
+                info: "{{dtInfo}}",
+                paginate: {
+                    next: "{{dtNext}}",
+                    previous: "{{dtPrevious}}",
+                },
+                emptyTable: "{{dtEmptyTable}}",
+                select: {
+                    rows: {
+                        "_": "{{dtMultipleLineSelected}}",
+                        "0": "",
+                        "1": "{{dtOneLineSelected}}"
+                    },
+                },
+                lengthMenu: "{{dtLengthMenu}}",
+                search: "{{dtSearch}}"
+            },
         });
 
         $('#shipForm').on('submit', function(e) {

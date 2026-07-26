@@ -129,6 +129,10 @@ function buildItinerary(trips, prices){
     "cycle" : "{{cycle}}",
     "walk" : "{{walk}}",
     "aerialway": '{{aerialway}}',
+    "scooter": '{{scooter}}',
+    "funicular": '{{funicular}}',
+    "rail": '{{rail}}',
+    "ski": '{{ski}}',
   }
 
 {% if 'price' in request.args %}              
@@ -253,7 +257,13 @@ let operatorContents = [];
 if (trip.trip.multi_operators) {
   console.log(trip.trip.multi_operators);
   trip.trip.multi_operators.forEach(multiOperator => {
-      console.log(multiOperator);
+      // No logo (free text, or an operator with no logo on file) → show the name.
+      if (!multiOperator.logo_url) {
+        operatorContents.push(
+          $('<span>').addClass('itineraryOperatorName').text(multiOperator.operator_name || '')
+        );
+        return;
+      }
       let imgElement = $("<img>")
         .attr("src", "/static/"+multiOperator.logo_url)
         .attr("class", "itineraryOperatorLogo");
@@ -319,7 +329,7 @@ if (operatorContents.length) {
     var formattedTicketInfo = null;
     var formattedPrice = null;
 
-    if (trip.trip.ticket_price_in_user_currency){
+    if (isNumber(trip.trip.ticket_price_in_user_currency)){
       formattedTicketPrice = trip.trip.ticket + " - " + formatCurrency("{{langId}}",trip.trip.ticket_price_in_user_currency, trip.trip.user_currency);
       if (trip.trip.user_currency != trip.trip.ticket_currency){
         originalCurrency = formatCurrency("{{langId}}",trip.trip.ticket_price, trip.trip.ticket_currency);
@@ -329,7 +339,7 @@ if (operatorContents.length) {
       
     }
 
-    if(trip.trip.price_in_user_currency)
+    if (isNumber(trip.trip.price_in_user_currency))
     {
       formattedTripPrice = formatCurrency("{{langId}}",trip.trip.price_in_user_currency, trip.trip.user_currency);
       if (trip.trip.user_currency != trip.trip.currency){
@@ -633,6 +643,10 @@ var map = createMap({
     bus: '{{bus}}',
     ferry: '{{ferry}}',
     aerialway: '{{aerialway}}',
+    scooter: '{{scooter}}',
+    funicular: '{{funicular}}',
+    rail: '{{rail}}',
+    ski: '{{ski}}',
     future: '{{future}}',
     current: '{{current}}',
     project: '{{project}}'

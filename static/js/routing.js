@@ -53,6 +53,10 @@ antpathStyles =  {
 };
 
 var useNewRouter = false;
+// Persists the ferry-split checkbox's state across re-renders (routeWhileDragging
+// fires routeselected repeatedly, which fully re-creates the sidebar HTML — without
+// this, an unchecked box would silently reset to checked on the next drag/reroute).
+var ferrySplitEnabled = false;
 
 var markergroup = new L.featureGroup(markerIconStart, markerIconEnd);
 
@@ -60,16 +64,16 @@ var routeDetails = null;
 (function() {
   var originalOpen = XMLHttpRequest.prototype.open;
   var originalSend = XMLHttpRequest.prototype.send;
-  
+
   XMLHttpRequest.prototype.open = function(method, url) {
     this._requestUrl = url;
     return originalOpen.apply(this, arguments);
   };
-  
+
   XMLHttpRequest.prototype.send = function() {
     var self = this;
     var originalOnReadyStateChange = this.onreadystatechange;
-    
+
     this.onreadystatechange = function() {
       if (self.readyState === 4 && self.status === 200) {
         // Check if this is an OSRM routing request
@@ -77,22 +81,26 @@ var routeDetails = null;
           try {
             var response = JSON.parse(self.responseText);
             if (response.routes && response.routes[0] && response.routes[0].details) {
-              routeDetails = response.routes[0].details;              
+              routeDetails = response.routes[0].details;
             }
           } catch(e) {
             console.error('Error parsing OSRM response:', e);
           }
         }
       }
-      
+
       if (originalOnReadyStateChange) {
         return originalOnReadyStateChange.apply(this, arguments);
       }
     };
-    
+
     return originalSend.apply(this, arguments);
   };
 })();
+
+// Track freehand segments (from waypoint i to i+1)
+var freehandSegments = new Set();
+var freehandLines = []; // transparent click-intercept polylines for freehand sections
 
 function downloadCurrentRouteAsGeoJSON(distance) {
   var routeCoordinates = currentRoute.map(function(point) {
@@ -129,9 +137,9 @@ function recomputeRoute() {
     excludelist.push('highspeed');
     }
     if (excludelist.length) {
-    control.options.router.options.requestParameters = {exclude: excludelist.join(',')};
+    window.baseRouter.options.requestParameters = {exclude: excludelist.join(',')};
     } else {
-    delete control.options.router.options.requestParameters;
+    delete window.baseRouter.options.requestParameters;
     }
     control.route();
 }
@@ -220,25 +228,26 @@ function switchRouter() {
     delete newTrip["details"];
   }
   
-  // Update the router to pass the new_router parameter through our backend
+  // Update the underlying OSRM router (baseRouter) directly — the control's router is
+  // a freehand wrapper with no .options of its own.
   var routerUrl = `${window.location.origin}/forwardRouting/${type}/route/v1`;
-  control.options.router.options.serviceUrl = routerUrl;
-  
+  window.baseRouter.options.serviceUrl = routerUrl;
+
   // Preserve existing parameters (like exclude from recomputeRoute)
-  var currentParams = control.options.router.options.requestParameters || {};
-  
+  var currentParams = window.baseRouter.options.requestParameters || {};
+
   // Update the use_new_router parameter
   if (useNewRouter) {
     currentParams.use_new_router = 'true';
   } else {
     delete currentParams.use_new_router;
   }
-  
+
   // Only set requestParameters if there are any parameters to set
   if (Object.keys(currentParams).length > 0) {
-    control.options.router.options.requestParameters = currentParams;
+    window.baseRouter.options.requestParameters = currentParams;
   } else {
-    delete control.options.router.options.requestParameters;
+    delete window.baseRouter.options.requestParameters;
   }
   
   // Recompute the route with the new router
@@ -249,14 +258,411 @@ window.removeWaypoint = function(index) {
   // Close any open popups
   map.closePopup();
   
-  // Find the plan instance
+  // Update freehand segments in place (reassigning would break createCustomRouter's closure).
+  var toAdjust = [];
+  freehandSegments.forEach(function(segIndex) {
+    if (segIndex >= index) toAdjust.push(segIndex);
+  });
+  toAdjust.forEach(function(segIndex) {
+    freehandSegments.delete(segIndex);
+    if (segIndex > index) {
+      freehandSegments.add(segIndex - 1); // shift down; segIndex === index is simply removed
+    }
+  });
+  
+  // Find the plan instance and remove the waypoint
   if (window.currentPlan) {
     window.currentPlan.spliceWaypoints(index, 1);
   }
 };
 
-function routing(map, showSidebar=true, type){
+window.toggleFreehand = function(index) {
+  // Close popup
+  map.closePopup();
+  
+  // For waypoint at index, toggle the segment FROM index TO index+1
+  if (freehandSegments.has(index)) {
+    freehandSegments.delete(index);
+  } else {
+    freehandSegments.add(index);
+  }
+  
+  // Update marker visual appearance
+  updateMarkerVisuals();
+  
+  // Force re-route to update the display
+  if (window.currentControl) {
+    window.currentControl.route();
+  }
+};
+
+// Function to update all marker visual indicators
+window.updateMarkerVisuals = function() {
+  if (window.currentPlan && window.currentPlan._markers) {
+    window.currentPlan._markers.forEach(function(marker, index) {
+      if (index > 0 && index < window.currentPlan._markers.length - 1) {
+        let segmentIsFreehand = freehandSegments.has(index);
+        
+        setTimeout(() => {
+          if (marker.getElement()) {
+            if (segmentIsFreehand) {
+              addFreehandOverlay(marker.getElement());
+            } else {
+              removeFreehandOverlay(marker.getElement());
+            }
+          }
+        }, 100);
+      }
+    });
+  }
+};
+
+// Function to add freehand overlay
+window.addFreehandOverlay = function(element) {
+  // Remove existing overlay if present
+  removeFreehandOverlay(element);
+  
+  // Create star overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'freehand-overlay';
+  overlay.innerHTML = '★';
+  overlay.style.cssText = `
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    color: #ff8800;
+    font-size: 16px;
+    font-weight: bold;
+    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
+    pointer-events: none;
+    z-index: 1000;
+    line-height: 1;
+  `;
+  
+  element.style.position = 'relative';
+  element.appendChild(overlay);
+};
+
+// Function to remove freehand overlay
+window.removeFreehandOverlay = function(element) {
+  const existing = element.querySelector('.freehand-overlay');
+  if (existing) {
+    existing.remove();
+  }
+};
+
+// Custom router that handles freehand segments
+function createCustomRouter(baseRouter, freehandSegments) {
+  return {
+    route: function(waypoints, callback, context, options) {
+      // Clear previous freehand click-intercept layers
+      freehandLines.forEach(function(line) { map.removeLayer(line); });
+      freehandLines = [];
+
+      // If no waypoints or only one, return early
+      if (!waypoints || waypoints.length < 2) {
+        callback.call(context, null, [{
+          name: 'Empty route',
+          coordinates: [],
+          instructions: [],
+          summary: { totalDistance: 0, totalTime: 0 },
+          waypoints: waypoints || [],
+          inputWaypoints: waypoints || []
+        }]);
+        return;
+      }
+      
+      // Build segments based on freehand configuration
+      var segments = [];
+      var currentRouted = [];
+      
+      for (var i = 0; i < waypoints.length; i++) {
+        currentRouted.push(waypoints[i]);
+        
+        // Check if the segment FROM i TO i+1 is freehand
+        var segmentIsFreehand = freehandSegments.has(i);
+        
+        if (segmentIsFreehand && i < waypoints.length - 1) {
+          // End current routed segment (if it has multiple points)
+          if (currentRouted.length > 1) {
+            segments.push({
+              waypoints: [...currentRouted],
+              isFreehand: false,
+              type: 'routed'
+            });
+          }
+          
+          // Add freehand segment
+          segments.push({
+            waypoints: [waypoints[i], waypoints[i + 1]],
+            isFreehand: true,
+            type: 'freehand'
+          });
+          
+          // Start new routed segment with the end point
+          currentRouted = [waypoints[i + 1]];
+        } else if (i === waypoints.length - 1) {
+          // Last waypoint - finish current segment if it has multiple points
+          if (currentRouted.length > 1) {
+            segments.push({
+              waypoints: [...currentRouted],
+              isFreehand: false,
+              type: 'routed'
+            });
+          }
+        }
+      }
+      
+      // Handle case where we have no segments (single waypoint)
+      if (segments.length === 0) {
+        callback.call(context, null, [{
+          name: 'Single point',
+          coordinates: waypoints.length > 0 ? [{lat: waypoints[0].latLng.lat, lng: waypoints[0].latLng.lng}] : [],
+          instructions: [],
+          summary: { totalDistance: 0, totalTime: 0 },
+          waypoints: waypoints,
+          inputWaypoints: waypoints
+        }]);
+        return;
+      }
+      
+      // Process all segments
+      var allRoutes = new Array(segments.length);
+      var processedSegments = 0;
+      var hasError = false;
+      
+      segments.forEach(function(segment, segmentIndex) {
+        if (segment.isFreehand) {
+          // Handle freehand segment
+          var start = segment.waypoints[0].latLng;
+          var end = segment.waypoints[1].latLng;
+          
+          // Transparent hit area — intercepts clicks so LRM's own proportional
+          // mapping (which gets the wrong index for short freehand sections) never fires.
+          // Coordinates are initially set to marker positions; combineRoutes will
+          // update them to the actual snapped route endpoints (B_snapped → C_snapped).
+          var hitArea = L.polyline([start, end], {
+            weight: 12,
+            opacity: 0,
+            interactive: true
+          }).addTo(map);
+          freehandLines.push(hitArea);
+          var _wpStartIdx = waypoints.indexOf(segment.waypoints[0]);
+          (function(wpStartIdx, ha) {
+            ha.on('click', function(e) {
+              L.DomEvent.stopPropagation(e);
+              if (window.currentPlan) {
+                window.currentPlan.spliceWaypoints(wpStartIdx + 1, 0, L.Routing.waypoint(e.latlng));
+              }
+            });
+          })(_wpStartIdx, hitArea);
+
+          var distance = start.distanceTo(end);
+
+          allRoutes[segmentIndex] = {
+            coordinates: [
+              {lat: start.lat, lng: start.lng},
+              {lat: end.lat, lng: end.lng}
+            ],
+            _hitArea: hitArea,
+            instructions: [{
+              type: 'Straight',
+              text: 'Freehand segment',
+              distance: distance,
+              time: 0,
+              index: 0
+            }],
+            summary: {
+              totalDistance: distance,
+              totalTime: 0
+            },
+            inputWaypoints: segment.waypoints,
+            isFreehand: true
+          };
+          
+          processedSegments++;
+          if (processedSegments === segments.length && !hasError) {
+            combineRoutes(allRoutes, waypoints, callback, context);
+          }
+          
+        } else {
+          // Handle routed segment
+          baseRouter.route(segment.waypoints, function(err, routes) {
+            if (err) {
+              hasError = true;
+              callback.call(context, err);
+              return;
+            }
+            
+            if (routes && routes[0]) {
+              if (!routes[0].instructions) {
+                routes[0].instructions = [];
+              }
+              allRoutes[segmentIndex] = routes[0];
+            } else {
+              // Create a fallback route
+              allRoutes[segmentIndex] = {
+                coordinates: segment.waypoints.map(function(wp) {
+                  return {lat: wp.latLng.lat, lng: wp.latLng.lng};
+                }),
+                instructions: [],
+                summary: { totalDistance: 0, totalTime: 0 },
+                inputWaypoints: segment.waypoints
+              };
+            }
+            
+            processedSegments++;
+            if (processedSegments === segments.length && !hasError) {
+              combineRoutes(allRoutes, waypoints, callback, context);
+            }
+          }, context, options);
+        }
+      });
+    }
+  };
+}
+
+function combineRoutes(routes, waypoints, callback, context) {
+  var combinedCoordinates = [];
+  var combinedInstructions = [];
+  var totalDistance = 0;
+  var totalTime = 0;
+  
+  routes.forEach(function(route, idx) {
+    if (route && route.coordinates) {
+      totalDistance += route.summary.totalDistance;
+      if (!route.isFreehand) {
+        totalTime += route.summary.totalTime;
+      }
+
+      if (route.isFreehand) {
+        // Draw straight line from the last snapped route coordinate to the first
+        // coordinate of the next routed segment, bypassing the marker positions.
+        // This avoids the LRM snap-line zigzag (B_snapped→B_marker→C_marker→C_snapped).
+        var nextRoute = null;
+        for (var j = idx + 1; j < routes.length; j++) {
+          if (routes[j] && !routes[j].isFreehand) { nextRoute = routes[j]; break; }
+        }
+        var freeEnd = nextRoute && nextRoute.coordinates.length > 0
+          ? nextRoute.coordinates[0]
+          : route.coordinates[route.coordinates.length - 1]; // last freehand WP if no next route
+
+        if (freeEnd) {
+          var freeStart = combinedCoordinates.length > 0
+            ? combinedCoordinates[combinedCoordinates.length - 1]
+            : route.coordinates[0];
+          combinedCoordinates.push(freeEnd);
+
+          // Update hit area to cover the actual snapped span
+          if (route._hitArea) {
+            route._hitArea.setLatLngs([
+              L.latLng(freeStart.lat, freeStart.lng),
+              L.latLng(freeEnd.lat, freeEnd.lng)
+            ]);
+          }
+        }
+      } else {
+        // Avoid duplicating connection points between segments
+        if (combinedCoordinates.length > 0 && route.coordinates.length > 0) {
+          var lastCoord = combinedCoordinates[combinedCoordinates.length - 1];
+          var firstCoord = route.coordinates[0];
+          if (Math.abs(lastCoord.lat - firstCoord.lat) < 0.00001 &&
+              Math.abs(lastCoord.lng - firstCoord.lng) < 0.00001) {
+            combinedCoordinates = combinedCoordinates.concat(route.coordinates.slice(1));
+          } else {
+            combinedCoordinates = combinedCoordinates.concat(route.coordinates);
+          }
+        } else {
+          combinedCoordinates = combinedCoordinates.concat(route.coordinates);
+        }
+
+        // Add instructions
+        if (route.instructions && route.instructions.length > 0) {
+          var instructionsToAdd = route.instructions.map(function(instruction) {
+            return {
+              ...instruction,
+              index: instruction.index + combinedCoordinates.length - route.coordinates.length
+            };
+          });
+          combinedInstructions = combinedInstructions.concat(instructionsToAdd);
+        }
+      }
+    }
+  });
+  
+  // Ensure we have at least one instruction
+  if (combinedInstructions.length === 0) {
+    combinedInstructions = [{
+      type: 'Head',
+      text: 'Route',
+      distance: totalDistance,
+      time: totalTime,
+      index: 0
+    }];
+  }
+  
+  var combinedRoute = {
+    name: 'Combined Route',
+    coordinates: combinedCoordinates,
+    instructions: combinedInstructions,
+    summary: {
+      totalDistance: totalDistance,
+      totalTime: totalTime
+    },
+    waypoints: waypoints,
+    inputWaypoints: waypoints
+  };
+  
+  callback.call(context, null, [combinedRoute]);
+}
+
+// Trip types whose OSRM profile can plausibly cross a ferry leg (car/bus ferries,
+// foot/bike passenger ferries, train ferries). Trams, metros, air, etc. never do.
+var FERRY_SPLIT_TYPES = ['car', 'bus', 'train', 'cycle', 'walk'];
+window.FERRY_SPLIT_TYPES = FERRY_SPLIT_TYPES;
+
+// Plural form selection lives in util.js as window.pluralize (shared, CLDR-based).
+
+// Car-carrying rail shuttles (Channel Tunnel "Le Shuttle"/Eurotunnel, Alpine
+// Autoverlad, Sylt Autozug, motorail, …) are tagged route=shuttle_train in OSM,
+// which OSRM reports with mode 'ferry' — but they're trains, not ferries, so we
+// must NOT offer to split them off as a ferry leg. The step name is the only
+// signal OSRM gives us to tell them apart from real ferries.
+var SHUTTLE_TRAIN_RE = /shuttle|eurotunnel|autoverlad|autozug|auto-?train|motorail|verladung|vereina|l[oö]tschberg|furka|oberalp|tauernschleuse|autoreisezug/i;
+
+// Group a route's instructions into contiguous driving/ferry segments, using each
+// instruction's coordinate-array `index` to slice out per-segment coordinates.
+// Freehand placeholder instructions carry no `.mode`, so they're treated as
+// 'driving' and simply merge into whichever driving segment surrounds them.
+function detectModeSegments(route) {
+  var instructions = route.instructions, coords = route.coordinates;
+  var segments = []; // {mode, startIdx, roadName, distance, time, coordinates}
+  instructions.forEach(function(instr) {
+    var mode = 'driving';
+    if (instr.mode === 'ferry') {
+      // OSRM reports car-shuttle trains as 'ferry' too; give them their own 'train'
+      // segment so the split saves them as a train leg instead of a ferry leg.
+      mode = (instr.road && SHUTTLE_TRAIN_RE.test(instr.road)) ? 'train' : 'ferry';
+    }
+    var cur = segments[segments.length - 1];
+    if (!cur || cur.mode !== mode) {
+      cur = { mode: mode, startIdx: instr.index, distance: 0, time: 0, roadName: null };
+      segments.push(cur);
+    }
+    cur.distance += instr.distance;
+    cur.time += instr.time;
+    if (mode !== 'driving' && !cur.roadName) cur.roadName = instr.road; // OSRM crossing step name
+  });
+  for (var i = 0; i < segments.length; i++) {
+    var endIdx = (i < segments.length - 1) ? segments[i + 1].startIdx : coords.length - 1;
+    segments[i].coordinates = coords.slice(segments[i].startIdx, endIdx + 1);
+  }
+  return segments;
+}
+
+function routing(map, showSidebar=true, type, allowFerrySplit=false){
   flutterBridge.loading(true);
+
   sidebar = L.control.sidebar('sidebar', {
       closeButton: true,
       position: 'right',
@@ -318,6 +724,7 @@ function routing(map, showSidebar=true, type){
       routeWhileDragging: true,
       createMarker: function(i, wp, n) {
         let icon;
+        
         if (i === 0) {
           icon = markerIconStart;
         } else if (i === n - 1) {
@@ -331,30 +738,75 @@ function routing(map, showSidebar=true, type){
           icon: icon
         });
 
-        // For intermediate waypoints, add popup with delete functionality
+        // For intermediate waypoints, add popup with delete and freehand toggle
         if (i > 0 && i < n - 1) {
-          // Store the current index with the marker
-          marker.waypointIndex = i;
+          // Check if the segment FROM this waypoint is freehand
+          let segmentIsFreehand = freehandSegments.has(i);
           
-          // Create popup content with delete button
+          // Add visual indicator for freehand waypoints
+          if (segmentIsFreehand) {
+            // Add a simple star overlay to indicate freehand segment starts here
+            setTimeout(() => {
+              if (marker.getElement()) {
+                addFreehandOverlay(marker.getElement());
+              }
+            }, 100);
+          } else {
+            // Remove overlay for non-freehand waypoints
+            setTimeout(() => {
+              if (marker.getElement()) {
+                removeFreehandOverlay(marker.getElement());
+              }
+            }, 100);
+          }
+          
+          // Create popup content with delete button and freehand toggle
+          const freehandLabel = segmentIsFreehand ? (texts.normalRoute || 'Normal Route') : (texts.freehandRoute || 'Freehand Route');
+          const freehandButtonColor = segmentIsFreehand ? '#28a745' : '#ff8800';
+          const freehandIcon = segmentIsFreehand ? '🔄' : '✏️';
+          
           const popupContent = `
-            <div style="text-align: center; min-width: 120px;">
-              <p style="margin: 5px 0 10px 0;">${texts.waypoint} ${i}</p>
+            <div style="text-align: center; min-width: 150px;">
+              <p style="margin: 5px 0 10px 0;">
+                ${segmentIsFreehand ? '✏️ ' : ''}${texts.waypoint || 'Waypoint'} ${i}
+                ${segmentIsFreehand ? ' (Freehand Start)' : ''}
+              </p>
+              <button 
+                onclick="toggleFreehand(${i})" 
+                style="
+                  background-color: ${freehandButtonColor};
+                  color: white;
+                  border: none;
+                  padding: 5px 10px;
+                  border-radius: 4px;
+                  cursor: pointer;
+                  font-size: 13px;
+                  margin-bottom: 5px;
+                  width: 100%;
+                  font-weight: bold;
+                "
+                onmouseover="this.style.opacity='0.8'"
+                onmouseout="this.style.opacity='1'"
+                title="Toggle freehand for segment from this waypoint to next"
+              >
+                ${freehandIcon} ${freehandLabel}
+              </button>
               <button 
                 onclick="removeWaypoint(${i})" 
                 style="
                   background-color: #dc3545;
                   color: white;
                   border: none;
-                  padding: 5px 15px;
+                  padding: 5px 10px;
                   border-radius: 4px;
                   cursor: pointer;
-                  font-size: 14px;
+                  font-size: 13px;
+                  width: 100%;
                 "
                 onmouseover="this.style.backgroundColor='#c82333'"
                 onmouseout="this.style.backgroundColor='#dc3545'"
               >
-                🗑️ ${texts.remove}
+                🗑️ ${texts.remove || 'Remove'}
               </button>
             </div>
           `;
@@ -374,8 +826,30 @@ function routing(map, showSidebar=true, type){
         return marker;
       },
       waypointMode: 'snap',
+      addWaypoints: true
     });
     window.currentPlan = plan;
+
+    // Intercept spliceWaypoints to keep freehandSegments indices in sync.
+    // removeWaypoint() already adjusts freehandSegments before calling splice,
+    // so we only need to handle pure insertions (remove === 0).
+    var _origSplice = plan.spliceWaypoints.bind(plan);
+    plan.spliceWaypoints = function(index, remove) {
+      var added = Array.prototype.slice.call(arguments, 2);
+      if (remove === 0 && added.length > 0) {
+        // Mutate the existing Set in place — createCustomRouter captured this
+        // object by reference, so a reassignment would break its closure.
+        var toShift = [];
+        freehandSegments.forEach(function(seg) {
+          if (seg >= index) toShift.push(seg);
+        });
+        toShift.forEach(function(seg) {
+          freehandSegments.delete(seg);
+          freehandSegments.add(seg + added.length);
+        });
+      }
+      return _origSplice.apply(plan, arguments);
+    };
 
     if (window.innerWidth > 600){
       var autoPan = true;
@@ -391,6 +865,10 @@ function routing(map, showSidebar=true, type){
     else if(type == "ferry" ){
       profile = "ferry";
     }
+
+    var baseRouter = L.Routing.osrmv1({serviceUrl: routerurl, profile: profile, useHints: false});
+    window.baseRouter = baseRouter;
+    var customRouter = createCustomRouter(baseRouter, freehandSegments);
 
     var control = L.Routing.control({
       routeWhileDragging: true,
@@ -409,12 +887,23 @@ function routing(map, showSidebar=true, type){
             weight: 6 // Visible line
           },
           useAntPath ? antpathStyles : {color: '#52b0fe', opacity: 0.9, weight: 3}
-        ]
+        ],
+        addWaypoints: true  // Allow adding waypoints on regular segments
       },
-      router: L.Routing.osrmv1({serviceUrl: routerurl, profile: profile, useHints: false})
+      router: customRouter
     }).on('routeselected', function(){
       var content = `<h4>${texts.routeTitle.replace("{origLabel}", origLabel).replace("{destLabel}", destLabel)}</h4>`;
-      
+      var hintHtml = ''; // "adjust the markers" hint, shown inline next to the distance (train only)
+
+      // Detect car/ferry mode transitions so the ferry-split toggle and
+      // saveTripSplit() in routing.html can offer splitting into separate trips.
+      // Only offered on the dedicated new-trip routing page (allowFerrySplit) — the
+      // edit/copy path editor and the AI-compose map reuse this same routing() control
+      // but only ever save a single trip, so splitting isn't wired up there.
+      window.modeSegments = (allowFerrySplit && FERRY_SPLIT_TYPES.includes(type)) ? detectModeSegments(this._selectedRoute) : null;
+      var ferryCount = window.modeSegments ? window.modeSegments.filter(function(s) { return s.mode === 'ferry'; }).length : 0;
+      var trainCount = window.modeSegments ? window.modeSegments.filter(function(s) { return s.mode === 'train'; }).length : 0;
+
       // Add router selector for train, tram, metro
       if(["train", "tram", "metro"].includes(type)){
         content += `
@@ -431,28 +920,64 @@ function routing(map, showSidebar=true, type){
             </label>
           </div>
         `;
-        content += `<p><small>${texts.fineTuneNote}</small></p>`;
+        // Tuck the "adjust the markers" hint behind a small info icon (rendered inline with distance).
+        hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div>${texts.fineTuneNote}</div></details>`;
       }
       
+      // Add note about freehand segments if any exist
+      if (freehandSegments.size > 0) {
+        content += `<p><small>⚠️ Route includes ${freehandSegments.size} freehand segment(s) shown as orange dashed lines</small></p>`;
+      }
+
+      // Ferry-split toggle: offered when adding a new leg (plain trip or new plan leg).
+      // allowFerrySplit is false on the edit/copy path editor, so editing an existing
+      // trip or plan leg's route never shows this — splitting an in-place edit into a
+      // different number of trips/legs is out of scope.
+      if (allowFerrySplit && FERRY_SPLIT_TYPES.includes(type) && (ferryCount || trainCount)) {
+        // One descriptive line per crossing type present (a route usually has only
+        // one kind), and a single checkbox that splits at every crossing. The label
+        // uses the ferry wording unless the only crossings are rail shuttles.
+        var noteLines = '';
+        if (ferryCount) noteLines += `<p style="margin: 0 0 8px 0;">${pluralize(texts.ferrySplitNote, ferryCount)}</p>`;
+        if (trainCount) noteLines += `<p style="margin: 0 0 8px 0;">${pluralize(texts.trainSplitNote, trainCount)}</p>`;
+        var splitLabel = (trainCount && !ferryCount) ? texts.trainSplitOption : texts.ferrySplitOption;
+        content += `
+          <div style="margin: 10px 0; padding: 10px; background-color: #eef6ff; border-radius: 4px;">
+            ${noteLines}
+            <label style="display: flex; align-items: center; cursor: pointer;">
+              <input
+                type="checkbox"
+                id="ferrySplitToggle"
+                onchange="ferrySplitEnabled = this.checked"
+                ${ferrySplitEnabled ? 'checked' : ''}
+                style="margin-right: 8px;"
+              >
+              <span>${splitLabel}</span>
+            </label>
+          </div>
+        `;
+      }
+
       var distanceM = this._selectedRoute.summary.totalDistance;
       var durationS = this._selectedRoute.summary.totalTime;
       var km = mToKm(distanceM);
       var m = Math.floor(distanceM);
-      var time = secondsToDhm(durationS, "en");     
+      var time = secondsToDhm(durationS, "en");
       
       var formattedData = `${texts.distanceTime.replace("{km}", km).replace("{time}", time)}`;
-      content += `<p><i>${formattedData}</i></p>`;
+      content += `<div class="route-meta"><span class="route-dist">${formattedData}</span>${hintHtml}</div>`;
 
       flutterBridge.routeInfo(formattedData, distanceM, durationS);
       flutterBridge.loading(false);
     
       if(geojson){
-        content += `<p><button id="downloadGeoJSON" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></p>`;
+        content += `<div class="submit-control"><button id="downloadGeoJSON" class="submit-main" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></div>`;
       } else {
-        content += `<p><button id="saveTrip" type="button" onclick="saveTrip()">${texts.saveTripButton}</button></p>`;
-        if(newTrip.precision == "preciseDates"){
-          content += `<button id="saveTripContinue" type="button"  onclick="saveTrip(true)">${texts.saveTripContinueButton}</button>`;
-        }
+        content += buildSubmitControl({
+          saveLabel: texts.saveTripButton,
+          continueLabel: texts.saveTripContinueButton,
+          showContinue: newTrip.precision == "preciseDates" || !!newTrip.plan_uuid
+        });
       }
        
       sidebar.setContent(content);
@@ -472,6 +997,11 @@ function routing(map, showSidebar=true, type){
       if(waypoints.length > 2) {
           const latLngs = waypoints.slice(1, -1).map(point => point.latLng);
           newTrip["waypoints"] = JSON.stringify(latLngs);
+      }
+      
+      // Store freehand segment indices
+      if (freehandSegments.size > 0) {
+          newTrip["freehandSegments"] = JSON.stringify(Array.from(freehandSegments));
       }
     }).on('routingerror', function(){
       var errorContentWithToggle = errorContent;
@@ -499,8 +1029,17 @@ function routing(map, showSidebar=true, type){
       sidebar.setContent(errorContentWithToggle);
     }).addTo(map);
 
-    // Store control globally so switchRouter can access it
+    // After LRM draws the route line, bring freehand hit areas to the SVG front
+    // so they sit on top of the route line and capture clicks first.
+    control.on('routesfound', function() {
+      setTimeout(function() {
+        freehandLines.forEach(function(l) { l.bringToFront(); });
+      }, 0);
+    });
+
+    // Store control globally: window.control for switchRouter, window.currentControl for toggleFreehand
     window.control = control;
+    window.currentControl = control;
   }
 
   if (showSidebar){
@@ -510,3 +1049,46 @@ function routing(map, showSidebar=true, type){
   }
 }
 window.switchRouter = switchRouter;
+
+// Remember whether the user last used "Save" or "Save & continue" so we can promote
+// that action to the big primary button next time (the other drops under the caret).
+function getSubmitDefault() {
+  var m = document.cookie.match(/(?:^|;\s*)routingSubmitDefault=([^;]+)/);
+  return m && decodeURIComponent(m[1]) === 'continue' ? 'continue' : 'save';
+}
+function setSubmitDefault(mode) {
+  var expires = new Date(Date.now() + 365 * 864e5).toUTCString();
+  document.cookie = 'routingSubmitDefault=' + mode + '; expires=' + expires + '; path=/';
+}
+// Persist the choice, then run the page's saveTrip(). onclick target for both buttons.
+window.saveTripPref = function(continueTrip) {
+  setSubmitDefault(continueTrip ? 'continue' : 'save');
+  saveTrip(continueTrip);
+};
+
+// Build the submit control for the sidebar: a plain "Valider" button, or — when a
+// "save & continue" action applies — a split button whose caret (a CSS-only <details>)
+// reveals the alternative option. The last-used action is shown as the primary button
+// (remembered in a cookie). Shared by routing.js, routing.html and air_routing.html.
+function submitBtn(id, cls, label, continueTrip) {
+  return '<button id="' + id + '"' + (cls ? ' class="' + cls + '"' : '') +
+    ' type="button" onclick="saveTripPref(' + (continueTrip ? 'true' : 'false') + ')">' + label + '</button>';
+}
+function buildSubmitControl(opts) {
+  var save = submitBtn('saveTrip', 'submit-main', opts.saveLabel, false);
+  if (!opts.showContinue) {
+    return '<div class="submit-control">' + save + '</div>';
+  }
+  var continueFirst = getSubmitDefault() === 'continue';
+  // Primary (big) button is the last-used action; the other goes under the caret.
+  var primary = continueFirst
+    ? submitBtn('saveTripContinue', 'submit-main', opts.continueLabel, true)
+    : save;
+  var secondary = continueFirst
+    ? submitBtn('saveTrip', '', opts.saveLabel, false)
+    : submitBtn('saveTripContinue', '', opts.continueLabel, true);
+  return '<div class="submit-control"><div class="submit-split">' + primary +
+    '<details class="submit-more"><summary><i class="fa-solid fa-chevron-down"></i></summary>' +
+    '<div class="submit-menu">' + secondary + '</div></details></div></div>';
+}
+window.buildSubmitControl = buildSubmitControl;

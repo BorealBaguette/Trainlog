@@ -1,11 +1,18 @@
 <!-- Trainset Builder Modal — include in forms that have a #material_type input -->
 <style>
-  .tsb-unit { min-width:68px; max-width:84px; font-size:.7rem; background:#f8f9fa;
+  .tsb-unit { min-width:44px; font-size:.7rem; background:#f8f9fa;
               border:1px solid #dee2e6; border-radius:4px; padding:4px; text-align:center; }
-  .tsb-unit img { max-height:38px; max-width:76px; display:block; margin:0 auto 2px; }
+  /* Image size (height + width:auto) is set at runtime by normalizeStrip so every car
+     shares one metres-per-pixel scale, matching the public trainset display. */
+  .tsb-unit img { display:block; width:auto; margin:0 auto 2px; }
+  .tsb-unit .tsb-ph { height:22px; width:auto; opacity:0.5; }
   .tsb-unit .tsb-nom { display:block; overflow:hidden; text-overflow:ellipsis;
-                       white-space:nowrap; width:100%; }
+                       white-space:nowrap; max-width:96px; margin:0 auto; }
+  .tsb-unit[draggable="true"] { cursor: grab; }
+  .tsb-unit.tsb-drag-over-left  { border-left: 3px solid #0d6efd; }
+  .tsb-unit.tsb-drag-over-right { border-right: 3px solid #0d6efd; }
 </style>
+<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 
 <div class="modal fade" id="tsbModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -15,19 +22,29 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body pb-2">
+        <div class="text-muted" style="font-size:.7rem; font-weight:600; text-transform:uppercase;
+             letter-spacing:.05em; margin-bottom:4px">{{tsbBuildSection}}</div>
         <input type="text" id="tsb-q" class="form-control form-control-sm mb-1"
                placeholder="{{tsSearchWagons}}" autocomplete="off">
         <div id="tsb-results" class="list-group mb-2" style="max-height:160px;overflow-y:auto"></div>
         <hr class="my-2">
-        <div id="tsb-strip" class="d-flex flex-wrap gap-2 py-1" style="min-height:60px">
+        <div id="tsb-ref-badge" style="display:none; font-size:.75rem; color:#0d6efd;
+             margin-bottom:4px; align-items:center; gap:4px; flex-wrap:wrap">
+          <i class="fas fa-link"></i>
+          <span id="tsb-ref-name" style="display:inline-flex; align-items:center; gap:4px; flex-wrap:wrap"></span>
+          <button type="button" onclick="tsbBreakRef()" style="border:0; background:none;
+                  cursor:pointer; color:#999; font-size:.9rem; line-height:1; padding:0"
+                  title="Edit / break reference">✎</button>
+        </div>
+        <div id="tsb-strip" class="d-flex flex-wrap align-items-end gap-2 py-1" style="min-height:60px">
           <span id="tsb-empty" class="text-muted fst-italic small m-auto">{{tsEmptyHint}}</span>
         </div>
       </div>
       <div class="modal-footer flex-wrap gap-2 py-2">
-        <!-- Save name row, hidden until "Save & use" is clicked -->
+        <!-- Save name row, hidden until "Save & apply" is clicked -->
         <div id="tsb-save-row" class="input-group input-group-sm me-auto d-none" style="max-width:260px">
           <input type="text" id="tsb-save-name" class="form-control" placeholder="{{tsTrainsetNamePlaceholder}}">
-          <button type="button" class="btn btn-success" onclick="tsbConfirmSave()">{{tsSaveBtn}}</button>
+          <button type="button" class="btn btn-success btn-sm mb-0" onclick="tsbConfirmSave()">{{tsSaveBtn}}</button>
         </div>
         <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">{{cancel}}</button>
         <button type="button" class="btn btn-outline-primary btn-sm" id="tsb-use-btn"
@@ -41,43 +58,124 @@
 
 <script>
 (function () {
-  var _units   = [];
-  var _uid     = 0;
-  var _timer   = null;
-  var WAGONS   = '{{ url_for("static", filename="images/wagons") }}';
-  var _i18n    = {
-    noResults:  '{{tsbNoResults}}',
-    flip:       '{{tsFlipSide}}',
-    remove:     '{{remove}}',
-    saveFailed: '{{tsSaveFailed}}'
+  var _units        = [];
+  var _uid          = 0;
+  var _timer        = null;
+  var WAGONS        = '{{ url_for("static", filename="images/wagons") }}';
+  var _i18n         = {
+    noResults:       '{{tsbNoResults}}',
+    flip:            '{{tsFlipSide}}',
+    remove:          '{{remove}}',
+    saveFailed:      '{{tsSaveFailed}}',
+    public:          '{{tsPubBadge}}',
+    addUnknown:      '{{addUnknownWagon}}',
+    notInCatalogue:  '{{notInCatalogue}}'
   };
+  var _adminSets    = [];
+  var _personalSets = [];
+  var _refNames     = []; // pure-reference mode: stack of trainset names; null = loose wagons (edited)
+  var _dragUid      = null;
+  var _phTypes      = [null, 'loco_l', 'loco_both', 'loco_r', 'mid']; // null = auto
+
+  /* Parse a composite material_type_advanced value ({"trainsets": [names]}) → names array or null */
+  window.tsbCompositeNames = window.tsbCompositeNames || function (val) {
+    try {
+      var parsed = JSON.parse(val);
+      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets)) return parsed.trainsets;
+    } catch(e) {}
+    return null;
+  };
+
+  function _loadRefStack(names) {
+    // Resolve each name sequentially so segment order is preserved
+    var chain = Promise.resolve();
+    names.forEach(function(name) {
+      chain = chain.then(function() {
+        return fetch('/api/trainsets/resolve?value=' + encodeURIComponent(name))
+          .then(function(r) { return r.json(); })
+          .then(function(units) {
+            var seg = _refNames.length;
+            _refNames.push(name);
+            units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L', _seg: seg })); });
+          });
+      });
+    });
+    chain.then(_render);
+  }
 
   /* ── open ── */
   window.openTsbModal = function () {
     _units = [];
-    var val = document.getElementById('material_type_advanced').value;
-    try {
-      var saved = JSON.parse(val);
-      if (Array.isArray(saved)) {
-        saved.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
-      }
-    } catch(e) {
-      // val might be a trainset name — fetch its units from the API
-      if (val) {
-        fetch('/api/trainsets/resolve?value=' + encodeURIComponent(val))
-          .then(function(r) { return r.json(); })
-          .then(function(units) {
-            units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
-            _render();
-          });
-      }
+    _refNames = [];
+    var sourceId = window._tsbAdvTarget || 'material_type_advanced';
+    var sourceEl = document.getElementById(sourceId);
+    var val = sourceEl ? sourceEl.value : '';
+    var composite = tsbCompositeNames(val);
+    var isInlineArray = false;
+    try { isInlineArray = Array.isArray(JSON.parse(val)); } catch (e) {}
+    if (composite) {
+      _loadRefStack(composite);
+    } else if (isInlineArray) {
+      // Inline array of units — re-enrich from the catalogue via the API so fields like
+      // image_ext are current (fixes e.g. PNG wagons whose stored value predates image_ext).
+      _refNames = null;
+      fetch('/api/trainsets/resolve?value=' + encodeURIComponent(val))
+        .then(function (r) { return r.json(); })
+        .then(function (units) {
+          units.forEach(function (u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
+          _render();
+        });
+    } else if (val) {
+      // val is a trainset name — load in reference mode
+      _loadRefStack([val]);
     }
     document.getElementById('tsb-q').value = '';
     document.getElementById('tsb-results').innerHTML = '';
     document.getElementById('tsb-save-row').classList.add('d-none');
     document.getElementById('tsb-save-name').value = '';
     _render();
+    _fetchSets();
     $('#tsbModal').modal('show');
+  };
+
+  /* ── fetch saved sets (for search) ── */
+  function _fetchSets() {
+    $.getJSON('/api/trainsets', function(sets) {
+      _personalSets = sets.filter(function(ts) { return !ts.is_admin; });
+      _adminSets    = sets.filter(function(ts) { return ts.is_admin; });
+    });
+  }
+
+  function _loadSavedIntoStrip(name) {
+    fetch('/api/trainsets/resolve?value=' + encodeURIComponent(name))
+      .then(function(r) { return r.json(); })
+      .then(function(units) {
+        if (_refNames === null) {
+          // Loose wagon mode — append the set's wagons, flattened
+          units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
+        } else {
+          // Pure-reference mode — stack as a new referenced segment
+          var seg = _refNames.length;
+          _refNames.push(name);
+          units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L', _seg: seg })); });
+        }
+        _render();
+        document.getElementById('tsb-q').value = '';
+        document.getElementById('tsb-results').innerHTML = '';
+      });
+  }
+
+  window.tsbBreakRef = function() {
+    _refNames = null;
+    _render();
+  };
+
+  window.tsbRemoveSeg = function(seg) {
+    if (_refNames === null) return;
+    _refNames.splice(seg, 1);
+    _units = _units.filter(function(u) { return u._seg !== seg; });
+    _units.forEach(function(u) { if (u._seg > seg) u._seg--; });
+    _render();
   };
 
   /* ── search ── */
@@ -92,9 +190,39 @@
     $.getJSON('/api/wagons/search', { q: q, limit: 12 }, function (rows) {
       var el = document.getElementById('tsb-results');
       el.innerHTML = '';
-      if (!rows.length) {
+
+      // Prepend matching trainsets
+      var ql = q.toLowerCase();
+      var matchingSets = _personalSets.concat(_adminSets).filter(function(ts) {
+        return ts.name.toLowerCase().indexOf(ql) !== -1;
+      });
+      matchingSets.forEach(function(ts) {
+        var btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'list-group-item list-group-item-action py-1 px-2 d-flex align-items-center gap-2';
+        btn.style.background = ts.is_admin ? '#f0f4ff' : '#f5fff5';
+        var icon = document.createElement('i');
+        icon.className = 'fas fa-train';
+        icon.style.cssText = 'font-size:.75rem;color:#6c757d;flex-shrink:0';
+        btn.appendChild(icon);
+        var label = document.createElement('span');
+        label.style.fontSize = '.8rem';
+        label.className = 'flex-fill text-truncate';
+        label.textContent = ts.name;
+        btn.appendChild(label);
+        if (ts.is_admin) {
+          var badge = document.createElement('span');
+          badge.className = 'badge bg-primary ms-auto';
+          badge.style.fontSize = '.6rem';
+          badge.textContent = _i18n.public;
+          btn.appendChild(badge);
+        }
+        btn.onclick = (function(tsName) { return function() { _loadSavedIntoStrip(tsName); }; })(ts.name);
+        el.appendChild(btn);
+      });
+
+      if (!rows.length && !matchingSets.length) {
         el.innerHTML = '<div class="list-group-item small text-muted py-1">' + _i18n.noResults + '</div>';
-        return;
       }
       rows.forEach(function (w) {
         var btn = document.createElement('button');
@@ -104,7 +232,7 @@
         /* thumbnail */
         if (w.image) {
           var thumb = document.createElement('img');
-          thumb.src = _imgSrc(w.image, 'L', w.image_type);
+          thumb.src = _imgSrc(w.image, 'L', w.image_type, w.image_ext);
           thumb.style.cssText = 'height:28px;width:auto;flex-shrink:0;object-fit:contain';
           thumb.onerror = function () { this.remove(); };
           btn.appendChild(thumb);
@@ -120,19 +248,19 @@
         var nomEl = document.createElement('strong');
         nomEl.className = 'text-truncate';
         nomEl.style.fontSize = '.8rem';
-        nomEl.textContent = w.nom || '?';
+        nomEl.textContent = w.label || '?';
         top.appendChild(nomEl);
 
-        if (w.epo) {
+        if (w.era) {
           var epo = document.createElement('span');
           epo.className = 'badge bg-secondary ms-1';
           epo.style.fontSize = '.6rem';
-          epo.textContent = w.epo;
+          epo.textContent = w.era;
           top.appendChild(epo);
         }
         info.appendChild(top);
 
-        var desc = [w.titre1, w.titre2].filter(Boolean).join(' · ');
+        var desc = [w.category, w.subcategory].filter(Boolean).join(' · ');
         if (desc) {
           var sub = document.createElement('div');
           sub.className = 'text-muted text-truncate';
@@ -147,11 +275,39 @@
         };
         el.appendChild(btn);
       });
+
+      /* "Add as unknown wagon" footer row */
+      var addBtn = document.createElement('button');
+      addBtn.type = 'button';
+      addBtn.className = 'list-group-item list-group-item-action py-1 px-2 d-flex align-items-center gap-2';
+      addBtn.style.cssText = 'color:#888;font-style:italic';
+      var plusSpan = document.createElement('span');
+      plusSpan.style.cssText = 'font-size:.85rem;flex-shrink:0';
+      plusSpan.textContent = '＋';
+      addBtn.appendChild(plusSpan);
+      var addInfo = document.createElement('div');
+      addInfo.className = 'flex-fill overflow-hidden';
+      var addStrong = document.createElement('strong');
+      addStrong.style.cssText = 'font-size:.8rem;font-style:normal';
+      addStrong.textContent = '\u201c' + q + '\u201d';
+      var addSub = document.createElement('div');
+      addSub.style.fontSize = '.72rem';
+      addSub.textContent = _i18n.addUnknown;
+      addInfo.appendChild(addStrong);
+      addInfo.appendChild(addSub);
+      addBtn.appendChild(addInfo);
+      addBtn.onclick = function () {
+        _addUnit({ name: q, label: q, image: null, image_type: 'plain',
+                   category: '', subcategory: '', era: '', notes: '',
+                   source: '', author: '', license: '' });
+      };
+      el.appendChild(addBtn);
     });
   }
 
   /* ── unit management ── */
   function _addUnit(wagon) {
+    _refNames = null; // adding a wagon breaks the references
     var defaultSide = wagon.image_type === 'sides_R' ? 'R' : 'L';
     _units.push(Object.assign({}, wagon, { _uid: ++_uid, _side: defaultSide }));
     _render();
@@ -159,19 +315,27 @@
 
   window.tsbFlip = function (uid) {
     var u = _units.find(function (u) { return u._uid === uid; });
-    if (u) { u._side = u._side === 'L' ? 'R' : 'L'; _render(); }
+    if (u) { _refNames = null; u._side = u._side === 'L' ? 'R' : 'L'; _render(); }
+  };
+
+  window.tsbCyclePh = function (uid) {
+    var u = _units.find(function (u) { return u._uid === uid; });
+    if (!u) return;
+    _refNames = null;
+    var idx = _phTypes.indexOf(u._phType || null);
+    u._phType = _phTypes[(idx + 1) % _phTypes.length];
+    _render();
   };
 
   window.tsbRemove = function (uid) {
+    _refNames = null;
     _units = _units.filter(function (u) { return u._uid !== uid; });
     _render();
   };
 
   /* ── render strip ── */
-  function _imgSrc(image, side, imageType) {
-    if (!image) return '';
-    if (imageType === 'sides') return WAGONS + '/' + image + (side === 'R' ? '_R' : '_L') + '.gif';
-    return WAGONS + '/' + image + '.gif';
+  function _imgSrc(image, side, imageType, ext) {
+    return wagonImgSrc(WAGONS, { image: image, image_type: imageType, image_ext: ext }, side);
   }
 
   function _render() {
@@ -179,47 +343,154 @@
     strip.querySelectorAll('.tsb-unit').forEach(function (el) { el.remove(); });
     document.getElementById('tsb-empty').style.display = _units.length ? 'none' : '';
 
-    _units.forEach(function (u) {
+    // Reference badge — one chip per stacked trainset
+    var badge = document.getElementById('tsb-ref-badge');
+    var inRefMode = _refNames !== null && _refNames.length > 0;
+    if (inRefMode) {
+      var nameEl = document.getElementById('tsb-ref-name');
+      nameEl.innerHTML = '';
+      _refNames.forEach(function(name, seg) {
+        if (seg > 0) {
+          var plus = document.createElement('span');
+          plus.style.color = '#999';
+          plus.textContent = '+';
+          nameEl.appendChild(plus);
+        }
+        var chip = document.createElement('span');
+        chip.style.cssText = 'display:inline-flex; align-items:center; gap:3px; background:#e7f1ff; border-radius:10px; padding:0 6px';
+        var lbl = document.createElement('span');
+        lbl.textContent = name;
+        chip.appendChild(lbl);
+        if (_refNames.length > 1) {
+          var x = document.createElement('button');
+          x.type = 'button';
+          x.style.cssText = 'border:0; background:none; cursor:pointer; color:#999; font-size:.85rem; line-height:1; padding:0';
+          x.title = _i18n.remove;
+          x.textContent = '×';
+          x.onclick = (function(s) { return function() { tsbRemoveSeg(s); }; })(seg);
+          chip.appendChild(x);
+        }
+        nameEl.appendChild(chip);
+      });
+      badge.style.display = 'flex';
+    } else {
+      badge.style.display = 'none';
+    }
+
+    var prevSeg = null;
+    _units.forEach(function (u, i) {
+      var isFirst = (i === 0), isLast = (i === _units.length - 1);
+      var phSuffix = u._phType || ((isFirst && isLast) ? 'loco_both' : isFirst ? 'loco_l' : isLast ? 'loco_r' : 'mid');
+      var phSrc = WAGONS + '/placeholder_' + phSuffix + '.svg';
+
+      if (inRefMode && i > 0 && u._seg !== prevSeg) {
+        var divider = document.createElement('div');
+        divider.className = 'tsb-unit tsb-seg-divider';
+        divider.style.cssText = 'min-width:0; max-width:none; border:0; background:none; padding:0; align-self:center; color:#adb5bd; font-size:1rem';
+        divider.textContent = '+';
+        strip.appendChild(divider);
+      }
+      prevSeg = u._seg;
+
       var card = document.createElement('div');
       card.className = 'tsb-unit';
 
       var img = document.createElement('img');
-      img.src = _imgSrc(u.image, u._side, u.image_type);
-      img.title = u.nom || '';
-      img.onerror = function () { this.style.display = 'none'; };
+      img.src = u.image ? _imgSrc(u.image, u._side, u.image_type, u.image_ext) : phSrc;
+      img.title = u.label || '';
+      if (!u.image) img.className = 'tsb-ph';
+      // Calibrated stock renders to true scale (normalizeStrip reads data-ppm).
+      else if (u.px_per_meter) img.setAttribute('data-ppm', u.px_per_meter);
+      img.onerror = function () { this.src = phSrc; this.className = 'tsb-ph'; this.removeAttribute('data-ppm'); this.onerror = null; };
       card.appendChild(img);
 
       var nom = document.createElement('span');
       nom.className = 'tsb-nom';
-      nom.textContent = u.nom || '?';
+      nom.textContent = u.label || '?';
       card.appendChild(nom);
 
-      var btns = document.createElement('div');
-      btns.className = 'd-flex justify-content-center gap-1 mt-1';
+      if (!inRefMode) {
+        card.draggable = true;
+        card.addEventListener('dragstart', (function(uid, c) { return function(e) {
+          _dragUid = uid;
+          e.dataTransfer.effectAllowed = 'move';
+          setTimeout(function() { c.style.opacity = '0.4'; }, 0);
+        }; })(u._uid, card));
+        card.addEventListener('dragend', function() {
+          card.style.opacity = '';
+          strip.querySelectorAll('.tsb-unit').forEach(function(el) {
+            el.classList.remove('tsb-drag-over-left', 'tsb-drag-over-right');
+          });
+        });
+        card.addEventListener('dragover', (function(c) { return function(e) {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = 'move';
+          strip.querySelectorAll('.tsb-unit').forEach(function(el) {
+            el.classList.remove('tsb-drag-over-left', 'tsb-drag-over-right');
+          });
+          var rect = c.getBoundingClientRect();
+          c.classList.add(e.clientX < rect.left + rect.width / 2 ? 'tsb-drag-over-left' : 'tsb-drag-over-right');
+        }; })(card));
+        card.addEventListener('drop', (function(uid, c) { return function(e) {
+          e.preventDefault();
+          if (_dragUid === uid) return;
+          var fromIdx = _units.findIndex(function(x) { return x._uid === _dragUid; });
+          var toIdx   = _units.findIndex(function(x) { return x._uid === uid; });
+          if (fromIdx === -1 || toIdx === -1) return;
+          var rect = c.getBoundingClientRect();
+          var insertAfter = e.clientX >= rect.left + rect.width / 2;
+          var moved = _units.splice(fromIdx, 1)[0];
+          toIdx = _units.findIndex(function(x) { return x._uid === uid; });
+          _units.splice(insertAfter ? toIdx + 1 : toIdx, 0, moved);
+          _render();
+        }; })(u._uid, card));
 
-      if (u.image_type === 'sides') {
-        var flip = document.createElement('button');
-        flip.type = 'button';
-        flip.className = 'btn btn-outline-secondary p-0';
-        flip.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
-        flip.title = _i18n.flip;
-        flip.textContent = '↔';
-        flip.onclick = (function (uid) { return function () { tsbFlip(uid); }; })(u._uid);
-        btns.appendChild(flip);
+        var btns = document.createElement('div');
+        btns.className = 'd-flex justify-content-center gap-1 mt-1';
+
+        if (u.image_type === 'sides') {
+          var flip = document.createElement('button');
+          flip.type = 'button';
+          flip.className = 'btn btn-outline-secondary p-0';
+          flip.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
+          flip.title = _i18n.flip;
+          flip.textContent = '↔';
+          flip.onclick = (function (uid) { return function () { tsbFlip(uid); }; })(u._uid);
+          btns.appendChild(flip);
+        }
+
+        if (!u.image) {
+          var phLabels = { 'loco_l': '◀—', 'loco_both': '◀▶', 'loco_r': '—▶', 'mid': '■' };
+          var cycleBtn = document.createElement('button');
+          cycleBtn.type = 'button';
+          cycleBtn.className = 'btn btn-outline-secondary p-0';
+          cycleBtn.style.cssText = 'font-size:.55rem;min-width:24px;height:18px;line-height:1;padding:0 2px';
+          cycleBtn.title = 'Change placeholder type';
+          cycleBtn.textContent = u._phType ? phLabels[u._phType] : '↺';
+          cycleBtn.onclick = (function (uid) { return function () { tsbCyclePh(uid); }; })(u._uid);
+          btns.appendChild(cycleBtn);
+        }
+
+        var rm = document.createElement('button');
+        rm.type = 'button';
+        rm.className = 'btn btn-outline-danger p-0';
+        rm.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
+        rm.title = _i18n.remove;
+        rm.textContent = '×';
+        rm.onclick = (function (uid) { return function () { tsbRemove(uid); }; })(u._uid);
+
+        btns.appendChild(rm);
+        card.appendChild(btns);
       }
 
-      var rm = document.createElement('button');
-      rm.type = 'button';
-      rm.className = 'btn btn-outline-danger p-0';
-      rm.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
-      rm.title = _i18n.remove;
-      rm.textContent = '×';
-      rm.onclick = (function (uid) { return function () { tsbRemove(uid); }; })(u._uid);
-
-      btns.appendChild(rm);
-      card.appendChild(btns);
       strip.appendChild(card);
     });
+
+    // Size + baseline-align the row like the public trainset display.
+    // Placeholders here carry .tsb-ph (not the default skip class), so pass it explicitly.
+    if (window.normalizeStrip) {
+      normalizeStrip(strip, { target: 20, min: 13, max: 30, skipClass: 'tsb-ph' });
+    }
 
     var any = _units.length > 0;
     document.getElementById('tsb-use-btn').disabled  = !any;
@@ -227,12 +498,33 @@
   }
 
   /* ── actions ── */
-  window.tsbUseOnce = function () {
-    var json = JSON.stringify(_units.map(function (u) {
-      return { name: u.name, image: u.image, nom: u.nom, _side: u._side, image_type: u.image_type };
-    }));
-    document.getElementById('material_type_advanced').value = json;
+  function _tsbWriteAndClose(value) {
+    var targetId = window._tsbAdvTarget || 'material_type_advanced';
+    document.getElementById(targetId).value = value;
+    if (typeof window._tsbAdvCallback === 'function') {
+      window._tsbAdvCallback(value);
+    }
+    window._tsbAdvTarget = null;
+    window._tsbAdvCallback = null;
     $('#tsbModal').modal('hide');
+  }
+
+  window.tsbUseOnce = function () {
+    if (_refNames !== null && _refNames.length === 1) {
+      _tsbWriteAndClose(_refNames[0]);
+      return;
+    }
+    if (_refNames !== null && _refNames.length > 1) {
+      _tsbWriteAndClose(JSON.stringify({ trainsets: _refNames }));
+      return;
+    }
+    var json = JSON.stringify(_units.map(function (u) {
+      var o = { name: u.name, image: u.image, label: u.label, _side: u._side,
+                image_type: u.image_type, image_ext: u.image_ext };
+      if (u._phType) o._phType = u._phType;
+      return o;
+    }));
+    _tsbWriteAndClose(json);
   };
 
   window.tsbToggleSave = function () {
@@ -250,10 +542,7 @@
       url: '/api/trainsets', method: 'POST',
       contentType: 'application/json',
       data: JSON.stringify({ name: name, units: units }),
-      success: function (data) {
-        document.getElementById('material_type_advanced').value = data.name;
-        $('#tsbModal').modal('hide');
-      },
+      success: function (data) { _tsbWriteAndClose(data.name); },
       error: function (xhr) {
         var msg = _i18n.saveFailed;
         try { msg = JSON.parse(xhr.responseText).error || msg; } catch (e) {}

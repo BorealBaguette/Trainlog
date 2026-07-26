@@ -22,12 +22,30 @@ MONTH_NAMES = {
     9: "September", 10: "October", 11: "November", 12: "December"
 }
 
-# Distance comparisons in km
+# Distance comparisons in km.
+# `key` maps to a lang JSON key so names can be translated.
 DISTANCE_COMPARISONS = [
-    {"name": "Paris → New York", "km": 5837, "emoji": "🗽"},
-    {"name": "London → Tokyo", "km": 9571, "emoji": "🗼"},
-    {"name": "Earth's circumference", "km": 40075, "emoji": "🌍"},
-    {"name": "Earth to Moon", "km": 384400, "emoji": "🌙"},
+    {"key": "distComp_english_channel",    "km": 34,     "icon": "fa-solid fa-person-swimming"},
+    {"key": "distComp_marathon",           "km": 42.195, "icon": "fa-solid fa-person-running"},
+    {"key": "distComp_iss_altitude",       "km": 400,    "icon": "fa-solid fa-satellite"},
+    {"key": "distComp_proclaimers",        "km": 804.6,  "icon": "fa-solid fa-shoe-prints"},
+    {"key": "distComp_mordor",             "km": 2863,   "icon": "fa-solid fa-ring"},
+    {"key": "distComp_moon_circumference", "km": 10921,  "icon": "fa-solid fa-moon"},
+    {"key": "distComp_longest_flight",     "km": 15349,  "icon": "fa-solid fa-plane"},
+    {"key": "distComp_earth_circumference","km": 40075,  "icon": "fa-solid fa-earth-europe"},
+    {"key": "distComp_earth_moon",         "km": 384400, "icon": "fa-solid fa-rocket"},
+]
+
+# Duration comparisons in hours
+DURATION_COMPARISONS = [
+    {"key": "durComp_longest_tennis",   "h": 11,    "icon": "fa-solid fa-baseball"},
+    {"key": "durComp_lotr_marathon",    "h": 12,    "icon": "fa-solid fa-film"},
+    {"key": "durComp_lindbergh_flight", "h": 33.5,  "icon": "fa-solid fa-plane-departure"},
+    {"key": "durComp_orient_express",   "h": 68,    "icon": "fa-solid fa-train"},
+    {"key": "durComp_apollo11",         "h": 195,   "icon": "fa-solid fa-user-astronaut"},
+    {"key": "durComp_lunar_orbit",      "h": 655,   "icon": "fa-solid fa-meteor"},
+    {"key": "durComp_80_days",          "h": 1920,  "icon": "fa-solid fa-hot-air-balloon"},
+    {"key": "durComp_bear_hibernation", "h": 3600,  "icon": "fa-solid fa-paw"},
 ]
 
 
@@ -298,18 +316,6 @@ def get_wrapped_data(username, year, trip_type="combined"):
     wrapped["duration_hours"] = round(wrapped["total_duration"] / 3600)
     wrapped["duration_days"] = round(wrapped["total_duration"] / 86400, 1)
     
-    # Distance comparisons
-    wrapped["distance_comparisons"] = []
-    for comp in DISTANCE_COMPARISONS:
-        if wrapped["total_km"] > 0:
-            times = wrapped["total_km"] / comp["km"]
-            if times >= 0.1:
-                wrapped["distance_comparisons"].append({
-                    "name": comp["name"],
-                    "emoji": comp["emoji"],
-                    "times": round(times, 1) if times < 10 else int(times),
-                    "percent": round(times * 100) if times < 1 else None
-                })
     
     # Calculate what percent of the year they traveled
     if wrapped["days_traveled"] > 0:

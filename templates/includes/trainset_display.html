@@ -1,0 +1,311 @@
+{# Trainset composition display — CSS + JS helpers + render functions.
+   Include once per page that needs to display trainset strips.
+   Requires: jQuery, Bootstrap tooltips.
+#}
+
+{# ── CSS ───────────────────────────────────────────────────────────────────── #}
+<style>
+    .compo-container {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        overflow-y: hidden;
+        background: #1a1a2e;
+        border-radius: 8px;
+        padding: 20px 10px;
+        box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
+        text-align: left;
+    }
+
+    /* Scrollbar styling */
+    .compo-container::-webkit-scrollbar { height: 10px; }
+    .compo-container::-webkit-scrollbar-track { background: #121220; border-radius: 4px; }
+    .compo-container::-webkit-scrollbar-thumb { background: #4a4a6a; border-radius: 5px; border: 2px solid #121220; }
+    .compo-container::-webkit-scrollbar-thumb:hover { background: #6a6a8a; }
+
+    /* Inline (child row) trainset scroll wrapper */
+    .trainset-inline-scroll { display: block; overflow-x: auto; overflow-y: hidden; padding-bottom: 16px; }
+    .trainset-inline-scroll .compo-strip { min-width: unset; }
+    /* Wagon labels on light background */
+    .ts-nom-inline { color: #444 !important; background: rgba(0,0,0,0.07) !important; }
+    /* Inline trainset: strip then label as caption below */
+    .ts-inline-wrapper { display: flex; flex-direction: column; align-items: flex-start; gap: 0; margin-top: 4px; }
+    .ts-inline-header { display: flex; align-items: center; gap: 4px; }
+    .ts-inline-label { font-size: 0.82em; line-height: 1.3; color: #666; margin-top: 1px; }
+    .ts-inline-personal { display: inline; font-style: italic; }
+    .ts-inline-saved { display: inline; font-weight: 600; }
+    .ts-inline-personal + .ts-inline-saved::before { content: ' · '; font-style: normal; font-weight: normal; color: #aaa; }
+    .ts-attr-icon { cursor: pointer; color: rgba(0,0,0,0.4); font-size: 0.7em; position: absolute; top: 1px; left: 2px; z-index: 5; line-height: 1; }
+    @media (max-width: 767px) {
+        /* Fallback for callers that don't measure the row themselves. Deliberately
+           NOT !important: where the renderer sets an exact pixel max-width (the
+           itinerary legs), that measurement is tighter and must win — the viewport
+           width ignores the leg's left offset and let strips spill past the card. */
+        .ts-inline-wrapper .trainset-inline-scroll { max-width: calc(100vw - 24px); }
+    }
+
+    /* The Train Strip */
+    .compo-strip {
+        display: inline-flex;
+        align-items: flex-end;
+        gap: 0;
+        min-width: 100%;
+        width: max-content;
+        padding: 0 10px;
+    }
+
+    /* Individual Wagon */
+    .compo-wagon {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        position: relative;
+        flex-shrink: 0;
+    }
+    .compo-wagon img {
+        display: block;
+        width: auto;
+        transition: transform 0.2s;
+    }
+    .compo-wagon:hover img { transform: scale(1.05); z-index: 10; }
+
+    /* Coach Number (Below) */
+    .compo-coach-no {
+        font-size: 0.7rem;
+        color: #fff;
+        background: #444;
+        padding: 1px 5px;
+        border-radius: 4px;
+        margin-top: 5px;
+        font-family: monospace;
+    }
+
+    /* Class Indicators (Above) */
+    .compo-class-bar {
+        display: flex;
+        gap: 2px;
+        margin-bottom: 5px;
+        height: 12px;
+    }
+    .compo-class-dot {
+        font-size: 0.6rem;
+        padding: 0 4px;
+        border-radius: 2px;
+        color: #fff;
+        font-weight: bold;
+        line-height: 12px;
+    }
+
+    /* Class Colors */
+    .compo-class-dot.c-1st       { background: #d4a017; }
+    .compo-class-dot.c-2nd       { background: #2e7d32; }
+    .compo-class-dot.c-2nd-plus  { background: #388e3c; }
+    .compo-class-dot.c-business  { background: #6a1b9a; }
+    .compo-class-dot.c-dining    { background: #c62828; }
+    .compo-class-dot.c-sleeper   { background: #1565c0; }
+    .compo-class-dot.c-couchette { background: #0277bd; }
+    .compo-class-dot.c-service   { background: #616161; }
+
+    /* Misc */
+    .compo-trigger { cursor: pointer; color: #0d6efd; }
+    .compo-trigger:hover { text-decoration: underline; }
+    .compo-source {
+        font-size: 0.7rem;
+        color: #6c757d;
+        text-align: right;
+        margin-top: 6px;
+        padding: 4px 12px 0;
+        letter-spacing: 0.02em;
+    }
+    .compo-source a {
+        color: #495057;
+        text-decoration: none;
+        font-weight: 500;
+        transition: color 0.15s ease;
+    }
+    .compo-source a:hover,
+    .compo-source a:focus {
+        color: #212529;
+        text-decoration: none;
+    }
+
+    /* Trainset strip (MLG images) */
+    .ts-strip { gap: 2px; }
+    .ts-unit img { max-height: 70px; image-rendering: pixelated; display: block; }
+    .ts-nom { font-size: 0.6rem; color: #ccc; text-align: center; max-width: 90px;
+              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0; }
+
+    /* Placeholder for wagons not yet in the catalogue */
+    .wagon-placeholder-img { height: 44px; width: auto; opacity: 0.5; display: block; flex-shrink: 0; }
+</style>
+
+{# ── JavaScript ───────────────────────────────────────────────────────────── #}
+<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
+<script>
+var _wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
+
+function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _wagonImgSrc(u) {
+    return wagonImgSrc(_wagonsBase, u, u._side);
+}
+
+function _makePlaceholder(isLight, isFirst, isLast, phType) {
+    var suffix = phType || ((isFirst && isLast) ? 'loco_both' : isFirst ? 'loco_l' : isLast ? 'loco_r' : 'mid');
+    var img = document.createElement('img');
+    img.src = _wagonsBase + '/placeholder_' + suffix + '.svg';
+    img.className = 'wagon-placeholder-img';
+    return img;
+}
+
+function _attributionParts(units) {
+    function distinct(field) {
+        var seen = {};
+        return (units || []).map(function(u) { return u[field]; })
+            .filter(function(v) { return v && !seen[v] && (seen[v] = 1); });
+    }
+    return { authors: distinct('author'), licenses: distinct('license'), sources: distinct('source') };
+}
+
+/* Profile URLs we can shorten to a username: Trainlog public pages and MediaWiki
+   user pages. Returns null for anything else (plain names, other URLs). */
+function _authorLinkName(a) {
+    var m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/)
+         || a.match(/^https?:\/\/[^/]+\/wiki\/User:(.+)$/i);
+    return m ? m[1] : null;
+}
+
+function _authorName(a) {
+    return _authorLinkName(a) || a;
+}
+
+/* HTML version with clickable author links — for modal display */
+function _attributionHtml(units) {
+    var p = _attributionParts(units);
+    var parts = [];
+    if (p.authors.length)  parts.push(p.authors.map(function(a) {
+        var n = _authorLinkName(a);
+        return n ? '© <a href="' + esc(a) + '" target="_blank" rel="noopener">' + esc(n) + '</a>'
+                 : '© ' + esc(a);
+    }).join(', '));
+    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(l); }).join(', '));
+    if (p.sources.length)  parts.push(p.sources.map(function(s) { return esc(s); }).join(', '));
+    return parts.join(' · ');
+}
+
+/* Plain-text version — for tooltips */
+function _attributionText(units) {
+    var p = _attributionParts(units);
+    var parts = [];
+    if (p.authors.length)  parts.push(p.authors.map(function(a) { return '© ' + esc(_authorName(a)); }).join(', '));
+    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(l); }).join(', '));
+    if (p.sources.length)  parts.push(p.sources.map(function(s) { return esc(s); }).join(', '));
+    return parts.join(' · ');
+}
+
+/* Parse a composite material_type_advanced value ({"trainsets": [names]}) → names array or null */
+window.tsbCompositeNames = window.tsbCompositeNames || function (val) {
+    try {
+        var parsed = JSON.parse(val);
+        if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets)) return parsed.trainsets;
+    } catch(e) {}
+    return null;
+};
+
+/* Resolve a material_type_advanced value to enriched units (Promise-based).
+   `owner` is the trip owner's username — required for logged-out visitors on
+   public pages so the backend can scope visibility to that owner's own
+   trainsets plus admin (public) ones, since there is no session to scope to. */
+function _resolveUnits(value, owner) {
+    var isInline = false;
+    try { isInline = Array.isArray(JSON.parse(value)); } catch(e) {}
+    var composite = tsbCompositeNames(value);
+    if (isInline || composite) {
+        return $.getJSON('/api/trainsets/resolve', { value: value, owner: owner || '' }).then(function(units) {
+            return { units: units, name: composite ? composite.join(' + ') : null };
+        });
+    }
+    return $.getJSON('/api/trainsets/by-name', { name: value, owner: owner || '' }).then(function(ts) {
+        return { units: ts.units, name: ts.name };
+    });
+}
+
+/* Render into a modal body element */
+function _renderTrainset($modalBody, units, setName) {
+    var strip = $('<div class="compo-strip ts-strip"></div>');
+    var all = units || [];
+    all.forEach(function(u, i) {
+        var isFirst = (i === 0), isLast = (i === all.length - 1);
+        var wagon = $('<div class="compo-wagon ts-unit"></div>');
+        wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
+        if (u.image) {
+            var img = $('<img>').attr({src: _wagonImgSrc(u), title: u.label || u.nom || '',
+                'data-toggle': 'tooltip', 'data-placement': 'top'});
+            if (u.px_per_meter) img.attr('data-ppm', u.px_per_meter);
+            img.on('error', (function(iF,iL,pT) { return function() { $(this).replaceWith(_makePlaceholder(false, iF, iL, pT)); }; })(isFirst, isLast, u._phType));
+            wagon.append(img);
+        } else {
+            wagon.append(_makePlaceholder(false, isFirst, isLast, u._phType));
+        }
+        wagon.append('<span class="compo-coach-no ts-nom">' + esc(u.label || u.nom || '') + '</span>');
+        strip.append(wagon);
+    });
+    if (!strip.children().length) {
+        $modalBody.html('<div class="alert alert-warning">Trainset has no units.</div>');
+        return;
+    }
+    var container = $('<div class="compo-container"></div>').append(strip);
+    $modalBody.empty().append(container);
+    normalizeStrip(strip[0], { target: 46, min: 26, max: 72 });
+    var sourceLines = [];
+    if (setName) sourceLines.push('Trainset: ' + esc(setName));
+    var attr = _attributionHtml(units);
+    if (attr) sourceLines.push(attr);
+    if (sourceLines.length) $modalBody.append('<div class="compo-source">' + sourceLines.join('<br>') + '</div>');
+    container.find('[data-toggle="tooltip"]').tooltip();
+}
+
+/* Render into an inline container element (#trainsetInline<rowId>) */
+function _renderTrainsetInline(rowId, units, labels) {
+    var $container = $('#trainsetInline' + rowId);
+    if (!$container.length) return;
+    var strip = $('<div class="compo-strip ts-strip"></div>');
+    var all = units || [];
+    all.forEach(function(u, i) {
+        var isFirst = (i === 0), isLast = (i === all.length - 1);
+        var wagon = $('<div class="compo-wagon ts-unit"></div>');
+        wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
+        if (u.image) {
+            var img = $('<img>').attr({src: _wagonImgSrc(u), title: u.label || u.nom || '',
+                'data-toggle': 'tooltip', 'data-placement': 'top'});
+            if (u.px_per_meter) img.attr('data-ppm', u.px_per_meter);
+            img.on('error', (function(iF,iL,pT) { return function() { $(this).replaceWith(_makePlaceholder(true, iF, iL, pT)); }; })(isFirst, isLast, u._phType));
+            wagon.append(img);
+        } else {
+            wagon.append(_makePlaceholder(true, isFirst, isLast, u._phType));
+        }
+        wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline">' + esc(u.label || u.nom || '') + '</span>');
+        strip.append(wagon);
+    });
+    if (!strip.children().length) { $container.remove(); return; }
+    var tableW = $('#dataTable').width() || $(window).width();
+    labels = labels || {};
+    var labelHtml = '';
+    if (labels.personal) labelHtml += '<span class="ts-inline-personal">' + esc(labels.personal) + '</span>';
+    if (labels.saved && labels.saved !== labels.personal) labelHtml += '<span class="ts-inline-saved">' + esc(labels.saved) + '</span>';
+    var attr = _attributionText(units);
+    var $icon = attr ? $('<span class="ts-attr-icon" data-toggle="tooltip" data-placement="bottom" title="' + attr + '">&#9432;</span>') : null;
+    if ($icon) strip.children().first().append($icon);
+    $container.addClass('ts-inline-wrapper');
+    var $scroller = $('<div class="trainset-inline-scroll"></div>')
+        .css('max-width', (tableW - 160) + 'px').append(strip);
+    $container.append($scroller);
+    normalizeStrip(strip[0], { target: 46, min: 26, max: 72 });
+    if (labelHtml) {
+        $container.append($('<div class="ts-inline-label"></div>').html(labelHtml));
+    }
+    $container.find('[data-toggle="tooltip"]').tooltip();
+}
+</script>

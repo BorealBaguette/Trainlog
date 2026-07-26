@@ -7,140 +7,11 @@
     /* --- General UI --- */
     .ui-front { z-index: 9999999 !important; }
 
-        #dataTable_wrapper { min-height: 600px; }
+    .dt-container { min-height: 600px; }
 
-    /* --- Composition Modal Styles --- */
-    
-    /* 1. The Scrollable Window (Dark Box) */
-    .compo-container {
-        display: block;
-        width: 100%;
-        overflow-x: auto;       /* Force horizontal scroll */
-        overflow-y: hidden;     /* Hide vertical overflow */
-        background: #1a1a2e;    /* Dark Blue Background */
-        border-radius: 8px;
-        padding: 20px 10px;     /* Internal spacing */
-        box-shadow: inset 0 0 10px rgba(0,0,0,0.5); /* Depth effect */
-        text-align: left;       /* Default align left */
+    @media screen and (max-width: 767px) {
+        .dt-container { margin-top: 15px; }
     }
-
-    /* Scrollbar styling */
-    .compo-container::-webkit-scrollbar { height: 10px; }
-    .compo-container::-webkit-scrollbar-track { background: #121220; border-radius: 4px; }
-    .compo-container::-webkit-scrollbar-thumb { background: #4a4a6a; border-radius: 5px; border: 2px solid #121220; }
-    .compo-container::-webkit-scrollbar-thumb:hover { background: #6a6a8a; }
-
-    /* Inline (child row) trainset scroll wrapper */
-    .trainset-inline-scroll { display: block; overflow-x: auto; overflow-y: hidden; margin-top: 4px; padding-bottom: 16px; }
-    .trainset-inline-scroll .compo-strip { min-width: unset; }
-    /* Wagon labels on light background */
-    .ts-nom-inline { color: #444 !important; background: rgba(0,0,0,0.07) !important; }
-    /* Inline trainset: label + scroller side by side */
-    .ts-inline-wrapper { display: flex; align-items: center; gap: 10px; margin-top: 4px; }
-    .ts-inline-wrapper .trainset-inline-scroll { margin-top: 0; }
-    .ts-inline-label { flex: 0 0 auto; max-width: 120px; font-size: 0.82em; line-height: 1.4; color: #555; }
-    .ts-inline-personal { display: block; font-style: italic; }
-    .ts-inline-saved { display: block; font-weight: 600; }
-    /* Small screens: names above, strip below spanning full width */
-    @media (max-width: 767px) {
-        .ts-inline-wrapper { flex-direction: column; align-items: flex-start; gap: 4px; }
-        .ts-inline-label { max-width: none; }
-        .ts-inline-wrapper .trainset-inline-scroll { max-width: calc(100vw - 24px) !important; }
-    }
-
-    /* 2. The Train Strip (The long content) */
-    .compo-strip {
-        display: inline-flex;   /* Aligns wagons in a row */
-        align-items: flex-end;  /* Aligns wheels at the bottom */
-        gap: 0;                 /* Connect wagons */
-        min-width: 100%;        /* Ensure it takes full width */
-        width: max-content;     /* Allow it to grow infinitely */
-        padding: 0 10px;
-    }
-
-    /* 3. Individual Wagon */
-    .compo-wagon {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        position: relative;
-        flex-shrink: 0;         /* Prevent wagon from squishing */
-    }
-
-    .compo-wagon img {
-        display: block;
-        width: auto;            /* Maintain aspect ratio */
-        transition: transform 0.2s;
-    }
-    .compo-wagon:hover img { transform: scale(1.05); z-index: 10; }
-
-    /* Coach Number (Below) */
-    .compo-coach-no {
-        font-size: 0.7rem;
-        color: #fff;
-        background: #444;
-        padding: 1px 5px;
-        border-radius: 4px;
-        margin-top: 5px;
-        font-family: monospace;
-    }
-
-    /* Class Indicators (Above) */
-    .compo-class-bar {
-        display: flex;
-        gap: 2px;
-        margin-bottom: 5px;
-        height: 12px;
-    }
-    .compo-class-dot {
-        font-size: 0.6rem;
-        padding: 0 4px;
-        border-radius: 2px;
-        color: #fff;
-        font-weight: bold;
-        line-height: 12px;
-    }
-
-    /* Class Colors */
-    .compo-class-dot.c-1st { background: #d4a017; }
-    .compo-class-dot.c-2nd { background: #2e7d32; }
-    .compo-class-dot.c-2nd-plus { background: #388e3c; }
-    .compo-class-dot.c-business { background: #6a1b9a; }
-    .compo-class-dot.c-dining { background: #c62828; }
-    .compo-class-dot.c-sleeper { background: #1565c0; }
-    .compo-class-dot.c-couchette { background: #0277bd; }
-    .compo-class-dot.c-service { background: #616161; }
-    
-    /* Misc */
-    .compo-trigger { cursor: pointer; color: #0d6efd; }
-    .compo-trigger:hover { text-decoration: underline; }
-    .compo-source{
-        font-size: 0.7rem;
-        color: #6c757d;
-        text-align: right;
-        margin-top: 6px;
-        padding: 4px 12px 0;
-        letter-spacing: 0.02em;
-    }
-
-    .compo-source a{
-        color: #495057;
-        text-decoration: none;
-        font-weight: 500;
-        transition: color 0.15s ease;
-    }
-
-    .compo-source a:hover,
-    .compo-source a:focus{
-        color: #212529;
-        text-decoration: none;
-    }
-
-    /* Trainset strip (MLG images) inside composition modal */
-    .ts-strip { gap: 2px; }
-    .ts-unit img { max-height: 70px; image-rendering: pixelated; display: block; }
-    .ts-nom { font-size: 0.6rem; color: #ccc; text-align: center; max-width: 90px;
-              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0; }
 
     /* Trainset picker in edit/new forms */
     .ts-pick-wrap { position: relative; display: inline-block; width: 100%; }
@@ -195,10 +66,13 @@
         opacity: 0.9;
     }
 
-    
-</style>
+    /* Dated future trips shown on the past page via the "show upcoming" toggle */
+    tr.upcoming-trip > td { opacity: 0.65; }
 
 </style>
+
+{% include "includes/trainset_display.html" %}
+
 <div class="modal fade" id="smartSearchHelpModal" tabindex="-1" role="dialog" aria-labelledby="smartSearchHelpModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered" role="document">
         <div class="modal-content">
@@ -234,8 +108,11 @@
                             <div class="mb-2">
                                 <strong>"text"</strong> - {{smart_search_double_quotes_desc}}
                             </div>
+                            <div class="mb-2">
+                                <strong>`text`</strong> - {{smart_search_exact_desc}}
+                            </div>
                             <div>
-                                <strong>'text'</strong> - {{smart_search_single_quotes_desc}}
+                                <strong>!text</strong> - {{smart_search_negate_desc}}
                             </div>
                         </div>
                     </div>
@@ -244,10 +121,13 @@
                 <h6 class="fw-bold mb-2">{{smart_search_examples_title}}</h6>
                 <div class="search-example">from:"Oslo Central" type:train</div>
                 <small class="text-muted d-block mb-2">{{smart_search_example_spaces_desc}}</small>
-                
-                <div class="search-example">from:'Oslo Central' to:'Stockholm'</div>
+
+                <div class="search-example">from:`Oslo S` to:`Stockholm`</div>
                 <small class="text-muted d-block mb-2">{{smart_search_example_exact_desc}}</small>
-                
+
+                <div class="search-example">type:train to:!Paris</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_negate_desc}}</small>
+
                 <div class="search-example">from:Oslo express date:2024-01-15</div>
                 <small class="text-muted d-block">{{smart_search_example_mixed_desc}}</small>
             </div>
@@ -265,18 +145,19 @@
     <div class="btn-group dropup">
         <button type="button" class="btn btn-lg dropdown-toggle btn-secondary multiDropdown" data-bs-toggle="dropdown" aria-expanded="false"></button>
         <ul class="dropdown-menu" style="min-width: 12rem;">
-            <li class="dropdown-item" ><a onclick="exportSelected();"><i class="fa-solid fa-file-export"></i>  {{export}}</a></li>
+            <li class="dropdown-item" onclick="exportSelected();"><i class="fa-solid fa-file-export"></i>  {{export}}</li>
             {% if not isPublic %}
-            <li class="dropdown-item"><a onclick="$('#ticketSearchModal').modal('show');"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</a></li>
-            <li class="dropdown-item tagSearchLink" style="display:none;"><a onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags"></i>  {{manage_tags}}</a></li>
+            <li class="dropdown-item" onclick="$('#ticketSearchModal').modal('show');"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</li>
+            <li class="dropdown-item tagSearchLink" style="display:none;" onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags"></i>  {{manage_tags}}</li>
             {% endif %}
-            <li class="dropdown-item"><a onclick="exportGpx();"> <i class="fa-solid fa-route"></i>  {{exportGpx}}</a></li>
-            <li class="dropdown-item"><a onclick="exportGeojson();"><i class="fa-solid fa-draw-polygon"></i>  {{exportGeojson}}</a></li>
+            <li class="dropdown-item" onclick="exportGpx();"><i class="fa-solid fa-route"></i>  {{exportGpx}}</li>
+            <li class="dropdown-item" onclick="exportGeojson();"><i class="fa-solid fa-draw-polygon"></i>  {{exportGeojson}}</li>
             {% if not isPublic %}
-            <li class="dropdown-item"><a onclick="mergeTrips();"><i class="fa-solid fa-code-merge"></i>  {{mergeTrips}}</a></li>
-            <li class="dropdown-item"><a onclick="$('#changeVisibilityModal').modal('show');"><i class="fa-solid fa-eye"></i>  {{bulk_change_visibility}}</a></li>
+            <li class="dropdown-item" onclick="mergeTrips();"><i class="fa-solid fa-code-merge"></i>  {{mergeTrips}}</li>
+            <li class="dropdown-item" onclick="$('#changeVisibilityModal').modal('show');"><i class="fa-solid fa-eye"></i>  {{bulk_change_visibility}}</li>
+            <li class="dropdown-item" onclick="openMassEdit();"><i class="fa-solid fa-pen-to-square"></i>  {{massEdit}}</li>
             <hr class="dropdown-divider">
-            <li class="dropdown-item"><a onclick="multiDelete();"><i class="fa-solid fa-trash-can" style="color:#c72020;" aria-hidden="true"></i>  {{delete}}</a></li>
+            <li class="dropdown-item" onclick="multiDelete();"><i class="fa-solid fa-trash-can" style="color:#c72020;" aria-hidden="true"></i>  {{delete}}</li>
             {% endif %}
         </ul>
     </div>
@@ -297,10 +178,11 @@
                 <th data-orderable="false" data-sort-field="trip_speed">{{tripSpeed}}</th>
                 <th data-orderable="false" data-sort-field="operator">{{operator}}</th>
                 <th data-orderable="false" data-sort-field="line_name">{{lineName}}</th>
-                <th>{{crossedCountries}}</th>
+                <th title="{{crossedCountries}}"><i class="fas fa-globe"></i></th>
+                <th data-orderable="false" title="{{co2Emissions}}"><i class="fas fa-leaf"></i></th>
                 {% if not isPublic %}
-                <th>{{visibility}}</th>
-                <th data-orderable="false" data-sort-field="price">{{price}}</th>
+                <th title="{{visibility}}"><i class="fas fa-eye"></i></th>
+                <th data-orderable="false" data-sort-field="price" title="{{price}}"><i class="fas fa-coins"></i></th>
                 {% endif %}
                 <th data-orderable="false" class="none">{{material_type}}</th>
                 <th data-orderable="false" class="none">{{reg}}</th>
@@ -447,14 +329,161 @@
     </div>
 </div>
 
+<div class="modal fade" id="massEditModal" tabindex="-1" aria-hidden="true" style="padding-top: 56px">
+  <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-pen-to-square me-2"></i><span id="massEditTitle">{{massEdit}}</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="mb-3">
+          <label class="form-label">{{shiftTimes}}</label>
+          <div class="d-flex align-items-center gap-2">
+            <input type="number" class="form-control" id="massEditShiftDays" style="width:5rem" placeholder="0" />
+            <span class="text-muted small">{{wrapped_days}}</span>
+            <input type="number" class="form-control" id="massEditShiftHours" style="width:5rem" placeholder="0" />
+            <span class="text-muted small">{{hours}}</span>
+            <input type="number" class="form-control" id="massEditShiftMinutes" style="width:5rem" placeholder="0" />
+            <span class="text-muted small">min</span>
+          </div>
+        </div>
+        <hr class="my-2" />
+        <div class="mb-3">
+          <label class="form-label">{{originStation}}</label>
+          <div class="d-flex align-items-center gap-2">
+            <div class="flagDropdownWrapper">
+              <select id="massEditOriginCountry" class="custom-select-flag">
+                {% for code, emoji in country_list.items() %}
+                <option value="{{ emoji }}" data-code="{{ code }}">{{ emoji }} {{ code }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <input type="text" class="form-control" id="massEditOriginStation" placeholder="{{originStationName}}" />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{destinationStation}}</label>
+          <div class="d-flex align-items-center gap-2">
+            <div class="flagDropdownWrapper">
+              <select id="massEditDestCountry" class="custom-select-flag">
+                {% for code, emoji in country_list.items() %}
+                <option value="{{ emoji }}" data-code="{{ code }}">{{ emoji }} {{ code }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <input type="text" class="form-control" id="massEditDestStation" placeholder="{{destinationStationName}}" />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="massEditOperatorSearch">{{operator}}</label>
+          {# The submitted value stays free comma-separated text and keeps the
+             mass-edit-field hooks, so populate/dirty-tracking work unchanged; the
+             pills are just a view of it. #}
+          <input type="hidden" class="mass-edit-field" data-field="operator" id="massEditOperator" />
+          <div class="operatorPillsField" id="massEditOperatorPills">
+            <input type="text" id="massEditOperatorSearch" class="op-pill-placeholder" autocomplete="off" />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{lineName}}</label>
+          <input type="text" class="form-control mass-edit-field" data-field="line_name" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{material_type}}</label>
+          <input type="text" class="form-control mass-edit-field" data-field="material_type" id="massEditMaterialType" />
+          <input type="hidden" id="massEditMaterialTypeAdvanced" />
+          <div id="massEditTsbWrap" style="display:none; margin-top:0.4rem; align-items:center; gap:0.5rem; flex-wrap:wrap">
+            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="openMassEditTsb()">
+              <i class="fas fa-train"></i> {{tsbPickTrainset}}
+            </button>
+            <span id="massEditTsbLabel" style="font-size:.875rem; color:#666;"></span>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{reg}}</label>
+          <input type="text" class="form-control mass-edit-field" data-field="reg" />
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{seat}}</label>
+          <input type="text" class="form-control mass-edit-field" data-field="seat" />
+        </div>
+        <div class="mb-3 row g-2 align-items-end">
+          <div class="col">
+            <label class="form-label">{{departureDelay}}</label>
+            <input type="number" step="any" class="form-control" id="massEditDepDelay" placeholder="0" />
+          </div>
+          <div class="col">
+            <label class="form-label">{{arrivalDelay}}</label>
+            <input type="number" step="any" class="form-control" id="massEditArrDelay" placeholder="0" />
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{notes}}</label>
+          <textarea class="form-control mass-edit-field" data-field="notes" rows="2"></textarea>
+          <div class="mt-1" id="massEditNotesMode">
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="massEditNotesMode" id="massEditNotesReplace" value="replace" checked>
+              <label class="form-check-label" for="massEditNotesReplace">{{notesReplace}}</label>
+            </div>
+            <div class="form-check form-check-inline">
+              <input class="form-check-input" type="radio" name="massEditNotesMode" id="massEditNotesAppend" value="append">
+              <label class="form-check-label" for="massEditNotesAppend">{{notesAppend}}</label>
+            </div>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">{{visibility}}</label>
+          <select class="form-select mass-edit-field" data-field="visibility">
+            <option value="">—</option>
+            <option value="public">{{visibility_public}}</option>
+            <option value="friends">{{visibility_friends}}</option>
+            <option value="private">{{visibility_private}}</option>
+          </select>
+        </div>
+        <div id="massEditTypeSection" style="display:none">
+          <hr class="my-2" />
+          <div class="mb-3">
+            <label class="form-label">{{changeType}}</label>
+            <select class="form-select" id="massEditNewType">
+              <option value="">—</option>
+            </select>
+          </div>
+        </div>
+        <div id="massEditPowerSection" style="display:none">
+          <hr class="my-2" />
+          <div class="mb-3">
+            <label class="form-label">{{powerType}}</label>
+            <select class="form-select" id="massEditPowerType">
+              <option value="">—</option>
+              <option value="electric">{{electric}}</option>
+              <option value="thermic">{{thermic}}</option>
+              <option value="manual">{{manual}}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{cancel}}</button>
+        <button type="button" class="btn btn-primary" id="massEditSubmit" onclick="submitMassEdit()">
+          <span id="massEditSubmitLabel">{{submit}}</span>
+          <span id="massEditSpinner" class="spinner-border spinner-border-sm" role="status" style="display:none"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
 
-<script src="{{ url_for('static', filename='js/util.js') }}"></script>
+{% include "includes/trainset_builder_modal.html" %}
+
 <script type="text/javascript">
 const checkedTrips = [];
 const checkedTripData = {};
+// CLDR plural map for the "N rows selected" message (see window.pluralize in util.js).
+const dtRowsSelected = {{ dtRowsSelected | tojson }};
 
 var _trainsetNames = new Set();
-$.getJSON('/api/trainsets').done(function(rows) {
+$.getJSON('/api/trainsets', { owner: '{{ username }}' }).done(function(rows) {
     rows.forEach(function(r) { _trainsetNames.add(r.name); });
 });
 
@@ -462,9 +491,28 @@ function _isValidMaterial(mat) {
     if (!mat) return false;
     try {
         var arr = JSON.parse(mat);
-        return Array.isArray(arr) && arr.length > 0;
+        if (Array.isArray(arr)) return arr.length > 0;
+        if (arr && Array.isArray(arr.trainsets)) return arr.trainsets.length > 0;
     } catch(e) {}
     return _trainsetNames.has(mat);
+}
+
+// Whether a trip's ADVANCED material holds a resolvable trainset. The advanced field
+// is only ever written by the trainset builder — a saved-set name, an inline unit
+// array, or a {trainsets:[...]} composite — so its shape is authoritative. Unlike
+// _isValidMaterial's name path, this does NOT depend on the async _trainsetNames cache
+// (which loads from a separate request with no redraw, so the icon intermittently
+// failed to render on first draw for name-based sets).
+function _advancedHasTrainset(adv) {
+    if (!adv) return false;
+    try {
+        var v = JSON.parse(adv);
+        if (Array.isArray(v)) return v.length > 0;                          // inline units
+        if (v && Array.isArray(v.trainsets)) return v.trainsets.length > 0; // composite
+        return true;                                                        // other JSON → a reference
+    } catch(e) {
+        return true;                                                        // non-JSON string → saved set name
+    }
 }
 
 function openCompositionModal(trainName, dateStr, materialType) {
@@ -479,81 +527,14 @@ function openCompositionModal(trainName, dateStr, materialType) {
     $('#compositionModal').modal('show');
 
     if (materialType) {
-        // JSON one-off composition
-        try {
-            var units = JSON.parse(materialType);
-            if (Array.isArray(units)) { _renderTrainset($modalBody, units, null); return; }
-        } catch(e) {}
-        // Named trainset
-        $.getJSON('/api/trainsets/by-name', { name: materialType })
-            .done(function(ts) { _renderTrainset($modalBody, ts.units, ts.name); })
-            .fail(function()   { $modalBody.html('<div class="alert alert-warning">No composition data found.</div>'); });
+        _resolveUnits(materialType, '{{ username }}')
+            .done(function(r) { _renderTrainset($modalBody, r.units, r.name); })
+            .fail(function()  { $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>'); });
     } else {
-        $modalBody.html('<div class="alert alert-warning">No composition data found.</div>');
+        $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>');
     }
 }
 
-function _renderTrainset($modalBody, units, setName) {
-    var wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
-    var strip = $('<div class="compo-strip ts-strip"></div>');
-    (units || []).forEach(function(u) {
-        if (!u.image) return;
-        var side = u._side || 'L';
-        var itype = u.image_type;
-        var src;
-        if (itype === 'sides') src = wagonsBase + '/' + u.image + (side === 'R' ? '_R' : '_L') + '.gif';
-        else                   src = wagonsBase + '/' + u.image + '.gif';
-        var wagon = $('<div class="compo-wagon ts-unit"></div>');
-        wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
-        wagon.append(`<img src="${src}" onerror="this.style.display='none';" title="${u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
-        wagon.append(`<span class="compo-coach-no ts-nom">${u.nom || ''}</span>`);
-        strip.append(wagon);
-    });
-    if (!strip.children().length) {
-        $modalBody.html('<div class="alert alert-warning">Trainset has no units.</div>');
-        return;
-    }
-    var container = $('<div class="compo-container"></div>').append(strip);
-    $modalBody.empty().append(container);
-    if (setName) $modalBody.append(`<div class="compo-source">Trainset: ${setName}</div>`);
-    container.find('[data-toggle="tooltip"]').tooltip();
-}
-
-
-function _renderTrainsetInline(rowId, units, labels) {
-    var $container = $('#trainsetInline' + rowId);
-    if (!$container.length) return;
-    var wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
-    var strip = $('<div class="compo-strip ts-strip"></div>');
-    (units || []).forEach(function(u) {
-        if (!u.image) return;
-        var side = u._side || 'L';
-        var itype = u.image_type;
-        var src;
-        if (itype === 'sides') src = wagonsBase + '/' + u.image + (side === 'R' ? '_R' : '_L') + '.gif';
-        else                   src = wagonsBase + '/' + u.image + '.gif';
-        var wagon = $('<div class="compo-wagon ts-unit"></div>');
-        wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
-        wagon.append(`<img src="${src}" onerror="this.style.display='none';" title="${u.nom || ''}" data-toggle="tooltip" data-placement="top">`);
-        wagon.append(`<span class="compo-coach-no ts-nom ts-nom-inline">${u.nom || ''}</span>`);
-        strip.append(wagon);
-    });
-    if (!strip.children().length) { $container.remove(); return; }
-    var tableW = $('#dataTable').width() || $(window).width();
-    labels = labels || {};
-    var labelHtml = '';
-    if (labels.personal) labelHtml += `<span class="ts-inline-personal">${labels.personal}</span>`;
-    if (labels.saved && labels.saved !== labels.personal) labelHtml += `<span class="ts-inline-saved">${labels.saved}</span>`;
-    if (labelHtml) {
-        var $label = $('<div class="ts-inline-label"></div>').html(labelHtml);
-        var $scroller = $('<div class="trainset-inline-scroll"></div>')
-            .css('max-width', (tableW - 160 - 130) + 'px').append(strip);
-        $container.addClass('ts-inline-wrapper').append($label).append($scroller);
-    } else {
-        $container.addClass('trainset-inline-scroll').css('max-width', (tableW - 160) + 'px').append(strip);
-    }
-    $container.find('[data-toggle="tooltip"]').tooltip();
-}
 
 function toggleTypeFilter() {
     const switchState = document.getElementById('filterTypeSwitch').checked;
@@ -561,20 +542,73 @@ function toggleTypeFilter() {
     tableObject.ajax.reload();
 }
 
+function toggleIncludeFuture() {
+    const switchState = document.getElementById('includeFutureSwitch').checked;
+    setCookie('includeFutureSwitch', switchState, 7);
+    tableObject.ajax.reload();
+}
+
 function isEllipsisActive(el){
-  const styles = getComputedStyle(el);
-  const widthEl = parseFloat(styles.width);
-  const ctx = document.createElement('canvas').getContext('2d');
-  ctx.font = `${styles.fontSize} ${styles.fontFamily}`;
-  const text = ctx.measureText(el.innerText);
-  return text.width > widthEl;
+  if (!el) return false;
+  // Sub-pixel column widths make scrollWidth/clientWidth differ by a fraction on
+  // cells that are not actually clipped, so require a whole pixel of overflow.
+  if (el.scrollWidth > el.clientWidth + 1) return true;
+  // Only text can be ellipsed. Icon-only cells (a logo, or a hidden span holding the
+  // sort key) have nothing to truncate, so they must not be measured: their content
+  // is sized to the column and the correction below would read that as an overflow.
+  if (!el.innerText || !el.innerText.trim()) return false;
+  // Measure what is really laid out rather than re-measuring the text on a canvas:
+  // these cells start with a flag and can hold logos, and the canvas path measured
+  // el.innerText (images contribute nothing, the flag glyph is measured in the
+  // FlagEmojis-first body stack) so its widths did not reflect the rendered cell.
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    // A range only covers DOM nodes, so the responsive control arrow — a ::before
+    // on whichever column is first visible — is missed, and that cell alone reads
+    // ~18px narrower than it renders. Add the pseudo-element back in.
+    let width = range.getBoundingClientRect().width;
+    const before = getComputedStyle(el, '::before');
+    if (before && before.content !== 'none') {
+      width += (parseFloat(before.width) || 0)
+             + (parseFloat(before.borderLeftWidth) || 0)
+             + (parseFloat(before.borderRightWidth) || 0)
+             + (parseFloat(before.marginRight) || 0);
+    }
+    // clientWidth spans the padding box but the range spans only the content, so
+    // comparing them straight gives every cell a free ~20px of overflow (the
+    // theme's 10px cell padding either side) before it counts as clipped.
+    const styles = getComputedStyle(el);
+    const available = el.clientWidth
+                    - (parseFloat(styles.paddingLeft) || 0)
+                    - (parseFloat(styles.paddingRight) || 0);
+    return width > available + 1;
+  } catch (e) {
+    return false;
+  }
 }
 
 function processHiddenData(rowIdx, columns){
-    var ellipsedStation = isEllipsisActive(tableObject.cell(rowIdx, 1).node()) || isEllipsisActive(tableObject.cell(rowIdx, 2).node())
     var isAir = ["air", "helicopter"].includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
     var isFerry = $(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText == "ferry";
     var isTrain = TRAIN_TYPES.includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
+
+    // Origin and destination are read as a pair, so they move together: if either one
+    // is clipped (or was hidden outright) both drop into the detail row, rather than
+    // leaving one name up in the row and its counterpart down here.
+    var stationCols = [];
+    $('#dataTable thead th').each(function(i){
+        var field = $(this).attr('data-sort-field');
+        if (field === 'origin_station' || field === 'destination_station') {
+            stationCols.push(i);
+        }
+    });
+    var stationsBelow = stationCols.some(function(i){
+        var col = columns[i];
+        if (!col || col.data == "") return false;
+        return col.hidden || isEllipsisActive(tableObject.cell(rowIdx, i).node());
+    });
+
     var data = $.map( columns, function ( col, i ) {
         if (col.title == "{{tags}}" && col.data != ""){
             tag_list = JSON.parse(col.data).map(tag => tag.tag_id);
@@ -582,12 +616,20 @@ function processHiddenData(rowIdx, columns){
             tag_list.forEach(function(tagId) {
                 var tag = tags.find(t => t.uid == tagId); // Find the tag object by uid
                 if (tag) {
+                // Shared tags open the animated multiTrip view, not the
+                // single-owner public page
+                var tagHref = tag.is_shared
+                    ? "{{url_for('multi_trip', tagUuid='')}}" + tag.uuid
+                    : "{{url_for('public_trip', tagId='')}}" + tag.uuid;
                 var a = $('<a>')
-                    .attr('href', "{{url_for('public_trip', tagId='')}}" + tag.uuid)
+                    .attr('href', tagHref)
                     .addClass('tag-blob')
                     .css('background-color', tag.colour)
                     .css('color', getTextColor(tag.colour))
                     .text(tag.name);
+                if (tag.is_shared) {
+                    a.prepend($('<i>').addClass('fas fa-users').css('margin-right', '5px'));
+                }
                 tag_container.append(a);
                 }
             });
@@ -716,13 +758,26 @@ function processHiddenData(rowIdx, columns){
                 col.data = `<span id=airframe${rowIdx} >${full_name}</span>`
             }
         }
+        if (col.title == "{{operator}}") {
+            // Multi-operator trips get the roomier one-per-line list here.
+            var operatorRow = tableObject.row(rowIdx).data();
+            var expandedOperators = renderOperatorList(operatorRow);
+            if (expandedOperators) {
+                col.data = expandedOperators;
+                // Past four operators the compact 2x2 cell cannot show them all, and
+                // on desktop nothing is hidden by responsive, so the extras would be
+                // invisible with no way to reach them. Force the column into the
+                // detail row instead — same mechanism the delay columns use.
+                if (operatorsOverflow(operatorRow)) col.hidden = true;
+            }
+        }
         if (col.title == "{{material_type}}" && isTrain) {
             var rowData = tableObject.row(rowIdx).data();
             var rawAdv = rowData.material_type_advanced || '';
             var rawMat = rowData.material_type || '';
             var primary = rawAdv || rawMat;
             if (primary) {
-                var isValid = _isValidMaterial(primary);
+                var isValid = rawAdv ? _advancedHasTrainset(rawAdv) : _isValidMaterial(rawMat);
                 var formatted;
                 if (isValid) {
                     formatted = '';
@@ -737,14 +792,10 @@ function processHiddenData(rowIdx, columns){
                         setTimeout(function() {
                             var labels = {};
                             if (personal) labels.personal = personal;
-                            try {
-                                var units = JSON.parse(mat);
-                                if (Array.isArray(units)) { _renderTrainsetInline(rowId, units, labels); return; }
-                            } catch(e) {}
-                            $.getJSON('/api/trainsets/by-name', { name: mat })
-                                .done(function(ts) {
-                                    if (ts.name && ts.name !== labels.personal) labels.saved = ts.name;
-                                    _renderTrainsetInline(rowId, ts.units, labels);
+                            _resolveUnits(mat, '{{ username }}')
+                                .done(function(r) {
+                                    if (r.name && r.name !== labels.personal) labels.saved = r.name;
+                                    _renderTrainsetInline(rowId, r.units, labels);
                                 })
                                 .fail(function() { $('#trainsetInline' + rowId).remove(); });
                         }, 0);
@@ -792,10 +843,33 @@ function processHiddenData(rowIdx, columns){
             }
         }
         if (col.title != ""){
-            return (col.hidden || ([1,2].includes(col.columnIndex) && ellipsedStation)) && col.data != ""?
+            var thAttrTitle = $($('#dataTable thead th').get(col.columnIndex)).attr('title');
+            var label = thAttrTitle || col.title;
+            // For icon-only columns, pair each icon with its tooltip text, one line per item
+            var displayData = col.data;
+            if (thAttrTitle) {
+                var $cell = $('<div>').html(col.data);
+                var pairs = [];
+                $cell.children().each(function() {
+                    var $el = $(this);
+                    var text = $el.attr('title') || $el.attr('data-bs-original-title') || '';
+                    if (text) pairs.push($el.prop('outerHTML') + ' <span class="text-muted small">' + text + '</span>');
+                });
+                if (!pairs.length) {
+                    // Single element (no children), try the root
+                    var rootText = $cell.find('[title]').first().attr('title')
+                                || $cell.find('[data-bs-original-title]').first().attr('data-bs-original-title') || '';
+                    if (rootText) pairs.push(col.data + ' <span class="text-muted small">' + rootText + '</span>');
+                }
+                if (pairs.length) displayData = pairs.join('<br>');
+            }
+            var show = stationCols.indexOf(col.columnIndex) !== -1
+                ? stationsBelow
+                : (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node()));
+            return show && col.data != ""?
             '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'">'+
-                '<td><strong>'+col.title+':</strong>'+'</td> '+
-                '<td>'+col.data+'</td>'+
+                '<td><strong>'+label+':</strong>'+'</td> '+
+                '<td>'+displayData+'</td>'+
             '</tr>' :
             '';
         }
@@ -881,20 +955,14 @@ function addSecsToDisplayTime(timeStr, secs) {
 
 function renderStartTime(data, type, row) {
     if (type === 'display') {
-        if (row.departure_delay) {
-            return data + renderDelayBadge(row.departure_delay);
-        }
-        return data;
+        return data + renderDelayBadge(row.departure_delay);
     }
     return data;
 }
 
 function renderEndTime(data, type, row) {
     if (type === 'display') {
-        if (row.arrival_delay) {
-            return data + renderDelayBadge(row.arrival_delay);
-        }
-        return data;
+        return data + renderDelayBadge(row.arrival_delay);
     }
     return data;
 }
@@ -903,18 +971,21 @@ function renderLineName(data, type, row) {
     if (type === 'display') {
         // Only show for trains
         if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
-            var mat      = row.material_type_advanced || row.material_type || '';
+            var adv      = row.material_type_advanced || '';
+            var mat      = adv || row.material_type || '';
             var dateStr  = row.start_date || '';
-            var safeName = (data || '').replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            var safeMat  = mat.replace(/'/g, "\\'").replace(/"/g, '&quot;');
-            var btn = _isValidMaterial(mat) ? `
+            var safeName = (data || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            var safeMat  = mat.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            // Icon only when the advanced field has a resolvable trainset (race-free);
+            // fall back to the name cache only for a legacy plain material_type match.
+            var btn = (adv ? _advancedHasTrainset(adv) : _isValidMaterial(mat)) ? `
                     <a href="javascript:void(0);"
                        onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}')"
                        class="text-decoration-none ms-2"
                        title="View Composition">
                        <i class="fas fa-train"></i>
                     </a>` : '';
-            if (data || btn) return `<span>${data || ''}${btn}</span>`;
+            if (data || btn) return `<span>${sanitize(data || '')}${btn}</span>`;
         }
     }
     return data;
@@ -959,9 +1030,18 @@ function renderSpeed(data, type, row) {
     return data;
 }
 
+function renderCarbon(data, type, row) {
+    if (type !== 'display') return data || 0;
+    if (!data || data <= 0) return '';
+    const co2PerKm = calculateCO2PerKm(data, row.trip_length);
+    const color = getCarbonColor(co2PerKm);
+    const tooltip = `${formatCarbonFootprint(data)} (${formatCO2PerKm(co2PerKm)})`;
+    return `<span data-toggle="tooltip" data-placement="top" title="${tooltip}" style="cursor:context-menu; color:${color};"><i class="fas fa-leaf"></i></span>`;
+}
+
 function renderFlags(data, type, row) {
     if (type === 'display') {
-        return getFlagEmojiListNew(data);
+        return getFlagEmojiListNew(data, row.type, row.power_type);
     }
     return data;
 }
@@ -998,7 +1078,7 @@ function renderButton(data, type, row){
             <div class="modal-dialog modal-dialog-centered" role="document">
                 <div class="modal-content">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="${modalId}Label">${data.origin_station} - ${data.destination_station}</h5>
+                        <h5 class="modal-title" id="${modalId}Label">${sanitize(data.origin_station || '')} - ${sanitize(data.destination_station || '')}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
@@ -1047,7 +1127,7 @@ function renderPrices(data, type, row) {
             .append($('<span>').attr("style", "display:none;").text(row.ticket_price_in_user_currency))
             .append(`<span data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${formattedTicketPrice}"><i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i></span>`);
         }
-        if (row.price) {
+        if (isNumber(row.price)) {
             let formattedPriceText = formatCurrency("{{langId}}", row.price_in_user_currency, row.user_currency);
             if (row.user_currency != row.currency) {
                 let originalCurrency = formatCurrency("{{langId}}", row.price, row.currency);
@@ -1064,12 +1144,15 @@ function renderPrices(data, type, row) {
 function _formatTrainsetStr(mat) {
     try {
         var units = JSON.parse(mat);
+        if (units && !Array.isArray(units) && Array.isArray(units.trainsets)) {
+            return units.trainsets.join(' + ');
+        }
         if (Array.isArray(units) && units.length > 0) {
             var result = [], i = 0;
             while (i < units.length) {
-                var name = units[i].nom || units[i].name || '?';
+                var name = units[i].label || units[i].nom || units[i].name || '?';
                 var count = 1;
-                while (i + count < units.length && (units[i + count].nom || units[i + count].name || '?') === name) count++;
+                while (i + count < units.length && (units[i + count].label || units[i + count].nom || units[i + count].name || '?') === name) count++;
                 result.push(count > 1 ? count + '\xd7 ' + name : name);
                 i += count;
             }
@@ -1079,17 +1162,22 @@ function _formatTrainsetStr(mat) {
     return mat;
 }
 
+function renderPlainText(data, type, row) {
+    if (type === 'display') return sanitize(data || '');
+    return data;
+}
+
 function renderMaterialType(data, type, row){
     if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
         var adv = row.material_type_advanced || '';
         var mat = row.material_type || '';
-        if (adv && mat) return mat + ' <span style="color:#888;font-size:.9em">' + _formatTrainsetStr(adv) + '</span>';
-        if (adv) return _formatTrainsetStr(adv);
-        return mat;
+        if (adv && mat) return sanitize(mat) + ' <span style="color:#888;font-size:.9em">' + sanitize(_formatTrainsetStr(adv)) + '</span>';
+        if (adv) return sanitize(_formatTrainsetStr(adv));
+        return sanitize(mat);
     }
     if (!row.material_type) return '';
-    if (row.model) return `[[${row.material_type}]] ${row.manufacturer} ${row.model}`;
-    return row.material_type;
+    if (row.model) return `[[${sanitize(row.material_type)}]] ${sanitize(row.manufacturer || '')} ${sanitize(row.model)}`;
+    return sanitize(row.material_type);
 }
 
 
@@ -1110,46 +1198,69 @@ var table = $('#tripRows');
         'notes:': {{ trip_column_names.index("notes") }}
     };
 
+    // Strip a wrapping pair of " (spaces) or ` (exact). Returns {value, isExact}.
+    function stripQuotes(value) {
+        if (value.startsWith('`') && value.endsWith('`') && value.length > 1) {
+            return { value: value.slice(1, -1), isExact: true };
+        }
+        if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
+            return { value: value.slice(1, -1), isExact: false };
+        }
+        return { value, isExact: false };
+    }
+
     function parseSmartSearch(searchValue) {
         const columnFilters = {};
         let globalSearch = '';
-        const terms = searchValue.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [];
+        const globalNot = [];
+        // Tokens: bare words, "double-quoted" (spaces) or `backtick-quoted` (exact).
+        const terms = searchValue.match(/(?:[^\s"`]+|"[^"]*"|`[^`]*`)+/g) || [];
         terms.forEach(term => {
             let matched = false;
             for (const [prefix, columnIndex] of Object.entries(SEARCH_PREFIXES)) {
                 if (term.toLowerCase().startsWith(prefix)) {
                     let value = term.substring(prefix.length);
-                    let isExact = false;
+                    let negate = false;
+                    if (value.startsWith('!')) { negate = true; value = value.substring(1); }
                     if (value) {
-                        if (value.startsWith("'") && value.endsWith("'") && value.length > 1) {
-                            value = value.slice(1, -1);
-                            isExact = true;
-                        } else if (value.startsWith('"') && value.endsWith('"') && value.length > 1) {
-                            value = value.slice(1, -1);
-                            isExact = false;
-                        }
-                        columnFilters[columnIndex] = { value, isExact };
+                        const { value: cleanValue, isExact } = stripQuotes(value);
+                        columnFilters[columnIndex] = { value: cleanValue, isExact, negate };
                         matched = true;
                         break;
                     }
                 }
             }
             if (!matched) {
-                let cleanTerm = term;
-                if ((term.startsWith('"') && term.endsWith('"')) ||
-                    (term.startsWith("'") && term.endsWith("'"))) {
-                    cleanTerm = term.slice(1, -1);
+                let negate = false;
+                let value = term;
+                if (value.startsWith('!')) { negate = true; value = value.substring(1); }
+                // Global search is a "contains" match; backticks/quotes here only
+                // group spaces, they do not force exactness across all fields.
+                value = stripQuotes(value).value;
+                if (!value) return;
+                if (negate) {
+                    globalNot.push(value);
+                } else {
+                    globalSearch += (globalSearch ? ' ' : '') + value;
                 }
-                globalSearch += (globalSearch ? ' ' : '') + cleanTerm;
             }
         });
-        return { columnFilters, globalSearch };
+        return { columnFilters, globalSearch, globalNot };
     }
 
-    var scroll = new URLSearchParams(window.location.search).get('scroll') === 'true'
-    var initialSearch = new URLSearchParams(window.location.search).get('search') || '';
+    var _urlParams = new URLSearchParams(window.location.search);
+    var scroll = _urlParams.get('scroll') === 'true';
+    var initialSearch = _urlParams.get('search') || '';
     var isPast = {{ (not projects)|lower }};
+    var _urlSortParam = _urlParams.get('sort');
+    var _initialPage = parseInt(_urlParams.get('page') || '1', 10);
+    var _initialRows = parseInt(_urlParams.get('rows') || '10', 10);
+    var _validRows = [10, 50, 100, -1].includes(_initialRows) ? _initialRows : 10;
     var customSort = { field: 'temporal', dir: isPast ? 'desc' : 'asc', label: '{{tripStartTime}}' };
+    if (_urlSortParam) {
+        var _sp = _urlSortParam.split(':');
+        if (_sp.length === 2) { customSort.field = _sp[0]; customSort.dir = _sp[1]; customSort.label = _sp[0]; }
+    }
     var tableObject = $('#dataTable').DataTable({
     processing: true,
     serverSide: true,
@@ -1157,21 +1268,32 @@ var table = $('#tripRows');
     searchDelay: 1000,
     scrollY: scroll == true ? $(window).height() - 300 : null,
     scroller: scroll,
-    dom: '<"dt-controls d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mb-2"lf>rtip',
+    dom: '<"dt-controls d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mb-2"lf>rt<"dt-controls-bottom d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mt-2"ip>',
     columnDefs: [{ orderable: false, targets: '_all' }],
+    // Every column is orderable:false and sorting runs through the "Trier" dropdown
+    // below, but DataTables 2 decides whether to draw a header sort arrow from a
+    // data-dt-order attribute rather than from the column being orderable, so it
+    // marks up an indicator on every header that nothing can act on. This has to be
+    // the object form: a top-level `orderIndicators` is overwritten during init by
+    // `else if (init.bSort === true) { init.orderIndicators = true; ... }`, which
+    // fires because ordering defaults to true.
+    ordering: { indicators: false, handler: false },
     ajax: {
         url: '{{ url_for("get_trips_api" if not isPublic else "get_trips_api_public", username=username, projects=projects) }}',
         "type": "POST",
         "data": function(d) {
-            d.filterTypes = $('#filterTypeSwitch').is(':checked') ? 0 : 1;
+            d.filterTypes = (getCookie('filterTypeSwitch') === 'true') ? 0 : 1;
+            d.includeFuture = (isPast && getCookie('includeFutureSwitch') === 'true') ? 1 : 0;
             
             // Parse smart search
             const searchValue = d.search.value || '';
-            const { columnFilters, globalSearch } = parseSmartSearch(searchValue);
+            const { columnFilters, globalSearch, globalNot } = parseSmartSearch(searchValue);
 
             // Set global search to the non-prefixed terms
             d.search.value = globalSearch;
-            
+            // Negative global terms ("!term"): JSON list the backend excludes
+            d.search_not = JSON.stringify(globalNot);
+
             // Add column-specific searches
             if (d.columns) {
                 d.columns.forEach((column, index) => {
@@ -1180,8 +1302,9 @@ var table = $('#tripRows');
                             value: columnFilters[index].value,
                             regex: false
                         };
-                        // Add exact flag as a separate parameter
+                        // Add exact / negate flags as separate parameters
                         d[`columns[${index}][search][exact]`] = columnFilters[index].isExact ? 'true' : 'false';
+                        d[`columns[${index}][search][negate]`] = columnFilters[index].negate ? 'true' : 'false';
                     }
                 });
             }
@@ -1195,7 +1318,7 @@ var table = $('#tripRows');
         { data: 'type', render: renderType },
         { data: 'origin_station', render: renderStation },
         { data: 'destination_station', render: renderStation },
-        { data: 'start_date' },
+        { data: 'start_date', className: 'tripDate' },
         { data: 'start_time', render: renderStartTime },
         { data: 'end_time', render: renderEndTime },
         { data: 'trip_duration', render: renderDuration },
@@ -1207,8 +1330,14 @@ var table = $('#tripRows');
             orderable: false
         },
         { data: 'operator', render: renderOperators },
-        {data: 'line_name',{% if is_alpha %} render: renderLineName,{% endif %}},
+        {data: 'line_name', render: renderLineName},
         { data: 'countries', render: renderFlags },
+        {
+            data: 'carbon_footprint',
+            render: renderCarbon,
+            defaultContent: "",
+            orderable: false
+        },
         {% if not isPublic %}
         { data: 'visibility', render: renderVisibility },
         {
@@ -1222,9 +1351,9 @@ var table = $('#tripRows');
             render: renderMaterialType,
             defaultContent: "",
         },
-        { data: 'reg' },
-        { data: 'seat' },
-        { data: 'notes' },
+        { data: 'reg', render: renderPlainText },
+        { data: 'seat', render: renderPlainText },
+        { data: 'notes', render: renderPlainText },
         { data: 'tags' },
         {
             data: null,
@@ -1253,9 +1382,14 @@ var table = $('#tripRows');
     },
     createdRow: function(row, data, dataIndex) {
         $(row).attr('id', data.uid).attr("origDest", `${data.origin_station} - ${data.destination_station}`);
+        if (isPast && data.plannedFuture == 1) {
+            $(row).addClass('upcoming-trip');
+        }
     },
     order: [],
     lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "{{dtAll}}"]],
+    pageLength: _validRows,
+    displayStart: Math.max(0, _initialPage - 1) * (_validRows > 0 ? _validRows : 0),
     paging: true,
     select: {
         style: 'multi+shift',
@@ -1290,13 +1424,30 @@ var table = $('#tripRows');
     updateSelectionMessage();
     addPageJumpInput();
 
-    // Sync search value to URL
+    // Sync table state to URL
     var searchVal = tableObject.search();
     var url = new URL(window.location);
     if (searchVal) {
         url.searchParams.set('search', searchVal);
     } else {
         url.searchParams.delete('search');
+    }
+    if (customSort.field) {
+        url.searchParams.set('sort', customSort.field + ':' + customSort.dir);
+    } else {
+        url.searchParams.delete('sort');
+    }
+    var _pi = tableObject.page.info();
+    if (_pi.page > 0) {
+        url.searchParams.set('page', _pi.page + 1);
+    } else {
+        url.searchParams.delete('page');
+    }
+    var _len = tableObject.page.len();
+    if (_len !== 10) {
+        url.searchParams.set('rows', _len);
+    } else {
+        url.searchParams.delete('rows');
     }
     history.replaceState({}, '', url);
 }).on('select', function(e, dt, type, indexes) {
@@ -1324,9 +1475,15 @@ var table = $('#tripRows');
     updateSelectionMessage();
 });
 
+// Update ?next= on the href just before navigation so it reflects the current URL (including filters/sort/page)
+$(document).on('mousedown', '.editButton, .copyButton', function() {
+    var base = $(this).attr('href').split('?')[0];
+    $(this).attr('href', base + '?next=' + encodeURIComponent(window.location.href));
+});
+
 (function() {
     var $btn = $('<label>{{sortTitle}}: <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
-    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($btn);
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($btn);
     updateSortButton();
 })();
 
@@ -1335,7 +1492,15 @@ var table = $('#tripRows');
         <input class="form-check-input" type="checkbox" id="filterTypeSwitch" onchange="toggleTypeFilter()">
         <label class="form-check-label" for="filterTypeSwitch">{{showPlaces}}</label>
     </div>`);
-    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($switch);
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($switch);
+{% endif %}
+
+{% if not projects %}
+    var $futureSwitch = $(`<div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="includeFutureSwitch" onchange="toggleIncludeFuture()">
+        <label class="form-check-label" for="includeFutureSwitch">{{showUpcoming}}</label>
+    </div>`);
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($futureSwitch);
 {% endif %}
 
 // Sort modal
@@ -1367,6 +1532,16 @@ const sortGroups = [
         { label: '{{sortPrice}}',    field: 'price' },
     ]},
 ];
+
+// Resolve sort button label from sortGroups when sort was loaded from URL
+if (_urlSortParam) {
+    for (var _sg of sortGroups) {
+        for (var _si of _sg.items) {
+            if (_si.field === customSort.field) { customSort.label = _si.label; break; }
+        }
+    }
+    updateSortButton();
+}
 
 $('#sortModal').on('show.bs.modal', function() {
     const list = $('#sortColumnList');
@@ -1436,8 +1611,9 @@ $(document).on('click', 'th[data-sort-field]', function() {
 });
 
 function deselectAll(){
-    tableObject.rows( { selected: true }).deselect();
-    checkedTrips = [];
+    tableObject.rows().deselect();
+    checkedTrips.splice(0);
+    Object.keys(checkedTripData).forEach(function(k) { delete checkedTripData[k]; });
     hideMultilink();
     updateSelectionMessage();
 }
@@ -1454,7 +1630,6 @@ function showMultilink() {
     // Add white space to make sure multilink doesn't hide 
     if ($('.bottom-space').length === 0) {  
         $('body').append('<div class="bottom-space"></div>');
-        console.log($('.bottom-space'))
     }
 }
 
@@ -1466,16 +1641,11 @@ function hideMultilink() {
 
 function updateSelectionMessage() {
     if (new URLSearchParams(window.location.search).get('scroll') != 'true') {
-        var message;
-        if (checkedTrips.length === 0) {
-            message = "";
-        } else if (checkedTrips.length === 1) {
-            message = "{{dtOneLineSelected}}";
-        } else {
-            message = "{{dtMultipleLineSelected}}".replace('%d', checkedTrips.length);
-        }
+        var message = checkedTrips.length === 0
+            ? ""
+            : pluralize(dtRowsSelected, checkedTrips.length);
 
-        var $dataTablesInfo = $('.dataTables_info');
+        var $dataTablesInfo = $('.dt-info');
 
         // Check if .select-info class exists
         if ($dataTablesInfo.find('.select-info').length === 0) {
@@ -1504,38 +1674,52 @@ $('.deleteButton').off('click').on('click', function() {
 });
 
     tableObject.rows().every( function ( rowIdx, tableLoop, rowLoop ) {
-        if ($(this.node()).hasClass("even") || $(this.node()).hasClass("odd")){
-            var hasHidden = false;
-            var controlElement;
-            var rowData = this.data();
-            // Delay data appears in sub-table even when columns aren't hidden by responsive
-            var hasDelaySubtable = rowData && (rowData.departure_delay || rowData.arrival_delay);
-            $(this.node()).children().each(
-                function(index, element){
-                    if ($(element).hasClass("dtr-control"))
-                    {
-                      controlElement = $(element)
-                    }
-                    if($(element).is(':hidden')){
-                        if($(element).text() != ""){
-                            hasHidden = true;
-                        }
-                    }
-
+        // No even/odd guard: DataTables 2 stripes rows with CSS :nth-child instead
+        // of the odd/even classes 1.x put on every <tr>, so testing for them here
+        // skipped every row and the control was never marked as having nothing to open.
+        var controlElement;
+        var rowData = this.data();
+        // Seeded true when the detail row carries something that is not a cell
+        // responsive hid: a delay breakdown, or operators beyond the four the
+        // compact cell can show. Either way the control must stay usable, since
+        // the detail row is the only place that content exists.
+        var hasHidden = Boolean(rowData && (
+            rowData.departure_delay || rowData.arrival_delay || operatorsOverflow(rowData)
+        ));
+        $(this.node()).children().each(
+            function(index, element){
+                if ($(element).hasClass("dtr-control"))
+                {
+                  controlElement = $(element)
                 }
-            );
+                if($(element).is(':hidden')){
+                    if($(element).text() != ""){
+                        hasHidden = true;
+                    }
+                }
+                // A visible but clipped cell is repeated in full in the detail row by
+                // processHiddenData, so it counts as something to open — otherwise the
+                // two disagree and the control is hidden on a row that has content.
+                else if (isEllipsisActive(element)) {
+                    hasHidden = true;
+                }
 
-            if(!hasHidden && !hasDelaySubtable) {
-                controlElement.addClass("noHidden");
             }
+        );
+
+        if (controlElement) {
+            controlElement.toggleClass("noHidden", !hasHidden);
         }
     });
-    
 }
+
+// True only when viewing your own trips (you may change their visibility).
+// The public/friend view sets isPublic=True; the owner's own page sets it False.
+const ownsTrips = "{{ isPublic }}" != "True";
 
 function shareTrips(openInNewTab) {
     const isAllPublic = Object.values(checkedTripData).every(trip => trip.visibility === 'public');
-    if(isAllPublic) {
+    if(isAllPublic || !ownsTrips) {
         window.open("{{ url_for('public_trip', tripIds='') }}" + checkedTrips, openInNewTab ? '_blank' : '_self', 'noopener')
         return;
     }
@@ -1611,6 +1795,334 @@ function deleteTrip(tripId){
     if (confirm(confirmText)) {
         processDelete(tripId);
     }   
+}
+
+const massEditDirtyFields = new Set();
+
+function _massEditPrefillStation(countrySelId, stationInputId, trips, field) {
+    const values = new Set(trips.map(function(t) { return t[field] ?? ''; }));
+    const stationInput = document.getElementById(stationInputId);
+    const countrySel = document.getElementById(countrySelId);
+    if (values.size === 1) {
+        const full = [...values][0];
+        const spaceIdx = full.indexOf(' ');
+        if (spaceIdx > 0) {
+            countrySel.value = full.slice(0, spaceIdx);
+            stationInput.value = full.slice(spaceIdx + 1);
+        } else {
+            stationInput.value = full;
+        }
+        stationInput.placeholder = '';
+    } else {
+        stationInput.value = '';
+        stationInput.placeholder = '{{multipleValues}}';
+    }
+}
+
+/* Operator pills in the mass-edit form.
+ *
+ * The suggestion list is per pool (transport / accommodation / car / poi), so it is
+ * fetched for the type of the selected trips and cached. Trips of mixed types fall
+ * back to the transport pool, which is what all but three trip types resolve against
+ * anyway.
+ */
+var _massEditOperatorPills = null;
+var _massEditManAndOpsCache = {};
+
+function _massEditSetupOperatorPills(trips) {
+    var types = new Set(trips.map(function(t) { return t.type; }));
+    var stationType = types.size === 1 ? [...types][0] : 'train';
+    var hidden = $('#massEditOperator');
+    var search = $('#massEditOperatorSearch');
+
+    // Mirror the placeholder the populate loop put on the hidden input, so a mixed
+    // selection still reads "multiple values" in the visible field.
+    search.attr('placeholder', hidden.attr('placeholder') || '');
+    search.data('placeholder', hidden.attr('placeholder') || '');
+
+    function build(manAndOps) {
+        // Rebuilt per opening: the pool, and therefore the suggestion list, depends
+        // on the current selection.
+        $('#massEditOperatorPills .op-pill').remove();
+        _massEditOperatorPills = operatorPillsInput(
+            hidden, search, $('#massEditOperatorPills'), manAndOps,
+            "{{ url_for('static', filename='') }}", stationType);
+    }
+
+    if (_massEditManAndOpsCache[stationType]) {
+        build(_massEditManAndOpsCache[stationType]);
+        return;
+    }
+    $.get("{{ url_for('getManAndOps', username=username, station_type='STATION_TYPE') }}"
+              .replace('STATION_TYPE', stationType),
+          function(manAndOps) {
+              _massEditManAndOpsCache[stationType] = manAndOps;
+              build(manAndOps);
+          });
+}
+
+function openMassEdit() {
+    massEditDirtyFields.clear();
+    const trips = Object.values(checkedTripData);
+    const n = trips.length;
+
+    document.getElementById('massEditTitle').textContent = `{{massEdit}} (${n})`;
+
+    // Standard fields
+    document.querySelectorAll('#massEditModal .mass-edit-field').forEach(function(input) {
+        const field = input.dataset.field;
+        const values = new Set(trips.map(function(t) { return t[field] ?? ''; }));
+        input.dataset.dirty = '';
+        if (values.size === 1) {
+            if (input.tagName === 'SELECT') {
+                input.value = [...values][0];
+            } else {
+                input.value = [...values][0];
+                input.placeholder = '';
+            }
+            input.classList.remove('text-muted');
+        } else {
+            if (input.tagName !== 'SELECT') {
+                input.value = '';
+                input.placeholder = '{{multipleValues}}';
+            } else {
+                input.value = '';
+            }
+        }
+    });
+
+    // Operator pills follow the hidden field the loop above just populated. Loaded
+    // for the pool the selected trips belong to, so bulk-editing hotels offers
+    // accommodation operators rather than railways.
+    _massEditSetupOperatorPills(trips);
+
+    // Station fields
+    _massEditPrefillStation('massEditOriginCountry', 'massEditOriginStation', trips, 'origin_station');
+    _massEditPrefillStation('massEditDestCountry', 'massEditDestStation', trips, 'destination_station');
+
+    // material_type_advanced: reset hidden field and label
+    document.getElementById('massEditMaterialTypeAdvanced').value = '';
+    document.getElementById('massEditTsbLabel').textContent = '';
+
+    // Show TSB button only when all trips are rail types
+    const allRail = trips.every(function(t) {
+        return typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(t.type);
+    });
+    const tsbWrap = document.getElementById('massEditTsbWrap');
+    tsbWrap.style.display = allRail ? 'flex' : 'none';
+
+    // Reset shift + delay fields
+    document.getElementById('massEditShiftDays').value = '';
+    document.getElementById('massEditShiftHours').value = '';
+    document.getElementById('massEditShiftMinutes').value = '';
+    document.getElementById('massEditDepDelay').value = '';
+    document.getElementById('massEditArrDelay').value = '';
+
+    // Reset notes mode to replace
+    document.getElementById('massEditNotesReplace').checked = true;
+
+    // Type groups (must match Python TripTypes.can_transform groups)
+    const TYPE_GROUPS = [
+        ['accomodation', 'poi', 'restaurant'],
+        ['air', 'helicopter'],
+        ['bus', 'car'],
+        ['cycle', 'scooter'],
+        ['ferry'],
+        ['metro', 'train', 'tram', 'funicular', 'rail'],
+        ['ski'],
+        ['walk'],
+        ['other'],
+    ];
+    // Power-type-capable types
+    const POWER_TYPE_RULES = {
+        train:   ['electric', 'thermic'],
+        rail:    ['electric', 'thermic'],
+        bus:     ['electric', 'thermic'],
+        car:     ['electric', 'thermic'],
+        ferry:   ['electric', 'thermic'],
+        cycle:   ['electric', 'manual'],
+        scooter: ['electric', 'manual']
+    };
+    const tripTypes = trips.map(t => t.type);
+    const uniqueTypes = [...new Set(tripTypes)];
+    const group = TYPE_GROUPS.find(g => uniqueTypes.every(t => g.includes(t)));
+    const typeSection = document.getElementById('massEditTypeSection');
+    const newTypeSelect = document.getElementById('massEditNewType');
+    newTypeSelect.innerHTML = '<option value="">—</option>';
+    if (group && group.length > 1) {
+        const currentType = uniqueTypes.length === 1 ? uniqueTypes[0] : null;
+        group.filter(t => t !== currentType).forEach(function(t) {
+            const opt = document.createElement('option');
+            opt.value = t;
+            opt.textContent = (window.TYPE_LABELS && window.TYPE_LABELS[t]) || t;
+            newTypeSelect.appendChild(opt);
+        });
+        typeSection.style.display = '';
+    } else {
+        typeSection.style.display = 'none';
+    }
+
+    // Power type section: show if all trips are power-type-capable
+    const powerSection = document.getElementById('massEditPowerSection');
+    const powerTypeSelect = document.getElementById('massEditPowerType');
+    powerTypeSelect.innerHTML = '<option value="">—</option>';
+
+    const allowedPowerSets = uniqueTypes.map(t => POWER_TYPE_RULES[t]).filter(Boolean);
+    const allPowerCapable = allowedPowerSets.length === uniqueTypes.length;
+
+    if (allPowerCapable) {
+        // Keep only power types allowed by all selected trip types
+        const commonPowerTypes = allowedPowerSets.reduce((acc, arr) =>
+            acc.filter(v => arr.includes(v))
+        );
+
+        if (commonPowerTypes.length > 0) {
+            commonPowerTypes.forEach(function(pt) {
+                const opt = document.createElement('option');
+                opt.value = pt;
+                opt.textContent = {
+                    electric: '{{electric}}',
+                    thermic: '{{thermic}}',
+                    manual: '{{manual}}'
+                }[pt] || pt;
+                powerTypeSelect.appendChild(opt);
+            });
+            powerSection.style.display = '';
+        } else {
+            powerSection.style.display = 'none';
+        }
+    } else {
+        powerSection.style.display = 'none';
+    }
+
+    $('#massEditModal').modal('show');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('#massEditModal .mass-edit-field').forEach(function(input) {
+        input.addEventListener('input', function() { massEditDirtyFields.add(input.dataset.field); });
+        input.addEventListener('change', function() { massEditDirtyFields.add(input.dataset.field); });
+    });
+
+    // Populate country names in flag dropdowns
+    updateCountryNames(document.getElementById('massEditOriginCountry'));
+    updateCountryNames(document.getElementById('massEditDestCountry'));
+
+    // Station dirty tracking
+    ['massEditOriginCountry', 'massEditOriginStation'].forEach(function(id) {
+        document.getElementById(id).addEventListener('input', function() { massEditDirtyFields.add('origin_station'); });
+        document.getElementById(id).addEventListener('change', function() { massEditDirtyFields.add('origin_station'); });
+    });
+    ['massEditDestCountry', 'massEditDestStation'].forEach(function(id) {
+        document.getElementById(id).addEventListener('input', function() { massEditDirtyFields.add('destination_station'); });
+        document.getElementById(id).addEventListener('change', function() { massEditDirtyFields.add('destination_station'); });
+    });
+});
+
+function openMassEditTsb() {
+    window._tsbAdvTarget = 'massEditMaterialTypeAdvanced';
+    window._tsbAdvCallback = function(value) {
+        massEditDirtyFields.add('material_type_advanced');
+        var label = '';
+        try {
+            var units = JSON.parse(value);
+            if (Array.isArray(units)) label = units.map(function(u) { return u.label || u.nom || u.name; }).join(' + ');
+            else if (units && Array.isArray(units.trainsets)) label = units.trainsets.join(' + ');
+        } catch (e) {
+            label = value;
+            _trainsetNames.add(value); // keep cache current so the icon renders after table reload
+        }
+        document.getElementById('massEditTsbLabel').textContent = label;
+    };
+    openTsbModal();
+}
+
+function submitMassEdit() {
+    const fields = {};
+    massEditDirtyFields.forEach(function(fieldName) {
+        if (fieldName === 'origin_station') {
+            const emoji = document.getElementById('massEditOriginCountry').value;
+            const name = document.getElementById('massEditOriginStation').value.trim();
+            if (name) fields['origin_station'] = emoji + ' ' + name;
+        } else if (fieldName === 'destination_station') {
+            const emoji = document.getElementById('massEditDestCountry').value;
+            const name = document.getElementById('massEditDestStation').value.trim();
+            if (name) fields['destination_station'] = emoji + ' ' + name;
+        } else if (fieldName === 'material_type_advanced') {
+            fields['material_type_advanced'] = document.getElementById('massEditMaterialTypeAdvanced').value || null;
+        } else {
+            const input = document.querySelector('#massEditModal [data-field="' + fieldName + '"]');
+            if (input) fields[fieldName] = input.value;
+        }
+    });
+
+    // Delay fields (convert minutes → seconds)
+    const depDelayMin = parseFloat(document.getElementById('massEditDepDelay').value);
+    const arrDelayMin = parseFloat(document.getElementById('massEditArrDelay').value);
+    if (!isNaN(depDelayMin)) fields['departure_delay'] = Math.round(depDelayMin * 60) || null;
+    if (!isNaN(arrDelayMin)) fields['arrival_delay'] = Math.round(arrDelayMin * 60) || null;
+
+    const shiftDays = parseInt(document.getElementById('massEditShiftDays').value, 10) || 0;
+    const shiftHours = parseInt(document.getElementById('massEditShiftHours').value, 10) || 0;
+    const shiftMinutes = parseInt(document.getElementById('massEditShiftMinutes').value, 10) || 0;
+    const timeShift = shiftDays * 1440 + shiftHours * 60 + shiftMinutes;
+
+    const newType = document.getElementById('massEditNewType').value;
+    const newPowerType = document.getElementById('massEditPowerType').value;
+
+    if (Object.keys(fields).length === 0 && !timeShift && !newType && !newPowerType) {
+        $('#massEditModal').modal('hide');
+        return;
+    }
+
+    const notesAppend = document.getElementById('massEditNotesAppend').checked;
+
+    document.getElementById('massEditSubmit').disabled = true;
+    document.getElementById('massEditSubmitLabel').style.display = 'none';
+    document.getElementById('massEditSpinner').style.display = '';
+
+    const requests = [];
+
+    if (Object.keys(fields).length > 0 || timeShift) {
+        requests.push(fetch('{{ url_for("bulkEditTrips", username=username) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trip_ids: checkedTrips, fields: fields, notes_append: notesAppend, time_offset_minutes: timeShift })
+        }).then(r => r.json()));
+    }
+
+    if (newType) {
+        requests.push(fetch('{{ url_for("bulkChangeType", username=username) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trip_ids: checkedTrips, new_type: newType })
+        }).then(r => r.json()));
+    }
+
+    if (newPowerType) {
+        requests.push(fetch('{{ url_for("bulkSetPowerType", username=username) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ trip_ids: checkedTrips, power_type: newPowerType })
+        }).then(r => r.json()));
+    }
+
+    Promise.all(requests)
+    .then(function(results) {
+        const failed = results.find(d => !d.success);
+        if (failed) {
+            alert(failed.error || 'Error');
+        } else {
+            tableObject.ajax.reload();
+            $('#massEditModal').modal('hide');
+            deselectAll();
+        }
+    })
+    .finally(function() {
+        document.getElementById('massEditSubmit').disabled = false;
+        document.getElementById('massEditSubmitLabel').style.display = '';
+        document.getElementById('massEditSpinner').style.display = 'none';
+    });
 }
 
 function multiDelete(){
@@ -1711,10 +2223,34 @@ fetch(`{{ url_for("get_all_tags", username=username) }}`)
 function setupAutocomplete(tags) {
     $("#tagSearchInput").autocomplete({
         source: function(request, response) {
-            const results = $.ui.autocomplete.filter(tags.map(tag => tag.name).filter(tagName => !isTagAlreadyAttached(tagName)), request.term);
+            const results = $.ui.autocomplete.filter(
+                tags.filter(tag => !isTagAlreadyAttached(tag.name))
+                    .map(tag => ({ label: tag.name, value: tag.name, _shared: tag.is_shared })),
+                request.term
+            );
+            const term = request.term.trim();
+            if (term && !tags.some(tag => tag.name.toLowerCase() === term.toLowerCase())) {
+                results.push({
+                    label: {{ create_tag_option | tojson }}.replace('{name}', term),
+                    value: term,
+                    _create: true
+                });
+            }
             response(results);
         },
         select: function(event, ui) {
+            if (ui.item._create) {
+                $.post({
+                    url: `{{ url_for("quick_create_tag", username=username) }}`,
+                    contentType: 'application/json',
+                    data: JSON.stringify({ name: ui.item.value })
+                }).done(function(data) {
+                    tags.push(data.tag);
+                    selectTag(data.tag); // attach to the checked trips right away
+                });
+                $('#tagSearchInput').val('');
+                return false;
+            }
             const selectedTag = tags.find(tag => tag.name === ui.item.value);
             if (selectedTag) {
                 selectTag(selectedTag);
@@ -1722,6 +2258,9 @@ function setupAutocomplete(tags) {
             return false; // Prevent the widget from updating the input with the selected value
         }
     });
+
+    // Icons on every row (shared/plain/create) — shared renderer from util.js
+    $("#tagSearchInput").data("ui-autocomplete")._renderItem = renderTagAutocompleteItem;
 }
 
 function isTagAlreadyAttached(tagName) {
@@ -1800,11 +2339,12 @@ function displayAssociatedTags(tags) {
         const allTripsHaveTag = checkedTrips.every(tripId => tagTripIds.includes(String(tripId)));
         const icon = allTripsHaveTag ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-circle-minus"></i>';
 
+        const shared = tag.is_shared ? '<i class="fas fa-users"></i> ' : '';
         const span = $('<span>')
             .addClass('tag-blob')
             .css('background-color', tag.colour)
             .css('color', getTextColor(tag.colour))
-            .html(tag.name + icon) // Use .html to add the icon
+            .text(tag.name).prepend(shared).append(icon) // Use .text for safety, then append icon HTML
             .on('click', function() {
                 if (allTripsHaveTag) {
                     detachTag(tag.uid);
@@ -1850,8 +2390,13 @@ $('#submitBtn').on('click', function() {
             filterSwitch.checked = savedState;
         }
 
+        const futureSwitch = document.getElementById('includeFutureSwitch');
+        if (futureSwitch) {
+            futureSwitch.checked = (typeof getCookie === 'function' && getCookie('includeFutureSwitch') === 'true');
+        }
+
         setTimeout(function() {
-            var searchContainer = $('.dataTables_filter');
+            var searchContainer = $('.dt-search');
             if (searchContainer.length && !searchContainer.find('.search-help-icon').length) {
                 var $input = searchContainer.find('input');
                 var $wrapper = $('<span style="display:inline-flex;align-items:center;gap:1px;"></span>');
@@ -1865,9 +2410,12 @@ $('#submitBtn').on('click', function() {
 
     function addPageJumpInput() {
         // Only add if it doesn't already exist
-        if ($('.dataTables_paginate input.page-jump-input').length === 0) {
+        if ($('.dt-paging input.page-jump-input').length === 0) {
+            // DataTables 2 wraps the buttons in a <nav> inside .dt-paging, so appending
+            // to .dt-paging itself would drop the box onto its own line below them.
+            var $pagingNav = $('.dt-paging nav');
             $('<input type="number" placeholder="#" class="form-control page-jump-input" style="width: 70px; margin-left: 10px; display: inline-block;" min="1">')
-                .appendTo($('.dataTables_paginate'))
+                .appendTo($pagingNav.length ? $pagingNav : $('.dt-paging'))
                 .on('keyup blur', function(e) {
                     if (e.type === 'keyup' && e.key !== 'Enter') return;
                     if (!this.value) return;
@@ -1892,6 +2440,14 @@ $('#submitBtn').on('click', function() {
 
     const TRAIN_TYPES = ['train', 'metro', 'tram'];
 
+    window.TYPE_LABELS = {
+        train: '{{train}}', tram: '{{tram}}', metro: '{{metro}}', rail: '{{rail}}',
+        funicular: '{{funicular}}', bus: '{{bus}}', car: '{{car}}', ferry: '{{ferry}}',
+        air: '{{air}}', helicopter: '{{helicopter}}', walk: '{{walk}}', cycle: '{{cycle}}',
+        scooter: '{{scooter}}', ski: '{{ski}}', aerialway: '{{aerialway}}',
+        accomodation: '{{accommodation}}', poi: '{{poi}}', restaurant: '{{restaurant}}', other: '{{other}}'
+    };
+
     const CLASS_LABELS = {
         '1st': '1st', '2nd': '2nd', '2nd-plus': '2+', 'business': 'Biz',
         'dining': 'Din', 'sleeper': 'Slp', 'couchette': 'Cch', 'service': 'Svc'
@@ -1913,7 +2469,7 @@ $('#submitBtn').on('click', function() {
         var params = { train: trainName };
         if (dateStr) params.date = dateStr;
 
-        container.html('<div class="compo-error">No composition data found.</div>');
+        container.html('<div class="compo-error">' + {{ tsNoComposition | tojson }} + '</div>');
         container.data('loaded', true);
     }
 </script>

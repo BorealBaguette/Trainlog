@@ -1,0 +1,66 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<style>
+  .deck-index {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #0d1b2a;
+    font-family: "Century Gothic", sans-serif;
+  }
+  .deck-index h1 {
+    color: #e8edf3; font-size: 1.1em; font-weight: bold;
+    letter-spacing: 0.06em; text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .deck-index a {
+    display: flex; align-items: center; gap: 12px;
+    padding: 11px 16px; border-radius: 8px;
+    color: #e8edf3; text-decoration: none;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    transition: background 0.15s, border-color 0.15s;
+    font-size: 0.95em;
+  }
+  .deck-index a:hover { background: rgba(255,255,255,0.11); border-color: rgba(255,255,255,0.2); }
+  .deck-index .icon { font-size: 1.3em; width: 24px; text-align: center; }
+  .deck-index .sub { font-size: 0.8em; color: #8fa6bd; }
+  .card { background: rgba(20,28,40,0.92); border-radius: 14px; padding: 22px 26px; width: 280px; }
+  .links { display: flex; flex-direction: column; gap: 8px; }
+  .divider { height: 1px; background: #2a3a4d; margin: 6px 0; }
+</style>
+
+<div class="deck-index">
+  <div class="card">
+    <h1>Visualisations</h1>
+    <div class="links">
+      <a href="{{ url_for('viz.bestagons', username=username) }}">
+        <span class="icon">⬡</span>
+        <span>Hexagons <span class="sub">— density grid</span></span>
+      </a>
+      <a href="{{ url_for('viz.calendar', username=username) }}">
+        <span class="icon"><i class="fa-solid fa-calendar-days"></i></span>
+        <span>Calendar <span class="sub">— travel days</span></span>
+      </a>
+      <a href="{{ url_for('viz.arcs', username=username) }}">
+        <span class="icon"><i class="fa-solid fa-bezier-curve"></i></span>
+        <span>Arc flow <span class="sub">— route frequency</span></span>
+      </a>
+      <a href="{{ url_for('viz.heatmap', username=username) }}">
+        <span class="icon"><i class="fa-solid fa-fire"></i></span>
+        <span>Heatmap <span class="sub">— corridor frequency</span></span>
+      </a>
+<a href="{{ url_for('viz.trips_page', username=username) }}">
+        <span class="icon"><i class="fa-solid fa-play"></i></span>
+        <span>Trip replay <span class="sub">— animated timeline</span></span>
+      </a>
+      <div class="divider"></div>
+      <a href="{{ url_for('bestagons_map') }}">
+        <span class="icon"><i class="fa-solid fa-globe"></i></span>
+        <span>Global bestagons <span class="sub">— all users</span></span>
+      </a>
+    </div>
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,130 @@
+{#
+  Shared trip card display component.
+
+  Provides:
+    - CSS for .trip-card, .trip-card.selected, .trip-card.has-error
+    - renderTripCards(trips, containerId, opts) JS function
+
+  opts (all optional):
+    showTypeSelect  boolean  – show a type <select> on each non-error card
+    tripTypes       object   – { value: label } map used when showTypeSelect is true
+    cbClass         string   – CSS class for checkboxes (default: "trip-checkbox")
+    disableErrors   boolean  – if true, error cards are unchecked and unclickable
+#}
+<style>
+  .trip-card {
+    border: 2px solid #dee2e6;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    margin-bottom: 0.75rem;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    background: white;
+    cursor: pointer;
+  }
+  .trip-card.selected {
+    border-color: #198754;
+    background: #f8fff8;
+    box-shadow: 0 2px 8px rgba(25, 135, 84, 0.15);
+  }
+  .trip-card.has-error {
+    border-color: #dc3545;
+    background: #fff8f8;
+    cursor: default;
+    opacity: 0.85;
+  }
+  .trip-card:not(.has-error):hover {
+    border-color: #adb5bd;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+  .trip-header { font-weight: 600; font-size: 1.05em; }
+  .trip-details { color: #6c757d; font-size: 0.9em; margin-top: 0.4rem; }
+  .trip-type-select { min-width: 150px; }
+</style>
+<script>
+/**
+ * Render trip preview cards into a container.
+ *
+ * @param {Array}  trips        - array of trip objects (see format below)
+ * @param {string} containerId  - id of the DOM element to fill
+ * @param {Object} opts
+ *   opts.showTypeSelect {boolean} - show type <select> per card
+ *   opts.tripTypes      {Object}  - { value: label } for the type select
+ *   opts.cbClass        {string}  - checkbox CSS class (default "trip-checkbox")
+ *
+ * Trip object format:
+ *   { display, error?, save_data? }
+ *   display: { origin, destination, type, date, distance, operator?, line_name? }
+ *   error: string (present only on failed-parse rows)
+ */
+function renderTripCards(trips, containerId, opts) {
+  opts = opts || {};
+  const showType  = opts.showTypeSelect || false;
+  const types     = opts.tripTypes || {};
+  const cbClass   = opts.cbClass || 'trip-checkbox';
+
+  function formatDuration(seconds) {
+    if (!seconds) return '';
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    return h > 0 ? h + 'h ' + m + 'm' : m + 'm';
+  }
+
+  let html = '';
+  trips.forEach(function(t, i) {
+    const d = t.display || {};
+    const isError = !!(t.error);
+    const cardClass = isError ? 'trip-card has-error' : 'trip-card selected';
+    const cbAttrs   = isError ? 'disabled' : 'checked';
+
+    html += `<div class="${cardClass}" data-index="${i}">`;
+    html += `<div class="d-flex justify-content-between align-items-start">`;
+    html += `<div class="flex-grow-1">`;
+    html += `<div class="trip-header${isError ? ' text-danger' : ''}">`;
+    if (isError) html += `<i class="bi bi-exclamation-triangle me-1"></i>`;
+    html += `${d.origin || '?'} → ${d.destination || '?'}</div>`;
+
+    if (isError) {
+      html += `<div class="text-danger small mt-1">${t.error}</div>`;
+    } else {
+      if (d.line_name || d.operator) {
+        const sub = [d.line_name, d.operator].filter(Boolean).join(' · ');
+        html += `<div class="text-muted" style="font-size:0.85em;margin-top:0.2rem;">${sub}</div>`;
+      }
+    }
+    html += `</div>`;
+    html += `<input type="checkbox" class="${cbClass} form-check-input ms-2" ${cbAttrs} style="width:1.25rem;height:1.25rem;">`;
+    html += `</div>`;
+
+    if (!isError) {
+      html += `<div class="trip-details">`;
+      html += `<div class="row align-items-center mt-2">`;
+      if (showType) {
+        html += `<div class="col-md-4">`;
+        html += `<select class="form-select form-select-sm trip-type-select" data-index="${i}">`;
+        Object.keys(types).forEach(function(k) {
+          const sel = k === (d.type || '') ? 'selected' : '';
+          html += `<option value="${k}" ${sel}>${types[k]}</option>`;
+        });
+        html += `</select></div>`;
+        html += `<div class="col-md-8">`;
+      } else {
+        html += `<div class="col-12">`;
+      }
+      const details = [];
+      if (d.date) details.push(d.date);
+      if (d.distance) details.push(d.distance);
+      if (d.duration) details.push(formatDuration(d.duration));
+      if (!showType && d.type) details.push(`<span class="badge bg-secondary">${d.type}</span>`);
+      html += details.join(' · ');
+      html += `</div></div>`;
+      if (d.notes) {
+        html += `<div class="mt-2"><small class="text-muted">${d.notes}</small></div>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div>`;
+  });
+
+  document.getElementById(containerId).innerHTML = html;
+}
+</script>

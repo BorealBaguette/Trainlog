@@ -27,10 +27,15 @@
         <ul class="dropdown-menu">
             <li>
               <a class="dropdown-item" href="{{ url_for('public_stats', username=username, tripType='combined') }}">
-                <i></i> {{ all }}
+                <i class="fa-solid fa-layer-group"></i> {{ all }}
               </a>
             </li>
+          {% set ns = namespace(group=none) %}
           {% for type, data in distinctTypes.items() %}
+            {% if data.group != ns.group %}
+            <li><hr class="dropdown-divider"></li>
+            {% endif %}
+            {% set ns.group = data.group %}
             <li>
               <a class="dropdown-item" href="{{ url_for('public_stats', username=username, tripType=type) }}">
                 <i class="{{ data.icon }}"></i> {{ data.label }}
@@ -47,7 +52,7 @@
         </li>		
         {%endif%}
         <li class="nav-item">
-          <a class="nav-link" href="{{ url_for('login') }}"><i class="bi bi-power"></i> {{exit}}</a>
+          <a class="nav-link" href="{{ url_for('login') }}"><i class="bi bi-power"></i> {{login}}</a>
         </li>			
       </ul>		
     </div>

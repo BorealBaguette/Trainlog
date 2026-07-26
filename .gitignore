@@ -4,6 +4,7 @@
 *.db
 *.db-wal
 *.db-shm
+*.dump
 !databases/data.db
 .flask_secret
 config.yaml
@@ -17,3 +18,5 @@ package.json
 package-lock.json
 server.js
 venv/
+city_percent/*
+databases/cache/

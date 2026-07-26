@@ -9,16 +9,29 @@ const MapConfig = {
         { id: 'bus', icon: 'fa-bus', color: '#9f4bbb' },
         { id: 'car', icon: 'fa-car-side', color: '#a68fcd' },
         { id: 'cycle', icon: 'fa-bicycle', color: '#6e211a' },
+        { id: 'scooter', icon: 'bi-scooter', iconClass: 'bi', color: '#00d084' },
+        { id: 'funicular', icon: 'fa-mountain', color: '#6495ed' },
+        { id: 'rail', icon: 'fa-dumbbell', color: '#7ec8ff' },
+        { id: 'ski', icon: 'fa-person-skiing', color: '#b8e6f0' },
         { id: 'walk', icon: 'fa-person-hiking', color: '#e88c00' },
         { id: 'air', icon: 'fa-plane', color: '#40b91f' },
         { id: 'ferry', icon: 'fa-ship', color: '#1e1e7c' },
-        { id: 'aerialway', icon: 'fa-cable-car', color: '#afcf3b' }
+        { id: 'aerialway', icon: 'fa-cable-car', color: '#afcf3b' },
+        { id: 'other', icon: 'fa-circle-question', color: '#000000' }
     ],
+    // Vertical exaggeration for 3D flight altitude. Real cruise (~11 km) over a
+    // ~1000 km route is ~1% of the route length and barely visible, so the stored
+    // (true-metre) altitude is multiplied by this at render time only.
+    altitudeExaggeration: 1,
     jawgAllowedLangs: ["de", "en", "es", "fr", "it", "ja", "ko", "nl", "ru", "zh"],
     vectorStylePaths: {
         "jawg-streets-v2":'/getVectorStyle/{language}/jawg-streets.json',
         "jawg-lagoon-v2":'/getVectorStyle/{language}/jawg-lagoon.json',
-        "trainlog-lagoon-v2":'/getVectorStyle/{language}/trainlog-lagoon.json'
+        "trainlog-lagoon-v2":'/getVectorStyle/{language}/trainlog-lagoon.json',
+        "dark-train":       '/getVectorStyle/{language}/trainlog-dark.json',
+        "ofm-liberty": 'https://tiles.openfreemap.org/styles/liberty',
+        "ofm-bright": 'https://tiles.openfreemap.org/styles/bright',
+        "ofm-positron": 'https://tiles.openfreemap.org/styles/positron'
     }
 };
 
@@ -36,17 +49,31 @@ async function initializeMapLibre(options = {}) {
 
     let mapStyle;
 
+    // Parse orm-vector overlay
+    let ormVectorBase = null;
+    let ormVectorType = 'standard';
+    let effectiveTileserver = tileserver;
+    const ormVectorMatch = tileserver && tileserver.match(/^orm-vector-([^.]+)\.(.+)$/);
+    if (ormVectorMatch) {
+        ormVectorType = ormVectorMatch[1];
+        ormVectorBase = ormVectorMatch[2];
+        effectiveTileserver = ormVectorBase;
+    }
+
     // Handle different tile server types
-    if (isVectorTileServer(tileserver) || styleUrl) {
+    if (effectiveTileserver === 'none') {
+        mapStyle = { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#f8f9fa' } }] };
+        if (useGlobe) mapStyle.projection = { type: 'globe' };
+    } else if (isVectorTileServer(effectiveTileserver) || styleUrl) {
         // Load vector style
-        const url = styleUrl || getVectorStyleUrl(tileserver, userLanguage);
+        const url = styleUrl || getVectorStyleUrl(effectiveTileserver, userLanguage);
         try {
             const response = await fetch(url);
             if (!response.ok) {
                 throw new Error(`Failed to load style: ${response.status}`);
             }
             mapStyle = await response.json();
-            
+
             // Add globe projection if requested
             if (useGlobe) {
                 mapStyle.projection = { type: 'globe' };
@@ -58,7 +85,7 @@ async function initializeMapLibre(options = {}) {
         }
     } else {
         // Use raster tiles
-        mapStyle = createRasterStyle(tileserver, userLanguage, useGlobe);
+        mapStyle = createRasterStyle(effectiveTileserver, userLanguage, useGlobe);
     }
 
     // Create map
@@ -69,6 +96,80 @@ async function initializeMapLibre(options = {}) {
         zoom: zoom,
         doubleClickZoom: false
     });
+
+    // Add a sentinel layer that trip layers will sit above
+    map.once('load', () => {
+        map.addLayer({ id: 'orm-sentinel', type: 'background', paint: { 'background-opacity': 0 } });
+    });
+
+    // Add OpenRailwayMap vector overlay after style loads
+    if (ormVectorBase) {
+        const ormTypeMap = {
+            standard:    'standard',
+            maxspeed:    'speed',
+            signals:     'signals',
+            electrified: 'electrification',
+            gauge:       'track',
+        };
+        const ormStyleName = ormTypeMap[ormVectorType] || 'standard';
+
+        map.once('load', async () => {
+            try {
+                const ormStyleResp = await fetch(`/getORMStyle/${ormStyleName}.json`);
+                const ormStyle = await ormStyleResp.json();
+
+                const skipSources = new Set(['dem', 'search', 'route', 'route_stops', 'openhistoricalmap']);
+                const addedSources = new Set();
+
+                // Fix sources: convert relative url/tiles to absolute tiles array
+                for (const [name, source] of Object.entries(ormStyle.sources)) {
+                    if (skipSources.has(name)) continue;
+                    try {
+                        const fixedSource = { ...source };
+                        if (fixedSource.url) {
+                            const path = fixedSource.url.startsWith('/') ? fixedSource.url : `/${fixedSource.url}`;
+                            fixedSource.tiles = [`https://openrailwaymap.app${path}/{z}/{x}/{y}`];
+                            delete fixedSource.url;
+                        } else if (fixedSource.tiles) {
+                            fixedSource.tiles = fixedSource.tiles.map(t =>
+                                t.startsWith('/') ? `https://openrailwaymap.app${t}/{z}/{x}/{y}` : t
+                            );
+                        } else {
+                            continue; // no tiles, skip
+                        }
+                        map.addSource(`orm_${name}`, fixedSource);
+                        addedSources.add(name);
+                    } catch (e) {
+                        console.warn(`[ORM] skipping source ${name}:`, e.message);
+                    }
+                }
+
+                // Add all ORM line layers below text labels but above base map geometry
+                // Skip text/symbol/background layers — they cause gritty artifacts and CORS issues
+                const skipLayers = new Set(['hillshade', 'route', 'route_text', 'route_stops', 'search']);
+                const skipTypes = new Set(['symbol', 'background', 'raster']);
+                const firstSymbolId = map.getStyle().layers.find(l => l.type === 'symbol')?.id || 'orm-sentinel';
+                for (const layer of ormStyle.layers) {
+                    if (skipLayers.has(layer.id) || !layer.source) continue;
+                    if (skipSources.has(layer.source) || !addedSources.has(layer.source)) continue;
+                    if (skipTypes.has(layer.type)) continue;
+                    if (layer.id.includes('_casing') || layer.id.includes('_cover')) continue;
+                    try {
+                        const newLayer = { ...layer, source: `orm_${layer.source}` };
+                        // Strip layout.visibility expressions — unsupported by MapLibre, default to visible
+                        if (newLayer.layout?.visibility && typeof newLayer.layout.visibility !== 'string') {
+                            newLayer.layout = { ...newLayer.layout, visibility: 'visible' };
+                        }
+                        map.addLayer(newLayer, firstSymbolId);
+                    } catch (e) {
+                        console.warn(`[ORM] skipping layer ${layer.id}:`, e.message);
+                    }
+                }
+            } catch (e) {
+                console.error('[ORM] failed to load style:', e);
+            }
+        });
+    }
 
     // Add navigation controls
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
@@ -81,7 +182,11 @@ function isVectorTileServer(tileserver) {
     const vectorServers = [
         'jawg-streets-v2',
         'jawg-lagoon-v2',
-        'trainlog-lagoon-v2'
+        'trainlog-lagoon-v2',
+        'dark-train',
+        'ofm-liberty',
+        'ofm-bright',
+        'ofm-positron'
     ];
     return vectorServers.includes(tileserver);
 }
@@ -150,7 +255,12 @@ function getTileServerConfig(serverType, userLanguage) {
             } else if (serverType === 'thunderforest-transport') {
                 tileUrl = `https://tiles.trainlog.me/tile/${serverType}/{x}/{y}/{z}`;
                 attribution = '© Thunderforest, © OpenStreetMap contributors';
-            }else if (serverType && serverType.startsWith("openrailwaymap-")) {
+            } else if (serverType && serverType.startsWith("orm-vector-")) {
+                // Vector ORM is handled by initializeMapLibre; fall back to base raster
+                const m = serverType.match(/^orm-vector-([^.]+)\.(.+)$/);
+                serverType = (m ? m[2] : null) || "osm";
+                return getTileServerConfig(serverType, userLanguage);
+            } else if (serverType && serverType.startsWith("openrailwaymap-")) {
                 var baseStyle = "osm"; // default
                 if (serverType.includes(".")) {
                     var parts = serverType.split(".");
@@ -226,6 +336,82 @@ function createGeodesicLine(start, end, numPoints = 100, splitSegments = false) 
 
     segments.push(currentSeg);
     return splitSegments ? segments : segments.flat();
+}
+
+// ---------------------------------------------------------------------------
+// Live flight tracks
+//
+// A flight logged before it happens is stored as a 2-point line and drawn as a
+// geodesic, which looks obviously fake next to a completed leg's real track.
+// While it is airborne we have the flown-so-far path from FR24, so we swap it in
+// and estimate only the remainder.
+// ---------------------------------------------------------------------------
+
+// Attach the real flown-so-far path to each trip that has a live track, as `livePath`.
+//
+// `trip.path` is deliberately left alone. It is the trip's stored route and the rest of
+// the page reads it as such — the destination marker, for one, takes its position from
+// the last point of it. Overwriting it with a track that stops at the aircraft dragged
+// the end of the journey along with the plane. Anything that wants the live geometry
+// opts in by reading livePath; everything else keeps seeing the real route.
+//
+// Both map surfaces already split an in-progress trip into travelled and remaining
+// portions, so they render the estimated remainder with their own existing styling.
+//
+// `features` is optional. When given (the array returned by buildTripLayers), the
+// matching feature's geometry is updated in place. In place matters: buildTripLayers
+// installs a pulse animation that addresses features by array index, so the array
+// must keep its identity, order and length across a refresh.
+function applyLiveTracks(trips, liveTracks, features) {
+    if (!liveTracks) return;
+
+    trips.forEach(trip => {
+        const live = liveTracks[trip.trip.uid];
+        if (!live || !live.path || live.path.length < 2) return;
+
+        const original = trip.path || [];
+        // Where the flight is meant to end. Taken from the stored route rather than the
+        // live feed, so a diversion cannot silently retarget the estimate at an airport
+        // the user never logged. Safe to recompute every refresh now that trip.path is
+        // never overwritten.
+        const destination = original.length ? original[original.length - 1] : null;
+        // The origin, for the same reason plus one of its own: FR24's public track often
+        // starts at the first airborne radar contact rather than at the gate — several km
+        // into the climb-out — so without this the route appears to begin in mid-air near
+        // the airport instead of at it.
+        const origin = original.length ? original[0] : null;
+
+        trip.livePath = live.path;
+        trip.liveTracked = true;
+        trip.liveOrigin = origin;
+        trip.liveDestination = destination;
+        trip.liveUpdated = live.updated || null;
+        if (live.altitude) trip.altitude = live.altitude;
+        if (live.timestamps) trip.timestamps = live.timestamps;
+
+        if (features) {
+            const feature = features.find(f => f && f.properties.id === trip.trip.uid);
+            if (feature) {
+                // The whole route, not just the flown part: this feature stands for the
+                // entire trip, and its layers include the drop shadow. Giving it only
+                // the flown portion would end the shadow at the aircraft and leave the
+                // remaining leg looking detached from the rest of the map. Bridged to
+                // both airports so the line still runs terminal to terminal.
+                let coords = live.path.map(c => [c[1], c[0]]);
+                if (origin) {
+                    coords = createGeodesicLine([origin[1], origin[0]], coords[0])
+                        .concat(coords);
+                }
+                if (destination) {
+                    coords = coords.concat(
+                        createGeodesicLine(coords[coords.length - 1],
+                                           [destination[1], destination[0]])
+                    );
+                }
+                feature.geometry.coordinates = normalizePathCoords(coords);
+            }
+        }
+    });
 }
 
 // Build trip layers for the map
@@ -563,8 +749,318 @@ function modifyVectorStyle(style, modifications = {}) {
 }
 
 // Export utilities
+// ─── 3D flight tracks (altitude profile) ────────────────────────────────────
+
+let _deckGLPromise = null;
+
+// Lazy-load deck.gl from CDN (only when a 3D flight is actually present).
+function loadDeckGL() {
+    if (window.deck) return Promise.resolve(window.deck);
+    if (_deckGLPromise) return _deckGLPromise;
+    _deckGLPromise = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = 'https://unpkg.com/deck.gl@9.0.0/dist.min.js';
+        s.onload = () => resolve(window.deck);
+        s.onerror = () => reject(new Error('Failed to load deck.gl'));
+        document.head.appendChild(s);
+    });
+    return _deckGLPromise;
+}
+
+function _hexToRgbArray(hex) {
+    const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex || '');
+    return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [64, 185, 31];
+}
+
+function _coerceArray(v) {
+    if (Array.isArray(v)) return v;
+    if (typeof v === 'string') { try { return JSON.parse(v); } catch (e) { return null; } }
+    return null;
+}
+
+// Viewer-side preference (per-device, free for everyone — not premium) for
+// rendering 3D flight tracks. Default ON so premium owners' flights show their
+// 3D "clout", but any viewer can switch it off for performance. Stored in
+// localStorage so it's a machine-specific choice and works for anonymous viewers.
+const FLIGHT_3D_VIEW_KEY = 'trainlog_flight_3d_view';
+function flight3DViewEnabled() {
+    try { return localStorage.getItem(FLIGHT_3D_VIEW_KEY) !== 'off'; } catch (e) { return true; }
+}
+function setFlight3DViewEnabled(on) {
+    try { localStorage.setItem(FLIGHT_3D_VIEW_KEY, on ? 'on' : 'off'); } catch (e) { /* ignore */ }
+}
+
+// A small button to toggle the 3D flight view. Only added when the page actually
+// has 3D-capable (premium-owner) flights, so it doubles as a subtle signal of the
+// premium flex without ever nagging for money. Positioned as a standalone button
+// (not a corner control) so it stays clear of the zoom group and the sidebar
+// handle, which both occupy the top-right corner stack.
+function _addFlight3DToggleControl(map, onToggle, title) {
+    const container = map.getContainer();
+    // Reuse the existing button if the layer is rebuilt (a live flight track arrives
+    // after first render), otherwise every rebuild would stack another toggle.
+    if (map._flight3dToggleBtn) {
+        const existing = map._flight3dToggleBtn;
+        existing.onclick = () => {
+            onToggle(!flight3DViewEnabled());
+            existing.style.opacity = flight3DViewEnabled() ? '1' : '0.45';
+        };
+        return existing;
+    }
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = title || 'Toggle 3D flight altitude';
+    btn.innerHTML = '<i class="fa-solid fa-plane-departure"></i>';
+    btn.style.cssText =
+        'position:absolute;z-index:399;background:#fff;border:none;border-radius:8px;' +
+        'box-shadow:0 1px 5px rgba(0,0,0,.3);font-size:14px;color:#333;' +
+        'cursor:pointer;padding:0;';
+    container.appendChild(btn);
+
+    // Align to the bottom-left legend ("i") button: same left edge and size,
+    // stacked just above it. Falls back to a fixed bottom-left spot if absent.
+    const legend = document.querySelector('.legend-control');
+    function place() {
+        if (legend) {
+            const lr = legend.getBoundingClientRect();
+            const cr = container.getBoundingClientRect();
+            btn.style.left = (lr.left - cr.left) + 'px';
+            btn.style.bottom = (cr.bottom - lr.top + 8) + 'px';
+            btn.style.width = lr.width + 'px';
+            btn.style.height = lr.height + 'px';
+        } else {
+            btn.style.left = '20px';
+            btn.style.bottom = '68px';
+            btn.style.width = '42px';
+            btn.style.height = '38px';
+        }
+    }
+    place();
+    window.addEventListener('resize', place);
+
+    const sync = () => { btn.style.opacity = flight3DViewEnabled() ? '1' : '0.45'; };
+    // onclick (not addEventListener) so a rebuild can replace the handler outright
+    // instead of leaving the previous one attached and firing the toggle twice.
+    btn.onclick = () => { onToggle(!flight3DViewEnabled()); sync(); };
+    sync();
+    map._flight3dToggleBtn = btn;
+    return btn;
+}
+
+// deck.gl runs in its own canvas stacked on top of the map (interleaved mode shares
+// MapLibre's WebGL context and can blank a raster base map, so it is not an option).
+// Left alone that canvas is added last and paints over everything, including the
+// station pins and the current-position marker. Drop it to its own low layer and lift
+// the markers above it, so the altitude profile floats over the map lines but still
+// passes under the pins.
+// Initial compass bearing between two [lng, lat, ...] points, degrees clockwise from north.
+function _bearingDeg(a, b) {
+    const toRad = d => d * Math.PI / 180;
+    const lat1 = toRad(a[1]), lat2 = toRad(b[1]), dLng = toRad(b[0] - a[0]);
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2)
+            - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// Plane silhouette pointing north, as a data URI so no asset request is needed.
+// Drawn as a deck.gl icon mask, so getColor tints it.
+//
+// The explicit width/height are required, not decorative: deck rasterises icons with
+// createImageBitmap, which throws InvalidStateError on an SVG carrying only a viewBox
+// ("image without natural dimensions"). The icon then never reaches the atlas and
+// nothing is drawn at all.
+const _PLANE_SVG = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">' +
+    '<path fill="#fff" d="M12 2c-.8 0-1.4.9-1.4 2v5.3L2 14.4v2.1l8.6-2.7v4.6l-2.4 1.7V22l3.8-1.1 3.8 1.1v-1.9l-2.4-1.7v-4.6l8.6 2.7v-2.1l-8.6-5.1V4c0-1.1-.6-2-1.4-2z"/>' +
+    '</svg>'
+);
+
+function _lowerDeckCanvas(map) {
+    const container = map.getContainer();
+    // deck.gl's canvas id has moved around between versions, so identify it by
+    // elimination instead: any canvas in the container that isn't MapLibre's own.
+    const mapCanvas = map.getCanvas();
+    container.querySelectorAll('canvas').forEach(canvas => {
+        if (canvas === mapCanvas) return;
+        // deck.gl is installed with map.addControl, which drops its canvas inside
+        // MapLibre's control container. That container stacks above the markers on
+        // purpose (controls must stay clickable) and forms its own stacking context,
+        // so restyling the canvas in place cannot bring it below anything. Reparent
+        // deck's wrapper to the map container instead, where its z-index competes with
+        // the markers directly. deck positions the wrapper absolutely at 0,0/100%x100%,
+        // so moving it does not change where it draws.
+        const wrapper = canvas.parentElement;
+        const node = (wrapper && wrapper !== container) ? wrapper : canvas;
+        if (node.parentElement !== container) container.appendChild(node);
+        node.style.zIndex = '1';
+        node.style.pointerEvents = 'none';
+    });
+    if (!document.getElementById('deck-marker-stacking')) {
+        const style = document.createElement('style');
+        style.id = 'deck-marker-stacking';
+        style.textContent = '.maplibregl-marker { z-index: 2; }';
+        document.head.appendChild(style);
+    }
+}
+
+// Show or hide the flat ground marker for a live position. While the 3D overlay is up
+// the aircraft is drawn at its real altitude, so the ground copy is a duplicate sitting
+// directly beneath it.
+//
+// Toggled directly rather than through a CSS class: the marker's own inline styles make
+// a stylesheet rule an unreliable lever here. visibility, not display, because the
+// element relies on an inline `display: flex` to centre its glyph.
+function _setGroundAircraftVisible(map, visible) {
+    map.getContainer().querySelectorAll('.marker-live').forEach(el => {
+        el.style.visibility = visible ? 'visible' : 'hidden';
+    });
+}
+
+// Render flights that carry an altitude array as a 3D deck.gl PathLayer. At pitch
+// 0 the path projects exactly onto its 2D ground line (invisible from the top);
+// tilting the map reveals the altitude profile rising above the ground track.
+// Server only sends altitude for premium owners (the "clout" gate); here a free
+// per-viewer toggle decides whether to actually render it (the performance gate).
+async function build3DFlightLayer(map, trips, options = {}) {
+    // deck.gl's overlay can't follow MapLibre's globe projection (the track
+    // detaches from the sphere), so skip 3D entirely in globe mode — the flat 2D
+    // lines render as before.
+    const proj = map.getProjection && map.getProjection();
+    if (proj && proj.type === 'globe') return null;
+
+    // A live flight track arrives after first render and carries the altitude this
+    // layer needs, so the layer gets rebuilt. Drop the previous overlay first or the
+    // old (shorter) track would stay on the map underneath the new one.
+    if (map._flight3dRemove) {
+        map._flight3dRemove();
+        map._flight3dRemove = null;
+    }
+
+    const exaggeration = options.exaggeration ?? MapConfig.altitudeExaggeration;
+    // Draw a vertical line from every Nth track point down to the ground track.
+    const dropStep = options.dropLineStep ?? 1;
+
+    const flights = [];
+    const dropLines = [];  // vertical segments {source:[lng,lat,alt], target:[lng,lat,0]}
+    const aircraft = [];   // live positions, drawn at their real altitude
+    trips.forEach(trip => {
+        // livePath when the flight is being tracked: the altitude array is parallel to
+        // the live track, not to the stored two-point route.
+        const path = _coerceArray(trip.livePath || trip.path);   // [[lat, lng], ...]
+        const altitude = _coerceArray(trip.altitude);  // [m, ...] parallel to path
+        if (!path || !altitude || altitude.length < 2) return;
+        const n = Math.min(path.length, altitude.length);
+        const coords = [];
+        for (let i = 0; i < n; i++) {
+            const lng = path[i][1], lat = path[i][0];
+            const z = (altitude[i] || 0) * exaggeration;
+            coords.push([lng, lat, z]);
+            if (i % dropStep === 0 && z > 0) {
+                dropLines.push({ source: [lng, lat, z], target: [lng, lat, 0] });
+            }
+        }
+        flights.push({ uid: trip.trip.uid, coords });
+
+        // An in-flight aircraft belongs at the tip of its own altitude profile, not on
+        // the ground below it. A DOM marker cannot carry a z coordinate, so the live
+        // position is drawn here instead and the flat marker hides while 3D is on.
+        if (trip.liveTracked && coords.length >= 2) {
+            const tip = coords[coords.length - 1];
+            // Measured over several points: consecutive samples can be metres apart and
+            // a bearing across those jitters the aircraft on every refresh.
+            const back = coords[Math.max(0, coords.length - 6)];
+            aircraft.push({ position: tip, angle: _bearingDeg(back, tip) });
+        }
+    });
+
+    // No premium 3D flights on this page -> no overlay, no toggle, no nagging.
+    if (flights.length === 0) return null;
+
+    const airColor = _hexToRgbArray(
+        (MapConfig.transportTypes.find(t => t.id === 'air') || {}).color
+    );
+
+    let overlay = null;
+    async function buildOverlay() {
+        if (overlay) return;
+        const deck = await loadDeckGL();  // only loaded when the viewer wants 3D
+        const pathLayer = new deck.PathLayer({
+            id: 'flight-3d',
+            data: flights,
+            getPath: d => d.coords,
+            getColor: airColor,
+            widthUnits: 'pixels',
+            getWidth: 2,
+            widthMinPixels: 1,
+            jointRounded: true,
+            capRounded: true
+        });
+        // Translucent "wall" of vertical droplines connecting the 3D track to its
+        // 2D ground projection, so the altitude profile reads even when nearly flat.
+        const dropLayer = new deck.LineLayer({
+            id: 'flight-3d-drops',
+            data: dropLines,
+            getSourcePosition: d => d.source,
+            getTargetPosition: d => d.target,
+            getColor: [...airColor, 70],
+            getWidth: 1,
+            widthUnits: 'pixels',
+            widthMinPixels: 1
+        });
+        // Overlaid (not interleaved): deck.gl draws in its own canvas on top of the
+        // map and still camera-syncs pitch for the 3D effect. Interleaved mode shares
+        // MapLibre's WebGL context and can blank the (raster) base map.
+        // The live aircraft, sitting on top of its altitude profile. IconLayer angles
+        // counter-clockwise from the icon's own orientation, and the silhouette points
+        // north, so a clockwise compass bearing goes in negated.
+        const aircraftLayer = new deck.IconLayer({
+            id: 'flight-3d-aircraft',
+            data: aircraft,
+            getPosition: d => d.position,
+            getAngle: d => -d.angle,
+            getColor: [43, 122, 18],
+            getSize: 26,
+            sizeUnits: 'pixels',
+            // Laid in the map plane, not billboarded at the camera: a billboarded icon
+            // is angled in screen space, so rotating the map would leave the aircraft
+            // pointing the same way on screen while its track turned underneath it.
+            billboard: false,
+            // The `id` is not optional in practice: deck caches icons by it, and
+            // without one the icon can silently fail to rasterise and nothing draws.
+            getIcon: () => ({
+                id: 'live-plane', url: _PLANE_SVG, width: 24, height: 24, mask: true
+            })
+        });
+        overlay = new deck.MapboxOverlay({
+            interleaved: false,
+            layers: [dropLayer, pathLayer, aircraftLayer]
+        });
+        map.addControl(overlay);
+        _lowerDeckCanvas(map);
+        // Conditional on there actually being one: if no live aircraft is drawn up
+        // here, hiding the ground marker would leave the flight with no marker at all.
+        if (aircraft.length) _setGroundAircraftVisible(map, false);
+    }
+    function removeOverlay() {
+        if (overlay) { map.removeControl(overlay); overlay = null; }
+        // Back to 2D: the ground marker is the only aircraft left, so restore it.
+        _setGroundAircraftVisible(map, true);
+    }
+    map._flight3dRemove = removeOverlay;
+
+    _addFlight3DToggleControl(map, async (on) => {
+        setFlight3DViewEnabled(on);
+        if (on) await buildOverlay(); else removeOverlay();
+    }, options.toggleTitle);
+
+    if (flight3DViewEnabled()) await buildOverlay();
+    return overlay;
+}
+
 window.MapLibreUtils = {
     MapConfig,
+    build3DFlightLayer,
     initializeMapLibre,
     isVectorTileServer,
     getVectorStyleUrl,
@@ -572,6 +1068,7 @@ window.MapLibreUtils = {
     getTileServerConfig,
     createGeodesicLine,
     computeTimeStatus,
+    applyLiveTracks,
     buildTripLayers,
     updateLayerVisibility,
     fitBoundsToVisibleFeatures,

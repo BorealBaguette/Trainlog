@@ -1,1 +1,0 @@
-SELECT DISTINCT type from trip where (:username IS NULL OR username = :username)

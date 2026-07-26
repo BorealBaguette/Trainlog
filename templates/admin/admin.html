@@ -34,14 +34,22 @@
                 <div id="totals"></div>
                 <div id="languages"></div>
             </div>
-            <div class="col-auto text-right">
-                <button id="showLangModalBtn" class="btn btn-info">Language Stats</button><br>
-                <button id="loadDateBtn" class="btn btn-primary">
-                    Refresh Currency
-                    <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
-                        style="display: none;"></span>
-                </button><br>
-                <span id="last_date">...</span>
+            <div class="col-auto">
+                <div class="d-flex flex-column align-items-stretch" style="gap: 0.5rem; width: 220px;">
+                    <button id="showLangModalBtn" class="btn btn-info">Language Stats</button>
+                    <button id="loadDateBtn" class="btn btn-primary">
+                        Refresh Currency
+                        <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
+                            style="display: none;"></span>
+                    </button>
+                    <span id="last_date" class="text-muted small text-break">...</span>
+                    <button id="rebuildGlobalBtn" class="btn btn-primary">
+                        Rebuild Bestagons
+                        <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
+                            style="display: none;"></span>
+                    </button>
+                    <span id="global_map_status" class="text-muted small text-break">...</span>
+                </div>
             </div>
         </div>
     </div>
@@ -73,6 +81,26 @@
         </thead>
         <tbody></tbody>
     </table>
+</div>
+
+<div class="modal fade" id="renameModal" tabindex="-1" role="dialog" aria-labelledby="renameModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="renameModalLabel">Rename User</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p>Current username: <strong id="renameCurrentUsername"></strong></p>
+                <input type="text" class="form-control" id="renameNewUsername" placeholder="New username">
+                <div id="renameError" class="text-danger mt-2" style="display:none;"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-warning" id="renameConfirmBtn">Rename</button>
+            </div>
+        </div>
+    </div>
 </div>
 
 <div class="modal fade" id="langModal" tabindex="-1" role="dialog" aria-labelledby="langModalLabel" aria-hidden="true">
@@ -115,16 +143,25 @@
             admin: 'fa-chess-rook',
             alpha: 'fa-flask',
             translator: 'fa-language',
-            premium: 'fa-gem'
+            premium: 'fa-gem',
+            feature_admin: 'fa-shield-halved'
         };
 
-        return `<button class="btn ${buttonClass} roleButton" 
-                data-uid="${user.uid}" 
-                data-role="${role}" 
+        const roleLabels = {
+            admin: 'Admin',
+            alpha: 'Alpha',
+            translator: 'Translator',
+            premium: 'Premium',
+            feature_admin: 'Feature Admin'
+        };
+
+        return `<button class="btn ${buttonClass} roleButton"
+                data-uid="${user.uid}"
+                data-role="${role}"
                 data-action="${action}">
-                <i class="fa-solid ${roleIcons[role]}"></i> 
-                <i class="fa-solid ${actionIcon}"></i> 
-                ${action === 'make' ? 'Make' : 'Remove'} ${role.charAt(0).toUpperCase() + role.slice(1)}
+                <i class="fa-solid ${roleIcons[role]}"></i>
+                <i class="fa-solid ${actionIcon}"></i>
+                ${action === 'make' ? 'Make' : 'Remove'} ${roleLabels[role] || role}
                 </button>`;
     }
 
@@ -154,6 +191,7 @@
                         if (row.premium) html += '<span style="display:none;">premium</span><i class="fa-solid fa-gem" style="color: #00CED1;"></i> ';
                         if (row.alpha) html += '<span style="display:none;">alpha</span><i class="fas fa-flask" style="color: #9B59B6;"></i> ';
                         if (row.translator) html += '<span style="display:none;">translator</span><i class="fa-solid fa-language" style="color: #3498DB;"></i> ';
+                        if (row.feature_admin) html += '<span style="display:none;">feature_admin</span><i class="fa-solid fa-shield-halved" style="color: #2ECC71;"></i> ';
                         if (row.username != "{{logged_in_user}}") {
                             if (row.admin) html += '<span style="display:none;">admin</span><i class="fa-solid fa-chess-rook" style="color: #E74C3C;"></i> ';
                         } else {
@@ -259,15 +297,16 @@
                     const alphaBtn = createRoleActionButton(row, 'alpha');
                     const translatorBtn = createRoleActionButton(row, 'translator');
                     const premiumBtn = createRoleActionButton(row, 'premium');
-                    return `${adminBtn} ${alphaBtn} ${translatorBtn} ${premiumBtn}`;
+                    const featureAdminBtn = createRoleActionButton(row, 'feature_admin');
+                    return `${adminBtn} ${alphaBtn} ${translatorBtn} ${premiumBtn} ${featureAdminBtn}`;
                 }
             },
-            { 
+            {
                 data: null,
                 searchable: false,
                 orderable: false,
                 render: function(data, type, row) {
-                    return `<button class="btn btn-danger deleteButton" data-uid="${row.uid}" data-username="${row.username}">Delete</button>`;
+                    return `<button class="btn btn-warning renameButton me-1" data-uid="${row.uid}" data-username="${row.username}">Rename</button><button class="btn btn-danger deleteButton" data-uid="${row.uid}" data-username="${row.username}">Delete</button>`;
                 }
             }
         ],
@@ -287,6 +326,23 @@
                 type: 'column',
                 target: 0
             }
+        },
+        language: {
+            info: "{{dtInfo}}",
+            paginate: {
+                next: "{{dtNext}}",
+                previous: "{{dtPrevious}}",
+            },
+            emptyTable: "{{dtEmptyTable}}",
+            select: {
+                rows: {
+                    "_": "{{dtMultipleLineSelected}}",
+                    "0": "",
+                    "1": "{{dtOneLineSelected}}"
+                },
+            },
+            lengthMenu: "{{dtLengthMenu}}",
+            search: "{{dtSearch}}"
         },
         drawCallback: function() {
             resetObjects();
@@ -311,6 +367,16 @@
         // Use event delegation for dynamically created buttons
         $('#admin tbody').off('click', '.linkButton').on('click', '.linkButton', function() {
             location.href = $(this).data('url');
+        });
+
+        $('#admin tbody').off('click', '.renameButton').on('click', '.renameButton', function() {
+            const uid = $(this).data('uid');
+            const username = $(this).data('username');
+            $('#renameCurrentUsername').text(username);
+            $('#renameNewUsername').val('');
+            $('#renameError').hide().text('');
+            $('#renameConfirmBtn').data('uid', uid);
+            $('#renameModal').modal('show');
         });
 
         $('#admin tbody').off('click', '.deleteButton').on('click', '.deleteButton', function() {
@@ -345,6 +411,29 @@
 
         $('[data-toggle="tooltip"]').tooltip();
     }
+
+    $('#renameConfirmBtn').on('click', function() {
+        const uid = $(this).data('uid');
+        const newUsername = $('#renameNewUsername').val().trim();
+        if (!newUsername) {
+            $('#renameError').text('Username cannot be empty').show();
+            return;
+        }
+        $.ajax({
+            url: "{{ url_for('rename_user', uid=0) }}".replace(0, uid),
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({ new_username: newUsername }),
+            success: function() {
+                $('#renameModal').modal('hide');
+                dataTable.ajax.reload();
+            },
+            error: function(xhr) {
+                const msg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Rename failed';
+                $('#renameError').text(msg).show();
+            }
+        });
+    });
 
     $('#showInactiveUsers').on('change', function() {
         showInactive = this.checked;
@@ -388,6 +477,70 @@
             console.error("Error occurred: " + error);
         }
     });
+
+    // ── Global hexagon map rebuild ─────────────────────────────────────────
+    var globalMapPoll = null;
+
+    function fmtDur(s) {
+        if (s == null) return '?';
+        return s < 90 ? Math.round(s) + 's' : (s / 60).toFixed(1) + ' min';
+    }
+
+    function renderGlobalMapStatus(s) {
+        var btn = $('#rebuildGlobalBtn');
+        var total = Object.values(s.counts || {}).reduce(function(a, b) { return a + b; }, 0);
+
+        if (s.running) {
+            btn.find('.spinner-border').show();
+            btn.prop('disabled', true);
+            var elapsed = s.started ? (Date.now() - Date.parse(s.started)) / 1000 : 0;
+            var est = s.estimate_seconds != null ? ' / ~' + fmtDur(s.estimate_seconds) + ' total' : '';
+            var msg;
+            if (s.phase === 'writing') {
+                msg = 'Writing datasets ' + (s.bins_done || 0) + '/' + (s.bins_total || '?') +
+                      ' — ' + total.toLocaleString() + ' hexagons so far';
+            } else {
+                msg = 'Aggregating trip points…';
+            }
+            $('#global_map_status').text(msg + ' (' + fmtDur(elapsed) + ' elapsed' + est + ')');
+            return;
+        }
+
+        btn.find('.spinner-border').hide();
+        btn.prop('disabled', false);
+        if (s.phase === 'error' || s.error) {
+            $('#global_map_status').text('Build failed: ' + (s.error || 'unknown'));
+        } else if (s.finished) {
+            var built = new Date(s.finished);
+            var when = new Intl.DateTimeFormat('en-IE', {
+                dateStyle: 'medium',
+                timeStyle: 'short'
+            }).format(built);
+            $('#global_map_status').text('Built ' + when + ' in ' + fmtDur(s.duration_seconds));
+        } else {
+            var hint = s.estimate_seconds != null ? ' (≈' + fmtDur(s.estimate_seconds) + ' expected)' : '';
+            $('#global_map_status').text('Not built yet.' + hint);
+        }
+    }
+
+    function pollGlobalMapStatus() {
+        $.get('{{url_for("bestagons_status")}}', function(s) {
+            renderGlobalMapStatus(s);
+            if (s.running && !globalMapPoll) {
+                globalMapPoll = setInterval(pollGlobalMapStatus, 4000);
+            } else if (!s.running && globalMapPoll) {
+                clearInterval(globalMapPoll); globalMapPoll = null;
+            }
+        });
+    }
+
+    $('#rebuildGlobalBtn').click(function() {
+        $.post('{{url_for("rebuild_bestagons")}}', function() {
+            pollGlobalMapStatus();
+        });
+    });
+
+    pollGlobalMapStatus();
 
     $('#langModal').on('shown.bs.modal', function () {
         if ($.fn.dataTable.isDataTable('#langTable')) {

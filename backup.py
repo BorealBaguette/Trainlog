@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
+import json
+import os
 import sqlite3
+import subprocess
 import sys
 import time
 from datetime import datetime
@@ -13,12 +16,17 @@ from zoneinfo import ZoneInfo
 SRC_DIR = Path("databases")
 BASE_BACKUP_DIR = Path("backup")
 
-# List of DB filenames
-SIMPLE_DBS = ["auth.db", "error.db"]
-FILTERED_DBS = [("main.db", "trip", "uid"), ("path.db", "paths", "trip_id")]
+# SQLite DBs that remain after the PostgreSQL migration (auth + error log).
+# All trip/path/reference data now lives in PostgreSQL (backed up via pg_dump).
+SIMPLE_DBS = ["auth.db"]
 
 # Max parameters per SQLite query (keep below 999)
 CHUNK_SIZE = 900
+
+# History of recent pg_dump runs (duration + dump size), used to estimate how
+# long the next dump will take and to render a live progress bar.
+PG_HISTORY_FILE = BASE_BACKUP_DIR / "pg_dump_history.json"
+PG_HISTORY_KEEP = 10
 
 # ─── Progress Bar Class ─────────────────────────────────────────────────────────
 
@@ -178,23 +186,6 @@ def copy_schema_and_data(
     dst_conn.commit()
 
 
-def get_ids(src_path: Path, table: str, column: str) -> set:
-    """Fetch the set of values of `column` from `table` in src_path."""
-    conn = connect_readonly(src_path)
-    cur = conn.cursor()
-    cur.execute(f"SELECT DISTINCT {column} FROM {table}")
-    ids = {row[0] for row in cur.fetchall()}
-    conn.close()
-    return ids
-
-
-def chunked(iterable, size):
-    """Yield successive chunks from iterable of length ≤ size."""
-    it = list(iterable)
-    for i in range(0, len(it), size):
-        yield it[i : i + size]
-
-
 # ─── Backup Routines ────────────────────────────────────────────────────────────
 
 
@@ -224,87 +215,177 @@ def backup_simple(db_name: str, dst_folder: Path):
         copy_schema_and_data(src_conn, dst_conn, progress_callback=update_progress)
 
 
-def backup_filtered(
-    main_db: str, table: str, column: str, valid_ids: set, dst_folder: Path
-):
+# ─── PostgreSQL backup ──────────────────────────────────────────────────────────
+
+
+def _format_size(num_bytes: float) -> str:
+    """Format a byte count as MB/GB."""
+    mb = num_bytes / (1024 * 1024)
+    if mb >= 1024:
+        return f"{mb / 1024:.2f} GB"
+    return f"{mb:.1f} MB"
+
+
+def _format_duration(seconds: float) -> str:
+    """Format seconds into a short human-readable string."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    elif seconds < 3600:
+        return f"{int(seconds // 60)}m {int(seconds % 60)}s"
+    else:
+        return f"{int(seconds // 3600)}h {int((seconds % 3600) // 60)}m"
+
+
+def load_pg_history() -> list:
+    """Load the recorded pg_dump runs (newest last). Tolerates a missing/corrupt file."""
+    try:
+        with open(PG_HISTORY_FILE) as f:
+            data = json.load(f)
+        if isinstance(data, list):
+            return data
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        pass
+    return []
+
+
+def save_pg_run(duration_sec: float, size_bytes: int):
+    """Append a completed run and keep only the most recent PG_HISTORY_KEEP entries."""
+    history = load_pg_history()
+    history.append(
+        {
+            "timestamp": datetime.now(ZoneInfo("Europe/Oslo")).isoformat(timespec="seconds"),
+            "duration_sec": round(duration_sec, 2),
+            "size_bytes": int(size_bytes),
+        }
+    )
+    history = history[-PG_HISTORY_KEEP:]
+    PG_HISTORY_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(PG_HISTORY_FILE, "w") as f:
+        json.dump(history, f, indent=2)
+
+
+def estimate_pg(history: list):
+    """Estimate (final_size_bytes, sec_per_byte) for the next dump from past runs.
+
+    Final size is taken from the most recent run (best predictor of a growing DB);
+    sec_per_byte is a rough baseline averaged over all recorded runs. Returns
+    (None, None) when there's no usable history yet.
     """
-    Copy schema + all data *except* `table`, then create `table` and copy only rows
-    whose `column` is in valid_ids (in chunks).
-    """
-    src = SRC_DIR / main_db
-    dst = dst_folder / main_db
+    runs = [r for r in history if r.get("size_bytes")]
+    if not runs:
+        return None, None
 
-    print(f"Analyzing {main_db}...")
+    est_size = runs[-1]["size_bytes"]
+    total_dur = sum(r["duration_sec"] for r in runs)
+    total_size = sum(r["size_bytes"] for r in runs)
+    sec_per_byte = total_dur / total_size if total_size else None
+    return est_size, sec_per_byte
 
-    with connect_readonly(src) as src_conn:
-        # Get total rows excluding the filtered table
-        total_other_rows = 0
-        cur = src_conn.cursor()
-        cur.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
-        )
-        for (tbl,) in cur.fetchall():
-            if tbl != table:
-                total_other_rows += get_table_row_count(src_conn, tbl)
 
-        # Get count of rows we'll copy from the filtered table
-        if valid_ids:
-            # Estimate based on a sample to avoid creating huge IN clauses
-            sample_size = min(100, len(valid_ids))
-            sample_ids = list(valid_ids)[:sample_size]
-            qmarks = ",".join("?" for _ in sample_ids)
-            sample_count = cur.execute(
-                f"SELECT COUNT(*) FROM {table} WHERE {column} IN ({qmarks})",
-                tuple(sample_ids),
-            ).fetchone()[0]
-            # Extrapolate to full set
-            filtered_rows = int(sample_count * len(valid_ids) / sample_size)
+def _display_pg_progress(current, est_size, sec_per_byte, start, width=40, final=False):
+    """Render the live pg_dump progress line based on the growing dump file size."""
+    elapsed = time.time() - start
+
+    if est_size:
+        frac = 1.0 if final else min(current / est_size, 1.0)
+        filled = int(width * frac)
+        bar = "█" * filled + "▒" * (width - filled)
+        pct = 100.0 if final else min(frac * 100, 99.9)
+
+        if final:
+            tail = f" | Done in {_format_duration(elapsed)}"
+        elif sec_per_byte and current < est_size:
+            remaining = (est_size - current) * sec_per_byte
+            tail = f" | ETA: {_format_duration(remaining)}"
         else:
-            filtered_rows = 0
+            tail = " | finishing..."
 
-        total_rows = total_other_rows + filtered_rows
-
-    if total_rows == 0:
-        print(f"✅ {main_db} would be empty after filtering, skipping.")
-        return
-
-    # Create progress bar
-    progress = ProgressBar(total_rows, f"Backing up {main_db} (filtered)")
-
-    with connect_readonly(src) as src_conn, connect_writable(dst) as dst_conn:
-        # 1) Copy everything *except* our filtered table
-        def filter_out(name, obj_type):
-            return not (obj_type == "table" and name == table)
-
-        def update_progress_other(rows_processed):
-            progress.update(rows_processed)
-
-        copy_schema_and_data(
-            src_conn,
-            dst_conn,
-            table_filter=filter_out,
-            progress_callback=update_progress_other,
+        line = (
+            f"\rBacking up PostgreSQL |{bar}| {pct:5.1f}% "
+            f"({_format_size(current)} / ~{_format_size(est_size)}){tail}"
+        )
+    else:
+        # First run (no history): we can't estimate completion, just show progress.
+        line = (
+            f"\rBacking up PostgreSQL | {_format_size(current)} written "
+            f"| {_format_duration(elapsed)}"
         )
 
-        # 2) Now create the filtered table schema itself
-        schema_sql = src_conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' AND name=?", (table,)
-        ).fetchone()[0]
-        dst_conn.execute(schema_sql)
+    print(line.ljust(90), end="", flush=True)
+    if final:
+        print()
 
-        # 3) Copy filtered data in chunks
-        insert_cur = dst_conn.cursor()
-        for chunk in chunked(valid_ids, CHUNK_SIZE):
-            qmarks = ",".join("?" for _ in chunk)
-            rows = src_conn.execute(
-                f"SELECT * FROM {table} WHERE {column} IN ({qmarks})", tuple(chunk)
-            ).fetchall()
-            if rows:
-                ph = ",".join("?" for _ in rows[0])
-                insert_cur.executemany(f"INSERT INTO {table} VALUES ({ph})", rows)
-                progress.update(len(rows))
 
-        dst_conn.commit()
+def backup_postgres(dst_folder: Path):
+    """Dump the PostgreSQL database (trips, paths, tickets, tags, reference data,
+    finance, meta, ...) to a compressed custom-format file.
+
+    Runs pg_dump inside the postgis container (via `docker exec`, targeting the
+    container named by POSTGRES_HOST) so the client version always matches the
+    server and it works regardless of the current working directory.
+    Restore with: pg_restore --clean --if-exists -U <user> -d <db> < trainlog_pg.dump
+
+    The duration and resulting dump size of each run are recorded in
+    PG_HISTORY_FILE, so the next run can show a live progress bar / ETA derived
+    from a rough sec/MB baseline and the dump file's current size.
+    """
+    db = os.environ.get("POSTGRES_DB", "postgres")
+    user = os.environ.get("POSTGRES_USER", "trainlog")
+    container = os.environ.get("POSTGRES_HOST", "trainlog_db")
+
+    out = dst_folder / "trainlog_pg.dump"
+    print(f"Backing up PostgreSQL database '{db}' -> {out}")
+
+    est_size, sec_per_byte = estimate_pg(load_pg_history())
+    if est_size:
+        eta = sec_per_byte * est_size if sec_per_byte else None
+        eta_str = f", ~{_format_duration(eta)}" if eta else ""
+        print(
+            f"   Estimated from history: ~{_format_size(est_size)}{eta_str} "
+            f"(based on last run / sec-per-MB baseline)"
+        )
+    else:
+        print("   No history yet — this run will calibrate future estimates.")
+
+    start = time.time()
+    with open(out, "wb") as f:
+        proc = subprocess.Popen(
+            [
+                "docker", "exec", "-i", container,
+                "pg_dump",
+                "-Fc",  # compressed custom format (restore with pg_restore)
+                "-U", user,
+                "-d", db,
+                "-n", "public",
+                "-n", "finance",
+                "-n", "meta",
+            ],
+            stdout=f,
+        )
+
+        # Poll the growing dump file to drive the progress bar.
+        while proc.poll() is None:
+            try:
+                current = out.stat().st_size
+            except FileNotFoundError:
+                current = 0
+            _display_pg_progress(current, est_size, sec_per_byte, start)
+            time.sleep(0.5)
+
+        rc = proc.wait()
+
+    if rc != 0:
+        raise subprocess.CalledProcessError(rc, "pg_dump")
+
+    duration = time.time() - start
+    final_size = out.stat().st_size
+    _display_pg_progress(final_size, est_size or final_size, sec_per_byte, start, final=True)
+
+    save_pg_run(duration, final_size)
+    print(
+        f"✅ PostgreSQL backup complete — {_format_size(final_size)} "
+        f"in {_format_duration(duration)}"
+    )
 
 
 # ─── Main Script ────────────────────────────────────────────────────────────────
@@ -319,32 +400,15 @@ def main():
     dst.mkdir(parents=True, exist_ok=True)
     print(f"📁 Backing up to folder: {dst}\n")
 
-    # 2) Simple DBs
+    # 2) Remaining SQLite DBs (auth + error log)
     for db in SIMPLE_DBS:
         backup_simple(db, dst)
         print()  # Add spacing between databases
 
-    # 3) Compute valid trip IDs = intersection of main.trip.uid and path.paths.trip_id
-    print("🔍 Computing valid trip IDs...")
-    main_ids = get_ids(SRC_DIR / "main.db", "trip", "uid")
-    path_ids = get_ids(SRC_DIR / "path.db", "paths", "trip_id")
-    valid = main_ids & path_ids
+    # 3) PostgreSQL (everything else)
+    backup_postgres(dst)
 
-    print(f"   Found {len(main_ids)} trip IDs in main.db")
-    print(f"   Found {len(path_ids)} trip IDs in path.db")
-    print(f"   Valid intersection: {len(valid)} trip IDs")
-
-    if not valid:
-        print("⚠️  Warning: no matching trip IDs between main.db and path.db")
-    print()
-
-    # 4) Filtered DBs
-    backup_filtered("main.db", "trip", "uid", valid, dst)
-    print()
-    backup_filtered("path.db", "paths", "trip_id", valid, dst)
-    print()
-
-    print("✅ Backup complete!")
+    print("\n✅ Backup complete!")
 
 
 if __name__ == "__main__":

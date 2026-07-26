@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 176 44" width="420" role="img" aria-label="Generic right power car placeholder">
+
+  <path fill="#8b9298" d="
+    M175.2 30
+    C173.5 26 170 23 164 20
+    C154 15 140 11 130 8
+    L6 8
+    C4.5 8 3 10 2 12
+    L2 34
+    C3 36 4.5 38 6 38
+    L160 38
+    C170 38 175.2 35 175.2 30
+    Z"></path>
+
+  <rect x="18" y="13" width="104" height="5" rx="1.5" fill="#6f7c88"></rect>
+
+</svg>

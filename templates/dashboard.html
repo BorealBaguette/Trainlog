@@ -7,6 +7,7 @@
     --primary-color: #2563eb;
     --success-color: #059669;
     --info-color: #0891b2;
+    --warning-color: #d97706;
     --background-light: #f8fafc;
     --border-color: #e2e8f0;
     --text-muted: #64748b;
@@ -17,324 +18,1582 @@
   .dashboard-container {
     background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
     min-height: 100vh;
-    padding-top: 2rem;
-    padding-bottom: 2rem;
+    padding: 2rem 0;
   }
 
+  /* ── Hero bar ── */
+  .hero-bar {
+    background: linear-gradient(135deg, #1e40af 0%, #2563eb 60%, #3b82f6 100%);
+    border-radius: 16px;
+    padding: 1.75rem 2rem;
+    color: white;
+    margin-bottom: 1.5rem;
+    box-shadow: var(--shadow-md);
+  }
+  .hero-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0;
+  }
+  .hero-stat {
+    padding: 0 1.5rem;
+    border-right: 1px solid rgba(255,255,255,0.2);
+  }
+  .hero-stat:first-child { padding-left: 0; }
+  .hero-stat:last-child  { border-right: none; }
+  .hero-stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+    letter-spacing: -0.5px;
+  }
+  .hero-stat-label {
+    font-size: 0.8rem;
+    opacity: 0.75;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-top: 0.2rem;
+  }
+  @media (max-width: 575px) {
+    .hero-bar { padding: 1.25rem 1.25rem; border-radius: 12px; }
+    .hero-stats { grid-template-columns: repeat(2, 1fr); gap: 0; }
+    .hero-stat {
+      padding: 0.75rem 1rem;
+      border-right: none;
+      border-bottom: 1px solid rgba(255,255,255,0.15);
+    }
+    .hero-stat:first-child { padding-left: 1rem; }
+    .hero-stat:last-child  { border-bottom: none; }
+    /* right border on odd items (left column) */
+    .hero-stat:nth-child(odd)  { border-right: 1px solid rgba(255,255,255,0.15); }
+    /* no bottom border on the last row */
+    .hero-stat:nth-last-child(-n+2) { border-bottom: none; }
+    .hero-stat-value { font-size: 1.6rem; }
+  }
+
+  /* ── Cards ── */
+  .dash-card {
+    background: white;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow-md);
+    overflow: hidden;
+    height: 100%;
+    transition: box-shadow 0.2s ease;
+  }
+  .dash-card:hover {
+    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  }
+  .dash-card-header {
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 1px solid #f1f5f9;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+  }
+  .dash-card-header-link,
+  .dash-card-header-link:hover,
+  .dash-card-header-link:focus,
+  .dash-card-header-link:active,
+  .dash-card-header-link:visited {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: inherit;
+    text-decoration: none;
+  }
+  .dash-card-header i {
+    font-size: 1rem;
+    color: var(--primary-color);
+  }
+  .dash-card-body {
+    padding: 1rem 1.25rem;
+  }
+
+  /* ── Current trip ── */
+  .current-trip-card {
+    background: linear-gradient(135deg, #064e3b 0%, #065f46 100%);
+    color: white;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    margin-bottom: 1.5rem;
+    display: none;
+  }
+  .current-trip-route {
+    font-size: 1.35rem;
+    font-weight: 700;
+    margin-bottom: 0.3rem;
+  }
+  .current-trip-meta {
+    font-size: 0.85rem;
+    opacity: 0.8;
+    margin-bottom: 0.75rem;
+  }
+  .progress-track {
+    background: rgba(255,255,255,0.2);
+    border-radius: 8px;
+    height: 8px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    background: #34d399;
+    height: 100%;
+    border-radius: 8px;
+    transition: width 0.5s ease;
+  }
+  .current-trip-times {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.78rem;
+    opacity: 0.7;
+    margin-top: 0.4rem;
+  }
+
+  /* ── Trip list items ── */
+  .trip-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .trip-item:last-child { border-bottom: none; }
+  .trip-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    background: #eff6ff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+    color: var(--primary-color);
+  }
+  .trip-route {
+    font-weight: 500;
+    font-size: 0.9rem;
+    color: #1f2937;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .trip-meta {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .trip-right {
+    margin-left: auto;
+    text-align: right;
+    flex-shrink: 0;
+  }
+  .trip-date {
+    font-size: 0.78rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+  .trip-km {
+    font-size: 0.75rem;
+    color: #9ca3af;
+  }
+  .empty-state {
+    color: var(--text-muted);
+    font-size: 0.88rem;
+    padding: 0.75rem 0;
+    text-align: center;
+  }
+
+  /* ── Countdown badge ── */
+  .countdown-badge {
+    font-size: 0.7rem;
+    background: #eff6ff;
+    color: var(--primary-color);
+    border-radius: 6px;
+    padding: 0.15rem 0.5rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  /* ── Stat rows ── */
+  .stat-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 0.5rem 0;
+    border-bottom: 1px solid #f8fafc;
+  }
+  .stat-row:last-child { border-bottom: none; }
+  .stat-label { font-size: 0.85rem; color: #374151; }
+  .stat-value { font-weight: 600; font-size: 0.95rem; color: #111827; }
+  .stat-sub  { font-size: 0.75rem; color: var(--text-muted); }
+  .stat-row-flags { align-items: flex-start; }
+  .country-flags {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.2rem 0.35rem;
+    line-height: 1.1;
+    font-size: 1rem;
+  }
+  .country-flag { display: inline-block; }
+  .bar-row { padding: 0.4rem 0; border-bottom: 1px solid #f8fafc; }
+  .bar-row:last-child { border-bottom: none; }
+  .bar-row-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.2rem; }
+  .bar-row-label { font-size: 0.82rem; color: #374151; display: flex; align-items: center; gap: 0.35rem; }
+  .bar-row-value { font-weight: 600; font-size: 0.88rem; color: #111827; white-space: nowrap; }
+  .bar-row-track { height: 5px; background: #f1f5f9; border-radius: 3px; overflow: hidden; }
+  .bar-row-fill  { height: 100%; border-radius: 3px; transition: width 0.4s ease; }
+  .mode-table { width: 100%; border-collapse: collapse; }
+  .mode-table tr { border-bottom: 1px solid #f1f5f9; }
+  .mode-table tr:last-child { border-bottom: none; }
+  .mode-table td { padding: 0.6rem 1.25rem; vertical-align: middle; }
+  .mode-table .mode-name { display: flex; align-items: center; gap: 0.45rem; font-size: 0.82rem; font-weight: 500; color: #374151; white-space: nowrap; }
+  .mode-table .mode-name i { color: var(--primary-color); width: 14px; text-align: center; }
+  .mode-table .mode-num { text-align: right; font-size: 0.82rem; font-weight: 600; color: #111827; white-space: nowrap; }
+  .mode-table .mode-unit { font-size: 0.72rem; font-weight: 400; color: var(--text-muted); margin-left: 1px; }
+  .change-up   { color: #059669; font-size: 0.75rem; margin-left: 0.3rem; }
+  .change-down { color: #dc2626; font-size: 0.75rem; margin-left: 0.3rem; }
+
+  /* ── Year big numbers ── */
+  .year-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+  .year-stat {
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 0.75rem;
+    text-align: center;
+  }
+  .year-stat-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #111827;
+    line-height: 1.1;
+  }
+  .year-stat-label {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-top: 0.2rem;
+  }
+
+  /* ── Leaderboard rank ── */
+  .rank-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+    padding: 0.5rem 1.25rem 0;
+    border-bottom: 1px solid #f1f5f9;
+    background: white;
+  }
+  .rank-tab {
+    padding: 0.2rem 0.6rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 6px;
+    cursor: pointer;
+    color: var(--text-muted);
+    border: 1px solid transparent;
+    transition: all 0.15s ease;
+    margin-bottom: 0.4rem;
+  }
+  .rank-tab:hover { background: #f8fafc; color: #374151; }
+  .rank-tab.active {
+    background: #eff6ff;
+    color: var(--primary-color);
+    border-color: #bfdbfe;
+    font-weight: 600;
+  }
+  .rank-metric-toggle {
+    margin-left: auto;
+    display: flex;
+    gap: 0.2rem;
+    margin-bottom: 0.4rem;
+    flex-shrink: 0;
+  }
+  .rank-metric-btn {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 500;
+    border-radius: 5px;
+    cursor: pointer;
+    color: var(--text-muted);
+    border: 1px solid #e2e8f0;
+    background: white;
+    transition: all 0.15s ease;
+  }
+  .rank-metric-btn.active {
+    background: #1e40af;
+    color: white;
+    border-color: #1e40af;
+  }
+  .hl-year-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding-right: 1.2rem;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='8' height='5' viewBox='0 0 8 5'%3E%3Cpath fill='white' d='M0 0l4 5 4-5z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 5px center;
+    cursor: pointer;
+    min-width: 4rem;
+  }
+  .rank-display {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 0 0.5rem;
+  }
+  .rank-number {
+    font-size: 3rem;
+    font-weight: 800;
+    color: var(--primary-color);
+    line-height: 1;
+  }
+  .rank-number.top3 { color: #d97706; }
+  .rank-context { font-size: 0.85rem; color: var(--text-muted); }
+  .rank-bar-track {
+    background: #f1f5f9;
+    border-radius: 8px;
+    height: 8px;
+    overflow: hidden;
+    margin-top: 0.5rem;
+  }
+  .rank-bar-fill {
+    background: linear-gradient(90deg, var(--primary-color), #60a5fa);
+    height: 100%;
+    border-radius: 8px;
+  }
+
+  /* ── Friends ── */
+  .friend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.6rem 0;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .friend-item:last-child { border-bottom: none; }
+  .friend-username {
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 700;
+    border-radius: 4px;
+    padding: 1px 5px;
+    margin-bottom: 2px;
+    letter-spacing: 0.4px;
+    text-transform: uppercase;
+  }
+  .friend-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 0.8rem;
+    flex-shrink: 0;
+  }
+  .live-dot {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    background: #10b981;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+    margin-right: 0.3rem;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.4; }
+  }
+
+  /* ── Country completion ── */
   .completion-card {
     background: white;
     border: 1px solid var(--border-color);
     border-radius: 12px;
     box-shadow: var(--shadow-md);
     overflow: hidden;
-    transition: all 0.2s ease;
   }
-
-  .completion-card:hover {
-    box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
-  }
-
   .card-header-custom {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #3b82f6 100%);
-    color: white;
-    padding: 1.25rem 1.5rem;
-    font-weight: 600;
-    font-size: 1.1rem;
-    border: none;
+    padding: 1rem 1.25rem 0.75rem;
+    border-bottom: 1px solid #f1f5f9;
     display: flex;
     align-items: center;
-    gap: 0.75rem;
+    gap: 0.6rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #374151;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    cursor: pointer;
+    user-select: none;
   }
-
   .card-header-custom i {
-    font-size: 1.2rem;
-    opacity: 0.9;
+    font-size: 1rem;
+    color: var(--primary-color);
   }
-
-  .completion-table {
-    margin: 0;
+  .card-header-custom .collapse-chevron {
+    margin-left: auto;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    transition: transform 0.2s ease;
   }
-
+  .card-header-custom.collapsed .collapse-chevron { transform: rotate(-90deg); }
+  .completion-table { margin: 0; }
   .completion-table thead th {
-    background: var(--background-light);
-    border: none;
-    padding: 1rem 1.5rem;
+    background: var(--background-light) !important;
+    border: none !important;
+    padding: 0.75rem 1.25rem;
     font-weight: 600;
     color: #374151;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
   }
+  .completion-table tbody tr { border: none; transition: all 0.15s ease; }
+  .completion-table tbody tr:not(:last-child) { border-bottom: 1px solid #f1f5f9; }
+  .completion-table tbody tr:hover { background-color: #f8fafc; }
+  .completion-table td { padding: 1rem 1.25rem; border: none; vertical-align: middle; }
+  .country-flag-name { font-weight: 500; color: #1f2937; font-size: 0.95rem; }
+  .progress-container { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+  .progress-bar-container { flex: 1; background-color: #f1f5f9; border-radius: 8px; overflow: hidden; height: 18px; }
+  .progress-bar-fill { height: 100%; border-radius: 8px; transition: width 0.3s ease; }
+  .progress-bar-country { background: linear-gradient(90deg, var(--success-color) 0%, #10b981 100%); }
+  .progress-bar-region  { background: linear-gradient(90deg, var(--info-color) 0%, #06b6d4 100%); height: 14px; }
+  .progress-text { font-weight: 600; color: #374151; font-size: 0.85rem; min-width: 40px; text-align: right; }
+  .region-row { background-color: #fafbfc !important; }
+  .region-row td { padding: 0.75rem 1.25rem 0.75rem 3rem; }
+  .region-flag-name { color: var(--text-muted); font-size: 0.85rem; }
+  .region-progress-container { background-color: #e5e7eb; height: 14px; }
+  .region-progress-text { font-size: 0.8rem; color: var(--text-muted); }
+  .chevron { font-size: 0.6rem; display: inline-block; transition: transform 0.2s ease; margin-right: 4px; color: #9ca3af; }
+  .chevron.down { transform: rotate(90deg); }
 
-  .completion-table tbody tr {
-    border: none;
-    transition: all 0.15s ease;
-  }
-
-  .completion-table tbody tr:not(:last-child) {
+  /* ── News ── */
+  .news-item {
+    padding: 0.75rem 0;
     border-bottom: 1px solid #f1f5f9;
   }
+  .news-item:last-child { border-bottom: none; }
+  .news-title { font-weight: 500; font-size: 0.9rem; color: #1f2937; margin-bottom: 0.2rem; }
+  .news-preview { font-size: 0.82rem; color: var(--text-muted); overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; line-clamp: 2; -webkit-box-orient: vertical; }
+  .news-preview p { margin: 0; }
+  .news-date { font-size: 0.75rem; color: #9ca3af; margin-top: 0.2rem; }
 
-  .completion-table tbody tr:hover {
-    background-color: #f8fafc;
-  }
+  /* ── Skeleton loader ── */
+  .skeleton { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px; }
+  @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+  .skeleton-line { height: 14px; margin-bottom: 8px; }
+  .skeleton-line.short { width: 60%; }
+  .skeleton-line.medium { width: 80%; }
 
-  .completion-table td {
-    padding: 1.25rem 1.5rem;
-    border: none;
-    vertical-align: middle;
-  }
+  /* ── Section spacing ── */
+  .dash-row { margin-bottom: 1.5rem; }
 
-  .country-row[style*="cursor: pointer"]:hover {
-    background-color: #f0f9ff !important;
-    cursor: pointer;
-  }
-
-  .country-flag-name {
-    font-weight: 500;
-    color: #1f2937;
-    font-size: 1rem;
-  }
-
-  .progress-container {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 1rem;
-  }
-
-  .progress-bar-container {
-    flex: 1;
-    background-color: #f1f5f9;
-    border-radius: 8px;
-    overflow: hidden;
-    height: 20px;
-    position: relative;
-  }
-
-  .progress-bar-fill {
-    height: 100%;
-    border-radius: 8px;
-    transition: width 0.3s ease;
-    position: relative;
-    overflow: hidden;
-  }
-
-  .progress-bar-country {
-    background: linear-gradient(90deg, var(--success-color) 0%, #10b981 100%);
-  }
-
-  .progress-bar-region {
-    background: linear-gradient(90deg, var(--info-color) 0%, #06b6d4 100%);
-    height: 16px;
-  }
-
-  .progress-text {
-    font-weight: 600;
-    color: #374151;
-    font-size: 0.9rem;
-    min-width: 45px;
-    text-align: right;
-  }
-
-  .region-row {
-    background-color: #fafbfc !important;
-  }
-
-  .region-row td {
-    padding: 1rem 1.5rem;
-  }
-
-  .region-flag-name {
-    padding-left: 2rem;
-    color: var(--text-muted);
-    font-size: 0.9rem;
-    font-weight: 400;
-  }
-
-  .region-progress-container {
-    background-color: #e5e7eb;
-    height: 16px;
-  }
-
-  .region-progress-text {
-    font-size: 0.85rem;
-    color: var(--text-muted);
-  }
-
-  .chevron {
-    font-size: 0.65rem;
-    vertical-align: middle;
-    display: inline-block;
-    transition: transform 0.2s ease;
-    margin-right: 4px;
-    color: #64748b; /* subtle muted gray */
-    }
-
-    .chevron.down {
-    transform: rotate(90deg);
-    }
-
-    .country-flag-name .chevron {
-    margin-right: 6px;
-    }
-
-    .region-row td {
-    padding-left: 3rem; /* More indentation for visual hierarchy */
-    }
-
-
-  /* Mobile responsiveness */
   @media (max-width: 768px) {
-    .dashboard-container {
-      padding-top: 1rem;
-      padding-bottom: 1rem;
-    }
-    
-    .card-header-custom {
-      padding: 1rem 1.25rem;
-      font-size: 1rem;
-    }
-    
-    .completion-table thead th {
-      padding: 0.75rem 1rem;
-      font-size: 0.8rem;
-    }
-    
-    .completion-table td {
-      padding: 1rem;
-    }
-    
-    .progress-container {
-      gap: 0.75rem;
-    }
-    
-    .region-flag-name {
-      padding-left: 4rem;
-    }
-    
-    .progress-text,
-    .region-progress-text {
-      min-width: 40px;
-      font-size: 0.8rem;
-    }
+    .hero-bar { padding: 1.25rem; }
+    .hero-stat { padding: 0 0.75rem; min-width: 100px; }
+    .hero-stat-value { font-size: 1.5rem; }
+    .dashboard-container { padding: 1rem 0; }
   }
 </style>
 
 <div class="dashboard-container">
   <div class="container">
-    <div class="completion-card mb-4">
-      <div class="card-header-custom">
-        <i class="bi bi-percent"></i>
-        <span>{{coverage}}</span>
-      </div>
-      <div class="card-body p-0">
-        <table class="table completion-table" id="completion-table">
-          <thead>
-            <tr>
-              <th style="width: 55%">{{ leaderboardCountry }}</th>
-              <th style="width: 45%">{{ leaderboardPercent }}</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+
+    <!-- Hero bar -->
+    <div class="hero-bar" id="hero-bar">
+      <div class="hero-stats">
+        <div class="hero-stat">
+          <div class="hero-stat-value" id="hero-trips">—</div>
+          <div class="hero-stat-label">{{ trips }}</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value" id="hero-km">—</div>
+          <div class="hero-stat-label">km</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value" id="hero-countries">—</div>
+          <div class="hero-stat-label">{{ crossedCountries }}</div>
+        </div>
+        <div class="hero-stat">
+          <div class="hero-stat-value" id="hero-hours">—</div>
+          <div class="hero-stat-label">{{ hoursOnTrains }}</div>
+        </div>
       </div>
     </div>
-  </div>
+
+    <!-- Current trip (hidden until active) -->
+    <div class="current-trip-card" id="current-trip-card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:0.5rem;">
+        <div style="display:flex; align-items:flex-start; gap:0.75rem;">
+          <div id="ct-icon" style="font-size:1.5rem; opacity:0.85; margin-top:0.1rem;"></div>
+          <div>
+            <div style="font-size:0.7rem; opacity:0.7; text-transform:uppercase; letter-spacing:1px; margin-bottom:0.2rem;">
+              <span class="live-dot"></span>{{ onTrip }}
+            </div>
+            <div class="current-trip-route" id="ct-route">—</div>
+            <div class="current-trip-meta" id="ct-meta"></div>
+          </div>
+        </div>
+        <div id="ct-pct" style="font-size:1rem; font-weight:700; opacity:0.85; white-space:nowrap; padding-top:0.2rem;"></div>
+      </div>
+      <div class="progress-track">
+        <div class="progress-fill" id="ct-progress" style="width:0%"></div>
+      </div>
+      <div class="current-trip-times">
+        <span id="ct-start"></span>
+        <span id="ct-end"></span>
+      </div>
+    </div>
+
+    <!-- Row 1: Recent + Upcoming (past left → future right) -->
+    <div class="row dash-row g-3">
+      <div class="col-md-6">
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <a class="dash-card-header-link" href="{{ url_for('dynamic_trips', time='trips', username=username) }}">
+              <i class="bi bi-clock-history"></i>{{ recentTrips }}
+            </a>
+          </div>
+          <div class="dash-card-body" id="recent-body">
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+            <div class="skeleton skeleton-line medium"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="dash-card">
+          <div class="dash-card-header">
+            <a class="dash-card-header-link" href="{{ url_for('dynamic_trips', time='projects', username=username) }}">
+              <i class="bi bi-calendar-event"></i>{{ upcomingTrips }}
+            </a>
+          </div>
+          <div class="dash-card-body" id="upcoming-body">
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+            <div class="skeleton skeleton-line medium"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Friends activity -->
+    <div class="dash-row" id="friends-activity-row">
+      <div class="dash-card">
+        <div class="dash-card-header"><i class="bi bi-people"></i>{{ friendsActivity }}</div>
+        <div class="dash-card-body" id="friends-body">
+          <div class="skeleton skeleton-line medium"></div>
+          <div class="skeleton skeleton-line short"></div>
+          <div class="skeleton skeleton-line medium"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Year scope toggle — controls This Year, Highlights, Records -->
+    <div class="d-flex justify-content-end dash-row" style="padding:0 4px; margin-bottom:-0.25rem;">
+      <div class="rank-metric-toggle" id="hl-scope-toggle">
+        <button class="rank-metric-btn" data-scope="alltime">{{ allTime }}</button>
+        <select id="hl-year-select" class="hl-year-select rank-metric-btn active"></select>
+      </div>
+    </div>
+
+    <!-- Row 2: This year + Leaderboard -->
+    <div class="row dash-row g-3">
+      <div class="col-md-6">
+        <div class="dash-card">
+          <div class="dash-card-header"><i class="bi bi-calendar2-week"></i>{{ thisYear }} <span id="year-label" style="margin-left:auto; font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0; font-size:0.78rem;"></span></div>
+          <div class="dash-card-body" id="year-body">
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+            <div class="skeleton skeleton-line medium"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="dash-card">
+          <div class="dash-card-header"><i class="bi bi-trophy"></i>{{ leaderboard }}<span id="leaderboard-scope-label" style="margin-left:auto; font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0; font-size:0.78rem;">{{ allTime }}</span></div>
+          <div id="rank-tabs-container"></div>
+          <div class="dash-card-body" id="leaderboard-body">
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 3: Top op/route + Records -->
+    <div class="row dash-row g-3">
+      <div class="col-md-6">
+        <div class="dash-card">
+          <div class="dash-card-header"><i class="bi bi-star"></i>{{ highlights }}<span id="highlights-scope-label" style="margin-left:auto; font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0; font-size:0.78rem;"></span></div>
+          <div class="dash-card-body" id="highlights-body">
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+            <div class="skeleton skeleton-line medium"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="dash-card">
+          <div class="dash-card-header"><i class="bi bi-lightning-charge"></i>{{ records }}<span id="records-scope-label" style="margin-left:auto; font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0; font-size:0.78rem;"></span></div>
+          <div class="dash-card-body" id="records-body">
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+            <div class="skeleton skeleton-line medium"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 4: Money + CO2 -->
+    <div class="row dash-row g-3">
+      <div class="col-md-6">
+        <div class="dash-card">
+          <div class="dash-card-header"><i class="bi bi-cash-coin"></i>{{ moneySpent }}<span id="money-scope-label" style="margin-left:auto; font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0; font-size:0.78rem;"></span></div>
+          <div class="dash-card-body" id="money-body">
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+            <div class="skeleton skeleton-line medium"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="dash-card">
+          <div class="dash-card-header"><i class="bi bi-cloud-haze2"></i>{{ co2Emissions }}<span id="co2-scope-label" style="margin-left:auto; font-weight:400; color:var(--text-muted); text-transform:none; letter-spacing:0; font-size:0.78rem;"></span></div>
+          <div class="dash-card-body" id="co2-body">
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+            <div class="skeleton skeleton-line medium"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 5: Mode summary + Country completion -->
+    <div class="row dash-row g-3">
+      <div class="col-md-6">
+        <div class="dash-card" style="height:100%;">
+          <div class="dash-card-header"><i class="bi bi-bar-chart-steps"></i>{{ byMode }}<span id="mode-scope-label" style="margin-left:auto;font-weight:400;color:var(--text-muted);text-transform:none;letter-spacing:0;font-size:0.78rem;"></span></div>
+          <div class="dash-card-body" id="mode-body" style="padding:0;">
+            <div class="skeleton skeleton-line medium"></div>
+            <div class="skeleton skeleton-line short"></div>
+            <div class="skeleton skeleton-line medium"></div>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-6">
+        <div class="completion-card" id="completion-section" style="height:100%;margin:0;">
+          <div class="card-header-custom" id="completion-toggle">
+            <i class="bi bi-percent"></i>
+            <span>{{coverage}}</span>
+            <span class="collapse-chevron">▼</span>
+          </div>
+          <div id="completion-body">
+            <table class="table completion-table" id="completion-table">
+              <thead>
+                <tr>
+                  <th style="width:55%">{{ leaderboardCountry }}</th>
+                  <th style="width:45%">{{ leaderboardPercent }}</th>
+                </tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- News -->
+    <div class="dash-row">
+      <div class="dash-card">
+        <div class="dash-card-header">
+          <a class="dash-card-header-link" href="{{ url_for('news.news') }}">
+            <i class="bi bi-newspaper"></i>{{ news }}
+          </a>
+        </div>
+        <div class="dash-card-body" id="news-body">
+          <div class="skeleton skeleton-line medium"></div>
+          <div class="skeleton skeleton-line short"></div>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /container -->
 </div>
+
+<script id="dist-comps-data" type="application/json">{{ dist_comps_json | safe }}</script>
+<script id="dur-comps-data"  type="application/json">{{ dur_comps_json  | safe }}</script>
 
 <script>
 const username = "{{ username }}";
-const tableBody = document.querySelector("#completion-table tbody");
+const countriesBaseUrl = "{{ url_for('countries', username=username, cc='__CC__') }}";
 
-fetch(`/api/user_completion/u/${username}`)
-  .then(res => res.json())
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
+
+function fmt(n) {
+  if (n == null) return "—";
+  return n.toLocaleString();
+}
+
+function fmtDate(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+}
+
+function fmtTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+}
+
+function fmtDuration(secs) {
+  if (!secs) return "";
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m`;
+}
+
+function countdown(iso) {
+  const now = new Date();
+  const then = new Date(iso);
+  const diff = then - now;
+  if (diff <= 0) return "{{ soon }}";
+  const days = Math.floor(diff / 86400000);
+  const hrs  = Math.floor((diff % 86400000) / 3600000);
+  if (days > 0) return "{{ inXDays }}".replace("{n}", days);
+  if (hrs > 0)  return "{{ inXHours }}".replace("{n}", hrs);
+  return "{{ soon }}";
+}
+
+function tripIcon(type) {
+  const icons = {
+    train: "fa-solid fa-train",
+    tram: "fa-solid fa-train-tram",
+    metro: "fa-solid fa-train-subway",
+    air: "fa-solid fa-plane-up",
+    bus: "fa-solid fa-bus",
+    ferry: "fa-solid fa-ship",
+    helicopter: "fa-solid fa-helicopter",
+    aerialway: "fa-solid fa-cable-car",
+    walk: "fa-solid fa-person-hiking",
+    cycle: "fa-solid fa-bicycle",
+    car: "fa-solid fa-car-side",
+    accommodation: "fa-solid fa-bed",
+    poi: "fa-solid fa-map-location-dot",
+    restaurant: "fa-solid fa-utensils",
+  };
+  return icons[type] || "fa-solid fa-route";
+}
+
+function changeArrow(pct) {
+  if (pct == null) return "";
+  const cls = pct >= 0 ? "change-up" : "change-down";
+  const arrow = pct >= 0 ? "↑" : "↓";
+  return `<span class="${cls}">${arrow}${Math.abs(pct)}%</span>`;
+}
+
+function statRow(label, value, sub, cls) {
+  const className = cls ? `stat-row ${cls}` : "stat-row";
+  return `<div class="${className}">
+    <div>
+      <div class="stat-label">${label}</div>
+      ${sub ? `<div class="stat-sub">${sub}</div>` : ""}
+    </div>
+    <div class="stat-value">${value}</div>
+  </div>`;
+}
+
+function tripItem(trip, right) {
+  const icon = tripIcon(trip.type);
+  const tag = trip.trip_id ? "a" : "div";
+  const href = trip.trip_id ? ` href="/public/trip/${trip.trip_id}"` : "";
+  return `<${tag}${href} class="trip-item" style="text-decoration:none;color:inherit;">
+    <div class="trip-icon"><i class="${icon}"></i></div>
+    <div style="flex:1; min-width:0">
+      <div class="trip-route">${esc(trip.origin) || "?"} → ${esc(trip.destination) || "?"}</div>
+      <div class="trip-meta">${esc(trip.operator)}</div>
+    </div>
+    <div class="trip-right">${right}</div>
+  </${tag}>`;
+}
+
+function emptyState(msg) {
+  return `<div class="empty-state">${msg}</div>`;
+}
+
+// ─── Hero totals ─────────────────────────────────────────────────────────────
+
+let _totalsData = null;
+
+fetch(`/u/${username}/dashboard_totals`)
+  .then(r => r.json())
+  .then(d => {
+    _totalsData = d;
+    document.getElementById("hero-trips").textContent     = fmt(d.total_trips);
+    document.getElementById("hero-km").textContent        = fmt(d.total_km);
+    document.getElementById("hero-countries").textContent = fmt(d.country_count);
+    const h = Math.floor((d.total_duration_sec || 0) / 3600);
+    document.getElementById("hero-hours").textContent = fmt(h);
+    if (_hlScope === "alltime" && _hlData) renderYearCard(_hlData);
+  })
+  .catch(() => {});
+
+// ─── Current trip ─────────────────────────────────────────────────────────────
+
+let _currentTrip = null;
+
+function _updateCurrentTripProgress() {
+  if (!_currentTrip) return;
+  const trip = _currentTrip;
+  // Parse UTC datetimes (server sends ISO strings or "YYYY-MM-DD HH:MM:SS" in UTC)
+  const parseUTC = s => {
+    if (!s) return null;
+    // Ensure it's treated as UTC even without Z suffix
+    return new Date(s.includes("T") || s.endsWith("Z") ? s : s.replace(" ", "T") + "Z");
+  };
+  const depDelay = (trip.departure_delay || 0) * 1000; // ms
+  const arrDelay = (trip.arrival_delay  || 0) * 1000;
+  const rawStart = parseUTC(trip.utc_start_datetime || trip.start_datetime);
+  const rawEnd   = parseUTC(trip.utc_end_datetime   || trip.end_datetime);
+  if (!rawStart || !rawEnd) return;
+  const actualStart = new Date(rawStart.getTime() + depDelay);
+  const actualEnd   = new Date(rawEnd.getTime()   + arrDelay);
+  const now   = new Date();
+  const total   = actualEnd - actualStart;
+  const elapsed = now - actualStart;
+  const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+  document.getElementById("ct-progress").style.width = pct.toFixed(1) + "%";
+  document.getElementById("ct-pct").textContent = Math.round(pct) + "%";
+
+  // Show actual departure/arrival times in local timezone, with delay indicator.
+  // When delayed, show the original (planned) time struck through above the actual time.
+  const fmtActual = (base, delayMs) => {
+    const planned = base.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+    const actual  = new Date(base.getTime() + delayMs);
+    const actualT = actual.toLocaleTimeString([], {hour:"2-digit", minute:"2-digit"});
+    const delayMin = Math.round(delayMs / 60000);
+    if (delayMin > 0) {
+      return `<span style="text-decoration:line-through;opacity:0.55;font-size:0.72rem;">${planned}</span> `
+           + `${actualT} <span style="color:#f87171;font-size:0.75rem;">+${delayMin}'</span>`;
+    }
+    if (delayMin < 0) {
+      return `<span style="text-decoration:line-through;opacity:0.55;font-size:0.72rem;">${planned}</span> `
+           + `${actualT} <span style="color:#4ade80;font-size:0.75rem;">${delayMin}'</span>`;
+    }
+    return planned;
+  };
+  document.getElementById("ct-start").innerHTML = fmtActual(rawStart, depDelay);
+  document.getElementById("ct-end").innerHTML   = fmtActual(rawEnd,   arrDelay);
+}
+
+fetch(`/u/${username}/getCurrentTrip`)
+  .then(r => r.json())
   .then(data => {
-    const { countries, regions } = data;
+    if (!data || !data.length) return;
+    _currentTrip = data[0].trip;
+    const trip = _currentTrip;
+    document.getElementById("ct-icon").innerHTML = `<i class="${tripIcon(trip.type || trip.trip_type)}"></i>`;
+    document.getElementById("ct-route").textContent = `${trip.origin_station} → ${trip.destination_station}`;
+    document.getElementById("ct-meta").textContent = [trip.operator, trip.line_name].filter(Boolean).join(" · ");
+    document.getElementById("current-trip-card").style.display = "block";
+    _updateCurrentTripProgress();
+    // Refresh progress every 30 seconds
+    setInterval(_updateCurrentTripProgress, 30000);
+  })
+  .catch(() => {});
 
-    // Map regions by parent code
-    const regionMap = {};
-    regions.forEach(r => {
-      const parent = r.cc.substring(0, 2).toUpperCase();
-      regionMap[parent] = regionMap[parent] || [];
-      regionMap[parent].push(r);
-    });
-    Object.values(regionMap).forEach(regionList => {
-        regionList.sort((b, a) => b.percent - a.percent);
-    });
+// ─── Trips (upcoming / recent) ───────────────────────────────────────────────
 
-    // Sort countries by percent descending
-    countries.sort((a, b) => b.percent - a.percent);
-
-    countries.forEach(country => {
-      const { flag, name } = processCountryCode(country.cc);
-
-      const tr = document.createElement("tr");
-      tr.classList.add("country-row");
-      tr.setAttribute("data-cc", country.cc);
-      if (regionMap[country.cc.toUpperCase()]) tr.style.cursor = "pointer";
-
-        const hasRegions = regionMap[country.cc.toUpperCase()];
-        const chevron = hasRegions ? '<span class="chevron">▶</span>' : '&nbsp;&nbsp;&nbsp;';
-
-        tr.innerHTML = `
-        <td class="country-flag-name">${chevron}${flag} ${name}</td>
-        <td>
-            <div class="progress-container">
-            <div class="progress-bar-container">
-                <div class="progress-bar-fill progress-bar-country"
-                    style="width: ${country.percent}%;"
-                    role="progressbar"
-                    aria-valuenow="${country.percent}" 
-                    aria-valuemin="0" 
-                    aria-valuemax="100">
-                </div>
-            </div>
-            <div class="progress-text">${country.percent}%</div>
-            </div>
-        </td>
-        `;
-
-      tr.addEventListener("click", () => {
-  if (!hasRegions) return;
-
-  const subRows = document.querySelectorAll(`.region-of-${country.cc}`);
-  const chevronIcon = tr.querySelector('.chevron');
-
-  if (subRows.length > 0) {
-    subRows.forEach(row => row.remove()); // collapse
-    chevronIcon.classList.remove('down');
-  } else {
-    regionMap[country.cc.toUpperCase()].forEach(region => {
-      const { flag: rFlag, name: rName } = processCountryCode(region.cc, null, "region_only");
-      const subTr = document.createElement("tr");
-      subTr.className = `region-of-${country.cc} region-row`;
-      subTr.innerHTML = `
-        <td class="region-flag-name">${rFlag} ${rName}</td>
-        <td>
-          <div class="progress-container">
-            <div class="progress-bar-container region-progress-container">
-              <div class="progress-bar-fill progress-bar-region"
-                   style="width: ${region.percent}%;"
-                   role="progressbar"
-                   aria-valuenow="${region.percent}" 
-                   aria-valuemin="0" 
-                   aria-valuemax="100">
-              </div>
-            </div>
-            <div class="progress-text region-progress-text">${region.percent}%</div>
-          </div>
-        </td>
-      `;
-      tr.after(subTr);
-    });
-    chevronIcon.classList.add('down');
+// Parse a UTC ISO string (server guarantees "Z" suffix) into a Date.
+function parseUTCStr(s) {
+  if (!s) return null;
+  // Ensure Z suffix for correct UTC parsing
+  if (!s.endsWith("Z") && !s.includes("+") && !/[+-]\d{2}:\d{2}$/.test(s)) {
+    s = s.replace(" ", "T") + "Z";
   }
-});
+  return new Date(s);
+}
 
-      tableBody.appendChild(tr);
+// True if the UTC datetime string corresponds to today in the browser's local TZ.
+function isToday(utcStr) {
+  const d = parseUTCStr(utcStr);
+  if (!d) return false;
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear()
+      && d.getMonth()    === now.getMonth()
+      && d.getDate()     === now.getDate();
+}
+
+function renderTripList(el, trips, badgeFn, defaultCount) {
+  if (!trips || !trips.length) return;
+  const items = trips.map((t, i) => {
+    const hidden = i >= defaultCount;
+    return `<div class="trip-list-item${hidden ? ' trip-extra d-none' : ''}">`
+         + tripItem(t, badgeFn(t))
+         + `</div>`;
+  });
+  const extra = trips.length - defaultCount;
+  const expand = extra > 0
+    ? `<button class="btn btn-link btn-sm p-0 mt-1 trip-expand-btn" style="font-size:0.78rem;color:var(--text-muted);">`
+      + `<i class="bi bi-chevron-down"></i> {{ showMore }} (${extra})</button>`
+    : "";
+  el.innerHTML = items.join("") + expand;
+  const btn = el.querySelector(".trip-expand-btn");
+  if (btn) {
+    btn.addEventListener("click", () => {
+      el.querySelectorAll(".trip-extra").forEach(e => e.classList.remove("d-none"));
+      btn.remove();
+    });
+  }
+}
+
+fetch(`/u/${username}/dashboard_trips`)
+  .then(r => r.json())
+  .then(d => {
+    // Upcoming — use utc_start for countdown (works in any local TZ)
+    const upEl = document.getElementById("upcoming-body");
+    if (!d.upcoming || !d.upcoming.length) {
+      upEl.innerHTML = emptyState("{{ noUpcomingTrips }}");
+    } else {
+      renderTripList(upEl, d.upcoming, t => {
+        // Use utc_start for countdown so comparison is always correct
+        const ref = t.utc_start || t.start;
+        return `<span class="countdown-badge">${countdown(ref)}</span>`
+             + (t.trip_length ? `<div class="trip-km">${mToKm(t.trip_length)} km</div>` : "");
+      }, 3);
+    }
+
+    // Recent — determine "today" / "ongoing" client-side from utc timestamps
+    const recEl = document.getElementById("recent-body");
+    if (!d.recent || !d.recent.length) {
+      recEl.innerHTML = emptyState("{{ noRecentTrips }}");
+    } else {
+      renderTripList(recEl, d.recent, t => {
+        const ref = t.utc_start || t.start;
+        const now = Date.now();
+        const startMs = parseUTCStr(ref)?.getTime();
+        const endMs   = t.utc_end ? parseUTCStr(t.utc_end)?.getTime() : null;
+        const ongoing = startMs != null && endMs != null && startMs <= now && now <= endMs;
+        let badge;
+        if (ongoing) {
+          badge = `<span class="countdown-badge" style="background:#ecfdf5;color:#059669;">`
+                + `<span class="live-dot" style="width:6px;height:6px;margin-right:0.25rem;"></span>{{ onTrip }}</span>`;
+        } else if (isToday(ref)) {
+          badge = `<span class="countdown-badge" style="background:#f0fdf4;color:#059669;">{{ today }}</span>`;
+        } else {
+          badge = `<div class="trip-date">${fmtDate(t.start)}</div>`;
+        }
+        return badge + (t.trip_length ? `<div class="trip-km">${mToKm(t.trip_length)} km</div>` : "");
+      }, 5);
+    }
+  })
+  .catch(() => {
+    ["upcoming-body", "recent-body"].forEach(id => {
+      document.getElementById(id).innerHTML = emptyState("—");
     });
   });
+
+// ─── This year + Highlights + Records ────────────────────────────────────────
+
+let _hlScope = "ytd";  // "ytd" | "alltime"
+let _hlYear  = new Date().getFullYear();
+let _hlData  = null;   // last fetched dashboard_year response
+
+function countryFlags(list) {
+  if (!list || !list.length) return null;
+  return `<div class="country-flags">${
+    list.map(c => `<span class="country-flag">${processCountryCode(c.code).flag}</span>`).join("")
+  }</div>`;
+}
+
+// Static comparison tables — mirrors wrapped.py, used for client-side all-time computation.
+// Single source of truth: definitions injected from wrapped.py via app.py
+const _DIST_COMPS = JSON.parse(document.getElementById("dist-comps-data").textContent);
+const _DUR_COMPS  = JSON.parse(document.getElementById("dur-comps-data").textContent);
+const _COMP_NAMES = {
+  "distComp_english_channel":           "{{ distComp_english_channel }}",
+  "distComp_english_channel_pct":       "{{ distComp_english_channel_pct }}",
+  "distComp_marathon":                  "{{ distComp_marathon }}",
+  "distComp_marathon_pct":              "{{ distComp_marathon_pct }}",
+  "distComp_iss_altitude":              "{{ distComp_iss_altitude }}",
+  "distComp_iss_altitude_pct":          "{{ distComp_iss_altitude_pct }}",
+  "distComp_proclaimers":               "{{ distComp_proclaimers }}",
+  "distComp_proclaimers_pct":           "{{ distComp_proclaimers_pct }}",
+  "distComp_mordor":                    "{{ distComp_mordor }}",
+  "distComp_mordor_pct":                "{{ distComp_mordor_pct }}",
+  "distComp_moon_circumference":        "{{ distComp_moon_circumference }}",
+  "distComp_moon_circumference_pct":    "{{ distComp_moon_circumference_pct }}",
+  "distComp_longest_flight":            "{{ distComp_longest_flight }}",
+  "distComp_longest_flight_pct":        "{{ distComp_longest_flight_pct }}",
+  "distComp_earth_circumference":       "{{ distComp_earth_circumference }}",
+  "distComp_earth_circumference_pct":   "{{ distComp_earth_circumference_pct }}",
+  "distComp_earth_moon":                "{{ distComp_earth_moon }}",
+  "distComp_earth_moon_pct":            "{{ distComp_earth_moon_pct }}",
+  "durComp_longest_tennis":             "{{ durComp_longest_tennis }}",
+  "durComp_longest_tennis_pct":         "{{ durComp_longest_tennis_pct }}",
+  "durComp_lotr_marathon":              "{{ durComp_lotr_marathon }}",
+  "durComp_lotr_marathon_pct":          "{{ durComp_lotr_marathon_pct }}",
+  "durComp_lindbergh_flight":           "{{ durComp_lindbergh_flight }}",
+  "durComp_lindbergh_flight_pct":       "{{ durComp_lindbergh_flight_pct }}",
+  "durComp_orient_express":             "{{ durComp_orient_express }}",
+  "durComp_orient_express_pct":         "{{ durComp_orient_express_pct }}",
+  "durComp_apollo11":                   "{{ durComp_apollo11 }}",
+  "durComp_apollo11_pct":               "{{ durComp_apollo11_pct }}",
+  "durComp_lunar_orbit":                "{{ durComp_lunar_orbit }}",
+  "durComp_lunar_orbit_pct":            "{{ durComp_lunar_orbit_pct }}",
+  "durComp_80_days":                    "{{ durComp_80_days }}",
+  "durComp_80_days_pct":                "{{ durComp_80_days_pct }}",
+  "durComp_bear_hibernation":           "{{ durComp_bear_hibernation }}",
+  "durComp_bear_hibernation_pct":       "{{ durComp_bear_hibernation_pct }}",
+};
+
+function _computeComps(value, table, field) {
+  return table.reduce((acc, c) => {
+    const ratio = value / c[field];
+    if (ratio >= 0.1) acc.push({
+      key: c.key, icon: c.icon,
+      times:   ratio < 10 ? Math.round(ratio * 10) / 10 : Math.round(ratio),
+      percent: ratio < 1  ? Math.round(ratio * 100) : null,
+    });
+    return acc;
+  }, []);
+}
+
+function _randComp(list) {
+  if (!list || !list.length) return null;
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function _compHtml(cmp) {
+  if (!cmp) return null;
+  const isPct = cmp.percent != null;
+  const key = isPct ? cmp.key + "_pct" : cmp.key;
+  const template = _COMP_NAMES[key] || _COMP_NAMES[cmp.key] || cmp.key;
+  const n = isPct ? cmp.percent : cmp.times;
+  const icon = `<i class="${esc(cmp.icon)}" style="margin-right:0.3rem;color:var(--text-muted);font-size:0.85em;"></i>`;
+  return icon + template.replace("{n}", n);
+}
+
+function renderYearCard(d) {
+  const isCurrentYear = (d.year === new Date().getFullYear());
+  const isAllTime = (_hlScope === "alltime");
+  document.getElementById("year-label").textContent =
+    isAllTime ? "{{ allTime }}" : d.year ? (isCurrentYear ? `${d.year} · YTD` : String(d.year)) : "";
+  const yearEl = document.getElementById("year-body");
+
+  const trips = isAllTime && _totalsData ? _totalsData.total_trips : d.total_trips;
+  const km    = isAllTime && _totalsData ? _totalsData.total_km    : d.total_km;
+  const tripsArrow = isAllTime ? "" : changeArrow(d.trips_change);
+  const kmArrow    = isAllTime ? "" : changeArrow(d.km_change);
+
+  const grid = `<div class="year-grid">
+    <div class="year-stat">
+      <div class="year-stat-value">${fmt(trips)}${tripsArrow}</div>
+      <div class="year-stat-label">{{ trips }}</div>
+    </div>
+    <div class="year-stat">
+      <div class="year-stat-value">${fmt(km)}${kmArrow}</div>
+      <div class="year-stat-label">km</div>
+    </div>
+  </div>`;
+  const yearRows = [];
+
+  if (isAllTime && _totalsData) {
+    const h = Math.floor((_totalsData.total_duration_sec || 0) / 3600);
+    if (h) yearRows.push(statRow("{{ hoursOnTrains }}", `${fmt(h)}h`));
+    if (_totalsData.country_count) yearRows.push(statRow("{{ crossedCountries }}", fmt(_totalsData.country_count)));
+    // Compute comparisons client-side from all-time totals
+    const distCmps = km   ? _computeComps(km, _DIST_COMPS, "km") : [];
+    const durCmps  = h    ? _computeComps(h,  _DUR_COMPS,  "h")  : [];
+    const distHtml = _compHtml(_randComp(distCmps));
+    const durHtml  = _compHtml(_randComp(durCmps));
+    if (distHtml) yearRows.push(statRow("{{ distanceComparison }}", distHtml));
+    if (durHtml)  yearRows.push(statRow("{{ durationComparison }}", durHtml));
+  } else {
+    if (d.duration_hours) yearRows.push(statRow("{{ hoursOnTrains }}", `${fmt(d.duration_hours)}h`));
+    if (d.country_count)  yearRows.push(statRow("{{ crossedCountries }}", fmt(d.country_count)));
+    const distHtml = _compHtml(_randComp(_computeComps(d.total_km || 0, _DIST_COMPS, "km")));
+    const durHtml  = _compHtml(_randComp(_computeComps(d.duration_hours || 0, _DUR_COMPS, "h")));
+    if (distHtml) yearRows.push(statRow("{{ distanceComparison }}", distHtml));
+    if (durHtml)  yearRows.push(statRow("{{ durationComparison }}", durHtml));
+    if (d.busiest_month) {
+      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      yearRows.push(statRow("{{ busiestMonth }}", `${months[d.busiest_month.month - 1]} (${d.busiest_month.trips} {{ trips }})`));
+    }
+  }
+  yearEl.innerHTML = grid + yearRows.join("");
+}
+
+function renderHighlights(d, scope) {
+  const ops      = scope === "alltime" ? d.top_operators_alltime  : d.top_operators_ytd;
+  const routes   = scope === "alltime" ? d.top_routes_alltime     : d.top_routes_ytd;
+  const countries = scope === "alltime" ? d.top_countries_alltime : d.top_countries_ytd;
+  const rows = [];
+  const opVal = op => op.logo
+    ? `<img src="/static/${esc(op.logo)}" style="height:1.4rem;max-width:5rem;object-fit:contain;vertical-align:middle;" title="${esc(op.name)}" onerror="this.replaceWith(document.createTextNode(this.title))">`
+    : esc(op.name);
+  const subRow = (label, value, sub) =>
+    `<div class="stat-row" style="padding-left:1.1rem;">
+      <div><div class="stat-label" style="color:var(--text-muted);">${label}</div>${sub ? `<div class="stat-sub">${sub}</div>` : ""}</div>
+      <span class="stat-value">${value}</span>
+    </div>`;
+  if (ops && ops.length) {
+    rows.push(statRow("{{ topOperator }}", ""));
+    ops.slice(0, 3).forEach(op =>
+      rows.push(subRow(opVal(op), `${fmt(op.trips)} {{ trips }}`)));
+  }
+  if (routes && routes.length) {
+    rows.push(statRow("{{ topRoute }}", ""));
+    routes.slice(0, 3).forEach(r =>
+      rows.push(subRow(esc(r.name), `×${r.count}`)));
+  }
+  const flags = countryFlags(countries);
+  if (flags) rows.push(statRow("{{ crossedCountries }}", flags, null, "stat-row-flags"));
+  document.getElementById("highlights-body").innerHTML = rows.length ? rows.join("") : emptyState("{{ noDataYet }}");
+}
+
+function renderRecords(d, scope) {
+  const longest = scope === "alltime" ? d.longest_trip_alltime : d.longest_trip_ytd;
+  const fastest = scope === "alltime" ? d.fastest_trip_alltime : d.fastest_trip_ytd;
+  const streak  = scope === "alltime" ? d.streak_alltime       : d.streak_ytd;
+  const rows = [];
+  if (longest) rows.push(statRow("{{ longestTrip }}", `${fmt(longest.km)} km`, `${esc(longest.origin)} → ${esc(longest.destination)}`));
+  if (fastest) rows.push(statRow("{{ fastestTrip }}", `${fmt(fastest.speed)} km/h`, `${esc(fastest.origin)} → ${esc(fastest.destination)}`));
+  if (streak && streak.days > 1) rows.push(statRow("{{ longestStreak }}", `${streak.days} {{ days }}`, `${fmtDate(streak.start)} – ${fmtDate(streak.end)}`));
+  if (scope !== "alltime" && d.percentile) rows.push(statRow("{{ percentileKm }}", `{{ top }} ${Math.round(100 - d.percentile.km)}%`, `{{ outOf }} ${fmt(d.percentile.total_users)} {{ users }}`));
+  document.getElementById("records-body").innerHTML = rows.length ? rows.join("") : emptyState("{{ noDataYet }}");
+}
+
+const TYPE_ORDER = ["train","tram","metro","bus","air","ferry","car","walk","cycle","helicopter","aerialway"];
+const TYPE_LABELS = {"train":"{{ train }}","tram":"{{ tram }}","metro":"{{ metro }}","bus":"{{ bus }}","air":"{{ air }}","ferry":"{{ ferry }}","car":"{{ car }}","walk":"{{ walk }}","cycle":"{{ cycle }}","helicopter":"{{ helicopter }}","aerialway":"{{ aerialway }}","accommodation":"{{ accommodation }}","poi":"{{ poi }}","restaurant":"{{ restaurant }}"};
+
+function barRow(label, value, pct, color) {
+  return `<div class="bar-row">
+    <div class="bar-row-header">
+      <span class="bar-row-label">${label}</span>
+      <span class="bar-row-value">${value}</span>
+    </div>
+    <div class="bar-row-track"><div class="bar-row-fill" style="width:${pct.toFixed(1)}%;background:${color};"></div></div>
+  </div>`;
+}
+
+function renderMoney(d, scope) {
+  const m = scope === "alltime" ? d.money_alltime : d.money_ytd;
+  if (!m || !m.total) { document.getElementById("money-body").innerHTML = emptyState("{{ noDataYet }}"); return; }
+  const cur = m.currency || "";
+  const fmtM = v => v != null ? v.toLocaleString(undefined, {minimumFractionDigits:0, maximumFractionDigits:0}) : "—";
+  const sorted = Object.entries(m.by_type || {}).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+  const rows = [statRow("{{ total }}", `${fmtM(m.total)} ${cur}`, "&nbsp;")];
+  sorted.forEach(([t, v]) => {
+    const pct = m.total > 0 ? (v / m.total) * 100 : 0;
+    rows.push(barRow(`<i class="${tripIcon(t)}" style="width:14px;text-align:center;"></i> ${TYPE_LABELS[t]||t}`,
+      `${fmtM(v)} ${cur}`, pct, "var(--info-color)"));
+  });
+  document.getElementById("money-body").innerHTML = rows.join("");
+}
+
+function renderCO2(d, scope) {
+  const c = scope === "alltime" ? d.co2_alltime : d.co2_ytd;
+  if (!c || !c.total) { document.getElementById("co2-body").innerHTML = emptyState("{{ noDataYet }}"); return; }
+  const fmtKg = v => v >= 1000 ? `${(v/1000).toFixed(1)} t` : `${Math.round(v)} kg`;
+  const sorted = Object.entries(c.by_type || {}).filter(([,v]) => v > 0).sort((a,b) => b[1]-a[1]);
+  const rows = [statRow("{{ total }}", fmtKg(c.total), "CO₂e")];
+  sorted.forEach(([t, v]) => {
+    const pct = c.total > 0 ? (v / c.total) * 100 : 0;
+    rows.push(barRow(`<i class="${tripIcon(t)}" style="width:14px;text-align:center;"></i> ${TYPE_LABELS[t]||t}`,
+      fmtKg(v), pct, "#10b981"));
+  });
+  document.getElementById("co2-body").innerHTML = rows.join("");
+}
+
+function renderModeStats(d, scope) {
+  const rows = scope === "alltime" ? d.mode_alltime : d.mode_ytd;
+  const el = document.getElementById("mode-body");
+  if (!rows || !rows.length) { el.innerHTML = emptyState("{{ noDataYet }}"); return; }
+  const trs = rows.map(r => `
+    <tr>
+      <td class="mode-name"><i class="${tripIcon(r.type)}"></i>${TYPE_LABELS[r.type] || r.type}</td>
+      <td class="mode-num">${fmt(r.trips)}<span class="mode-unit">{{ trips }}</span></td>
+      <td class="mode-num">${fmt(Math.round(r.km))}<span class="mode-unit">km</span></td>
+      <td class="mode-num">${r.sec > 0 ? secondsToDhm(r.sec, "{{ langId }}") : "—"}</td>
+    </tr>`).join("");
+  el.innerHTML = `<table class="table completion-table mode-table"><thead><tr>
+    <th>{{ mode }}</th>
+    <th style="text-align:right;">{{ trips }}</th>
+    <th style="text-align:right;">km</th>
+    <th style="text-align:right;">{{ hoursOnTrains }}</th>
+  </tr></thead><tbody>${trs}</tbody></table>`;
+}
+
+function updateScopeLabels(scope, year) {
+  const lbl = scope === "alltime" ? "{{ allTime }}" : String(year);
+  ["highlights-scope-label","records-scope-label","money-scope-label","co2-scope-label","mode-scope-label"].forEach(id => {
+    document.getElementById(id).textContent = lbl;
+  });
+}
+
+function applyHlData(d) {
+  _hlData = d;
+  renderYearCard(d);
+  renderHighlights(d, _hlScope);
+  renderRecords(d, _hlScope);
+  renderMoney(d, _hlScope);
+  renderCO2(d, _hlScope);
+  renderModeStats(d, _hlScope);
+  updateScopeLabels(_hlScope, d.year);
+}
+
+function fetchYearData(year) {
+  const skel = `<div class="skeleton skeleton-line medium"></div><div class="skeleton skeleton-line short"></div><div class="skeleton skeleton-line medium"></div>`;
+  ["year-body", "highlights-body", "records-body", "money-body", "co2-body", "mode-body"].forEach(id => {
+    document.getElementById(id).innerHTML = skel;
+  });
+  fetch(`/u/${username}/dashboard_year?year=${year}`)
+    .then(r => r.json())
+    .then(d => applyHlData(d))
+    .catch(() => {
+      ["year-body","highlights-body","records-body"].forEach(id => {
+        document.getElementById(id).innerHTML = emptyState("—");
+      });
+    });
+}
+
+// Populate year dropdown, then load default (current year)
+fetch(`/u/${username}/dashboard_years`)
+  .then(r => r.json())
+  .then(data => {
+    const sel = document.getElementById("hl-year-select");
+    const currentYear = new Date().getFullYear();
+    (data.years || []).forEach(y => {
+      const opt = document.createElement("option");
+      opt.value = y;
+      opt.textContent = y;
+      if (y === currentYear) opt.selected = true;
+      sel.appendChild(opt);
+    });
+    _hlYear = sel.value ? parseInt(sel.value) : currentYear;
+    fetchYearData(_hlYear);
+  })
+  .catch(() => fetchYearData(_hlYear));
+
+// Toggle: all time button
+document.getElementById("hl-scope-toggle").addEventListener("click", e => {
+  const btn = e.target.closest("button.rank-metric-btn");
+  if (!btn) return;
+  _hlScope = btn.dataset.scope;  // "alltime"
+  document.querySelectorAll("#hl-scope-toggle button.rank-metric-btn").forEach(b => b.classList.remove("active"));
+  document.getElementById("hl-year-select").classList.remove("active");
+  btn.classList.add("active");
+  if (_hlData) { renderYearCard(_hlData); renderHighlights(_hlData, _hlScope); renderRecords(_hlData, _hlScope); renderMoney(_hlData, _hlScope); renderCO2(_hlData, _hlScope); renderModeStats(_hlData, _hlScope); updateScopeLabels(_hlScope, _hlYear); }
+  fetchLeaderboard(null);
+});
+
+// Year dropdown — fire on both change and click-when-already-selected (coming from all-time)
+const _hlYearSel = document.getElementById("hl-year-select");
+function _applyYearScope() {
+  const wasAllTime = (_hlScope === "alltime");
+  _hlScope = "ytd";
+  document.querySelectorAll("#hl-scope-toggle button.rank-metric-btn").forEach(b => b.classList.remove("active"));
+  _hlYearSel.classList.add("active");
+  _hlYear = parseInt(_hlYearSel.value);
+  if (_hlData && _hlData.year === _hlYear) {
+    renderYearCard(_hlData); renderHighlights(_hlData, _hlScope); renderRecords(_hlData, _hlScope);
+    renderMoney(_hlData, _hlScope); renderCO2(_hlData, _hlScope); renderModeStats(_hlData, _hlScope); updateScopeLabels(_hlScope, _hlYear);
+  } else {
+    fetchYearData(_hlYear);
+  }
+  fetchLeaderboard(_hlYear);
+}
+_hlYearSel.addEventListener("change", _applyYearScope);
+_hlYearSel.addEventListener("click", function() {
+  if (_hlScope === "alltime") _applyYearScope();
+});
+
+// ─── Leaderboard rank ────────────────────────────────────────────────────────
+
+const typeLabels = {
+  all: "{{ trips }}",
+  train: "{{ train }}", tram: "{{ tram }}", metro: "{{ metro }}",
+  bus: "{{ bus }}", air: "{{ air }}", ferry: "{{ ferry }}",
+  car: "{{ car }}", walk: "{{ walk }}", cycle: "{{ cycle }}",
+};
+const typeOrder = ["all","train","tram","metro","bus","air","ferry","car","walk","cycle"];
+
+let _rankMetric = "km"; // "km" or "trips"
+
+function renderRank(data, type) {
+  const d = data[type];
+  if (!d) return;
+  const rank  = _rankMetric === "km" ? d.km_rank : d.trips_rank;
+  const value = _rankMetric === "km" ? `${fmt(d.km)} km` : `${fmt(d.trips)} {{ trips }}`;
+  const other = _rankMetric === "km" ? `${fmt(d.trips)} {{ trips }}` : `${fmt(d.km)} km`;
+  const isTop3 = rank <= 3;
+  const pct = d.total > 1 ? Math.round(((d.total - rank) / (d.total - 1)) * 100) : 100;
+  document.getElementById("leaderboard-body").innerHTML = `
+    <div class="rank-display">
+      <div class="rank-number${isTop3 ? " top3" : ""}">#${rank}</div>
+      <div>
+        <div style="font-size:0.9rem; font-weight:500; color:#111827;">{{ outOf }} ${fmt(d.total)}</div>
+        <div class="rank-context">${value} · ${other}</div>
+      </div>
+    </div>
+    <div class="rank-bar-track">
+      <div class="rank-bar-fill" style="width:${pct}%"></div>
+    </div>`;
+}
+
+let _lbActiveType = "all";
+
+function fetchLeaderboard(year) {
+  document.getElementById("leaderboard-scope-label").textContent = year ? String(year) : "{{ allTime }}";
+  const url = year ? `/u/${username}/dashboard_leaderboard?year=${year}` : `/u/${username}/dashboard_leaderboard`;
+  document.getElementById("leaderboard-body").innerHTML =
+    `<div class="skeleton skeleton-line medium"></div><div class="skeleton skeleton-line short"></div>`;
+  fetch(url)
+  .then(r => r.json())
+  .then(data => {
+    const available = typeOrder.filter(t => data[t]);
+    if (!available.length) {
+      document.getElementById("leaderboard-body").innerHTML = emptyState("—");
+      return;
+    }
+
+    const tabsEl = document.getElementById("rank-tabs-container");
+    tabsEl.className = "rank-tabs";
+    if (!available.includes(_lbActiveType)) _lbActiveType = available.includes("all") ? "all" : available[0];
+
+    const typeTabs = available.map(t =>
+      `<span class="rank-tab${t === _lbActiveType ? " active" : ""}" data-type="${t}">${typeLabels[t] || t}</span>`
+    ).join("");
+    const metricToggle = `<div class="rank-metric-toggle">
+      <button class="rank-metric-btn${_rankMetric === "km" ? " active" : ""}" data-metric="km">km</button>
+      <button class="rank-metric-btn${_rankMetric === "trips" ? " active" : ""}" data-metric="trips">{{ trips }}</button>
+    </div>`;
+    tabsEl.innerHTML = typeTabs + metricToggle;
+
+    tabsEl.addEventListener("click", e => {
+      const tab = e.target.closest(".rank-tab");
+      if (tab) {
+        tabsEl.querySelectorAll(".rank-tab").forEach(el => el.classList.remove("active"));
+        tab.classList.add("active");
+        _lbActiveType = tab.dataset.type;
+        renderRank(data, _lbActiveType);
+        return;
+      }
+      const btn = e.target.closest(".rank-metric-btn");
+      if (btn) {
+        tabsEl.querySelectorAll(".rank-metric-btn").forEach(el => el.classList.remove("active"));
+        btn.classList.add("active");
+        _rankMetric = btn.dataset.metric;
+        renderRank(data, _lbActiveType);
+      }
+    });
+
+    renderRank(data, _lbActiveType);
+  })
+  .catch(() => {
+    document.getElementById("leaderboard-body").innerHTML = emptyState("—");
+  });
+}
+
+fetchLeaderboard(_hlYear);
+
+// ─── Friends ─────────────────────────────────────────────────────────────────
+
+function usernameColor(name) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const hue = Math.abs(hash) % 360;
+  return { bg: `hsl(${hue},70%,90%)`, color: `hsl(${hue},55%,32%)` };
+}
+
+function friendItem(t, right) {
+  const icon = tripIcon(t.type);
+  const tag = t.trip_id ? "a" : "div";
+  const href = t.trip_id ? ` href="/public/trip/${t.trip_id}"` : "";
+  return `<${tag}${href} class="friend-item" style="text-decoration:none;color:inherit;">
+    <div class="trip-icon"><i class="${icon}"></i></div>
+    <div style="flex:1;min-width:0">
+      <div><span class="friend-username" style="background:${usernameColor(t.username).bg};color:${usernameColor(t.username).color};"><i class="fa-solid fa-user" style="font-size:0.6rem;margin-right:3px;opacity:0.8;"></i>${esc(t.username)}</span></div>
+      <div class="trip-route">${esc(t.origin) || "?"} → ${esc(t.destination) || "?"}</div>
+      <div class="trip-meta">${esc(t.operator)}${t.km ? " · " + fmt(t.km) + " km" : ""}</div>
+    </div>
+    ${right ? `<div class="trip-right">${right}</div>` : ""}
+  </${tag}>`;
+}
+
+function friendSection(label, labelStyle, items) {
+  return `<div style="font-size:0.72rem; font-weight:600; color:${labelStyle}; text-transform:uppercase; letter-spacing:0.5px; margin:0.5rem 0 0.3rem;">${label}</div>`
+    + items;
+}
+
+fetch(`/u/${username}/dashboard_friends`)
+  .then(r => r.json())
+  .then(d => {
+    const row = document.getElementById("friends-activity-row");
+    if (d.has_friends === false) {
+      if (row) row.style.display = "none";
+      return;
+    }
+    const el = document.getElementById("friends-body");
+    let html = "";
+
+    if (d.current && d.current.length) {
+      const items = d.current.map(t => friendItem(t, "")).join("");
+      html += friendSection(`<span class="live-dot"></span>{{ onTrip }}`, "var(--success-color)", items);
+    }
+
+    if (d.upcoming && d.upcoming.length) {
+      const items = d.upcoming.map(t => {
+        const badge = `<span class="countdown-badge">${countdown(t.start)}</span>`;
+        return friendItem(t, badge);
+      }).join("");
+      html += friendSection("{{ upcomingTrips }}", "var(--primary-color)", items);
+    }
+
+    if (d.recent && d.recent.length) {
+      const items = d.recent.map(t =>
+        friendItem(t, `<div class="trip-date">${fmtDate(t.start)}</div>`)
+      ).join("");
+      html += friendSection("{{ recentTrips }}", "var(--text-muted)", items);
+    }
+
+    el.innerHTML = html || emptyState("{{ noFriendsActivity }}");
+  })
+  .catch(() => {
+    document.getElementById("friends-body").innerHTML = emptyState("—");
+  });
+
+// ─── Country completion ───────────────────────────────────────────────────────
+
+const completionToggle = document.getElementById("completion-toggle");
+const completionBody   = document.getElementById("completion-body");
+let completionLoaded   = false;
+
+function loadCompletion() {
+  if (completionLoaded) return;
+  completionLoaded = true;
+  const tableBody = document.querySelector("#completion-table tbody");
+
+  fetch(`/api/user_completion/u/${username}`)
+    .then(res => res.json())
+    .then(data => {
+      const { countries, regions } = data;
+      const regionMap = {};
+      regions.forEach(r => {
+        const parent = r.cc.substring(0, 2).toUpperCase();
+        regionMap[parent] = regionMap[parent] || [];
+        regionMap[parent].push(r);
+      });
+      Object.values(regionMap).forEach(list => list.sort((a, b) => a.percent - b.percent));
+      countries.sort((a, b) => b.percent - a.percent);
+
+      countries.forEach(country => {
+        const { flag, name } = processCountryCode(country.cc);
+        const hasRegions = regionMap[country.cc.toUpperCase()];
+        const chevronHtml = hasRegions ? '<span class="chevron">▶</span>' : '&nbsp;&nbsp;&nbsp;';
+        const tr = document.createElement("tr");
+        tr.classList.add("country-row");
+        tr.setAttribute("data-cc", country.cc);
+        if (hasRegions) tr.style.cursor = "pointer";
+        tr.innerHTML = `
+          <td class="country-flag-name">${chevronHtml}<a href="${countriesBaseUrl.replace('__CC__', country.cc)}" style="color:inherit;text-decoration:none;" onclick="event.stopPropagation();">${flag} ${name}</a></td>
+          <td>
+            <div class="progress-container">
+              <div class="progress-bar-container">
+                <div class="progress-bar-fill progress-bar-country" style="width:${country.percent}%" role="progressbar"></div>
+              </div>
+              <div class="progress-text">${country.percent}%</div>
+            </div>
+          </td>`;
+
+        tr.addEventListener("click", () => {
+          if (!hasRegions) return;
+          const subRows = document.querySelectorAll(`.region-of-${country.cc}`);
+          const chevronIcon = tr.querySelector(".chevron");
+          if (subRows.length > 0) {
+            subRows.forEach(row => row.remove());
+            chevronIcon.classList.remove("down");
+          } else {
+            regionMap[country.cc.toUpperCase()].forEach(region => {
+              const { flag: rFlag, name: rName } = processCountryCode(region.cc, null, "region_only");
+              const subTr = document.createElement("tr");
+              subTr.className = `region-of-${country.cc} region-row`;
+              subTr.innerHTML = `
+                <td class="region-flag-name"><a href="${countriesBaseUrl.replace('__CC__', region.cc)}" style="color:inherit;text-decoration:none;">${rFlag} ${rName}</a></td>
+                <td>
+                  <div class="progress-container">
+                    <div class="progress-bar-container region-progress-container">
+                      <div class="progress-bar-fill progress-bar-region" style="width:${region.percent}%" role="progressbar"></div>
+                    </div>
+                    <div class="progress-text region-progress-text">${region.percent}%</div>
+                  </div>
+                </td>`;
+              tr.after(subTr);
+            });
+            chevronIcon.classList.add("down");
+          }
+        });
+        tableBody.appendChild(tr);
+      });
+    });
+}
+
+completionToggle.addEventListener("click", () => {
+  const isCollapsed = completionBody.style.display === "none";
+  completionBody.style.display = isCollapsed ? "" : "none";
+  completionToggle.classList.toggle("collapsed", !isCollapsed);
+  loadCompletion();
+});
+
+loadCompletion(); // load on page open
+
+// ─── News ─────────────────────────────────────────────────────────────────────
+
+fetch("/api/news/app")
+  .then(r => r.json())
+  .then(items => {
+    const el = document.getElementById("news-body");
+    if (!items || !items.length) {
+      el.innerHTML = emptyState("—");
+      return;
+    }
+    el.innerHTML = items.slice(0, 3).map(n => `
+      <div class="news-item">
+        <div class="news-title">${n.title}</div>
+        <div class="news-preview">${n.content_html || n.content}</div>
+        <div class="news-date">${fmtDate(n.created)}</div>
+      </div>`).join("");
+  })
+  .catch(() => {
+    document.getElementById("news-body").innerHTML = emptyState("—");
+  });
+
 </script>
 
 {% endblock %}

@@ -37,11 +37,11 @@
               <div id="dropText">
                 <i class="bi bi-cloud-upload fs-1 text-secondary mb-2"></i>
                 <p class="mb-1">{{ l.get("ai_drop_files", "Drop files here or click to browse") }}</p>
-                <small class="text-muted">PDF, ICS, CSV, PNG, JPG</small>
+                <small class="text-muted">PDF, ICS, CSV, GPX, PNG, JPG</small>
               </div>
               <div id="fileList" class="mt-3"></div>
             </div>
-            <input type="file" id="fileInput" name="files" multiple accept=".pdf,.ics,.csv,.png,.jpg,.jpeg,.gif,.webp" class="d-none">
+            <input type="file" id="fileInput" name="files" multiple accept=".pdf,.ics,.csv,.gpx,.png,.jpg,.jpeg,.gif,.webp" class="d-none">
           </div>
           
           <div id="pastePreview" class="mb-4 d-none"></div>
@@ -292,7 +292,7 @@ function renderTrips(trips) {
     if (t.operator) details.push(t.operator);
     if (t.line_name) details.push(t.line_name);
     if (t._distance) details.push(Math.round(t._distance / 1000) + ' km');
-    if (t.price && t.currency) details.push(t.price + ' ' + t.currency);
+    if (isNumber(t.price) && t.currency) details.push(t.price + ' ' + t.currency);
     if (t.seat) details.push('{{ l.get("seat", "Seat") }}: ' + t.seat);
     
     const failed = t._enrich_failed;

@@ -4,21 +4,140 @@
 {% include "bootstrap/navigation.html"%}
 
 <style>
-    .ts-pick-wrap { position: relative; }
-    .ts-pick-list { position: absolute; z-index: 999; left: 0; right: 0; top: 100%;
-                    background: #fff; border: 1px solid #aaa; border-radius: 4px;
-                    max-height: 180px; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,.15); }
-    .ts-pick-item { padding: 6px 10px; cursor: pointer; font-size: 0.9rem; }
-    .ts-pick-item:hover { background: #f0f0f0; }
     .ts-btn { padding: 6px 16px; border: 0; background-color: #f3f3f3;
-              cursor: pointer; flex: 1; font-size: 0.875rem; line-height: 1.4; }
+              cursor: pointer; font-size: 0.875rem; line-height: 1.4; }
     .ts-btn:hover { background-color: #e8e8e8; }
+
+    .power-type-group { display: flex; border: 1px solid #ced4da; border-radius: 0.375rem; overflow: hidden; }
+    .power-type-group input[type="radio"] { display: none; }
+    .power-type-group label {
+        flex: 1; text-align: center; padding: 0.375rem 0.75rem; margin: 0;
+        cursor: pointer; font-size: 0.875rem; color: #6c757d;
+        background-color: #fff; border-right: 1px solid #ced4da;
+        transition: background-color 0.15s, color 0.15s;
+    }
+    .power-type-group label:last-of-type { border-right: none; }
+    .power-type-group input[type="radio"]:checked + label {
+        background-color: #e9ecef; color: #333; font-weight: 500;
+    }
+    .power-type-group label:hover { background-color: #f8f9fa; color: #444; }
+
+    .via-row { position: relative; }
+    .via-row input.viaStation { padding-right: 36px; }
+    .via-row .via-remove {
+        position: absolute; top: 0; right: 0; height: 32px; width: 32px;
+        border: 0; background: transparent; cursor: pointer;
+        color: #999; font-size: 1.2rem; line-height: 1; padding: 0;
+    }
+    .via-row .via-remove:hover { color: #333; }
 </style>
+
+{% if vehicle_type == 'air' %}
+<div class="modal fade" id="fr24Modal" tabindex="-1" aria-labelledby="fr24ModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="fr24ModalLabel">Import Flight from FR24</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted">Data is available starting from 30 days in the past to one day in the future</p>
+        <form id="fr24Form">
+          <div class="mb-3">
+            <label class="form-label d-block">{{searchBy}}</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="fr24SearchToggle">
+              <label class="form-check-label" for="fr24SearchToggle" id="fr24SearchToggleLabel">{{reg}}</label>
+            </div>
+          </div>
+
+          <div class="mb-3" id="flightNumberGroup">
+            <label for="fr24FlightNumber" class="form-label">{{flightNumber}}</label>
+            <input type="text" class="form-control" id="fr24FlightNumber" placeholder="e.g. EK184">
+          </div>
+
+          <div class="mb-3 d-none" id="regNumberGroup">
+            <label for="fr24RegNumber" class="form-label">{{reg}}</label>
+            <input type="text" class="form-control" id="fr24RegNumber" placeholder="{{registrationPlaceholder}}">
+          </div>
+          <div class="mb-3">
+            <label for="fr24Date" class="form-label">Flight Date</label>
+            <input type="date" class="form-control" id="fr24Date">
+          </div>
+          <div if="progressContainer" class="progress mt-3  d-none">
+            <div id="fr24ProgressBar" class="progress-bar progress-bar-striped progress-bar-animated"
+                role="progressbar" style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+              0%
+            </div>
+          </div>
+        </form>
+        <div id="fr24Error" class="text-danger small d-none"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="fr24SubmitBtn">OK</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="legSelectorModal" tabindex="-1" aria-labelledby="legSelectorModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="legSelectorModalLabel">Select Flight Leg</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted mb-3">This flight has multiple legs. Please select which leg you want to import:</p>
+        <div id="legsList" class="list-group">
+          <!-- Legs will be dynamically inserted here -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <div id="form" >
   <h2 class="header">{{newTrip}}</h2>
   <div>
     <form id="newTripForm" autocomplete="off" action="javascript:void(0);" method="GET">
+      {% if plan_uuid %}
+      <div class="alert alert-info d-flex align-items-center gap-2 py-2 px-3 mb-3" role="alert" style="font-size:0.95rem;">
+        <span style="font-size:1.2rem;">🗺️</span>
+        <span>{{ addingToPlan|default('Adding a trip to plan') }}: <strong>{{ plan_name|default('') }}</strong></span>
+      </div>
+      {% endif %}
+      {% if vehicle_type == 'air' %}
+      <div class="d-inline-flex align-items-center">
+        <span
+          data-bs-toggle="modal"
+          data-bs-target="#fr24Modal"
+          class="btn btn-labeled {% if fr24_calls == 'premium' %}btn-primary{% elif fr24_calls is number and fr24_calls >= 5 %}btn-secondary disabled{% else %}btn-primary{% endif %}"
+          {% if fr24_calls is number and fr24_calls >= 5 %}aria-disabled="true"{% endif %}
+        >
+          <span class="btn-label">
+            <img src="{{ url_for('static', filename='images/icons/fr24.png') }}" alt="FR24" style="height: 1.5em;">
+          </span>
+            {{ import }} FR24 {% if fr24_calls == 'premium' %} <small><i class="fa-solid fa-gem" style="color: #F39C12;"></i></small>{% else %}({{ fr24_calls }}/5){% endif %}
+          </span>
+            {% if fr24_calls is number and fr24_calls >= 5 %}
+          <span
+          class="ms-2"
+          data-bs-toggle="tooltip"
+          data-bs-placement="top"
+          title="{{fr24LimitInfo}}"
+          >
+          <i class="bi bi-info-circle-fill text-muted" style="cursor: help;"></i>
+        </span>
+        {% endif %}
+      </div>
+      <br>
+      {% endif %}
       <label for="originManualToggle" class="checkboxLabel non_manual">{{manualOrigin}}</label>
       <input type="checkbox" id="originManualToggle" name="originManualToggle" class="non_manual" />
 
@@ -45,20 +164,51 @@
       </group>
       <group id="destinationStationManual" class="non_poi" class="non_manual">
         <label for="destinationManualName" class="sr-only">{{destinationTerminalName}}</label>
-        <input type="text" class="" name="destinationManualName" id="destinationManualName" placeholder="{{destinationTerminalName}}"/> 
+        <input type="text" class="" name="destinationManualName" id="destinationManualName" placeholder="{{destinationTerminalName}}"/>
         <label for="destinationManualLat" class="sr-only">Lat</label>
-        <input type="float" class="" name="destinationManualLat" id="destinationManualLat" placeholder="Lat"/> 
+        <input type="float" class="" name="destinationManualLat" id="destinationManualLat" placeholder="Lat"/>
         <label for="destinationManualLng" class="sr-only">Lng</label>
         <input type="float" class="" name="destinationManualLng" id="destinationManualLng" placeholder="Lng"/>
       </group>
 
+      {% if vehicle_type != 'air' %}
+      <group id="viaGroup" class="non_poi">
+        <div id="viaContainer"></div>
+        <button type="button" id="addViaBtn" class="ts-btn"><i class="fas fa-plus"></i> {{via}}</button>
+      </group>
+      {% endif %}
+
       <br class="non_poi">
       <group id="operatorGroup" class="non_poi">
-        <div class="operatorLogoWrapper">
-          <img class="operatorLogo" src="{{ url_for('static',filename='images/icons/trip_logos/'+ vehicle_type +'.png')}}"/>
+        <div class="operatorLogoWrapper dropdown">
+          <img class="operatorLogo" id="typeSwitchIcon" data-bs-toggle="dropdown" aria-expanded="false"
+               role="button" title="{{ changeTripType|default('Change trip type') }}" style="cursor:pointer;"
+               src="{{ url_for('static',filename='images/icons/trip_logos/'+ vehicle_type +'.png')}}"/>
+          <ul class="dropdown-menu" id="typeSwitchMenu" aria-labelledby="typeSwitchIcon" style="max-height:60vh;overflow:auto;">
+            {% set ns = namespace(group=none) %}
+            {% for t, data in new_trip_types.items() %}
+            {% if ns.group is not none and data.group != ns.group %}
+            <li><hr class="dropdown-divider"></li>
+            {% endif %}
+            {% set ns.group = data.group %}
+            <li>
+              <a class="dropdown-item d-flex align-items-center gap-2 {% if t == vehicle_type %}active{% endif %}"
+                 href="{{ url_for('new', username=username, vehicle_type=t) }}{% if request.query_string %}?{{ request.query_string.decode() }}{% endif %}">
+                <img src="{{ url_for('static', filename='images/icons/trip_logos/' + t + '.png') }}" width="20" height="20" onerror="this.style.display='none'">
+                <span>{{ data.label }}</span>
+              </a>
+            </li>
+            {% endfor %}
+          </ul>
         </div>
-        <label for="operator" class="sr-only">{{operator}}</label>
-        <input type="text" name="operator" id="operator" placeholder="{{operator}}"/>
+        <label for="operatorSearch" class="sr-only">{{operator}}</label>
+        {# The submitted value stays free comma-separated text; the pills are a view
+           of it, built by operatorPillsInput(). #}
+        <input type="hidden" name="operator" id="operator"/>
+        <div class="operatorPillsField" id="operatorPills">
+          <input type="text" id="operatorSearch" class="op-pill-placeholder"
+                 placeholder="{{operator}}" autocomplete="off"/>
+        </div>
       </group>
 
       <label for="lineName" class="sr-only">{{lineName}}</label>
@@ -79,7 +229,7 @@
         <label for="material_type" class="sr-only">{{material_type}}</label>
         <input type="text" class="non_poi" name="material_type" id="material_type" placeholder="{{material_type}}">
         <input type="hidden" name="material_type_advanced" id="material_type_advanced">
-        {% if vehicle_type in ('train', 'metro', 'tram') and is_alpha %}
+        {% if vehicle_type in ('train', 'metro', 'tram') %}
         <div id="ts-active-display" class="non_poi" style="display:none; margin-bottom:1rem">
             <div style="display:flex; align-items:center; gap:8px; padding:6px 12px; background:#f3f3f3; font-size:0.875rem">
                 <i class="fas fa-train" style="color:#666; flex-shrink:0"></i>
@@ -87,12 +237,8 @@
                 <button type="button" onclick="clearMaterialTypeJson()" style="border:0; background:none; cursor:pointer; padding:0; color:#999; font-size:1.1rem; line-height:1; flex-shrink:0" title="Clear">×</button>
             </div>
         </div>
-        <div class="ts-pick-wrap non_poi">
-            <div style="display:flex; gap:8px; margin-bottom:1rem">
-                <button type="button" class="ts-btn" onclick="toggleTsPicker()"><i class="fas fa-train"></i> {{tsbPickTrainset}}</button>
-                <button type="button" class="ts-btn" onclick="openTsbModal()"><i class="fas fa-wrench"></i> {{tsbBuildTrainset}}</button>
-            </div>
-            <div id="ts-pick-list" class="ts-pick-list" style="display:none"></div>
+        <div class="non_poi" style="margin-bottom:1rem">
+            <button type="button" class="ts-btn" style="width:100%" onclick="openTsbModal()"><i class="fas fa-train"></i> {{tsbPickTrainset}}</button>
         </div>
         {% endif %}
         <label for="reg" class="sr-only">{{reg}}</label>
@@ -102,13 +248,6 @@
         <label for="notes" class="sr-only">{{notes}}</label>
         <input type="text" name="notes" id="notes" placeholder="{{notes}}">
 
-        <fieldset class="fieldset-time non_poi">
-          <legend><span class="legend">{{delays}}</span></legend>
-          <label class="sr-only" for="departureDelayMinutes">{{departureDelay}}</label>
-          <input type="number" step="1" id="departureDelayMinutes" name="departureDelayMinutes" placeholder="{{departure}}"/>
-          <label class="sr-only" for="arrivalDelayMinutes">{{arrivalDelay}}</label>
-          <input type="number" step="1" id="arrivalDelayMinutes" name="arrivalDelayMinutes" placeholder="{{arrival}}"/>
-        </fieldset>
 
         <!-- Price Details Subgroup -->
         <fieldset class="fieldset-fixed fieldset-price">
@@ -134,34 +273,80 @@
           <input type="date" name="purchasing_date" id="purchasing_date" />
         </fieldset>
 
+        {% if not plan_uuid %}
         <label for="ticketSearchInput" id="ticketSearchInputLabel" class="form-label">{{select_ticket}}</label>
         <select id="ticketSearchInput" name="ticket_id" class="form-select">
         </select>
-        <!-- Train Power Type Toggle (only for trains) -->
+        {% endif %}
+        <!-- Power Type Toggle -->
         {% if vehicle_type == 'train' %}
         <div class="mb-3">
           <label class="form-label">{{powerType}}</label>
-          <div class="btn-group w-100" role="group">
+          <div class="power-type-group">
             <input type="radio" class="btn-check" name="powerType" id="powerAuto" value="auto" checked autocomplete="off">
-            <label class="btn btn-outline-secondary" for="powerAuto">
+            <label for="powerAuto">
               <i class="fas fa-magic"></i> {{auto}}
             </label>
-            
             <input type="radio" class="btn-check" name="powerType" id="powerElectric" value="electric" autocomplete="off">
-            <label class="btn btn-outline-secondary" for="powerElectric">
+            <label for="powerElectric">
               <i class="fas fa-bolt"></i> {{electric}}
             </label>
-            
             <input type="radio" class="btn-check" name="powerType" id="powerThermic" value="thermic" autocomplete="off">
-            <label class="btn btn-outline-secondary" for="powerThermic">
+            <label for="powerThermic">
               <i class="fas fa-fire"></i> {{thermic}}
             </label>
           </div>
         </div>
+        {% elif vehicle_type in ('bus', 'car') %}
+        <div class="mb-3">
+          <label class="form-label">{{powerType}}</label>
+          <div class="power-type-group">
+            <input type="radio" class="btn-check" name="powerType" id="powerThermic" value="thermic" checked autocomplete="off">
+            <label for="powerThermic">
+              <i class="fas fa-fire"></i> {{thermic}}
+            </label>
+            <input type="radio" class="btn-check" name="powerType" id="powerElectric" value="electric" autocomplete="off">
+            <label for="powerElectric">
+              <i class="fas fa-bolt"></i> {{electric}}
+            </label>
+          </div>
+        </div>
+        {% elif vehicle_type in ('cycle', 'scooter') %}
+        <div class="mb-3">
+          <label class="form-label">{{powerType}}</label>
+          <div class="power-type-group">
+            <input type="radio" class="btn-check" name="powerType" id="powerManual" value="manual" checked autocomplete="off">
+            <label for="powerManual">
+              <i class="fas fa-person-biking"></i> {{manual}}
+            </label>
+            <input type="radio" class="btn-check" name="powerType" id="powerElectric" value="electric" autocomplete="off">
+            <label for="powerElectric">
+              <i class="fas fa-bolt"></i> {{electric}}
+            </label>
+          </div>
+        </div>
+        {% elif vehicle_type == 'ferry' %}
+        <div class="mb-3">
+          <label class="form-label">{{propulsion}}</label>
+          <div class="power-type-group">
+            <input type="radio" class="btn-check" name="powerType" id="powerThermic" value="thermic" checked autocomplete="off">
+            <label for="powerThermic">
+              <i class="fas fa-fire"></i> {{thermic}}
+            </label>
+            <input type="radio" class="btn-check" name="powerType" id="powerElectric" value="electric" autocomplete="off">
+            <label for="powerElectric">
+              <i class="fas fa-bolt"></i> {{electric}}
+            </label>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="co2Override">{{co2OverrideLabel}} <small class="text-muted">{{co2OverrideHint}}</small></label>
+          <input type="number" class="form-control" id="co2Override" name="co2Override" min="0" step="0.1" placeholder="{{co2OverridePlaceholder}}">
+        </div>
         {% endif %}
-       <!-- <br>
-        <input type="text" id="tagSearchInput" placeholder="{{select_tag}}" class="form-control" autocomplete="off">
-        <div id="tagList" class="d-flex flex-wrap"></div> -->
+        <br>
+        <input type="text" id="tagSearchInput" placeholder="{{select_tag}}" class="form-control" autocomplete="off" style="margin-bottom:.4rem;">
+        <div id="tagList" class="d-flex flex-wrap gap-1"></div>
       </div>
 
       <br/>
@@ -172,13 +357,22 @@
           <span class="legend">{{timings}}:</span>
         </legend>
         <div class="radio-group non_poi">
-          <input type="radio" id="radioPreciseDates" class="non_poi" value="preciseDates" name="precision" checked/>
+          <input type="radio" id="radioPreciseDates" class="non_poi" value="preciseDates" name="precision" {% if not plan_uuid %}checked{% endif %}/>
           <label for="radioPreciseDates" class="checkboxLabel non_poi" >{{preciseDates}}</label>
         </div>
+        {% if plan_uuid %}
+        <div class="radio-group non_poi">
+          <input type="radio" id="radioRelative" class="non_poi" value="relative" name="precision" checked/>
+          <label for="radioRelative" class="checkboxLabel non_poi">{{ relativeTiming|default('Day + time') }}</label>
+        </div>
+        {% endif %}
+        {# "unknown" (past/future) is meaningless for a plan — omit it there. #}
+        {% if not plan_uuid %}
         <div class="radio-group non_poi">
           <input type="radio" id="radioUnknown" class="non_poi" value="unknown" name="precision"/>
           <label for="radioUnknown" class="checkboxLabel non_poi">{{unknown}}</label>
         </div>
+        {% endif %}
         <div class="radio-group non_poi">
           <input type="radio" id="radioOnlyDate" class="non_poi" value="onlyDate" name="precision"/>
           <label for="radioOnlyDate" class="checkboxLabel non_poi">{{onlyDate}}</label>
@@ -218,26 +412,112 @@
       <group id="dates">
         <fieldset class="fieldset-datetime">
           <legend>
-            <span class="legend">{{ newTripStart if vehicle_type not in  ('accommodation', 'poi', 'restaurant') else checkIn }}</span>
+            <span class="legend">{{ newTripStart if vehicle_type not in ('accommodation', 'poi', 'restaurant') else checkIn }}<span class="delay-planned-suffix" style="display:none"> ({{plannedFuture}})</span></span>
           </legend>
           <label class="sr-only" for="newTripStartDate">{{ date }}</label>
           <input type="date" name="newTripStartDate" id="newTripStartDate" placeholder=" "/>
-          <label class="sr-only" for="newTripStartDate">{{ time }}</label>
-          <input type="time" name="newTripStartTime" id="newTripStartTime" placeholder=" "/>    
+          <label class="sr-only" for="newTripStartTime">{{ time }}</label>
+          <input type="time" name="newTripStartTime" id="newTripStartTime" placeholder=" "/>
         </fieldset>
 
         <fieldset class="fieldset-datetime">
           <legend>
-            <span class="legend">{{newTripEnd if vehicle_type not in  ('accommodation', 'poi', 'restaurant') else checkOut}}</span>
+            <span class="legend">{{newTripEnd if vehicle_type not in ('accommodation', 'poi', 'restaurant') else checkOut}}<span class="delay-planned-suffix" style="display:none"> ({{plannedFuture}})</span></span>
           </legend>
           <label class="sr-only" for="newTripEndDate">{{ date }}</label>
           <input type="date" name="newTripEndDate" id="newTripEndDate" placeholder=" "/>
-          <label class="sr-only" for="newTripEndDate">{{ time }}</label>
+          <label class="sr-only" for="newTripEndTime">{{ time }}</label>
           <input type="time" name="newTripEndTime" id="newTripEndTime" placeholder=" " />
         </fieldset>
       </group>
 
-      <button id=submit type="submit" onclick="toRouting($('form').serializeArray(), '{{vehicle_type}}' == 'helicopter' ? airRoutingURL : routingURL, '{{vehicle_type}}');">{{submit}}</button>
+      {% if plan_uuid %}
+      <input type="hidden" name="plan_uuid" value="{{ plan_uuid }}"/>
+      <style>
+        #form #relativeDates { display: none; }
+        #form:has(input[id=radioRelative]:checked) #relativeDates { display: grid; gap: 0 0.3rem; }
+        /* Day-only relative leg: no times to derive a duration from -> offer the
+           manual duration inputs (JS toggles the class). */
+        #form #manDuration.rel-duration { display: grid; }
+        /* Duration mode hides the time column -> let the day input take the full row. */
+        #form #relativeDates.rel-dur .fieldset-datetime { grid-template-columns: 1fr; }
+        .wd-toggle { border: 1px solid #cbd2db; background: transparent; border-radius: 6px;
+                     padding: .15rem .45rem; font-size: .8rem; cursor: pointer; }
+        .wd-toggle.on { background: #4b78d6; border-color: #4b78d6; color: #fff; }
+      </style>
+      <group id="relativeDates">
+        {# Either/or: a leg is timed (Day + time) OR duration-based (Day + duration) —
+           never both, so the two can't contradict each other. #}
+        <div style="grid-column:1/-1; display:flex; gap:1.2rem; margin-bottom:.3rem;">
+          <div class="radio-group">
+            <input type="radio" id="relModeTime" name="relTimeMode" value="time" checked/>
+            <label for="relModeTime" class="checkboxLabel">{{ planModeTime|default('Time') }}</label>
+          </div>
+          <div class="radio-group">
+            <input type="radio" id="relModeDuration" name="relTimeMode" value="duration"/>
+            <label for="relModeDuration" class="checkboxLabel">{{ tripDuration|default('Duration') }}</label>
+          </div>
+        </div>
+        <fieldset class="fieldset-datetime">
+          <legend><span class="legend">{{ newTripStart }}</span></legend>
+          <label class="sr-only" for="planStartDay">{{ day|default('Day') }}</label>
+          <input type="number" min="1" value="1" name="planStartDay" id="planStartDay" placeholder="{{ day|default('Day') }}"/>
+          <label class="sr-only" for="planStartTime">{{ time }}</label>
+          <input type="time" name="planStartTime" id="planStartTime" placeholder=" "/>
+        </fieldset>
+        <fieldset class="fieldset-datetime">
+          <legend><span class="legend">{{ newTripEnd }}</span></legend>
+          <label class="sr-only" for="planEndDay">{{ day|default('Day') }}</label>
+          <input type="number" min="1" value="1" name="planEndDay" id="planEndDay" placeholder="{{ day|default('Day') }}"/>
+          <label class="sr-only" for="planEndTime">{{ time }}</label>
+          <input type="time" name="planEndTime" id="planEndTime" placeholder=" "/>
+        </fieldset>
+        <div id="planWeekdaysGroup" style="grid-column:1/-1; margin:.4rem 0 .2rem;">
+          <span class="legend">{{ planWeekdaysLabel|default('Runs on') }} <i class="fa-solid fa-circle-info text-muted" style="cursor:help;" title="{{ planWeekdaysHint|default('For services with less-than-daily frequencies. Leave empty if it runs daily.') }}"></i></span>
+          <div id="planWeekdayBtns" style="display:flex; gap:.25rem; margin-top:.25rem;"></div>
+          <input type="hidden" name="planWeekdays" id="planWeekdays" value="0"/>
+        </div>
+      </group>
+      {% endif %}
+
+      <span id="delayToggleWrapper" class="non_poi" style="display:inline-flex; align-items:center; gap:0.3rem">
+        <input type="checkbox" id="delayToggle" />
+        <label for="delayToggle" class="checkboxLabel">{{delaysToggle}}</label>
+      </span>
+      <span id="delayModeSwitchWrapper" class="non_poi" style="display:none; margin-left:1.5rem">
+        <span style="display:inline-flex; align-items:center; gap:0.3rem">
+          <input type="checkbox" id="delayModeSwitch" />
+          <label for="delayModeSwitch" class="checkboxLabel">{{delayDateMode}}</label>
+        </span>
+      </span>
+
+      <div id="depActualGroup" class="non_poi" style="display:none; margin-top:0.6rem">
+        <fieldset class="fieldset-datetime">
+          <legend><span class="legend">{{ newTripStart if vehicle_type not in ('accommodation', 'poi', 'restaurant') else checkIn }} ({{delayActual}})</span></legend>
+          <label class="sr-only" for="depActualDate">{{ date }}</label>
+          <input type="date" id="depActualDate" placeholder=" " />
+          <label class="sr-only" for="depActualTime">{{ time }}</label>
+          <input type="time" id="depActualTime" placeholder=" " />
+        </fieldset>
+      </div>
+      <div id="arrActualGroup" class="non_poi" style="display:none">
+        <fieldset class="fieldset-datetime">
+          <legend><span class="legend">{{newTripEnd if vehicle_type not in ('accommodation', 'poi', 'restaurant') else checkOut}} ({{delayActual}})</span></legend>
+          <label class="sr-only" for="arrActualDate">{{ date }}</label>
+          <input type="date" id="arrActualDate" placeholder=" " />
+          <label class="sr-only" for="arrActualTime">{{ time }}</label>
+          <input type="time" id="arrActualTime" placeholder=" " />
+        </fieldset>
+      </div>
+      <fieldset class="fieldset-time non_poi" id="delayMinutesInputs" style="display:none">
+        <legend><span class="legend">{{delays}}</span></legend>
+        <label class="sr-only" for="departureDelayMinutes">{{departureDelay}}</label>
+        <input type="number" step="any" id="departureDelayMinutes" name="departureDelayMinutes" placeholder="{{departure}}"/>
+        <label class="sr-only" for="arrivalDelayMinutes">{{arrivalDelay}}</label>
+        <input type="number" step="any" id="arrivalDelayMinutes" name="arrivalDelayMinutes" placeholder="{{arrival}}"/>
+      </fieldset>
+
+      <button id=submit type="submit" onclick="toRouting($('form').serializeArray(), ['helicopter', 'air'].includes('{{vehicle_type}}') ? airRoutingURL : routingURL, '{{vehicle_type}}');">{{submit}}</button>
     </form>
   </div>
 </div>
@@ -245,17 +525,91 @@
 <script>
 
   {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
- 
+
     $(".non_poi").hide();
-  
+
+    {% if plan_uuid %}
+    // In a plan, static legs (stays/stops) still get the timing precision selector
+    // so they can be Day + time, date-only, etc. Clear the inline display we just set
+    // so the stylesheet (which toggles each group by the checked radio) takes over.
+    $(".trip-time-inputs").css('display', '');
+    $(".trip-time-inputs .non_poi").css('display', '');
+    $("#onlyDatePicker, #manDuration").css('display', '');
+    {% endif %}
+
   {% endif %}
 
   manualCopyHandler();
+
+  {% if plan_uuid %}
+  // Plans have no tickets or delays — hide the delay section (its init then self-skips
+  // because #delayToggle is hidden). The ticket selector isn't rendered in plan mode.
+  $('#delayToggleWrapper, #delayModeSwitchWrapper, #delayMinutesInputs, #depActualGroup, #arrActualGroup').hide();
+
+  // Relative legs are timed (Day + time) OR duration-based (Day + duration), never
+  // both: the switch shows one set of inputs and clears the other, so conflicting
+  // values can't be submitted. The duration travels as onlyDateDuration.
+  // #manDuration is shared with the onlyDate precision further down the form, so in
+  // relative-duration mode it is MOVED up into #relativeDates (before the weekday
+  // row) and restored to its original slot (marker) for the other modes.
+  var _md = document.getElementById('manDuration');
+  var _mdHome = document.createElement('span');
+  _mdHome.style.display = 'none';
+  _md.parentNode.insertBefore(_mdHome, _md);
+  function updateRelTimeMode() {
+    var rel = $('#radioRelative').is(':checked');
+    var dur = $('#relModeDuration').is(':checked');
+    $('#planStartTime, #planEndTime').toggle(!(rel && dur));
+    $('#manDuration').toggleClass('rel-duration', rel && dur);
+    $('#relativeDates').toggleClass('rel-dur', rel && dur);
+    if (rel && dur) {
+      var wd = document.getElementById('planWeekdaysGroup');
+      wd.parentNode.insertBefore(_md, wd);
+    } else {
+      _mdHome.parentNode.insertBefore(_md, _mdHome.nextSibling);
+    }
+    if (rel) {
+      if (dur) $('#planStartTime, #planEndTime').val('');
+      else $('#manDurationHours, #manDurationMinutes').val('');
+    }
+  }
+  $('input[name="precision"], input[name="relTimeMode"]').on('change', updateRelTimeMode);
+  updateRelTimeMode();
+
+  // Weekday-constraint toggles (bitmask, bit 0 = Monday), localised via Intl.
+  (function initPlanWeekdays() {
+    var hidden = document.getElementById('planWeekdays');
+    var wrap = document.getElementById('planWeekdayBtns');
+    if (!hidden || !wrap) return;
+    var mask = parseInt(hidden.value, 10) || 0;
+    var fmt = new Intl.DateTimeFormat("{{ langId }}" || 'en', { weekday: 'short', timeZone: 'UTC' });
+    for (var i = 0; i < 7; i++) (function (i) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'wd-toggle' + (((mask >> i) & 1) ? ' on' : '');
+      b.textContent = fmt.format(new Date(Date.UTC(2024, 0, 1 + i))); // 2024-01-01 = Monday
+      b.addEventListener('click', function () {
+        mask ^= (1 << i);
+        b.classList.toggle('on', !!((mask >> i) & 1));
+        hidden.value = mask;
+      });
+      wrap.appendChild(b);
+    })(i);
+  })();
+  {% endif %}
   var globalStationDict = {};
   var manualStationsList = [];
+  // Built once getManAndOps returns. Anything setting the operator programmatically
+  // goes through setOperatorValue() so the pills follow the hidden field — before
+  // the pills exist, seeding the hidden field is enough, as they initialise from it.
+  var operatorPills = null;
+  function setOperatorValue(value) {
+    $('#operator').val(value);
+    if (operatorPills) operatorPills.set(value);
+  }
   var visitedStations = {};
   var routingURL = "{{url_for('routing', username=username)}}";
-  var airRoutingURL = "{{url_for('air_routing', username=username, type='helicopter')}}";
+  var airRoutingURL = "{{url_for('air_routing', username=username, type=('air' if vehicle_type == 'air' else 'helicopter'))}}";
 
   $.get('{{url_for("getManAndOps", username=username, station_type=vehicle_type)}}', function(manAndOps, status){
     Object.assign(globalStationDict, manAndOps.manualStations);
@@ -266,8 +620,15 @@
     })
 
 
-    operatorAutocomplete( $("#operator"), manAndOps, "{{ url_for('static',filename='')}}",  "{{ url_for('static',filename='images/icons/trip_logos/' + vehicle_type + '.png')}}", "{{vehicle_type}}");
+    operatorPills = operatorPillsInput(
+      $("#operator"), $("#operatorSearch"), $("#operatorPills"), manAndOps,
+      "{{ url_for('static',filename='')}}", "{{vehicle_type}}",
+      { plainToggle: true,
+        plainLabel: "{{ operatorPlainText|default('Edit as plain text') }}",
+        pillsLabel: "{{ operatorPillsMode|default('Back to operator list') }}" });
+    {% if vehicle_type != 'air' %}
     materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
+    {% endif %}
   });
 
 
@@ -282,13 +643,42 @@
 
   }
   else{
-    $("#newTripStartDate").val(searchParams.get('prevEndDate'));    
-    $("#newTripEndDate").val(searchParams.get('prevEndDate'));    
+    // prevDest is "lat,lng,label" — the label itself may contain commas.
+    const prevDestParts = searchParams.get('prevDest').split(',');
+    coords = [parseFloat(prevDestParts[0]), parseFloat(prevDestParts[1])];
+    const prevDestLabel = prevDestParts.slice(2).join(',');
+    $("#originStation").val(prevDestLabel);
+    globalStationDict[prevDestLabel] = [coords, prevDestLabel];
+    {% if plan_uuid %}
+    // Plan "save & continue": carry forward the previous leg's timing MODE.
+    if (searchParams.has('prevEndDate')) {
+      // Previous leg was precise (or date-only) -> continue in precise mode.
+      $("#radioPreciseDates").prop("checked", true);
+      $("#newTripStartDate").val(searchParams.get('prevEndDate'));
+      $("#newTripEndDate").val(searchParams.get('prevEndDate'));
+      $("#newTripStartTime").val(searchParams.get('prevEndTime') || '');
+      $("#onlyDate").val(searchParams.get('prevEndDate'));
+    } else {
+      // Previous leg was relative -> continue in Day + time mode.
+      $("#radioRelative").prop("checked", true);
+      if (searchParams.get('prevPlanDay')) {
+        $("#planStartDay").val(searchParams.get('prevPlanDay'));
+        $("#planEndDay").val(searchParams.get('prevPlanDay'));
+      }
+      if (searchParams.get('prevPlanTime')) {
+        $("#planStartTime").val(searchParams.get('prevPlanTime'));
+      }
+      // Harmless defaults for the hidden precise fields.
+      $("#newTripStartDate").val(getCurrentDate());
+      $("#newTripStartTime").val(getCurrentTime());
+      $("#onlyDate").val(getCurrentDate());
+    }
+    $("#purchasing_date").val(getCurrentDate()).attr({"max":getCurrentDate()});
+    {% else %}
+    $("#newTripStartDate").val(searchParams.get('prevEndDate'));
+    $("#newTripEndDate").val(searchParams.get('prevEndDate'));
     $("#newTripStartTime").val(searchParams.get('prevEndTime'));
     $("#onlyDate").val(searchParams.get('prevEndDate'));
-    coords = [searchParams.get('prevDest').split(',')[0],searchParams.get('prevDest').split(',')[1]];
-    $("#originStation").val(searchParams.get('prevDest').split(',')[2]);
-    globalStationDict[searchParams.get('prevDest').split(',')[2]] = [coords, searchParams.get('prevDest').split(',')[2]];
     if ($("#newTripStartDate").val()>getCurrentDate() )
     {
       $("#purchasing_date").val(getCurrentDate());
@@ -298,8 +688,27 @@
       $("#purchasing_date").val($("#newTripStartDate").val());
       $("#purchasing_date").attr({"max":$("#newTripStartDate").val()});
     }
+    {% endif %}
   }
-  
+
+  {% if plan_uuid %}
+  // Fresh plan legs default to relative "Day + time". Don't override a precise-mode
+  // continue (prevEndDate present) or a user's explicit pick.
+  (function() {
+    if (new URLSearchParams(window.location.search).has('prevEndDate')) return;
+    var userPickedPrecision = false;
+    $('input[name="precision"]').on('change', function() { userPickedPrecision = true; });
+    function forceRelative() {
+      if (!userPickedPrecision && $('#radioRelative').length) {
+        $('#radioRelative').prop('checked', true);
+      }
+    }
+    forceRelative();                           // immediately
+    $(forceRelative);                          // DOM ready
+    $(window).on('load', forceRelative);       // after everything
+  })();
+  {% endif %}
+
   $("#newTripStartDate").on("focusout", function() {
     if($("#newTripEndDate").val() < $(this).val())
     {
@@ -325,15 +734,19 @@
     "train": "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
     "tram": "/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station&osm_tag=railway:halt",
     "metro": "/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance",
+    "funicular": "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
+    "rail": "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
     "ferry": "/stationAutocomplete?osm_tag=amenity:ferry_terminal",
     "helicopter": "/stationAutocomplete?osm_tag=aeroway:helipad&osm_tag=aeroway:heliport&osm_tag=aeroway:aerodrome",
     "accommodation": "/stationAutocomplete?osm_tag=tourism:alpine_hut&osm_tag=tourism:apartment&osm_tag=tourism:chalet&osm_tag=tourism:guest_house&osm_tag=tourism:hostel&osm_tag=tourism:hotel&osm_tag=tourism:motel&osm_tag=tourism:wilderness_hut",
     "poi": "/stationAutocomplete?osm_tag=tourism&osm_tag=!tourism:alpine_hut&osm_tag=!tourism:apartment&osm_tag=!tourism:chalet&osm_tag=!tourism:guest_house&osm_tag=!tourism:hostel&osm_tag=!tourism:hotel&osm_tag=!tourism:motel&osm_tag=!tourism:wilderness_hut",
     "restaurant":  "/stationAutocomplete?osm_tag=amenity:restaurant&osm_tag=amenity:pub&osm_tag=amenity:biergarten&osm_tag=amenity:cafe&osm_tag=amenity:bar",
     "aerialway":  "/stationAutocomplete?osm_tag=aerialway:station",
+    "ski":  "/stationAutocomplete?osm_tag=aerialway:station",
     "car":  "/stationAutocomplete",
     "walk":  "/stationAutocomplete",
     "cycle":  "/stationAutocomplete",
+    "scooter":  "/stationAutocomplete",
   }
   var specialURLs = {
     "metro": "/stationAutocomplete?osm_tag=railway:station&osm_tag=!train",
@@ -344,13 +757,35 @@
   const params = new URLSearchParams(window.location.search);
   const special = params.get('special');
 
-  console.log(special);
+{% if vehicle_type != 'air' %}
+  var stationSearchUrl;
   if("{{vehicle_type}}" == "train" && special){
-    stationSearchAutocomplete(".stationSearch", visitedStations, specialURLs[special], "{{manual}}");
+    stationSearchUrl = specialURLs[special];
   }
   else{
-    stationSearchAutocomplete(".stationSearch", visitedStations, URLs["{{vehicle_type}}"], "{{manual}}");
+    stationSearchUrl = URLs["{{vehicle_type}}"];
   }
+  stationSearchAutocomplete(".stationSearch", visitedStations, stationSearchUrl, "{{manual}}");
+
+  // ---------- Via (intermediate waypoint) stations ----------
+  var viaPlaceholder = "{{via}}";
+  function addViaRow() {
+    var $row = $(
+      '<div class="via-row">' +
+        '<input type="text" class="stationSearch viaStation" placeholder="' + viaPlaceholder + '" />' +
+        '<button type="button" class="via-remove" title="Remove">&times;</button>' +
+      '</div>'
+    );
+    $('#viaContainer').append($row);
+    // Initialise autocomplete on the newly added input
+    stationSearchAutocomplete($row.find('.viaStation'), visitedStations, stationSearchUrl, "{{manual}}");
+    $row.find('.viaStation').focus();
+  }
+  $('#addViaBtn').on('click', addViaRow);
+  $('#viaContainer').on('click', '.via-remove', function() {
+    $(this).closest('.via-row').remove();
+  });
+{% endif %}
 
   const currencySelect = document.getElementById('currency');
   for (let option of currencySelect.options) {
@@ -360,7 +795,7 @@
   }
 
   $('#price').on('input', function() {
-      var priceDefined = $(this).val() > 0;
+      var priceDefined = isNumber($(this).val());
       
       if(priceDefined) {
           // Show currency and purchasing_date if price is defined
@@ -384,8 +819,13 @@
           $("#price").css("grid-column-end", "-1");
       }
   }).trigger('input'); // Trigger on load to apply initial state
+  {% if not plan_uuid %}
   fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}");
-  //setupTagAutocomplete(`{{ url_for("get_all_tags", username=username) }}`);
+  {% endif %}
+  setupTagAutocomplete(`{{ url_for("get_all_tags", username=username) }}`, null, {
+    url: `{{ url_for("quick_create_tag", username=username) }}`,
+    label: {{ create_tag_option | tojson }}
+  });
 
 
   if(!CSS.supports("contain:strict")) {
@@ -406,14 +846,14 @@
     });
   }
 
-  {% if is_alpha %}
+ 
   function formatTrainset(units) {
     var result = [];
     var i = 0;
     while (i < units.length) {
-      var name = units[i].nom || units[i].name || '?';
+      var name = units[i].label || units[i].name || '?';
       var count = 1;
-      while (i + count < units.length && (units[i + count].nom || units[i + count].name || '?') === name) count++;
+      while (i + count < units.length && (units[i + count].label || units[i + count].name || '?') === name) count++;
       result.push(count > 1 ? count + '\xd7 ' + name : name);
       i += count;
     }
@@ -431,6 +871,11 @@
         $display.show();
         return;
       }
+      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets) && parsed.trainsets.length > 0) {
+        $('#ts-active-label').text(parsed.trainsets.join(' + '));
+        $display.show();
+        return;
+      }
     } catch(e) {}
     if (val) {
       $('#ts-active-label').text(val);
@@ -445,33 +890,491 @@
   }
   updateMaterialTypeDisplay();
   $(document).on('hidden.bs.modal', '#tsbModal', updateMaterialTypeDisplay);
-  function toggleTsPicker() {
-    var $list = $('#ts-pick-list');
-    if ($list.is(':visible')) { $list.hide(); return; }
-    if ($list.data('loaded')) { $list.show(); return; }
-    $list.html('<div class="p-2 text-muted" style="font-size:.85rem">Loading…</div>').show();
-    $.getJSON('/api/trainsets')
-      .done(function(sets) {
-        $list.empty();
-        if (!sets.length) {
-          $list.html('<div class="p-2 text-muted" style="font-size:.85rem">No saved trainsets</div>');
-          return;
-        }
-        sets.forEach(function(ts) {
-          $('<div class="ts-pick-item"></div>').text(ts.name).on('click', function() {
-            $('#material_type_advanced').val(ts.name);
-            updateMaterialTypeDisplay();
-            $list.hide();
-          }).appendTo($list);
-        });
-        $list.data('loaded', true);
-      })
-      .fail(function() { $list.html('<div class="p-2 text-danger" style="font-size:.85rem">Failed to load</div>'); });
+
+
+  // Delay section controls
+  (function() {
+    if ($('#delayToggle').is(':hidden')) return;
+    var delayDateMode = Cookies.get('delayDateMode') === 'true';
+    $('#delayModeSwitch').prop('checked', delayDateMode);
+
+    // Single source of truth: delay in seconds (null = not set)
+    var depDelaySec = null, arrDelaySec = null;
+
+    function fillActual(plannedDateId, plannedTimeId, actualDateId, actualTimeId, seconds) {
+      if (seconds === null) return;
+      var pd = document.getElementById(plannedDateId).value;
+      var pt = document.getElementById(plannedTimeId).value;
+      if (!pd || !pt) return;
+      var actual = new Date(new Date(pd + 'T' + pt).getTime() + seconds * 1000);
+      document.getElementById(actualDateId).value = actual.toTimezonedISOString().slice(0, 10);
+      document.getElementById(actualTimeId).value = actual.toTimeString().slice(0, 5);
+    }
+
+    function fillMinutes(minutesInputId, seconds) {
+      document.getElementById(minutesInputId).value = seconds !== null ? seconds / 60 : '';
+    }
+
+    function setDatetimeMode(on) {
+      if (on) {
+        $('#delayMinutesInputs').hide();
+        $('#depActualGroup, #arrActualGroup').show();
+        $('.delay-planned-suffix').show();
+        fillActual('newTripStartDate', 'newTripStartTime', 'depActualDate', 'depActualTime', depDelaySec);
+        fillActual('newTripEndDate', 'newTripEndTime', 'arrActualDate', 'arrActualTime', arrDelaySec);
+      } else {
+        $('#delayMinutesInputs').show();
+        $('#depActualGroup, #arrActualGroup').hide();
+        $('.delay-planned-suffix').hide();
+        fillMinutes('departureDelayMinutes', depDelaySec);
+        fillMinutes('arrivalDelayMinutes', arrDelaySec);
+      }
+    }
+
+    $('#delayToggle').on('change', function() {
+      if ($(this).is(':checked')) {
+        $('#delayModeSwitchWrapper').css('display', 'inline-flex');
+        setDatetimeMode($('#delayModeSwitch').is(':checked'));
+      } else {
+        $('#delayModeSwitchWrapper').hide();
+        $('#delayMinutesInputs').hide();
+        $('#depActualGroup, #arrActualGroup').hide();
+        $('.delay-planned-suffix').hide();
+      }
+    });
+
+    $('#delayModeSwitch').on('change', function() {
+      var dateMode = $(this).is(':checked');
+      Cookies.set('delayDateMode', dateMode, { expires: 365 });
+      if ($('#delayToggle').is(':checked')) setDatetimeMode(dateMode);
+    });
+
+    $('#departureDelayMinutes').on('input', function() {
+      var v = parseFloat(this.value);
+      depDelaySec = isNaN(v) ? null : v * 60;
+    });
+    $('#arrivalDelayMinutes').on('input', function() {
+      var v = parseFloat(this.value);
+      arrDelaySec = isNaN(v) ? null : v * 60;
+    });
+
+    function updateFromActual(plannedDateId, plannedTimeId, actualDateId, actualTimeId, minutesInputId, isArr) {
+      var pd = document.getElementById(plannedDateId).value;
+      var pt = document.getElementById(plannedTimeId).value;
+      var ad = document.getElementById(actualDateId).value;
+      var at = document.getElementById(actualTimeId).value;
+      var sec = (pd && pt && ad && at) ? (new Date(ad + 'T' + at) - new Date(pd + 'T' + pt)) / 1000 : null;
+      if (isArr) arrDelaySec = sec; else depDelaySec = sec;
+      document.getElementById(minutesInputId).value = sec !== null ? sec / 60 : '';
+    }
+
+    ['depActualDate', 'depActualTime', 'newTripStartDate', 'newTripStartTime'].forEach(function(id) {
+      document.getElementById(id).addEventListener('change', function() {
+        if ($('#depActualGroup').is(':visible'))
+          updateFromActual('newTripStartDate', 'newTripStartTime', 'depActualDate', 'depActualTime', 'departureDelayMinutes', false);
+      });
+    });
+    ['arrActualDate', 'arrActualTime', 'newTripEndDate', 'newTripEndTime'].forEach(function(id) {
+      document.getElementById(id).addEventListener('change', function() {
+        if ($('#arrActualGroup').is(':visible'))
+          updateFromActual('newTripEndDate', 'newTripEndTime', 'arrActualDate', 'arrActualTime', 'arrivalDelayMinutes', true);
+      });
+    });
+
+    $('form').on('submit', function() {
+      if (!$('#delayToggle').is(':checked'))
+        $('#departureDelayMinutes, #arrivalDelayMinutes').val('');
+    });
+
+    // Hide delays when precision is not precise dates
+    function updateDelayAvailability() {
+      var isPrecise = $('#radioPreciseDates').is(':checked');
+      $('#delayToggleWrapper').css('display', isPrecise ? 'inline-flex' : 'none');
+      if (!isPrecise && $('#delayToggle').is(':checked')) {
+        $('#delayToggle').prop('checked', false);
+        $('#delayModeSwitchWrapper').hide();
+        $('#delayMinutesInputs').hide();
+        $('#depActualGroup, #arrActualGroup').hide();
+        $('.delay-planned-suffix').hide();
+      }
+    }
+    updateDelayAvailability();
+    $('input[name="precision"]').on('change', updateDelayAvailability);
+  })();
+
+{% if vehicle_type == 'air' %}
+  // ---------- Air-specific behaviour ----------
+
+  // Airports don't support manual coordinate entry; hide those controls.
+  $('label[for="originManualToggle"], #originManualToggle, #originStationManual, ' +
+    '#destinationManualToggleLabel, #destinationManualToggle, #destinationStationManual').hide();
+
+  // Airport autocomplete (IATA + flag labels)
+  $(".stationSearch").autocomplete({
+    source: function (request, response) {
+      $.ajax({
+        url: "/api/airportAutocomplete/" + request.term,
+        dataType: "json",
+        success: function (data) {
+          var airportList = [];
+          data.forEach(function (item) {
+            var flag = getFlagEmoji(item.iso_country);
+            var label = `${flag} ${item.name} (${item.iata})`;
+            airportList.push({ "label": label, "value": label });
+            globalStationDict[label] = [[item.latitude, item.longitude], label];
+          });
+          response(airportList);
+        },
+      });
+    },
+  });
+
+  // Aircraft type autocomplete (from the airliner database)
+  let airlinersData = [];
+  $.ajax({
+    url: "/getAirliners",
+    type: "GET",
+    dataType: "json",
+    success: function (data) { airlinersData = data; },
+    error: function (xhr, status, error) { console.log("Error: " + error); }
+  });
+  $("#material_type").autocomplete({
+    source: function (request, response) {
+      const term = request.term.toLowerCase();
+      const filteredData = airlinersData.filter(item => {
+        const combinedString = `${item.iata} ${item.manufacturer} ${item.model}`.toLowerCase();
+        return combinedString.includes(term);
+      });
+      response($.map(filteredData, function (item) {
+        return {
+          label: `${item.iata} - ${item.manufacturer} ${item.model}`,
+          value: item.iata
+        };
+      }));
+    }
+  });
+
+  // Fill an airport input from an ICAO code (barcode / query-param import)
+  function fillFromBarcode(element, icao) {
+    return new Promise((resolve, reject) => {
+      $.ajax({
+        url: "/api/airportAutocomplete/" + icao,
+        dataType: "json",
+        success: function (data) {
+          const airport = data[0];
+          const flag = getFlagEmoji(airport.iso_country);
+          const label = `${flag} ${airport.name} (${airport.iata})`;
+          globalStationDict[label] = [[airport.latitude, airport.longitude], label];
+          element.val(label);
+          resolve(airport);
+        },
+        error: reject
+      });
+    });
   }
-  {% endif %}
+
+  // Prefill from query params (e.g. boarding pass import)
+  (function fillFormWithQueryParams() {
+    var qp = new URLSearchParams(window.location.search);
+    if ([...qp.keys()].length === 0) return;
+    if (qp.get('origin')) fillFromBarcode($('#originStation'), qp.get('origin'));
+    if (qp.get('destination')) fillFromBarcode($('#destinationStation'), qp.get('destination'));
+    if (qp.get('operator')) setOperatorValue(qp.get('operator'));
+    if (qp.get('flight_number')) $('#lineName').val(qp.get('flight_number'));
+    if (qp.get('start_datetime')) {
+      var startDateTime = qp.get('start_datetime').split('+')[0];
+      $('#newTripStartDate').val(startDateTime.split('T')[0]);
+      $('#newTripStartTime').val(startDateTime.split('T')[1]);
+    }
+    if (qp.get('end_datetime')) {
+      var endDateTime = qp.get('end_datetime').split('+')[0];
+      $('#newTripEndDate').val(endDateTime.split('T')[0]);
+      $('#newTripEndTime').val(endDateTime.split('T')[1]);
+    }
+    if (qp.get('seat_number')) $('#seat').val(qp.get('seat_number'));
+    if (qp.get('material')) $('#material_type').val(qp.get('material'));
+  })();
+
+  // ---------- FR24 import ----------
+  $("#fr24Date").val(getCurrentDate());
+
+  let allFlightLegs = [];
+
+  $("#fr24SubmitBtn").click(async function () {
+    const isReg = document.getElementById('fr24SearchToggle').checked;
+    const searchType = isReg ? 'reg' : 'flight';
+    const flightNumber = $("#fr24FlightNumber").val().trim();
+    const regNumber = $("#fr24RegNumber").val().trim();
+    const flightDate = $("#fr24Date").val();
+
+    if (searchType === 'flight' && (!flightNumber || !flightDate)) {
+      $("#fr24Error").text("Please enter both flight number and date.").removeClass("d-none");
+      return;
+    }
+    if (searchType === 'reg' && (!regNumber || !flightDate)) {
+      $("#fr24Error").text("Please enter both registration and date.").removeClass("d-none");
+      return;
+    }
+
+    $("#fr24Error").addClass("d-none");
+    updateProgressBar(10);
+
+    try {
+      const url = searchType === 'flight'
+        ? '{{url_for("flight_summary", username=username)}}'
+        : '{{url_for("flight_summary_reg", username=username)}}';
+
+      const query = searchType === 'flight'
+        ? { flight_number: flightNumber, date: flightDate }
+        : { registration: regNumber, date: flightDate };
+
+      const res = await $.get(url, query);
+
+      if (!res.data || res.data.length === 0) {
+        $("#fr24Error").text("No flight data found for this number and date.").removeClass("d-none");
+        updateProgressBar(0);
+        return;
+      }
+
+      allFlightLegs = res.data;
+
+      if (allFlightLegs.length === 1) {
+        await processFlightLeg(allFlightLegs[0]);
+      } else {
+        updateProgressBar(0);
+        showLegSelector(allFlightLegs);
+      }
+    } catch (err) {
+      console.error(err);
+      $("#fr24Error").text("Error fetching flight data.").removeClass("d-none");
+      updateProgressBar(0);
+    }
+  });
+
+  $('#fr24SearchToggle').on('change', function () {
+    const isReg = $(this).is(':checked');
+    if (isReg) {
+      $('#flightNumberGroup').addClass('d-none');
+      $('#regNumberGroup').removeClass('d-none');
+    } else {
+      $('#regNumberGroup').addClass('d-none');
+      $('#flightNumberGroup').removeClass('d-none');
+    }
+  });
+
+  async function showLegSelector(legs) {
+    const legsList = $("#legsList");
+    legsList.empty();
+
+    const processedLegs = [];
+
+    for (let index = 0; index < legs.length; index++) {
+      const leg = legs[index];
+
+      const originData = await $.ajax({ url: "/api/airportAutocomplete/" + leg.orig_icao, dataType: "json" });
+      const originAirport = originData[0];
+      const originFlag = getFlagEmoji(originAirport.iso_country);
+      const originLabel = `${originFlag} ${originAirport.name} (${originAirport.iata})`;
+
+      const destData = await $.ajax({ url: "/api/airportAutocomplete/" + leg.dest_icao, dataType: "json" });
+      const destAirport = destData[0];
+      const destFlag = getFlagEmoji(destAirport.iso_country);
+      const destLabel = `${destFlag} ${destAirport.name} (${destAirport.iata})`;
+
+      let departureLocalString = 'Unknown';
+      let departureLocal = null;
+      if (leg.datetime_takeoff_local) {
+        departureLocal = new Date(leg.datetime_takeoff_local);
+        departureLocalString = departureLocal.toLocaleString(undefined, {
+          year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      }
+
+      let arrivalLocalString = 'Unknown';
+      let arrivalLocal = null;
+      if (leg.datetime_landed_local) {
+        arrivalLocal = new Date(leg.datetime_landed_local);
+        arrivalLocalString = arrivalLocal.toLocaleString(undefined, {
+          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+      }
+
+      processedLegs.push({
+        index, leg, originAirport, destAirport, originLabel, destLabel,
+        departureLocal, arrivalLocal, departureLocalString, arrivalLocalString
+      });
+    }
+
+    const fr24Modal = bootstrap.Modal.getInstance(document.getElementById('fr24Modal'));
+    fr24Modal.hide();
+
+    const legSelectorModal = new bootstrap.Modal(document.getElementById('legSelectorModal'));
+    legSelectorModal.show();
+
+    processedLegs.forEach((processedLeg) => {
+      const { index, leg, departureLocalString, arrivalLocalString, originLabel, destLabel } = processedLeg;
+
+      const legItem = $(`
+        <a href="#" class="list-group-item list-group-item-action" data-leg-index="${index}">
+          <div class="d-flex w-100 justify-content-between">
+            <h6 class="mb-1">Leg ${index + 1}: ${originLabel} → ${destLabel}</h6>
+            <small class="text-muted">${leg.flight}</small>
+          </div>
+          <p class="mb-1">
+            <strong>Departure:</strong> ${departureLocalString}<br>
+            <strong>Arrival:</strong> ${arrivalLocalString}
+          </p>
+          <small class="text-muted">Aircraft: ${leg.type} (${leg.reg})</small>
+        </a>
+      `);
+
+      legItem.on('click', async function (e) {
+        e.preventDefault();
+        const selectedIndex = $(this).data('leg-index');
+        const legModal = bootstrap.Modal.getInstance(document.getElementById('legSelectorModal'));
+        legModal.hide();
+        await processFlightLegWithData(allFlightLegs[selectedIndex], processedLegs[selectedIndex]);
+      });
+
+      legsList.append(legItem);
+    });
+  }
+
+  async function processFlightLeg(flight) {
+    updateProgressBar(10);
+
+    let durationSeconds = null;
+    if (flight.datetime_takeoff && flight.datetime_landed) {
+      const takeoff = new Date(flight.datetime_takeoff);
+      const landed = new Date(flight.datetime_landed);
+      durationSeconds = Math.floor((landed - takeoff) / 1000);
+    }
+
+    window.FR24 = { "fr24_id": flight.fr24_id, "fr24_duration": durationSeconds };
+
+    updateProgressBar(25);
+
+    await fillFromBarcode($('#originStation'), flight.orig_icao);
+    await fillFromBarcode($('#destinationStation'), flight.dest_icao);
+
+    updateProgressBar(50);
+
+    $('#lineName').val(flight.flight);
+    $('#material_type').val(flight.type);
+    $('#reg').val(flight.reg);
+
+    // Resolve FR24's airline ICAO code to a readable operator name + logo
+    if (flight.operating_as) {
+      try {
+        const airlineRes = await $.get("/api/airlines", { icao: flight.operating_as });
+        if (airlineRes.length > 0) {
+          const airline = airlineRes[0];
+          setOperatorValue(airline.name);
+          if (airline.logo_url) {
+            $(".operatorLogo").attr("src", airline.logo_url);
+          }
+        } else {
+          setOperatorValue(flight.operating_as);
+        }
+      } catch {
+        setOperatorValue(flight.operating_as);
+      }
+    }
+
+    updateProgressBar(65);
+
+    if (flight.datetime_takeoff_local && flight.datetime_landed_local) {
+      const startLocal = new Date(flight.datetime_takeoff_local);
+      const endLocal = new Date(flight.datetime_landed_local);
+
+      $('#newTripStartDate').val(startLocal.toTimezonedISOString().split('T')[0]);
+      $('#newTripStartTime').val(startLocal.toTimeString().slice(0, 5));
+      $('#newTripEndDate').val(endLocal.toTimezonedISOString().split('T')[0]);
+      $('#newTripEndTime').val(endLocal.toTimeString().slice(0, 5));
+      $('#radioPreciseDates').prop('checked', true);
+    }
+
+    updateProgressBar(100);
+    setTimeout(() => {
+      const modal = bootstrap.Modal.getInstance(document.getElementById('fr24Modal'));
+      if (modal) modal.hide();
+      updateProgressBar(0);
+    }, 400);
+  }
+
+  async function processFlightLegWithData(flight, processedData) {
+    updateProgressBar(10);
+
+    let durationSeconds = null;
+    if (flight.datetime_takeoff && flight.datetime_landed) {
+      const takeoff = new Date(flight.datetime_takeoff);
+      const landed = new Date(flight.datetime_landed);
+      durationSeconds = Math.floor((landed - takeoff) / 1000);
+    }
+
+    window.FR24 = { "fr24_id": flight.fr24_id, "fr24_duration": durationSeconds };
+
+    updateProgressBar(25);
+
+    const originFlag = getFlagEmoji(processedData.originAirport.iso_country);
+    const originLabel = `${originFlag} ${processedData.originAirport.name} (${processedData.originAirport.iata})`;
+    globalStationDict[originLabel] = [[processedData.originAirport.latitude, processedData.originAirport.longitude], originLabel];
+    $('#originStation').val(originLabel);
+
+    const destFlag = getFlagEmoji(processedData.destAirport.iso_country);
+    const destLabel = `${destFlag} ${processedData.destAirport.name} (${processedData.destAirport.iata})`;
+    globalStationDict[destLabel] = [[processedData.destAirport.latitude, processedData.destAirport.longitude], destLabel];
+    $('#destinationStation').val(destLabel);
+
+    updateProgressBar(50);
+
+    $('#lineName').val(flight.flight);
+    $('#material_type').val(flight.type);
+    $('#reg').val(flight.reg);
+
+    // Resolve FR24's airline ICAO code to a readable operator name + logo
+    if (flight.operating_as) {
+      try {
+        const airlineRes = await $.get("/api/airlines", { icao: flight.operating_as });
+        if (airlineRes.length > 0) {
+          const airline = airlineRes[0];
+          setOperatorValue(airline.name);
+          if (airline.logo_url) {
+            $(".operatorLogo").attr("src", airline.logo_url);
+          }
+        } else {
+          setOperatorValue(flight.operating_as);
+        }
+      } catch {
+        setOperatorValue(flight.operating_as);
+      }
+    }
+
+    updateProgressBar(65);
+
+    if (processedData.departureLocal && processedData.arrivalLocal) {
+      $('#newTripStartDate').val(processedData.departureLocal.toTimezonedISOString().split('T')[0]);
+      $('#newTripStartTime').val(processedData.departureLocal.toTimeString().slice(0, 5));
+      $('#newTripEndDate').val(processedData.arrivalLocal.toTimezonedISOString().split('T')[0]);
+      $('#newTripEndTime').val(processedData.arrivalLocal.toTimeString().slice(0, 5));
+      $('#radioPreciseDates').prop('checked', true);
+    }
+
+    updateProgressBar(100);
+    setTimeout(() => { updateProgressBar(0); }, 400);
+  }
+
+  function updateProgressBar(percent) {
+    const bar = $('#fr24ProgressBar');
+    bar.parent().removeClass('d-none');
+    bar.css('width', `${percent}%`);
+    bar.attr('aria-valuenow', percent);
+    bar.text(`${percent}%`);
+  }
+{% endif %}
 </script>
 
-{% if vehicle_type in ('train', 'metro', 'tram') and is_alpha %}
+{% if vehicle_type in ('train', 'metro', 'tram') %}
 {% include "includes/trainset_builder_modal.html" %}
 {% endif %}
 

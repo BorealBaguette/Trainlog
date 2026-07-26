@@ -1,1 +1,1 @@
-UPDATE trips SET ticket_id = :ticket_id WHERE trip_id = :trip_id;
+UPDATE trips SET ticket_id = :ticket_id, last_modified = :last_modified WHERE trip_id = :trip_id;

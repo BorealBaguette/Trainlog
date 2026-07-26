@@ -10,6 +10,14 @@
 <div id="form" class="aboutForm">
     <h2 class="header">{{ translations['travel_bounds_header'] or 'Travel Boundaries' }}</h2>
     <div>
+        <div class="d-flex flex-wrap mb-3 justify-content-center">
+            <select id="boundsSelectYear" class="form-select statsSelect mr-2" style="max-width: 200px;">
+                <option value="all" {% if not boundsYear %}selected{% endif %}>{{ translations['all'] or 'All' }}</option>
+                {% for year in distinctStatYears %}
+                    <option value="{{ year }}" {% if year == boundsYear %}selected{% endif %}>{{ year }}</option>
+                {% endfor %}
+            </select>
+        </div>
         <p>{{ translations['travel_bounds_text'] or 'Here are the northernmost, southernmost, westernmost, and easternmost points from your trips.' }}</p>
         <div id="bounds-loading" class="loading my-3 text-center">
             <span class="spinner-border spinner-border-sm"></span>
@@ -164,8 +172,24 @@ function displayBoundsOnMap(data) {
 
 document.addEventListener("DOMContentLoaded", function() {
     const username = "{{ username }}";
+    const boundsYear = "{{ boundsYear or '' }}";
+    const boundsUrl = boundsYear
+        ? `/u/${username}/getBounds/${boundsYear}`
+        : `/u/${username}/getBounds`;
     
-    fetch(`/u/${username}/getBounds`)
+    const yearSelect = document.getElementById('boundsSelectYear');
+    if (yearSelect) {
+        yearSelect.addEventListener('change', function() {
+            const selectedYear = this.value;
+            if (selectedYear === "all") {
+                window.location.href = `/u/${username}/bounds`;
+            } else {
+                window.location.href = `/u/${username}/bounds/${selectedYear}`;
+            }
+        });
+    }
+
+    fetch(boundsUrl)
         .then(r => r.json())
         .then(data => {
             document.getElementById("bounds-loading").style.display = "none";

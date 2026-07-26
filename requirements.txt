@@ -12,7 +12,6 @@ SQLAlchemy==1.4.54
 SQLAlchemy-Utils==0.41.2
 Werkzeug==2.3.8
 geopip==2.1.0
-flask_monitoringdashboard==3.3.2
 gitpython==3.1.45
 flask_compress==1.18
 emoji-country-flag == 1.3.2
@@ -34,7 +33,7 @@ distinctipy==1.3.4
 Flask-Caching==2.3.1
 httpx==0.28.1
 scgraph==2.10.0
-pillow==12.1.1
+pillow==12.3.0
 CairoSVG==2.8.2
 pycountry==24.6.1
 geojson==3.2.0
@@ -51,3 +50,7 @@ IMAPClient==3.0.1
 pypdf==6.6.0
 icalendar==6.3.2
 cryptography==45.0.7
+Markdown==3.10.2
+pytz==2025.2
+python-dateutil==2.9.0.post0
+pandas==2.3.3

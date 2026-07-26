@@ -7,19 +7,6 @@
     height: 38px; max-width: 90px; object-fit: contain;
     cursor: zoom-in;
   }
-  .itype-select {
-    border: none; background: transparent; appearance: none;
-    -webkit-appearance: none; padding: 0;
-    font-size: inherit; font-family: inherit; color: inherit; cursor: pointer;
-  }
-  .itype-select:hover { text-decoration: underline; }
-  .editable {
-    display: inline-block;
-    min-width: 60px; min-height: 1.3em;
-    padding: 1px 3px; border-radius: 2px; cursor: text;
-  }
-  .editable:empty::before { content: '—'; color: #adb5bd; pointer-events: none; }
-  .editable:focus { outline: 1px dashed #0d6efd; background: #f0f6ff; }
 </style>
 
 <div class="container-fluid px-4">
@@ -28,19 +15,16 @@
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
       <i class="fas fa-plus me-1"></i>Add Wagon
     </button>
-    <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#vwModal">
-      <i class="fas fa-train me-1"></i>Import from VagonWeb
-    </button>
     <a class="btn btn-outline-secondary"  href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i> {{tsBuilderTitle}}</a>
   </div>
   <table id="wagonsTable" class="table table-striped table-bordered" style="width:100%">
     <thead>
       <tr>
         <th data-priority="3">Name (key)</th>
-        <th data-priority="1">Nom</th>
-        <th data-priority="4">Titre 1</th>
-        <th data-priority="5">Titre 2</th>
-        <th data-priority="6">Épo</th>
+        <th data-priority="1">Label</th>
+        <th data-priority="4">Category</th>
+        <th data-priority="5">Subcategory</th>
+        <th data-priority="6">Era</th>
         <th data-priority="2">Type</th>
         <th data-priority="2" data-orderable="false">Image</th>
         <th data-priority="1" data-orderable="false">Actions</th>
@@ -49,28 +33,6 @@
   </table>
 </div>
 
-
-<!-- ══════════════════════════════════ VagonWeb Import Modal -->
-<div class="modal fade" id="vwModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-train me-2"></i>Import from VagonWeb</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <label class="form-label">VagonWeb composition URL</label>
-        <input type="url" id="vwUrl" class="form-control"
-               placeholder="https://www.vagonweb.cz/razeni/vlak.php?zeme=ZSSK&amp;cislo=186&amp;rok=2026">
-        <div id="vwResult" class="small mt-2"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" id="vwImport">Import</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- ══════════════════════════════════ Add Modal -->
 <div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true">
@@ -83,23 +45,33 @@
       <div class="modal-body">
         <form id="addForm" enctype="multipart/form-data">
           <div class="row g-2 mb-2">
-            <div class="col-md-4">
-              <label class="form-label fw-semibold">Nom <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" name="nom" required>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Label <span class="text-danger">*</span></label>
+              <input type="text" class="form-control" name="label" id="addLabel" required
+                     placeholder="e.g. Sr3 Vectron">
+              <div class="form-text">Shown to users. Free text.</div>
             </div>
-            <div class="col-md-4">
-              <label class="form-label fw-semibold">Titre 1</label>
-              <input type="text" class="form-control" name="titre1">
-            </div>
-            <div class="col-md-4">
-              <label class="form-label fw-semibold">Titre 2</label>
-              <input type="text" class="form-control" name="titre2">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Name (key)</label>
+              <input type="text" class="form-control font-monospace" name="name" id="addName"
+                     placeholder="e.g. VR_Sr3_Vectron">
+              <div class="form-text">Internal ID and image filename, auto-filled from the label. Cannot be changed later.</div>
             </div>
           </div>
-          <div class="row g-2 mb-3">
+          <div class="row g-2 mb-2">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Category</label>
+              <input type="text" class="form-control" name="category" placeholder="e.g. Electric locomotives">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Subcategory</label>
+              <input type="text" class="form-control" name="subcategory" placeholder="e.g. Sr3">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
             <div class="col-md-2">
-              <label class="form-label fw-semibold">Époque</label>
-              <input type="text" class="form-control" name="epo" placeholder="e.g. 5,6">
+              <label class="form-label fw-semibold">Era</label>
+              <input type="text" class="form-control" name="era" placeholder="e.g. 5b,6">
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Image type</label>
@@ -109,6 +81,26 @@
                 <option value="sides_L">Sides L only</option>
                 <option value="sides_R">Sides R only</option>
               </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Gauge (mm)</label>
+              <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Scale (px/m)</label>
+              <input type="number" step="any" min="0" class="form-control" name="px_per_meter"
+                     placeholder="auto" title="Pixels per real metre. Blank = auto-scale by strip median.">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Author</label>
+              <input type="text" class="form-control" name="author" placeholder="e.g. https://trainlog.me/public/username">
+              <div class="form-text">A Trainlog or wiki user page URL is rendered as a link named after the user. Any other URL or name is shown as-is.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">License</label>
+              <input type="text" class="form-control" name="license" placeholder="e.g. CC BY-NC-SA 3.0">
             </div>
           </div>
 
@@ -120,13 +112,97 @@
 
           <div>
             <label class="form-label fw-semibold">Notes</label>
-            <textarea class="form-control" name="notes" rows="2"></textarea>
+            <textarea class="form-control" name="notes" rows="2" placeholder="e.g. Birthday livery"></textarea>
           </div>
         </form>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
         <button class="btn btn-primary" onclick="submitAdd()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ══════════════════════════════════ Edit Modal -->
+<div class="modal fade" id="editModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-pencil me-2"></i>Edit — <span id="editModalTitle"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <form id="editForm">
+          <div class="row g-2 mb-2">
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Label</label>
+              <input type="text" class="form-control" name="label" placeholder="e.g. Sr3 Vectron">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Category</label>
+              <input type="text" class="form-control" name="category" placeholder="e.g. Electric locomotives">
+            </div>
+            <div class="col-md-4">
+              <label class="form-label fw-semibold">Subcategory</label>
+              <input type="text" class="form-control" name="subcategory" placeholder="e.g. Sr3">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Era</label>
+              <input type="text" class="form-control" name="era" placeholder="e.g. 5b,6">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Image type</label>
+              <select class="form-select" name="image_type">
+                <option value="plain">Plain</option>
+                <option value="sides">Sides (L+R)</option>
+                <option value="sides_L">Sides L only</option>
+                <option value="sides_R">Sides R only</option>
+              </select>
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Line type</label>
+              <input type="text" class="form-control" name="line_type" placeholder="e.g. 2">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Gauge (mm)</label>
+              <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Scale (px/m)</label>
+              <input type="number" step="any" min="0" class="form-control" name="px_per_meter"
+                     placeholder="auto" title="Pixels per real metre. Blank = auto-scale by strip median.">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Author</label>
+              <input type="text" class="form-control" name="author" placeholder="e.g. https://trainlog.me/public/username">
+              <div class="form-text">A Trainlog or wiki user page URL is rendered as a link named after the user. Any other URL or name is shown as-is.</div>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">License</label>
+              <input type="text" class="form-control" name="license" placeholder="e.g. CC BY-NC-SA 3.0">
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Source</label>
+              <input type="text" class="form-control" name="source" placeholder="e.g. MLG Traffic">
+            </div>
+          </div>
+          <div>
+            <label class="form-label fw-semibold">Notes</label>
+            <textarea class="form-control" name="notes" rows="3" placeholder="e.g. Birthday livery"></textarea>
+          </div>
+        </form>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" onclick="submitEdit()">Save</button>
       </div>
     </div>
   </div>
@@ -155,41 +231,13 @@
 </div>
 
 
-<!-- ══════════════════════════════════ Detail Modal -->
-<div class="modal fade" id="detailModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header py-2">
-        <h6 class="modal-title mb-0" id="detailTitle">Wagon details</h6>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <div class="mb-2">
-          <span class="fw-semibold small">Source: </span>
-          <span id="detailSource" class="font-monospace small text-break"></span>
-        </div>
-        <div class="mb-2">
-          <span class="fw-semibold small">Typeligne: </span>
-          <span id="detailTypeligne" class="small"></span>
-        </div>
-        <div>
-          <span class="fw-semibold small">Notes: </span>
-          <div id="detailNotes" class="small mt-1" style="white-space:pre-wrap"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-</div>
-
-
+<script defer src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 <script defer>
 const WAGONS_URL = '{{ url_for("static", filename="images/wagons") }}';
 const API        = '/api/admin/wagons';
 
-function imgSrc(image, itype) {
-  if (!image) return '';
-  if (itype === 'sides') return `${WAGONS_URL}/${image}_L.gif`;
-  return `${WAGONS_URL}/${image}.gif`;
+function imgSrc(image, itype, ext) {
+  return wagonImgSrc(WAGONS_URL, { image: image, image_type: itype, image_ext: ext }, 'L');
 }
 function esc(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -208,25 +256,17 @@ const table = $('#wagonsTable').DataTable({
     })
   },
   columns: [
-    { data: 'name',  orderable: true,  render: (d, t) => t === 'display' ? `<span class="font-monospace small">${esc(d)}</span>` : (d||'') },
-    { data: 'nom',   orderable: true,  render: (d, t, row) => t === 'display' ? editable(row.name, 'nom',    d) : (d||'') },
-    { data: 'titre1',orderable: true,  render: (d, t, row) => t === 'display' ? editable(row.name, 'titre1', d) : (d||'') },
-    { data: 'titre2',orderable: true,  render: (d, t, row) => t === 'display' ? editable(row.name, 'titre2', d) : (d||'') },
-    { data: 'epo',   orderable: true,  render: (d, t, row) => t === 'display' ? editable(row.name, 'epo',    d) : (d||'') },
-    {
-      data: 'image_type', orderable: false,
-      render(d, t, row) {
-        if (t !== 'display') return d||'';
-        const opts = ['plain','sides','sides_L','sides_R']
-          .map(v => `<option value="${v}"${v===d?' selected':''}>${v}</option>`).join('');
-        return `<select class="itype-select" data-name="${esc(row.name)}">${opts}</select>`;
-      }
-    },
+    { data: 'name',        orderable: true,  render: (d, t) => t === 'display' ? `<span class="font-monospace small">${esc(d)}</span>` : (d||'') },
+    { data: 'label',       orderable: true,  render: (d) => esc(d) },
+    { data: 'category',    orderable: true,  render: (d) => esc(d) },
+    { data: 'subcategory', orderable: true,  render: (d) => esc(d) },
+    { data: 'era',         orderable: true,  render: (d) => esc(d) },
+    { data: 'image_type',  orderable: false, render: (d) => `<span class="badge bg-secondary text-white">${esc(d)}</span>` },
     {
       data: 'image', orderable: false,
       render(d, t, row) {
         if (t !== 'display') return d||'';
-        const src = imgSrc(d, row.image_type);
+        const src = imgSrc(d, row.image_type, row.image_ext);
         const inner = src
           ? `<img src="${src}" class="wagon-img" onerror="this.style.opacity='.2'" title="${esc(d)}">`
           : `<span class="text-muted small fst-italic">no image</span>`;
@@ -237,18 +277,14 @@ const table = $('#wagonsTable').DataTable({
       data: null, orderable: false,
       render(d, t, row) {
         if (t !== 'display') return '';
-        return `<button class="btn btn-outline-secondary btn-sm me-1 detail-btn" data-name="${esc(row.name)}" title="Details"><i class="fas fa-info-circle"></i></button>
-                <button class="btn btn-danger btn-sm delete-btn" data-name="${esc(row.name)}" data-nom="${esc(row.nom)}" title="Delete"><i class="fa-regular fa-trash-can"></i></button>`;
+        return `<button class="btn btn-outline-primary btn-sm me-1 edit-btn" data-name="${esc(row.name)}" title="Edit"><i class="fas fa-pencil"></i></button>
+                <button class="btn btn-danger btn-sm delete-btn" data-name="${esc(row.name)}" data-label="${esc(row.label)}" title="Delete"><i class="fa-regular fa-trash-can"></i></button>`;
       }
     }
   ],
   order: [[1, 'asc']], pageLength: 25, lengthMenu: [[25,50,100],[25,50,100]],
   language: { processing: '<i class="fas fa-spinner fa-spin"></i> Loading…' },
 });
-
-function editable(name, field, d) {
-  return `<span contenteditable="true" class="editable" data-name="${esc(name)}" data-field="${field}">${esc(d)}</span>`;
-}
 
 /* ── row cache ──────────────────────────────────────────────────── */
 const _cache = {};
@@ -259,30 +295,9 @@ table.on('xhr', () => {
 
 /* ── event delegation ───────────────────────────────────────────── */
 $('#wagonsTable')
-  .on('blur', '.editable', function () {
-    const val = this.textContent.replace(/\s+/g, ' ').trim();
-    this.textContent = val;
-    updateFieldVal(this.dataset.name, this.dataset.field, val);
-  })
-  .on('keydown', '.editable', function (e) {
-    if (e.key === 'Enter') { e.preventDefault(); this.blur(); }
-  })
-  .on('change', '.itype-select', function () {
-    updateFieldVal(this.dataset.name, 'image_type', this.value);
-  })
-  .on('click', '.img-cell',    function () { openImgModal(this.dataset.name); })
-  .on('click', '.detail-btn',  function () { showDetail(this.dataset.name); })
-  .on('click', '.delete-btn',  function () { deleteWagon(this.dataset.name, this.dataset.nom); });
-
-/* ── field update ───────────────────────────────────────────────── */
-function updateFieldVal(wname, field, val) {
-  fetch(`${API}/${encodeURIComponent(wname)}/${field}`, {
-    method: 'PUT', headers: { 'Content-Type': 'text/plain' }, body: val
-  }).then(res => {
-    if (!res.ok) res.text().then(t => toast(`Error: ${t}`, 'danger'));
-    else toast(`${field} updated`);
-  }).catch(err => toast(`Error: ${err}`, 'danger'));
-}
+  .on('click', '.img-cell',   function () { openImgModal(this.dataset.name); })
+  .on('click', '.edit-btn',   function () { openEditModal(this.dataset.name); })
+  .on('click', '.delete-btn', function () { deleteWagon(this.dataset.name, this.dataset.label); });
 
 /* ── add modal ──────────────────────────────────────────────────── */
 function renderAddUpload(itype) {
@@ -292,30 +307,45 @@ function renderAddUpload(itype) {
       <div class="row g-2">
         <div class="col-md-6">
           <label class="form-label small">L view <span class="text-muted">(optional)</span></label>
-          <input type="file" name="file_l" class="form-control form-control-sm" accept=".gif,image/gif">
+          <input type="file" name="file_l" class="form-control form-control-sm" accept=".gif,.png,image/gif,image/png">
         </div>
         <div class="col-md-6">
           <label class="form-label small">R view <span class="text-muted">(optional)</span></label>
-          <input type="file" name="file_r" class="form-control form-control-sm" accept=".gif,image/gif">
+          <input type="file" name="file_r" class="form-control form-control-sm" accept=".gif,.png,image/gif,image/png">
         </div>
       </div>`;
   } else {
     const label = itype === 'sides_L' ? 'L view' : itype === 'sides_R' ? 'R view' : 'Image';
     sec.innerHTML = `
       <label class="form-label small">${label} <span class="text-muted">(optional)</span></label>
-      <input type="file" name="file" class="form-control form-control-sm" accept=".gif,image/gif">`;
+      <input type="file" name="file" class="form-control form-control-sm" accept=".gif,.png,image/gif,image/png">`;
   }
 }
 
 document.getElementById('addImageType').addEventListener('change', function () {
   renderAddUpload(this.value);
 });
-// initialise on page load
 renderAddUpload('sides');
 
-// reset upload section when modal is opened
+/* Name (key) mirrors the label — sanitised like _sanitize_name() server-side —
+   until the admin types their own, after which it is left alone. */
+let _nameTouched = false;
+const _addLabel = document.getElementById('addLabel');
+const _addName  = document.getElementById('addName');
+
+function slugify(s) {
+  return s.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+_addLabel.addEventListener('input', () => {
+  if (!_nameTouched) _addName.value = slugify(_addLabel.value);
+});
+_addName.addEventListener('input', () => { _nameTouched = _addName.value !== ''; });
+_addName.addEventListener('blur', () => { _addName.value = slugify(_addName.value); });
+
 document.getElementById('addModal').addEventListener('show.bs.modal', function () {
   document.getElementById('addForm').reset();
+  _nameTouched = false;
   renderAddUpload('sides');
 });
 
@@ -330,13 +360,56 @@ function submitAdd() {
     .then(j => {
       $('#addModal').modal('hide');
       table.ajax.reload();
-      toast(`Wagon "${j.nom}" added`);
+      toast(`Wagon "${j.label}" added (${j.name})`);
     })
     .catch(err => toast(`Error: ${err}`, 'danger'));
 }
 
 document.getElementById('addForm').addEventListener('keydown', e => {
   if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submitAdd(); }
+});
+
+/* ── edit modal ─────────────────────────────────────────────────── */
+let _editWagon = null;
+const _editFields = ['label','category','subcategory','era','image_type','line_type',
+                     'gauge','px_per_meter','author','license','source','notes'];
+
+function openEditModal(wname) {
+  const r = _cache[wname];
+  if (!r) return;
+  _editWagon = r;
+  document.getElementById('editModalTitle').textContent = r.label || wname;
+  const f = document.getElementById('editForm');
+  _editFields.forEach(field => {
+    const el = f.elements[field];
+    if (!el) return;
+    el.value = r[field] != null ? r[field] : '';
+  });
+  $('#editModal').modal('show');
+}
+
+function submitEdit() {
+  if (!_editWagon) return;
+  const f = document.getElementById('editForm');
+  const data = {};
+  _editFields.forEach(field => {
+    const el = f.elements[field];
+    if (el) data[field] = el.value;
+  });
+  fetch(`${API}/${encodeURIComponent(_editWagon.name)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  }).then(res => {
+    if (!res.ok) return res.json().then(j => { throw new Error(j.error || res.status); });
+    $('#editModal').modal('hide');
+    table.ajax.reload(null, false);
+    toast('Wagon updated');
+  }).catch(err => toast(`Error: ${err}`, 'danger'));
+}
+
+document.getElementById('editForm').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.tagName !== 'TEXTAREA') { e.preventDefault(); submitEdit(); }
 });
 
 /* ── image modal ────────────────────────────────────────────────── */
@@ -347,27 +420,25 @@ function openImgModal(wname) {
   if (!r) return;
   _imgWagon = r;
 
-  document.getElementById('imgModalTitle').textContent = `Image — ${r.nom || wname}`;
+  document.getElementById('imgModalTitle').textContent = `Image — ${r.label || wname}`;
 
-  // Full-size preview
   const preview = document.getElementById('imgPreview');
   const onErr   = `this.replaceWith(Object.assign(document.createElement('span'),{className:'text-muted small fst-italic',textContent:'(not found on disk)'}))`;
   if (r.image_type === 'sides' && r.image) {
     preview.innerHTML = `
       <div class="d-flex justify-content-center gap-4 flex-wrap">
         <div><div class="small text-muted mb-1">L view</div>
-          <img src="${WAGONS_URL}/${r.image}_L.gif" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
+          <img src="${WAGONS_URL}/${r.image}_L.${r.image_ext || 'gif'}" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
         <div><div class="small text-muted mb-1">R view</div>
-          <img src="${WAGONS_URL}/${r.image}_R.gif" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
+          <img src="${WAGONS_URL}/${r.image}_R.${r.image_ext || 'gif'}" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
       </div>`;
   } else {
-    const src = imgSrc(r.image, r.image_type);
+    const src = imgSrc(r.image, r.image_type, r.image_ext);
     preview.innerHTML = src
       ? `<img src="${src}" style="max-height:280px;max-width:80vw" onerror="${onErr}">`
       : `<span class="text-muted fst-italic">No image set</span>`;
   }
 
-  // Replace section
   const section = document.getElementById('imgUploadSection');
   if (r.image_type === 'sides') {
     section.innerHTML = `
@@ -376,25 +447,25 @@ function openImgModal(wname) {
         <div class="col-md-6">
           <label class="form-label small">L view</label>
           <div class="input-group input-group-sm">
-            <input type="file" id="fileL" class="form-control" accept=".gif,image/gif">
+            <input type="file" id="fileL" class="form-control" accept=".gif,.png,image/gif,image/png">
             <button class="btn btn-outline-secondary" onclick="uploadFile('L')">Upload</button>
           </div>
         </div>
         <div class="col-md-6">
           <label class="form-label small">R view</label>
           <div class="input-group input-group-sm">
-            <input type="file" id="fileR" class="form-control" accept=".gif,image/gif">
+            <input type="file" id="fileR" class="form-control" accept=".gif,.png,image/gif,image/png">
             <button class="btn btn-outline-secondary" onclick="uploadFile('R')">Upload</button>
           </div>
         </div>
       </div>`;
   } else {
-    const label = r.image_type === 'sides_L' ? 'L view' : r.image_type === 'sides_R' ? 'R view' : 'Image';
+    const lbl = r.image_type === 'sides_L' ? 'L view' : r.image_type === 'sides_R' ? 'R view' : 'Image';
     section.innerHTML = `
       <p class="small fw-semibold mb-2">Replace image file</p>
       <div class="input-group input-group-sm">
-        <label class="input-group-text">${label}</label>
-        <input type="file" id="filePlain" class="form-control" accept=".gif,image/gif">
+        <label class="input-group-text">${lbl}</label>
+        <input type="file" id="filePlain" class="form-control" accept=".gif,.png,image/gif,image/png">
         <button class="btn btn-outline-secondary" onclick="uploadFile('')">Upload</button>
       </div>`;
   }
@@ -420,7 +491,6 @@ function uploadFile(side) {
     .then(j => {
       toast(`Saved: ${j.saved}`);
       document.getElementById(inputId).value = '';
-      // Cache-bust and reload preview images
       document.getElementById('imgPreview').querySelectorAll('img').forEach(img => {
         img.src = img.src.split('?')[0] + '?t=' + Date.now();
       });
@@ -430,26 +500,15 @@ function uploadFile(side) {
 }
 
 /* ── delete ─────────────────────────────────────────────────────── */
-function deleteWagon(wname, nom) {
-  if (!confirm(`Delete wagon "${nom}" (${wname})?`)) return;
+function deleteWagon(wname, label) {
+  if (!confirm(`Delete wagon "${label}" (${wname})?`)) return;
   fetch(`${API}/${encodeURIComponent(wname)}`, { method: 'DELETE' })
     .then(res => {
       if (!res.ok) return res.text().then(t => { throw new Error(t); });
       table.ajax.reload();
-      toast(`Wagon "${nom}" deleted`);
+      toast(`Wagon "${label}" deleted`);
     })
     .catch(err => toast(`Error: ${err}`, 'danger'));
-}
-
-/* ── detail modal ───────────────────────────────────────────────── */
-function showDetail(wname) {
-  const r = _cache[wname];
-  if (!r) return;
-  document.getElementById('detailTitle').textContent     = r.nom || wname;
-  document.getElementById('detailSource').textContent    = r.source    || '—';
-  document.getElementById('detailTypeligne').textContent = r.typeligne || '—';
-  document.getElementById('detailNotes').textContent     = r.notes     || '—';
-  $('#detailModal').modal('show');
 }
 
 /* ── toast ──────────────────────────────────────────────────────── */
@@ -464,42 +523,6 @@ function toast(msg, type = 'success') {
   t.show();
   el.addEventListener('hidden.bs.toast', () => el.remove());
 }
-
-// ── VagonWeb import ────────────────────────────────────────────────────────
-document.getElementById('vwImport').addEventListener('click', async () => {
-  const url = document.getElementById('vwUrl').value.trim();
-  if (!url) return;
-  const btn = document.getElementById('vwImport');
-  const out = document.getElementById('vwResult');
-  btn.disabled = true;
-  btn.textContent = 'Importing…';
-  out.innerHTML = '';
-  try {
-    const resp = await fetch('/api/admin/vagonweb/import', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({url}),
-    });
-    const data = await resp.json();
-    if (resp.ok) {
-      const warn = data.errors && data.errors.length
-        ? ` — ${data.errors.length} warning(s): ${data.errors.slice(0, 3).join('; ')}`
-        : '';
-      out.innerHTML = `<span class="text-success">`
-        + `&#10003; ${data.wagons_imported} wagons imported, `
-        + `${data.wagons_skipped} already existed, `
-        + `${data.trainsets_created} compositions created${warn}</span>`;
-      table.ajax.reload();
-    } else {
-      out.innerHTML = `<span class="text-danger">Error: ${data.error}</span>`;
-    }
-  } catch (e) {
-    out.textContent = 'Network error';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Import';
-  }
-});
 </script>
 
 {% endblock %}

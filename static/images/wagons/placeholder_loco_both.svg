@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 44" width="560" role="img" aria-label="Generic both-unit train placeholder">
+
+  <!-- body -->
+  <path fill="#8b9298" d="
+    M34 8
+    L286 8
+    C296 8 304 12 310 18
+    C314 22 314 26 310 30
+    C304 36 296 38 286 38
+    L34 38
+    C24 38 16 36 10 30
+    C6 26 6 22 10 18
+    C16 12 24 8 34 8
+    Z"></path>
+
+  <!-- window band -->
+  <rect x="44" y="13" width="232" height="5" rx="1.5" fill="#6f7c88"></rect>
+
+</svg>

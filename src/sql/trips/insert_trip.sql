@@ -1,5 +1,4 @@
 INSERT INTO trips (
-    trip_id,
     user_id,
     origin_station,
     destination_station,
@@ -30,10 +29,12 @@ INSERT INTO trips (
     carbon,
     visibility,
     departure_delay,
-    arrival_delay
+    arrival_delay,
+    power_type,
+    co2_override,
+    route_source
 )
 VALUES (
-    :trip_id,
     :user_id,
     :origin_station,
     :destination_station,
@@ -64,6 +65,9 @@ VALUES (
     :carbon,
     :visibility,
     :departure_delay,
-    :arrival_delay
+    :arrival_delay,
+    :power_type,
+    :co2_override,
+    :route_source
 )
 RETURNING trip_id

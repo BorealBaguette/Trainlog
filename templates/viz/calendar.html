@@ -1,0 +1,379 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<style>
+  body { background: #0d1b2a; }
+  #page {
+    min-height: 100vh;
+    padding: 80px 32px 40px;
+    font-family: "Century Gothic", sans-serif;
+    color: #e8edf3;
+  }
+
+  /* Header row: toggles + stat chips all on one line */
+  #header-row {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    align-items: center; justify-content: center;
+    margin-bottom: 36px;
+  }
+
+  /* Pill toggles (segmented control style) */
+  .toggle-group {
+    display: inline-flex;
+    background: rgba(10,18,28,0.8);
+    border: 1px solid #1e3248;
+    border-radius: 20px;
+    padding: 3px;
+    gap: 2px;
+  }
+  .toggle-btn {
+    padding: 5px 13px; border-radius: 16px; border: none;
+    background: transparent; color: #8fa6bd;
+    cursor: pointer; font-family: inherit; font-size: 0.8em; white-space: nowrap;
+    transition: background 0.15s, color 0.15s;
+  }
+  .toggle-btn.active { background: #1a3a5c; color: #e8edf3; }
+
+  /* Stat chips — compact, sit inline with toggles */
+  #summary { display: contents; }
+  .stat {
+    background: rgba(20,28,40,0.92); border-radius: 10px; padding: 6px 14px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .stat .val { font-size: 1.2em; font-weight: bold; color: #52b0fe; line-height: 1.2; }
+  .stat .lbl { font-size: 0.68em; color: #8fa6bd; text-transform: uppercase; letter-spacing: 0.05em; margin-top: 1px; }
+
+  /* Calendar grid */
+  .year-block { margin-bottom: 32px; width: fit-content; margin-left: auto; margin-right: auto; }
+  .year-label { font-size: 0.85em; color: #8fa6bd; font-weight: bold; margin-bottom: 6px; letter-spacing: 0.04em; }
+
+  .cal-wrap { display: flex; gap: 6px; }
+  .dow-labels {
+    display: grid; gap: 2px;
+    font-size: 0.7em; color: #4a6278; width: 24px;
+    align-items: center; flex-shrink: 0;
+  }
+
+  .cal-grid-wrap { overflow-x: auto; }
+  .month-labels {
+    display: flex; font-size: 0.72em; color: #4a6278;
+    margin-bottom: 3px;
+  }
+  .month-labels span { display: inline-block; flex-shrink: 0; }
+
+  .cal-grid {
+    display: grid;
+    grid-auto-flow: column;
+    gap: 2px;
+  }
+  .cell {
+    border-radius: 2px;
+    cursor: default; transition: opacity 0.1s;
+  }
+
+  @media (max-width: 640px) {
+    #page { padding: 70px 12px 40px; }
+  }
+  .cell:hover { opacity: 0.75; outline: 1px solid #e8edf3; outline-offset: 1px; cursor: pointer; }
+  .cell.empty { background: transparent !important; pointer-events: none; }
+
+  /* Tooltip */
+  #tip {
+    position: fixed; z-index: 100;
+    background: rgba(10,18,28,0.96); color: #e8edf3;
+    border: 1px solid #2a3a4d; border-radius: 7px;
+    padding: 8px 12px; font-size: 0.8em; pointer-events: none;
+    display: none; white-space: nowrap;
+  }
+  #tip b { color: #52b0fe; }
+
+  /* Legend */
+  #legend {
+    display: flex; align-items: center; gap: 6px; justify-content: center;
+    margin-top: 8px; font-size: 0.75em; color: #4a6278;
+  }
+  #legend .swatch { width: 13px; height: 13px; border-radius: 2px; }
+</style>
+
+<div id="page">
+  <div id="header-row">
+    <div class="toggle-group" id="by-toggle">
+      <button class="toggle-btn active" data-by="travel">Travel date</button>
+      <button class="toggle-btn" data-by="log">Log date</button>
+    </div>
+    <div class="toggle-group" id="mode-toggle">
+      <button class="toggle-btn active" data-mode="trips">Trips</button>
+      <button class="toggle-btn" data-mode="km">km</button>
+    </div>
+    <div id="summary"></div>
+  </div>
+  <div id="calendar"></div>
+  <div id="legend"></div>
+</div>
+
+<div id="tip"></div>
+
+<script>
+const DATA_URL  = "{{ url_for('viz.calendar_api', username=username) }}";
+const TRIPS_URL = "{{ trips_url }}";
+
+// Blue-toned 5-level palette (0 = no travel, 4 = heaviest)
+const PALETTE = ['#0e1f30', '#0e3d5c', '#0e5c8a', '#1a85c2', '#52b0fe'];
+const DOW = ['Mon','','Wed','','Fri','','Sun'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+let mode   = 'trips';
+let byMode = 'travel';
+const datasets = { travel: {}, log: {} };
+let thresholds = { trips: [0,1,3,6,10], km: [0,50,200,500,1000] };
+
+function level(val, key) {
+  const t = thresholds[key];
+  if (val <= 0)      return 0;
+  if (val < t[2])    return 1;
+  if (val < t[3])    return 2;
+  if (val < t[4])    return 3;
+  return 4;
+}
+
+function isoDow(date) {
+  // Monday = 0 … Sunday = 6
+  return (date.getDay() + 6) % 7;
+}
+
+const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+const MON_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+function renderSummary(data) {
+  // Totals always from travel data so log-date gaps don't affect them
+  const travel     = Object.values(datasets.travel);
+  const totalTrips = travel.reduce((s, d) => s + d.trips, 0);
+  const totalKm    = travel.reduce((s, d) => s + d.km, 0);
+  const activeDays = travel.length;
+
+  // Busiest stats from the active dataset
+  const years    = [...new Set(data.map(d => d.day.slice(0, 4)))].sort();
+  const busyYear = years.reduce((best, y) => {
+    const n = data.filter(d => d.day.startsWith(y)).reduce((s, d) => s + d.trips, 0);
+    return n > (best.n || 0) ? { y, n } : best;
+  }, {}).y;
+
+  const byDow = {};
+  data.forEach(d => {
+    const [y, m, day] = d.day.split('-').map(Number);
+    const dow = new Date(y, m - 1, day).getDay();
+    byDow[dow] = (byDow[dow] || 0) + d.trips;
+  });
+  const busyDow = Object.entries(byDow).sort((a, b) => b[1] - a[1])[0];
+
+  const byMon = {};
+  data.forEach(d => { const m = +d.day.slice(5, 7) - 1; byMon[m] = (byMon[m] || 0) + d.trips; });
+  const busyMon = Object.entries(byMon).sort((a, b) => b[1] - a[1])[0];
+
+  document.getElementById('summary').innerHTML = [
+    { val: totalTrips.toLocaleString(),                   lbl: 'Total trips' },
+    { val: Math.round(totalKm).toLocaleString() + ' km',  lbl: 'Total distance' },
+    { val: activeDays.toLocaleString(),                   lbl: 'Days with travel' },
+    { val: busyYear || '—',                               lbl: 'Busiest year' },
+    { val: busyDow ? DOW_NAMES[+busyDow[0]] : '—',       lbl: 'Busiest weekday' },
+    { val: busyMon ? MON_NAMES[+busyMon[0]] : '—',       lbl: 'Busiest month' },
+  ].map(s => `<div class="stat"><div class="val">${s.val}</div><div class="lbl">${s.lbl}</div></div>`).join('');
+}
+
+function buildCalendar(data) {
+  datasets.travel = {};
+  data.forEach(d => { datasets.travel[d.day] = d; });
+  renderSummary(data);
+  renderGrid();
+  renderLegend();
+}
+
+const MAX_CELL = 20;
+
+// Returns { sz, gap } where gap scales with cell size to keep proportions constant.
+function computeCell(numWeeks) {
+  const page  = document.getElementById('page');
+  const cs    = getComputedStyle(page);
+  const content = page.clientWidth
+    - parseFloat(cs.paddingLeft)
+    - parseFloat(cs.paddingRight)
+    - 30; // 24px dow-labels + 6px gap
+  // First pass with gap=2 to get approximate sz, then derive gap from sz.
+  let sz  = Math.min(MAX_CELL, Math.max(8, Math.floor((content - (numWeeks - 1) * 2) / numWeeks)));
+  const gap = Math.max(1, Math.floor(sz / 5));
+  sz = Math.min(MAX_CELL, Math.max(8, Math.floor((content - (numWeeks - 1) * gap) / numWeeks)));
+  return { sz, gap };
+}
+
+function renderHalf(container, label, cells, numWeeks, monthCols, colOffset) {
+  const { sz, gap } = computeCell(numWeeks);
+  const colW = sz + gap;
+
+  // Month labels
+  const labelRow = document.createElement('div');
+  labelRow.className = 'month-labels';
+  for (let w = 0; w < numWeeks; w++) {
+    const span = document.createElement('span');
+    span.style.width = colW + 'px';
+    const mon = Object.entries(monthCols).find(([, c]) => +c - colOffset === w);
+    span.textContent = mon ? MONTHS[+mon[0]] : '';
+    labelRow.appendChild(span);
+  }
+
+  // Cell grid
+  const grid = document.createElement('div');
+  grid.className = 'cal-grid';
+  grid.style.gridTemplateColumns = `repeat(${numWeeks}, ${sz}px)`;
+  grid.style.gridTemplateRows   = `repeat(7, ${sz}px)`;
+  grid.style.gap = `${gap}px`;
+  cells.forEach(c => {
+    const el = document.createElement('div');
+    el.className = 'cell' + (c ? '' : ' empty');
+    el.style.width  = sz + 'px';
+    el.style.height = sz + 'px';
+    if (c) {
+      el.style.background = PALETTE[level(mode === 'trips' ? c.trips : c.km, mode)];
+      el.dataset.date  = c.date;
+      el.dataset.trips = c.trips;
+      el.dataset.km    = c.km;
+    }
+    grid.appendChild(el);
+  });
+
+  // DOW labels — height matches: one colW row for month header, 7×sz rows for days
+  const dowLabels = document.createElement('div');
+  dowLabels.className = 'dow-labels';
+  dowLabels.style.gridTemplateRows = `${colW}px repeat(7, ${sz}px)`;
+  dowLabels.style.gap = `${gap}px`;
+  dowLabels.innerHTML = '<span></span>' + DOW.map(d => `<span style="line-height:${sz}px">${d}</span>`).join('');
+
+  const gridWrap = document.createElement('div');
+  gridWrap.className = 'cal-grid-wrap';
+  gridWrap.appendChild(labelRow);
+  gridWrap.appendChild(grid);
+
+  const wrap = document.createElement('div');
+  wrap.className = 'cal-wrap';
+  wrap.appendChild(dowLabels);
+  wrap.appendChild(gridWrap);
+
+  const block = document.createElement('div');
+  block.className = 'year-block';
+  block.innerHTML = `<div class="year-label">${label}</div>`;
+  block.appendChild(wrap);
+  container.appendChild(block);
+}
+
+function renderGrid() {
+  const cal    = document.getElementById('calendar');
+  cal.innerHTML = '';
+  const isMob  = window.innerWidth < 640;
+
+  const years = [...new Set(Object.keys(datasets[byMode]).map(d => d.slice(0, 4)))].sort().reverse();
+
+  years.forEach(year => {
+    const jan1   = new Date(+year, 0, 1);
+    const offset = isoDow(jan1);
+
+    const cells     = Array(offset).fill(null);
+    const d         = new Date(+year, 0, 1);
+    const monthCols = {};
+    while (d.getFullYear() === +year) {
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      const col = Math.floor(cells.length / 7);
+      const mon = d.getMonth();
+      if (!(mon in monthCols)) monthCols[mon] = col;
+      cells.push({ date: key, ...(datasets[byMode][key] || { trips: 0, km: 0 }) });
+      d.setDate(d.getDate() + 1);
+    }
+    const numWeeks = Math.ceil(cells.length / 7);
+    while (cells.length < numWeeks * 7) cells.push(null);
+
+    if (isMob && monthCols[6] !== undefined) {
+      const split  = monthCols[6];
+      const h1     = cells.slice(0, split * 7);
+      const h2     = cells.slice(split * 7);
+      const hasData = arr => arr.some(c => c && (c.trips > 0 || c.km > 0));
+      // Jul–Dec first — matches newest-first year ordering
+      if (hasData(h2)) renderHalf(cal, `${year} · Jul–Dec`, h2, numWeeks - split, monthCols, split);
+      if (hasData(h1)) renderHalf(cal, `${year} · Jan–Jun`, h1, split, monthCols, 0);
+    } else {
+      renderHalf(cal, String(year), cells, numWeeks, monthCols, 0);
+    }
+  });
+}
+
+function renderLegend() {
+  const leg = document.getElementById('legend');
+  const t = thresholds[mode];
+  const labels = mode === 'trips'
+    ? ['0', '1–2', '3–5', '6–9', '10+']
+    : ['0', `1–${t[2]-1} km`, `${t[2]}–${t[3]-1} km`, `${t[3]}–${t[4]-1} km`, `${t[4]}+ km`];
+  leg.innerHTML = '<span>Less</span>' +
+    PALETTE.map((c, i) => `<div class="swatch" style="background:${c}" title="${labels[i]}"></div>`).join('') +
+    '<span>More</span>';
+}
+
+// Tooltip
+const tip = document.getElementById('tip');
+document.addEventListener('click', e => {
+  const cell = e.target.closest('.cell:not(.empty)');
+  if (!cell || !cell.dataset.date) return;
+  window.location.href = TRIPS_URL + '?search=' + encodeURIComponent('date:' + cell.dataset.date);
+});
+
+document.addEventListener('mousemove', e => {
+  const cell = e.target.closest('.cell:not(.empty)');
+  if (!cell) { tip.style.display = 'none'; return; }
+  const km = parseFloat(cell.dataset.km);
+  tip.innerHTML = `<b>${cell.dataset.date}</b><br>
+    ${cell.dataset.trips} trip${cell.dataset.trips==1?'':'s'} · ${km.toLocaleString()} km`;
+  tip.style.display = 'block';
+  const tipW = tip.offsetWidth;
+  const left = e.clientX + 14 + tipW > window.innerWidth
+    ? e.clientX - 14 - tipW
+    : e.clientX + 14;
+  tip.style.left = Math.max(0, left) + 'px';
+  tip.style.top  = (e.clientY - 36) + 'px';
+});
+
+// Trips/km toggle
+document.querySelectorAll('#mode-toggle .toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    mode = btn.dataset.mode;
+    document.querySelectorAll('#mode-toggle .toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+    renderGrid();
+    renderLegend();
+  });
+});
+
+// Travel/log toggle — lazy-fetches log data on first switch
+document.querySelectorAll('#by-toggle .toggle-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const newBy = btn.dataset.by;
+    if (newBy === byMode) return;
+    byMode = newBy;
+    document.querySelectorAll('#by-toggle .toggle-btn').forEach(b => b.classList.toggle('active', b === btn));
+    const redraw = () => { renderSummary(Object.values(datasets[byMode])); renderGrid(); };
+    if (Object.keys(datasets[byMode]).length) {
+      redraw();
+    } else {
+      fetch(DATA_URL + '?by=' + byMode).then(r => r.json()).then(data => {
+        datasets[byMode] = {};
+        data.forEach(d => { datasets[byMode][d.day] = d; });
+        redraw();
+      });
+    }
+  });
+});
+
+let _resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(_resizeTimer);
+  _resizeTimer = setTimeout(() => { if (Object.keys(datasets[byMode]).length) renderGrid(); }, 150);
+});
+
+fetch(DATA_URL).then(r => r.json()).then(buildCalendar);
+</script>
+
+{% endblock %}

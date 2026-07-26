@@ -19,7 +19,7 @@
 
 <div class="container">
     <h1 class="mt-3">Stations</h1>
-    <table id="stationsTable" class="table mt-3">
+    <table id="stationsTable">
         <thead>
             <tr>
                 <th scope="col">Name</th>
@@ -63,6 +63,23 @@
         ],
         drawCallback: function(settings) {
             $('[data-toggle="tooltip"]').tooltip();
+        },
+        language: {
+            info: "{{dtInfo}}",
+            paginate: {
+                next: "{{dtNext}}",
+                previous: "{{dtPrevious}}",
+            },
+            emptyTable: "{{dtEmptyTable}}",
+            select: {
+                rows: {
+                    "_": "{{dtMultipleLineSelected}}",
+                    "0": "",
+                    "1": "{{dtOneLineSelected}}"
+                },
+            },
+            lengthMenu: "{{dtLengthMenu}}",
+            search: "{{dtSearch}}"
         },
     });
 </script>

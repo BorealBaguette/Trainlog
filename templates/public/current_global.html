@@ -5,6 +5,14 @@
   .leaflet-popup-content {
     max-width: 600px;
   }
+
+  .delay-time {
+    color: #dc3545;
+  }
+
+  .early-time {
+    color: #28a745;
+  }
 </style>
 
 <div class="spinner-container">
@@ -16,7 +24,6 @@
 
 <div id="map" class="mapIndiv"></div>
 
-<script src="{{ url_for('static', filename='js/util.js') }}"></script>
 <script>
 var logosList = {{logosList | safe}};
 var apiEndpoint = "{{ api_endpoint }}";  // Dynamic endpoint variable
@@ -36,15 +43,48 @@ function daysDifference(d0, d1) {
   return Math.round(diff/8.64e7);
 }
 
+function addDelayToISO(iso, delaySeconds) {
+  if (!iso) return iso;
+  const delay = Number(delaySeconds || 0);
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  d.setSeconds(d.getSeconds() + delay);
+  return d.toISOString();
+}
+
+function formatDayDiff(iso, startDT) {
+  const day_diff = daysDifference(startDT, iso);
+  if (day_diff > 0) {
+    return ` (+${day_diff})`;
+  } else if (day_diff < 0) {
+    return ` (${day_diff})`;
+  }
+  return '';
+}
+
+function withDelayDisplay(iso, delaySeconds, startDT) {
+  const scheduled = formatDT(iso).time;
+  const scheduled_str = scheduled + formatDayDiff(iso, startDT);
+  const delay = Number(delaySeconds || 0);
+  if (!delay) {
+    return scheduled_str;
+  }
+
+  const actualISO = addDelayToISO(iso, delay);
+  const actual = formatDT(actualISO).time;
+  const actual_str = actual + formatDayDiff(actualISO, startDT);
+  const delayClass = delay > 0 ? 'delay-time' : 'early-time';
+  return `<s>${scheduled_str}</s> <span class="${delayClass}">${actual_str}</span>`;
+}
+
 function getPopupContent(tripObj) {
   const trip        = tripObj.trip || {};
   const username    = tripObj.username || "-";
   const origin      = trip.origin_station || "-";
   const destination = trip.destination_station || "-";
-  const { date: startDate, time: startTime } = formatDT(trip.start_datetime);
-  const { date: endDate, time: endTime } = formatDT(trip.end_datetime);
-  const days_diff = daysDifference(trip.start_datetime, trip.end_datetime);
-  const days_diff_string = days_diff > 0 ? ` (+${days_diff})` : '';
+  const { date: startDate } = formatDT(trip.start_datetime);
+  const startTime = withDelayDisplay(trip.start_datetime, trip.departure_delay, trip.start_datetime);
+  const endTime = withDelayDisplay(trip.end_datetime, trip.arrival_delay, trip.start_datetime);
   const profile_url = `/public/${username}`;
   const lineName    = trip.line_name;
 
@@ -126,7 +166,7 @@ let infoHTML = `
       <div><strong>From:</strong> ${origin}</div>
       <div><strong>To:</strong> ${destination}</div>
       <div><strong>Date:</strong> ${startDate}</div>
-      <div><strong>Time:</strong> ${startTime} – ${endTime}${days_diff_string}</div>
+      <div><strong>Time:</strong> ${startTime} – ${endTime}</div>
       ${trip.line_name ? `<div><strong>Line:</strong> ${trip.line_name}</div>` : ''}
     </div>
   </div>
@@ -139,7 +179,7 @@ return `
       max-width: 600px;
       display: inline-block;
       white-space: nowrap; 
-      overflow: hidden;
+      overflow: visible;
     }
   </style>
   <div class="popup-content" style="
@@ -158,8 +198,12 @@ return `
 
 function calculateProgress(tripObj) {
   const now     = Date.now();
-  const startMs = new Date(tripObj.trip.utc_start_datetime + 'Z').getTime();
-  const endMs   = new Date(tripObj.trip.utc_end_datetime + 'Z').getTime();
+  const departureDelayMs = Number(tripObj.trip.departure_delay || 0) * 1000;
+  const arrivalDelayMs = Number(tripObj.trip.arrival_delay || 0) * 1000;
+  const startMs = new Date(tripObj.trip.utc_start_datetime + 'Z').getTime() + departureDelayMs;
+  const endMs   = new Date(tripObj.trip.utc_end_datetime + 'Z').getTime() + arrivalDelayMs;
+
+  if (isNaN(startMs) || isNaN(endMs) || endMs <= startMs) return 0;
   return Math.min(Math.max((now - startMs) / (endMs - startMs), 0), 1);
 }
 
@@ -205,6 +249,17 @@ function placePeg(position, tripObj){
 
 /* ───────────────────────────── main renderer ──────────────────────────── */
 let tripsLayerGroup = null;   // global reference so we can replace it
+let lastTripsSignature = null;
+
+function fitMapToTrips() {
+  if (tripsLayerGroup && tripsLayerGroup.getLayers().length) {
+    map.fitBounds(tripsLayerGroup.getBounds());
+  } else {
+    // Default bounds: [[southWestLat, southWestLng], [northEastLat, northEastLng]]
+    const defaultBounds = [[20, -130], [60, 30]]; // adjust these values as needed
+    map.fitBounds(defaultBounds);
+  }
+}
 
 function renderTrips(trips){
   if (tripsLayerGroup){
@@ -241,14 +296,7 @@ function renderTrips(trips){
     tripsLayerGroup.addLayer(placePeg(pegPos, trip));
   });
 
-  if (trips.length) {
-        tripsLayerGroup.addTo(map);
-        map.fitBounds(tripsLayerGroup.getBounds());
-    } else {
-        // Default bounds: [[southWestLat, southWestLng], [northEastLat, northEastLng]]
-        const defaultBounds = [[20, -130], [60, 30]]; // adjust these values as needed
-        map.fitBounds(defaultBounds);
-    }
+  tripsLayerGroup.addTo(map);
   $('.spinner-container').hide();
 }
 
@@ -259,14 +307,23 @@ var map = createMap({
   car:         '{{car}}',     walk:    '{{walk}}',   cycle:   '{{cycle}}',
   air:         '{{air}}',     bus:     '{{bus}}',    ferry:   '{{ferry}}',
   aerialway:   '{{aerialway}}',
+  scooter:     '{{scooter}}', funicular: '{{funicular}}', rail: '{{rail}}', ski: '{{ski}}',
   future:      '{{future}}',  current: '{{current}}', project:'{{project}}'
 }, null);
 
 function loadTrips(){
-  $.get(apiEndpoint, renderTrips);  // Use the dynamic endpoint
+  $.get(apiEndpoint, function(trips) {  // Use the dynamic endpoint
+    const signature = JSON.stringify(trips);
+    renderTrips(trips);
+
+    if (signature !== lastTripsSignature) {
+      lastTripsSignature = signature;
+      fitMapToTrips();
+    }
+  });
 }
 
-loadTrips();                    // first draw
-setInterval(loadTrips, 60000);  // refresh every minute
+loadTrips();                        // first draw (fit happens after data arrives)
+setInterval(loadTrips, 60000);       // refresh every 60 seconds
 </script>
 {% endblock %}

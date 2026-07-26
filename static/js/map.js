@@ -22,71 +22,37 @@ function createMap(translations=null, center = [50, 10]) {
         'jawg-light',
         'jawg-terrain',
         'jawg-dark',
-        'thunderforest-transport',
         'de',
         'fr',
+        'none',
     ];
 
-    let tileserverUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png'; // Default tileserver URL
+    let tileserverUrl = null;
+    let attribution = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
 
-    if (serverType && allowed_styles.includes(serverType)) {
-    if (serverType === 'de') {
+    if (serverType === 'none') {
+        // No background tiles
+    } else if (serverType === 'de') {
         tileserverUrl = 'https://tile.openstreetmap.de/{z}/{x}/{y}.png';
-    }
-
-    else if (serverType === 'fr') {
-        tileserverUrl = 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png'; // Works well in France, but seemingly everywhere else the max zoom level is quite poor. Too situational to be viable for replacing the default tileserver, unlike the German tileserver.
-    }
-
-    else {
+    } else if (serverType === 'fr') {
+        tileserverUrl = 'https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png';
+        attribution = '&copy; OpenStreetMap France | ' + attribution;
+    } else if (serverType && serverType.startsWith('jawg-') && allowed_styles.includes(serverType)) {
         tileserverUrl = `https://tiles.trainlog.me/tile/${serverType}/{x}/{y}/{z}/{r}`;
-    }
-}
-
-    // Adding tile layer to the map
-
-    const attributions = [
-        'default',
-        'fr',
-        'jawg',
-        'thunderforest',
-    ];
-
-    if (serverType === 'fr') {
-        attributionmsg = '&copy; OpenStreetMap France | &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+        attribution = '<a href="https://jawg.io" title="Tiles Courtesy of Jawg Maps" target="_blank">&copy; <b>Jawg</b>Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+    } else if (serverType === 'orm') {
+        tileserverUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+        attribution = 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | Map style: &copy; <a href="https://www.OpenRailwayMap.org">OpenRailwayMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)';
+    } else {
+        tileserverUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
     }
 
-    else {
-        attributionmsg = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-    }
-
-    if (serverType === 'jawg-streets' || serverType === 'jawg-lagoon'|| serverType === 'jawg-sunny'|| serverType === 'jawg-light'|| serverType === 'jawg-terrain'|| serverType === 'jawg-dark') {
-        attributionmsg = '<a href="https://jawg.io" title="Tiles Courtesy of Jawg Maps" target="_blank">&copy; <b>Jawg</b>Maps</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
-    }
-
-    if (serverType === 'thunderforest-transport') {
-        attributionmsg = '&copy; <a href="http://www.thunderforest.com/">Thunderforest</a>, &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+    if (tileserverUrl) {
+        L.tileLayer(tileserverUrl, { maxZoom: 19, attribution }).addTo(map);
     }
 
     if (serverType === 'orm') {
-        attributionmsg = 'Map data: &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors | Map style: &copy; <a href="https://www.OpenRailwayMap.org">OpenRailwayMap</a> (<a href="https://creativecommons.org/licenses/by-sa/3.0/">CC-BY-SA</a>)';
-    }
-
-
-    const tileLayer = L.tileLayer(tileserverUrl, {
-        maxZoom: 19,
-        attribution:
-            attributionmsg,
-    });
-
-    const ormtileLayer = L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-    });
-
-    tileLayer.addTo(map);
-
-    if (serverType === 'orm') {     //OpenRailwayMap overlay requires to show two tile layers, the base OSM mapnik map, and the ORM map itself
-        ormtileLayer.addTo(map);
+        L.tileLayer('https://{s}.tiles.openrailwaymap.org/standard/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
     }
 
 
@@ -124,6 +90,10 @@ function createMap(translations=null, center = [50, 10]) {
                         <li><span class="legend-icon" style="background-color: var(--bus);"></span> <i class="fa-solid fa-bus"></i>&nbsp;${translations['bus']}</li>
                         <li><span class="legend-icon" style="background-color: var(--ferry);"></span> <i class="fa-solid fa-ship"></i>&nbsp;${translations['ferry']}</li>
                         <li><span class="legend-icon" style="background-color: var(--aerialway);"></span> <i class="fa-solid fa-cable-car"></i>&nbsp;${translations['aerialway']}</li>
+                        <li><span class="legend-icon" style="background-color: var(--scooter);"></span> <i class="bi bi-scooter"></i>&nbsp;${translations['scooter']}</li>
+                        <li><span class="legend-icon" style="background-color: var(--funicular);"></span> <i class="fa-solid fa-mountain"></i>&nbsp;${translations['funicular']}</li>
+                        <li><span class="legend-icon" style="background-color: var(--rail);"></span> <i class="fa-solid fa-dumbbell"></i>&nbsp;${translations['rail']}</li>
+                        <li><span class="legend-icon" style="background-color: var(--ski);"></span> <i class="fa-solid fa-person-skiing"></i>&nbsp;${translations['ski']}</li>
                     </ul>
                     <hr style="margin: 10px 0; border-top: 1px solid #ccc;" />
                     <ul>

@@ -11,8 +11,10 @@ from icalendar import Calendar
 from py.utils import load_config, getCountryFromCoordinates, get_flag_emoji, getDistance, getCountriesFromPath
 from src.trips import Trip, create_trip
 from src.routing import forward_routing_core
-from src.utils import get_default_trip_visibility, pathConn, managed_cursor
+from src.utils import get_default_trip_visibility
+from src.paths import fetch_path
 from src.pg import pg_session
+from src.photon import photonRequest
 import re
 
 logger = logging.getLogger(__name__)
@@ -53,14 +55,13 @@ def route_path(origin, destination, trip_type):
     return None
 
 def get_airport_by_iata(iata):
-    from src.utils import mainConn, managed_cursor
-    with managed_cursor(mainConn) as cursor:
-        result = cursor.execute(
-            "SELECT name, latitude, longitude, iso_country FROM airports WHERE iata = ?",
-            (iata.upper(),)
+    with pg_session() as pg:
+        result = pg.execute(
+            "SELECT name, latitude, longitude, iso_country FROM airports WHERE iata = :iata",
+            {"iata": iata.upper()},
         ).fetchone()
         if result:
-            return dict(result)
+            return dict(result._mapping)
     return None
 
 STATION_EXPANSIONS = {
@@ -104,18 +105,13 @@ def get_coords_from_past_trips(station_name, trip_type="train"):
         
         if not result:
             return None
-        
-        with managed_cursor(pathConn) as cursor:
-            cursor.execute("SELECT path FROM paths WHERE trip_id = ?", (result.trip_id,))
-            row = cursor.fetchone()
-        
-        if not row:
-            return None
-        
-        path = json.loads(row["path"])
+
+        with pg_session() as pg:
+            path = fetch_path(pg, result.trip_id)
+
         if not path:
             return None
-        
+
         point = path[0] if result.matched_field == 'origin' else path[-1]
         return {"lat": point[0], "lng": point[1]}
     except Exception as e:
@@ -143,41 +139,37 @@ def geocode_station(query, trip_type="train", fallback_coords=None, city_fallbac
         params = [("q", q), ("limit", 1), ("lang", "en")]
         for tag in osm_tags.get(trip_type, []):
             params.append(("osm_tag", tag))
-        
-        for url in ["http://photon.srv.trainlog.me", "https://photon.chiel.uk/api", "https://photon.komoot.io/api"]:
-            try:
-                resp = requests.get(url, params=params, timeout=10)
-                resp.raise_for_status()
-                data = resp.json()
-                
-                if data.get("features"):
-                    feat = data["features"][0]
-                    props = feat["properties"]
-                    lng, lat = feat["geometry"]["coordinates"]
-                    
-                    # Validate against AI coords if provided
-                    if fallback_coords:
-                        dist = getDistance(
-                            {"lat": lat, "lng": lng},
-                            {"lat": fallback_coords[0], "lng": fallback_coords[1]}
-                        )
-                        if dist > 50:
-                            logger.debug(f"Geocode result for '{q}' too far ({dist:.0f}km), skipping")
-                            continue
-                    
-                    country_code = props.get("countrycode", "")
-                    if not country_code or country_code in ["CN", "FI"]:
-                        country = getCountryFromCoordinates(lat, lng)
-                        country_code = country.get("countryCode", "")
-                    
-                    name = props.get("name", query)
-                    city = props.get("city")
-                    if city and city.lower() not in name.lower():
-                        name = f"{city} - {name}"
-                    
-                    return {"name": name, "lat": lat, "lng": lng, "country_code": country_code}
-            except Exception as e:
-                logger.debug(f"Geocoding {url} failed: {e}")
+
+        data = photonRequest("/api", params, timeout=10)
+
+        if data and data.get("features"):
+            feat = data["features"][0]
+            props = feat["properties"]
+            lng, lat = feat["geometry"]["coordinates"]
+
+            # Validate against AI coords if provided
+            if fallback_coords:
+                dist = getDistance(
+                    {"lat": lat, "lng": lng},
+                    {"lat": fallback_coords[0], "lng": fallback_coords[1]}
+                )
+                if dist > 50:
+                    logger.debug(
+                        f"Geocode result for '{q}' too far ({dist:.0f}km), skipping"
+                    )
+                    continue
+
+            country_code = props.get("countrycode", "")
+            if not country_code or country_code in ["CN", "FI"]:
+                country = getCountryFromCoordinates(lat, lng)
+                country_code = country.get("countryCode", "")
+
+            name = props.get("name", query)
+            city = props.get("city")
+            if city and city.lower() not in name.lower():
+                name = f"{city} - {name}"
+
+            return {"name": name, "lat": lat, "lng": lng, "country_code": country_code}
     
     # Try past trips before AI fallback
     past_coords = get_coords_from_past_trips(query, trip_type)
@@ -251,7 +243,9 @@ def parse_trip_with_ai(text, user_lang="en", images=None, ics_events=None, pdf_t
 A trip is ONE segment (e.g., a flight with one connection = 2 trips).
 Ignore walking trips that are between two public transit trips unless specified
 When no date is given, default to today ({datetime.today().strftime('%Y-%m-%d')}), when date and time are given but no year, default to this year ({datetime.today().strftime('%Y')})
-When only one price is given for a multi leg trip, default to dividing the price among each leg
+When only one price is given for a multi leg trip, default to dividing the price among each leg.
+
+Make sure no indentifyable information is stored in notes (PNR, names, etc)
 
 Return ONLY valid JSON array, no markdown:
 [{{

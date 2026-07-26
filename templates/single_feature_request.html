@@ -47,32 +47,36 @@
 
               <h6 class="card-subtitle mb-3 text-muted">{{ feature_requests_voting if feature_requests_voting is defined else 'Voting' }}</h6>
 
-              {% if logged_in_user and not is_owner and username %}
-                <form method="POST" action="{{ url_for('feature_requests.vote_feature_request', username=username) }}" class="mb-2">
-                  <input type="hidden" name="request_id" value="{{ request.id }}">
-                  <input type="hidden" name="vote_type" value="upvote">
-                  <button type="submit" class="btn btn-lg w-100 {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }}">
-                    <i class="fa-solid fa-chevron-up"></i>
-                  </button>
-                </form>
+              {% if logged_in_user and not is_owner and username and username != "public" %}
+                <button type="button"
+                        class="btn btn-lg w-100 {{ 'btn-success' if request.user_vote == 1 else 'btn-outline-success' }} mb-2"
+                        data-vote-button
+                        data-request-id="{{ request.id }}"
+                        data-vote-type="upvote"
+                        data-vote-url="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
+                  <i class="fa-solid fa-chevron-up"></i>
+                </button>
               {% else %}
                 <div class="btn btn-lg w-100 btn-outline-success disabled mb-2">
                   <i class="fa-solid fa-chevron-up"></i>
                 </div>
               {% endif %}
 
-              <div class="fs-2 fw-bold text-{{ 'success' if request.score > 0 else 'danger' if request.score < 0 else 'muted' }} my-3">
+              <div class="fs-2 fw-bold text-{{ 'success' if request.score > 0 else 'danger' if request.score < 0 else 'muted' }} my-3"
+                   data-vote-score
+                   data-request-id="{{ request.id }}">
                 {{ request.score }}
               </div>
 
-              {% if logged_in_user and not is_owner and username %}
-                <form method="POST" action="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
-                  <input type="hidden" name="request_id" value="{{ request.id }}">
-                  <input type="hidden" name="vote_type" value="downvote">
-                  <button type="submit" class="btn btn-lg w-100 {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }}">
-                    <i class="fa-solid fa-chevron-down"></i>
-                  </button>
-                </form>
+              {% if logged_in_user and not is_owner and username and username != "public" %}
+                <button type="button"
+                        class="btn btn-lg w-100 {{ 'btn-danger' if request.user_vote == -1 else 'btn-outline-danger' }}"
+                        data-vote-button
+                        data-request-id="{{ request.id }}"
+                        data-vote-type="downvote"
+                        data-vote-url="{{ url_for('feature_requests.vote_feature_request', username=username) }}">
+                  <i class="fa-solid fa-chevron-down"></i>
+                </button>
               {% else %}
                 <div class="btn btn-lg w-100 btn-outline-danger disabled">
                   <i class="fa-solid fa-chevron-down"></i>
@@ -85,7 +89,8 @@
                   <span class="text-success">
                     <i class="fa-solid fa-chevron-up"></i>
                     <span onclick="showVoters({{ request.id }})" style="cursor: pointer; text-decoration: underline;">
-                      {{ request.upvotes }} {{ feature_requests_votes_positive if feature_requests_votes_positive is defined else 'upvotes' }}
+                      <span data-vote-up data-request-id="{{ request.id }}">{{ request.upvotes }}</span>
+                      {{ feature_requests_votes_positive if feature_requests_votes_positive is defined else 'upvotes' }}
                     </span>
                   </span>
                 </div>
@@ -93,7 +98,8 @@
                   <span class="text-danger">
                     <i class="fa-solid fa-chevron-down"></i>
                     <span onclick="showVoters({{ request.id }})" style="cursor: pointer; text-decoration: underline;">
-                      {{ request.downvotes }} {{ feature_requests_votes_negative if feature_requests_votes_negative is defined else 'downvotes' }}
+                      <span data-vote-down data-request-id="{{ request.id }}">{{ request.downvotes }}</span>
+                      {{ feature_requests_votes_negative if feature_requests_votes_negative is defined else 'downvotes' }}
                     </span>
                   </span>
                 </div>
@@ -122,7 +128,7 @@
                       </div>
                     </div>
 
-                    {% if logged_in_user and username and (is_owner or request.author_display == logged_in_user) %}
+                    {% if logged_in_user and username and username != "public" and (is_owner or is_feature_admin or request.author_display == logged_in_user) %}
                       <div class="btn-group">
                         <button type="button" class="btn btn-outline-secondary"
                                 onclick="editRequest({{ request.id }}, `{{ request.title|e }}`, `{{ request.description|e }}`)">
@@ -139,12 +145,22 @@
               </div>
 
               <!-- Closure Reason Alert -->
-              {% if request.status in ['completed','not_doing', 'merged'] and request.closure_reason %}
+              {% if request.status in ['completed','not_doing', 'merged'] and (request.closure_reason or request.closed_by) %}
                 <div class="alert alert-info mb-4">
                   <h6 class="alert-heading">
                     <i class="fa-solid fa-circle-info me-2"></i>{{ feature_requests_closure_reason_title }}
                   </h6>
-                  <div style="white-space: pre-wrap;">{{ request.closure_reason }}</div>
+                  {% if request.closure_reason %}
+                    <div style="white-space: pre-wrap;">{{ request.closure_reason }}</div>
+                  {% endif %}
+                  {% if request.closed_by and request.closed_at %}
+                    <hr class="my-2">
+                    <small class="text-muted">
+                      {{ (feature_requests_closed_by_on if feature_requests_closed_by_on is defined else 'Closed by {user} on {date}')
+                         .replace('{user}', '<strong>' ~ request.closed_by ~ '</strong>')
+                         .replace('{date}', '<time class="js-fr-datetime" datetime="' ~ request.closed_at.isoformat() ~ '">' ~ request.closed_at.strftime('%Y-%m-%d %H:%M') ~ '</time>') | safe }}
+                    </small>
+                  {% endif %}
                 </div>
               {% endif %}
 
@@ -163,7 +179,7 @@
             <div class="card-body">
               
               <!-- Add Comment Form -->
-              {% if logged_in_user and username %}
+              {% if logged_in_user and username and username != "public" %}
               <form id="commentForm" class="mb-4">
                 <div class="mb-2">
                   <textarea class="form-control" id="commentContent" rows="3" 
@@ -241,6 +257,8 @@
                 <small class="text-muted d-block">{{ feature_requests_by }}</small>
                 {% if request.author_display == "admin" %}
                   <span class="badge bg-warning text-dark"><i class="fa-solid fa-crown"></i> admin</span>
+                {% elif request.author_is_feature_admin %}
+                  <span class="badge text-white" style="background-color: #2ECC71;"><i class="fa-solid fa-shield-halved"></i> {{ request.author_display }}</span>
                 {% else %}
                   <span class="badge bg-primary">{{ request.author_display }}</span>
                 {% endif %}
@@ -270,7 +288,7 @@
             </div>
           </div>
 
-          {% if is_owner %}
+          {% if is_owner or is_feature_admin %}
           <!-- Admin Actions -->
           <div class="card">
             <div class="card-header">
@@ -416,6 +434,20 @@
 </div>
 
 <script>
+window.featureRequestsConfig = {{ {
+  "votersUrlTemplate": (url_for("feature_requests.feature_request_voters", request_id=0).rsplit('0', 1) | join('__ID__') if username else "/feature_requests/__ID__/voters")
+} | tojson }};
+window.featureRequestsI18n = {{ {
+  "upvoters": feature_requests_upvoters,
+  "downvoters": feature_requests_downvoters,
+  "noVotes": feature_requests_no_votes,
+  "errorLoading": feature_requests_error_loading,
+  "voteError": (feature_requests_vote_error if feature_requests_vote_error is defined else "Vote failed. Please try again.")
+} | tojson }};
+</script>
+<script src="{{ url_for('static', filename='js/feature_requests.js') }}"></script>
+
+<script>
 function editRequest(id, title, description) {
   document.getElementById('editRequestId').value = id;
   document.getElementById('editTitle').value = title;
@@ -433,49 +465,6 @@ function deleteRequest(id, title) {
   modal.show();
 }
 
-function showVoters(requestId) {
-  const modal = new bootstrap.Modal(document.getElementById('votersModal'));
-  modal.show();
-
-  {% if username %}
-    fetch(`{{ url_for('feature_requests.feature_request_voters', request_id=0) }}`.replace('0', requestId))
-  {% else %}
-    fetch(`/feature_requests/${requestId}/voters`)
-  {% endif %}
-    .then(response => response.json())
-    .then(data => {
-      let content = '';
-
-      if (data.upvoters.length > 0) {
-        content += '<h6 class="text-success"><i class="fa-solid fa-chevron-up"></i> {{ feature_requests_upvoters }} (' + data.upvoters.length + ')</h6>';
-        content += '<ul class="list-unstyled mb-3">';
-        data.upvoters.forEach(voter => {
-          content += `<li><small>${voter.username} <span class="text-muted">• ${new Date(voter.created).toLocaleDateString()}</span></small></li>`;
-        });
-        content += '</ul>';
-      }
-
-      if (data.downvoters.length > 0) {
-        content += '<h6 class="text-danger"><i class="fa-solid fa-chevron-down"></i> {{ feature_requests_downvoters }} (' + data.downvoters.length + ')</h6>';
-        content += '<ul class="list-unstyled">';
-        data.downvoters.forEach(voter => {
-          content += `<li><small>${voter.username} <span class="text-muted">• ${new Date(voter.created).toLocaleDateString()}</span></small></li>`;
-        });
-        content += '</ul>';
-      }
-
-      if (data.upvoters.length === 0 && data.downvoters.length === 0) {
-        content = '<p class="text-muted text-center">{{ feature_requests_no_votes }}</p>';
-      }
-
-      document.getElementById('votersContent').innerHTML = content;
-    })
-    .catch(error => {
-      console.error('Error:', error);
-      document.getElementById('votersContent').innerHTML = '<p class="text-danger">{{ feature_requests_error_loading }}</p>';
-    });
-}
-
 // Reset forms when modals are hidden
 document.getElementById('editModal').addEventListener('hidden.bs.modal', function () {
   document.getElementById('editForm').reset();
@@ -484,9 +473,25 @@ document.getElementById('editModal').addEventListener('hidden.bs.modal', functio
 const REQUEST_ID = {{ request.id }};
 const CURRENT_USER = '{{ logged_in_user|default("", true) }}';
 const IS_OWNER = {{ 'true' if is_owner else 'false' }};
+const IS_FEATURE_ADMIN = {{ 'true' if is_feature_admin else 'false' }};
 const USERNAME = '{{ username|default("", true) }}';
+const USER_LANG = '{{ lang|default("en", true) }}';
 let editingCommentId = null;
 let deletingCommentId = null;
+
+(function formatFrDatetimes() {
+  const fmt = new Intl.DateTimeFormat(USER_LANG || undefined, {
+    dateStyle: 'long',
+    timeStyle: 'short',
+  });
+  document.querySelectorAll('time.js-fr-datetime').forEach(el => {
+    const iso = el.getAttribute('datetime');
+    if (!iso) return;
+    const d = new Date(iso);
+    if (isNaN(d)) return;
+    el.textContent = fmt.format(d);
+  });
+})();
 
 function loadComments() {
   fetch(`/feature_requests/${REQUEST_ID}/comments`)
@@ -518,14 +523,17 @@ function renderComments(comments) {
 
 function renderComment(c, depth) {
   const indent = Math.min(depth, 4) * 20;
-  const canEdit = CURRENT_USER && (IS_OWNER || c.raw_username === CURRENT_USER);
+  const canEdit = CURRENT_USER && (IS_OWNER || IS_FEATURE_ADMIN || c.raw_username === CURRENT_USER);
   const edited = c.modified && c.created !== c.modified;
-  
+  const authorBadge = c.username === 'admin'
+    ? '<i class="fa-solid fa-crown ms-1" style="color: #F39C12;" title="admin"></i>'
+    : (c.is_feature_admin ? '<i class="fa-solid fa-shield-halved ms-1" style="color: #2ECC71;" title="Feature Admin"></i>' : '');
+
   return `
     <div class="border-start ps-3 mb-3" style="margin-left:${indent}px">
       <div class="d-flex justify-content-between align-items-start">
         <div>
-          <strong>${c.username}</strong>
+          <strong>${c.username}</strong>${authorBadge}
           <small class="text-muted ms-2">${new Date(c.created).toLocaleString()}</small>
           ${edited ? '<small class="text-muted fst-italic ms-1">({{ feature_requests_edited if feature_requests_edited is defined else "edited" }})</small>' : ''}
         </div>

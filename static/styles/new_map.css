@@ -2,14 +2,19 @@
 :root {
     --air: #40b91f;
     --train: #52b0fe;
+    --funicular: #6495ed;
+    --rail: #7ec8ff;
     --tram: #a2d7ff;
     --metro: #004595;
     --bus: #9f4bbb;
     --ferry: #1e1e7c;
     --car: #a68fcd;
     --cycle: #6e211a;
+    --scooter: #00d084;
+    --ski: #b8e6f0;
     --walk: #e88c00;
     --aerialway: #afcf3b;
+    --other: #000000;
     --future: rgba(255, 255, 255, 0.5);
     --bg-primary: #ffffff;
     --bg-secondary: #f8f9fa;

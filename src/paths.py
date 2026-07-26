@@ -1,3 +1,50 @@
+import json
+
+
+def coords_to_ewkt(coords):
+    """Convert a [[lat, lng], ...] coordinate list to EWKT (SRID 4326) for the
+    PostGIS `paths.geom` column. PostGIS uses (lng lat) ordering. Returns None for
+    an empty list (such a row should be skipped)."""
+    if not coords:
+        return None
+    points = ", ".join(f"{c[1]} {c[0]}" for c in coords)
+    if len(coords) == 1:
+        return f"SRID=4326;POINT({points})"
+    return f"SRID=4326;LINESTRING({points})"
+
+
+def fetch_paths_map(pg, trip_ids):
+    """Return {trip_id: [[lat, lng], ...]} for the given trip_ids from PostGIS."""
+    if not trip_ids:
+        return {}
+    rows = pg.execute(
+        "SELECT trip_id, ST_AsGeoJSON(geom) AS geojson FROM paths WHERE trip_id = ANY(:ids)",
+        {"ids": [int(t) for t in trip_ids]},
+    ).fetchall()
+    return {row["trip_id"]: geom_geojson_to_coords(row["geojson"]) for row in rows}
+
+
+def fetch_path(pg, trip_id):
+    """Return [[lat, lng], ...] for a single trip_id (empty list if no path)."""
+    row = pg.execute(
+        "SELECT ST_AsGeoJSON(geom) AS geojson FROM paths WHERE trip_id = :trip_id",
+        {"trip_id": trip_id},
+    ).fetchone()
+    return geom_geojson_to_coords(row["geojson"]) if row else []
+
+
+def geom_geojson_to_coords(geojson):
+    """Convert ST_AsGeoJSON(geom) output back to the app's [[lat, lng], ...] format
+    (swapping PostGIS lng/lat order). Accepts the GeoJSON string or parsed dict."""
+    if geojson is None:
+        return []
+    data = json.loads(geojson) if isinstance(geojson, str) else geojson
+    coordinates = data.get("coordinates", [])
+    if data.get("type") == "Point":
+        return [[coordinates[1], coordinates[0]]]
+    return [[c[1], c[0]] for c in coordinates]
+
+
 class Node:
     def __init__(self, trip_id, node_order, lat, lng):
         self.trip_id = trip_id

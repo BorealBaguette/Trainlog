@@ -2,6 +2,8 @@
 {% include "bootstrap/leafletLayout.html" %}
 {% block content %}
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lib/leaflet.geometryutil.js') }}"></script>
+<script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
 
 {% include "bootstrap/navigation.html"%}
 
@@ -96,15 +98,23 @@
         padding-left: 8px;
         padding-right: 8px;
     }
-    .ts-pick-wrap { position: relative; }
-    .ts-pick-list { position: absolute; z-index: 999; left: 0; right: 0; top: 100%;
-                    background: #fff; border: 1px solid #aaa; border-radius: 4px;
-                    max-height: 180px; overflow-y: auto; box-shadow: 0 4px 8px rgba(0,0,0,.15); }
-    .ts-pick-item { padding: 6px 10px; cursor: pointer; font-size: 0.9rem; }
-    .ts-pick-item:hover { background: #f0f0f0; }
     .ts-btn { padding: 6px 16px; border: 0; background-color: #f3f3f3;
-              cursor: pointer; flex: 1; font-size: 0.875rem; line-height: 1.4; }
+              cursor: pointer; font-size: 0.875rem; line-height: 1.4; }
     .ts-btn:hover { background-color: #e8e8e8; }
+
+    .power-type-group { display: flex; border: 1px solid #ced4da; border-radius: 0.375rem; overflow: hidden; }
+    .power-type-group input[type="radio"] { display: none; }
+    .power-type-group label {
+        flex: 1; text-align: center; padding: 0.375rem 0.75rem; margin: 0;
+        cursor: pointer; font-size: 0.875rem; color: #6c757d;
+        background-color: #fff; border-right: 1px solid #ced4da;
+        transition: background-color 0.15s, color 0.15s;
+    }
+    .power-type-group label:last-of-type { border-right: none; }
+    .power-type-group input[type="radio"]:checked + label {
+        background-color: #e9ecef; color: #333; font-weight: 500;
+    }
+    .power-type-group label:hover { background-color: #f8f9fa; color: #444; }
 </style>
 
 <!-- GPX Import Modal -->
@@ -120,7 +130,7 @@
                     <i class="fa-solid fa-file-arrow-up fa-3x text-muted mb-3"></i>
                     <h5>{{dropGpxFileHere}}</h5>
                     <p class="text-muted">{{orClickToBrowse}}</p>
-                    <input type="file" id="gpxFileInput" class="gpx-file-input" accept=".gpx" />
+                    <input type="file" id="gpxFileInput" class="gpx-file-input" accept=".gpx,.csv" />
                 </div>
                 <div id="gpxError" class="text-danger small d-none"></div>
                 <div id="gpxProgressContainer" class="progress mt-3 d-none">
@@ -139,6 +149,14 @@
 </div>
 
 <!-- FR24 Path Import Modal (for air/helicopter) -->
+<style>
+    #fr24SearchTabs .nav-link { color: var(--bs-secondary); }
+    #fr24SearchTabs .nav-link.active {
+        background-color: var(--bs-secondary);
+        color: #fff;
+    }
+</style>
+
 <div class="modal fade" id="fr24PathModal" tabindex="-1" aria-labelledby="fr24PathModalLabel" aria-hidden="true">
     <div class="modal-dialog">
         <div class="modal-content">
@@ -149,13 +167,20 @@
             <div class="modal-body">
                 <p class="text-muted">{{importActualFlightPath}}</p>
                 <form id="fr24PathForm">
-                    <!-- Search Type Toggle -->
+                    <!-- Search Type Selector -->
                     <div class="mb-3">
                         <label class="form-label d-block">{{searchBy}}</label>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="fr24SearchToggle">
-                            <label class="form-check-label" for="fr24SearchToggle" id="fr24SearchToggleLabel">{{reg}}</label>
-                        </div>
+                        <ul class="nav nav-pills nav-fill" id="fr24SearchTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button type="button" class="nav-link active" data-fr24-type="flight">{{flightNumber}}</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button type="button" class="nav-link" data-fr24-type="reg">{{reg}}</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button type="button" class="nav-link" data-fr24-type="id">FR24 ID</button>
+                            </li>
+                        </ul>
                     </div>
 
 
@@ -171,7 +196,13 @@
                         <input type="text" class="form-control" id="fr24PathRegNumber"
                             placeholder="{{registrationPlaceholder}}" value="{{tripReg}}">
                     </div>
-                    <div class="mb-3">
+
+                    <div class="mb-3 d-none" id="fr24IdGroup">
+                        <label for="fr24PathFlightId" class="form-label">FR24 ID</label>
+                        <input type="text" class="form-control" id="fr24PathFlightId" placeholder="e.g. 3ff86083">
+                    </div>
+
+                    <div class="mb-3" id="fr24PathDateGroup">
                         <label for="fr24PathDate" class="form-label">{{flightDate}}</label>
                         <input type="date" class="form-control" id="fr24PathDate"
                             value="{{ start_datetime[:10] if start_datetime not in [1, -1, None, ''] else current_date }}">
@@ -245,9 +276,7 @@
                     <select id="originCountry" class="custom-select-flag" name="originCountry">
                         {% for code, emoji in country_list.items() %}
                         <option value="{{ emoji }}" data-code="{{ code }}" {% if origin.startswith(emoji) %}selected{%
-                            endif %}>
-                            {{ emoji }}
-                        </option>
+                            endif %}>{{ emoji }} {{ code }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -265,9 +294,7 @@
                     <select id="destinationCountry" class="custom-select-flag" name="destinationCountry">
                         {% for code, emoji in country_list.items() %}
                         <option value="{{ emoji }}" data-code="{{ code }}" {% if destination.startswith(emoji)
-                            %}selected{% endif %}>
-                            {{ emoji }}
-                        </option>
+                            %}selected{% endif %}>{{ emoji }} {{ code }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -282,8 +309,14 @@
             <div class="operatorLogoWrapper">
                 <img class="operatorLogo" />
             </div>
-            <label for="operator" class="sr-only">{{operator}}</label>
-            <input type="text" name="operator" id="operator" placeholder="{{operator}}" value="{{tripOperator}}" />
+            <label for="operatorSearch" class="sr-only">{{operator}}</label>
+            {# The submitted value stays free comma-separated text; the pills are a
+               view of it, seeded here from the trip being edited. #}
+            <input type="hidden" name="operator" id="operator" value="{{tripOperator}}" />
+            <div class="operatorPillsField" id="operatorPills">
+              <input type="text" id="operatorSearch" class="op-pill-placeholder"
+                     placeholder="{{operator}}" autocomplete="off" />
+            </div>
         </group>
         <label for="lineName" class="sr-only">{{lineName}}</label>
         <input type="text" name="lineName" id="lineName" placeholder="{{lineName}}" value="{{tripLineName}}" />
@@ -307,7 +340,7 @@
                 value="{{tripMaterialType}}">
             <input type="hidden" name="material_type_advanced" id="material_type_advanced"
                 value="{{tripMaterialTypeAdvanced}}">
-            {% if tripType in ('train', 'metro', 'tram') and is_alpha %}
+            {% if tripType in ('train', 'metro', 'tram') %}
             <div id="ts-active-display" style="display:none; margin-bottom:1rem">
                 <div style="display:flex; align-items:center; gap:8px; padding:6px 12px; background:#f3f3f3; font-size:0.875rem">
                     <i class="fas fa-train" style="color:#666; flex-shrink:0"></i>
@@ -315,12 +348,8 @@
                     <button type="button" onclick="clearMaterialTypeJson()" style="border:0; background:none; cursor:pointer; padding:0; color:#999; font-size:1.1rem; line-height:1; flex-shrink:0" title="Clear">×</button>
                 </div>
             </div>
-            <div class="ts-pick-wrap">
-                <div style="display:flex; gap:8px; margin-bottom:1rem">
-                    <button type="button" class="ts-btn" onclick="toggleTsPicker()"><i class="fas fa-train"></i> {{tsbPickTrainset}}</button>
-                    <button type="button" class="ts-btn" onclick="openTsbModal()"><i class="fas fa-wrench"></i> {{tsbBuildTrainset}}</button>
-                </div>
-                <div id="ts-pick-list" class="ts-pick-list" style="display:none"></div>
+            <div style="margin-bottom:1rem">
+                <button type="button" class="ts-btn" style="width:100%" onclick="openTsbModal()"><i class="fas fa-train"></i> {{tsbPickTrainset}}</button>
             </div>
             {% endif %}
             <label for="reg">{{reg}}</label>
@@ -330,25 +359,20 @@
             <label for="notes">{{notes}}</label>
             <input type="text" name="notes" id="notes" placeholder="{{notes}}" value="{{tripNotes}}">
 
-            <fieldset class="fieldset-time">
-                <legend><span class="legend">{{delays}}</span></legend>
-                <label class="sr-only" for="departureDelayMinutes">{{departureDelay}}</label>
-                <input type="number" step="1" id="departureDelayMinutes" name="departureDelayMinutes"
-                    value="{{tripDepartureDelay}}" placeholder="{{departure}}" />
-                <label class="sr-only" for="arrivalDelayMinutes">{{arrivalDelay}}</label>
-                <input type="number" step="1" id="arrivalDelayMinutes" name="arrivalDelayMinutes"
-                    value="{{tripArrivalDelay}}" placeholder="{{arrival}}" />
-            </fieldset>
+            <label>{{tags|default('Tags')}}</label>
+            <input type="text" id="tagSearchInput" placeholder="{{select_tag|default('Add a tag…')}}" class="form-control form-control-sm" autocomplete="off" style="margin-bottom:.4rem;">
+            <div id="tagList" class="d-flex flex-wrap gap-1"></div>
+
         </fieldset>
 
         <!-- Price Details Subgroup -->
-        <fieldset class="fieldset-fixed fieldset-price">
+        <fieldset class="fieldset-fixed fieldset-price{% if plan_uuid %} fieldset-price-plan{% endif %}">
             <legend>
                 <span class="legend">{{priceLabel}}</span>
             </legend>
 
             <label for="price" id="price_label" class="sr-only">{{price}}</label>
-            <input type="number" step="any" name="price" id="price" min="0" placeholder="{{price}}"
+            <input type="number" step="any" name="price" id="price" placeholder="{{price}}"
                 value="{{tripPrice}}">
 
             <label for="currency" id="currency_label" class="sr-only">{{currency}}</label>
@@ -361,14 +385,74 @@
                 {% endfor %}
             </select>
 
+            {% if plan_uuid %}
+            <!-- Plan mode: a price is a budget estimate unless the ticket is actually
+                 booked. Only booked tickets expose (and persist) a real purchase date. -->
+            <span id="bookedWrapper" style="display:none; align-items:center; gap:0.3rem">
+                <input type="checkbox" id="bookedToggle" name="booked" value="true" {% if tripBooked %}checked{% endif %}>
+                <label for="bookedToggle" class="checkboxLabel">{{ bookedLabel|default('Already booked') }}</label>
+            </span>
+            {% endif %}
+
             <!-- Purchasing Date Picker, limited to today's date or earlier -->
             <label for="purchasing_date" id="purchasing_date_label" class="sr-only">{{purchasing_date}}</label>
             <input type="date" name="purchasing_date" id="purchasing_date" value="{{tripPurchasingDate}}">
         </fieldset>
 
+        {% if not plan_uuid %}
         <label for="ticketSearchInput" id="ticketSearchInputLabel" class="form-label">{{select_ticket}}</label>
         <select id="ticketSearchInput" name="ticket_id" class="form-select">
         </select>
+        {% endif %}
+
+        <!-- Power Type Toggle -->
+        {% if tripType == 'train' %}
+        <div class="mb-3">
+          <label class="form-label">{{powerType}}</label>
+          <div class="power-type-group">
+            <input type="radio" class="btn-check" name="powerType" id="powerAuto" value="auto" {% if tripPowerType == 'auto' or not tripPowerType %}checked{% endif %} autocomplete="off">
+            <label for="powerAuto"><i class="fas fa-magic"></i> {{auto}}</label>
+            <input type="radio" class="btn-check" name="powerType" id="powerElectric" value="electric" {% if tripPowerType == 'electric' %}checked{% endif %} autocomplete="off">
+            <label for="powerElectric"><i class="fas fa-bolt"></i> {{electric}}</label>
+            <input type="radio" class="btn-check" name="powerType" id="powerThermic" value="thermic" {% if tripPowerType == 'thermic' %}checked{% endif %} autocomplete="off">
+            <label for="powerThermic"><i class="fas fa-fire"></i> {{thermic}}</label>
+          </div>
+        </div>
+        {% elif tripType in ('bus', 'car') %}
+        <div class="mb-3">
+          <label class="form-label">{{powerType}}</label>
+          <div class="power-type-group">
+            <input type="radio" class="btn-check" name="powerType" id="powerThermic" value="thermic" {% if tripPowerType == 'thermic' or not tripPowerType %}checked{% endif %} autocomplete="off">
+            <label for="powerThermic"><i class="fas fa-fire"></i> {{thermic}}</label>
+            <input type="radio" class="btn-check" name="powerType" id="powerElectric" value="electric" {% if tripPowerType == 'electric' %}checked{% endif %} autocomplete="off">
+            <label for="powerElectric"><i class="fas fa-bolt"></i> {{electric}}</label>
+          </div>
+        </div>
+        {% elif tripType in ('cycle', 'scooter') %}
+        <div class="mb-3">
+          <label class="form-label">{{powerType}}</label>
+          <div class="power-type-group">
+            <input type="radio" class="btn-check" name="powerType" id="powerManual" value="manual" {% if tripPowerType == 'manual' or not tripPowerType %}checked{% endif %} autocomplete="off">
+            <label for="powerManual"><i class="fas fa-person-biking"></i> {{manual}}</label>
+            <input type="radio" class="btn-check" name="powerType" id="powerElectric" value="electric" {% if tripPowerType == 'electric' %}checked{% endif %} autocomplete="off">
+            <label for="powerElectric"><i class="fas fa-bolt"></i> {{electric}}</label>
+          </div>
+        </div>
+        {% elif tripType == 'ferry' %}
+        <div class="mb-3">
+          <label class="form-label">{{propulsion}}</label>
+          <div class="power-type-group">
+            <input type="radio" class="btn-check" name="powerType" id="powerThermic" value="thermic" {% if tripPowerType == 'thermic' or not tripPowerType %}checked{% endif %} autocomplete="off">
+            <label for="powerThermic"><i class="fas fa-fire"></i> {{thermic}}</label>
+            <input type="radio" class="btn-check" name="powerType" id="powerElectric" value="electric" {% if tripPowerType == 'electric' %}checked{% endif %} autocomplete="off">
+            <label for="powerElectric"><i class="fas fa-bolt"></i> {{electric}}</label>
+          </div>
+        </div>
+        <div class="mb-3">
+          <label class="form-label" for="co2Override">{{co2OverrideLabel}} <small class="text-muted">{{co2OverrideHint}}</small></label>
+          <input type="number" class="form-control" id="co2Override" name="co2Override" min="0" step="0.1" placeholder="{{co2OverridePlaceholder}}"{% if tripCo2Override is not none %} value="{{tripCo2Override}}"{% endif %}>
+        </div>
+        {% endif %}
         <br>
 
         <fieldset class="trip-time-inputs">
@@ -376,21 +460,80 @@
                 <span class="legend">{{timings}}:</span>
             </legend>
 
+            {% if plan_uuid %}
+            <div class="radio-group">
+                <input type="radio" id="radioRelative" value="relative" name="precision" />
+                <label for="radioRelative" class="checkboxLabel">{{ relativeTiming|default('Day + time') }}</label>
+            </div>
+            {% endif %}
             <div class="radio-group">
                 <input type="radio" id="radioPreciseDates" value="preciseDates" name="precision" checked />
                 <label for="radioPreciseDates" class="checkboxLabel">{{preciseDates}}</label>
             </div>
+            {% if not plan_uuid %}
             <div class="radio-group">
                 <input type="radio" id="radioUnknown" value="unknown" name="precision" />
                 <label for="radioUnknown" class="checkboxLabel">{{unknown}}</label>
             </div>
+            {% endif %}
             <div class="radio-group">
                 <input type="radio" id="radioOnlyDate" value="onlyDate" name="precision" />
                 <label for="radioOnlyDate" class="checkboxLabel">{{onlyDate}}</label>
             </div>
         </fieldset>
 
-        <hr><br>
+        {% if plan_uuid %}
+        <style>
+          #form #relativeDates { display: none; }
+          #form :has(input[id=radioRelative]:checked) #relativeDates { display: grid; gap: 0 0.3rem; }
+          /* Day-only relative leg: no times to derive a duration from -> offer the
+             manual duration inputs (JS toggles the class). */
+          #form #manDuration.rel-duration { display: grid; }
+          /* Duration mode hides the time column -> let the day input take the full row. */
+          #form #relativeDates.rel-dur .fieldset-datetime { grid-template-columns: 1fr; }
+          /* In relative mode everything between the relative group and the path
+             section is hidden -> drop the now-pointless first separator. */
+          #form :has(input[id=radioRelative]:checked) #precisionSep { display: none; }
+          .wd-toggle { border: 1px solid #cbd2db; background: transparent; border-radius: 6px;
+                       padding: .15rem .45rem; font-size: .8rem; cursor: pointer; }
+          .wd-toggle.on { background: #4b78d6; border-color: #4b78d6; color: #fff; }
+        </style>
+        <group id="relativeDates">
+            {# Either/or: a leg is timed (Day + time) OR duration-based (Day + duration) —
+               never both, so the two can't contradict each other. #}
+            <div style="grid-column:1/-1; display:flex; gap:1.2rem; margin-bottom:.3rem;">
+              <div class="radio-group">
+                <input type="radio" id="relModeTime" name="relTimeMode" value="time" {% if planStartTime %}checked{% endif %}/>
+                <label for="relModeTime" class="checkboxLabel">{{ planModeTime|default('Time') }}</label>
+              </div>
+              <div class="radio-group">
+                <input type="radio" id="relModeDuration" name="relTimeMode" value="duration" {% if not planStartTime %}checked{% endif %}/>
+                <label for="relModeDuration" class="checkboxLabel">{{ tripDuration|default('Duration') }}</label>
+              </div>
+            </div>
+            <fieldset class="fieldset-datetime">
+                <legend><span class="legend">{{ newTripStart }}</span></legend>
+                <label class="sr-only" for="planStartDay">{{ day|default('Day') }}</label>
+                <input type="number" min="1" name="planStartDay" id="planStartDay" placeholder="{{ day|default('Day') }}" value="{{ planStartDay|default('1') }}"/>
+                <label class="sr-only" for="planStartTime">{{ time }}</label>
+                <input type="time" name="planStartTime" id="planStartTime" placeholder=" " value="{{ planStartTime|default('') }}"/>
+            </fieldset>
+            <fieldset class="fieldset-datetime">
+                <legend><span class="legend">{{ newTripEnd }}</span></legend>
+                <label class="sr-only" for="planEndDay">{{ day|default('Day') }}</label>
+                <input type="number" min="1" name="planEndDay" id="planEndDay" placeholder="{{ day|default('Day') }}" value="{{ planEndDay|default('1') }}"/>
+                <label class="sr-only" for="planEndTime">{{ time }}</label>
+                <input type="time" name="planEndTime" id="planEndTime" placeholder=" " value="{{ planEndTime|default('') }}"/>
+            </fieldset>
+            <div id="planWeekdaysGroup" style="grid-column:1/-1; margin:.4rem 0 .2rem;">
+              <span class="legend">{{ planWeekdaysLabel|default('Runs on') }} <i class="fa-solid fa-circle-info text-muted" style="cursor:help;" title="{{ planWeekdaysHint|default('For services with less-than-daily frequencies. Leave empty if it runs daily.') }}"></i></span>
+              <div id="planWeekdayBtns" style="display:flex; gap:.25rem; margin-top:.25rem;"></div>
+              <input type="hidden" name="planWeekdays" id="planWeekdays" value="{{ planWeekdays|default(0) }}"/>
+            </div>
+        </group>
+        {% endif %}
+
+        {% if plan_uuid %}<div id="precisionSep"><hr><br></div>{% else %}<hr><br>{% endif %}
 
         <group id="onlyDatePicker">
             <label for="newTripStart">{{newTripStart}}</label>
@@ -425,7 +568,7 @@
         <group id="dates">
             <fieldset class="fieldset-datetime">
                 <legend>
-                    <span class="legend">{{ newTripStart }}</span>
+                    <span class="legend">{{ newTripStart }}<span class="delay-planned-suffix" style="display:none"> ({{plannedFuture}})</span></span>
                 </legend>
                 <label class="sr-only" for="newTripStartDate">{{ date }}</label>
                 <input type="date" name="newTripStartDate" id="newTripStartDate" placeholder=" " />
@@ -434,14 +577,57 @@
             </fieldset>
             <fieldset class="fieldset-datetime">
                 <legend>
-                    <span class="legend">{{newTripEnd }}</span>
+                    <span class="legend">{{newTripEnd }}<span class="delay-planned-suffix" style="display:none"> ({{plannedFuture}})</span></span>
                 </legend>
-                <label class="sr-only" for="newTripStartDate">{{ date }}</label>
+                <label class="sr-only" for="newTripEndDate">{{ date }}</label>
                 <input type="date" name="newTripEndDate" id="newTripEndDate" placeholder=" " />
                 <label class="sr-only" for="newTripEndTime">{{ time }}</label>
                 <input type="time" name="newTripEndTime" id="newTripEndTime" placeholder=" " />
             </fieldset>
         </group>
+
+        <span id="delayToggleWrapper" style="display:inline-flex; align-items:center; gap:0.3rem">
+            <input type="checkbox" id="delayToggle" />
+            <label for="delayToggle" class="checkboxLabel">{{delaysToggle}}</label>
+        </span>
+        <span id="delayModeSwitchWrapper" style="display:none; margin-left:1.5rem">
+            <span style="display:inline-flex; align-items:center; gap:0.3rem">
+                <input type="checkbox" id="delayModeSwitch" />
+                <label for="delayModeSwitch" class="checkboxLabel">{{delayDateMode}}</label>
+            </span>
+        </span>
+
+        <div id="depActualGroup" style="display:none; margin-top:0.6rem">
+            <fieldset class="fieldset-datetime">
+                <legend>
+                    <span class="legend">{{ newTripStart }} ({{delayActual}})</span>
+                </legend>
+                <label class="sr-only" for="depActualDate">{{ date }}</label>
+                <input type="date" id="depActualDate" placeholder=" " />
+                <label class="sr-only" for="depActualTime">{{ time }}</label>
+                <input type="time" id="depActualTime" placeholder=" " />
+            </fieldset>
+        </div>
+        <div id="arrActualGroup" style="display:none">
+            <fieldset class="fieldset-datetime">
+                <legend>
+                    <span class="legend">{{newTripEnd }} ({{delayActual}})</span>
+                </legend>
+                <label class="sr-only" for="arrActualDate">{{ date }}</label>
+                <input type="date" id="arrActualDate" placeholder=" " />
+                <label class="sr-only" for="arrActualTime">{{ time }}</label>
+                <input type="time" id="arrActualTime" placeholder=" " />
+            </fieldset>
+        </div>
+        <fieldset class="fieldset-time" id="delayMinutesInputs" style="display:none">
+            <legend><span class="legend">{{delays}}</span></legend>
+            <label class="sr-only" for="departureDelayMinutes">{{departureDelay}}</label>
+            <input type="number" step="any" id="departureDelayMinutes" name="departureDelayMinutes"
+                value="{{tripDepartureDelay}}" placeholder="{{departure}}" />
+            <label class="sr-only" for="arrivalDelayMinutes">{{arrivalDelay}}</label>
+            <input type="number" step="any" id="arrivalDelayMinutes" name="arrivalDelayMinutes"
+                value="{{tripArrivalDelay}}" placeholder="{{arrival}}" />
+        </fieldset>
 
         <hr>
 
@@ -504,64 +690,21 @@
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{close}}"></button>
             </div>
             <div class="modal-body">
-                <!-- Train Controls (Power Type + Router Toggle integrated) -->
-                {% if tripType == 'train' %}
-                <div class="mb-3">
-                    <label class="form-label mb-2">{{powerType}}</label>
-                    <div class="row g-2">
-                        <!-- Power Type Column -->
-                        <div class="col-md-8">
-                            <div class="btn-group w-100" role="group">
-                                <input type="radio" class="btn-check" name="powerType" id="powerAuto" value="auto" checked autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="powerAuto">
-                                    <i class="fas fa-magic"></i> {{auto}}
-                                </label>
-                                
-                                <input type="radio" class="btn-check" name="powerType" id="powerElectric" value="electric" autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="powerElectric">
-                                    <i class="fas fa-bolt"></i> {{electric}}
-                                </label>
-                                
-                                <input type="radio" class="btn-check" name="powerType" id="powerThermic" value="thermic" autocomplete="off">
-                                <label class="btn btn-outline-secondary" for="powerThermic">
-                                    <i class="fas fa-fire"></i> {{thermic}}
-                                </label>
-                            </div>
-                        </div>
-                        
-                        <!-- Router Toggle Column -->
-                        <div class="col-md-4">
-                            <div class="form-check form-switch d-flex align-items-center h-100 ps-0">
-                                <label class="form-check-label d-flex align-items-center w-100" for="newRouterToggleModal" style="cursor: pointer;">
-                                    <input 
-                                        class="form-check-input me-2 ms-0 mt-0" 
-                                        type="checkbox" 
-                                        id="newRouterToggleModal"
-                                        style="cursor: pointer; flex-shrink: 0;"
-                                    >
-                                    <span style="font-size: 0.9rem; line-height: 1.2;">{{useNewRouter}} <small class="text-muted">ᵦ</small></span>
-                                </label>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                {% elif tripType in ['tram', 'metro'] %}
-                <!-- New Router Toggle (for tram, metro only) -->
-                <div class="mb-3">
-                    <div class="form-check form-switch">
-                        <input 
-                            class="form-check-input" 
-                            type="checkbox" 
-                            id="newRouterToggleModal"
-                            style="cursor: pointer;"
-                        >
+                <!-- Router Toggle (train, tram, metro). The power selector now lives
+                     on the main form, since power no longer requires re-routing.
+                     The freehand toggle sits on the same row (see #freehandToggleSlot). -->
+                <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+                    {% if tripType in ('train', 'tram', 'metro') %}
+                    <div class="form-check form-switch mb-0">
+                        <input class="form-check-input" type="checkbox" id="newRouterToggleModal" style="cursor: pointer;">
                         <label class="form-check-label" for="newRouterToggleModal" style="cursor: pointer;">
                             {{useNewRouter}} <small class="text-muted">ᵦ</small>
                         </label>
                     </div>
+                    {% endif %}
+                    <div id="freehandToggleSlot"></div>
                 </div>
-                {% endif %}
-                
+
                 <div id="map" class="mapRouting full-height" style="width: 100%; height: 400px;"></div>
                 <div id="sidebar">
                     <div id="sidebar-content"></div>
@@ -577,6 +720,15 @@
 
 
 <script>
+
+    // Built once getManAndOps returns. Anything setting the operator programmatically
+    // goes through setOperatorValue() so the pills follow the hidden field — before
+    // the pills exist, seeding the hidden field is enough, as they initialise from it.
+    var operatorPills = null;
+    function setOperatorValue(value) {
+        $('#operator').val(value);
+        if (operatorPills) operatorPills.set(value);
+    }
 
     /*
     TODO: load different fields for edit POI, of a different page
@@ -600,7 +752,14 @@
     }
 
     var tripType = "{{tripType}}";
+    // Freehand inline mode in the map modal. routeSource is how the trip was created; if it
+    // was 'freehand', the modal opens straight into the draw canvas.
+    var freehandEditor = null;
+    var freehandActive = false;
+    var routeSource = "{{ route_source|default('router') }}";
     var updatedPath = null;
+    var updatedAltitude = null;    // FR24 altitude (m), parallel to updatedPath
+    var updatedTimestamps = null;  // FR24 timestamps (epoch s), parallel to updatedPath
     var updatedRouteDetails = null;
 
     if (tripType == "air") {
@@ -664,33 +823,94 @@
                     }
                     
                     // Update the router
-                    if (window.control) {
-                        var currentParams = window.control.options.router.options.requestParameters || {};
-                        
+                    if (window.control && window.baseRouter) {
+                        var currentParams = window.baseRouter.options.requestParameters || {};
+
                         if (useNewRouter) {
                             currentParams.use_new_router = 'true';
                         } else {
                             delete currentParams.use_new_router;
                         }
-                        
+
                         if (Object.keys(currentParams).length > 0) {
-                            window.control.options.router.options.requestParameters = currentParams;
+                            window.baseRouter.options.requestParameters = currentParams;
                         } else {
-                            delete window.control.options.router.options.requestParameters;
+                            delete window.baseRouter.options.requestParameters;
                         }
-                        
+
                         // Recompute the route
                         window.control.route();
                     }
                 });
             }
             {% endif %}
+
+            // ── Freehand inline toggle (opens straight into freehand for freehand trips) ──
+            {% if tripType not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
+            addFreehandToggle(document.getElementById('freehandToggleSlot'), {
+                active: routeSource === 'freehand',
+                compact: true,
+                labelFreehand: "{{ freehandMode|default('Freehand') }}",
+                labelRouter: "{{ routerMode|default('Router') }}",
+                onToggle: function (active) { active ? enterFreehand() : exitFreehand(); }
+            });
+            if (routeSource === 'freehand') enterFreehand();
+            {% endif %}
         }
     });
 
+    {% if tripType not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
+    // The router-choice switch is meaningless while hand-drawing — disable it in freehand mode.
+    function setRouterToggleDisabled(disabled) {
+        var rt = document.getElementById('newRouterToggleModal');
+        if (!rt) return;
+        rt.disabled = disabled;
+        var wrap = rt.closest('.form-check');
+        if (wrap) wrap.style.opacity = disabled ? '0.5' : '';
+    }
+    function enterFreehand() {
+        if (freehandActive) return;
+        freehandActive = true;
+        setRouterToggleDisabled(true);
+        if (window.control) map.removeControl(window.control);
+        freehandEditor = createFreehandEditor(map, {
+            origin: wplist[0],
+            dest: wplist[wplist.length - 1],
+            waypoints: wplist.slice(1, -1),
+            markerIconStart: markerIconStart,
+            markerIconEnd: markerIconEnd,
+            onChange: function (path, distance) {
+                currentRoute = path.map(function (p) { return { lat: p.lat, lng: p.lng }; });
+                newTrip["trip_length"] = distance;
+                newTrip["estimated_trip_duration"] = (distance / 30) * 3.6;
+                if (window.sidebar) {
+                    window.sidebar.setContent(
+                        '<h4>' + origLabel + ' → ' + destLabel + '</h4>' +
+                        '<p><i>' + mToKm(distance) + ' km</i></p>'
+                    );
+                }
+            }
+        });
+    }
+    function exitFreehand() {
+        if (!freehandActive) return;
+        freehandActive = false;
+        setRouterToggleDisabled(false);
+        if (freehandEditor) { freehandEditor.destroy(); freehandEditor = null; }
+        if (window.control) window.control.addTo(map); // re-adds + re-routes
+    }
+    {% endif %}
+
     $(document).ready(function () {
         $('#editPathButton').on('click', function () {
-            updatedPath = currentRoute;
+            if (freehandActive && freehandEditor) {
+                updatedPath = freehandEditor.getPath();
+                newTrip["route_source"] = "freehand";
+                newTrip["waypoints"] = JSON.stringify(freehandEditor.getWaypoints());
+            } else {
+                updatedPath = currentRoute;
+                newTrip["route_source"] = "router";
+            }
             if(routeDetails == null){routeDetails = {};}
             routeDetails["powerType"] = $('input[name="powerType"]:checked').val();
             updatedRouteDetails = routeDetails;
@@ -702,6 +922,8 @@
 
     // GPX Import functionality
     let gpxPath = null;
+    let gpxAltitude = null;    // metres, parallel to gpxPath (null if GPX has no <ele>)
+    let gpxTimestamps = null;  // epoch seconds, parallel to gpxPath (null if no <time>)
     let lastImportType = null;
 
     // GPX Drop zone functionality
@@ -734,8 +956,67 @@
         }
     });
 
+    // Split a CSV line, respecting double-quoted fields (FR24 quotes "lat,lon").
+    function splitCsvLine(line) {
+        const out = [];
+        let cur = '', inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const c = line[i];
+            if (c === '"') inQuotes = !inQuotes;
+            else if (c === ',' && !inQuotes) { out.push(cur); cur = ''; }
+            else cur += c;
+        }
+        out.push(cur);
+        return out;
+    }
+
+    // Parse a FlightRadar24 flight-track CSV export into the same shape as the GPX
+    // parser. Columns: Timestamp,UTC,Callsign,Position("lat,lon"),Altitude(feet),...
+    function parseFr24Csv(content) {
+        const lines = content.split(/\r?\n/).filter(l => l.trim() !== '');
+        const coordinates = [], altitudes = [], times = [];
+        let hasEle = false, hasTime = false;
+        if (lines.length < 2) return { coordinates, altitudes, times, hasEle, hasTime };
+
+        const header = splitCsvLine(lines[0]).map(h => h.trim().toLowerCase());
+        const iTs = header.indexOf('timestamp');
+        const iUtc = header.indexOf('utc');
+        const iPos = header.indexOf('position');
+        const iAlt = header.indexOf('altitude');
+
+        for (let i = 1; i < lines.length; i++) {
+            const cols = splitCsvLine(lines[i]);
+            if (iPos < 0 || cols[iPos] === undefined) continue;
+            const pos = cols[iPos].replace(/"/g, '').split(',');
+            const lat = parseFloat(pos[0]), lng = parseFloat(pos[1]);
+            if (isNaN(lat) || isNaN(lng)) continue;
+
+            const utc = iUtc >= 0 ? cols[iUtc] : null;
+            coordinates.push({ lat: lat, lng: lng, time: utc });  // time used for duration
+
+            let alt = null;  // FR24 altitude is feet -> store metres
+            if (iAlt >= 0 && cols[iAlt] !== undefined && cols[iAlt].trim() !== '') {
+                const ft = parseFloat(cols[iAlt]);
+                if (!isNaN(ft)) { alt = Math.round(ft * 0.3048 * 10) / 10; hasEle = true; }
+            }
+            altitudes.push(alt);
+
+            let t = null;
+            if (iTs >= 0 && cols[iTs] !== undefined && cols[iTs].trim() !== '') {
+                const v = parseInt(cols[iTs], 10);          // already epoch seconds
+                if (!isNaN(v)) { t = v; hasTime = true; }
+            } else if (utc) {
+                const ms = Date.parse(utc);
+                if (!isNaN(ms)) { t = Math.round(ms / 1000); hasTime = true; }
+            }
+            times.push(t);
+        }
+        return { coordinates, altitudes, times, hasEle, hasTime };
+    }
+
     function handleGpxFile(file) {
-        if (!file.name.toLowerCase().endsWith('.gpx')) {
+        const lowerName = file.name.toLowerCase();
+        if (!lowerName.endsWith('.gpx') && !lowerName.endsWith('.csv')) {
             showGpxError('{{pleaseSelectValidGpx}}');
             return;
         }
@@ -746,38 +1027,62 @@
         const reader = new FileReader();
         reader.onload = function (e) {
             try {
-                const gpxContent = e.target.result;
-                const parser = new DOMParser();
-                const gpxDoc = parser.parseFromString(gpxContent, 'text/xml');
-
+                const fileContent = e.target.result;
                 showGpxProgress(50);
 
-                // Extract coordinates from GPX
-                const trackPoints = gpxDoc.querySelectorAll('trkpt');
-                const routePoints = gpxDoc.querySelectorAll('rtept');
-                const waypoints = gpxDoc.querySelectorAll('wpt');
-
+                // coordinates [{lat,lng,time?}] plus altitude (metres) and time
+                // (epoch seconds) arrays, all parallel/aligned 1:1 with the path.
                 let coordinates = [];
+                let altitudes = [];
+                let times = [];
+                let hasEle = false, hasTime = false;
 
-                // Try track points first, then route points, then waypoints
-                if (trackPoints.length > 0) {
-                    trackPoints.forEach(point => {
+                if (lowerName.endsWith('.csv')) {
+                    // FlightRadar24 track CSV: Timestamp,UTC,Callsign,Position,Altitude,...
+                    const parsed = parseFr24Csv(fileContent);
+                    coordinates = parsed.coordinates;
+                    altitudes = parsed.altitudes;
+                    times = parsed.times;
+                    hasEle = parsed.hasEle;
+                    hasTime = parsed.hasTime;
+                } else {
+                    const parser = new DOMParser();
+                    const gpxDoc = parser.parseFromString(fileContent, 'text/xml');
+
+                    const trackPoints = gpxDoc.querySelectorAll('trkpt');
+                    const routePoints = gpxDoc.querySelectorAll('rtept');
+                    const waypoints = gpxDoc.querySelectorAll('wpt');
+
+                    const pushPoint = (point) => {
                         const lat = parseFloat(point.getAttribute('lat'));
                         const lon = parseFloat(point.getAttribute('lon'));
                         coordinates.push({ lat: lat, lng: lon });
-                    });
-                } else if (routePoints.length > 0) {
-                    routePoints.forEach(point => {
-                        const lat = parseFloat(point.getAttribute('lat'));
-                        const lon = parseFloat(point.getAttribute('lon'));
-                        coordinates.push({ lat: lat, lng: lon });
-                    });
-                } else if (waypoints.length > 0) {
-                    waypoints.forEach(point => {
-                        const lat = parseFloat(point.getAttribute('lat'));
-                        const lon = parseFloat(point.getAttribute('lon'));
-                        coordinates.push({ lat: lat, lng: lon });
-                    });
+
+                        const eleEl = point.querySelector('ele');
+                        let alt = null;
+                        if (eleEl && eleEl.textContent.trim() !== '') {
+                            const v = parseFloat(eleEl.textContent);
+                            if (!isNaN(v)) { alt = v; hasEle = true; }  // GPX <ele> is already metres
+                        }
+                        altitudes.push(alt);
+
+                        const timeEl = point.querySelector('time');
+                        let t = null;
+                        if (timeEl && timeEl.textContent.trim() !== '') {
+                            const ms = Date.parse(timeEl.textContent.trim());
+                            if (!isNaN(ms)) { t = Math.round(ms / 1000); hasTime = true; }
+                        }
+                        times.push(t);
+                    };
+
+                    // Try track points first, then route points, then waypoints
+                    if (trackPoints.length > 0) {
+                        trackPoints.forEach(pushPoint);
+                    } else if (routePoints.length > 0) {
+                        routePoints.forEach(pushPoint);
+                    } else if (waypoints.length > 0) {
+                        waypoints.forEach(pushPoint);
+                    }
                 }
 
                 if (coordinates.length < 2) {
@@ -788,8 +1093,11 @@
 
                 showGpxProgress(80);
 
-                // Store the path data in the expected format
+                // Store the path plus its parallel altitude/time arrays (kept only when
+                // the GPX actually carries them; written together with XY on save).
                 gpxPath = coordinates;
+                gpxAltitude = hasEle ? altitudes : null;
+                gpxTimestamps = hasTime ? times : null;
 
                 showGpxProgress(100);
 
@@ -848,6 +1156,10 @@
     document.getElementById('gpxImportBtn').addEventListener('click', function () {
         if (gpxPath) {
             updatedPath = gpxPath;
+            // Use the GPX's own altitude/time when present, else clear (so a prior
+            // FR24 import this session can't leave a stale track on the new geometry).
+            updatedAltitude = gpxAltitude;
+            updatedTimestamps = gpxTimestamps;
             lastImportType = 'gpx';
 
             // Calculate trip length and duration from GPX path
@@ -932,11 +1244,24 @@
     }
 
     document.getElementById('fr24PathSubmitBtn').addEventListener('click', async function () {
-        const isReg = document.getElementById('fr24SearchToggle').checked;
-        const searchType = isReg ? 'reg' : 'flight';
+        const searchType = document.querySelector('#fr24SearchTabs .nav-link.active').dataset.fr24Type;
         const flightNumber = document.getElementById('fr24PathFlightNumber').value.trim();
         const regNumber = document.getElementById('fr24PathRegNumber').value.trim();
+        const flightId = document.getElementById('fr24PathFlightId').value.trim();
         const flightDate = document.getElementById('fr24PathDate').value;
+
+        // Direct import by FR24 flight ID — fetches the path straight from the ID,
+        // bypassing the flight-number search (fallback for mis-tagged flights).
+        if (searchType === 'id') {
+            if (!flightId) {
+                showFr24PathError('Please enter an FR24 flight ID.');
+                return;
+            }
+            hideFr24PathError();
+            updateFr24PathProgressBar(10);
+            await processFlightLegForPath({ fr24_id: flightId });
+            return;
+        }
 
         if (searchType === 'flight' && (!flightNumber || !flightDate)) {
             showFr24PathError('{{pleaseEnterFlightNumberAndDate}}');
@@ -1082,21 +1407,25 @@
 
         try {
             // Fetch the detailed path data from FR24
-            const pathRes = await $.get(`{{url_for("flight_tracks", username=username, fr24_id='' )}}${flight.fr24_id}`);
+            const pathData = await $.get(`{{url_for("flight_tracks", username=username, fr24_id='' )}}${flight.fr24_id}`);
+            const coordinates = pathData.coordinates;
 
             updateFr24PathProgressBar(40);
 
-            if (!pathRes || pathRes.length === 0) {
+            if (!coordinates || coordinates.length === 0) {
                 showFr24PathError('{{noPathDataAvailable}}');
                 updateFr24PathProgressBar(0);
                 return;
             }
 
-            // Convert FR24 path to the expected format (array of {lat, lng} objects)
-            updatedPath = pathRes.map(point => ({
+            // Convert FR24 path to the expected format (array of {lat, lng} objects),
+            // and keep altitude/timestamps (parallel to the path) for the 3D track.
+            updatedPath = coordinates.map(point => ({
                 lat: point[0],
                 lng: point[1]
             }));
+            updatedAltitude = pathData.altitude || null;
+            updatedTimestamps = pathData.timestamps || null;
 
             if (updatedPath.length < 2) {
                 showFr24PathError('{{insufficientPathData}}');
@@ -1107,7 +1436,7 @@
             updateFr24PathProgressBar(60);
 
             // Calculate trip metrics using the same logic as air routing
-            const tripLength = getTotalDistanceFromPath(pathRes);
+            const tripLength = getTotalDistanceFromPath(coordinates);
             let tripDuration = null;
 
             // Calculate duration from flight times (following air routing pattern)
@@ -1176,20 +1505,15 @@
                     console.log(airlineRes)
                     if (airlineRes.length > 0) {
                         const airline = airlineRes[0];
-                        document.getElementById('operator').value = airline.name;
-
-                        // Update operator logo
-                        if (airline.logo_url) {
-                            $(".operatorLogo").attr("src", airline.logo_url);
-                        } else {
-                            $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}");
-                        }
+                        // The pill picks up the logo itself, so the icon stays the
+                        // trip type rather than being swapped for the airline's.
+                        setOperatorValue(airline.name);
                     } else {
-                        document.getElementById('operator').value = flight.operating_as;
+                        setOperatorValue(flight.operating_as);
                     }
                 } catch (error) {
                     console.error('Error fetching airline data:', error);
-                    document.getElementById('operator').value = flight.operating_as;
+                    setOperatorValue(flight.operating_as);
                 }
             }
 
@@ -1257,11 +1581,11 @@
                 document.getElementById('radioPreciseDates').checked = true;
 
                 // Fill start date and time
-                document.getElementById('newTripStartDate').value = takeoffDate.toISOString().slice(0, 10);
+                document.getElementById('newTripStartDate').value = takeoffDate.toTimezonedISOString().slice(0, 10);
                 document.getElementById('newTripStartTime').value = takeoffDate.toTimeString().slice(0, 5);
 
                 // Fill end date and time
-                document.getElementById('newTripEndDate').value = landedDate.toISOString().slice(0, 10);
+                document.getElementById('newTripEndDate').value = landedDate.toTimezonedISOString().slice(0, 10);
                 document.getElementById('newTripEndTime').value = landedDate.toTimeString().slice(0, 5);
 
                 // Calculate and fill trip duration (following air routing pattern)
@@ -1355,7 +1679,11 @@
         }
     });
 
-    if ('{{precision}}' == "unknown") {
+    if ('{{precision}}' == "relative") {
+        // Plan leg with relative "Day N + time" timing (inputs prefilled server-side).
+        $("#radioRelative").prop("checked", true);
+    }
+    else if ('{{precision}}' == "unknown") {
         $("#radioUnknown").prop("checked", true);
     }
     else if ('{{precision}}' == "onlyDate") {
@@ -1374,6 +1702,58 @@
     else if ("{{unknownType}}" == "future") {
         $("#radioFuture").prop("checked", true);
     }
+    {% if plan_uuid %}
+    // Relative legs are timed (Day + time) OR duration-based (Day + duration), never
+    // both: the switch shows one set of inputs and clears the other, so conflicting
+    // values can't be submitted. The duration travels as onlyDateDuration.
+    // #manDuration is shared with the onlyDate precision further down the form, so in
+    // relative-duration mode it is MOVED up into #relativeDates (before the weekday
+    // row) and restored to its original slot (marker) for the other modes.
+    var _md = document.getElementById('manDuration');
+    var _mdHome = document.createElement('span');
+    _mdHome.style.display = 'none';
+    _md.parentNode.insertBefore(_mdHome, _md);
+    function updateRelTimeMode() {
+        var rel = $('#radioRelative').is(':checked');
+        var dur = $('#relModeDuration').is(':checked');
+        $('#planStartTime, #planEndTime').toggle(!(rel && dur));
+        $('#manDuration').toggleClass('rel-duration', rel && dur);
+        $('#relativeDates').toggleClass('rel-dur', rel && dur);
+        if (rel && dur) {
+            var wd = document.getElementById('planWeekdaysGroup');
+            wd.parentNode.insertBefore(_md, wd);
+        } else {
+            _mdHome.parentNode.insertBefore(_md, _mdHome.nextSibling);
+        }
+        if (rel) {
+            if (dur) $('#planStartTime, #planEndTime').val('');
+            else $('#manDurationHours, #manDurationMinutes').val('');
+        }
+    }
+    $('input[name="precision"], input[name="relTimeMode"]').on('change', updateRelTimeMode);
+    updateRelTimeMode();
+
+    // Weekday-constraint toggles (bitmask, bit 0 = Monday), localised via Intl.
+    (function initPlanWeekdays() {
+        var hidden = document.getElementById('planWeekdays');
+        var wrap = document.getElementById('planWeekdayBtns');
+        if (!hidden || !wrap) return;
+        var mask = parseInt(hidden.value, 10) || 0;
+        var fmt = new Intl.DateTimeFormat("{{ langId }}" || 'en', { weekday: 'short', timeZone: 'UTC' });
+        for (var i = 0; i < 7; i++) (function (i) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'wd-toggle' + (((mask >> i) & 1) ? ' on' : '');
+            b.textContent = fmt.format(new Date(Date.UTC(2024, 0, 1 + i))); // 2024-01-01 = Monday
+            b.addEventListener('click', function () {
+                mask ^= (1 << i);
+                b.classList.toggle('on', !!((mask >> i) & 1));
+                hidden.value = mask;
+            });
+            wrap.appendChild(b);
+        })(i);
+    })();
+    {% endif %}
     function updateTrip(copy) {
         $("#submit_text").hide();
         $(".spinner-border").show();
@@ -1387,6 +1767,9 @@
 
         if (updatedPath != null) {
             formData["path"] = JSON.stringify(updatedPath);
+            // Replace the 3D track together with the geom when re-imported from FR24.
+            if (updatedAltitude != null) formData["altitude"] = JSON.stringify(updatedAltitude);
+            if (updatedTimestamps != null) formData["timestamps"] = JSON.stringify(updatedTimestamps);
             if (updatedRouteDetails != null) {
                 newTrip["details"] = JSON.stringify(updatedRouteDetails);
             }
@@ -1410,6 +1793,12 @@
                 formData["precision"] == "preciseDates"
                 && formData["newTripStart"].length == 16
                 && formData["newTripEnd"].length == 16
+            )
+            || (
+                // Plan leg: relative Day N (+ optional time); only the days are required.
+                formData["precision"] == "relative"
+                && formData["planStartDay"]
+                && formData["planEndDay"]
             )) {
 
             var redirectToProjects;
@@ -1427,14 +1816,48 @@
                 redirectToProjects = (formData["unknownType"] == "past" ? false : true)
             }
             $.post({
-                url: copy ? "{{ url_for('copyTrip', username=username) }}" : "{{ url_for('updateTrip', username=username) }}",
+                url: {% if plan_uuid %}"{{ url_for('update_plan_trip_full_route', username=username, plan_uuid=plan_uuid, plan_trip_uid=plan_trip_uid) }}"{% else %}(copy ? "{{ url_for('copyTrip', username=username) }}" : "{{ url_for('updateTrip', username=username) }}"){% endif %},
                 data: formData,
                 success: function (res) {
-                    if (redirectToProjects) {
-                        location.href = "{{ url_for('dynamic_trips', time='projects', username=username) }}";
+                    {% if plan_uuid %}
+                    location.href = "{{ url_for('plan_view', username=username, plan_uuid=plan_uuid) }}";
+                    return;
+                    {% endif %}
+                    function doRedirect() {
+                        var nextUrl = new URLSearchParams(window.location.search).get('next');
+                        var nextAllowed = false;
+                        if (nextUrl) {
+                            try {
+                                var resolved = new URL(nextUrl, window.location.origin);
+                                nextAllowed = resolved.origin === window.location.origin;
+                            } catch(e) {}
+                        }
+                        if (nextAllowed) location.href = nextUrl;
+                        else if (redirectToProjects) location.href = "{{ url_for('dynamic_trips', time='projects', username=username) }}";
+                        else location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}";
                     }
-                    else {
-                        location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}";
+                    // Sync tags (copy mode: new trip id comes back from the copyTrip response)
+                    if (typeof _tagSetup !== 'undefined') {
+                        var tripId = copy ? res : location.pathname.split('/').pop();
+                        var currentIds = new Set(
+                            Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(el => el.dataset.tagId)
+                        );
+                        var orig = _tagSetup.getOriginalTagIds();
+                        var toAdd = [...currentIds].filter(id => !orig.has(id));
+                        var toRemove = [...orig].filter(id => !currentIds.has(id));
+                        var ops = [
+                            ...toAdd.map(id => fetch('{{ url_for("attach_tag", username=username) }}', {
+                                method: 'POST', headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({tag_id: id, trip_ids: [tripId]})
+                            })),
+                            ...toRemove.map(id => fetch('{{ url_for("detach_tag", username=username) }}', {
+                                method: 'POST', headers: {'Content-Type': 'application/json'},
+                                body: JSON.stringify({tag_id: id, trip_ids: [tripId]})
+                            }))
+                        ];
+                        Promise.all(ops).finally(doRedirect);
+                    } else {
+                        doRedirect();
                     }
                 },
                 fail: function () {
@@ -1446,13 +1869,20 @@
     }
 
 
-    var origFilepath = "{{ url_for('static',filename='images/operator_logos/')}}" + "{{tripOperator}}" + ".png";
-    $.ajax(origFilepath)
-        .done(function () { $(".operatorLogo").attr("src", origFilepath); })
-        .fail(function () { $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}"); });
+    // The operator's logo is now shown on its pill — and for every operator of a
+    // multi-operator trip, resolved through aliases — so this icon is just the trip
+    // type, as on the new-trip form. It previously guessed a legacy
+    // images/operator_logos/<name>.png path, which only ever matched exact spellings
+    // that happened to have a file under that old naming convention.
+    $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}");
 
     $.get('{{url_for("getManAndOps", username=username, station_type=tripType)}}', function (manAndOps, status) {
-        operatorAutocomplete($("#operator"), manAndOps, "{{ url_for('static',filename='')}}", "{{ url_for('static',filename='images/icons/trip_logos/' + tripType + '.png')}}", "{{tripType}}");
+        operatorPills = operatorPillsInput(
+            $("#operator"), $("#operatorSearch"), $("#operatorPills"), manAndOps,
+            "{{ url_for('static',filename='')}}", "{{tripType}}",
+            { plainToggle: true,
+              plainLabel: "{{ operatorPlainText|default('Edit as plain text') }}",
+              pillsLabel: "{{ operatorPillsMode|default('Back to operator list') }}" });
         if (tripType != 'air') {
             materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
         }
@@ -1504,33 +1934,41 @@
         }
     }
 
-    $('#price').on('input', function () {
-        var priceDefined = $(this).val() > 0;
-
+    // In plan mode a price is an estimate; the purchase date only applies (and shows)
+    // when the ticket is marked as actually booked.
+    var isPlanEdit = {{ 'true' if plan_uuid else 'false' }};
+    function updatePriceFields() {
+        var priceDefined = isNumber($('#price').val());
         if (priceDefined) {
-            // Show currency and purchasing_date if price is defined
-            $('#currency').show();
-            $('#currency_label').show();
-            $('#purchasing_date').show();
-            $('#purchasing_date_label').show();
-            $("#price").show();
-            $("#price").css("width", "");
-            $("#price").css("grid-column-start", "");
-            $("#price").css("grid-column-end", "");
+            $('#currency, #currency_label').show();
+            $("#price").show().css({ "width": "", "grid-column-start": "", "grid-column-end": "" });
+            if (isPlanEdit) {
+                $('#bookedWrapper').css('display', 'inline-flex');
+                var booked = $('#bookedToggle').is(':checked');
+                $('#purchasing_date, #purchasing_date_label').toggle(booked);
+            } else {
+                $('#purchasing_date, #purchasing_date_label').show();
+            }
         } else {
-            // Hide currency and purchasing_date if price is not defined
-            $('#currency').hide();
-            $('#currency_label').hide();
-            $('#purchasing_date').hide();
-            $('#purchasing_date_label').hide();
-            $("#price").show();
-            $("#price").css("width", "100%");
-            $("#price").css("grid-column-start", "1");
-            $("#price").css("grid-column-end", "-1");
+            $('#currency, #currency_label, #purchasing_date, #purchasing_date_label, #bookedWrapper').hide();
+            $("#price").show().css({ "width": "100%", "grid-column-start": "1", "grid-column-end": "-1" });
         }
-    }).trigger('input'); // Trigger on load to apply initial state
+    }
+    $('#price').on('input', updatePriceFields);
+    $('#bookedToggle').on('change', updatePriceFields);
+    updatePriceFields(); // Apply initial state
 
+    {% if not plan_uuid %}
     fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}", {{ tripTicketId }});
+    {% endif %}
+    var _tagSetup = setupTagAutocomplete(
+        '{{ url_for("get_all_tags", username=username) }}',
+        {{ tripId if edit_copy_type == 'edit' else 'null' }},
+        {
+            url: '{{ url_for("quick_create_tag", username=username) }}',
+            label: {{ create_tag_option | tojson }}
+        }
+    );
 
     var editCopyType = "{{ edit_copy_type }}";
     var precision = "{{ precision }}";
@@ -1556,8 +1994,8 @@
         var newEndDate = new Date(today);
         newEndDate.setDate(today.getDate() + dayDifference);
 
-        var formattedNewStartDate = newStartDate.toISOString().slice(0, 10);
-        var formattedNewEndDate = newEndDate.toISOString().slice(0, 10);
+        var formattedNewStartDate = newStartDate.toTimezonedISOString().slice(0, 10);
+        var formattedNewEndDate = newEndDate.toTimezonedISOString().slice(0, 10);
 
         $("#newTripStartDate").val(formattedNewStartDate);
         $("#newTripEndDate").val(formattedNewEndDate);
@@ -1587,16 +2025,31 @@
         });
     }
 
-    $('#fr24SearchToggle').on('change', function () {
-        const isReg = $(this).is(':checked');
+    // Remember the user's manual "GPS only" choice so we can restore it after
+    // leaving FR24 ID mode (where it's forced on).
+    var fr24OnlyPathUserState = $('#fr24OnlyPath').is(':checked');
+    $('#fr24OnlyPath').on('change', function () {
+        if (!this.disabled) fr24OnlyPathUserState = this.checked;
+    });
 
-        if (isReg) {
-            $('#flightNumberGroup').addClass('d-none');
-            $('#regNumberGroup').removeClass('d-none');
+    function applyFr24SearchType(type) {
+        $('#flightNumberGroup').toggleClass('d-none', type !== 'flight');
+        $('#regNumberGroup').toggleClass('d-none', type !== 'reg');
+        $('#fr24IdGroup').toggleClass('d-none', type !== 'id');
+        // The date is irrelevant when importing by an exact FR24 ID
+        $('#fr24PathDateGroup').toggleClass('d-none', type === 'id');
+        // Importing by ID is path-only by definition: force-tick and grey out the toggle
+        if (type === 'id') {
+            $('#fr24OnlyPath').prop('checked', true).prop('disabled', true);
         } else {
-            $('#regNumberGroup').addClass('d-none');
-            $('#flightNumberGroup').removeClass('d-none');
+            $('#fr24OnlyPath').prop('disabled', false).prop('checked', fr24OnlyPathUserState);
         }
+    }
+
+    $('#fr24SearchTabs .nav-link').on('click', function () {
+        $('#fr24SearchTabs .nav-link').removeClass('active');
+        $(this).addClass('active');
+        applyFr24SearchType($(this).data('fr24-type'));
     });
 
   {% if tripType in ('train', 'metro', 'tram') %}
@@ -1604,9 +2057,9 @@
     var result = [];
     var i = 0;
     while (i < units.length) {
-      var name = units[i].nom || units[i].name || '?';
+      var name = units[i].label || units[i].name || '?';
       var count = 1;
-      while (i + count < units.length && (units[i + count].nom || units[i + count].name || '?') === name) count++;
+      while (i + count < units.length && (units[i + count].label || units[i + count].name || '?') === name) count++;
       result.push(count > 1 ? count + '\xd7 ' + name : name);
       i += count;
     }
@@ -1624,6 +2077,11 @@
         $display.show();
         return;
       }
+      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets) && parsed.trainsets.length > 0) {
+        $('#ts-active-label').text(parsed.trainsets.join(' + '));
+        $display.show();
+        return;
+      }
     } catch(e) {}
     if (val) {
       $('#ts-active-label').text(val);
@@ -1638,34 +2096,139 @@
   }
   updateMaterialTypeDisplay();
   $(document).on('hidden.bs.modal', '#tsbModal', updateMaterialTypeDisplay);
-  function toggleTsPicker() {
-    var $list = $('#ts-pick-list');
-    if ($list.is(':visible')) { $list.hide(); return; }
-    if ($list.data('loaded')) { $list.show(); return; }
-    $list.html('<div class="p-2 text-muted" style="font-size:.85rem">Loading…</div>').show();
-    $.getJSON('/api/trainsets')
-      .done(function(sets) {
-        $list.empty();
-        if (!sets.length) {
-          $list.html('<div class="p-2 text-muted" style="font-size:.85rem">No saved trainsets</div>');
-          return;
-        }
-        sets.forEach(function(ts) {
-          $('<div class="ts-pick-item"></div>').text(ts.name).on('click', function() {
-            $('#material_type_advanced').val(ts.name);
-            updateMaterialTypeDisplay();
-            $list.hide();
-          }).appendTo($list);
-        });
-        $list.data('loaded', true);
-      })
-      .fail(function() { $list.html('<div class="p-2 text-danger" style="font-size:.85rem">Failed to load</div>'); });
-  }
   {% endif %}
+
+  // Delay section controls
+  (function() {
+    // Plans are tentative and have no delays — hide the section and skip its wiring.
+    if (isPlanEdit) {
+      $('#delayToggleWrapper, #delayModeSwitchWrapper, #delayMinutesInputs, #depActualGroup, #arrActualGroup').hide();
+      return;
+    }
+    var delayDateMode = Cookies.get('delayDateMode') === 'true';
+    $('#delayModeSwitch').prop('checked', delayDateMode);
+
+    // Single source of truth: delay in seconds (null = not set)
+    var depDelaySec = null, arrDelaySec = null;
+    var initDep = parseFloat($('#departureDelayMinutes').val());
+    var initArr = parseFloat($('#arrivalDelayMinutes').val());
+    if (!isNaN(initDep)) depDelaySec = initDep * 60;
+    if (!isNaN(initArr)) arrDelaySec = initArr * 60;
+
+    function fillActual(plannedDateId, plannedTimeId, actualDateId, actualTimeId, seconds) {
+      if (seconds === null) return;
+      var pd = document.getElementById(plannedDateId).value;
+      var pt = document.getElementById(plannedTimeId).value;
+      if (!pd || !pt) return;
+      var actual = new Date(new Date(pd + 'T' + pt).getTime() + seconds * 1000);
+      document.getElementById(actualDateId).value = actual.toTimezonedISOString().slice(0, 10);
+      document.getElementById(actualTimeId).value = actual.toTimeString().slice(0, 5);
+    }
+
+    function fillMinutes(minutesInputId, seconds) {
+      document.getElementById(minutesInputId).value = seconds !== null ? seconds / 60 : '';
+    }
+
+    function setDatetimeMode(on) {
+      if (on) {
+        $('#delayMinutesInputs').hide();
+        $('#depActualGroup, #arrActualGroup').show();
+        $('.delay-planned-suffix').show();
+        fillActual('newTripStartDate', 'newTripStartTime', 'depActualDate', 'depActualTime', depDelaySec);
+        fillActual('newTripEndDate', 'newTripEndTime', 'arrActualDate', 'arrActualTime', arrDelaySec);
+      } else {
+        $('#delayMinutesInputs').show();
+        $('#depActualGroup, #arrActualGroup').hide();
+        $('.delay-planned-suffix').hide();
+        fillMinutes('departureDelayMinutes', depDelaySec);
+        fillMinutes('arrivalDelayMinutes', arrDelaySec);
+      }
+    }
+
+    // Auto-check if trip already has delays
+    if (depDelaySec !== null || arrDelaySec !== null) {
+      $('#delayToggle').prop('checked', true);
+      $('#delayModeSwitchWrapper').css('display', 'inline-flex');
+      setDatetimeMode(delayDateMode);
+    }
+
+    $('#delayToggle').on('change', function() {
+      if ($(this).is(':checked')) {
+        $('#delayModeSwitchWrapper').css('display', 'inline-flex');
+        setDatetimeMode($('#delayModeSwitch').is(':checked'));
+      } else {
+        $('#delayModeSwitchWrapper').hide();
+        $('#delayMinutesInputs').hide();
+        $('#depActualGroup, #arrActualGroup').hide();
+        $('.delay-planned-suffix').hide();
+      }
+    });
+
+    $('#delayModeSwitch').on('change', function() {
+      var dateMode = $(this).is(':checked');
+      Cookies.set('delayDateMode', dateMode, { expires: 365 });
+      if ($('#delayToggle').is(':checked')) setDatetimeMode(dateMode);
+    });
+
+    // Minutes inputs → update source of truth
+    $('#departureDelayMinutes').on('input', function() {
+      var v = parseFloat(this.value);
+      depDelaySec = isNaN(v) ? null : v * 60;
+    });
+    $('#arrivalDelayMinutes').on('input', function() {
+      var v = parseFloat(this.value);
+      arrDelaySec = isNaN(v) ? null : v * 60;
+    });
+
+    // Actual datetime inputs → update source of truth and keep minutes in sync
+    function updateFromActual(plannedDateId, plannedTimeId, actualDateId, actualTimeId, minutesInputId, isArr) {
+      var pd = document.getElementById(plannedDateId).value;
+      var pt = document.getElementById(plannedTimeId).value;
+      var ad = document.getElementById(actualDateId).value;
+      var at = document.getElementById(actualTimeId).value;
+      var sec = (pd && pt && ad && at) ? (new Date(ad + 'T' + at) - new Date(pd + 'T' + pt)) / 1000 : null;
+      if (isArr) arrDelaySec = sec; else depDelaySec = sec;
+      document.getElementById(minutesInputId).value = sec !== null ? sec / 60 : '';
+    }
+
+    ['depActualDate', 'depActualTime', 'newTripStartDate', 'newTripStartTime'].forEach(function(id) {
+      document.getElementById(id).addEventListener('change', function() {
+        if ($('#depActualGroup').is(':visible'))
+          updateFromActual('newTripStartDate', 'newTripStartTime', 'depActualDate', 'depActualTime', 'departureDelayMinutes', false);
+      });
+    });
+    ['arrActualDate', 'arrActualTime', 'newTripEndDate', 'newTripEndTime'].forEach(function(id) {
+      document.getElementById(id).addEventListener('change', function() {
+        if ($('#arrActualGroup').is(':visible'))
+          updateFromActual('newTripEndDate', 'newTripEndTime', 'arrActualDate', 'arrActualTime', 'arrivalDelayMinutes', true);
+      });
+    });
+
+    // On submit: clear delay values if toggle is unchecked
+    $('form').not('#fr24PathForm').on('submit', function() {
+      if (!$('#delayToggle').is(':checked'))
+        $('#departureDelayMinutes, #arrivalDelayMinutes').val('');
+    });
+
+    // Hide delays when precision is not precise dates
+    function updateDelayAvailability() {
+      var isPrecise = $('#radioPreciseDates').is(':checked');
+      $('#delayToggleWrapper').css('display', isPrecise ? 'inline-flex' : 'none');
+      if (!isPrecise && $('#delayToggle').is(':checked')) {
+        $('#delayToggle').prop('checked', false);
+        $('#delayModeSwitchWrapper').hide();
+        $('#delayMinutesInputs').hide();
+        $('#depActualGroup, #arrActualGroup').hide();
+        $('.delay-planned-suffix').hide();
+      }
+    }
+    updateDelayAvailability();
+    $('input[name="precision"]').on('change', updateDelayAvailability);
+  })();
 
 </script>
 
-{% if tripType in ('train', 'metro', 'tram') and is_alpha %}
+{% if tripType in ('train', 'metro', 'tram') %}
 {% include "includes/trainset_builder_modal.html" %}
 {% endif %}
 

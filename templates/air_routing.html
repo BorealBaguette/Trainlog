@@ -16,6 +16,7 @@
   nav.navbar { display: none !important; }
 </style>
 {% endif %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/routing_panel.css') }}">
 
 <script>
 // ─── Flutter bridge (for app) ───────────────────────────────────────────────
@@ -36,6 +37,8 @@ window.flutterBridge = {
 let currentPolyline = null;
 let useFR24 = true;
 let fr24PathCache = null;
+let fr24AltCache = null;   // altitude (metres), parallel to fr24PathCache
+let fr24TimeCache = null;  // timestamps (epoch seconds), parallel to fr24PathCache
 
 const id = getGetParams().get("id");
 let newTrip = null;
@@ -53,8 +56,8 @@ if (!newTrip) {
     throw new Error('No trip data');
 }
 var fromApp = !!getGetParams().get("fromApp");
+var type = getGetParams().get("type") || newTrip.type;
 
-console.log(newTrip);
 console.log(newTrip);
 
 let origCoord = newTrip.originStation?.[0] ?? [0, 0];
@@ -96,7 +99,10 @@ async function updateRoute() {
             showLoadingSidebar();
             try {
                 const res = await fetch(`{{url_for("flight_tracks", username=username, fr24_id='' )}}${newTrip.fr24_id}`);
-                fr24PathCache = await res.json();
+                const data = await res.json();
+                fr24PathCache = data.coordinates;
+                fr24AltCache = data.altitude;
+                fr24TimeCache = data.timestamps;
             } catch (e) {
                 console.warn("FR24 path fetch failed, falling back to geodesic");
                 useFR24 = false;
@@ -176,10 +182,14 @@ function updateSidebar(isFr24Active) {
     flutterBridge.loading(false);
 
     if (newTrip.fr24_id) {
-        content += `<p><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></p>`;
+        content += `<div class="submit-control"><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></div>`;
     }
 
-    content += `<p><button id="saveTrip" type="button" onclick="saveTrip()" class="btn btn-success">Submit</button></p>`;
+    content += buildSubmitControl({
+        saveLabel: "{{submit}}",
+        continueLabel: "{{saveTripContinueButton}}",
+        showContinue: true
+    });
     sidebar.setContent(content);
 }
 
@@ -210,15 +220,19 @@ function showLoadingSidebar(message = "Loading flight path...") {
 }
 
 
-async function saveTrip() {
+async function saveTrip(continueTrip=false) {
     flutterBridge.loading(true);
     sidebar.setContent('<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>');
 
     let pathToSave;
+    let altToSave = null;
+    let timeToSave = null;
 
     if (useFR24 && Array.isArray(fr24PathCache) && fr24PathCache.length >= 2) {
-        // Save FR24 path
+        // Save FR24 path (with altitude/timestamps, parallel to the path points)
         pathToSave = fr24PathCache.map(p => ({ lat: p[0], lng: p[1] }));
+        altToSave = fr24AltCache;
+        timeToSave = fr24TimeCache;
         console.log("Saving FR24 path", pathToSave);
         newTrip["trip_length"] = getTotalDistanceFromPath(fr24PathCache);
         newTrip["estimated_trip_duration"] = newTrip.fr24_duration ?? newTrip.estimated_trip_duration;
@@ -237,6 +251,8 @@ async function saveTrip() {
         data: {
             newTrip: JSON.stringify(newTrip),
             jsonPath: JSON.stringify(pathToSave),
+            altitude: altToSave ? JSON.stringify(altToSave) : "",
+            timestamps: timeToSave ? JSON.stringify(timeToSave) : "",
             fromApp: fromApp
         },
         success: function (res) {
@@ -246,7 +262,30 @@ async function saveTrip() {
                 return;
             }
 
-            location.href = "{{ url_for('landing') }}";
+            var isPlan = !!newTrip.plan_uuid;
+            if (isPlan) {
+                if (continueTrip) {
+                    // Carry forward the same timing mode this leg used (relative or precise).
+                    var contUrl = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${encodeURIComponent(newTrip["destinationStation"])}`;
+                    if (newTrip.precision == "preciseDates") {
+                        contUrl += `&prevEndDate=${newTrip["newTripEndDate"] || ''}&prevEndTime=${newTrip["newTripEndTime"] || ''}`;
+                    } else if (newTrip.precision == "onlyDate") {
+                        contUrl += `&prevEndDate=${newTrip["onlyDate"] || ''}`;
+                    } else {
+                        contUrl += `&prevPlanDay=${newTrip["planEndDay"] || ''}&prevPlanTime=${newTrip["planEndTime"] || ''}`;
+                    }
+                    location.href = contUrl;
+                } else {
+                    location.href = "/u/{{ username }}/plan/" + encodeURIComponent(newTrip.plan_uuid);
+                }
+                return;
+            }
+
+            if (continueTrip) {
+                location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?prevDest=${encodeURIComponent(newTrip["destinationStation"])}&prevEndDate=${newTrip["newTripEndDate"]}&prevEndTime=${newTrip["newTripEndTime"]}`;
+            } else {
+                location.href = "{{ url_for('landing') }}";
+            }
         },
         error: function (xhr, status, error) {
             flutterBridge.loading(false);

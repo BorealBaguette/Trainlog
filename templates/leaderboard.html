@@ -15,14 +15,14 @@
 </div>
 
 <div id="leaderboard-container" class="container mt-3">
-    <h2>
+    <h1>
         {% if type == "all" %}
             {{ leaderboardTotal }}
         {% else %}
             {{ transport_types[type] }}
         {% endif %}
-    </h2>
-    
+    </h1>
+
     <br>
     
     {% include "leaderboardNav.html"%}
@@ -30,7 +30,7 @@
     <br>
 
     <table id="leaderboard" class="table table-striped table-bordered display nowrap">
-        <thead class="thead">
+        <thead>
             <tr>
                 <th></th>
                 <th>{{ leaderboardRank }}</th>
@@ -53,12 +53,14 @@ showLoading();
 $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(users, status){
 
     function generateLink(username, highlighted=false) {
+        const safe = sanitize(username);
+        const encoded = encodeURIComponent(username);
         if (users.non_public_users.includes(username)) {
-            return `${username}`;
+            return safe;
         } else if (highlighted) {
-            return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+            return `<a class="leaderboardLink link-light" href="{{url_for('public', username="")}}${encoded}">${safe}</a>`;
         } else {
-            return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${username}">${username}</a>`;
+            return `<a class="leaderboardLink link-dark" href="{{url_for('public', username="")}}${encoded}">${safe}</a>`;
         }
     }
     
@@ -106,7 +108,24 @@ $.get('{{url_for("getLeaderboardUsers", type=type)}}', function(users, status){
                 target: 0
             }
         },
-        order: [[4, 'desc']]  // Order by Total Trips in descending order
+        order: [[4, 'desc']],  // Order by Total Trips in descending order
+        language: {
+            info: "{{dtInfo}}",
+            paginate: {
+                next: "{{dtNext}}",
+                previous: "{{dtPrevious}}",
+            },
+            emptyTable: "{{dtEmptyTable}}",
+            select: {
+                rows: {
+                    "_": "{{dtMultipleLineSelected}}",
+                    "0": "",
+                    "1": "{{dtOneLineSelected}}"
+                },
+            },
+            lengthMenu: "{{dtLengthMenu}}",
+            search: "{{dtSearch}}"
+        },
     });
 
     dTable
