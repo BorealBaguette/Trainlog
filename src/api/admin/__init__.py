@@ -2,7 +2,7 @@ import logging
 
 from flask import Blueprint, render_template, request, session
 
-from py.utils import get_flag_emoji
+from py.utils import get_all_countries, get_flag_emoji
 from src.suspicious_activity import list_denied_logins, list_suspicious_activity
 from src.utils import admin_required, getUser, has_current_trip, lang, owner_required
 
@@ -73,6 +73,21 @@ def wagons_admin():
         "admin/wagons.html",
         nav="bootstrap/navigation.html",
         username=getUser(),
+        country_list=get_all_countries(),
+        isCurrent=has_current_trip(),
+        **session["userinfo"],
+        **lang[session["userinfo"]["lang"]],
+    )
+
+
+@admin_blueprint.route("/vagonweb")
+@owner_required
+def vagonweb_admin():
+    return render_template(
+        "admin/vagonweb.html",
+        nav="bootstrap/navigation.html",
+        username=getUser(),
+        country_list=get_all_countries(),
         isCurrent=has_current_trip(),
         **session["userinfo"],
         **lang[session["userinfo"]["lang"]],

@@ -19,6 +19,61 @@ import re
 
 logger = logging.getLogger(__name__)
 
+AI_CHAT_URL = "https://api.infomaniak.com/2/ai/106774/openai/v1/chat/completions"
+
+
+def get_ai_api_key():
+    return load_config().get("infomaniak_ai", {}).get("api_key")
+
+
+def call_ai_json(prompt, images=None, model=None, timeout=120):
+    """
+    Send a prompt (optionally with images) to the chat API and return the decoded
+    JSON reply, or None if the call or the decode failed.
+
+    `images` is a list of {"mime": ..., "data": <base64>}; when given, the default
+    model switches to the vision-capable one.
+    """
+    api_key = get_ai_api_key()
+    if not api_key:
+        logger.error("No AI API key found")
+        return None
+
+    if images:
+        content = [
+            {"type": "image_url",
+             "image_url": {"url": f"data:{img['mime']};base64,{img['data']}"}}
+            for img in images
+        ]
+        content.append({"type": "text", "text": prompt})
+    else:
+        content = prompt
+
+    try:
+        response = requests.post(
+            AI_CHAT_URL,
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            json={"model": model or ("qwen3" if images else "mistral3"),
+                  "messages": [{"role": "user", "content": content}]},
+            timeout=timeout,
+        )
+        result = response.json()
+
+        if "choices" not in result:
+            logger.error(f"AI API error response: {result}")
+            return None
+
+        raw = result["choices"][0]["message"]["content"]
+        raw = raw.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        return json.loads(raw)
+    except json.JSONDecodeError as e:
+        logger.error(f"AI returned invalid JSON: {e} - {raw[:500]}")
+        return None
+    except Exception as e:
+        logger.error(f"AI call failed: {e}")
+        return None
+
+
 class FakeRequest:
     def __init__(self):
         self.query_string = b"overview=full&geometries=geojson"
@@ -217,12 +272,6 @@ def parse_ics_content(ics_data):
     return events
 
 def parse_trip_with_ai(text, user_lang="en", images=None, ics_events=None, pdf_texts=None):
-    config = load_config()
-    api_key = config.get("infomaniak_ai", {}).get("api_key")
-    if not api_key:
-        logger.error("No AI API key found")
-        return None
-    
     lang_names = {"en": "English", "fr": "French", "de": "German", "es": "Spanish", "it": "Italian", "pt": "Portuguese", "nl": "Dutch", "pl": "Polish", "cs": "Czech", "ja": "Japanese", "zh": "Chinese", "ko": "Korean"}
     lang_name = lang_names.get(user_lang, "English")
     
@@ -283,33 +332,11 @@ If no valid trip info, return []
 
 Text: {text if text else "(see images)"}{attachment_info}"""
 
-    # Build message content
-    if images:
-        content = []
-        for img in images:
-            content.append({"type": "image_url", "image_url": {"url": f"data:{img['mime']};base64,{img['data']}"}})
-        content.append({"type": "text", "text": prompt})
-    else:
-        content = prompt
-
-    model = "qwen3" if images else "mistral3"
+    parsed = call_ai_json(prompt, images=images)
+    if parsed is None:
+        return None
 
     try:
-        response = requests.post(
-            "https://api.infomaniak.com/2/ai/106774/openai/v1/chat/completions",
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={"model": model, "messages": [{"role": "user", "content": content}]}
-        )
-        result = response.json()
-        
-        if "choices" not in result:
-            logger.error(f"AI API error response: {result}")
-            return None
-        
-        resp_content = result["choices"][0]["message"]["content"]
-        resp_content = resp_content.strip().removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        parsed = json.loads(resp_content)
-        
         # Normalize response to list
         if isinstance(parsed, dict):
             if parsed.get("origin") and parsed.get("destination"):
@@ -333,9 +360,6 @@ Text: {text if text else "(see images)"}{attachment_info}"""
             return None
         
         return valid_trips
-    except json.JSONDecodeError as e:
-        logger.error(f"AI returned invalid JSON: {e} - {resp_content[:500]}")
-        return None
     except Exception as e:
         logger.error(f"AI parsing error: {e}")
         return None

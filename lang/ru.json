@@ -1130,5 +1130,6 @@
     "bookedLabel": "Уже забронировано",
     "impossibleConnection": "Отправляется до прибытия предыдущего участка",
     "manage_manual_stations": "Manual stations",
-    "confirm_delete_manual_station": "Are you sure you want to delete this manual station?"
+    "confirm_delete_manual_station": "Are you sure you want to delete this manual station?",
+    "licensedToTrainlog": "Лицензировано для Trainlog"
 }

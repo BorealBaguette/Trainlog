@@ -13,6 +13,7 @@ config.yaml
 .venv/
 logs/
 static/images/operator_logos/
+static/images/wagons/images/_vw_staging/
 node_modules/
 package.json
 package-lock.json

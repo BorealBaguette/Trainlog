@@ -1128,5 +1128,6 @@
     "settingsSectionGeneral": "Général",
     "settingsSectionData": "Données",
     "manage_manual_stations": "Gares manuelles",
-    "confirm_delete_manual_station": "Voulez-vous vraiment supprimer cette gare manuelle ?"
+    "confirm_delete_manual_station": "Voulez-vous vraiment supprimer cette gare manuelle ?",
+    "licensedToTrainlog": "Sous licence pour Trainlog"
 }

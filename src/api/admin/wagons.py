@@ -1,5 +1,9 @@
+import json
+import logging
 import re
 import shlex
+import time
+from collections import Counter
 from pathlib import Path
 
 from flask import Blueprint, jsonify, request
@@ -7,18 +11,90 @@ from flask import Blueprint, jsonify, request
 from src.pg import pg_session
 from src.utils import admin_required
 
+logger = logging.getLogger(__name__)
+
 wagons_admin_blueprint = Blueprint("admin_wagons", __name__)
 
 _EDITABLE_FIELDS = {"label", "category", "subcategory", "era", "source", "notes",
-                    "image_type", "line_type", "image", "author", "license",
-                    "gauge", "updated_on", "image_ext", "px_per_meter"}
+                    "image_type", "image", "author", "license",
+                    "gauge", "updated_on", "image_ext", "px_per_meter", "countries"}
 _VALID_IMAGE_TYPES = {"plain", "sides", "sides_L", "sides_R"}
 _VALID_IMAGE_EXTS  = {"gif", "png"}
 _COL_MAP = {0: "name", 1: "label", 2: "category", 3: "subcategory",
-            4: "era", 5: "image_type", 6: "image"}
+            4: "era", 5: "countries", 6: "uses", 7: "image_type", 8: "image"}
 
 WAGONS_ROOT   = Path("static/images/wagons").resolve()
 CUSTOM_FOLDER = "images/custom"          # relative to WAGONS_ROOT, stored in DB
+
+
+_USAGE_TTL = 300          # seconds; the admin table re-queries on every page change
+_usage_cache: dict = {"at": 0.0, "counts": {}}
+
+
+def _wagon_usage() -> dict[str, int]:
+    """
+    Trips using each wagon, keyed by wagon name.
+
+    There is no foreign key to follow: trips.material_type_advanced holds either an
+    inline JSON array of units, a composite {"trainsets": [names]}, or a bare trainset
+    name. Rather than cast that column to jsonb in SQL — one malformed row would abort
+    the whole query — group the distinct values, then parse them in Python where a bad
+    value can be skipped. Distinct compositions are far fewer than trips, so this stays
+    cheap, and the result is cached for a few minutes.
+    """
+    now = time.time()
+    if now - _usage_cache["at"] < _USAGE_TTL:
+        return _usage_cache["counts"]
+
+    counts: Counter = Counter()
+    try:
+        with pg_session() as pg:
+            sets = {}
+            for r in pg.execute("SELECT name, units_json FROM trainsets").fetchall():
+                try:
+                    units = json.loads(r["units_json"] or "[]")
+                except (TypeError, ValueError):
+                    continue
+                names = [u.get("name") for u in units if isinstance(u, dict) and u.get("name")]
+                # Names collide between personal and public sets; union them rather
+                # than guessing which one a given trip meant.
+                sets.setdefault(r["name"], set()).update(names)
+
+            rows = pg.execute(
+                """
+                SELECT material_type_advanced AS mta, COUNT(*) AS n
+                FROM trips
+                WHERE material_type_advanced IS NOT NULL AND material_type_advanced <> ''
+                GROUP BY material_type_advanced
+                """
+            ).fetchall()
+
+        for row in rows:
+            value, n = (row["mta"] or "").strip(), row["n"]
+            names: set[str] = set()
+            if value.startswith("["):
+                try:
+                    names = {u.get("name") for u in json.loads(value)
+                             if isinstance(u, dict) and u.get("name")}
+                except (TypeError, ValueError):
+                    continue
+            elif value.startswith("{"):
+                try:
+                    for set_name in json.loads(value).get("trainsets") or []:
+                        names |= sets.get(set_name, set())
+                except (TypeError, ValueError, AttributeError):
+                    continue
+            else:
+                names = sets.get(value, set())
+
+            for wagon in names:
+                counts[wagon] += n
+    except Exception as e:                        # never break the listing over a stat
+        logger.warning("wagon usage count failed: %s", e)
+        return _usage_cache["counts"]
+
+    _usage_cache.update(at=now, counts=dict(counts))
+    return _usage_cache["counts"]
 
 
 def _sanitize_name(label: str) -> str:
@@ -78,6 +154,9 @@ def list_wagons():
     order_col = _COL_MAP.get(request.args.get("order[0][column]", 0, type=int), "label")
     order_dir = "ASC" if request.args.get("order[0][dir]", "asc") == "asc" else "DESC"
 
+    # Must run before the session below opens — pg_session() refuses to nest.
+    usage = _wagon_usage()
+
     with pg_session() as pg:
         total = pg.execute("SELECT COUNT(*) FROM wagons").scalar()
 
@@ -88,7 +167,8 @@ def list_wagons():
                 terms = search.split()
             # Text fields searched with ILIKE; gauge cast to text for numeric match
             _text_fields = ["label", "category", "subcategory", "notes",
-                            "name", "image", "era", "source", "author", "license"]
+                            "name", "image", "era", "source", "author", "license",
+                            "countries"]
             _field_exprs = [f"{f} ILIKE :t{{i}}" for f in _text_fields] + \
                            ["gauge::text ILIKE :t{i}"]
             qparams = {"limit": length, "offset": start}
@@ -106,12 +186,21 @@ def list_wagons():
             filtered = total
             qparams  = {"limit": length, "offset": start}
 
+        # Usage counts live in Python (see _wagon_usage), so they are fed back in as a
+        # pair of arrays and joined — that keeps sorting by popularity in SQL, which
+        # server-side paging requires.
+        qparams["u_names"]  = list(usage.keys())
+        qparams["u_counts"] = list(usage.values())
+
         data = [dict(r) for r in pg.execute(
             f"""
             SELECT name, label, category, subcategory, era, image, notes,
-                   source, line_type, image_type, image_ext, px_per_meter,
-                   author, license, gauge
+                   source, image_type, image_ext, px_per_meter,
+                   author, license, gauge, countries,
+                   COALESCE(u.ucount, 0) AS uses
             FROM wagons
+            LEFT JOIN unnest(CAST(:u_names AS text[]), CAST(:u_counts AS bigint[]))
+                   AS u(uname, ucount) ON u.uname = wagons.name
             {where}
             ORDER BY {order_col} {order_dir} NULLS LAST
             LIMIT :limit OFFSET :offset
@@ -262,6 +351,12 @@ def create_wagon():
     author     = (request.form.get("author")      or "").strip()
     license_   = (request.form.get("license")     or "").strip()
     gauge_str  = (request.form.get("gauge")       or "").strip()
+    # The selector posts one value per country; store them the way tickets do
+    countries  = ",".join(
+        c for c in dict.fromkeys(
+            v.strip().upper() for v in request.form.getlist("countries[]") if v.strip()
+        )
+    ) or None
     ppm_str    = (request.form.get("px_per_meter") or "").strip()
     image_type = (request.form.get("image_type")  or "sides").strip()
 
@@ -341,9 +436,11 @@ def create_wagon():
         pg.execute(
             """
             INSERT INTO wagons (category, subcategory, label, era, image, name,
-                                notes, image_type, image_ext, px_per_meter, author, license, gauge)
+                                notes, image_type, image_ext, px_per_meter, author, license,
+                                gauge, countries)
             VALUES (:category, :subcategory, :label, :era, :image, :name,
-                    :notes, :image_type, :image_ext, :px_per_meter, :author, :license, :gauge)
+                    :notes, :image_type, :image_ext, :px_per_meter, :author, :license,
+                    :gauge, :countries)
             """,
             {
                 "category":     category or None,
@@ -359,6 +456,7 @@ def create_wagon():
                 "author":       author or None,
                 "license":      license_ or None,
                 "gauge":        gauge,
+                "countries":    countries,
             },
         )
 
