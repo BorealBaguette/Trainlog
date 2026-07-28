@@ -273,7 +273,11 @@ function renderResults() {
           <div>
             <strong>${esc(w.label)}</strong>
             <span class="font-monospace small text-muted ms-2">${esc(w.vw_base)}</span>
-            ${w.already_imported ? '<span class="badge bg-secondary ms-2">already in catalogue</span>' : ''}
+            ${w.already_imported
+              ? '<span class="badge bg-secondary ms-2">already in catalogue</span>'
+              : ((w.imported_codes || []).length
+                 ? `<span class="badge bg-info text-dark ms-2" title="Already imported: ${esc((w.imported_codes||[]).join(', '))}">${w.imported_codes.length} of ${(w.variants||[]).length} codes imported</span>`
+                 : '')}
             ${(w.variants || []).length > 1
               ? `<span class="badge bg-warning text-dark ms-2" title="VagonWeb draws these type codes with this same file, so they import as one wagon">also drawn as ${esc(w.variants.slice(1).join(', '))}</span>`
               : ''}
@@ -449,6 +453,8 @@ function activeVariants() {
 function renderVariantPicker() {
   const wrap = document.getElementById('variantPicker');
   const defs = current.variant_defaults || [];
+  // Codes already in the catalogue start unticked so a re-import is deliberate
+  const done = current.imported_codes || [];
   if (defs.length < 2) { wrap.innerHTML = ''; wrap.classList.add('d-none'); return; }
   wrap.classList.remove('d-none');
   wrap.innerHTML =
@@ -456,10 +462,13 @@ function renderVariantPicker() {
     defs.map((d, i) => `
       <span class="form-check-inline-wrap me-3">
         <input class="form-check-input" type="checkbox" id="var_${i}"
-               value="${esc(d.code)}" data-name="${esc(d.name)}" checked>
-        <label class="form-check-label" for="var_${i}">${esc(d.code)}</label>
+               value="${esc(d.code)}" data-name="${esc(d.name)}"
+               ${done.includes(d.code) ? '' : 'checked'}>
+        <label class="form-check-label${done.includes(d.code) ? ' text-muted' : ''}"
+               for="var_${i}">${esc(d.code)}${done.includes(d.code) ? ' ✓' : ''}</label>
       </span>`).join('') +
-    '<span class="text-muted small">Each ticked code is saved as its own wagon, with its own copy of the image.</span>';
+    `<span class="text-muted small">Each ticked code is saved as its own wagon, with its own copy of the image.${
+      done.length ? ` Already imported: ${esc(done.join(', '))}.` : ''}</span>`;
   wrap.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
     document.getElementById('segBody').innerHTML = '';   // regenerate defaults
     renderSegments();
