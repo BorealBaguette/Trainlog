@@ -151,11 +151,14 @@
           <div id="cutInnerR"><img id="cutImgR" alt=""></div>
         </div>
 
-        <!-- One row per resulting car -->
+        <div id="variantPicker" class="d-none mb-2 small"></div>
+
+        <!-- One row per code x car -->
         <div class="table-responsive">
           <table class="table table-sm align-middle seg-table">
             <thead>
               <tr>
+                <th style="width:5rem">Code</th>
                 <th style="width:4rem">Car</th>
                 <th style="width:6rem">Width</th>
                 <th>Name (key)</th>
@@ -347,10 +350,38 @@ function startDrag(e, i) {
 }
 
 /* Rebuild the per-car rows, keeping anything already typed in place by index */
+function activeVariants() {
+  // The type codes to import. Several codes can share one VagonWeb drawing; each
+  // becomes its own wagon with its own copy of the picture.
+  const boxes = [...document.querySelectorAll('#variantPicker input[type=checkbox]')];
+  if (!boxes.length) return [{ code: '', name: current.default_name }];
+  return boxes.filter(b => b.checked).map(b => ({ code: b.value, name: b.dataset.name }));
+}
+
+function renderVariantPicker() {
+  const wrap = document.getElementById('variantPicker');
+  const defs = current.variant_defaults || [];
+  if (defs.length < 2) { wrap.innerHTML = ''; wrap.classList.add('d-none'); return; }
+  wrap.classList.remove('d-none');
+  wrap.innerHTML =
+    '<span class="fw-semibold me-1">Type codes on this drawing:</span>' +
+    defs.map((d, i) => `
+      <span class="form-check-inline-wrap me-3">
+        <input class="form-check-input" type="checkbox" id="var_${i}"
+               value="${esc(d.code)}" data-name="${esc(d.name)}" checked>
+        <label class="form-check-label" for="var_${i}">${esc(d.code)}</label>
+      </span>`).join('') +
+    '<span class="text-muted small">Each ticked code is saved as its own wagon, with its own copy of the image.</span>';
+  wrap.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
+    document.getElementById('segBody').innerHTML = '';   // regenerate defaults
+    renderSegments();
+  }));
+}
+
 function renderSegments() {
   const body = document.getElementById('segBody');
-  // Only hand-edited fields survive a cut change; the rest are re-derived so the
-  // "_c1, _c2…" naming appears as soon as the strip is actually split.
+  // Only hand-edited fields survive a cut/variant change; the rest are re-derived so
+  // the "_c1, _c2…" naming appears as soon as the strip is actually split.
   const typed = [...body.querySelectorAll('tr')].map(tr => {
     const v = {};
     tr.querySelectorAll('input').forEach(inp => {
@@ -359,36 +390,47 @@ function renderSegments() {
     return v;
   });
 
-  const bounds = [0, ...cuts, current.width];
-  const rows   = [];
-  for (let i = 0; i < bounds.length - 1; i++) {
-    const split  = bounds.length > 2;
-    const suffix = split ? `_c${i + 1}` : '';
-    const prev     = typed[i] || {};
-    const defaults = {
-      name:        current.default_name + suffix,
-      label:       split ? `${current.label} — car ${i + 1}` : current.label,
-      category:    current.category || '',
-      subcategory: current.subcategory || '',
-      notes:       current.notes || '',
-    };
-    const cell = (field, extra = '') => {
-      const dirty = prev[field] !== undefined;
-      const value = dirty ? prev[field] : defaults[field];
-      return `<td><input class="form-control form-control-sm ${extra}" data-field="${field}"
-                         ${dirty ? 'data-dirty="1"' : ''} value="${esc(value)}"></td>`;
-    };
-    rows.push(`
-      <tr>
-        <td class="text-muted">${i + 1}</td>
-        <td class="text-muted small">${bounds[i + 1] - bounds[i]} px</td>
-        ${cell('name', 'font-monospace')}
-        ${cell('label')}
-        ${cell('category')}
-        ${cell('subcategory')}
-        ${cell('notes')}
-      </tr>`);
-  }
+  const bounds   = [0, ...cuts, current.width];
+  const cars     = bounds.length - 1;
+  const split    = cars > 1;
+  const variants = activeVariants();
+  const multi    = variants.length > 1;
+  const rows     = [];
+
+  variants.forEach((variant, v) => {
+    for (let i = 0; i < cars; i++) {
+      const idx    = v * cars + i;
+      const suffix = split ? `_c${i + 1}` : '';
+      const prev   = typed[idx] || {};
+      // The label follows the code, so a B3-2 does not end up reading "B3-4"
+      const base   = multi ? `${current.operator || ''} ${variant.code}`.trim() : current.label;
+      const defaults = {
+        name:        variant.name + suffix,
+        label:       split ? `${base} — car ${i + 1}` : base,
+        category:    multi ? variant.code : (current.category || ''),
+        subcategory: current.subcategory || '',
+        notes:       current.notes || '',
+      };
+      const cell = (field, extra = '') => {
+        const dirty = prev[field] !== undefined;
+        const value = dirty ? prev[field] : defaults[field];
+        return `<td><input class="form-control form-control-sm ${extra}" data-field="${field}"
+                           ${dirty ? 'data-dirty="1"' : ''} value="${esc(value)}"></td>`;
+      };
+      rows.push(`
+        <tr${multi && i === 0 && v > 0 ? ' class="border-top border-2"' : ''}>
+          <td class="text-muted small">${multi ? esc(variant.code) : ''}</td>
+          <td class="text-muted">${i + 1}</td>
+          <td class="text-muted small">${bounds[i + 1] - bounds[i]} px</td>
+          ${cell('name', 'font-monospace')}
+          ${cell('label')}
+          ${cell('category')}
+          ${cell('subcategory')}
+          ${cell('notes')}
+        </tr>`);
+    }
+  });
+
   body.innerHTML = rows.join('');
   body.querySelectorAll('input').forEach(inp => {
     inp.addEventListener('input', () => {
@@ -398,7 +440,6 @@ function renderSegments() {
   });
   renderCarTags();
 }
-
 function openImport(i) {
   current = wagons[i];
   cuts    = [];
@@ -431,6 +472,7 @@ function openImport(i) {
       'R view (-b) — same cuts, mirrored; check they still land on the joints';
   }
 
+  renderVariantPicker();
   renderCuts();
   renderSegments();
   new bootstrap.Modal(document.getElementById('importModal')).show();
@@ -472,6 +514,8 @@ document.getElementById('aiFillBtn').addEventListener('click', async function ()
       body: JSON.stringify({
         key: current.key,
         cuts,
+        // The grid is codes x cars, so the AI must answer for every row, not just car 1
+        variants: activeVariants().map(v => v.code),
         // The keys let a hint like "BPb74 = N_Vy_BM74_c4" actually bind to a car
         car_keys: rows.map(tr => (tr.querySelector('input[data-field="name"]') || {}).value || ''),
         hint: document.getElementById('aiHint').value.trim(),
@@ -544,6 +588,7 @@ document.getElementById('importBtn').addEventListener('click', async function ()
     px_per_meter: document.getElementById('imPpm').value.trim(),
     countries:    $('#imCountries').val() || [],
     cuts, units,
+    variants: activeVariants().map(v => v.code),
   };
 
   this.disabled = true;

@@ -111,6 +111,22 @@ def _sanitize_name(name: str) -> str:
     return re.sub(r"[^\w.-]+", "_", name).strip("_")
 
 
+def _variant_base(vw_base: str, code: str) -> str:
+    """
+    Image base for one type code sharing a drawing.
+
+    VagonWeb draws a B3-2 with the B3-4 file, so a single image backs several codes.
+    Each code becomes its own catalogue entry with its own copy of the picture —
+    "N-/Vy/B3-4" + code "B3-2" → "N-/Vy/B3-2". A few KB duplicated is a fair price
+    for each wagon carrying its own designation.
+    """
+    stem = _sanitize_name(code or "")
+    if not stem:
+        return vw_base
+    parent = posixpath.dirname(vw_base)
+    return f"{parent}/{stem}" if parent else stem
+
+
 def _download(url: str, dest_noext: Path) -> str | None:
     """Download a VagonWeb image. Returns the extension saved, or None on failure."""
     try:
@@ -523,6 +539,12 @@ def preview():
             "coach_no": w["coach_no"],
             "category": w["wagon_type"] or None,
             "variants": w.get("variants") or [],
+            # Each code gets its own wagon; precompute the key so the UI and the
+            # importer agree on it without the client inventing image paths.
+            "variant_defaults": [
+                {"code": c, "name": _name_from_base(_variant_base(vw_base, c))}
+                for c in (w.get("variants") or [])
+            ],
             "subcategory": w["sub_variant"] or None,
             "notes": w["amenities"] or ", ".join(w["classes"]) or None,
             "route": w["route"],
@@ -576,11 +598,13 @@ def preview():
 @owner_required
 def import_one():
     """
-    Import a single staged wagon, optionally split into one wagon per car.
+    Import a staged drawing as one wagon per type code per car.
 
     Body: {key, author, license, source, era, countries, gauge, px_per_meter,
-           cuts: [x…], units: [{name, label, category, subcategory, notes}, …]}
-    `units` must hold exactly len(cuts) + 1 entries.
+           cuts: [x…], variants: [code…],
+           units: [{name, label, category, subcategory, notes}, …]}
+    `units` is the variant x car grid flattened variant-major, so it must hold
+    exactly len(variants) * (len(cuts) + 1) entries.
     """
     data = request.get_json(silent=True) or {}
     meta = _staged_meta(data.get("key"))
@@ -602,10 +626,16 @@ def import_one():
 
     units = data.get("units") or []
     spans = _segments(cuts, width)
-    if len(units) != len(spans):
-        return jsonify(
-            {"error": f"expected {len(spans)} unit(s), got {len(units)}"}
-        ), 400
+    # One entry per type code that shares this drawing; [""] means "just the drawing
+    # as VagonWeb names it", which is the ordinary single-code case.
+    variants = [str(v).strip() for v in (data.get("variants") or []) if str(v).strip()]
+    if not variants:
+        variants = [""]
+    if len(units) != len(variants) * len(spans):
+        return jsonify({
+            "error": f"expected {len(variants) * len(spans)} unit(s) "
+                     f"({len(variants)} code(s) x {len(spans)} car(s)), got {len(units)}"
+        }), 400
 
     names = [_sanitize_name((u.get("name") or "").strip()) for u in units]
     if any(not n for n in names) or len(set(names)) != len(names):
@@ -656,39 +686,45 @@ def import_one():
     ext = meta["ext_l"]
     image_type = "sides" if two_sided else "plain"
     rows = []
-    for i, ((x0, x1), unit) in enumerate(zip(spans, units)):
-        suffix = f"_c{i + 1}" if len(spans) > 1 else ""
-        image_path = f"{VW_PREFIX}/{meta['vw_base']}{suffix}"
-        base = WAGONS_ROOT / image_path
+    for v_idx, code in enumerate(variants):
+        # Each code is written out separately, picture and all — the drawing is a few
+        # KB, and a shared image path would make the codes indistinguishable on disk.
+        variant_base = _variant_base(meta["vw_base"], code)
+        for c_idx, (x0, x1) in enumerate(spans):
+            unit = units[v_idx * len(spans) + c_idx]
+            suffix = f"_c{c_idx + 1}" if len(spans) > 1 else ""
+            image_path = f"{VW_PREFIX}/{variant_base}{suffix}"
+            base = WAGONS_ROOT / image_path
 
-        if two_sided:
-            _crop_side(src_l, base.with_name(base.name + f"_L.{ext}"), x0, x1)
-            _crop_side(
-                src_r, base.with_name(base.name + f"_R.{ext}"), x0, x1, mirror_box=True
+            if two_sided:
+                _crop_side(src_l, base.with_name(base.name + f"_L.{ext}"), x0, x1)
+                _crop_side(
+                    src_r, base.with_name(base.name + f"_R.{ext}"), x0, x1, mirror_box=True
+                )
+            else:
+                _crop_side(src_l, base.with_name(base.name + f".{ext}"), x0, x1)
+
+            rows.append(
+                {
+                    "name": names[v_idx * len(spans) + c_idx],
+                    "label": (unit.get("label") or "").strip()
+                             or names[v_idx * len(spans) + c_idx],
+                    "category": (unit.get("category") or "").strip() or None,
+                    "subcategory": (unit.get("subcategory") or "").strip() or None,
+                    "notes": (unit.get("notes") or "").strip() or None,
+                    "era": (data.get("era") or "").strip() or None,
+                    "countries": countries,
+                    "source": (data.get("source") or "VagonWeb").strip(),
+                    "author": author,
+                    "license": license_,
+                    "gauge": gauge,
+                    "px_per_meter": ppm,
+                    "image": image_path,
+                    "image_type": image_type,
+                    "image_ext": ext,
+                    "updated_on": date.today().isoformat(),
+                }
             )
-        else:
-            _crop_side(src_l, base.with_name(base.name + f".{ext}"), x0, x1)
-
-        rows.append(
-            {
-                "name": names[i],
-                "label": (unit.get("label") or "").strip() or names[i],
-                "category": (unit.get("category") or "").strip() or None,
-                "subcategory": (unit.get("subcategory") or "").strip() or None,
-                "notes": (unit.get("notes") or "").strip() or None,
-                "era": (data.get("era") or "").strip() or None,
-                "countries": countries,
-                "source": (data.get("source") or "VagonWeb").strip(),
-                "author": author,
-                "license": license_,
-                "gauge": gauge,
-                "px_per_meter": ppm,
-                "image": image_path,
-                "image_type": image_type,
-                "image_ext": ext,
-                "updated_on": date.today().isoformat(),
-            }
-        )
 
     with pg_session() as pg:
         for row in rows:
@@ -769,20 +805,40 @@ def suggest_fields():
     # The row keys go with them: a hint like "BPb74 = N_Vy_BM74_c4" is only actionable
     # if the model has actually been told which key belongs to which position.
     keys = [str(k).strip() for k in (data.get("car_keys") or [])]
+
+    # Several type codes can share one drawing (a B7-4 and an A7-1 drawn with the same
+    # file), and each becomes its own wagon. The answer therefore has one entry per
+    # code-and-car, in the same variant-major order the import grid uses — otherwise
+    # only the first row would ever get filled.
+    variants = [str(v).strip() for v in (data.get("variants") or []) if str(v).strip()]
+    if not variants:
+        variants = [""]
+    grid = [(code, i, w) for code in variants for i, w in enumerate(widths)]
+    cars = len(grid)
+
     if cars > 1:
         car_lines = "\n".join(
-            f"    car {i + 1}"
-            + (f" (key {keys[i]})" if i < len(keys) and keys[i] else "")
+            f"    entry {n + 1}"
+            + (f" — type code {code}" if code else "")
+            + (f", car {i + 1} of {len(widths)}" if len(widths) > 1 else "")
+            + (f" (key {keys[n]})" if n < len(keys) and keys[n] else "")
             + f": {w} px wide"
-            for i, w in enumerate(widths)
+            for n, (code, i, w) in enumerate(grid)
         )
+        multi_code = len(variants) > 1
         car_block = (
-            f"\nThe drawing has been split into {cars} cars, left to right:\n{car_lines}\n"
-            "Answer with one entry per car in exactly this order — entry 1 is the leftmost.\n"
-            "Describe each car individually where they genuinely differ (driving car vs\n"
-            "intermediate, first vs second class, a short centre module). Where they do\n"
-            "not differ, repeating the same text is fine.\n"
-            "\nORDERING RULES, in priority order:\n"
+            f"\nThis drawing produces {cars} catalogue entries:\n{car_lines}\n"
+            f"Answer with exactly {cars} entries in this order.\n"
+            + (
+                "Several type codes share this one drawing. They are DIFFERENT vehicles —\n"
+                "a Norwegian 'A7-1' is first class where a 'B7-4' is second — so describe\n"
+                "each code on its own terms rather than repeating one description.\n"
+                if multi_code else
+                "Describe each car individually where they genuinely differ (driving car vs\n"
+                "intermediate, first vs second class, a short centre module). Where they do\n"
+                "not differ, repeating the same text is fine.\n"
+            )
+            + "\nORDERING RULES, in priority order:\n"
             "  1. If the extra information below pins a specific car to a specific key\n"
             '     (e.g. "BPb74 = ..._c4"), that pinning is a hard constraint. Honour it\n'
             "     even when it contradicts a list given as left-to-right, and re-derive\n"
@@ -843,7 +899,7 @@ holds exactly {cars} entry/entries in left-to-right order:
   }},
   "cars": [
     {{
-      "label":       "short display name for this car, e.g. 'BM 74 FLIRT'. No operator prefix, and never repeat the class code twice",
+      "label":       "short display name for THIS entry. It must contain that entry's full type code exactly as given above — never shorten 'B7-5' to 'B7', and never drop a suffix that distinguishes it from a sibling code. No operator prefix, and do not repeat the code twice",
       "subcategory": "series, variant or role of this car, or null. Not the operator name",
       "notes":       "one or two English sentences on this car. No Czech. No personal data. Mention a builder or a build year ONLY if you are certain of it — a short note that just describes the interior is far better than a detailed one that is wrong."
     }}
