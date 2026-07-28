@@ -312,13 +312,32 @@
     };
 }
 
-    function normalizeKey(input) {
-        return input
-            .normalize("NFD")
-            .replace(/[\u0300-\u036f]/g, "")
-            .replace(/[^a-zA-Z0-9 ]/g, "")
-            .replace(/\s+/g, '_')
-            .toLowerCase();
+    // ECharts rich-text keys only accept [a-zA-Z0-9_], so operator names can't be
+    // used directly: non-latin ones (\u4eac\u90fd\u5e02\u4ea4) would normalize to an empty key and
+    // render as a literal "{}", and names differing only by punctuation would
+    // collide and share a logo. Index-based keys are safe for any name.
+    var operatorRichKeys = Object.keys(operatorImages).reduce(function (keys, operator, index) {
+        keys[operator] = 'operator_' + index;
+        return keys;
+    }, {});
+
+    function operatorAxisLabelConfig() {
+        return {
+            formatter: function (value) {
+                const richKey = operatorRichKeys[value];
+                return richKey ? `{${richKey}|}` : value;
+            },
+            rich: Object.keys(operatorImages).reduce(function (rich, operator) {
+                rich[operatorRichKeys[operator]] = {
+                    width: isMobile() ? 50 : 110,
+                    height: isMobile() ? 10 : 20,
+                    backgroundColor: {
+                        image: encodeURI(staticLink + operatorImages[operator].replace('&', '%26'))
+                    }
+                };
+                return rich;
+            }, {})
+        };
     }
 
     function showLoading() {
@@ -910,27 +929,7 @@
             yAxis: {
                 type: 'category',
                 inverse: true,
-                axisLabel: {
-                    formatter: function(value) {
-                        const normalizedKey = normalizeKey(value);
-                        if (operatorImages[value]) {
-                            return `{${normalizedKey}|}`;
-                        }
-                        return value;
-                    },
-                    rich: Object.assign({}, ...Object.keys(operatorImages).map(operator => {
-                        const normalizedKey = normalizeKey(operator);
-                        return {
-                            [normalizedKey]: {
-                                width: isMobile() ? 50 : 110,
-                                height: isMobile() ? 10 : 20,
-                                backgroundColor: {
-                                    image: encodeURI(staticLink + operatorImages[operator].replace('&', '%26'))
-                                }
-                            }
-                        };
-                    }))
-                },
+                axisLabel: operatorAxisLabelConfig(),
                 data: dataToUse.operators.map(item => item.operator)
             },
             xAxis: operatorsValueAxisOptions,
@@ -1226,27 +1225,7 @@
                 type: 'category',
                 inverse: true,
                 axisLabel: dataKey === 'operators'
-                    ? {
-                        formatter: function(value) {
-                            const normalizedKey = normalizeKey(value);
-                            if (operatorImages[value]) {
-                                return `{${normalizedKey}|}`;
-                            }
-                            return value;
-                        },
-                        rich: Object.assign({}, ...Object.keys(operatorImages).map(operator => {
-                            const normalizedKey = normalizeKey(operator);
-                            return {
-                                [normalizedKey]: {
-                                    width: isMobile() ? 50 : 110,
-                                    height: isMobile() ? 10 : 20,
-                                    backgroundColor: {
-                                        image: encodeURI(staticLink + operatorImages[operator].replace('&', '%26'))
-                                    }
-                                }
-                            };
-                        }))
-                    }
+                    ? operatorAxisLabelConfig()
                     : {
                         formatter: function (value) {
                             return !isMobile() ? value : value.slice(-5);
