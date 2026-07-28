@@ -30,6 +30,14 @@
   .country-flags { font-size: 1.05rem; letter-spacing: .1rem; cursor: help; }
   .uses-badge { cursor: help; font-variant-numeric: tabular-nums; }
   .country-more  { font-size: .75rem; color: var(--bs-gray-600); letter-spacing: normal; }
+
+  /* style2.css puts .navbar at z-index 2000, well above Bootstrap's modal (1055)
+     and backdrop (1050), so a modal renders *underneath* the nav bar. Lift the
+     modal layer over it here rather than lowering the nav globally, which other
+     pages may rely on. */
+  .modal-backdrop { z-index: 2050; }
+  .modal          { z-index: 2060; }
+  .tooltip, .popover { z-index: 2070; }
 </style>
 
 <div class="container-fluid px-4">

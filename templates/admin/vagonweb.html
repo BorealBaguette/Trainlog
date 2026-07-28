@@ -32,6 +32,14 @@
   /* style2.css floats bare checkboxes — keep each one glued to its own label */
   .form-check-inline-wrap { display: inline-flex; align-items: center; gap: .4rem; }
   .form-check-inline-wrap .form-check-input { float: none; margin: 0; }
+
+  /* style2.css puts .navbar at z-index 2000, well above Bootstrap's modal (1055)
+     and backdrop (1050), so a modal renders *underneath* the nav bar. Lift the
+     modal layer over it here rather than lowering the nav globally, which other
+     pages may rely on. */
+  .modal-backdrop { z-index: 2050; }
+  .modal          { z-index: 2060; }
+  .tooltip, .popover { z-index: 2070; }
 </style>
 
 <div class="container-fluid px-4">
@@ -236,6 +244,9 @@ function renderResults() {
             <strong>${esc(w.label)}</strong>
             <span class="font-monospace small text-muted ms-2">${esc(w.vw_base)}</span>
             ${w.already_imported ? '<span class="badge bg-secondary ms-2">already in catalogue</span>' : ''}
+            ${(w.variants || []).length > 1
+              ? `<span class="badge bg-warning text-dark ms-2" title="VagonWeb draws these type codes with this same file, so they import as one wagon">also drawn as ${esc(w.variants.slice(1).join(', '))}</span>`
+              : ''}
             ${w.suggested_cuts.length ? `<span class="badge bg-info text-dark ms-2">${w.suggested_cuts.length + 1} cars detected</span>` : ''}
           </div>
           <button class="btn btn-sm btn-primary" onclick="openImport(${i})">
