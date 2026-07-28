@@ -29,7 +29,7 @@ from datetime import date
 from pathlib import Path
 
 import requests
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, jsonify, request, session
 from PIL import Image, ImageChops
 
 from py.utils import get_all_countries
@@ -319,11 +319,14 @@ def _parse_page(html: str) -> dict:
 
     blocks = list(re.finditer(r"<div id='vlak_(\d+)'", html))
     if not blocks:
-        return {"train_title": train_title, "wagons": []}
+        return {"train_title": train_title, "wagons": [], "compositions": []}
 
     # Keyed by VagonWeb image base so the same coach appearing in several
     # compositions is offered once.
     unique: dict[str, dict] = {}
+    # …but the running order, with its repeats, is what a trainset needs, so keep
+    # each composition's cells in sequence alongside the deduped catalogue view.
+    compositions: list[dict] = []
     for idx, m in enumerate(blocks):
         vlak_id = m.group(1)
         start = m.start()
@@ -333,11 +336,17 @@ def _parse_page(html: str) -> dict:
         tbl_m = re.search(r"<table class='vlacek'[^>]*>(.*)", block, re.DOTALL)
         tbl = tbl_m.group(1) if tbl_m else block
 
+        cells: list[dict] = []
         for cell_idx, cell in enumerate(re.split(r"<td class='bunka_vozu[^']*'", tbl)[1:], 1):
             for w in _parse_cell(cell, vlak_id, cell_idx, block):
                 vw_base = _img_local_base(w["img_url_a"])
                 if not vw_base:
                     continue
+                cells.append({
+                    "vw_base": vw_base,
+                    "code": (w["wagon_type"] or "").strip(),
+                    "coach_no": w["coach_no"],
+                })
                 if vw_base not in unique:
                     unique[vw_base] = {**w, "vw_base": vw_base, "variants": []}
                 # VagonWeb reuses one drawing across related type codes (a B3-2 is
@@ -349,7 +358,20 @@ def _parse_page(html: str) -> dict:
                 if code and code not in variants:
                     variants.append(code)
 
-    return {"train_title": train_title, "wagons": list(unique.values())}
+        if cells:
+            h4 = re.search(r"<h4[^>]*>(.*?)</h4>", block, re.DOTALL)
+            title = _strip_tags(h4.group(1)) if h4 else f"Composition {vlak_id}"
+            compositions.append({
+                "vlak_id": vlak_id,
+                "title": re.sub(r"\s+", " ", title).strip(),
+                "cells": cells,
+            })
+
+    return {
+        "train_title": train_title,
+        "wagons": list(unique.values()),
+        "compositions": compositions,
+    }
 
 
 # ── Auto-cut: find car joints in a multi-car strip ────────────────────────────
@@ -591,7 +613,11 @@ def preview():
                 img == prefix or img.startswith(prefix + "_c") for img in known_images
             )
 
-    return jsonify({"train_title": parsed["train_title"], "wagons": out})
+    return jsonify({
+        "train_title": parsed["train_title"],
+        "wagons": out,
+        "compositions": parsed.get("compositions") or [],
+    })
 
 
 @vagonweb_blueprint.route("/import", methods=["POST"])
@@ -978,6 +1004,113 @@ owner will fill it in. Never invent a builder, a works, or a date to sound compl
         })
 
     return jsonify({"shared": shared, "cars": out_cars})
+
+
+@vagonweb_blueprint.route("/trainset", methods=["POST"])
+@owner_required
+def save_composition():
+    """
+    Save a parsed composition as a personal trainset.
+
+    The running order comes from the page (repeats included, unlike the deduped
+    catalogue view). Each cell is resolved to an already-imported wagon by its image
+    path, which the importer owns; a cell split into cars expands to those cars in
+    order. Vehicles that have not been imported are kept as placeholders under the
+    name the importer would give them, so the formation is complete and heals itself
+    on a later import. Always personal (is_admin false); public sets stay a
+    deliberate act.
+
+    Body: {name, cells: [{vw_base, code}, …]}
+    """
+    data = request.get_json(silent=True) or {}
+    name = (data.get("name") or "").strip()
+    cells = data.get("cells") or []
+    if not name:
+        return jsonify({"error": "a name is required"}), 400
+    if not cells:
+        return jsonify({"error": "nothing to save — the composition is empty"}), 400
+
+    username = session.get("logged_in")
+
+    # Candidate image paths per cell, most specific first: the code's own entry, then
+    # the drawing it was imported under.
+    wanted: list[tuple[list[str], str, str]] = []
+    for c in cells:
+        base = str(c.get("vw_base") or "").strip()
+        if not base:
+            continue
+        code = str(c.get("code") or "").strip()
+        paths = [f"{VW_PREFIX}/{_variant_base(base, code)}"] if code else []
+        paths.append(f"{VW_PREFIX}/{base}")
+        wanted.append((paths, base, code))
+
+    lookup = {p for paths, _, _ in wanted for p in paths}
+    with pg_session() as pg:
+        rows = pg.execute(
+            """
+            SELECT name, image FROM wagons
+            WHERE image = ANY(:paths) OR image LIKE ANY(:like_paths)
+            ORDER BY image
+            """,
+            {
+                "paths": list(lookup),
+                "like_paths": [f"{p}\\_c%" for p in lookup],
+            },
+        ).fetchall()
+
+        by_image: dict[str, str] = {}
+        cars: dict[str, list[tuple[str, str]]] = {}
+        for r in rows:
+            by_image[r["image"]] = r["name"]
+            head, sep, tail = r["image"].rpartition("_c")
+            if sep and tail.isdigit():
+                cars.setdefault(head, []).append((tail.zfill(4), r["name"]))
+
+        units, missing = [], []
+        for paths, base, code in wanted:
+            for p in paths:
+                if p in by_image:
+                    units.append({"name": by_image[p], "_side": "L"})
+                    break
+                if p in cars:
+                    units.extend({"name": n, "_side": "L"}
+                                 for _, n in sorted(cars[p]))
+                    break
+            else:
+                # Not imported yet — keep the vehicle in the formation rather than
+                # dropping it, so the set still reads as the real train. The name is
+                # the one the importer *would* give this code, so the placeholder
+                # turns into the real wagon by itself once it is imported. Until
+                # then the display finds no wagon and draws its placeholder art,
+                # labelled with the type code.
+                stand_in = _name_from_base(_variant_base(base, code) if code else base)
+                units.append({
+                    "name": stand_in,
+                    "_side": "L",
+                    "label": code or stand_in,
+                })
+                missing.append(code or stand_in)
+
+        if pg.execute(
+            "SELECT 1 FROM trainsets WHERE NOT is_admin AND username = :u AND name = :n",
+            {"u": username, "n": name},
+        ).fetchone():
+            return jsonify({"error": f'you already have a trainset named "{name}"'}), 409
+
+        trainset_id = pg.execute(
+            """
+            INSERT INTO trainsets (name, username, is_admin, units_json)
+            VALUES (:name, :username, FALSE, :units_json)
+            RETURNING id
+            """,
+            {"name": name, "username": username, "units_json": json.dumps(units)},
+        ).scalar()
+
+    return jsonify({
+        "id": trainset_id, "name": name,
+        "units": len(units),
+        "missing": sorted(set(missing)),
+    }), 201
 
 
 @vagonweb_blueprint.route("/staging", methods=["DELETE"])

@@ -58,6 +58,30 @@
 
   <div id="status" class="mb-3"></div>
   <h5 id="trainTitle" class="d-none"></h5>
+  <div id="compPanel" class="d-none card mb-3">
+    <div class="card-body py-3">
+      <div class="d-flex flex-wrap align-items-end gap-2">
+        <div>
+          <label class="form-label fw-semibold mb-1" for="compName">Save this train as a trainset</label>
+          <div class="small text-muted mb-2" id="compSummary"></div>
+          <select id="compSelect" class="form-select form-select-sm d-none mb-2" style="max-width:420px"></select>
+        </div>
+      </div>
+      <div class="input-group input-group-sm mt-1" style="max-width:560px">
+        <input type="text" class="form-control" id="compName" placeholder="Trainset name">
+        <button class="btn btn-outline-primary" id="compSaveBtn">
+          <i class="fa-solid fa-screwdriver-wrench me-1"></i>Save as my trainset
+        </button>
+      </div>
+      <div class="form-text">
+        Saved to your own sets only — never public. Vehicles you haven't imported yet
+        are kept in the formation as placeholders and become the real wagon by
+        themselves once you import them under the offered name.
+      </div>
+      <div id="compStatus" class="small mt-2"></div>
+    </div>
+  </div>
+
   <div id="results" class="row g-3"></div>
 </div>
 
@@ -212,6 +236,7 @@ const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
 
 /* ── Fetch & list ───────────────────────────────────────────────── */
 let wagons = [];
+let compositions = [];
 
 async function fetchPage() {
   const url = document.getElementById('urlInput').value.trim();
@@ -231,6 +256,8 @@ async function fetchPage() {
   }
 
   wagons = data.wagons;
+  compositions = data.compositions || [];
+  renderCompPanel(data.train_title);
   status.innerHTML = `<span class="text-muted">${wagons.length} distinct wagon(s) found.</span>`;
   const t = document.getElementById('trainTitle');
   t.textContent = data.train_title;
@@ -268,6 +295,67 @@ function renderResults() {
       </div>
     </div>`).join('');
 }
+
+/* ── Save the whole train as a personal trainset ─────────────────────
+   The catalogue list above is deduplicated; a trainset needs the running order
+   with its repeats, which the server returns separately. */
+function currentComposition() {
+  const sel = document.getElementById('compSelect');
+  return compositions[sel.value ? Number(sel.value) : 0];
+}
+
+function renderCompPanel(trainTitle) {
+  const panel = document.getElementById('compPanel');
+  if (!compositions.length) { panel.classList.add('d-none'); return; }
+  panel.classList.remove('d-none');
+
+  const sel = document.getElementById('compSelect');
+  sel.classList.toggle('d-none', compositions.length < 2);
+  sel.innerHTML = compositions.map((c, i) =>
+    `<option value="${i}">${esc(c.title)} — ${c.cells.length} vehicles</option>`).join('');
+  sel.onchange = () => describeComposition(trainTitle);
+
+  document.getElementById('compName').value = trainTitle || '';
+  document.getElementById('compStatus').innerHTML = '';
+  describeComposition(trainTitle);
+}
+
+function describeComposition() {
+  const comp = currentComposition();
+  document.getElementById('compSummary').textContent =
+    comp.cells.map(c => c.code || '?').join(' · ');
+}
+
+document.getElementById('compSaveBtn').addEventListener('click', async function () {
+  const status = document.getElementById('compStatus');
+  const comp   = currentComposition();
+  const name   = document.getElementById('compName').value.trim();
+  if (!name) { status.innerHTML = '<span class="text-danger">Give it a name first.</span>'; return; }
+
+  this.disabled = true;
+  status.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving…';
+  let data;
+  try {
+    const res = await fetch(`${API}/trainset`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, cells: comp.cells }),
+    });
+    data = await res.json();
+    if (!res.ok) {
+      throw new Error(esc(data.error || res.status));
+    }
+  } catch (err) {
+    this.disabled = false;
+    status.innerHTML = `<span class="text-danger">${err.message}</span>`;
+    return;
+  }
+  this.disabled = false;
+  const n = (data.missing || []).length;
+  const miss = n
+    ? ` <span class="text-warning">${n} placeholder(s) for wagons not imported yet: ${esc(data.missing.join(', '))}.</span>` : '';
+  status.innerHTML =
+    `<span class="text-success">Saved “${esc(data.name)}” with ${data.units} unit(s).</span>${miss}`;
+});
 
 /* ── Cut editor ─────────────────────────────────────────────────── */
 let current = null;   // the wagon being imported
