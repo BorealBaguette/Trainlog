@@ -320,8 +320,18 @@ def _parse_page(html: str) -> dict:
         for cell_idx, cell in enumerate(re.split(r"<td class='bunka_vozu[^']*'", tbl)[1:], 1):
             for w in _parse_cell(cell, vlak_id, cell_idx, block):
                 vw_base = _img_local_base(w["img_url_a"])
-                if vw_base and vw_base not in unique:
-                    unique[vw_base] = {**w, "vw_base": vw_base}
+                if not vw_base:
+                    continue
+                if vw_base not in unique:
+                    unique[vw_base] = {**w, "vw_base": vw_base, "variants": []}
+                # VagonWeb reuses one drawing across related type codes (a B3-2 is
+                # drawn with the B3-4 file). Deduping by image is right — there is
+                # only one file to import — but record every code that maps onto it
+                # so the collapse is visible instead of silent.
+                variants = unique[vw_base]["variants"]
+                code = (w["wagon_type"] or "").strip()
+                if code and code not in variants:
+                    variants.append(code)
 
     return {"train_title": train_title, "wagons": list(unique.values())}
 
@@ -512,6 +522,7 @@ def preview():
             "gallery": w["gallery"],
             "coach_no": w["coach_no"],
             "category": w["wagon_type"] or None,
+            "variants": w.get("variants") or [],
             "subcategory": w["sub_variant"] or None,
             "notes": w["amenities"] or ", ".join(w["classes"]) or None,
             "route": w["route"],
@@ -803,6 +814,7 @@ text is usually Czech: translate and rewrite it as natural English.
   country + operator : {meta.get("operator_country") or "unknown"}   (Czech country name)
   operator           : {meta.get("operator") or "unknown"}
   type code          : {meta.get("category") or "unknown"}
+  same drawing also used for : {", ".join(meta.get("variants") or []) or "n/a"}
   photo gallery path : {meta.get("gallery") or "none"}   (country / operator / family)
   image path         : {meta.get("vw_base")}   (country / operator / type code)
   vagonweb extra     : {meta.get("subcategory") or "none"}   (often not a real variant)
