@@ -144,6 +144,15 @@
 <script>
 var _wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
 
+/* Drawings licensed directly to Trainlog carry a sentinel instead of a public
+   licence name (see window.TRAINLOG_LICENSE in wagon_img.js) — show the
+   translated phrase rather than the raw value. */
+var _trainlogLicenseLabel = {{ licensedToTrainlog | tojson }};
+
+function _licenseLabel(l) {
+    return l === window.TRAINLOG_LICENSE ? _trainlogLicenseLabel : l;
+}
+
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
@@ -190,7 +199,7 @@ function _attributionHtml(units) {
         return n ? '© <a href="' + esc(a) + '" target="_blank" rel="noopener">' + esc(n) + '</a>'
                  : '© ' + esc(a);
     }).join(', '));
-    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(l); }).join(', '));
+    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(_licenseLabel(l)); }).join(', '));
     if (p.sources.length)  parts.push(p.sources.map(function(s) { return esc(s); }).join(', '));
     return parts.join(' · ');
 }
@@ -200,7 +209,7 @@ function _attributionText(units) {
     var p = _attributionParts(units);
     var parts = [];
     if (p.authors.length)  parts.push(p.authors.map(function(a) { return '© ' + esc(_authorName(a)); }).join(', '));
-    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(l); }).join(', '));
+    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(_licenseLabel(l)); }).join(', '));
     if (p.sources.length)  parts.push(p.sources.map(function(s) { return esc(s); }).join(', '));
     return parts.join(' · ');
 }

@@ -33,6 +33,11 @@
  *   In legacy median mode (fallbackPpm:0), placeholders keep their CSS size as before.
  */
 (function () {
+  /* Sentinel stored in wagons.license for drawings licensed directly to Trainlog.
+   * It is not a public licence name, so every surface that shows a licence must
+   * swap it for the translated `licensedToTrainlog` string rather than print it. */
+  var TRAINLOG_LICENSE = 'TRAINLOG_LICENSED';
+
   function wagonImgSrc(base, unit, side) {
     if (!unit || !unit.image) return '';
     var ext = unit.image_ext || 'gif';
@@ -123,4 +128,5 @@
 
   window.wagonImgSrc = wagonImgSrc;
   window.normalizeStrip = normalizeStrip;
+  window.TRAINLOG_LICENSE = TRAINLOG_LICENSE;
 })();
