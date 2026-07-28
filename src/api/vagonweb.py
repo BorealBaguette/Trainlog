@@ -586,32 +586,44 @@ def preview():
             }
         )
 
-    # Flag the ones already in the catalogue (single round trip)
+    # Flag what is already in the catalogue (single round trip).
     if out:
-        # A split import stores its cars under "<base>_c1", "_c2"… so match the
-        # image path by prefix as well as the untouched default name.
-        prefixes = [f"{VW_PREFIX}/{w['vw_base']}" for w in out]
+        # Each type code sharing a drawing is imported under its OWN path, so it is
+        # not enough to look for the vw_base — a B7-5/B7-4/A7-1 trio lands on three
+        # separate paths and none of them is the base. Check every variant, and a
+        # split import additionally stores its cars under "<path>_c1", "_c2"…
+        def _paths(w):
+            bases = [w["vw_base"]] + [
+                _variant_base(w["vw_base"], c) for c in (w.get("variants") or [])
+            ]
+            return {f"{VW_PREFIX}/{b}" for b in bases}
+
+        all_paths = sorted({p for w in out for p in _paths(w)})
         with pg_session() as pg:
             rows = pg.execute(
                 """
-                SELECT name, image FROM wagons
-                WHERE name = ANY(:names)
-                   OR image = ANY(:prefixes)
-                   OR image LIKE ANY(:like_prefixes)
+                SELECT image FROM wagons
+                WHERE image = ANY(:paths) OR image LIKE ANY(:like_paths)
                 """,
                 {
-                    "names": [w["default_name"] for w in out],
-                    "prefixes": prefixes,
-                    "like_prefixes": [f"{p}\\_c%" for p in prefixes],
+                    "paths": all_paths,
+                    "like_paths": [f"{p}\\_c%" for p in all_paths],
                 },
             ).fetchall()
-        known_names = {r["name"] for r in rows}
-        known_images = {r["image"] for r in rows}
+        known = {r["image"] for r in rows}
+
+        def _have(path):
+            return any(img == path or img.startswith(path + "_c") for img in known)
+
         for w in out:
-            prefix = f"{VW_PREFIX}/{w['vw_base']}"
-            w["already_imported"] = w["default_name"] in known_names or any(
-                img == prefix or img.startswith(prefix + "_c") for img in known_images
-            )
+            codes = w.get("variants") or []
+            if codes:
+                done = [c for c in codes
+                        if _have(f"{VW_PREFIX}/{_variant_base(w['vw_base'], c)}")]
+            else:
+                done = ["*"] if _have(f"{VW_PREFIX}/{w['vw_base']}") else []
+            w["imported_codes"] = [c for c in done if c != "*"]
+            w["already_imported"] = bool(done) and len(done) == max(len(codes), 1)
 
     return jsonify({
         "train_title": parsed["train_title"],
