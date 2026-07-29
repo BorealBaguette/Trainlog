@@ -1015,9 +1015,8 @@ function renderSpeed(data, type, row) {
         else{
             const scheduledDur = row.trip_duration[1];
             const speed = Math.round((row.trip_length / scheduledDur) * 3.6);
-            const hasDelay = row.departure_delay || row.arrival_delay;
-            if (hasDelay) {
-                const actualDur = scheduledDur + (row.arrival_delay || 0) - (row.departure_delay || 0);
+            const actualDur = scheduledDur + (row.arrival_delay || 0) - (row.departure_delay || 0);
+            if (actualDur !== scheduledDur) {
                 const actualSpeed = Math.round((row.trip_length / actualDur) * 3.6);
                 const diff = actualSpeed - speed;
                 const sign = diff > 0 ? '+' : '';
