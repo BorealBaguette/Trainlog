@@ -38,6 +38,11 @@
   .modal-backdrop { z-index: 2050; }
   .modal          { z-index: 2060; }
   .tooltip, .popover { z-index: 2070; }
+
+  /* Preview images are full-width vehicle strips — clamp them to the modal body
+     rather than the viewport, or a long multi-car strip runs off the dialog. */
+  #imgPreview img { max-width: 100%; max-height: 280px; height: auto; object-fit: contain; }
+  #imgPreview .side-view { min-width: 0; flex: 1 1 100%; }
 </style>
 
 <div class="container-fluid px-4">
@@ -639,16 +644,16 @@ function openImgModal(wname) {
   const onErr   = `this.replaceWith(Object.assign(document.createElement('span'),{className:'text-muted small fst-italic',textContent:'(not found on disk)'}))`;
   if (r.image_type === 'sides' && r.image) {
     preview.innerHTML = `
-      <div class="d-flex justify-content-center gap-4 flex-wrap">
-        <div><div class="small text-muted mb-1">L view</div>
-          <img src="${WAGONS_URL}/${r.image}_L.${r.image_ext || 'gif'}" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
-        <div><div class="small text-muted mb-1">R view</div>
-          <img src="${WAGONS_URL}/${r.image}_R.${r.image_ext || 'gif'}" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
+      <div class="d-flex justify-content-center gap-3 flex-wrap">
+        <div class="side-view"><div class="small text-muted mb-1">L view</div>
+          <img src="${WAGONS_URL}/${r.image}_L.${r.image_ext || 'gif'}" style="max-height:200px" onerror="${onErr}"></div>
+        <div class="side-view"><div class="small text-muted mb-1">R view</div>
+          <img src="${WAGONS_URL}/${r.image}_R.${r.image_ext || 'gif'}" style="max-height:200px" onerror="${onErr}"></div>
       </div>`;
   } else {
     const src = imgSrc(r.image, r.image_type, r.image_ext);
     preview.innerHTML = src
-      ? `<img src="${src}" style="max-height:280px;max-width:80vw" onerror="${onErr}">`
+      ? `<img src="${src}" onerror="${onErr}">`
       : `<span class="text-muted fst-italic">No image set</span>`;
   }
 
