@@ -250,5 +250,5 @@ def process(country_code):
         json.dump(data, file)
         print(f"Simplified {path}")
 
-
-process(sys.argv[1])
+if __name__ == "__main__":
+    process(sys.argv[1])

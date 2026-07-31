@@ -19,5 +19,5 @@ package.json
 package-lock.json
 server.js
 venv/
-city_percent/*
+country_percent/countries/preprocessed/
 databases/cache/
