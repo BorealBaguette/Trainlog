@@ -368,6 +368,7 @@
     "copyTrip": "Utazás másolása",
     "rideAlong": "Utazz velük",
     "rideAlongConfirm": "Másolja ezeket az utakat a profiljába?",
+    "copyTripFailed": "Az utazást nem sikerült másolni.",
     "active": "Aktív",
     "new_tag": "Új címke létrehozása",
     "new_tag_nav": "Új címke",

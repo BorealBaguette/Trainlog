@@ -369,6 +369,7 @@
     "copyTrip": "Reise kopieren",
     "rideAlong": "Mitfahren",
     "rideAlongConfirm": "Diese Reisen in dein Profil kopieren?",
+    "copyTripFailed": "Die Reise konnte nicht kopiert werden.",
     "active": "Aktiv",
     "new_tag": "Neuen Tag erstellen",
     "new_tag_nav": "Neuer Tag",

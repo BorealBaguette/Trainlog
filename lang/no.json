@@ -369,6 +369,7 @@
     "copyTrip": "Kopier tur",
     "rideAlong": "Bli med",
     "rideAlongConfirm": "Kopier disse reisene til profilen din?",
+    "copyTripFailed": "Kunne ikke kopiere denne reisen.",
     "active": "Aktiv",
     "new_tag": "Opprett Ny Tagg",
     "new_tag_nav": "Ny Tagg",

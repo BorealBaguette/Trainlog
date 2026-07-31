@@ -369,6 +369,7 @@
     "copyTrip": "Kopioi matka",
     "rideAlong": "Matkusta mukana",
     "rideAlongConfirm": "Kopioi nämä matkat profiiliisi?",
+    "copyTripFailed": "Matkan kopiointi epäonnistui.",
     "active": "Aktiivinen",
     "new_tag": "Luo uusi tunniste",
     "new_tag_nav": "Uusi tunniste",

@@ -368,6 +368,7 @@
     "copyTrip": "Kopeeri reis",
     "rideAlong": "Sõida kaasa",
     "rideAlongConfirm": "Kopeerida need reisid oma profiilile?",
+    "copyTripFailed": "Reisi kopeerimine ebaõnnestus.",
     "active": "Aktiivne",
     "new_tag": "Loo uus silt",
     "new_tag_nav": "Uus silt",

@@ -368,6 +368,7 @@
     "copyTrip": "Yolculuğu kopyala",
     "rideAlong": "Birlikte git",
     "rideAlongConfirm": "Bu seyahatleri profilinize kopyalamak ister misiniz?",
+    "copyTripFailed": "Bu seyahat kopyalanamadı.",
     "active": "Aktif",
     "new_tag": "Yeni etiket oluştur",
     "new_tag_nav": "Yeni etiket",

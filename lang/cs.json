@@ -370,6 +370,7 @@
     "copyTrip": "Kopírovat výlet",
     "rideAlong": "Jet s nimi",
     "rideAlongConfirm": "Zkopírovat tyto cesty do svého profilu?",
+    "copyTripFailed": "Cestu se nepodařilo zkopírovat.",
     "active": "Aktivní",
     "new_tag": "Vytvořit Nový Štítek",
     "new_tag_nav": "Nový Štítek",

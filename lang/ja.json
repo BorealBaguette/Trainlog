@@ -368,6 +368,7 @@
     "copyTrip": "記録を複製",
     "rideAlong": "一緒に乗る",
     "rideAlongConfirm": "これらの旅行をプロフィールにコピーしますか？",
+    "copyTripFailed": "この旅程をコピーできませんでした。",
     "active": "アクティブ",
     "new_tag": "新しいタグを作成",
     "new_tag_nav": "新しいタグ",

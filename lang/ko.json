@@ -368,6 +368,7 @@
     "copyTrip": "여정 복사",
     "rideAlong": "함께 타기",
     "rideAlongConfirm": "이 여행들을 내 프로필에 복사할까요?",
+    "copyTripFailed": "이 여행을 복사하지 못했습니다.",
     "active": "활성화",
     "new_tag": "태그 추가",
     "new_tag_nav": "태그 추가",
