@@ -369,6 +369,7 @@
     "copyTrip": "Kopiera resa",
     "rideAlong": "Åk med",
     "rideAlongConfirm": "Kopiera dessa resor till din profil?",
+    "copyTripFailed": "Det gick inte att kopiera resan.",
     "active": "Aktiv",
     "new_tag": "Skapa Ny tagg",
     "new_tag_nav": "Ny tagg",

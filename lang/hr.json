@@ -370,6 +370,7 @@
     "copyTrip": "Kopiraj putovanje",
     "rideAlong": "Pridruži se",
     "rideAlongConfirm": "Kopirati ova putovanja u svoj profil?",
+    "copyTripFailed": "Putovanje nije bilo moguće kopirati.",
     "active": "Aktivno",
     "new_tag": "Stvori novu oznaku",
     "new_tag_nav": "Nova oznaka",

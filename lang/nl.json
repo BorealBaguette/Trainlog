@@ -369,6 +369,7 @@
     "copyTrip": "Reis kopiëren",
     "rideAlong": "Meerijden",
     "rideAlongConfirm": "Deze reizen naar je profiel kopiëren?",
+    "copyTripFailed": "Kan deze reis niet kopiëren.",
     "active": "Actief",
     "new_tag": "Creëer Nieuwe Tag",
     "new_tag_nav": "Nieuwe Tag",

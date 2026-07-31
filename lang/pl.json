@@ -370,6 +370,7 @@
     "copyTrip": "Kopiuj wycieczkę",
     "rideAlong": "Jedź razem",
     "rideAlongConfirm": "Skopiować te podróże do swojego profilu?",
+    "copyTripFailed": "Nie udało się skopiować tej podróży.",
     "active": "Aktywny",
     "new_tag": "Utwórz Nowy Tag",
     "new_tag_nav": "Nowy Tag",
