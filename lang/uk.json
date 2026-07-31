@@ -84,6 +84,7 @@
     "departureDelay": "Затримка відправлення (хв)",
     "arrivalDelay": "Затримка прибуття (хв)",
     "sortTitle": "Сортувати",
+    "sortLabel": "Сортувати:",
     "sortPlannedDeparture": "Запланований час відправлення",
     "sortDepartureDelay": "Затримка відправлення",
     "sortPlannedArrival": "Запланований час прибуття",

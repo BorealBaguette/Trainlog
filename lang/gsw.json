@@ -84,6 +84,7 @@
     "departureDelay": "Abfahrtsverspötig (min)",
     "arrivalDelay": "Akunftsverspötig (min)",
     "sortTitle": "Sortiere",
+    "sortLabel": "Sortiere:",
     "sortPlannedDeparture": "Planti Abfahrtsziit",
     "sortDepartureDelay": "Abfahrtsverspötig",
     "sortPlannedArrival": "Planti Aakunftsziit",

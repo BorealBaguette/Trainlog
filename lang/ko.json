@@ -84,6 +84,7 @@
     "departureDelay": "출발 지연 (분)",
     "arrivalDelay": "도착 지연 (분)",
     "sortTitle": "정렬",
+    "sortLabel": "정렬:",
     "sortPlannedDeparture": "계획된 출발 시간",
     "sortDepartureDelay": "출발 지연",
     "sortPlannedArrival": "계획된 도착 시간",

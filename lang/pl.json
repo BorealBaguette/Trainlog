@@ -84,6 +84,7 @@
     "departureDelay": "Opóźnienie wyjazdowe (min)",
     "arrivalDelay": "Opóźnienie przyjazdowe (min)",
     "sortTitle": "Sortuj",
+    "sortLabel": "Sortuj:",
     "sortPlannedDeparture": "Planowany czas odjazdu",
     "sortDepartureDelay": "Opóźnienie odjazdu",
     "sortPlannedArrival": "Planowany czas przyjazdu",

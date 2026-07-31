@@ -84,6 +84,7 @@
     "departureDelay": "Avgångsförsening (min)",
     "arrivalDelay": "Ankomstförsening (min)",
     "sortTitle": "Sortera",
+    "sortLabel": "Sortera:",
     "sortPlannedDeparture": "Planerad avgångstid",
     "sortDepartureDelay": "Försening vid avgång",
     "sortPlannedArrival": "Planerad ankomsttid",

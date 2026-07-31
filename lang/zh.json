@@ -84,6 +84,7 @@
     "departureDelay": "出发延误 (分钟)",
     "arrivalDelay": "到达延误 (分钟)",
     "sortTitle": "排序",
+    "sortLabel": "排序：",
     "sortPlannedDeparture": "计划出发时间",
     "sortDepartureDelay": "出发延误",
     "sortPlannedArrival": "计划到达时间",

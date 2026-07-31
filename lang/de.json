@@ -84,6 +84,7 @@
     "departureDelay": "Abflugverspätung (min)",
     "arrivalDelay": "Ankunftsverspätung (min)",
     "sortTitle": "Sortieren",
+    "sortLabel": "Sortieren:",
     "sortPlannedDeparture": "Geplante Abfahrtszeit",
     "sortDepartureDelay": "Abfahrtsverspätung",
     "sortPlannedArrival": "Geplante Ankunftszeit",

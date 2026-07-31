@@ -84,6 +84,7 @@
     "departureDelay": "Lähtöviivästys (min)",
     "arrivalDelay": "Saapumisviivästys (min)",
     "sortTitle": "Lajittele",
+    "sortLabel": "Lajittele:",
     "sortPlannedDeparture": "Suunniteltu lähtöaika",
     "sortDepartureDelay": "Lähtöviive",
     "sortPlannedArrival": "Suunniteltu saapumisaika",

@@ -84,6 +84,7 @@
     "departureDelay": "Zpoždění odletu (min)",
     "arrivalDelay": "Zpoždění příletu (min)",
     "sortTitle": "Seřadit",
+    "sortLabel": "Seřadit:",
     "sortPlannedDeparture": "Plánovaný čas odjezdu",
     "sortDepartureDelay": "Zpoždění odjezdu",
     "sortPlannedArrival": "Plánovaný čas příjezdu",
