@@ -240,10 +240,6 @@ function getTypeColor(type) {
     return t ? t.color : '#3887be';
 }
 
-function getPopupContent(username, origin, destination, date, startTime, endTime) {
-    return `<strong>${username}</strong><br>${origin} - ${destination}<br>Date: ${date}<br>Time: ${startTime} - ${endTime}`;
-}
-
 function getUserColor(username) {
     if (coloursData[username]) {
         const c = coloursData[username];
@@ -270,8 +266,8 @@ function processTrips() {
             coords = path.map(c => [c[1], c[0]]);
         }
 
-        const startTs = new Date(trip.utc_start_datetime).getTime();
-        const endTs = new Date(trip.utc_end_datetime).getTime();
+        const startTs = new Date(trip.utc_start_datetime).getTime() + (trip.departure_delay || 0) * 1000;
+        const endTs = new Date(trip.utc_end_datetime).getTime() + (trip.arrival_delay || 0) * 1000;
 
         if (startTs && endTs) {
             timestamps.push(startTs, endTs);
@@ -290,8 +286,6 @@ function processTrips() {
             origin: trip.origin_station,
             destination: trip.destination_station,
             date: trip.start_date,
-            startTime: trip.start_time,
-            endTime: trip.end_time
         });
 
         tripStates.push(0);
