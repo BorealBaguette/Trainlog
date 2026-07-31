@@ -84,6 +84,7 @@
     "departureDelay": "出発遅延 (分)",
     "arrivalDelay": "到着遅延 (分)",
     "sortTitle": "並べ替え",
+    "sortLabel": "並べ替え：",
     "sortPlannedDeparture": "予定出発時間",
     "sortDepartureDelay": "出発の遅れ",
     "sortPlannedArrival": "予定到着時間",

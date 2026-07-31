@@ -84,6 +84,7 @@
     "departureDelay": "Departure delay (min)",
     "arrivalDelay": "Arrival delay (min)",
     "sortTitle": "Sort",
+    "sortLabel": "Sort:",
     "sortPlannedDeparture": "Planned departure time",
     "sortDepartureDelay": "Departure delay",
     "sortPlannedArrival": "Planned arrival time",

@@ -84,6 +84,7 @@
     "departureDelay": "Kalkış gecikmesi (dk)",
     "arrivalDelay": "Varış gecikmesi (dk)",
     "sortTitle": "Sırala",
+    "sortLabel": "Sırala:",
     "sortPlannedDeparture": "Planlanan kalkış zamanı",
     "sortDepartureDelay": "Kalkış gecikmesi",
     "sortPlannedArrival": "Planlanan varış zamanı",

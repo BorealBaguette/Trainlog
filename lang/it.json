@@ -84,6 +84,7 @@
     "departureDelay": "Ritardo di partenza (min)",
     "arrivalDelay": "Ritardo di arrivo (min)",
     "sortTitle": "Ordina",
+    "sortLabel": "Ordina:",
     "sortPlannedDeparture": "Orario di partenza pianificato",
     "sortDepartureDelay": "Ritardo di partenza",
     "sortPlannedArrival": "Orario di arrivo pianificato",

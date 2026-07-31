@@ -84,6 +84,7 @@
     "departureDelay": "Indulási késés (perc)",
     "arrivalDelay": "Érkezési késés (perc)",
     "sortTitle": "Rendezés",
+    "sortLabel": "Rendezés:",
     "sortPlannedDeparture": "Tervezett indulási idő",
     "sortDepartureDelay": "Indulási késés",
     "sortPlannedArrival": "Tervezett érkezési idő",

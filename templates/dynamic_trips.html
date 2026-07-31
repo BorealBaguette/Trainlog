@@ -1481,7 +1481,7 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
 });
 
 (function() {
-    var $btn = $('<label>{{sortTitle}} : <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
+    var $btn = $('<label>{{sortLabel}} <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
     $(tableObject.table().container()).find('.dt-controls .dt-search').before($btn);
     updateSortButton();
 })();

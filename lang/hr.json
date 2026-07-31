@@ -84,6 +84,7 @@
     "departureDelay": "Kašnjenje polaska (min)",
     "arrivalDelay": "Kašnjenje dolaska (min)",
     "sortTitle": "Sortiraj",
+    "sortLabel": "Sortiraj:",
     "sortPlannedDeparture": "Planirano vrijeme polaska",
     "sortDepartureDelay": "Kašnjenje polaska",
     "sortPlannedArrival": "Planirano vrijeme dolaska",

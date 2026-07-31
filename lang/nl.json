@@ -84,6 +84,7 @@
     "departureDelay": "Vertrekvertraging (min)",
     "arrivalDelay": "Aankomstvertraging (min)",
     "sortTitle": "Sorteren",
+    "sortLabel": "Sorteren:",
     "sortPlannedDeparture": "Geplande vertrektijd",
     "sortDepartureDelay": "Vertrekvertraging",
     "sortPlannedArrival": "Geplande aankomsttijd",

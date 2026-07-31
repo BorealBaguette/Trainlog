@@ -84,6 +84,7 @@
     "departureDelay": "Hilinemine väljumisel (min)",
     "arrivalDelay": "Hilinemine saabumisel (min)",
     "sortTitle": "Sorteeri",
+    "sortLabel": "Sorteeri:",
     "sortPlannedDeparture": "Planeeritud väljumisaeg",
     "sortDepartureDelay": "Väljumise hilinemine",
     "sortPlannedArrival": "Planeeritud saabumisaeg",
