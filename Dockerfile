@@ -12,8 +12,7 @@ RUN pip install -r requirements.txt
 
 RUN git config --global --add safe.directory /code
 
-# Your application's default port, now using 80
-EXPOSE 80
+EXPOSE 5000
 
-# Command to run the application using Gunicorn, serving on port 80
+# Command to run the application using Gunicorn, serving on port 5000
 ENTRYPOINT ["gunicorn", "-b", "0.0.0.0:5000", "-t", "600", "app:app", "--capture-output"]
