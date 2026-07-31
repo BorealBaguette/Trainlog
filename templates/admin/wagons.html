@@ -7,6 +7,42 @@
     height: 38px; max-width: 90px; object-fit: contain;
     cursor: zoom-in;
   }
+  /* style2.css floats bare checkboxes — keep each one glued to its own label */
+  .form-check-inline-wrap { display: inline-flex; align-items: center; gap: .4rem; }
+  .form-check-inline-wrap .form-check-input { float: none; margin: 0; }
+
+  /* Attribution / notes icon strip */
+  .meta-icons { display: inline-flex; align-items: center; gap: .45rem; font-size: .95rem; }
+  .meta-icons .meta-none { color: var(--bs-gray-400); font-size: .8rem; font-style: italic; }
+  .meta-ico { color: var(--bs-gray-600); cursor: help; }
+  .meta-ico.lic-trainlog { color: #0d6efd; }
+  .meta-ico.lic-cc       { color: #198754; }
+  .meta-ico.lic-other    { color: #6c757d; }
+  .meta-ico.author       { color: #6f42c1; }
+  .notes-toggle { color: #fd7e14; cursor: pointer; background: none; border: 0; padding: 0; line-height: 1; }
+  .notes-toggle:hover, .notes-toggle:focus { filter: brightness(.85); outline: none; }
+  /* Notes stay collapsed until the icon is clicked, then open here */
+  .notes-popover { --bs-popover-max-width: 340px; }
+  .notes-popover .popover-header { font-size: .8rem; text-transform: uppercase;
+                                   letter-spacing: .03em; color: #d9480f; background: #fff8f0; }
+  .notes-popover .popover-body { white-space: pre-wrap; font-size: .85rem;
+                                 max-height: 260px; overflow-y: auto; }
+  .country-flags { font-size: 1.05rem; letter-spacing: .1rem; cursor: help; }
+  .uses-badge { cursor: help; font-variant-numeric: tabular-nums; }
+  .country-more  { font-size: .75rem; color: var(--bs-gray-600); letter-spacing: normal; }
+
+  /* style2.css puts .navbar at z-index 2000, well above Bootstrap's modal (1055)
+     and backdrop (1050), so a modal renders *underneath* the nav bar. Lift the
+     modal layer over it here rather than lowering the nav globally, which other
+     pages may rely on. */
+  .modal-backdrop { z-index: 2050; }
+  .modal          { z-index: 2060; }
+  .tooltip, .popover { z-index: 2070; }
+
+  /* Preview images are full-width vehicle strips — clamp them to the modal body
+     rather than the viewport, or a long multi-car strip runs off the dialog. */
+  #imgPreview img { max-width: 100%; max-height: 280px; height: auto; object-fit: contain; }
+  #imgPreview .side-view { min-width: 0; flex: 1 1 100%; }
 </style>
 
 <div class="container-fluid px-4">
@@ -15,10 +51,10 @@
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
       <i class="fas fa-plus me-1"></i>Add Wagon
     </button>
-    <button class="btn btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#vwModal" disabled hidden>
-      <i class="fas fa-train me-1"></i>Import from VagonWeb
-    </button>
     <a class="btn btn-outline-secondary"  href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i> {{tsBuilderTitle}}</a>
+    {% if is_owner %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.vagonweb_admin') }}"><i class="fa-solid fa-file-import"></i> VagonWeb import</a>
+    {% endif %}
   </div>
   <table id="wagonsTable" class="table table-striped table-bordered" style="width:100%">
     <thead>
@@ -28,36 +64,17 @@
         <th data-priority="4">Category</th>
         <th data-priority="5">Subcategory</th>
         <th data-priority="6">Era</th>
+        <th data-priority="5">Countries</th>
+        <th data-priority="3">Uses</th>
         <th data-priority="2">Type</th>
         <th data-priority="2" data-orderable="false">Image</th>
+        <th data-priority="3" data-orderable="false">Info</th>
         <th data-priority="1" data-orderable="false">Actions</th>
       </tr>
     </thead>
   </table>
 </div>
 
-
-<!-- ══════════════════════════════════ VagonWeb Import Modal -->
-<div class="modal fade" id="vwModal" tabindex="-1" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title"><i class="fas fa-train me-2"></i>Import from VagonWeb</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-      </div>
-      <div class="modal-body">
-        <label class="form-label">VagonWeb composition URL</label>
-        <input type="url" id="vwUrl" class="form-control"
-               placeholder="https://www.vagonweb.cz/razeni/vlak.php?zeme=ZSSK&amp;cislo=186&amp;rok=2026">
-        <div id="vwResult" class="small mt-2"></div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
-        <button type="button" class="btn btn-primary" id="vwImport">Import</button>
-      </div>
-    </div>
-  </div>
-</div>
 
 <!-- ══════════════════════════════════ Add Modal -->
 <div class="modal fade" id="addModal" tabindex="-1" aria-hidden="true">
@@ -70,23 +87,33 @@
       <div class="modal-body">
         <form id="addForm" enctype="multipart/form-data">
           <div class="row g-2 mb-2">
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label fw-semibold">Label <span class="text-danger">*</span></label>
-              <input type="text" class="form-control" name="label" required placeholder="e.g. TGV Duplex">
+              <input type="text" class="form-control" name="label" id="addLabel" required
+                     placeholder="e.g. Sr3 Vectron">
+              <div class="form-text">Shown to users. Free text.</div>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
+              <label class="form-label fw-semibold">Name (key)</label>
+              <input type="text" class="form-control font-monospace" name="name" id="addName"
+                     placeholder="e.g. VR_Sr3_Vectron">
+              <div class="form-text">Internal ID and image filename, auto-filled from the label. Cannot be changed later.</div>
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-6">
               <label class="form-label fw-semibold">Category</label>
-              <input type="text" class="form-control" name="category" placeholder="e.g. High-speed trains">
+              <input type="text" class="form-control" name="category" placeholder="e.g. Electric locomotives">
             </div>
-            <div class="col-md-4">
+            <div class="col-md-6">
               <label class="form-label fw-semibold">Subcategory</label>
-              <input type="text" class="form-control" name="subcategory" placeholder="e.g. TGV Duplex">
+              <input type="text" class="form-control" name="subcategory" placeholder="e.g. Sr3">
             </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-2">
               <label class="form-label fw-semibold">Era</label>
-              <input type="text" class="form-control" name="era" placeholder="e.g. 5,6">
+              <input type="text" class="form-control" name="era" placeholder="e.g. 5b,6">
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Image type</label>
@@ -101,15 +128,39 @@
               <label class="form-label fw-semibold">Gauge (mm)</label>
               <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
             </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Scale (px/m)</label>
+              <input type="number" step="any" min="0" class="form-control" name="px_per_meter"
+                     placeholder="auto" title="Pixels per real metre. Blank = auto-scale by strip median.">
+            </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Author</label>
-              <input type="text" class="form-control" name="author" placeholder="e.g. J. Martin">
+              <input type="text" class="form-control" name="author" placeholder="e.g. https://trainlog.me/public/username">
+              <div class="form-text">A Trainlog or wiki user page URL is rendered as a link named after the user. Any other URL or name is shown as-is.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">License</label>
-              <input type="text" class="form-control" name="license" placeholder="e.g. CC BY-NC-SA 3.0">
+              <input type="text" class="form-control" name="license" id="addLicense" placeholder="e.g. CC BY-NC-SA 3.0">
+              <div class="form-check-inline-wrap mt-1">
+                <input class="form-check-input" type="checkbox" id="addLicenseTrainlog">
+                <label class="form-check-label small" for="addLicenseTrainlog">Licensed to Trainlog</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-2 mb-2">
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Countries</label>
+              <select class="form-control selectpicker" id="addCountries" multiple
+                      data-live-search="true" data-selected-text-format="count > 6"
+                      data-none-selected-text="Not specified" title="Where this vehicle usually runs">
+                {% for code, emoji in country_list.items() %}
+                <option value="{{ code }}">{{ emoji }} {{ code }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Where this vehicle normally operates.</div>
             </div>
           </div>
 
@@ -121,7 +172,7 @@
 
           <div>
             <label class="form-label fw-semibold">Notes</label>
-            <textarea class="form-control" name="notes" rows="2" placeholder="e.g. SNCF livery, delivered 1997"></textarea>
+            <textarea class="form-control" name="notes" rows="2" placeholder="e.g. Birthday livery"></textarea>
           </div>
         </form>
       </div>
@@ -147,21 +198,21 @@
           <div class="row g-2 mb-2">
             <div class="col-md-4">
               <label class="form-label fw-semibold">Label</label>
-              <input type="text" class="form-control" name="label" placeholder="e.g. TGV Duplex">
+              <input type="text" class="form-control" name="label" placeholder="e.g. Sr3 Vectron">
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Category</label>
-              <input type="text" class="form-control" name="category" placeholder="e.g. High-speed trains">
+              <input type="text" class="form-control" name="category" placeholder="e.g. Electric locomotives">
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Subcategory</label>
-              <input type="text" class="form-control" name="subcategory" placeholder="e.g. TGV Duplex">
+              <input type="text" class="form-control" name="subcategory" placeholder="e.g. Sr3">
             </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-2">
               <label class="form-label fw-semibold">Era</label>
-              <input type="text" class="form-control" name="era" placeholder="e.g. 5,6">
+              <input type="text" class="form-control" name="era" placeholder="e.g. 5b,6">
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Image type</label>
@@ -173,22 +224,41 @@
               </select>
             </div>
             <div class="col-md-2">
-              <label class="form-label fw-semibold">Line type</label>
-              <input type="text" class="form-control" name="line_type" placeholder="e.g. 1">
-            </div>
-            <div class="col-md-2">
               <label class="form-label fw-semibold">Gauge (mm)</label>
               <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
+            </div>
+            <div class="col-md-2">
+              <label class="form-label fw-semibold">Scale (px/m)</label>
+              <input type="number" step="any" min="0" class="form-control" name="px_per_meter"
+                     placeholder="auto" title="Pixels per real metre. Blank = auto-scale by strip median.">
             </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Author</label>
-              <input type="text" class="form-control" name="author" placeholder="e.g. J. Martin">
+              <input type="text" class="form-control" name="author" placeholder="e.g. https://trainlog.me/public/username">
+              <div class="form-text">A Trainlog or wiki user page URL is rendered as a link named after the user. Any other URL or name is shown as-is.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">License</label>
-              <input type="text" class="form-control" name="license" placeholder="e.g. CC BY-NC-SA 3.0">
+              <input type="text" class="form-control" name="license" id="editLicense" placeholder="e.g. CC BY-NC-SA 3.0">
+              <div class="form-check-inline-wrap mt-1">
+                <input class="form-check-input" type="checkbox" id="editLicenseTrainlog">
+                <label class="form-check-label small" for="editLicenseTrainlog">Licensed to Trainlog</label>
+              </div>
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Countries</label>
+              <select class="form-control selectpicker" id="editCountries" multiple
+                      data-live-search="true" data-selected-text-format="count > 6"
+                      data-none-selected-text="Not specified" title="Where this vehicle usually runs">
+                {% for code, emoji in country_list.items() %}
+                <option value="{{ code }}">{{ emoji }} {{ code }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Where this vehicle normally operates.</div>
             </div>
           </div>
           <div class="row g-2 mb-2">
@@ -199,7 +269,7 @@
           </div>
           <div>
             <label class="form-label fw-semibold">Notes</label>
-            <textarea class="form-control" name="notes" rows="3" placeholder="e.g. SNCF livery, delivered 1997"></textarea>
+            <textarea class="form-control" name="notes" rows="3" placeholder="e.g. Birthday livery"></textarea>
           </div>
         </form>
       </div>
@@ -234,18 +304,85 @@
 </div>
 
 
+<script defer src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 <script defer>
 const WAGONS_URL = '{{ url_for("static", filename="images/wagons") }}';
 const API        = '/api/admin/wagons';
 
-function imgSrc(image, itype) {
-  if (!image) return '';
-  if (itype === 'sides' || itype === 'sides_L') return `${WAGONS_URL}/${image}_L.gif`;
-  if (itype === 'sides_R') return `${WAGONS_URL}/${image}_R.gif`;
-  return `${WAGONS_URL}/${image}.gif`;
+function imgSrc(image, itype, ext) {
+  return wagonImgSrc(WAGONS_URL, { image: image, image_type: itype, image_ext: ext }, 'L');
 }
 function esc(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── compact metadata renderers ─────────────────────────────────────
+   Author, licence, countries and notes don't fit as columns, so each is an icon
+   whose tooltip carries the value. Notes are the exception: they can be long, so
+   the icon expands a child row instead of overflowing a tooltip. */
+
+const TIP = 'data-bs-toggle="tooltip" data-bs-placement="top"';
+
+/* Same shortening the public attribution uses: a Trainlog or wiki user-page URL
+   becomes the username, anything else is shown as typed. */
+function authorName(a) {
+  const m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/)
+         || a.match(/^https?:\/\/[^/]+\/wiki\/User:(.+)$/i);
+  return m ? m[1] : a;
+}
+
+function renderCountries(csv) {
+  const codes = (csv || '').split(',').map(c => c.trim()).filter(Boolean);
+  if (!codes.length) return '<span class="meta-none">—</span>';
+  const names = codes.map(c => { try { return regionNames.of(c); } catch (e) { return c; } });
+  const shown = codes.slice(0, 4).map(getFlagEmoji).join('');
+  const more  = codes.length > 4 ? `<span class="country-more">+${codes.length - 4}</span>` : '';
+  return `<span class="country-flags" ${TIP} title="${esc(names.join(', '))}">${shown}${more}</span>`;
+}
+
+/* Trips using this wagon. Zero is common (most of the catalogue is never picked),
+   so it's muted rather than a loud "0". */
+function renderUses(n) {
+  const v = Number(n) || 0;
+  if (!v) return '<span class="meta-none">0</span>';
+  const tone = v >= 100 ? 'bg-success' : v >= 10 ? 'bg-primary' : 'bg-secondary';
+  return `<span class="badge ${tone} uses-badge" ${TIP}
+                title="${v} trip${v === 1 ? '' : 's'} use this wagon">${v}</span>`;
+}
+
+function renderMeta(row) {
+  const bits = [];
+
+  if (row.author) {
+    bits.push(`<i class="fa-solid fa-user-pen meta-ico author" ${TIP}
+                  title="${esc(authorName(row.author))}"></i>`);
+  }
+
+  const lic = row.license || '';
+  if (lic === window.TRAINLOG_LICENSE) {
+    // Licensed directly to Trainlog — its own mark, not a public licence name
+    bits.push(`<i class="fa-solid fa-shield-halved meta-ico lic-trainlog" ${TIP}
+                  title="Licensed to Trainlog"></i>`);
+  } else if (lic) {
+    const cc  = /^cc[\s-]/i.test(lic) || /creative\s*commons/i.test(lic);
+    const ico = cc ? 'fa-brands fa-creative-commons' : 'fa-solid fa-file-contract';
+    bits.push(`<i class="${ico} meta-ico lic-${cc ? 'cc' : 'other'}" ${TIP} title="${esc(lic)}"></i>`);
+  }
+
+  if (row.notes) {
+    // Notes are free text and can run long, so they open on click rather than hover.
+    // A popover keeps this self-contained: DataTables Responsive already owns
+    // row.child(), so a manual child row would fight it once columns collapse.
+    bits.push(`<button type="button" class="notes-toggle" data-bs-toggle="popover"
+                       data-bs-trigger="focus" data-bs-placement="left"
+                       data-bs-custom-class="notes-popover" data-bs-title="Notes"
+                       data-bs-content="${esc(row.notes)}"
+                       aria-label="Show notes"><i class="fa-solid fa-note-sticky"></i></button>`);
+  }
+
+  return bits.length
+    ? `<span class="meta-icons">${bits.join('')}</span>`
+    : '<span class="meta-none">—</span>';
 }
 
 /* ── DataTable ──────────────────────────────────────────────────── */
@@ -266,17 +403,24 @@ const table = $('#wagonsTable').DataTable({
     { data: 'category',    orderable: true,  render: (d) => esc(d) },
     { data: 'subcategory', orderable: true,  render: (d) => esc(d) },
     { data: 'era',         orderable: true,  render: (d) => esc(d) },
+    { data: 'countries',   orderable: true,  render: (d, t) => t === 'display' ? renderCountries(d) : (d || '') },
+    { data: 'uses',        orderable: true,  className: 'text-center',
+      render: (d, t) => t === 'display' ? renderUses(d) : (d || 0) },
     { data: 'image_type',  orderable: false, render: (d) => `<span class="badge bg-secondary text-white">${esc(d)}</span>` },
     {
       data: 'image', orderable: false,
       render(d, t, row) {
         if (t !== 'display') return d||'';
-        const src = imgSrc(d, row.image_type);
+        const src = imgSrc(d, row.image_type, row.image_ext);
         const inner = src
           ? `<img src="${src}" class="wagon-img" onerror="this.style.opacity='.2'" title="${esc(d)}">`
           : `<span class="text-muted small fst-italic">no image</span>`;
         return `<span class="img-cell" data-name="${esc(row.name)}" style="cursor:zoom-in">${inner}</span>`;
       }
+    },
+    {
+      data: null, orderable: false, className: 'text-nowrap',
+      render(d, t, row) { return t === 'display' ? renderMeta(row) : ''; }
     },
     {
       data: null, orderable: false,
@@ -287,7 +431,7 @@ const table = $('#wagonsTable').DataTable({
       }
     }
   ],
-  order: [[1, 'asc']], pageLength: 25, lengthMenu: [[25,50,100],[25,50,100]],
+  order: [[6, 'desc']], pageLength: 25, lengthMenu: [[25,50,100],[25,50,100]],
   language: { processing: '<i class="fas fa-spinner fa-spin"></i> Loading…' },
 });
 
@@ -296,6 +440,19 @@ const _cache = {};
 table.on('xhr', () => {
   const json = table.ajax.json();
   if (json && json.data) json.data.forEach(r => { _cache[r.name] = r; });
+});
+
+/* ── tooltips & note popovers ───────────────────────────────────────
+   Re-created on every draw: server-side paging replaces the row DOM each time,
+   so stale instances would leak and stop firing. */
+let _overlays = [];
+table.on('draw', () => {
+  _overlays.forEach(o => o.dispose());
+  const scope = document.getElementById('wagonsTable');
+  _overlays = [
+    ...[...scope.querySelectorAll('[data-bs-toggle="tooltip"]')].map(el => new bootstrap.Tooltip(el)),
+    ...[...scope.querySelectorAll('[data-bs-toggle="popover"]')].map(el => new bootstrap.Popover(el)),
+  ];
 });
 
 /* ── event delegation ───────────────────────────────────────────── */
@@ -312,18 +469,18 @@ function renderAddUpload(itype) {
       <div class="row g-2">
         <div class="col-md-6">
           <label class="form-label small">L view <span class="text-muted">(optional)</span></label>
-          <input type="file" name="file_l" class="form-control form-control-sm" accept=".gif,image/gif">
+          <input type="file" name="file_l" class="form-control form-control-sm" accept=".gif,.png,image/gif,image/png">
         </div>
         <div class="col-md-6">
           <label class="form-label small">R view <span class="text-muted">(optional)</span></label>
-          <input type="file" name="file_r" class="form-control form-control-sm" accept=".gif,image/gif">
+          <input type="file" name="file_r" class="form-control form-control-sm" accept=".gif,.png,image/gif,image/png">
         </div>
       </div>`;
   } else {
     const label = itype === 'sides_L' ? 'L view' : itype === 'sides_R' ? 'R view' : 'Image';
     sec.innerHTML = `
       <label class="form-label small">${label} <span class="text-muted">(optional)</span></label>
-      <input type="file" name="file" class="form-control form-control-sm" accept=".gif,image/gif">`;
+      <input type="file" name="file" class="form-control form-control-sm" accept=".gif,.png,image/gif,image/png">`;
   }
 }
 
@@ -332,15 +489,84 @@ document.getElementById('addImageType').addEventListener('change', function () {
 });
 renderAddUpload('sides');
 
+/* Name (key) mirrors the label — sanitised like _sanitize_name() server-side —
+   until the admin types their own, after which it is left alone. */
+let _nameTouched = false;
+const _addLabel = document.getElementById('addLabel');
+const _addName  = document.getElementById('addName');
+
+function slugify(s) {
+  return s.replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '');
+}
+
+_addLabel.addEventListener('input', () => {
+  if (!_nameTouched) _addName.value = slugify(_addLabel.value);
+});
+_addName.addEventListener('input', () => { _nameTouched = _addName.value !== ''; });
+_addName.addEventListener('blur', () => { _addName.value = slugify(_addName.value); });
+
 document.getElementById('addModal').addEventListener('show.bs.modal', function () {
   document.getElementById('addForm').reset();
+  _nameTouched = false;
   renderAddUpload('sides');
 });
+
+/* ── "Licensed to Trainlog" toggle ──────────────────────────────────
+   Ticking the box greys the licence text input; the TRAINLOG_LICENSE sentinel is
+   substituted at submit time (a disabled input is omitted from FormData, so the
+   value is never read off the DOM). Display surfaces swap the sentinel for the
+   translated phrase. */
+function bindLicenseToggle(inputId, checkId) {
+  const input = document.getElementById(inputId);
+  const check = document.getElementById(checkId);
+
+  /* Paint the input to match the checkbox. `keep` is what the text box should hold
+     while the box is unticked — on a user toggle that is whatever they had typed,
+     on a load it is the stored licence. */
+  const paint = keep => {
+    input.disabled    = check.checked;
+    input.value       = check.checked ? '' : keep;
+    input.placeholder = check.checked ? 'Licensed to Trainlog' : 'e.g. CC BY-NC-SA 3.0';
+    input.dataset.prev = check.checked ? (input.dataset.prev || '') : keep;
+  };
+
+  check.addEventListener('change', () => {
+    // Ticking stashes what was typed so unticking can put it back
+    if (check.checked) input.dataset.prev = input.value;
+    paint(input.dataset.prev || '');
+  });
+
+  return {
+    /* Load an existing stored value into the pair */
+    set(value) {
+      const v = value || '';
+      check.checked = v === window.TRAINLOG_LICENSE;
+      input.dataset.prev = '';
+      paint(check.checked ? '' : v);
+    },
+    /* Value to submit */
+    get() { return check.checked ? window.TRAINLOG_LICENSE : input.value.trim(); },
+  };
+}
+const addLicense  = bindLicenseToggle('addLicense',  'addLicenseTrainlog');
+const editLicense = bindLicenseToggle('editLicense', 'editLicenseTrainlog');
+
+/* ── Country multi-select ───────────────────────────────────────────
+   Stored as a comma-separated ISO alpha-2 string, matching tickets.active_countries. */
+function countriesGet(id) {
+  return ($(`#${id}`).val() || []).join(',');
+}
+function countriesSet(id, csv) {
+  $(`#${id}`).selectpicker('val', (csv || '').split(',').filter(Boolean));
+}
 
 function submitAdd() {
   const f = document.getElementById('addForm');
   if (!f.checkValidity()) { f.reportValidity(); return; }
-  fetch(API, { method: 'POST', body: new FormData(f) })
+  const body = new FormData(f);
+  body.set('license', addLicense.get());
+  ($('#addCountries').val() || []).forEach(c => body.append('countries[]', c));
+  fetch(API, { method: 'POST', body })
     .then(res => {
       if (!res.ok) return res.json().then(j => { throw new Error(j.error || res.status); });
       return res.json();
@@ -348,7 +574,7 @@ function submitAdd() {
     .then(j => {
       $('#addModal').modal('hide');
       table.ajax.reload();
-      toast(`Wagon "${j.label}" added`);
+      toast(`Wagon "${j.label}" added (${j.name})`);
     })
     .catch(err => toast(`Error: ${err}`, 'danger'));
 }
@@ -359,8 +585,8 @@ document.getElementById('addForm').addEventListener('keydown', e => {
 
 /* ── edit modal ─────────────────────────────────────────────────── */
 let _editWagon = null;
-const _editFields = ['label','category','subcategory','era','image_type','line_type',
-                     'gauge','author','license','source','notes'];
+const _editFields = ['label','category','subcategory','era','image_type',
+                     'gauge','px_per_meter','author','license','source','notes'];
 
 function openEditModal(wname) {
   const r = _cache[wname];
@@ -373,6 +599,8 @@ function openEditModal(wname) {
     if (!el) return;
     el.value = r[field] != null ? r[field] : '';
   });
+  editLicense.set(r.license);
+  countriesSet('editCountries', r.countries);
   $('#editModal').modal('show');
 }
 
@@ -384,6 +612,8 @@ function submitEdit() {
     const el = f.elements[field];
     if (el) data[field] = el.value;
   });
+  data.license = editLicense.get();
+  data.countries = countriesGet('editCountries');
   fetch(`${API}/${encodeURIComponent(_editWagon.name)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -414,16 +644,16 @@ function openImgModal(wname) {
   const onErr   = `this.replaceWith(Object.assign(document.createElement('span'),{className:'text-muted small fst-italic',textContent:'(not found on disk)'}))`;
   if (r.image_type === 'sides' && r.image) {
     preview.innerHTML = `
-      <div class="d-flex justify-content-center gap-4 flex-wrap">
-        <div><div class="small text-muted mb-1">L view</div>
-          <img src="${WAGONS_URL}/${r.image}_L.gif" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
-        <div><div class="small text-muted mb-1">R view</div>
-          <img src="${WAGONS_URL}/${r.image}_R.gif" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
+      <div class="d-flex justify-content-center gap-3 flex-wrap">
+        <div class="side-view"><div class="small text-muted mb-1">L view</div>
+          <img src="${WAGONS_URL}/${r.image}_L.${r.image_ext || 'gif'}" style="max-height:200px" onerror="${onErr}"></div>
+        <div class="side-view"><div class="small text-muted mb-1">R view</div>
+          <img src="${WAGONS_URL}/${r.image}_R.${r.image_ext || 'gif'}" style="max-height:200px" onerror="${onErr}"></div>
       </div>`;
   } else {
-    const src = imgSrc(r.image, r.image_type);
+    const src = imgSrc(r.image, r.image_type, r.image_ext);
     preview.innerHTML = src
-      ? `<img src="${src}" style="max-height:280px;max-width:80vw" onerror="${onErr}">`
+      ? `<img src="${src}" onerror="${onErr}">`
       : `<span class="text-muted fst-italic">No image set</span>`;
   }
 
@@ -435,14 +665,14 @@ function openImgModal(wname) {
         <div class="col-md-6">
           <label class="form-label small">L view</label>
           <div class="input-group input-group-sm">
-            <input type="file" id="fileL" class="form-control" accept=".gif,image/gif">
+            <input type="file" id="fileL" class="form-control" accept=".gif,.png,image/gif,image/png">
             <button class="btn btn-outline-secondary" onclick="uploadFile('L')">Upload</button>
           </div>
         </div>
         <div class="col-md-6">
           <label class="form-label small">R view</label>
           <div class="input-group input-group-sm">
-            <input type="file" id="fileR" class="form-control" accept=".gif,image/gif">
+            <input type="file" id="fileR" class="form-control" accept=".gif,.png,image/gif,image/png">
             <button class="btn btn-outline-secondary" onclick="uploadFile('R')">Upload</button>
           </div>
         </div>
@@ -453,7 +683,7 @@ function openImgModal(wname) {
       <p class="small fw-semibold mb-2">Replace image file</p>
       <div class="input-group input-group-sm">
         <label class="input-group-text">${lbl}</label>
-        <input type="file" id="filePlain" class="form-control" accept=".gif,image/gif">
+        <input type="file" id="filePlain" class="form-control" accept=".gif,.png,image/gif,image/png">
         <button class="btn btn-outline-secondary" onclick="uploadFile('')">Upload</button>
       </div>`;
   }
@@ -511,42 +741,6 @@ function toast(msg, type = 'success') {
   t.show();
   el.addEventListener('hidden.bs.toast', () => el.remove());
 }
-
-// ── VagonWeb import ────────────────────────────────────────────────────────
-document.getElementById('vwImport').addEventListener('click', async () => {
-  const url = document.getElementById('vwUrl').value.trim();
-  if (!url) return;
-  const btn = document.getElementById('vwImport');
-  const out = document.getElementById('vwResult');
-  btn.disabled = true;
-  btn.textContent = 'Importing…';
-  out.innerHTML = '';
-  try {
-    const resp = await fetch('/api/admin/vagonweb/import', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({url}),
-    });
-    const data = await resp.json();
-    if (resp.ok) {
-      const warn = data.errors && data.errors.length
-        ? ` — ${data.errors.length} warning(s): ${data.errors.slice(0, 3).join('; ')}`
-        : '';
-      out.innerHTML = `<span class="text-success">`
-        + `&#10003; ${data.wagons_imported} wagons imported, `
-        + `${data.wagons_skipped} already existed, `
-        + `${data.trainsets_created} compositions created${warn}</span>`;
-      table.ajax.reload();
-    } else {
-      out.innerHTML = `<span class="text-danger">Error: ${data.error}</span>`;
-    }
-  } catch (e) {
-    out.textContent = 'Network error';
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Import';
-  }
-});
 </script>
 
 {% endblock %}

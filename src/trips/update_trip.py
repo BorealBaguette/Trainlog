@@ -2,6 +2,7 @@ import logging
 
 from flask import abort
 
+from src.operators import sync_trip_operators
 from src.paths import coords_to_ewkt
 from src.pg import pg_session
 from src.sql.trips import update_trip_query
@@ -59,8 +60,13 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
                 "arrival_delay": trip.arrival_delay,
                 "power_type": trip.power_type,
                 "co2_override": trip.co2_override,
+                "route_source": trip.route_source,
             },
         )
+
+        # The operator text and the trip type both feed the resolution, and either
+        # may have changed here.
+        sync_trip_operators(trip_id, pg_session_=pg)
 
         # Update the route geometry. trip.path may be [[lat,lng],...] or
         # [{"lat":..,"lng":..},...] depending on caller; normalise to [lat,lng].

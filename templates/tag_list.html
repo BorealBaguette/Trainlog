@@ -3,11 +3,105 @@
 
 {% include "bootstrap/navigation.html" %}
 
+<style>
+  /* Small round colour swatch for the pending-invite rows */
+  .tag-dot {
+    display: inline-block;
+    width: 0.9em;
+    height: 0.9em;
+    border-radius: 50%;
+    vertical-align: -0.1em;
+    margin-right: 4px;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
+  }
+  /* Invite row: friend list and button side by side, whatever else is loaded */
+  .tag-invite-form {
+    display: flex !important;
+    align-items: center;
+    gap: 8px;
+  }
+  .tag-invite-form .form-select {
+    flex: 1 1 auto;
+    width: auto;
+  }
+  .tag-invite-form .btn {
+    flex: 0 0 auto;
+  }
+  /* Scrollable friend list so a long list doesn't blow up the modal */
+  .tag-invite-friends {
+    max-height: 14rem;
+    overflow-y: auto;
+  }
+  .tag-invite-item {
+    cursor: pointer;
+    margin-bottom: 0;
+    font-weight: normal;
+  }
+  /* Tick only shows for a selected friend */
+  .tag-invite-tick {
+    visibility: hidden;
+    color: var(--bs-primary, #0d6efd);
+  }
+  .tag-invite-check:checked ~ .tag-invite-tick { visibility: visible; }
+  .tag-invite-item:has(.tag-invite-check:checked) {
+    background-color: rgba(13, 110, 253, 0.08);
+  }
+  /* jQuery UI selectmenu button styled to match the Bootstrap inputs around it */
+  .ui-selectmenu-button.ui-button {
+    width: 100%;
+    text-align: left;
+    padding: 0.375rem 0.75rem;
+    background: var(--bs-body-bg, #fff);
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    font-size: 1.25rem;
+    line-height: 1.5;
+  }
+  /* Sit above the Bootstrap modal (z-index ~1055) */
+  .ui-selectmenu-menu { z-index: 2000; }
+  .tag-type-help { cursor: pointer; margin-left: 0.25rem; }
+  .tag-type-popover { max-width: 340px; }
+</style>
+
 <div class="container mt-4">
   <div class="row">
     <div >
       <h2 class="mb-3 text-center">{{ manage_tags }}</h2>
-      
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+          <div class="alert alert-{{category}}" role="alert">
+            {{ message }}
+          </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% if pending_invites %}
+      <div class="mb-4">
+        <h4>{{ pending_tag_invites }}</h4>
+        {% for inv in pending_invites %}
+        <div class="d-flex justify-content-between align-items-center mb-2">
+          <div>
+            <span class="tag-dot" style="background-color: {{ inv.colour }};"></span>
+            {{ tag_invited_you.format(owner=inv.owner, tag=inv.name) }}
+          </div>
+          <div class="d-flex gap-1">
+            <form action="{{ url_for('respond_to_tag_invite', username=username, tag_id=inv.tag_id) }}" method="post">
+              <input type="hidden" name="action" value="accept">
+              <button type="submit" class="btn btn-sm btn-success"><i class="bi bi-check-lg"></i> {{ accept }}</button>
+            </form>
+            <form action="{{ url_for('respond_to_tag_invite', username=username, tag_id=inv.tag_id) }}" method="post">
+              <input type="hidden" name="action" value="decline">
+              <button type="submit" class="btn btn-sm btn-danger"><i class="bi bi-x-lg"></i> {{ refuse }}</button>
+            </form>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+
       <table id="tagsTable">
         <thead>
           <tr>
@@ -15,17 +109,28 @@
             <th>{{ tag_colour }}</th>
             <th>{{ tag_type }}</th>
             <th>{{ trips }}</th>
-            <th>{{ tripDuration }}</th> 
-            <th>{{ tripLength }}</th>   
+            <th>{{ tripDuration }}</th>
+            <th>{{ tripLength }}</th>
             <th>{{ actions }}</th>
           </tr>
         </thead>
         <tbody>
           {% for tag in tagsList %}
+          {# Shared tags mix several users' trips: they open the animated
+             multiTrip view, never the single-owner public page #}
+          {% set tag_url = url_for('multi_trip', tagUuid=tag.uuid) if tag.is_shared else url_for('public_trip', tagId=tag.uuid) %}
           <tr>
-            <td><a class='tagLink' href="{{url_for('public_trip', tagId=tag.uuid)}}">{{ tag.name }}</a></td>
             <td>
-              <a href="{{url_for('public_trip', tagId=tag.uuid)}}" id="colour-{{tag.uid}}" class="tag-blob d-inline-block px-3 py-2" style="background-color: {{ tag.colour }}; border-radius: 20px;">
+              <a class='tagLink' href="{{ tag_url }}">{% if tag.is_shared %}<i class="fas fa-users"></i> {% endif %}{{ tag.name }}</a>
+              {% if not tag.is_owner %}
+              <br><small class="text-nowrap"><a href="#" class="text-muted text-decoration-none" data-bs-toggle="modal" data-bs-target="#viewMembersModal{{ tag.uid }}"><i class="bi bi-people"></i> {{ shared_with_you }} ({{ tag.username }})</a></small>
+              {% elif members_by_tag.get(tag.uid) %}
+              {# owner counts as a member too #}
+              <br><small class="text-nowrap"><a href="#" class="text-muted text-decoration-none" data-bs-toggle="modal" data-bs-target="#membersModal{{ tag.uid }}"><i class="bi bi-people"></i> {{ tag_members }}: {{ (members_by_tag.get(tag.uid, []) | selectattr('status', 'equalto', 'accepted') | list | length) + 1 }}</a></small>
+              {% endif %}
+            </td>
+            <td>
+              <a href="{{ tag_url }}" id="colour-{{tag.uid}}" class="tag-blob d-inline-block px-3 py-2" style="background-color: {{ tag.colour }}; border-radius: 20px;">
                 {{ tag.colour }}
               </a>
             </td>
@@ -45,52 +150,183 @@
           </td>
 
             <td>
+              {% if tag.is_owner %}
                 <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editTagModal{{ tag.uid }}"><i class="fa-regular fa-pen-to-square"></i></button>
+                <button class="btn btn-sm btn-info" data-bs-toggle="modal" data-bs-target="#membersModal{{ tag.uid }}" title="{{ tag_members }}"><i class="bi bi-people"></i></button>
                 <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteTagModal" data-tag-id="{{ tag.uid }}"><i class="fa-regular fa-trash-can"></i></button>
+              {% else %}
+                <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#leaveTagModal" data-url="{{ url_for('leave_tag', username=username, tag_id=tag.uid) }}" title="{{ leave_tag }}"><i class="bi bi-box-arrow-right"></i></button>
+              {% endif %}
             </td>
           </tr>
-
-          <!-- Edit Tag Modal -->
-          <div class="modal fade" id="editTagModal{{ tag.uid }}" tabindex="-1" aria-labelledby="editTagModalLabel{{ tag.uid }}" aria-hidden="true">
-            <div class="modal-dialog modal-dialog-centered">
-              <div class="modal-content">
-                <div class="modal-header">
-                  <h5 class="modal-title" id="editTagModalLabel{{ tag.uid }}">{{ edit_tag }}</h5>
-                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                  <form id="editTagForm{{ tag.uid }}" action="{{ url_for('update_tag', username=username, tag_id=tag.uid) }}" method="post" autocomplete="off">
-                    <div class="form-group mb-3">
-                      <label for="name{{ tag.uid }}">{{ tag_name }}</label>
-                      <input type="text" class="form-control" id="name{{ tag.uid }}" name="name" value="{{ tag.name }}" required>
-                    </div>
-                    <div class="form-group mb-3">
-                      <label for="colour{{ tag.uid }}">{{ tag_colour }}</label>
-                      <input id="colour{{ tag.uid }}" name="colour" type="text" class="form-control input-lg" value="{{ tag.colour }}">
-                    </div>
-                    <div class="form-group mb-3">
-                        <label for="type">{{ tag_type }} : </label>
-                        <div>
-                            <select id="type" name="type" class="form-control input-lg">
-                                <option value="collection" {% if tag.type == 'collection' %}selected{% endif %}>Collection</option>
-                                <option value="voyage" {% if tag.type == 'voyage' %}selected{% endif %}>Voyage</option>
-                            </select>
-                        </div>
-                    </div>
-
-
-                    <button type="submit" class="btn btn-primary w-100">{{ submit }}</button>
-                  </form>
-                </div>
-              </div>
-            </div>
-          </div>
           {% endfor %}
         </tbody>
       </table>
-      
+
+      {# Per-tag modals live outside the table: form elements inside
+         a <tbody> get flattened by the HTML parser (and DataTables owns
+         that DOM), which broke the modal layouts #}
+      {% for tag in tagsList %}
+      {% if tag.is_owner %}
+      <!-- Edit Tag Modal -->
+      <div class="modal fade" id="editTagModal{{ tag.uid }}" tabindex="-1" aria-labelledby="editTagModalLabel{{ tag.uid }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="editTagModalLabel{{ tag.uid }}">{{ edit_tag }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <form id="editTagForm{{ tag.uid }}" action="{{ url_for('update_tag', username=username, tag_id=tag.uid) }}" method="post" autocomplete="off">
+                <div class="form-group mb-3">
+                  <label for="name{{ tag.uid }}">{{ tag_name }}</label>
+                  <input type="text" class="form-control" id="name{{ tag.uid }}" name="name" value="{{ tag.name }}" required>
+                </div>
+                <div class="form-group mb-3">
+                  <label for="colour{{ tag.uid }}">{{ tag_colour }}</label>
+                  <input id="colour{{ tag.uid }}" name="colour" type="text" class="form-control input-lg" value="{{ tag.colour }}">
+                </div>
+                <div class="form-group mb-3">
+                    <label for="editTagType{{ tag.uid }}">{{ tag_type }} :</label>
+                    <i class="fas fa-circle-info text-muted tag-type-help" role="button" tabindex="0" title="{{ tag_type }}"></i>
+                    <div>
+                        <select id="editTagType{{ tag.uid }}" name="type" class="form-control input-lg">
+                            <option value="voyage" data-icon="fas fa-route" {% if tag.type == 'voyage' %}selected{% endif %}>{{voyage}}</option>
+                            <option value="collection" data-icon="fas fa-list" {% if tag.type == 'collection' %}selected{% endif %}>{{collection}}</option>
+                        </select>
+                    </div>
+                </div>
+
+
+                <button type="submit" class="btn btn-primary w-100">{{ submit }}</button>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Members Modal -->
+      <div class="modal fade" id="membersModal{{ tag.uid }}" tabindex="-1" aria-labelledby="membersModalLabel{{ tag.uid }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="membersModalLabel{{ tag.uid }}">{{ tag_members }} - {{ tag.name }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <ul class="list-group list-group-flush">
+                <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
+                  <span><i class="bi bi-person-fill text-muted me-1"></i> {{ username }}</span>
+                  <span class="badge bg-primary">{{ tag_owner_label }}</span>
+                </li>
+                {% set members = members_by_tag.get(tag.uid, []) %}
+                {% for m in members %}
+                <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
+                  <span>
+                    <i class="bi bi-person-fill text-muted me-1"></i> {{ m.username }}
+                    {% if m.status == 'pending' %}<span class="badge bg-secondary">{{ tag_invite_pending }}</span>{% endif %}
+                  </span>
+                  <form action="{{ url_for('remove_tag_member', username=username, tag_id=tag.uid) }}" method="post" class="mb-0" onsubmit="return confirm({{ remove_member_confirm | tojson }});">
+                    <input type="hidden" name="member_username" value="{{ m.username }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger" title="{{ remove }}"><i class="bi bi-x-lg"></i></button>
+                  </form>
+                </li>
+                {% endfor %}
+              </ul>
+              {% set member_names = members | map(attribute='username') | list %}
+              {% set invitable = friend_usernames | reject('in', member_names) | list %}
+              <div class="mt-3 pt-3 border-top">
+                {% if invitable %}
+                <div class="small text-muted mb-2">{{ invite_friend_to_tag }}</div>
+                <form action="{{ url_for('invite_to_tag', username=username, tag_id=tag.uid) }}" method="post" class="tag-invite-form">
+                  <div class="tag-invite-friends list-group flex-grow-1">
+                    {% for friend in invitable %}
+                    <label class="list-group-item tag-invite-item d-flex justify-content-between align-items-center py-2">
+                      <span><i class="bi bi-person-fill text-muted me-1"></i> {{ friend }}</span>
+                      <input class="tag-invite-check d-none" type="checkbox" name="friend_username" value="{{ friend }}">
+                      <i class="bi bi-check-lg tag-invite-tick"></i>
+                    </label>
+                    {% endfor %}
+                  </div>
+                  <button type="submit" class="btn btn-primary text-nowrap"><i class="bi bi-person-plus"></i> {{ invite_to_tag_btn }}</button>
+                </form>
+                {% else %}
+                <p class="text-muted mb-0"><i class="bi bi-info-circle me-1"></i>{{ tag_no_friends_to_invite }}</p>
+                {% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <!-- Read-only members modal for tags shared with you -->
+      <div class="modal fade" id="viewMembersModal{{ tag.uid }}" tabindex="-1" aria-labelledby="viewMembersModalLabel{{ tag.uid }}" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+          <div class="modal-content">
+            <div class="modal-header">
+              <h5 class="modal-title" id="viewMembersModalLabel{{ tag.uid }}">{{ tag_members }} - {{ tag.name }}</h5>
+              <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+              <ul class="list-group list-group-flush">
+                <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
+                  <span><i class="bi bi-person-fill text-muted me-1"></i> {{ tag.username }}</span>
+                  <span class="badge bg-primary">{{ tag_owner_label }}</span>
+                </li>
+                {% for m in members_by_tag.get(tag.uid, []) | selectattr('status', 'equalto', 'accepted') %}
+                <li class="list-group-item border-0 d-flex justify-content-between align-items-center px-0 py-1">
+                  <span><i class="bi bi-person-fill text-muted me-1"></i> {{ m.username }}</span>
+                </li>
+                {% endfor %}
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+      {% endif %}
+      {% endfor %}
+
       <div class="mt-4 text-center">
-        <a href="{{ url_for('new_tag', username=username) }}" class="btn btn-primary">{{ new_tag }}</a>
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#newTagModal">
+          <i class="bi bi-tag"></i> {{ new_tag }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- New Tag Modal -->
+<div class="modal fade" id="newTagModal" tabindex="-1" aria-labelledby="newTagModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="newTagModalLabel">{{ new_tag }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="newTagForm" action="{{ url_for('submit_tag', username=username) }}" method="post" autocomplete="off">
+          <div class="form-group mb-3">
+            <label for="newTagName">{{ tag_name }} :</label>
+            <input type="text" class="form-control" id="newTagName" name="name" required placeholder="{{ enter_tag_name }}">
+          </div>
+          <div class="form-group mb-3">
+            <label for="newTagColour">{{ tag_colour }} : </label>
+            <div>
+              <input id="newTagColour" name="colour" type="text" class="form-control input-lg" value="{{ suggested_colour }}">
+            </div>
+          </div>
+          <div class="form-group mb-3">
+            <label for="newTagType">{{ tag_type }} :</label>
+            <i class="fas fa-circle-info text-muted tag-type-help" role="button" tabindex="0" title="{{ tag_type }}"></i>
+            <div>
+              <select id="newTagType" name="type" class="form-control input-lg">
+                <option value="voyage" data-icon="fas fa-route" selected>{{voyage}}</option>
+                <option value="collection" data-icon="fas fa-list">{{collection}}</option>
+              </select>
+            </div>
+          </div>
+          <button type="submit" class="btn btn-primary w-100">{{ submit }}</button>
+        </form>
       </div>
     </div>
   </div>
@@ -108,7 +344,7 @@
         <p>Are you sure you want to delete this tag?</p>
       </div>
       <div class="modal-footer">
-        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ cancel }}</button>
         <form id="deleteTagForm" action="" method="post">
           <button type="submit" class="btn btn-danger">Delete</button>
         </form>
@@ -117,30 +353,60 @@
   </div>
 </div>
 
+<!-- Leave Tag Confirmation Modal -->
+<div class="modal fade" id="leaveTagModal" tabindex="-1" aria-labelledby="leaveTagModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="leaveTagModalLabel">{{ leave_tag }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>{{ leave_tag_confirm }}</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ cancel }}</button>
+        <form id="leaveTagForm" action="" method="post">
+          <button type="submit" class="btn btn-danger">{{ leave_tag }}</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
   $(document).ready(function() {
-    $('#tagsTable').DataTable(
-      {
-        order: [],
-        responsive:true,
-        lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]],
-        drawCallback: function(settings) {
-          updateTagColors();
-        }
-      }
-    );
+    var table = $('#tagsTable').DataTable({
+      order: [],
+      responsive: true,
+      lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]],
+      drawCallback: function(settings) {
+        updateTagColors();
+      },
+      language: {
+        info: "{{dtInfo}}",
+        paginate: {
+          next: "{{dtNext}}",
+          previous: "{{dtPrevious}}",
+        },
+        emptyTable: "{{dtEmptyTable}}",
+        select: {
+          rows: {
+            "_": "{{dtMultipleLineSelected}}",
+            "0": "",
+            "1": "{{dtOneLineSelected}}"
+          },
+        },
+        lengthMenu: "{{dtLengthMenu}}",
+        search: "{{dtSearch}}"
+      },
+    });
+    
     function updateTagColors() {
       {% for tag in tagsList %}
       $("#colour-{{ tag.uid }}").css("color", getTextColor("{{ tag.colour }}"));
       {% endfor %}
     }
-
-    {% for tag in tagsList %}
-    var colorPicker{{ tag.uid }} = $('#colour{{ tag.uid }}');
-
-    colorPicker{{ tag.uid }}.colorpicker({
-      format: 'hex'
-    });
 
     $('#deleteTagModal').on('show.bs.modal', function (event) {
       var button = $(event.relatedTarget);
@@ -150,10 +416,87 @@
       form.attr('action', actionUrl);
     });
 
-    colorPicker{{ tag.uid }}.on('colorpickerChange colorpickerCreate', function (event) {
-      var color = event.color;
-      $('#colour{{ tag.uid }}').css("color", getTextColor(color.toString())).css('background-color', color.toString());
+    $('#leaveTagModal').on('show.bs.modal', function (event) {
+      $('#leaveTagForm').attr('action', $(event.relatedTarget).data('url'));
     });
+
+    function bindColorPicker(picker) {
+      // autoInputFallback rewrites the input on every keystroke, which makes
+      // typing a hex code impossible, so disable it
+      picker.colorpicker({ format: 'hex', autoInputFallback: false, autoHexInputFallback: false });
+      picker.on('colorpickerChange colorpickerCreate', function (event) {
+        var color = event.color;
+        picker.css("color", getTextColor(color.toString())).css('background-color', color.toString());
+      });
+    }
+
+    bindColorPicker($('#newTagColour'));
+
+    // Icon-enabled dropdown for the tag type, mirroring the Font Awesome
+    // icons the tag-search autocomplete uses in new.html. The native
+    // <select name="type"> stays in the DOM so the form submits as before.
+    $.widget('custom.iconselectmenu', $.ui.selectmenu, {
+      _renderItem: function (ul, item) {
+        var wrapper = $('<div>');
+        var icon = item.element.attr('data-icon');
+        if (icon) $('<i>').addClass(icon + ' me-2').appendTo(wrapper);
+        wrapper.append(document.createTextNode(item.label));
+        return $('<li>').append(wrapper).appendTo(ul);
+      }
+    });
+
+    function initTypeSelect(selectId, modalSel) {
+      var $sel = $('#' + selectId);
+      if (!$sel.length) return;
+      function syncIcon() {
+        var icon = $sel.find('option:selected').attr('data-icon') || '';
+        var $txt = $('#' + selectId + '-button .ui-selectmenu-text');
+        $txt.find('i').remove();
+        if (icon) $txt.prepend($('<i>').addClass(icon + ' me-2'));
+      }
+      $sel.iconselectmenu({
+        // Anchor the popup inside the modal so it inherits the modal stacking context
+        appendTo: modalSel + ' .modal-body',
+        // The modal is hidden at init (offsetWidth 0); let CSS width:100% govern instead
+        width: false,
+        change: syncIcon
+      });
+      syncIcon();
+    }
+
+    initTypeSelect('newTagType', '#newTagModal');
+
+    // Require at least one friend checked before an invite form can submit
+    $('.tag-invite-form').on('submit', function (e) {
+      if (!$(this).find('input[name="friend_username"]:checked').length) {
+        e.preventDefault();
+      }
+    });
+
+    // Info popover explaining the difference between the two tag types.
+    // Content is assembled from the translated lang strings (icons match the
+    // ones shown in the type dropdown and the tags table).
+    var tagTypeHelpHtml =
+      '<p class="mb-2"><i class="fas fa-route me-1"></i><strong>' + {{ voyage | tojson }} +
+        '</strong><br>' + {{ tag_type_voyage_help | tojson }} + '</p>' +
+      '<p class="mb-0"><i class="fas fa-list me-1"></i><strong>' + {{ collection | tojson }} +
+        '</strong><br>' + {{ tag_type_collection_help | tojson }} + '</p>';
+    document.querySelectorAll('.tag-type-help').forEach(function (el) {
+      new bootstrap.Popover(el, {
+        html: true,
+        trigger: 'hover focus',
+        placement: 'right',
+        container: 'body',
+        customClass: 'tag-type-popover',
+        content: tagTypeHelpHtml
+      });
+    });
+
+    {% for tag in tagsList %}
+    {% if tag.is_owner %}
+    bindColorPicker($('#colour{{ tag.uid }}'));
+    initTypeSelect('editTagType{{ tag.uid }}', '#editTagModal{{ tag.uid }}');
+    {% endif %}
     {% endfor %}
   });
   document.addEventListener('DOMContentLoaded', () => {

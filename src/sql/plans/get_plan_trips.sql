@@ -18,9 +18,8 @@ LEFT JOIN LATERAL (
     LIMIT 1
 ) o ON TRUE
 WHERE pt.plan_id = :plan_id
--- Natural chronological order: timed legs sort by their materialised start_datetime;
--- untimed legs (no time → same date-only marker, or unknown → NULL) fall back to the
--- manual sort_order. So manual ordering only matters when there's no time to order by.
-ORDER BY pt.start_datetime NULLS LAST,
-         pt.sort_order,
+-- User order only. The chronological interleaving (anchored legs sorted by day/time,
+-- unanchored legs staying where the user put them) happens in Python — see
+-- build_plan_trip_list / _plan_display_order in app.py.
+ORDER BY pt.sort_order,
          pt.uid

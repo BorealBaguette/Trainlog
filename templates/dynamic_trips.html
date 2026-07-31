@@ -7,10 +7,10 @@
     /* --- General UI --- */
     .ui-front { z-index: 9999999 !important; }
 
-    #dataTable_wrapper { min-height: 600px; }
+    .dt-container { min-height: 600px; }
 
     @media screen and (max-width: 767px) {
-        #dataTable_wrapper { margin-top: 15px; }
+        .dt-container { margin-top: 15px; }
     }
 
     /* Trainset picker in edit/new forms */
@@ -65,6 +65,9 @@
     th[data-sort-field].th-sort-desc::after {
         opacity: 0.9;
     }
+
+    /* Dated future trips shown on the past page via the "show upcoming" toggle */
+    tr.upcoming-trip > td { opacity: 0.65; }
 
 </style>
 
@@ -373,8 +376,14 @@
           </div>
         </div>
         <div class="mb-3">
-          <label class="form-label">{{operator}}</label>
-          <input type="text" class="form-control mass-edit-field" data-field="operator" />
+          <label class="form-label" for="massEditOperatorSearch">{{operator}}</label>
+          {# The submitted value stays free comma-separated text and keeps the
+             mass-edit-field hooks, so populate/dirty-tracking work unchanged; the
+             pills are just a view of it. #}
+          <input type="hidden" class="mass-edit-field" data-field="operator" id="massEditOperator" />
+          <div class="operatorPillsField" id="massEditOperatorPills">
+            <input type="text" id="massEditOperatorSearch" class="op-pill-placeholder" autocomplete="off" />
+          </div>
         </div>
         <div class="mb-3">
           <label class="form-label">{{lineName}}</label>
@@ -467,13 +476,14 @@
 
 {% include "includes/trainset_builder_modal.html" %}
 
-<script src="{{ url_for('static', filename='js/util.js') }}"></script>
 <script type="text/javascript">
 const checkedTrips = [];
 const checkedTripData = {};
+// CLDR plural map for the "N rows selected" message (see window.pluralize in util.js).
+const dtRowsSelected = {{ dtRowsSelected | tojson }};
 
 var _trainsetNames = new Set();
-$.getJSON('/api/trainsets').done(function(rows) {
+$.getJSON('/api/trainsets', { owner: '{{ username }}' }).done(function(rows) {
     rows.forEach(function(r) { _trainsetNames.add(r.name); });
 });
 
@@ -481,9 +491,28 @@ function _isValidMaterial(mat) {
     if (!mat) return false;
     try {
         var arr = JSON.parse(mat);
-        return Array.isArray(arr) && arr.length > 0;
+        if (Array.isArray(arr)) return arr.length > 0;
+        if (arr && Array.isArray(arr.trainsets)) return arr.trainsets.length > 0;
     } catch(e) {}
     return _trainsetNames.has(mat);
+}
+
+// Whether a trip's ADVANCED material holds a resolvable trainset. The advanced field
+// is only ever written by the trainset builder — a saved-set name, an inline unit
+// array, or a {trainsets:[...]} composite — so its shape is authoritative. Unlike
+// _isValidMaterial's name path, this does NOT depend on the async _trainsetNames cache
+// (which loads from a separate request with no redraw, so the icon intermittently
+// failed to render on first draw for name-based sets).
+function _advancedHasTrainset(adv) {
+    if (!adv) return false;
+    try {
+        var v = JSON.parse(adv);
+        if (Array.isArray(v)) return v.length > 0;                          // inline units
+        if (v && Array.isArray(v.trainsets)) return v.trainsets.length > 0; // composite
+        return true;                                                        // other JSON → a reference
+    } catch(e) {
+        return true;                                                        // non-JSON string → saved set name
+    }
 }
 
 function openCompositionModal(trainName, dateStr, materialType) {
@@ -498,11 +527,11 @@ function openCompositionModal(trainName, dateStr, materialType) {
     $('#compositionModal').modal('show');
 
     if (materialType) {
-        _resolveUnits(materialType)
+        _resolveUnits(materialType, '{{ username }}')
             .done(function(r) { _renderTrainset($modalBody, r.units, r.name); })
-            .fail(function()  { $modalBody.html('<div class="alert alert-warning">No composition data found.</div>'); });
+            .fail(function()  { $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>'); });
     } else {
-        $modalBody.html('<div class="alert alert-warning">No composition data found.</div>');
+        $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>');
     }
 }
 
@@ -513,21 +542,73 @@ function toggleTypeFilter() {
     tableObject.ajax.reload();
 }
 
+function toggleIncludeFuture() {
+    const switchState = document.getElementById('includeFutureSwitch').checked;
+    setCookie('includeFutureSwitch', switchState, 7);
+    tableObject.ajax.reload();
+}
+
 function isEllipsisActive(el){
   if (!el) return false;
-  if (el.scrollWidth > el.clientWidth) return true;
-  const styles = getComputedStyle(el);
-  const widthEl = parseFloat(styles.width);
-  const ctx = document.createElement('canvas').getContext('2d');
-  ctx.font = `${styles.fontSize} ${styles.fontFamily}`;
-  const text = ctx.measureText(el.innerText);
-  return text.width > widthEl;
+  // Sub-pixel column widths make scrollWidth/clientWidth differ by a fraction on
+  // cells that are not actually clipped, so require a whole pixel of overflow.
+  if (el.scrollWidth > el.clientWidth + 1) return true;
+  // Only text can be ellipsed. Icon-only cells (a logo, or a hidden span holding the
+  // sort key) have nothing to truncate, so they must not be measured: their content
+  // is sized to the column and the correction below would read that as an overflow.
+  if (!el.innerText || !el.innerText.trim()) return false;
+  // Measure what is really laid out rather than re-measuring the text on a canvas:
+  // these cells start with a flag and can hold logos, and the canvas path measured
+  // el.innerText (images contribute nothing, the flag glyph is measured in the
+  // FlagEmojis-first body stack) so its widths did not reflect the rendered cell.
+  try {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    // A range only covers DOM nodes, so the responsive control arrow — a ::before
+    // on whichever column is first visible — is missed, and that cell alone reads
+    // ~18px narrower than it renders. Add the pseudo-element back in.
+    let width = range.getBoundingClientRect().width;
+    const before = getComputedStyle(el, '::before');
+    if (before && before.content !== 'none') {
+      width += (parseFloat(before.width) || 0)
+             + (parseFloat(before.borderLeftWidth) || 0)
+             + (parseFloat(before.borderRightWidth) || 0)
+             + (parseFloat(before.marginRight) || 0);
+    }
+    // clientWidth spans the padding box but the range spans only the content, so
+    // comparing them straight gives every cell a free ~20px of overflow (the
+    // theme's 10px cell padding either side) before it counts as clipped.
+    const styles = getComputedStyle(el);
+    const available = el.clientWidth
+                    - (parseFloat(styles.paddingLeft) || 0)
+                    - (parseFloat(styles.paddingRight) || 0);
+    return width > available + 1;
+  } catch (e) {
+    return false;
+  }
 }
 
 function processHiddenData(rowIdx, columns){
     var isAir = ["air", "helicopter"].includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
     var isFerry = $(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText == "ferry";
     var isTrain = TRAIN_TYPES.includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
+
+    // Origin and destination are read as a pair, so they move together: if either one
+    // is clipped (or was hidden outright) both drop into the detail row, rather than
+    // leaving one name up in the row and its counterpart down here.
+    var stationCols = [];
+    $('#dataTable thead th').each(function(i){
+        var field = $(this).attr('data-sort-field');
+        if (field === 'origin_station' || field === 'destination_station') {
+            stationCols.push(i);
+        }
+    });
+    var stationsBelow = stationCols.some(function(i){
+        var col = columns[i];
+        if (!col || col.data == "") return false;
+        return col.hidden || isEllipsisActive(tableObject.cell(rowIdx, i).node());
+    });
+
     var data = $.map( columns, function ( col, i ) {
         if (col.title == "{{tags}}" && col.data != ""){
             tag_list = JSON.parse(col.data).map(tag => tag.tag_id);
@@ -535,12 +616,20 @@ function processHiddenData(rowIdx, columns){
             tag_list.forEach(function(tagId) {
                 var tag = tags.find(t => t.uid == tagId); // Find the tag object by uid
                 if (tag) {
+                // Shared tags open the animated multiTrip view, not the
+                // single-owner public page
+                var tagHref = tag.is_shared
+                    ? "{{url_for('multi_trip', tagUuid='')}}" + tag.uuid
+                    : "{{url_for('public_trip', tagId='')}}" + tag.uuid;
                 var a = $('<a>')
-                    .attr('href', "{{url_for('public_trip', tagId='')}}" + tag.uuid)
+                    .attr('href', tagHref)
                     .addClass('tag-blob')
                     .css('background-color', tag.colour)
                     .css('color', getTextColor(tag.colour))
                     .text(tag.name);
+                if (tag.is_shared) {
+                    a.prepend($('<i>').addClass('fas fa-users').css('margin-right', '5px'));
+                }
                 tag_container.append(a);
                 }
             });
@@ -669,13 +758,26 @@ function processHiddenData(rowIdx, columns){
                 col.data = `<span id=airframe${rowIdx} >${full_name}</span>`
             }
         }
+        if (col.title == "{{operator}}") {
+            // Multi-operator trips get the roomier one-per-line list here.
+            var operatorRow = tableObject.row(rowIdx).data();
+            var expandedOperators = renderOperatorList(operatorRow);
+            if (expandedOperators) {
+                col.data = expandedOperators;
+                // Past four operators the compact 2x2 cell cannot show them all, and
+                // on desktop nothing is hidden by responsive, so the extras would be
+                // invisible with no way to reach them. Force the column into the
+                // detail row instead — same mechanism the delay columns use.
+                if (operatorsOverflow(operatorRow)) col.hidden = true;
+            }
+        }
         if (col.title == "{{material_type}}" && isTrain) {
             var rowData = tableObject.row(rowIdx).data();
             var rawAdv = rowData.material_type_advanced || '';
             var rawMat = rowData.material_type || '';
             var primary = rawAdv || rawMat;
             if (primary) {
-                var isValid = _isValidMaterial(primary);
+                var isValid = rawAdv ? _advancedHasTrainset(rawAdv) : _isValidMaterial(rawMat);
                 var formatted;
                 if (isValid) {
                     formatted = '';
@@ -690,7 +792,7 @@ function processHiddenData(rowIdx, columns){
                         setTimeout(function() {
                             var labels = {};
                             if (personal) labels.personal = personal;
-                            _resolveUnits(mat)
+                            _resolveUnits(mat, '{{ username }}')
                                 .done(function(r) {
                                     if (r.name && r.name !== labels.personal) labels.saved = r.name;
                                     _renderTrainsetInline(rowId, r.units, labels);
@@ -761,7 +863,10 @@ function processHiddenData(rowIdx, columns){
                 }
                 if (pairs.length) displayData = pairs.join('<br>');
             }
-            return (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node())) && col.data != ""?
+            var show = stationCols.indexOf(col.columnIndex) !== -1
+                ? stationsBelow
+                : (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node()));
+            return show && col.data != ""?
             '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'">'+
                 '<td><strong>'+label+':</strong>'+'</td> '+
                 '<td>'+displayData+'</td>'+
@@ -866,11 +971,14 @@ function renderLineName(data, type, row) {
     if (type === 'display') {
         // Only show for trains
         if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
-            var mat      = row.material_type_advanced || row.material_type || '';
+            var adv      = row.material_type_advanced || '';
+            var mat      = adv || row.material_type || '';
             var dateStr  = row.start_date || '';
             var safeName = (data || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
             var safeMat  = mat.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
-            var btn = _isValidMaterial(mat) ? `
+            // Icon only when the advanced field has a resolvable trainset (race-free);
+            // fall back to the name cache only for a legacy plain material_type match.
+            var btn = (adv ? _advancedHasTrainset(adv) : _isValidMaterial(mat)) ? `
                     <a href="javascript:void(0);"
                        onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}')"
                        class="text-decoration-none ms-2"
@@ -907,9 +1015,8 @@ function renderSpeed(data, type, row) {
         else{
             const scheduledDur = row.trip_duration[1];
             const speed = Math.round((row.trip_length / scheduledDur) * 3.6);
-            const hasDelay = row.departure_delay || row.arrival_delay;
-            if (hasDelay) {
-                const actualDur = scheduledDur + (row.arrival_delay || 0) - (row.departure_delay || 0);
+            const actualDur = scheduledDur + (row.arrival_delay || 0) - (row.departure_delay || 0);
+            if (actualDur !== scheduledDur) {
                 const actualSpeed = Math.round((row.trip_length / actualDur) * 3.6);
                 const diff = actualSpeed - speed;
                 const sign = diff > 0 ? '+' : '';
@@ -1036,6 +1143,9 @@ function renderPrices(data, type, row) {
 function _formatTrainsetStr(mat) {
     try {
         var units = JSON.parse(mat);
+        if (units && !Array.isArray(units) && Array.isArray(units.trainsets)) {
+            return units.trainsets.join(' + ');
+        }
         if (Array.isArray(units) && units.length > 0) {
             var result = [], i = 0;
             while (i < units.length) {
@@ -1157,13 +1267,22 @@ var table = $('#tripRows');
     searchDelay: 1000,
     scrollY: scroll == true ? $(window).height() - 300 : null,
     scroller: scroll,
-    dom: '<"dt-controls d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mb-2"lf>rtip',
+    dom: '<"dt-controls d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mb-2"lf>rt<"dt-controls-bottom d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mt-2"ip>',
     columnDefs: [{ orderable: false, targets: '_all' }],
+    // Every column is orderable:false and sorting runs through the "Trier" dropdown
+    // below, but DataTables 2 decides whether to draw a header sort arrow from a
+    // data-dt-order attribute rather than from the column being orderable, so it
+    // marks up an indicator on every header that nothing can act on. This has to be
+    // the object form: a top-level `orderIndicators` is overwritten during init by
+    // `else if (init.bSort === true) { init.orderIndicators = true; ... }`, which
+    // fires because ordering defaults to true.
+    ordering: { indicators: false, handler: false },
     ajax: {
         url: '{{ url_for("get_trips_api" if not isPublic else "get_trips_api_public", username=username, projects=projects) }}',
         "type": "POST",
         "data": function(d) {
             d.filterTypes = (getCookie('filterTypeSwitch') === 'true') ? 0 : 1;
+            d.includeFuture = (isPast && getCookie('includeFutureSwitch') === 'true') ? 1 : 0;
             
             // Parse smart search
             const searchValue = d.search.value || '';
@@ -1198,7 +1317,7 @@ var table = $('#tripRows');
         { data: 'type', render: renderType },
         { data: 'origin_station', render: renderStation },
         { data: 'destination_station', render: renderStation },
-        { data: 'start_date' },
+        { data: 'start_date', className: 'tripDate' },
         { data: 'start_time', render: renderStartTime },
         { data: 'end_time', render: renderEndTime },
         { data: 'trip_duration', render: renderDuration },
@@ -1210,7 +1329,7 @@ var table = $('#tripRows');
             orderable: false
         },
         { data: 'operator', render: renderOperators },
-        {data: 'line_name',{% if is_alpha %} render: renderLineName,{% endif %}},
+        {data: 'line_name', render: renderLineName},
         { data: 'countries', render: renderFlags },
         {
             data: 'carbon_footprint',
@@ -1262,6 +1381,9 @@ var table = $('#tripRows');
     },
     createdRow: function(row, data, dataIndex) {
         $(row).attr('id', data.uid).attr("origDest", `${data.origin_station} - ${data.destination_station}`);
+        if (isPast && data.plannedFuture == 1) {
+            $(row).addClass('upcoming-trip');
+        }
     },
     order: [],
     lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "{{dtAll}}"]],
@@ -1359,8 +1481,8 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
 });
 
 (function() {
-    var $btn = $('<label>{{sortTitle}} : <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
-    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($btn);
+    var $btn = $('<label>{{sortLabel}} <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($btn);
     updateSortButton();
 })();
 
@@ -1369,7 +1491,15 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
         <input class="form-check-input" type="checkbox" id="filterTypeSwitch" onchange="toggleTypeFilter()">
         <label class="form-check-label" for="filterTypeSwitch">{{showPlaces}}</label>
     </div>`);
-    $(tableObject.table().container()).find('.dt-controls .dataTables_filter').before($switch);
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($switch);
+{% endif %}
+
+{% if not projects %}
+    var $futureSwitch = $(`<div class="form-check form-switch">
+        <input class="form-check-input" type="checkbox" id="includeFutureSwitch" onchange="toggleIncludeFuture()">
+        <label class="form-check-label" for="includeFutureSwitch">{{showUpcoming}}</label>
+    </div>`);
+    $(tableObject.table().container()).find('.dt-controls .dt-search').before($futureSwitch);
 {% endif %}
 
 // Sort modal
@@ -1499,7 +1629,6 @@ function showMultilink() {
     // Add white space to make sure multilink doesn't hide 
     if ($('.bottom-space').length === 0) {  
         $('body').append('<div class="bottom-space"></div>');
-        console.log($('.bottom-space'))
     }
 }
 
@@ -1511,16 +1640,11 @@ function hideMultilink() {
 
 function updateSelectionMessage() {
     if (new URLSearchParams(window.location.search).get('scroll') != 'true') {
-        var message;
-        if (checkedTrips.length === 0) {
-            message = "";
-        } else if (checkedTrips.length === 1) {
-            message = "{{dtOneLineSelected}}";
-        } else {
-            message = "{{dtMultipleLineSelected}}".replace('%d', checkedTrips.length);
-        }
+        var message = checkedTrips.length === 0
+            ? ""
+            : pluralize(dtRowsSelected, checkedTrips.length);
 
-        var $dataTablesInfo = $('.dataTables_info');
+        var $dataTablesInfo = $('.dt-info');
 
         // Check if .select-info class exists
         if ($dataTablesInfo.find('.select-info').length === 0) {
@@ -1549,30 +1673,41 @@ $('.deleteButton').off('click').on('click', function() {
 });
 
     tableObject.rows().every( function ( rowIdx, tableLoop, rowLoop ) {
-        if ($(this.node()).hasClass("even") || $(this.node()).hasClass("odd")){
-            var hasHidden = false;
-            var controlElement;
-            var rowData = this.data();
-            // Delay data appears in sub-table even when columns aren't hidden by responsive
-            var hasDelaySubtable = rowData && (rowData.departure_delay || rowData.arrival_delay);
-            $(this.node()).children().each(
-                function(index, element){
-                    if ($(element).hasClass("dtr-control"))
-                    {
-                      controlElement = $(element)
-                    }
-                    if($(element).is(':hidden')){
-                        if($(element).text() != ""){
-                            hasHidden = true;
-                        }
-                    }
-
+        // No even/odd guard: DataTables 2 stripes rows with CSS :nth-child instead
+        // of the odd/even classes 1.x put on every <tr>, so testing for them here
+        // skipped every row and the control was never marked as having nothing to open.
+        var controlElement;
+        var rowData = this.data();
+        // Seeded true when the detail row carries something that is not a cell
+        // responsive hid: a delay breakdown, or operators beyond the four the
+        // compact cell can show. Either way the control must stay usable, since
+        // the detail row is the only place that content exists.
+        var hasHidden = Boolean(rowData && (
+            rowData.departure_delay || rowData.arrival_delay || operatorsOverflow(rowData)
+        ));
+        $(this.node()).children().each(
+            function(index, element){
+                if ($(element).hasClass("dtr-control"))
+                {
+                  controlElement = $(element)
                 }
-            );
+                if($(element).is(':hidden')){
+                    if($(element).text() != ""){
+                        hasHidden = true;
+                    }
+                }
+                // A visible but clipped cell is repeated in full in the detail row by
+                // processHiddenData, so it counts as something to open — otherwise the
+                // two disagree and the control is hidden on a row that has content.
+                else if (isEllipsisActive(element)) {
+                    hasHidden = true;
+                }
 
-            if(!hasHidden && !hasDelaySubtable) {
-                controlElement.addClass("noHidden");
             }
+        );
+
+        if (controlElement) {
+            controlElement.toggleClass("noHidden", !hasHidden);
         }
     });
 }
@@ -1683,6 +1818,48 @@ function _massEditPrefillStation(countrySelId, stationInputId, trips, field) {
     }
 }
 
+/* Operator pills in the mass-edit form.
+ *
+ * The suggestion list is per pool (transport / accommodation / car / poi), so it is
+ * fetched for the type of the selected trips and cached. Trips of mixed types fall
+ * back to the transport pool, which is what all but three trip types resolve against
+ * anyway.
+ */
+var _massEditOperatorPills = null;
+var _massEditManAndOpsCache = {};
+
+function _massEditSetupOperatorPills(trips) {
+    var types = new Set(trips.map(function(t) { return t.type; }));
+    var stationType = types.size === 1 ? [...types][0] : 'train';
+    var hidden = $('#massEditOperator');
+    var search = $('#massEditOperatorSearch');
+
+    // Mirror the placeholder the populate loop put on the hidden input, so a mixed
+    // selection still reads "multiple values" in the visible field.
+    search.attr('placeholder', hidden.attr('placeholder') || '');
+    search.data('placeholder', hidden.attr('placeholder') || '');
+
+    function build(manAndOps) {
+        // Rebuilt per opening: the pool, and therefore the suggestion list, depends
+        // on the current selection.
+        $('#massEditOperatorPills .op-pill').remove();
+        _massEditOperatorPills = operatorPillsInput(
+            hidden, search, $('#massEditOperatorPills'), manAndOps,
+            "{{ url_for('static', filename='') }}", stationType);
+    }
+
+    if (_massEditManAndOpsCache[stationType]) {
+        build(_massEditManAndOpsCache[stationType]);
+        return;
+    }
+    $.get("{{ url_for('getManAndOps', username=username, station_type='STATION_TYPE') }}"
+              .replace('STATION_TYPE', stationType),
+          function(manAndOps) {
+              _massEditManAndOpsCache[stationType] = manAndOps;
+              build(manAndOps);
+          });
+}
+
 function openMassEdit() {
     massEditDirtyFields.clear();
     const trips = Object.values(checkedTripData);
@@ -1712,6 +1889,11 @@ function openMassEdit() {
             }
         }
     });
+
+    // Operator pills follow the hidden field the loop above just populated. Loaded
+    // for the pool the selected trips belong to, so bulk-editing hotels offers
+    // accommodation operators rather than railways.
+    _massEditSetupOperatorPills(trips);
 
     // Station fields
     _massEditPrefillStation('massEditOriginCountry', 'massEditOriginStation', trips, 'origin_station');
@@ -1844,6 +2026,7 @@ function openMassEditTsb() {
         try {
             var units = JSON.parse(value);
             if (Array.isArray(units)) label = units.map(function(u) { return u.label || u.nom || u.name; }).join(' + ');
+            else if (units && Array.isArray(units.trainsets)) label = units.trainsets.join(' + ');
         } catch (e) {
             label = value;
             _trainsetNames.add(value); // keep cache current so the icon renders after table reload
@@ -2039,10 +2222,34 @@ fetch(`{{ url_for("get_all_tags", username=username) }}`)
 function setupAutocomplete(tags) {
     $("#tagSearchInput").autocomplete({
         source: function(request, response) {
-            const results = $.ui.autocomplete.filter(tags.map(tag => tag.name).filter(tagName => !isTagAlreadyAttached(tagName)), request.term);
+            const results = $.ui.autocomplete.filter(
+                tags.filter(tag => !isTagAlreadyAttached(tag.name))
+                    .map(tag => ({ label: tag.name, value: tag.name, _shared: tag.is_shared })),
+                request.term
+            );
+            const term = request.term.trim();
+            if (term && !tags.some(tag => tag.name.toLowerCase() === term.toLowerCase())) {
+                results.push({
+                    label: {{ create_tag_option | tojson }}.replace('{name}', term),
+                    value: term,
+                    _create: true
+                });
+            }
             response(results);
         },
         select: function(event, ui) {
+            if (ui.item._create) {
+                $.post({
+                    url: `{{ url_for("quick_create_tag", username=username) }}`,
+                    contentType: 'application/json',
+                    data: JSON.stringify({ name: ui.item.value })
+                }).done(function(data) {
+                    tags.push(data.tag);
+                    selectTag(data.tag); // attach to the checked trips right away
+                });
+                $('#tagSearchInput').val('');
+                return false;
+            }
             const selectedTag = tags.find(tag => tag.name === ui.item.value);
             if (selectedTag) {
                 selectTag(selectedTag);
@@ -2050,6 +2257,9 @@ function setupAutocomplete(tags) {
             return false; // Prevent the widget from updating the input with the selected value
         }
     });
+
+    // Icons on every row (shared/plain/create) — shared renderer from util.js
+    $("#tagSearchInput").data("ui-autocomplete")._renderItem = renderTagAutocompleteItem;
 }
 
 function isTagAlreadyAttached(tagName) {
@@ -2128,11 +2338,12 @@ function displayAssociatedTags(tags) {
         const allTripsHaveTag = checkedTrips.every(tripId => tagTripIds.includes(String(tripId)));
         const icon = allTripsHaveTag ? '<i class="fas fa-check-circle"></i>' : '<i class="fas fa-circle-minus"></i>';
 
+        const shared = tag.is_shared ? '<i class="fas fa-users"></i> ' : '';
         const span = $('<span>')
             .addClass('tag-blob')
             .css('background-color', tag.colour)
             .css('color', getTextColor(tag.colour))
-            .text(tag.name).append(icon) // Use .text for safety, then append icon HTML
+            .text(tag.name).prepend(shared).append(icon) // Use .text for safety, then append icon HTML
             .on('click', function() {
                 if (allTripsHaveTag) {
                     detachTag(tag.uid);
@@ -2178,8 +2389,13 @@ $('#submitBtn').on('click', function() {
             filterSwitch.checked = savedState;
         }
 
+        const futureSwitch = document.getElementById('includeFutureSwitch');
+        if (futureSwitch) {
+            futureSwitch.checked = (typeof getCookie === 'function' && getCookie('includeFutureSwitch') === 'true');
+        }
+
         setTimeout(function() {
-            var searchContainer = $('.dataTables_filter');
+            var searchContainer = $('.dt-search');
             if (searchContainer.length && !searchContainer.find('.search-help-icon').length) {
                 var $input = searchContainer.find('input');
                 var $wrapper = $('<span style="display:inline-flex;align-items:center;gap:1px;"></span>');
@@ -2193,9 +2409,12 @@ $('#submitBtn').on('click', function() {
 
     function addPageJumpInput() {
         // Only add if it doesn't already exist
-        if ($('.dataTables_paginate input.page-jump-input').length === 0) {
+        if ($('.dt-paging input.page-jump-input').length === 0) {
+            // DataTables 2 wraps the buttons in a <nav> inside .dt-paging, so appending
+            // to .dt-paging itself would drop the box onto its own line below them.
+            var $pagingNav = $('.dt-paging nav');
             $('<input type="number" placeholder="#" class="form-control page-jump-input" style="width: 70px; margin-left: 10px; display: inline-block;" min="1">')
-                .appendTo($('.dataTables_paginate'))
+                .appendTo($pagingNav.length ? $pagingNav : $('.dt-paging'))
                 .on('keyup blur', function(e) {
                     if (e.type === 'keyup' && e.key !== 'Enter') return;
                     if (!this.value) return;
@@ -2249,7 +2468,7 @@ $('#submitBtn').on('click', function() {
         var params = { train: trainName };
         if (dateStr) params.date = dateStr;
 
-        container.html('<div class="compo-error">No composition data found.</div>');
+        container.html('<div class="compo-error">' + {{ tsNoComposition | tojson }} + '</div>');
         container.data('loaded', true);
     }
 </script>

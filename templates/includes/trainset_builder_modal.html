@@ -1,15 +1,18 @@
 <!-- Trainset Builder Modal — include in forms that have a #material_type input -->
 <style>
-  .tsb-unit { min-width:68px; max-width:84px; font-size:.7rem; background:#f8f9fa;
+  .tsb-unit { min-width:44px; font-size:.7rem; background:#f8f9fa;
               border:1px solid #dee2e6; border-radius:4px; padding:4px; text-align:center; }
-  .tsb-unit img { max-height:38px; max-width:76px; display:block; margin:0 auto 2px; }
-  .tsb-unit .tsb-ph { max-height:30px; opacity:0.5; }
+  /* Image size (height + width:auto) is set at runtime by normalizeStrip so every car
+     shares one metres-per-pixel scale, matching the public trainset display. */
+  .tsb-unit img { display:block; width:auto; margin:0 auto 2px; }
+  .tsb-unit .tsb-ph { height:22px; width:auto; opacity:0.5; }
   .tsb-unit .tsb-nom { display:block; overflow:hidden; text-overflow:ellipsis;
-                       white-space:nowrap; width:100%; }
+                       white-space:nowrap; max-width:96px; margin:0 auto; }
   .tsb-unit[draggable="true"] { cursor: grab; }
   .tsb-unit.tsb-drag-over-left  { border-left: 3px solid #0d6efd; }
   .tsb-unit.tsb-drag-over-right { border-right: 3px solid #0d6efd; }
 </style>
+<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 
 <div class="modal fade" id="tsbModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-lg modal-dialog-centered">
@@ -26,14 +29,14 @@
         <div id="tsb-results" class="list-group mb-2" style="max-height:160px;overflow-y:auto"></div>
         <hr class="my-2">
         <div id="tsb-ref-badge" style="display:none; font-size:.75rem; color:#0d6efd;
-             margin-bottom:4px; align-items:center; gap:4px">
+             margin-bottom:4px; align-items:center; gap:4px; flex-wrap:wrap">
           <i class="fas fa-link"></i>
-          <span id="tsb-ref-name"></span>
+          <span id="tsb-ref-name" style="display:inline-flex; align-items:center; gap:4px; flex-wrap:wrap"></span>
           <button type="button" onclick="tsbBreakRef()" style="border:0; background:none;
                   cursor:pointer; color:#999; font-size:.9rem; line-height:1; padding:0"
                   title="Edit / break reference">✎</button>
         </div>
-        <div id="tsb-strip" class="d-flex flex-wrap gap-2 py-1" style="min-height:60px">
+        <div id="tsb-strip" class="d-flex flex-wrap align-items-end gap-2 py-1" style="min-height:60px">
           <span id="tsb-empty" class="text-muted fst-italic small m-auto">{{tsEmptyHint}}</span>
         </div>
       </div>
@@ -70,33 +73,61 @@
   };
   var _adminSets    = [];
   var _personalSets = [];
-  var _refName      = null; // set when strip is loaded as a reference (not for editing)
+  var _refNames     = []; // pure-reference mode: stack of trainset names; null = loose wagons (edited)
   var _dragUid      = null;
   var _phTypes      = [null, 'loco_l', 'loco_both', 'loco_r', 'mid']; // null = auto
+
+  /* Parse a composite material_type_advanced value ({"trainsets": [names]}) → names array or null */
+  window.tsbCompositeNames = window.tsbCompositeNames || function (val) {
+    try {
+      var parsed = JSON.parse(val);
+      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets)) return parsed.trainsets;
+    } catch(e) {}
+    return null;
+  };
+
+  function _loadRefStack(names) {
+    // Resolve each name sequentially so segment order is preserved
+    var chain = Promise.resolve();
+    names.forEach(function(name) {
+      chain = chain.then(function() {
+        return fetch('/api/trainsets/resolve?value=' + encodeURIComponent(name))
+          .then(function(r) { return r.json(); })
+          .then(function(units) {
+            var seg = _refNames.length;
+            _refNames.push(name);
+            units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L', _seg: seg })); });
+          });
+      });
+    });
+    chain.then(_render);
+  }
 
   /* ── open ── */
   window.openTsbModal = function () {
     _units = [];
-    _refName = null;
+    _refNames = [];
     var sourceId = window._tsbAdvTarget || 'material_type_advanced';
     var sourceEl = document.getElementById(sourceId);
     var val = sourceEl ? sourceEl.value : '';
-    try {
-      var saved = JSON.parse(val);
-      if (Array.isArray(saved)) {
-        saved.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
-      }
-    } catch(e) {
+    var composite = tsbCompositeNames(val);
+    var isInlineArray = false;
+    try { isInlineArray = Array.isArray(JSON.parse(val)); } catch (e) {}
+    if (composite) {
+      _loadRefStack(composite);
+    } else if (isInlineArray) {
+      // Inline array of units — re-enrich from the catalogue via the API so fields like
+      // image_ext are current (fixes e.g. PNG wagons whose stored value predates image_ext).
+      _refNames = null;
+      fetch('/api/trainsets/resolve?value=' + encodeURIComponent(val))
+        .then(function (r) { return r.json(); })
+        .then(function (units) {
+          units.forEach(function (u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
+          _render();
+        });
+    } else if (val) {
       // val is a trainset name — load in reference mode
-      if (val) {
-        _refName = val;
-        fetch('/api/trainsets/resolve?value=' + encodeURIComponent(val))
-          .then(function(r) { return r.json(); })
-          .then(function(units) {
-            units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
-            _render();
-          });
-      }
+      _loadRefStack([val]);
     }
     document.getElementById('tsb-q').value = '';
     document.getElementById('tsb-results').innerHTML = '';
@@ -119,9 +150,15 @@
     fetch('/api/trainsets/resolve?value=' + encodeURIComponent(name))
       .then(function(r) { return r.json(); })
       .then(function(units) {
-        _refName = name;
-        _units = [];
-        units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
+        if (_refNames === null) {
+          // Loose wagon mode — append the set's wagons, flattened
+          units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
+        } else {
+          // Pure-reference mode — stack as a new referenced segment
+          var seg = _refNames.length;
+          _refNames.push(name);
+          units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L', _seg: seg })); });
+        }
         _render();
         document.getElementById('tsb-q').value = '';
         document.getElementById('tsb-results').innerHTML = '';
@@ -129,7 +166,15 @@
   }
 
   window.tsbBreakRef = function() {
-    _refName = null;
+    _refNames = null;
+    _render();
+  };
+
+  window.tsbRemoveSeg = function(seg) {
+    if (_refNames === null) return;
+    _refNames.splice(seg, 1);
+    _units = _units.filter(function(u) { return u._seg !== seg; });
+    _units.forEach(function(u) { if (u._seg > seg) u._seg--; });
     _render();
   };
 
@@ -187,7 +232,7 @@
         /* thumbnail */
         if (w.image) {
           var thumb = document.createElement('img');
-          thumb.src = _imgSrc(w.image, 'L', w.image_type);
+          thumb.src = _imgSrc(w.image, 'L', w.image_type, w.image_ext);
           thumb.style.cssText = 'height:28px;width:auto;flex-shrink:0;object-fit:contain';
           thumb.onerror = function () { this.remove(); };
           btn.appendChild(thumb);
@@ -262,7 +307,7 @@
 
   /* ── unit management ── */
   function _addUnit(wagon) {
-    _refName = null; // adding a wagon breaks the reference
+    _refNames = null; // adding a wagon breaks the references
     var defaultSide = wagon.image_type === 'sides_R' ? 'R' : 'L';
     _units.push(Object.assign({}, wagon, { _uid: ++_uid, _side: defaultSide }));
     _render();
@@ -270,31 +315,27 @@
 
   window.tsbFlip = function (uid) {
     var u = _units.find(function (u) { return u._uid === uid; });
-    if (u) { _refName = null; u._side = u._side === 'L' ? 'R' : 'L'; _render(); }
+    if (u) { _refNames = null; u._side = u._side === 'L' ? 'R' : 'L'; _render(); }
   };
 
   window.tsbCyclePh = function (uid) {
     var u = _units.find(function (u) { return u._uid === uid; });
     if (!u) return;
-    _refName = null;
+    _refNames = null;
     var idx = _phTypes.indexOf(u._phType || null);
     u._phType = _phTypes[(idx + 1) % _phTypes.length];
     _render();
   };
 
   window.tsbRemove = function (uid) {
-    _refName = null;
+    _refNames = null;
     _units = _units.filter(function (u) { return u._uid !== uid; });
     _render();
   };
 
   /* ── render strip ── */
-  function _imgSrc(image, side, imageType) {
-    if (!image) return '';
-    if (imageType === 'sides') return WAGONS + '/' + image + (side === 'R' ? '_R' : '_L') + '.gif';
-    if (imageType === 'sides_L') return WAGONS + '/' + image + '_L.gif';
-    if (imageType === 'sides_R') return WAGONS + '/' + image + '_R.gif';
-    return WAGONS + '/' + image + '.gif';
+  function _imgSrc(image, side, imageType, ext) {
+    return wagonImgSrc(WAGONS, { image: image, image_type: imageType, image_ext: ext }, side);
   }
 
   function _render() {
@@ -302,28 +343,65 @@
     strip.querySelectorAll('.tsb-unit').forEach(function (el) { el.remove(); });
     document.getElementById('tsb-empty').style.display = _units.length ? 'none' : '';
 
-    // Reference badge
+    // Reference badge — one chip per stacked trainset
     var badge = document.getElementById('tsb-ref-badge');
-    if (_refName) {
-      document.getElementById('tsb-ref-name').textContent = _refName;
+    var inRefMode = _refNames !== null && _refNames.length > 0;
+    if (inRefMode) {
+      var nameEl = document.getElementById('tsb-ref-name');
+      nameEl.innerHTML = '';
+      _refNames.forEach(function(name, seg) {
+        if (seg > 0) {
+          var plus = document.createElement('span');
+          plus.style.color = '#999';
+          plus.textContent = '+';
+          nameEl.appendChild(plus);
+        }
+        var chip = document.createElement('span');
+        chip.style.cssText = 'display:inline-flex; align-items:center; gap:3px; background:#e7f1ff; border-radius:10px; padding:0 6px';
+        var lbl = document.createElement('span');
+        lbl.textContent = name;
+        chip.appendChild(lbl);
+        if (_refNames.length > 1) {
+          var x = document.createElement('button');
+          x.type = 'button';
+          x.style.cssText = 'border:0; background:none; cursor:pointer; color:#999; font-size:.85rem; line-height:1; padding:0';
+          x.title = _i18n.remove;
+          x.textContent = '×';
+          x.onclick = (function(s) { return function() { tsbRemoveSeg(s); }; })(seg);
+          chip.appendChild(x);
+        }
+        nameEl.appendChild(chip);
+      });
       badge.style.display = 'flex';
     } else {
       badge.style.display = 'none';
     }
 
+    var prevSeg = null;
     _units.forEach(function (u, i) {
       var isFirst = (i === 0), isLast = (i === _units.length - 1);
       var phSuffix = u._phType || ((isFirst && isLast) ? 'loco_both' : isFirst ? 'loco_l' : isLast ? 'loco_r' : 'mid');
       var phSrc = WAGONS + '/placeholder_' + phSuffix + '.svg';
 
+      if (inRefMode && i > 0 && u._seg !== prevSeg) {
+        var divider = document.createElement('div');
+        divider.className = 'tsb-unit tsb-seg-divider';
+        divider.style.cssText = 'min-width:0; max-width:none; border:0; background:none; padding:0; align-self:center; color:#adb5bd; font-size:1rem';
+        divider.textContent = '+';
+        strip.appendChild(divider);
+      }
+      prevSeg = u._seg;
+
       var card = document.createElement('div');
       card.className = 'tsb-unit';
 
       var img = document.createElement('img');
-      img.src = u.image ? _imgSrc(u.image, u._side, u.image_type) : phSrc;
+      img.src = u.image ? _imgSrc(u.image, u._side, u.image_type, u.image_ext) : phSrc;
       img.title = u.label || '';
       if (!u.image) img.className = 'tsb-ph';
-      img.onerror = function () { this.src = phSrc; this.className = 'tsb-ph'; this.onerror = null; };
+      // Calibrated stock renders to true scale (normalizeStrip reads data-ppm).
+      else if (u.px_per_meter) img.setAttribute('data-ppm', u.px_per_meter);
+      img.onerror = function () { this.src = phSrc; this.className = 'tsb-ph'; this.removeAttribute('data-ppm'); this.onerror = null; };
       card.appendChild(img);
 
       var nom = document.createElement('span');
@@ -331,7 +409,7 @@
       nom.textContent = u.label || '?';
       card.appendChild(nom);
 
-      if (!_refName) {
+      if (!inRefMode) {
         card.draggable = true;
         card.addEventListener('dragstart', (function(uid, c) { return function(e) {
           _dragUid = uid;
@@ -408,6 +486,12 @@
       strip.appendChild(card);
     });
 
+    // Size + baseline-align the row like the public trainset display.
+    // Placeholders here carry .tsb-ph (not the default skip class), so pass it explicitly.
+    if (window.normalizeStrip) {
+      normalizeStrip(strip, { target: 20, min: 13, max: 30, skipClass: 'tsb-ph' });
+    }
+
     var any = _units.length > 0;
     document.getElementById('tsb-use-btn').disabled  = !any;
     document.getElementById('tsb-save-btn').disabled = !any;
@@ -426,12 +510,17 @@
   }
 
   window.tsbUseOnce = function () {
-    if (_refName) {
-      _tsbWriteAndClose(_refName);
+    if (_refNames !== null && _refNames.length === 1) {
+      _tsbWriteAndClose(_refNames[0]);
+      return;
+    }
+    if (_refNames !== null && _refNames.length > 1) {
+      _tsbWriteAndClose(JSON.stringify({ trainsets: _refNames }));
       return;
     }
     var json = JSON.stringify(_units.map(function (u) {
-      var o = { name: u.name, image: u.image, label: u.label, _side: u._side, image_type: u.image_type };
+      var o = { name: u.name, image: u.image, label: u.label, _side: u._side,
+                image_type: u.image_type, image_ext: u.image_ext };
       if (u._phType) o._phType = u._phType;
       return o;
     }));

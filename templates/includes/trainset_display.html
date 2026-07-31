@@ -37,7 +37,11 @@
     .ts-inline-personal + .ts-inline-saved::before { content: ' · '; font-style: normal; font-weight: normal; color: #aaa; }
     .ts-attr-icon { cursor: pointer; color: rgba(0,0,0,0.4); font-size: 0.7em; position: absolute; top: 1px; left: 2px; z-index: 5; line-height: 1; }
     @media (max-width: 767px) {
-        .ts-inline-wrapper .trainset-inline-scroll { max-width: calc(100vw - 24px) !important; }
+        /* Fallback for callers that don't measure the row themselves. Deliberately
+           NOT !important: where the renderer sets an exact pixel max-width (the
+           itinerary legs), that measurement is tighter and must win — the viewport
+           width ignores the leg's left offset and let strips spill past the card. */
+        .ts-inline-wrapper .trainset-inline-scroll { max-width: calc(100vw - 24px); }
     }
 
     /* The Train Strip */
@@ -136,20 +140,25 @@
 </style>
 
 {# ── JavaScript ───────────────────────────────────────────────────────────── #}
+<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 <script>
 var _wagonsBase = '{{ url_for("static", filename="images/wagons") }}';
+
+/* Drawings licensed directly to Trainlog carry a sentinel instead of a public
+   licence name (see window.TRAINLOG_LICENSE in wagon_img.js) — show the
+   translated phrase rather than the raw value. */
+var _trainlogLicenseLabel = {{ licensedToTrainlog | tojson }};
+
+function _licenseLabel(l) {
+    return l === window.TRAINLOG_LICENSE ? _trainlogLicenseLabel : l;
+}
 
 function esc(s) {
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function _wagonImgSrc(u) {
-    if (!u.image) return '';
-    var side = u._side || 'L';
-    if (u.image_type === 'sides')   return _wagonsBase + '/' + u.image + (side === 'R' ? '_R' : '_L') + '.gif';
-    if (u.image_type === 'sides_L') return _wagonsBase + '/' + u.image + '_L.gif';
-    if (u.image_type === 'sides_R') return _wagonsBase + '/' + u.image + '_R.gif';
-    return _wagonsBase + '/' + u.image + '.gif';
+    return wagonImgSrc(_wagonsBase, u, u._side);
 }
 
 function _makePlaceholder(isLight, isFirst, isLast, phType) {
@@ -169,9 +178,16 @@ function _attributionParts(units) {
     return { authors: distinct('author'), licenses: distinct('license'), sources: distinct('source') };
 }
 
+/* Profile URLs we can shorten to a username: Trainlog public pages and MediaWiki
+   user pages. Returns null for anything else (plain names, other URLs). */
+function _authorLinkName(a) {
+    var m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/)
+         || a.match(/^https?:\/\/[^/]+\/wiki\/User:(.+)$/i);
+    return m ? m[1] : null;
+}
+
 function _authorName(a) {
-    var m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/);
-    return m ? m[1] : a;
+    return _authorLinkName(a) || a;
 }
 
 /* HTML version with clickable author links — for modal display */
@@ -179,11 +195,11 @@ function _attributionHtml(units) {
     var p = _attributionParts(units);
     var parts = [];
     if (p.authors.length)  parts.push(p.authors.map(function(a) {
-        var m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/);
-        return m ? '© <a href="' + esc(a) + '" target="_blank" rel="noopener">' + esc(m[1]) + '</a>'
+        var n = _authorLinkName(a);
+        return n ? '© <a href="' + esc(a) + '" target="_blank" rel="noopener">' + esc(n) + '</a>'
                  : '© ' + esc(a);
     }).join(', '));
-    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(l); }).join(', '));
+    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(_licenseLabel(l)); }).join(', '));
     if (p.sources.length)  parts.push(p.sources.map(function(s) { return esc(s); }).join(', '));
     return parts.join(' · ');
 }
@@ -193,21 +209,34 @@ function _attributionText(units) {
     var p = _attributionParts(units);
     var parts = [];
     if (p.authors.length)  parts.push(p.authors.map(function(a) { return '© ' + esc(_authorName(a)); }).join(', '));
-    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(l); }).join(', '));
+    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(_licenseLabel(l)); }).join(', '));
     if (p.sources.length)  parts.push(p.sources.map(function(s) { return esc(s); }).join(', '));
     return parts.join(' · ');
 }
 
-/* Resolve a material_type_advanced value to enriched units (Promise-based) */
-function _resolveUnits(value) {
+/* Parse a composite material_type_advanced value ({"trainsets": [names]}) → names array or null */
+window.tsbCompositeNames = window.tsbCompositeNames || function (val) {
+    try {
+        var parsed = JSON.parse(val);
+        if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets)) return parsed.trainsets;
+    } catch(e) {}
+    return null;
+};
+
+/* Resolve a material_type_advanced value to enriched units (Promise-based).
+   `owner` is the trip owner's username — required for logged-out visitors on
+   public pages so the backend can scope visibility to that owner's own
+   trainsets plus admin (public) ones, since there is no session to scope to. */
+function _resolveUnits(value, owner) {
     var isInline = false;
     try { isInline = Array.isArray(JSON.parse(value)); } catch(e) {}
-    if (isInline) {
-        return $.getJSON('/api/trainsets/resolve', { value: value }).then(function(units) {
-            return { units: units, name: null };
+    var composite = tsbCompositeNames(value);
+    if (isInline || composite) {
+        return $.getJSON('/api/trainsets/resolve', { value: value, owner: owner || '' }).then(function(units) {
+            return { units: units, name: composite ? composite.join(' + ') : null };
         });
     }
-    return $.getJSON('/api/trainsets/by-name', { name: value }).then(function(ts) {
+    return $.getJSON('/api/trainsets/by-name', { name: value, owner: owner || '' }).then(function(ts) {
         return { units: ts.units, name: ts.name };
     });
 }
@@ -223,6 +252,7 @@ function _renderTrainset($modalBody, units, setName) {
         if (u.image) {
             var img = $('<img>').attr({src: _wagonImgSrc(u), title: u.label || u.nom || '',
                 'data-toggle': 'tooltip', 'data-placement': 'top'});
+            if (u.px_per_meter) img.attr('data-ppm', u.px_per_meter);
             img.on('error', (function(iF,iL,pT) { return function() { $(this).replaceWith(_makePlaceholder(false, iF, iL, pT)); }; })(isFirst, isLast, u._phType));
             wagon.append(img);
         } else {
@@ -237,6 +267,7 @@ function _renderTrainset($modalBody, units, setName) {
     }
     var container = $('<div class="compo-container"></div>').append(strip);
     $modalBody.empty().append(container);
+    normalizeStrip(strip[0], { target: 46, min: 26, max: 72 });
     var sourceLines = [];
     if (setName) sourceLines.push('Trainset: ' + esc(setName));
     var attr = _attributionHtml(units);
@@ -258,6 +289,7 @@ function _renderTrainsetInline(rowId, units, labels) {
         if (u.image) {
             var img = $('<img>').attr({src: _wagonImgSrc(u), title: u.label || u.nom || '',
                 'data-toggle': 'tooltip', 'data-placement': 'top'});
+            if (u.px_per_meter) img.attr('data-ppm', u.px_per_meter);
             img.on('error', (function(iF,iL,pT) { return function() { $(this).replaceWith(_makePlaceholder(true, iF, iL, pT)); }; })(isFirst, isLast, u._phType));
             wagon.append(img);
         } else {
@@ -279,6 +311,7 @@ function _renderTrainsetInline(rowId, units, labels) {
     var $scroller = $('<div class="trainset-inline-scroll"></div>')
         .css('max-width', (tableW - 160) + 'px').append(strip);
     $container.append($scroller);
+    normalizeStrip(strip[0], { target: 46, min: 26, max: 72 });
     if (labelHtml) {
         $container.append($('<div class="ts-inline-label"></div>').html(labelHtml));
     }

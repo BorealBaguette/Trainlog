@@ -34,6 +34,11 @@
   .plan-leg.leg-impossible { border-color: #dc3545; background: rgba(220,53,69,.05); }
   .leg-warning { font-size: .78rem; font-weight: 600; color: #dc3545; margin-top: .12rem; }
   .leg-warning i { margin-right: .25rem; }
+  /* Weekday constraint: with Day 1 = anchor date, this leg lands on a day the
+     service doesn't run. Softer than the impossible-connection red. */
+  .leg-warning.leg-warning-weekday { color: #b45309; }
+  .wd-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: #7c5eb4;
+             background: rgba(124,94,180,.12); border-radius: 999px; padding: .05rem .5rem; }
   .leg-icon { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 10px;
               background: rgba(0,0,0,.04); display: flex; align-items: center; justify-content: center; }
   .leg-icon img { height: 24px; }
@@ -45,6 +50,19 @@
   .leg-actions .btn { border: 0; color: #98a0ab; padding: .25rem .45rem; }
   .leg-actions .btn:hover { color: #1f2937; background: rgba(0,0,0,.05); }
   .leg-actions .btn.act-del:hover { color: #dc3545; background: rgba(220,53,69,.1); }
+  /* Day separators: a labelled divider before the first leg of each new day, so
+     the timeline reads as distinct days. Overnight legs stay under their departure
+     day; the "→ Day N+1" on the leg itself shows where they cross midnight. */
+  .plan-day-sep { list-style: none; display: flex; align-items: center; gap: .65rem;
+                  margin: 1.1rem .15rem .55rem; }
+  .plan-day-sep:first-child { margin-top: .1rem; }
+  .plan-day-sep .day-sep-label { font-size: .74rem; font-weight: 700; text-transform: uppercase;
+                  letter-spacing: .05em; color: #6b7280; white-space: nowrap; }
+  .plan-day-sep .day-sep-line { flex: 1 1 auto; height: 1px;
+                  background: var(--bs-border-color, #e5e7eb); }
+  /* Overnight marker: a moon on the day transition (Day N -> Day N+1), so the
+     "runs through the night" fact sits with its cause rather than on a separate row. */
+  .ovn-moon { color: #5b60a6; margin: 0 .05rem; }
 </style>
 
 <div class="container plan-wrap" style="margin-top:1.5rem;">
@@ -198,8 +216,25 @@
   <!-- trips -->
   {% if plan_trips %}
   <ul class="plan-list" id="plan-trip-list">
+    {% set daysep = namespace(prev=None) %}
     {% for item in plan_trips %}
     {% set t = item.trip %}
+    {# Departure-day key: relative legs group by Day N, dated legs by their date.
+       Unanchored legs (no day / no date) carry no key and never start a new group. #}
+    {% set day_key = ('D' ~ t.day_number) if t.day_number is not none else (('A' ~ t.start_date) if t.start_date else None) %}
+    {# Overnight: arrival lands on a later day than departure. Relative legs compare
+       Day numbers; dated legs carry a "(+N)" suffix on the arrival time (formatTrip). #}
+    {% set is_overnight = (t.day_number is not none and t.end_day_number and t.end_day_number != t.day_number) or (t.end_time and '(+' in t.end_time) %}
+    {% if day_key is not none and day_key != daysep.prev %}
+    <li class="plan-day-sep">
+      <span class="day-sep-label">
+        {% if t.day_number is not none %}{{ day|default('Day') }} {{ t.day_number }}
+        {% else %}<span class="fmt-date" data-date="{{ t.start_date }}">{{ t.start_date }}</span>{% endif %}
+      </span>
+      <span class="day-sep-line"></span>
+    </li>
+    {% set daysep.prev = day_key %}
+    {% endif %}
     <li class="plan-leg{% if item.impossible %} leg-impossible{% endif %}" data-uid="{{ t.uid }}">
       <div class="leg-icon"><img src="{{ url_for('static', filename='images/icons/trip_logos/' + (t.type or 'other') + '.png') }}" onerror="this.style.display='none'"></div>
       <div class="leg-body">
@@ -207,16 +242,20 @@
         {% if item.impossible %}
         <div class="leg-warning"><i class="bi bi-exclamation-triangle-fill"></i> {{ impossibleConnection|default('Departs before the previous leg arrives') }}</div>
         {% endif %}
+        {% if item.weekday_mismatch %}
+        <div class="leg-warning leg-warning-weekday"><i class="bi bi-calendar-x"></i> {{ planWeekdayMismatch|default('With Day 1 on the chosen date, this leg falls on a day this service does not run') }}</div>
+        {% endif %}
         <div class="leg-meta text-truncate">
           {% if t.day_number is not none %}
             {# Relative leg: "Day N", optionally with a clock time. Collapse to one
                "Day N" when departure and arrival fall on the same day. #}
             <span class="day-pill">{{ day|default('Day') }} {{ t.day_number }}</span>{% if t.start_time %}{{ t.start_time }}{% endif %}
-            {% if t.end_day_number and t.end_day_number != t.day_number %} &rarr; <span class="day-pill">{{ day|default('Day') }} {{ t.end_day_number }}</span>{% if t.end_time %}{{ t.end_time }}{% endif %}
+            {% if t.end_day_number and t.end_day_number != t.day_number %} &rarr; <i class="bi bi-moon-stars ovn-moon" title="{{ overnight|default('Overnight') }}"></i> <span class="day-pill">{{ day|default('Day') }} {{ t.end_day_number }}</span>{% if t.end_time %}{{ t.end_time }}{% endif %}
             {% elif t.end_time and t.end_time != t.start_time %} &rarr; {{ t.end_time }}{% endif %}
           {% elif t.start_date %}
-            {{ t.start_date }}{% if t.start_time %} {{ t.start_time }}{% endif %}{% if t.end_time and t.end_time != t.start_time %} &rarr; {{ t.end_time }}{% endif %}
+            {{ t.start_date }}{% if t.start_time %} {{ t.start_time }}{% endif %}{% if t.end_time and t.end_time != t.start_time %} &rarr; {% if is_overnight %}<i class="bi bi-moon-stars ovn-moon" title="{{ overnight|default('Overnight') }}"></i> {% endif %}{{ t.end_time }}{% endif %}
           {% else %}—{% endif %}
+          {% if t.weekdays %} <span class="wd-pill fmt-wd" data-wd="{{ t.weekdays }}"></span>{% endif %}
           {% if t.duration_h %} · <span class="fmt-dur" data-s="{{ t.duration_seconds }}">{{ t.duration_h }}</span>{% endif %}
           {% if t.trip_length %} · <span class="fmt-num" data-n="{{ (t.trip_length / 1000)|round|int }}">{{ (t.trip_length / 1000)|round|int }}</span> km{% endif %}
           {% if t.price_in_user_currency %} · <span class="fmt-num" data-n="{{ t.price_in_user_currency|round|int }}">{{ t.price_in_user_currency|round|int }}</span> {{ t.user_currency }}{% endif %}
@@ -240,8 +279,14 @@
         {% endif %}
       </div>
       <div class="leg-actions d-flex gap-1 align-items-center">
+        {# Anchored legs (with a day or a date) are ordered by their chronology, not
+           by the arrows — a move would be a no-op, so the arrows are hidden. #}
+        {% if item.can_up %}
         <button class="btn btn-sm plan-move" data-dir="-1" title="{{ moveUp|default('Move up') }}"><i class="bi bi-arrow-up"></i></button>
+        {% endif %}
+        {% if item.can_down %}
         <button class="btn btn-sm plan-move" data-dir="1" title="{{ moveDown|default('Move down') }}"><i class="bi bi-arrow-down"></i></button>
+        {% endif %}
         <a class="btn btn-sm" title="{{ edit|default('Edit') }}"
            href="{{ url_for('plan_trip_editor', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}"><i class="bi bi-pencil"></i></a>
         <form method="post" action="{{ url_for('delete_plan_trip_route', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}" onsubmit="return confirm('{{ confirmDeletePlanTrip|default('Delete this trip?') }}');">
@@ -329,6 +374,26 @@
       try { el.textContent = secondsToDhm(s, LOC); } catch (e) { /* keep server fallback */ }
     }
   });
+  // Day-separator dates: YYYY-MM-DD -> localised long date (weekday + date).
+  var dfmt = new Intl.DateTimeFormat(LOC, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+  document.querySelectorAll('.fmt-date').forEach(function(el){
+    var p = (el.dataset.date || '').split('-');
+    if (p.length !== 3) return;
+    var dt = new Date(Date.UTC(+p[0], +p[1] - 1, +p[2]));
+    if (!isNaN(dt)) el.textContent = dfmt.format(dt);
+  });
+  // Weekday-constraint pills: bitmask (bit 0 = Monday) -> localised short day names.
+  var wdFmt = new Intl.DateTimeFormat(LOC, { weekday: 'short', timeZone: 'UTC' });
+  document.querySelectorAll('.fmt-wd').forEach(function(el){
+    var mask = parseInt(el.dataset.wd, 10);
+    if (isNaN(mask)) return;
+    var names = [];
+    for (var i = 0; i < 7; i++) {
+      // 2024-01-01 is a Monday
+      if ((mask >> i) & 1) names.push(wdFmt.format(new Date(Date.UTC(2024, 0, 1 + i))));
+    }
+    el.textContent = names.join('·');
+  });
 })();
 
 function planValidate() {
@@ -359,16 +424,22 @@ function planEdit(t) {
   planEditModal.show();
 }
 
-// Reorder: up/down swap, then POST the new uid order.
+// Reorder: up/down swap, then POST the new uid order. Reload afterwards so the
+// server recomputes the chronological interleaving and which arrows still apply.
 document.querySelectorAll('.plan-move').forEach(function(btn){
   btn.addEventListener('click', function(){
     var li = btn.closest('li'), dir = parseInt(btn.dataset.dir, 10);
-    if (dir < 0 && li.previousElementSibling) li.parentNode.insertBefore(li, li.previousElementSibling);
-    if (dir > 0 && li.nextElementSibling) li.parentNode.insertBefore(li.nextElementSibling, li);
-    var order = Array.from(document.querySelectorAll('#plan-trip-list li')).map(function(x){ return x.dataset.uid; });
+    // Skip over day-separator rows when moving, so a leg swaps with the next/prev leg.
+    var prevLeg = li.previousElementSibling;
+    while (prevLeg && !prevLeg.classList.contains('plan-leg')) prevLeg = prevLeg.previousElementSibling;
+    var nextLeg = li.nextElementSibling;
+    while (nextLeg && !nextLeg.classList.contains('plan-leg')) nextLeg = nextLeg.nextElementSibling;
+    if (dir < 0 && prevLeg) li.parentNode.insertBefore(li, prevLeg);
+    if (dir > 0 && nextLeg) li.parentNode.insertBefore(nextLeg, li);
+    var order = Array.from(document.querySelectorAll('#plan-trip-list li.plan-leg')).map(function(x){ return x.dataset.uid; });
     fetch("{{ url_for('reorder_plan_trips_route', username=username, plan_uuid=plan.uuid) }}", {
       method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({order: order})
-    });
+    }).then(function(){ location.reload(); });
   });
 });
 

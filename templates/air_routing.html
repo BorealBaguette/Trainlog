@@ -16,6 +16,7 @@
   nav.navbar { display: none !important; }
 </style>
 {% endif %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/routing_panel.css') }}">
 
 <script>
 // ─── Flutter bridge (for app) ───────────────────────────────────────────────
@@ -181,11 +182,14 @@ function updateSidebar(isFr24Active) {
     flutterBridge.loading(false);
 
     if (newTrip.fr24_id) {
-        content += `<p><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></p>`;
+        content += `<div class="submit-control"><button type="button" class="btn btn-sm btn-outline-primary" onclick="toggleRoute()">Switch to ${isFr24Active ? 'Geodesic' : 'FR24'} Path</button></div>`;
     }
 
-    content += `<p><button id="saveTrip" type="button" onclick="saveTrip()" class="btn btn-success">{{submit}}</button></p>`;
-    content += `<p><button id="saveTripContinue" type="button" onclick="saveTrip(true)" class="btn btn-outline-success btn-sm">{{saveTripContinueButton}}</button></p>`;
+    content += buildSubmitControl({
+        saveLabel: "{{submit}}",
+        continueLabel: "{{saveTripContinueButton}}",
+        showContinue: true
+    });
     sidebar.setContent(content);
 }
 
@@ -262,7 +266,7 @@ async function saveTrip(continueTrip=false) {
             if (isPlan) {
                 if (continueTrip) {
                     // Carry forward the same timing mode this leg used (relative or precise).
-                    var contUrl = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${newTrip["destinationStation"]}`;
+                    var contUrl = `{{ url_for('new', username=username, vehicle_type='') }}${type}?plan=${encodeURIComponent(newTrip.plan_uuid)}&prevDest=${encodeURIComponent(newTrip["destinationStation"])}`;
                     if (newTrip.precision == "preciseDates") {
                         contUrl += `&prevEndDate=${newTrip["newTripEndDate"] || ''}&prevEndTime=${newTrip["newTripEndTime"] || ''}`;
                     } else if (newTrip.precision == "onlyDate") {
@@ -278,7 +282,7 @@ async function saveTrip(continueTrip=false) {
             }
 
             if (continueTrip) {
-                location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?prevDest=${newTrip["destinationStation"]}&prevEndDate=${newTrip["newTripEndDate"]}&prevEndTime=${newTrip["newTripEndTime"]}`;
+                location.href = `{{ url_for('new', username=username, vehicle_type='') }}${type}?prevDest=${encodeURIComponent(newTrip["destinationStation"])}&prevEndDate=${newTrip["newTripEndDate"]}&prevEndTime=${newTrip["newTripEndTime"]}`;
             } else {
                 location.href = "{{ url_for('landing') }}";
             }

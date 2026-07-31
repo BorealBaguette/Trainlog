@@ -53,6 +53,10 @@ antpathStyles =  {
 };
 
 var useNewRouter = false;
+// Persists the ferry-split checkbox's state across re-renders (routeWhileDragging
+// fires routeselected repeatedly, which fully re-creates the sidebar HTML — without
+// this, an unchecked box would silently reset to checked on the next drag/reroute).
+var ferrySplitEnabled = false;
 
 var markergroup = new L.featureGroup(markerIconStart, markerIconEnd);
 
@@ -612,7 +616,51 @@ function combineRoutes(routes, waypoints, callback, context) {
   callback.call(context, null, [combinedRoute]);
 }
 
-function routing(map, showSidebar=true, type){
+// Trip types whose OSRM profile can plausibly cross a ferry leg (car/bus ferries,
+// foot/bike passenger ferries, train ferries). Trams, metros, air, etc. never do.
+var FERRY_SPLIT_TYPES = ['car', 'bus', 'train', 'cycle', 'walk'];
+window.FERRY_SPLIT_TYPES = FERRY_SPLIT_TYPES;
+
+// Plural form selection lives in util.js as window.pluralize (shared, CLDR-based).
+
+// Car-carrying rail shuttles (Channel Tunnel "Le Shuttle"/Eurotunnel, Alpine
+// Autoverlad, Sylt Autozug, motorail, …) are tagged route=shuttle_train in OSM,
+// which OSRM reports with mode 'ferry' — but they're trains, not ferries, so we
+// must NOT offer to split them off as a ferry leg. The step name is the only
+// signal OSRM gives us to tell them apart from real ferries.
+var SHUTTLE_TRAIN_RE = /shuttle|eurotunnel|autoverlad|autozug|auto-?train|motorail|verladung|vereina|l[oö]tschberg|furka|oberalp|tauernschleuse|autoreisezug/i;
+
+// Group a route's instructions into contiguous driving/ferry segments, using each
+// instruction's coordinate-array `index` to slice out per-segment coordinates.
+// Freehand placeholder instructions carry no `.mode`, so they're treated as
+// 'driving' and simply merge into whichever driving segment surrounds them.
+function detectModeSegments(route) {
+  var instructions = route.instructions, coords = route.coordinates;
+  var segments = []; // {mode, startIdx, roadName, distance, time, coordinates}
+  instructions.forEach(function(instr) {
+    var mode = 'driving';
+    if (instr.mode === 'ferry') {
+      // OSRM reports car-shuttle trains as 'ferry' too; give them their own 'train'
+      // segment so the split saves them as a train leg instead of a ferry leg.
+      mode = (instr.road && SHUTTLE_TRAIN_RE.test(instr.road)) ? 'train' : 'ferry';
+    }
+    var cur = segments[segments.length - 1];
+    if (!cur || cur.mode !== mode) {
+      cur = { mode: mode, startIdx: instr.index, distance: 0, time: 0, roadName: null };
+      segments.push(cur);
+    }
+    cur.distance += instr.distance;
+    cur.time += instr.time;
+    if (mode !== 'driving' && !cur.roadName) cur.roadName = instr.road; // OSRM crossing step name
+  });
+  for (var i = 0; i < segments.length; i++) {
+    var endIdx = (i < segments.length - 1) ? segments[i + 1].startIdx : coords.length - 1;
+    segments[i].coordinates = coords.slice(segments[i].startIdx, endIdx + 1);
+  }
+  return segments;
+}
+
+function routing(map, showSidebar=true, type, allowFerrySplit=false){
   flutterBridge.loading(true);
 
   sidebar = L.control.sidebar('sidebar', {
@@ -845,7 +893,17 @@ function routing(map, showSidebar=true, type){
       router: customRouter
     }).on('routeselected', function(){
       var content = `<h4>${texts.routeTitle.replace("{origLabel}", origLabel).replace("{destLabel}", destLabel)}</h4>`;
-      
+      var hintHtml = ''; // "adjust the markers" hint, shown inline next to the distance (train only)
+
+      // Detect car/ferry mode transitions so the ferry-split toggle and
+      // saveTripSplit() in routing.html can offer splitting into separate trips.
+      // Only offered on the dedicated new-trip routing page (allowFerrySplit) — the
+      // edit/copy path editor and the AI-compose map reuse this same routing() control
+      // but only ever save a single trip, so splitting isn't wired up there.
+      window.modeSegments = (allowFerrySplit && FERRY_SPLIT_TYPES.includes(type)) ? detectModeSegments(this._selectedRoute) : null;
+      var ferryCount = window.modeSegments ? window.modeSegments.filter(function(s) { return s.mode === 'ferry'; }).length : 0;
+      var trainCount = window.modeSegments ? window.modeSegments.filter(function(s) { return s.mode === 'train'; }).length : 0;
+
       // Add router selector for train, tram, metro
       if(["train", "tram", "metro"].includes(type)){
         content += `
@@ -862,12 +920,42 @@ function routing(map, showSidebar=true, type){
             </label>
           </div>
         `;
-        content += `<p><small>${texts.fineTuneNote}</small></p>`;
+        // Tuck the "adjust the markers" hint behind a small info icon (rendered inline with distance).
+        hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div>${texts.fineTuneNote}</div></details>`;
       }
       
       // Add note about freehand segments if any exist
       if (freehandSegments.size > 0) {
         content += `<p><small>⚠️ Route includes ${freehandSegments.size} freehand segment(s) shown as orange dashed lines</small></p>`;
+      }
+
+      // Ferry-split toggle: offered when adding a new leg (plain trip or new plan leg).
+      // allowFerrySplit is false on the edit/copy path editor, so editing an existing
+      // trip or plan leg's route never shows this — splitting an in-place edit into a
+      // different number of trips/legs is out of scope.
+      if (allowFerrySplit && FERRY_SPLIT_TYPES.includes(type) && (ferryCount || trainCount)) {
+        // One descriptive line per crossing type present (a route usually has only
+        // one kind), and a single checkbox that splits at every crossing. The label
+        // uses the ferry wording unless the only crossings are rail shuttles.
+        var noteLines = '';
+        if (ferryCount) noteLines += `<p style="margin: 0 0 8px 0;">${pluralize(texts.ferrySplitNote, ferryCount)}</p>`;
+        if (trainCount) noteLines += `<p style="margin: 0 0 8px 0;">${pluralize(texts.trainSplitNote, trainCount)}</p>`;
+        var splitLabel = (trainCount && !ferryCount) ? texts.trainSplitOption : texts.ferrySplitOption;
+        content += `
+          <div style="margin: 10px 0; padding: 10px; background-color: #eef6ff; border-radius: 4px;">
+            ${noteLines}
+            <label style="display: flex; align-items: center; cursor: pointer;">
+              <input
+                type="checkbox"
+                id="ferrySplitToggle"
+                onchange="ferrySplitEnabled = this.checked"
+                ${ferrySplitEnabled ? 'checked' : ''}
+                style="margin-right: 8px;"
+              >
+              <span>${splitLabel}</span>
+            </label>
+          </div>
+        `;
       }
 
       var distanceM = this._selectedRoute.summary.totalDistance;
@@ -877,18 +965,19 @@ function routing(map, showSidebar=true, type){
       var time = secondsToDhm(durationS, "en");
       
       var formattedData = `${texts.distanceTime.replace("{km}", km).replace("{time}", time)}`;
-      content += `<p><i>${formattedData}</i></p>`;
+      content += `<div class="route-meta"><span class="route-dist">${formattedData}</span>${hintHtml}</div>`;
 
       flutterBridge.routeInfo(formattedData, distanceM, durationS);
       flutterBridge.loading(false);
     
       if(geojson){
-        content += `<p><button id="downloadGeoJSON" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></p>`;
+        content += `<div class="submit-control"><button id="downloadGeoJSON" class="submit-main" type="button" onclick="downloadCurrentRouteAsGeoJSON(${m})">${texts.downloadGeoJSONButton}</button></div>`;
       } else {
-        content += `<p><button id="saveTrip" type="button" onclick="saveTrip()">${texts.saveTripButton}</button></p>`;
-        if(newTrip.precision == "preciseDates" || newTrip.plan_uuid){
-          content += `<button id="saveTripContinue" type="button"  onclick="saveTrip(true)">${texts.saveTripContinueButton}</button>`;
-        }
+        content += buildSubmitControl({
+          saveLabel: texts.saveTripButton,
+          continueLabel: texts.saveTripContinueButton,
+          showContinue: newTrip.precision == "preciseDates" || !!newTrip.plan_uuid
+        });
       }
        
       sidebar.setContent(content);
@@ -960,3 +1049,46 @@ function routing(map, showSidebar=true, type){
   }
 }
 window.switchRouter = switchRouter;
+
+// Remember whether the user last used "Save" or "Save & continue" so we can promote
+// that action to the big primary button next time (the other drops under the caret).
+function getSubmitDefault() {
+  var m = document.cookie.match(/(?:^|;\s*)routingSubmitDefault=([^;]+)/);
+  return m && decodeURIComponent(m[1]) === 'continue' ? 'continue' : 'save';
+}
+function setSubmitDefault(mode) {
+  var expires = new Date(Date.now() + 365 * 864e5).toUTCString();
+  document.cookie = 'routingSubmitDefault=' + mode + '; expires=' + expires + '; path=/';
+}
+// Persist the choice, then run the page's saveTrip(). onclick target for both buttons.
+window.saveTripPref = function(continueTrip) {
+  setSubmitDefault(continueTrip ? 'continue' : 'save');
+  saveTrip(continueTrip);
+};
+
+// Build the submit control for the sidebar: a plain "Valider" button, or — when a
+// "save & continue" action applies — a split button whose caret (a CSS-only <details>)
+// reveals the alternative option. The last-used action is shown as the primary button
+// (remembered in a cookie). Shared by routing.js, routing.html and air_routing.html.
+function submitBtn(id, cls, label, continueTrip) {
+  return '<button id="' + id + '"' + (cls ? ' class="' + cls + '"' : '') +
+    ' type="button" onclick="saveTripPref(' + (continueTrip ? 'true' : 'false') + ')">' + label + '</button>';
+}
+function buildSubmitControl(opts) {
+  var save = submitBtn('saveTrip', 'submit-main', opts.saveLabel, false);
+  if (!opts.showContinue) {
+    return '<div class="submit-control">' + save + '</div>';
+  }
+  var continueFirst = getSubmitDefault() === 'continue';
+  // Primary (big) button is the last-used action; the other goes under the caret.
+  var primary = continueFirst
+    ? submitBtn('saveTripContinue', 'submit-main', opts.continueLabel, true)
+    : save;
+  var secondary = continueFirst
+    ? submitBtn('saveTrip', '', opts.saveLabel, false)
+    : submitBtn('saveTripContinue', '', opts.continueLabel, true);
+  return '<div class="submit-control"><div class="submit-split">' + primary +
+    '<details class="submit-more"><summary><i class="fa-solid fa-chevron-down"></i></summary>' +
+    '<div class="submit-menu">' + secondary + '</div></details></div></div>';
+}
+window.buildSubmitControl = buildSubmitControl;

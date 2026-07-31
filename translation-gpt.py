@@ -144,6 +144,17 @@ for lang_file in lang_files:
                 process_nested_lists(
                     value, lang_content[key], index, "en", language_code
                 )
+        elif isinstance(value, dict):
+            # Values like plural-form maps ({"one": ..., "other": ...}). Fill only
+            # the missing sub-keys so any language-specific extras (e.g. Slavic
+            # "few"/"many" added by hand) are preserved across re-runs.
+            if not isinstance(lang_content.get(key), dict):
+                lang_content[key] = {}
+            for sub_key, sub_value in value.items():
+                if sub_key not in lang_content[key]:
+                    translated = translate_text(sub_value, "en", language_code)
+                    if translated:
+                        lang_content[key][sub_key] = translated
         else:
             if key not in lang_content:
                 translated = translate_text(value, "en", language_code)

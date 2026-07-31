@@ -22,25 +22,6 @@
     .carousel-inner { overflow: visible; }
     .carousel-control-next, .carousel-control-prev, .carousel-indicators { bottom: 4rem; }
 
-        /* Style select to look like plain text */
-    .operator-type-select {
-        border: none;
-        background: transparent;
-        appearance: none;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        padding: 0;
-        font-size: inherit;
-        font-family: inherit;
-        color: inherit;
-        cursor: pointer;
-    }
-
-    /* Add a visual cue on hover to indicate it's interactive */
-    .operator-type-select:hover {
-        text-decoration: underline;
-    }
-
     .missing-operator-badge {
         display: inline-block;
         margin: 5px;
@@ -48,6 +29,13 @@
         background-color: #f8f9fa;
         border: 1px solid #dee2e6;
         border-radius: 4px;
+    }
+
+    /* Flags of the countries a still-unresolved spelling was logged in. The body
+       font is FlagEmojis-first, so the glyphs render without extra work here. */
+    .missing-operator-flags {
+        margin-right: 4px;
+        cursor: help;
     }
 
     .missing-operator-count {
@@ -98,6 +86,24 @@
         background-color: #f8f9fa;
     }
 
+    /* Keep the two action buttons on one line — the column is narrow enough
+       that they otherwise wrap and stack. */
+    .operator-actions {
+        display: flex;
+        gap: .25rem;
+        flex-wrap: nowrap;
+    }
+
+    #operatorTable td:last-child {
+        white-space: nowrap;
+    }
+
+    /* style2.css sets .popover{max-width:80%} for the big vehicle-photo popovers in
+       the trips table. This one is explanatory text, so keep it a readable column. */
+    .popover.operator-help {
+        max-width: 24rem;
+    }
+
     .collapse-icon {
         transition: transform 0.2s;
     }
@@ -105,21 +111,124 @@
     .collapsed .collapse-icon {
         transform: rotate(-90deg);
     }
+
+    /* Trip counts. The operator's own count reads as a plain figure (tabular so the
+       column lines up); a zero is dimmed so the eye lands on operators that carry
+       trips. The group total sits beside it as a distinct pill — it is a different
+       number (what the stats sum together), so it should not look like the same one. */
+    .trip-count {
+        font-variant-numeric: tabular-nums;
+        font-weight: 600;
+        color: #343a40;
+    }
+    .trip-count-zero { color: #adb5bd; font-weight: 500; }
+
+    .trip-count-group {
+        display: inline-flex;
+        align-items: center;
+        gap: .3rem;
+        margin-left: .5rem;
+        padding: .1rem .5rem;
+        border-radius: 999px;
+        font-size: .75rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        color: #0c5460;
+        background: #d1ecf1;
+    }
+    .trip-count-group i { font-size: .85em; opacity: .8; }
+
+    /* A count nested inside a coloured badge (alias spellings, group members). The
+       tint is mixed from the badge's own text colour, so it reads correctly on both
+       the dark-text and white-text badges without a per-colour override. */
+    .count-chip {
+        margin-left: .45rem;
+        padding: 0 .4rem;
+        border-radius: 999px;
+        font-size: .9em;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        background: color-mix(in srgb, currentColor 16%, transparent);
+    }
+    .count-chip-zero { opacity: .55; }
 </style>
 
 <div class="container">
     <h1 class="mt-3">Operators and Logos</h1>
-    <div class="mb-3">
-        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#operatorModal" onclick="clearForm()">Add Operator</button>
-        <button type="button" class="btn btn-warning" data-bs-toggle="modal" data-bs-target="#missingOperatorsModal" onclick="loadMissingOperators()">View Missing Operators</button>
+    <div class="mb-3 d-flex align-items-center gap-2 flex-wrap">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#operatorModal" onclick="clearForm()">
+            <i class="fa-solid fa-plus me-1"></i>Add Operator
+        </button>
+        <!-- Everything except "Add Operator" lives here: the work queue is used often
+             but is still a task rather than a control, and the rest is bulk/maintenance.
+             The menu has a definite min-width so the trailing info icon is laid out
+             inside it — an absolutely positioned menu sizes to its widest item, and the
+             icon kept falling outside that measurement. -->
+        <div class="dropdown">
+            <button type="button" class="btn btn-outline-secondary dropdown-toggle"
+                    data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fa-solid fa-screwdriver-wrench"></i> Tools
+            </button>
+            <ul class="dropdown-menu" style="min-width:17rem">
+                <li>
+                    <button type="button" class="dropdown-item" data-bs-toggle="modal"
+                            data-bs-target="#missingOperatorsModal" onclick="loadMissingOperators()"
+                            title="Operator names used on trips that match no operator yet.">
+                        <i class="fa-solid fa-circle-question me-2"></i>Unresolved spellings
+                    </button>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <a class="dropdown-item" href="/api/admin/operators/export.csv"
+                       title="Download all operators and their aliases, keyed on slug.">
+                        <i class="fa-solid fa-download me-2"></i>Export CSV
+                    </a>
+                </li>
+                <li>
+                    <button type="button" class="dropdown-item" onclick="$('#importCsvFile').click()"
+                            title="Apply an edited export: renames operators and adds aliases. Never deletes.">
+                        <i class="fa-solid fa-upload me-2"></i>Import CSV
+                    </button>
+                </li>
+                <li><hr class="dropdown-divider"></li>
+                <li>
+                    <button type="button" class="dropdown-item d-flex align-items-center justify-content-between"
+                            onclick="checkTripOperators()">
+                        <span><i class="fa-solid fa-stethoscope me-2"></i>Check operator matching</span>
+                        <!-- stopPropagation so reading the help does not run the check. -->
+                        <i class="fa-solid fa-circle-info text-muted ms-2" tabindex="0"
+                           style="cursor:help" onclick="event.stopPropagation()"
+                           data-bs-toggle="popover" data-bs-trigger="hover focus" data-bs-html="true"
+                           data-bs-custom-class="operator-help"
+                           data-bs-placement="right" data-bs-title="What this checks"
+                           data-bs-content="
+                             <p class='mb-2'>A trip stores its operator as free text. That text is matched to an
+                             operator <strong>once, when the trip is saved</strong>, and the result is kept in a
+                             lookup table, which is what makes stats and logos fast.</p>
+                             <p class='mb-2'>This compares that lookup against what every trip's text would match
+                             today. It should always say <em>up to date</em>. If it does not, something changed a
+                             trip without going through the app, and <strong>Rebuild</strong> recomputes the lookup
+                             for every trip (about 30 seconds).</p>
+                             <p class='mb-0 text-muted'>It cannot tell you an alias is <em>missing</em>, only
+                             that the lookup disagrees with the trips. A spelling that matches no operator appears
+                             under <em>Unresolved spellings</em> instead.</p>"></i>
+                    </button>
+                </li>
+            </ul>
+        </div>
+
+        <input type="file" id="importCsvFile" accept=".csv" style="display:none" onchange="importOperatorsCsv(this)">
+        <span id="consistencyStatus"></span>
     </div>
-    <table id="operatorTable" class="mt-3">
+    <table id="operatorTable">
         <thead>
             <tr>
                 <th scope="col" data-priority=1>ID</th>
                 <th scope="col" data-priority=2>Short Name</th>
                 <th scope="col" data-priority=3>Long Name</th>
                 <th scope="col" data-priority=4>Operator Type</th> <!-- New column for Operator Type -->
+                <th scope="col" data-priority=3>Trips</th>
+                <th scope="col" data-priority=6 data-orderable="false">Aliases</th>
                 <th scope="col" data-priority=5 data-orderable="false">Logo</th>
                 <th scope="col" data-orderable="false" data-priority=1>Actions</th>
             </tr>
@@ -203,6 +312,7 @@
             </div>
             <div class="modal-body">
                 <form id="operatorForm">
+                    <input type="hidden" id="operator_id" name="operator_id">
                     <div class="form-group">
                         <label for="short_name">Short Name</label>
                         <input type="text" class="form-control" id="short_name" name="short_name" required>
@@ -212,7 +322,7 @@
                         <input type="text" class="form-control" id="long_name" name="long_name" required>
                     </div>
                     <div class="form-group">
-                        <label for="operator_type">Operator Type</label> <!-- New select field for Operator Type -->
+                        <label for="operator_type">Operator Type</label>
                         <select class="form-select" id="operator_type" name="operator_type" required>
                             <option value="operator">Operator</option>
                             <option value="accommodation">Accommodation</option>
@@ -220,18 +330,96 @@
                             <option value="poi">POI</option>
                         </select>
                     </div>
-                    <div class="form-group">
+                    <!-- Logo is uploaded when creating an operator; existing operators
+                         manage their logos through the carousel (click the logo). -->
+                    <div class="form-group" id="operatorLogoGroup">
                         <label for="logo">Logo Image</label>
                         <input type="file" class="form-control-file" id="logo" name="logo">
                     </div>
-                    <button type="submit" class="btn btn-primary">Save</button>
+                    <div id="operatorFormError" class="mt-2"></div>
                 </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="submit" form="operatorForm" class="btn btn-primary" id="operatorSaveBtn">Save</button>
             </div>
         </div>
     </div>
 </div>
 
   
+  <!-- Aliases + merge for one operator -->
+  <div class="modal fade" id="aliasModal" tabindex="-1" aria-labelledby="aliasModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="aliasModalLabel">Aliases</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p class="text-muted small">
+            Every spelling listed here resolves to this operator: its trips group together
+            in the stats and pick up its logo. Trips keep displaying whatever the user typed.
+          </p>
+          <div id="aliasList" class="mb-3"></div>
+
+          <div class="input-group mb-2">
+            <input type="text" class="form-control" id="newAliasInput" placeholder="Another spelling, e.g. CFF">
+            <button class="btn btn-primary" type="button" onclick="addAlias()">Add alias</button>
+          </div>
+          <div id="aliasError"></div>
+
+          <hr class="my-4">
+          <h6>Counted as one with</h6>
+          <p class="text-muted small">
+            For a company with several official names, such as SBB, CFF and FFS. Each stays a
+            separate operator with its own name and logo; they only add up together in
+            the stats, and every user sees the group under whichever name they log
+            most. Nothing is deleted and no trip changes.
+          </p>
+          <div id="groupMembers" class="mb-2"></div>
+          <div class="input-group">
+            <input type="text" class="form-control" id="groupSearchInput"
+                   placeholder="Search an operator to count as the same company"
+                   oninput="searchGroupCandidates()">
+          </div>
+          <div id="groupCandidates" class="mt-2"></div>
+
+          <hr class="my-4">
+          <h6>Merge another operator into this one</h6>
+          <p class="text-muted small">
+            Only for genuine duplicates, the same operator entered twice. The other
+            operator's logos and spellings move here and it is <strong>deleted</strong>.
+            For a company with several legitimate names, group them above instead.
+          </p>
+          <div class="input-group">
+            <input type="text" class="form-control" id="mergeSearchInput" placeholder="Search the operator to absorb"
+                   oninput="searchMergeCandidates()">
+          </div>
+          <div id="mergeCandidates" class="mt-2"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assign an unresolved spelling to an operator -->
+  <div class="modal fade" id="assignAliasModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Assign spelling</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Attach <strong id="assignAliasName"></strong> to an existing operator:</p>
+          <input type="text" class="form-control mb-2" id="assignSearchInput" oninput="searchAssignCandidates()">
+          <div id="assignCandidates"></div>
+          <div id="assignError"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Error Modal -->
   <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
@@ -269,36 +457,62 @@
                 data: 'short_name',
                 searchable: true,
                 orderable: true,
-                render(data, type, row) {
-                    if (type === 'display')
-                        return `<span style="display: block" contenteditable="true" onblur="updateOperator(${row.operator_id}, 'short_name', this.textContent)">${data}</span>`
-                    else return data;
+                render(data, type) {
+                    return type === 'display' ? escapeHtml(data) : data;
                 },
             },
             {
                 data: 'long_name',
                 searchable: true,
                 orderable: true,
-                render(data, type, row) {
-                    if (type === 'display')
-                        return `<span style="display: block" contenteditable="true" onblur="updateOperator(${row.operator_id}, 'long_name', this.textContent)">${data}</span>`
-                    else return data;
+                render(data, type) {
+                    return type === 'display' ? escapeHtml(data) : data;
                 },
             },
             {
               data: 'operator_type',
               searchable: true,
+              render(data, type) {
+                return type === 'display'
+                    ? `<span class="text-capitalize">${escapeHtml(data)}</span>`
+                    : data;
+              }
+            },
+            {
+              // How many trips resolve here. When the operator is grouped, the group
+              // total (the number the stats actually add up together) is shown alongside.
+              data: 'trip_count',
+              searchable: false,
+              orderable: true,
               render(data, type, row) {
-                if(type === 'display') {
-                    return `<select class="operator-type-select" onchange="updateOperator('${row.operator_id}', 'operator_type', this.value)">#}
-                        <option value="operator" ${data === 'operator' && 'selected'}>Operator</option>#}
-                        <option value="accommodation" ${data === 'accommodation' && 'selected'}>Accommodation</option>#}
-                        <option value="car" ${data === 'car' && 'selected'}>Car</option>#}
-                        <option value="poi" ${data === 'poi' && 'selected'}>POI</option>#}
-                   </select>`
-                } else {
-                  return data;
+                if (type !== 'display') return data;
+                const n = Number(data);
+                const cls = 'trip-count' + (n === 0 ? ' trip-count-zero' : '');
+                let html = `<span class="${cls}" title="Trips resolving to this operator">${fmtNum(n)}</span>`;
+                if (row.group_trip_count != null) {
+                    html += `<span class="trip-count-group" title="Trips counted together across the whole group">` +
+                            `<i class="fa-solid fa-layer-group"></i>${fmtNum(row.group_trip_count)}</span>`;
                 }
+                return html;
+              }
+            },
+            {
+              // Searchable so that looking up a spelling that was merged away finds
+              // the operator that absorbed it — searching "CFF" lands on SBB.
+              data: 'aliases',
+              searchable: true,
+              orderable: false,
+              render(data, type, row) {
+                // Sort/filter on both, so searching a spelling that was aliased away
+                // or an operator it is grouped with finds this row.
+                if (type !== 'display') return (data || '') + ' ' + (row.group_with || '');
+                let html = (data || '') ? data.split(', ').map(a =>
+                    `<span class="badge bg-light text-dark me-1">${escapeHtml(a)}</span>`).join('') : '';
+                if (row.group_with) {
+                    html += row.group_with.split(', ').map(g =>
+                        `<span class="badge bg-info text-dark me-1" title="Counted as one operator">= ${escapeHtml(g)}</span>`).join('');
+                }
+                return html;
               }
             },
             {
@@ -319,9 +533,20 @@
                 orderable: false,
                 render(data, type, row) {
                     if (type === 'display')
-                        return `<button class="btn btn-danger btn-sm" onclick="deleteOperator(${ row.operator_id })">
-                          <i class="fa-regular fa-trash-can"></i>
-                        </button>`
+                        return `<div class="operator-actions">
+                          <button class="btn btn-primary btn-sm" title="Edit"
+                                  onclick="editOperator(${ row.operator_id })">
+                            <i class="fa-solid fa-pen"></i>
+                          </button>
+                          <button class="btn btn-secondary btn-sm" title="Aliases"
+                                  onclick="showAliases(${ row.operator_id })">
+                            <i class="fa-solid fa-tags"></i>
+                          </button>
+                          <button class="btn btn-danger btn-sm" title="Delete"
+                                  onclick="deleteOperator(${ row.operator_id })">
+                            <i class="fa-regular fa-trash-can"></i>
+                          </button>
+                        </div>`
                     else
                         return data;
                 }
@@ -349,9 +574,38 @@
         },
     });
 
+    /* Diacritic-insensitive search, so "Ceske" finds "České dráhy" and "Rugensche"
+       finds "Rügensche BäderBahn" — operator names are full of accents an admin will
+       not type.
+
+       Both sides are folded with the same function the operator resolution uses.
+       DataTables' own hook only folds the table's data, which would leave the reverse
+       (typing an accented term) matching nothing, so the typed term is folded too by
+       taking over the search box. Spaces are kept, so multi-word search still works. */
+    $.fn.dataTable.ext.type.search.string = function (data) {
+        return typeof data === 'string' ? normalizeForSearch(data) : data;
+    };
+    $('#operatorTable_filter input').off().on('input', function () {
+        table.search(normalizeForSearch(this.value)).draw();
+    });
+
+    // Bootstrap popovers are opt-in; nothing else on this page initialises them.
+    document.querySelectorAll('[data-bs-toggle="popover"]')
+        .forEach(el => new bootstrap.Popover(el, { container: 'body' }));
+
     const operatorForm = document.getElementById('operatorForm');
     operatorForm.addEventListener('submit', (e) => {
         e.preventDefault();
+        if (!operatorForm.reportValidity()) return;
+        const operatorId = $('#operator_id').val();
+        if (operatorId) {
+            saveOperatorEdits(operatorId);
+        } else {
+            createOperator();
+        }
+    });
+
+    function createOperator() {
         const formData = new FormData(operatorForm);
 
         fetch('/api/admin/operators', {
@@ -382,7 +636,137 @@
                 $('#errorModal').off('hidden.bs.modal'); // clean up
             });
         });
-    });
+    }
+
+    // The API updates one field per PUT, so an edit is the changed fields sent in
+    // sequence — stopping at the first rejection (e.g. a name already taken) so the
+    // modal stays open with the reason shown, rather than half-applying the change.
+    async function saveOperatorEdits(operatorId) {
+        const before = operatorById(Number(operatorId)) || {};
+        const fields = {
+            short_name: $('#short_name').val().trim(),
+            long_name: $('#long_name').val().trim(),
+            operator_type: $('#operator_type').val(),
+        };
+        const changed = Object.entries(fields).filter(([f, v]) => v !== (before[f] ?? ''));
+
+        if (!changed.length) { $('#operatorModal').modal('hide'); return; }
+
+        const saveBtn = $('#operatorSaveBtn');
+        saveBtn.prop('disabled', true);
+        $('#operatorFormError').empty();
+
+        try {
+            // A name change can newly match trips that were unresolved (users had
+            // logged the new spelling). The PUTs run in sequence, each resyncing, so
+            // their counts don't overlap — summing gives the trips this edit picked up.
+            let matched = 0;
+            for (const [field, value] of changed) {
+                const res = await fetch(`/api/admin/operators/${operatorId}/${field}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'plain/text' },
+                    body: value
+                });
+                if (!res.ok) {
+                    const body = await res.json().catch(() => ({}));
+                    const e = new Error(body.message || `could not update ${field}`);
+                    e.conflict = body.conflict;
+                    throw e;
+                }
+                const body = await res.json().catch(() => ({}));
+                matched += body.trips_resynced || 0;
+            }
+            $('#operatorModal').modal('hide');
+            table.ajax.reload(null, false);
+            bootstrapToast(matched
+                ? `Operator ${fields.short_name} updated — now resolves ${matched} previously unmatched trip(s)`
+                : `Operator ${fields.short_name} updated successfully`);
+        } catch (err) {
+            // Keep the modal open; show the reason inline so the admin can correct the
+            // value or merge. A name clash is the same situation as an alias clash and
+            // is shown identically, offering to fold the clashing operator into this one.
+            $('#operatorFormError').html(conflictAlertHtml(err.message, err.conflict, operatorId));
+            table.ajax.reload(null, false);
+        } finally {
+            saveBtn.prop('disabled', false);
+        }
+    }
+
+    /* A name/spelling already resolving to another operator is one situation with one
+       remedy, so both the edit flow and the alias flow render it the same way: the
+       message, the clashing operator's logo and long name (for disambiguation), and a
+       button to merge it into `targetId`. `operator` is {operator_id, short_name,
+       long_name}; when absent, a plain message is shown. */
+    function conflictAlertHtml(message, operator, targetId) {
+        if (!operator)
+            return `<div class="alert alert-warning py-2 mb-0">${escapeHtml(message)}</div>`;
+        // The table already holds the operator's logo, so reuse it rather than fetch it.
+        const row = operatorById(operator.operator_id);
+        const target = operatorById(Number(targetId)) || {};
+        const logo = row && row.logo_url
+            ? `<img src="/static/${row.logo_url}" alt="" width="60"
+                    class="me-2 flex-shrink-0" style="object-fit:contain">`
+            : '';
+        // Long name disambiguates when the two share a short name (the whole point of
+        // the clash), and it makes the merge direction unambiguous: source → survivor.
+        const label = o => escapeHtml(o.long_name || o.short_name || ('#' + o.operator_id));
+        return `
+            <div class="alert alert-warning mb-0">
+                <div>${escapeHtml(message)}</div>
+                <div class="d-flex align-items-center mt-2">
+                    ${logo}
+                    <div>
+                        <strong>${escapeHtml(operator.short_name)}</strong>
+                        <div class="small text-muted">${escapeHtml(operator.long_name || '')}</div>
+                    </div>
+                </div>
+                <p class="small text-muted mt-2 mb-2">
+                    The same company entered twice? Merge them. Two different companies that
+                    share this name? Give one a distinguishing name instead.
+                </p>
+                <button class="btn btn-sm btn-warning"
+                        onclick="mergeOperator(${operator.operator_id}, ${targetId})">
+                    Merge ${label(operator)} into ${label(target)} (deletes ${label(operator)})
+                </button>
+            </div>`;
+    }
+
+    // Open the shared modal in Add mode (called from the "Add Operator" button).
+    function clearForm() {
+        operatorForm.reset();
+        $('#operator_id').val('');
+        $('#operatorModalLabel').text('Add Operator');
+        $('#operatorLogoGroup').show();
+        $('#operatorFormError').empty();
+    }
+
+    // Open the shared modal in Edit mode, prefilled from the row.
+    function editOperator(operatorId) {
+        const op = operatorById(operatorId);
+        if (!op) return;
+        operatorForm.reset();
+        $('#operator_id').val(op.operator_id);
+        $('#short_name').val(op.short_name);
+        $('#long_name').val(op.long_name);
+        $('#operator_type').val(op.operator_type);
+        $('#operatorModalLabel').text('Edit Operator: ' + op.short_name);
+        // Logos are managed through the carousel, not this modal.
+        $('#operatorLogoGroup').hide();
+        $('#operatorFormError').empty();
+        $('#operatorModal').modal('show');
+    }
+
+    /* The countries an unresolved spelling was logged in, as flags — the quickest
+       way to tell two same-named operators apart before assigning the alias. */
+    function missingCountryFlags(topCountries) {
+        if (!topCountries || !topCountries.length) return '';
+        return topCountries.map(c => {
+            const name = regionNames.of(c.code) || c.code;
+            return `<span class="missing-operator-flags"
+                          title="${escapeAttr(`${name}: ${c.trips} trip(s)`)}"
+                    >${getFlagEmoji(c.code)}</span>`;
+        }).join('');
+    }
 
     function loadMissingOperators() {
         $('#missingOperatorsContent').html(`
@@ -494,10 +878,17 @@
                 `;
 
                 operators.forEach(op => {
+                    // Each spelling is actionable: attach it to an operator as an
+                    // alias and every trip using it resolves from then on.
                     html += `
                         <div class="operator-list-item">
-                            <strong>${op.operator}</strong>
-                            <span class="badge bg-light text-dark">${op.occurrences} occurrences</span>
+                            <strong>${escapeHtml(op.operator)}</strong>
+                            <span>
+                                ${missingCountryFlags(op.top_countries)}
+                                <span class="badge bg-light text-dark">${op.occurrences} occurrences</span>
+                                <button class="btn btn-sm btn-outline-primary ms-2 assign-btn"
+                                        data-operator="${escapeAttr(op.operator)}">Assign</button>
+                            </span>
                         </div>
                     `;
                 });
@@ -523,26 +914,6 @@
                 </div>
             `);
         })
-    }
-
-    function updateOperator(operator_id, field, value) {
-        fetch(`/api/admin/operators/${operator_id}/${field}`, {
-            method: 'PUT',
-            body: value.replace(/\s+/g, ' ').trim(),
-            headers: {
-                'Content-Type': 'plain/text'
-            }
-        }).then((res) => {
-            if(res.status > 299) {
-                res.text().then((err) => { throw new Error(err) });
-                return;
-            }
-            switch(field) {
-                case "short_name": bootstrapToast(`Short name for operator ${operator_id} updated successfully`); return;
-                case "long_name": bootstrapToast(`Long name for operator ${operator_id} updated successfully`); return;
-                case "operator_type": bootstrapToast(`Type for operator ${operator_id} updated successfully`); return;
-            }
-        }).catch((err) => console.log(`Error: ${err}`))
     }
 
     function showLogoCarousel(operator_id) {
@@ -618,10 +989,6 @@
             .catch((err) => alert(`error: ${err}`))
     }
 
-    function clearForm() {
-        $('#operatorForm')[0].reset();
-    }
-
     function deleteLogo(logoId) {
         if (!confirm('Are you sure you want to delete this logo?')) return;
 
@@ -647,7 +1014,7 @@
 function bootstrapToast(message, type='success') {
   const id = 'toast-' + Math.random().toString(36).slice(2);
   const $toast = $(`
-    <div id="${id}" class="toast align-items-center bg-${type} text-white border-0 position-fixed bottom-0 end-0 m-3" role="alert" aria-live="assertive" aria-atomic="true">
+    <div id="${id}" class="toast align-items-center bg-${type} text-white border-0 position-fixed bottom-0 end-0 m-3" style="z-index:1090" role="alert" aria-live="assertive" aria-atomic="true">
       <div class="d-flex">
         <div class="toast-body">${message}</div>
         <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
@@ -662,6 +1029,339 @@ function bootstrapToast(message, type='success') {
   } catch(e) {
     setTimeout(() => $toast.remove(), 3000);
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Aliases, merging, and the unresolved-spelling queue.
+
+   An operator's identity is the set of spellings that resolve to it. Editing that
+   set re-resolves the affected trips server-side, so the stats and logos follow
+   immediately — which is why each action reports how many trips it touched.
+   --------------------------------------------------------------------------- */
+
+let aliasOperatorId = null;
+let assignAliasValue = null;
+
+function escapeHtml(s) {
+    return $('<div>').text(s == null ? '' : s).html();
+}
+
+// Thousands separators for the trip counts — the busy operators run to five figures.
+function fmtNum(n) {
+    return Number(n).toLocaleString();
+}
+
+// A trip count rendered inside a coloured badge (alias spellings, group members):
+// "N trips", dimmed when zero. `label` lets the tooltip name what is being counted.
+function countChip(n, label) {
+    const cls = 'count-chip' + (n === 0 ? ' count-chip-zero' : '');
+    return `<span class="${cls}" title="${label}">${fmtNum(n)} trip${n === 1 ? '' : 's'}</span>`;
+}
+
+// escapeHtml is for element text and does not escape quotes, so it is unsafe for a
+// double-quoted attribute value. This escapes the quote too. An operator spelling
+// carrying a " (or a JSON-quoted one) is exactly what broke the Assign button.
+function escapeAttr(s) {
+    return escapeHtml(s).replace(/"/g, '&quot;');
+}
+
+// Assign a spelling to an operator, from the unresolved-queue button. Delegated and
+// bound once, reading the spelling from a data attribute rather than an interpolated
+// onclick — the value is arbitrary user text and would otherwise break the handler.
+$(document).on('click', '#missingOperatorsContent .assign-btn', function() {
+    assignAlias(this.dataset.operator);
+});
+
+function operatorById(id) {
+    return table.rows().data().toArray().find(o => o.operator_id === id);
+}
+
+function showAliases(operatorId) {
+    aliasOperatorId = operatorId;
+    const operator = operatorById(operatorId);
+    $('#aliasModalLabel').text('Aliases: ' + (operator ? operator.short_name : operatorId));
+    $('#newAliasInput').val('');
+    $('#aliasError').empty();
+    $('#mergeSearchInput').val('');
+    $('#mergeCandidates').empty();
+    $('#groupSearchInput').val('');
+    $('#groupCandidates').empty();
+    $('#aliasList').html('<div class="spinner-border spinner-border-sm" role="status"></div>');
+    $('#aliasModal').modal('show');
+    loadAliases();
+    loadGroup();
+}
+
+function loadGroup() {
+    fetch(`/api/admin/operators/${aliasOperatorId}/group`)
+        .then(res => res.json())
+        .then(({ members }) => {
+            const others = members.filter(m => m.operator_id !== aliasOperatorId);
+            if (!others.length) {
+                $('#groupMembers').html('<em class="text-muted">Not grouped with any other operator</em>');
+                return;
+            }
+            $('#groupMembers').html(others.map(m => `
+                <span class="badge bg-info text-dark me-2 mb-2 d-inline-flex align-items-center">
+                  ${escapeHtml(m.short_name)}
+                  ${countChip(m.trip_count, 'Trips resolving to this member')}
+                  <button type="button" class="btn-close ms-2" style="font-size:.6rem"
+                          title="Stop counting as one" aria-label="Ungroup"
+                          onclick="unlinkOperator(${m.operator_id})"></button>
+                </span>`).join(''));
+        });
+}
+
+let groupSearchTimer = null;
+function searchGroupCandidates() {
+    clearTimeout(groupSearchTimer);
+    const name = $('#groupSearchInput').val().trim();
+    if (!name) { $('#groupCandidates').empty(); return; }
+    groupSearchTimer = setTimeout(() => {
+        fetch('/api/admin/operators/suggest?name=' + encodeURIComponent(name))
+            .then(res => res.json())
+            .then(({ suggestions }) => renderCandidates(
+                '#groupCandidates',
+                suggestions.filter(s => s.operator_id !== aliasOperatorId),
+                'linkOperator'));
+    }, 250);
+}
+
+function linkOperator(otherId) {
+    fetch(`/api/admin/operators/${aliasOperatorId}/group`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operator_id: otherId })
+    }).then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.description || 'could not group');
+        $('#groupSearchInput').val('');
+        $('#groupCandidates').empty();
+        loadGroup();
+        table.ajax.reload(null, false);
+        bootstrapToast(`Grouped: ${body.members} operators now count as one`);
+    }).catch(err => bootstrapToast(err.message, 'danger'));
+}
+
+function unlinkOperator(operatorId) {
+    fetch(`/api/admin/operators/${operatorId}/group`, { method: 'DELETE' })
+        .then(async res => {
+            if (!res.ok) throw new Error('could not ungroup');
+            loadGroup();
+            table.ajax.reload(null, false);
+            bootstrapToast('Ungrouped');
+        })
+        .catch(err => bootstrapToast(err.message, 'danger'));
+}
+
+function loadAliases() {
+    fetch(`/api/admin/operators/${aliasOperatorId}/aliases`)
+        .then(res => res.json())
+        .then(({ aliases }) => {
+            if (!aliases.length) { $('#aliasList').html('<em>No aliases</em>'); return; }
+            // short/long mirror the operator's own name fields — they are edited in
+            // the table, not here, so they are shown without a delete control.
+            const html = aliases.map(a => {
+                const fixed = a.kind !== 'alias';
+                const badge = fixed ? 'bg-secondary' : 'bg-primary';
+                const remove = fixed ? '' :
+                    `<button type="button" class="btn-close btn-close-white ms-2"
+                       style="font-size:.6rem" aria-label="Remove"
+                       onclick="deleteAlias(${a.alias_id})"></button>`;
+                // Trips logged with this exact spelling — a quick sense of which
+                // spellings actually carry the operator's trips.
+                const count = countChip(a.trip_count, 'Trips logged with this spelling');
+                return `<span class="badge ${badge} me-2 mb-2 d-inline-flex align-items-center">
+                          ${escapeHtml(a.alias)}
+                          <span class="ms-1 opacity-75">(${a.kind})</span>${count}${remove}
+                        </span>`;
+            }).join('');
+            $('#aliasList').html(html);
+        });
+}
+
+function addAlias() {
+    const alias = $('#newAliasInput').val().trim();
+    if (!alias) return;
+    $('#aliasError').empty();
+
+    fetch(`/api/admin/operators/${aliasOperatorId}/aliases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias })
+    }).then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (res.status === 409) {
+            // The spelling already belongs to someone. Shown the same way as a name
+            // clash in the edit modal, offering the merge that takes it over.
+            $('#aliasError').html(conflictAlertHtml(body.message, body.operator, aliasOperatorId));
+            return;
+        }
+        if (!res.ok) throw new Error(body.message || 'failed');
+        $('#newAliasInput').val('');
+        loadAliases();
+        bootstrapToast(`Alias added: now resolves ${body.alias.trips_resynced} previously unmatched trip(s)`);
+    }).catch(err => {
+        $('#aliasError').html(`<div class="alert alert-danger py-2">${escapeHtml(err.message)}</div>`);
+    });
+}
+
+function deleteAlias(aliasId) {
+    fetch(`/api/admin/operators/aliases/${aliasId}`, { method: 'DELETE' })
+        .then(async res => {
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body.description || body.message || 'Could not remove alias');
+            loadAliases();
+            // A row that was the operator's own name is reclassified, not deleted, so
+            // nothing stops resolving — a different message from a real alias removal.
+            bootstrapToast(body.reclassified
+                ? 'Removed from aliases (it is the operator\'s own name)'
+                : `Alias removed: ${body.trips_resynced} trip(s) no longer resolve here`);
+        })
+        .catch(err => bootstrapToast(err.message, 'danger'));
+}
+
+function renderCandidates(containerId, suggestions, onPickJs) {
+    if (!suggestions.length) {
+        $(containerId).html('<em class="text-muted">No match</em>');
+        return;
+    }
+    $(containerId).html(suggestions.map(s => `
+        <div class="d-flex justify-content-between align-items-center border-bottom py-1">
+            <span>
+                <strong>${escapeHtml(s.short_name)}</strong>
+                <span class="text-muted small ms-2">${escapeHtml(s.long_name)}</span>
+                <span class="badge bg-light text-dark ms-2">${s.operator_type}</span>
+            </span>
+            <button class="btn btn-sm btn-outline-primary" onclick="${onPickJs}(${s.operator_id})">Select</button>
+        </div>`).join(''));
+}
+
+let mergeSearchTimer = null;
+function searchMergeCandidates() {
+    clearTimeout(mergeSearchTimer);
+    const name = $('#mergeSearchInput').val().trim();
+    if (!name) { $('#mergeCandidates').empty(); return; }
+    mergeSearchTimer = setTimeout(() => {
+        fetch('/api/admin/operators/suggest?name=' + encodeURIComponent(name))
+            .then(res => res.json())
+            .then(({ suggestions }) => renderCandidates(
+                '#mergeCandidates',
+                suggestions.filter(s => s.operator_id !== aliasOperatorId),
+                'mergeOperator'));
+    }, 250);
+}
+
+// Fold `sourceId` into `targetId` (default: the operator whose alias modal is open).
+// Called from the alias modal's search, and from the conflict alert in either modal —
+// so it cleans up both contexts and reloads whichever is showing.
+function mergeOperator(sourceId, targetId = aliasOperatorId) {
+    const target = operatorById(targetId);
+    if (!confirm(`Merge operator #${sourceId} into ${target ? target.short_name : targetId}?\n\n`
+                 + 'Its logos and spellings move across and it is deleted.')) return;
+
+    fetch(`/api/admin/operators/${sourceId}/merge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ target_id: targetId })
+    }).then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.description || 'merge failed');
+        $('#mergeSearchInput').val('');
+        $('#mergeCandidates').empty();
+        $('#aliasError').empty();
+        $('#operatorFormError').empty();
+        $('#operatorModal').modal('hide');
+        if ($('#aliasModal').hasClass('show')) loadAliases();
+        table.ajax.reload(null, false);
+        bootstrapToast(`Merged: ${body.trips_resynced} trips re-resolved`);
+    }).catch(err => bootstrapToast(err.message, 'danger'));
+}
+
+/* Assigning a spelling straight from the unresolved queue. */
+function assignAlias(name) {
+    assignAliasValue = name;
+    $('#assignAliasName').text(name);
+    $('#assignSearchInput').val(name);
+    $('#assignError').empty();
+    $('#assignAliasModal').modal('show');
+    searchAssignCandidates();
+}
+
+let assignSearchTimer = null;
+function searchAssignCandidates() {
+    clearTimeout(assignSearchTimer);
+    const name = $('#assignSearchInput').val().trim();
+    if (!name) { $('#assignCandidates').empty(); return; }
+    assignSearchTimer = setTimeout(() => {
+        fetch('/api/admin/operators/suggest?name=' + encodeURIComponent(name))
+            .then(res => res.json())
+            .then(({ suggestions }) => renderCandidates('#assignCandidates', suggestions, 'assignToOperator'));
+    }, 250);
+}
+
+function assignToOperator(operatorId) {
+    fetch(`/api/admin/operators/${operatorId}/aliases`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ alias: assignAliasValue })
+    }).then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.message || 'failed');
+        $('#assignAliasModal').modal('hide');
+        bootstrapToast(`"${assignAliasValue}" assigned: now resolves ${body.alias.trips_resynced} previously unmatched trip(s)`);
+        loadMissingOperators();
+    }).catch(err => {
+        $('#assignError').html(`<div class="alert alert-danger py-2 mt-2">${escapeHtml(err.message)}</div>`);
+    });
+}
+
+/* Maintenance: trip_operators is derived, so it can be checked and rebuilt. */
+function checkTripOperators() {
+    $('#consistencyStatus').text('checking…');
+    fetch('/api/admin/operators/trip-operators/check')
+        .then(res => res.json())
+        .then(r => {
+            if (r.consistent) {
+                $('#consistencyStatus').html('<span class="badge bg-success">operator matching up to date</span>');
+                return;
+            }
+            $('#consistencyStatus').html(
+                `<span class="badge bg-danger">${r.missing} missing / ${r.stale} stale</span>
+                 <button class="btn btn-sm btn-danger ms-2" onclick="rebuildTripOperators()">Rebuild</button>`);
+        })
+        .catch(() => $('#consistencyStatus').html('<span class="badge bg-danger">check failed</span>'));
+}
+
+function rebuildTripOperators() {
+    $('#consistencyStatus').text('rebuilding, this takes about 30s…');
+    fetch('/api/admin/operators/trip-operators/rebuild', { method: 'POST' })
+        .then(res => res.json())
+        .then(r => {
+            $('#consistencyStatus').html(`<span class="badge bg-success">rebuilt: ${r.rows} rows</span>`);
+            bootstrapToast(`Operator matching rebuilt: ${r.rows} rows`);
+        })
+        .catch(() => $('#consistencyStatus').html('<span class="badge bg-danger">rebuild failed</span>'));
+}
+
+function importOperatorsCsv(input) {
+    const file = input.files[0];
+    if (!file) return;
+    const data = new FormData();
+    data.append('file', file);
+    input.value = '';
+
+    fetch('/api/admin/operators/import.csv', { method: 'POST', body: data })
+        .then(async res => {
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(body.description || 'import failed');
+            table.ajax.reload(null, false);
+            let msg = `${body.renamed} renamed, ${body.aliases_added} aliases added`;
+            if (body.unknown_slugs.length) msg += `, ${body.unknown_slugs.length} unknown slugs skipped`;
+            if (body.skipped_aliases.length) msg += `, ${body.skipped_aliases.length} aliases already taken`;
+            bootstrapToast(msg);
+        })
+        .catch(err => bootstrapToast(err.message, 'danger'));
 }
 </script>
 

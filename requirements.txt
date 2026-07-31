@@ -33,7 +33,7 @@ distinctipy==1.3.4
 Flask-Caching==2.3.1
 httpx==0.28.1
 scgraph==2.10.0
-pillow==12.1.1
+pillow==12.3.0
 CairoSVG==2.8.2
 pycountry==24.6.1
 geojson==3.2.0
@@ -50,4 +50,7 @@ IMAPClient==3.0.1
 pypdf==6.6.0
 icalendar==6.3.2
 cryptography==45.0.7
-pytz
+Markdown==3.10.2
+pytz==2025.2
+python-dateutil==2.9.0.post0
+pandas==2.3.3

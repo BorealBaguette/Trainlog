@@ -216,16 +216,28 @@ function resizeCanvas() {
 }
 
 function loadTrips() {
-    $.get('{{url_for("getMultiTrips", tripIds=tripIds)}}', function(data) {
+    // POST the ids in the body (like getPublicTrips) so long lists don't hit
+    // URL length limits.
+    $.post({
+        url: '{{url_for("getMultiTrips")}}',
+        contentType: 'application/json',
+        data: JSON.stringify({ tripIds: {{ tripIds | tojson }} })
+    }).done(function(data) {
         tripsData = data[0].reverse();
         coloursData = data[2];
+        // With a single user there is nothing to disambiguate: use the normal
+        // per-type trip colours instead of per-user ones
+        singleUserMode = Object.keys(coloursData).length === 1;
         processTrips();
         $('.spinner-container').hide();
     });
 }
 
-function getPopupContent(username, origin, destination, date, startTime, endTime) {
-    return `<strong>${username}</strong><br>${origin} - ${destination}<br>Date: ${date}<br>Time: ${startTime} - ${endTime}`;
+let singleUserMode = false;
+
+function getTypeColor(type) {
+    const t = MapLibreUtils.MapConfig.transportTypes.find(t => t.id === type);
+    return t ? t.color : '#3887be';
 }
 
 function getUserColor(username) {
@@ -245,7 +257,7 @@ function processTrips() {
     tripsData.forEach((tripData, index) => {
         const trip = tripData.trip;
         const path = tripData.path;
-        const color = getUserColor(trip.username);
+        const color = singleUserMode ? getTypeColor(trip.type) : getUserColor(trip.username);
 
         let coords;
         if (trip.type === 'air' && path.length === 2) {
@@ -254,8 +266,8 @@ function processTrips() {
             coords = path.map(c => [c[1], c[0]]);
         }
 
-        const startTs = new Date(trip.utc_start_datetime).getTime();
-        const endTs = new Date(trip.utc_end_datetime).getTime();
+        const startTs = new Date(trip.utc_start_datetime).getTime() + (trip.departure_delay || 0) * 1000;
+        const endTs = new Date(trip.utc_end_datetime).getTime() + (trip.arrival_delay || 0) * 1000;
 
         if (startTs && endTs) {
             timestamps.push(startTs, endTs);
@@ -274,8 +286,6 @@ function processTrips() {
             origin: trip.origin_station,
             destination: trip.destination_station,
             date: trip.start_date,
-            startTime: trip.start_time,
-            endTime: trip.end_time
         });
 
         tripStates.push(0);
@@ -287,15 +297,18 @@ function processTrips() {
         });
 
         if (!userMarkers[trip.username]) {
+            // In single-user mode lines carry type colours, so give the moving
+            // position marker a fixed distinctive colour instead
+            const markerColor = singleUserMode ? '#e74c3c' : color;
             const el = document.createElement('div');
-            el.style.cssText = `background-color: ${color}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; cursor: pointer;`;
+            el.style.cssText = `background-color: ${markerColor}; width: 14px; height: 14px; border-radius: 50%; border: 2px solid white; cursor: pointer;`;
             
             const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
                 .setLngLat(coords[0])
                 .setPopup(new maplibregl.Popup({ offset: 10 }).setText(trip.username))
                 .addTo(map);
             
-            userMarkers[trip.username] = { marker, color, el };
+            userMarkers[trip.username] = { marker, color: markerColor, el };
         }
     });
 
@@ -418,9 +431,14 @@ function toggleSidebar() {
 }
 
 function buildUserSidebar() {
+    // One user needs no legend
+    if (singleUserMode) {
+        document.getElementById('user-sidebar').style.display = 'none';
+        return;
+    }
     const userList = document.getElementById('user-list');
     userList.innerHTML = '';
-    
+
     Object.keys(userMarkers).sort().forEach(username => {
         const color = userMarkers[username].color;
         const item = document.createElement('div');

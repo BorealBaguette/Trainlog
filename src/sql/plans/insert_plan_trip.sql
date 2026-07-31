@@ -2,7 +2,7 @@
 -- from coords_to_ewkt (NULL for an empty path -> ST_GeomFromEWKT(NULL) = NULL).
 INSERT INTO plan_trips (
     plan_id, user_id, sort_order,
-    timing_mode, start_day, end_day, start_time, end_time,
+    timing_mode, start_day, end_day, start_time, end_time, weekdays,
     start_datetime, end_datetime, utc_start_datetime, utc_end_datetime,
     estimated_trip_duration, manual_trip_duration,
     origin_station, destination_station, trip_type, operator, line_name,
@@ -13,7 +13,7 @@ INSERT INTO plan_trips (
 )
 VALUES (
     :plan_id, :user_id, :sort_order,
-    :timing_mode, :start_day, :end_day, :start_time, :end_time,
+    :timing_mode, :start_day, :end_day, :start_time, :end_time, :weekdays,
     :start_datetime, :end_datetime, :utc_start_datetime, :utc_end_datetime,
     :estimated_trip_duration, :manual_trip_duration,
     :origin_station, :destination_station, :trip_type, :operator, :line_name,

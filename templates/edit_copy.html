@@ -2,6 +2,8 @@
 {% include "bootstrap/leafletLayout.html" %}
 {% block content %}
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
+<script src="{{ url_for('static', filename='js/lib/leaflet.geometryutil.js') }}"></script>
+<script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
 
 {% include "bootstrap/navigation.html"%}
 
@@ -307,8 +309,14 @@
             <div class="operatorLogoWrapper">
                 <img class="operatorLogo" />
             </div>
-            <label for="operator" class="sr-only">{{operator}}</label>
-            <input type="text" name="operator" id="operator" placeholder="{{operator}}" value="{{tripOperator}}" />
+            <label for="operatorSearch" class="sr-only">{{operator}}</label>
+            {# The submitted value stays free comma-separated text; the pills are a
+               view of it, seeded here from the trip being edited. #}
+            <input type="hidden" name="operator" id="operator" value="{{tripOperator}}" />
+            <div class="operatorPillsField" id="operatorPills">
+              <input type="text" id="operatorSearch" class="op-pill-placeholder"
+                     placeholder="{{operator}}" autocomplete="off" />
+            </div>
         </group>
         <label for="lineName" class="sr-only">{{lineName}}</label>
         <input type="text" name="lineName" id="lineName" placeholder="{{lineName}}" value="{{tripLineName}}" />
@@ -351,7 +359,7 @@
             <label for="notes">{{notes}}</label>
             <input type="text" name="notes" id="notes" placeholder="{{notes}}" value="{{tripNotes}}">
 
-            <label>{{tags|default('Tags')}}</label>
+            <label for="tagSearchInput">{{tags|default('Tags')}}</label>
             <input type="text" id="tagSearchInput" placeholder="{{select_tag|default('Add a tag…')}}" class="form-control form-control-sm" autocomplete="off" style="margin-bottom:.4rem;">
             <div id="tagList" class="d-flex flex-wrap gap-1"></div>
 
@@ -478,27 +486,54 @@
         <style>
           #form #relativeDates { display: none; }
           #form :has(input[id=radioRelative]:checked) #relativeDates { display: grid; gap: 0 0.3rem; }
+          /* Day-only relative leg: no times to derive a duration from -> offer the
+             manual duration inputs (JS toggles the class). */
+          #form #manDuration.rel-duration { display: grid; }
+          /* Duration mode hides the time column -> let the day input take the full row. */
+          #form #relativeDates.rel-dur .fieldset-datetime { grid-template-columns: 1fr; }
+          /* In relative mode everything between the relative group and the path
+             section is hidden -> drop the now-pointless first separator. */
+          #form :has(input[id=radioRelative]:checked) #precisionSep { display: none; }
+          .wd-toggle { border: 1px solid #cbd2db; background: transparent; border-radius: 6px;
+                       padding: .15rem .45rem; font-size: .8rem; cursor: pointer; }
+          .wd-toggle.on { background: #4b78d6; border-color: #4b78d6; color: #fff; }
         </style>
         <group id="relativeDates">
+            {# Either/or: a leg is timed (Day + time) OR duration-based (Day + duration) —
+               never both, so the two can't contradict each other. #}
+            <div style="grid-column:1/-1; display:flex; gap:1.2rem; margin-bottom:.3rem;">
+              <div class="radio-group">
+                <input type="radio" id="relModeTime" name="relTimeMode" value="time" {% if planStartTime %}checked{% endif %}/>
+                <label for="relModeTime" class="checkboxLabel">{{ planModeTime|default('Time') }}</label>
+              </div>
+              <div class="radio-group">
+                <input type="radio" id="relModeDuration" name="relTimeMode" value="duration" {% if not planStartTime %}checked{% endif %}/>
+                <label for="relModeDuration" class="checkboxLabel">{{ tripDuration|default('Duration') }}</label>
+              </div>
+            </div>
             <fieldset class="fieldset-datetime">
                 <legend><span class="legend">{{ newTripStart }}</span></legend>
                 <label class="sr-only" for="planStartDay">{{ day|default('Day') }}</label>
                 <input type="number" min="1" name="planStartDay" id="planStartDay" placeholder="{{ day|default('Day') }}" value="{{ planStartDay|default('1') }}"/>
                 <label class="sr-only" for="planStartTime">{{ time }}</label>
-                <input type="time" name="planStartTime" id="planStartTime" placeholder=" " value="{{ planStartTime|default('') }}" title="{{ timeOptional|default('Time (optional)') }}"/>
+                <input type="time" name="planStartTime" id="planStartTime" placeholder=" " value="{{ planStartTime|default('') }}"/>
             </fieldset>
             <fieldset class="fieldset-datetime">
                 <legend><span class="legend">{{ newTripEnd }}</span></legend>
                 <label class="sr-only" for="planEndDay">{{ day|default('Day') }}</label>
                 <input type="number" min="1" name="planEndDay" id="planEndDay" placeholder="{{ day|default('Day') }}" value="{{ planEndDay|default('1') }}"/>
                 <label class="sr-only" for="planEndTime">{{ time }}</label>
-                <input type="time" name="planEndTime" id="planEndTime" placeholder=" " value="{{ planEndTime|default('') }}" title="{{ timeOptional|default('Time (optional)') }}"/>
+                <input type="time" name="planEndTime" id="planEndTime" placeholder=" " value="{{ planEndTime|default('') }}"/>
             </fieldset>
-            <small class="text-muted" style="grid-column:1/-1;">{{ planTimeHint|default('Times are optional — leave blank to plan by day only.') }}</small>
+            <div id="planWeekdaysGroup" style="grid-column:1/-1; margin:.4rem 0 .2rem;">
+              <span class="legend">{{ planWeekdaysLabel|default('Runs on') }} <i class="fa-solid fa-circle-info text-muted" style="cursor:help;" title="{{ planWeekdaysHint|default('For services with less-than-daily frequencies. Leave empty if it runs daily.') }}"></i></span>
+              <div id="planWeekdayBtns" style="display:flex; gap:.25rem; margin-top:.25rem;"></div>
+              <input type="hidden" name="planWeekdays" id="planWeekdays" value="{{ planWeekdays|default(0) }}"/>
+            </div>
         </group>
         {% endif %}
 
-        <hr><br>
+        {% if plan_uuid %}<div id="precisionSep"><hr><br></div>{% else %}<hr><br>{% endif %}
 
         <group id="onlyDatePicker">
             <label for="newTripStart">{{newTripStart}}</label>
@@ -656,17 +691,19 @@
             </div>
             <div class="modal-body">
                 <!-- Router Toggle (train, tram, metro). The power selector now lives
-                     on the main form, since power no longer requires re-routing. -->
-                {% if tripType in ('train', 'tram', 'metro') %}
-                <div class="mb-3">
-                    <div class="form-check form-switch">
+                     on the main form, since power no longer requires re-routing.
+                     The freehand toggle sits on the same row (see #freehandToggleSlot). -->
+                <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
+                    {% if tripType in ('train', 'tram', 'metro') %}
+                    <div class="form-check form-switch mb-0">
                         <input class="form-check-input" type="checkbox" id="newRouterToggleModal" style="cursor: pointer;">
                         <label class="form-check-label" for="newRouterToggleModal" style="cursor: pointer;">
                             {{useNewRouter}} <small class="text-muted">ᵦ</small>
                         </label>
                     </div>
+                    {% endif %}
+                    <div id="freehandToggleSlot"></div>
                 </div>
-                {% endif %}
 
                 <div id="map" class="mapRouting full-height" style="width: 100%; height: 400px;"></div>
                 <div id="sidebar">
@@ -683,6 +720,15 @@
 
 
 <script>
+
+    // Built once getManAndOps returns. Anything setting the operator programmatically
+    // goes through setOperatorValue() so the pills follow the hidden field — before
+    // the pills exist, seeding the hidden field is enough, as they initialise from it.
+    var operatorPills = null;
+    function setOperatorValue(value) {
+        $('#operator').val(value);
+        if (operatorPills) operatorPills.set(value);
+    }
 
     /*
     TODO: load different fields for edit POI, of a different page
@@ -706,6 +752,11 @@
     }
 
     var tripType = "{{tripType}}";
+    // Freehand inline mode in the map modal. routeSource is how the trip was created; if it
+    // was 'freehand', the modal opens straight into the draw canvas.
+    var freehandEditor = null;
+    var freehandActive = false;
+    var routeSource = "{{ route_source|default('router') }}";
     var updatedPath = null;
     var updatedAltitude = null;    // FR24 altitude (m), parallel to updatedPath
     var updatedTimestamps = null;  // FR24 timestamps (epoch s), parallel to updatedPath
@@ -793,12 +844,73 @@
                 });
             }
             {% endif %}
+
+            // ── Freehand inline toggle (opens straight into freehand for freehand trips) ──
+            {% if tripType not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
+            addFreehandToggle(document.getElementById('freehandToggleSlot'), {
+                active: routeSource === 'freehand',
+                compact: true,
+                labelFreehand: "{{ freehandMode|default('Freehand') }}",
+                labelRouter: "{{ routerMode|default('Router') }}",
+                onToggle: function (active) { active ? enterFreehand() : exitFreehand(); }
+            });
+            if (routeSource === 'freehand') enterFreehand();
+            {% endif %}
         }
     });
 
+    {% if tripType not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
+    // The router-choice switch is meaningless while hand-drawing — disable it in freehand mode.
+    function setRouterToggleDisabled(disabled) {
+        var rt = document.getElementById('newRouterToggleModal');
+        if (!rt) return;
+        rt.disabled = disabled;
+        var wrap = rt.closest('.form-check');
+        if (wrap) wrap.style.opacity = disabled ? '0.5' : '';
+    }
+    function enterFreehand() {
+        if (freehandActive) return;
+        freehandActive = true;
+        setRouterToggleDisabled(true);
+        if (window.control) map.removeControl(window.control);
+        freehandEditor = createFreehandEditor(map, {
+            origin: wplist[0],
+            dest: wplist[wplist.length - 1],
+            waypoints: wplist.slice(1, -1),
+            markerIconStart: markerIconStart,
+            markerIconEnd: markerIconEnd,
+            onChange: function (path, distance) {
+                currentRoute = path.map(function (p) { return { lat: p.lat, lng: p.lng }; });
+                newTrip["trip_length"] = distance;
+                newTrip["estimated_trip_duration"] = (distance / 30) * 3.6;
+                if (window.sidebar) {
+                    window.sidebar.setContent(
+                        '<h4>' + origLabel + ' → ' + destLabel + '</h4>' +
+                        '<p><i>' + mToKm(distance) + ' km</i></p>'
+                    );
+                }
+            }
+        });
+    }
+    function exitFreehand() {
+        if (!freehandActive) return;
+        freehandActive = false;
+        setRouterToggleDisabled(false);
+        if (freehandEditor) { freehandEditor.destroy(); freehandEditor = null; }
+        if (window.control) window.control.addTo(map); // re-adds + re-routes
+    }
+    {% endif %}
+
     $(document).ready(function () {
         $('#editPathButton').on('click', function () {
-            updatedPath = currentRoute;
+            if (freehandActive && freehandEditor) {
+                updatedPath = freehandEditor.getPath();
+                newTrip["route_source"] = "freehand";
+                newTrip["waypoints"] = JSON.stringify(freehandEditor.getWaypoints());
+            } else {
+                updatedPath = currentRoute;
+                newTrip["route_source"] = "router";
+            }
             if(routeDetails == null){routeDetails = {};}
             routeDetails["powerType"] = $('input[name="powerType"]:checked').val();
             updatedRouteDetails = routeDetails;
@@ -1393,20 +1505,15 @@
                     console.log(airlineRes)
                     if (airlineRes.length > 0) {
                         const airline = airlineRes[0];
-                        document.getElementById('operator').value = airline.name;
-
-                        // Update operator logo
-                        if (airline.logo_url) {
-                            $(".operatorLogo").attr("src", airline.logo_url);
-                        } else {
-                            $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}");
-                        }
+                        // The pill picks up the logo itself, so the icon stays the
+                        // trip type rather than being swapped for the airline's.
+                        setOperatorValue(airline.name);
                     } else {
-                        document.getElementById('operator').value = flight.operating_as;
+                        setOperatorValue(flight.operating_as);
                     }
                 } catch (error) {
                     console.error('Error fetching airline data:', error);
-                    document.getElementById('operator').value = flight.operating_as;
+                    setOperatorValue(flight.operating_as);
                 }
             }
 
@@ -1595,6 +1702,58 @@
     else if ("{{unknownType}}" == "future") {
         $("#radioFuture").prop("checked", true);
     }
+    {% if plan_uuid %}
+    // Relative legs are timed (Day + time) OR duration-based (Day + duration), never
+    // both: the switch shows one set of inputs and clears the other, so conflicting
+    // values can't be submitted. The duration travels as onlyDateDuration.
+    // #manDuration is shared with the onlyDate precision further down the form, so in
+    // relative-duration mode it is MOVED up into #relativeDates (before the weekday
+    // row) and restored to its original slot (marker) for the other modes.
+    var _md = document.getElementById('manDuration');
+    var _mdHome = document.createElement('span');
+    _mdHome.style.display = 'none';
+    _md.parentNode.insertBefore(_mdHome, _md);
+    function updateRelTimeMode() {
+        var rel = $('#radioRelative').is(':checked');
+        var dur = $('#relModeDuration').is(':checked');
+        $('#planStartTime, #planEndTime').toggle(!(rel && dur));
+        $('#manDuration').toggleClass('rel-duration', rel && dur);
+        $('#relativeDates').toggleClass('rel-dur', rel && dur);
+        if (rel && dur) {
+            var wd = document.getElementById('planWeekdaysGroup');
+            wd.parentNode.insertBefore(_md, wd);
+        } else {
+            _mdHome.parentNode.insertBefore(_md, _mdHome.nextSibling);
+        }
+        if (rel) {
+            if (dur) $('#planStartTime, #planEndTime').val('');
+            else $('#manDurationHours, #manDurationMinutes').val('');
+        }
+    }
+    $('input[name="precision"], input[name="relTimeMode"]').on('change', updateRelTimeMode);
+    updateRelTimeMode();
+
+    // Weekday-constraint toggles (bitmask, bit 0 = Monday), localised via Intl.
+    (function initPlanWeekdays() {
+        var hidden = document.getElementById('planWeekdays');
+        var wrap = document.getElementById('planWeekdayBtns');
+        if (!hidden || !wrap) return;
+        var mask = parseInt(hidden.value, 10) || 0;
+        var fmt = new Intl.DateTimeFormat("{{ langId }}" || 'en', { weekday: 'short', timeZone: 'UTC' });
+        for (var i = 0; i < 7; i++) (function (i) {
+            var b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'wd-toggle' + (((mask >> i) & 1) ? ' on' : '');
+            b.textContent = fmt.format(new Date(Date.UTC(2024, 0, 1 + i))); // 2024-01-01 = Monday
+            b.addEventListener('click', function () {
+                mask ^= (1 << i);
+                b.classList.toggle('on', !!((mask >> i) & 1));
+                hidden.value = mask;
+            });
+            wrap.appendChild(b);
+        })(i);
+    })();
+    {% endif %}
     function updateTrip(copy) {
         $("#submit_text").hide();
         $(".spinner-border").show();
@@ -1677,9 +1836,9 @@
                         else if (redirectToProjects) location.href = "{{ url_for('dynamic_trips', time='projects', username=username) }}";
                         else location.href = "{{ url_for('dynamic_trips', time='trips', username=username) }}";
                     }
-                    // Sync tags (edit mode only — copy creates a new unknown trip id)
-                    if (!copy && typeof _tagSetup !== 'undefined') {
-                        var tripId = location.pathname.split('/').pop();
+                    // Sync tags (copy mode: new trip id comes back from the copyTrip response)
+                    if (typeof _tagSetup !== 'undefined') {
+                        var tripId = copy ? res : location.pathname.split('/').pop();
                         var currentIds = new Set(
                             Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(el => el.dataset.tagId)
                         );
@@ -1710,13 +1869,20 @@
     }
 
 
-    var origFilepath = "{{ url_for('static',filename='images/operator_logos/')}}" + "{{tripOperator}}" + ".png";
-    $.ajax(origFilepath)
-        .done(function () { $(".operatorLogo").attr("src", origFilepath); })
-        .fail(function () { $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}"); });
+    // The operator's logo is now shown on its pill — and for every operator of a
+    // multi-operator trip, resolved through aliases — so this icon is just the trip
+    // type, as on the new-trip form. It previously guessed a legacy
+    // images/operator_logos/<name>.png path, which only ever matched exact spellings
+    // that happened to have a file under that old naming convention.
+    $(".operatorLogo").attr("src", "{{ url_for('static',filename='images/icons/trip_logos/{}.png'.format(tripType))}}");
 
     $.get('{{url_for("getManAndOps", username=username, station_type=tripType)}}', function (manAndOps, status) {
-        operatorAutocomplete($("#operator"), manAndOps, "{{ url_for('static',filename='')}}", "{{ url_for('static',filename='images/icons/trip_logos/' + tripType + '.png')}}", "{{tripType}}");
+        operatorPills = operatorPillsInput(
+            $("#operator"), $("#operatorSearch"), $("#operatorPills"), manAndOps,
+            "{{ url_for('static',filename='')}}", "{{tripType}}",
+            { plainToggle: true,
+              plainLabel: "{{ operatorPlainText|default('Edit as plain text') }}",
+              pillsLabel: "{{ operatorPillsMode|default('Back to operator list') }}" });
         if (tripType != 'air') {
             materialTypeAutocomplete( $("#material_type"), manAndOps, "{{vehicle_type}}");
         }
@@ -1797,7 +1963,11 @@
     {% endif %}
     var _tagSetup = setupTagAutocomplete(
         '{{ url_for("get_all_tags", username=username) }}',
-        {{ tripId if edit_copy_type == 'edit' else 'null' }}
+        {{ tripId if edit_copy_type == 'edit' else 'null' }},
+        {
+            url: '{{ url_for("quick_create_tag", username=username) }}',
+            label: {{ create_tag_option | tojson }}
+        }
     );
 
     var editCopyType = "{{ edit_copy_type }}";
@@ -1904,6 +2074,11 @@
       var parsed = JSON.parse(val);
       if (Array.isArray(parsed) && parsed.length > 0) {
         $('#ts-active-label').text(formatTrainset(parsed));
+        $display.show();
+        return;
+      }
+      if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets) && parsed.trainsets.length > 0) {
+        $('#ts-active-label').text(parsed.trainsets.join(' + '));
         $display.show();
         return;
       }

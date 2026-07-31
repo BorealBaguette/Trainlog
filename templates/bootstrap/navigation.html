@@ -1,4 +1,5 @@
 {% set friendsIcon = getFriendsRequestsNumber() %}
+{% set tagInvitesIcon = getTagInvitesNumber() %}
 <nav class="navbar navbar-expand-xl navbar-light bg-light">
   <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('landing') }}">
@@ -26,8 +27,8 @@
                   <a class="dropdown-item" href="{{ url_for('ships') }}"><i class="fa fa-ship"></i> Ships </a>
                   <a class="dropdown-item" href="{{ url_for('active_users') }}"><i class="fa fa-chart-area"></i> Active Users </a>
                   <a class="dropdown-item" href="{{ url_for('finance.finances') }}"><i class="fa-solid fa-coins"></i> Finances </a>
-                  {% endif %}
                   <a class="dropdown-item" href="{{ url_for('adminManual') }}"><i class="bi bi-sign-stop-lights"></i> Manual Stations</a>
+                  {% endif %}
                   <a class="dropdown-item" href="{{ url_for('stations') }}"><i class="fa-solid fa-globe"></i> Stations</a>
                   <a class="dropdown-item" href="{{ url_for('editCountriesList') }}"><i class="bi bi-flag"></i> Coverage edit</a>
                   <a class="dropdown-item" href="{{ url_for('show_operators') }}"><i class="bi bi-images"></i> Operators</a>
@@ -148,7 +149,7 @@
       </li>
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
-          <i class="bi bi-three-dots"></i> {{tools}}{{friendsIcon | safe}}
+          <i class="bi bi-three-dots"></i> {{tools}}{{friendsIcon | safe}}{{tagInvitesIcon | safe}}
         </a>
         <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
           <a class="dropdown-item" href="{{ url_for('ai.new_trip_ai', username=username) }}"><i class="fa-solid fa-wand-magic-sparkles"></i> {{smart_logging}} ᵦ</a>
@@ -164,11 +165,8 @@
           <div class="dropdown-divider"></div>
           <!-- Tags Section -->
           <h6 class="dropdown-header">{{tags}}</h6>
-          <a class="dropdown-item" href="{{ url_for('new_tag', username=username) }}">
-            <i class="bi bi-tag"></i><i class="plus-icon bi bi-plus"></i> <span class="after-plus-icon">{{new_tag_nav}}</span>
-          </a>
           <a class="dropdown-item" href="{{ url_for('tag_list', username=username) }}">
-            <i class="bi bi-tags"></i> {{tag_list_nav}}
+            <i class="bi bi-tags"></i>{{tagInvitesIcon | safe}} {{manage_tags}}
           </a>
           <div class="dropdown-divider"></div>
           <!-- GPX Section -->
@@ -183,6 +181,7 @@
           <a class="dropdown-item" href="{{ url_for('live_map') }}"><i class="fa-solid fa-globe"></i> {{ live_map }}</a>
           <a class="dropdown-item" href="{{ url_for('timeline.timeline', username=username) }}"><i class="bi bi-calendar3"></i> {{ timeline }}</a>
           <a class="dropdown-item" href="{{ url_for('user_bounds', username=username) }}"><i class="fa-solid fa-arrows-to-circle"></i> {{ travel_bounds_header }}</a>
+          <a class="dropdown-item" href="{{ url_for('userManualStations', username=username) }}"><i class="bi bi-sign-stop-lights"></i> {{ manage_manual_stations }}</a>
           <a class="dropdown-item" href="{{ url_for('friends', username=username) }}"><i class="bi bi-people"></i>{{friendsIcon | safe}} {{friends}}</a>
           <a class="dropdown-item" href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i>{{tsBuilderTitle}}</a>
           {% if is_alpha %}
@@ -203,10 +202,15 @@
         <ul class="dropdown-menu">
             <li>
               <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType='combined') }}">
-                <i></i> {{ all }}
+                <i class="fa-solid fa-layer-group"></i> {{ all }}
               </a>
             </li>
+          {% set ns = namespace(group=none) %}
           {% for type, data in distinctTypes.items() %}
+            {% if data.group != ns.group %}
+            <li><hr class="dropdown-divider"></li>
+            {% endif %}
+            {% set ns.group = data.group %}
             <li>
               <a class="dropdown-item" href="{{ url_for('stats', username=username, tripType=type) }}">
                 <i class="{{ data.icon }}"></i> {{ data.label }}

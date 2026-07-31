@@ -1,0 +1,108 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include "bootstrap/navigation.html" %}
+
+<div class="container mt-4">
+  <div class="row">
+    <div>
+      <h2 class="mb-3 text-center">{{ manage_manual_stations }}</h2>
+
+      <table id="manualStationsTable">
+        <thead>
+          <tr>
+            <th>{{ originStationName }}</th>
+            <th>{{ sortType }}</th>
+            <th>Latitude</th>
+            <th>Longitude</th>
+            <th>{{ actions }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for station in stationsList %}
+          <tr>
+            <td>{{ station.name }}</td>
+            <td>{{ station.station_type }}</td>
+            <td>{{ station.lat }}</td>
+            <td>{{ station.lng }}</td>
+            <td>
+              <button class="btn btn-sm btn-warning" data-bs-toggle="modal" data-bs-target="#editStationModal{{ station.uid }}"><i class="fa-regular fa-pen-to-square"></i></button>
+              <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteStationModal" data-station-id="{{ station.uid }}"><i class="fa-regular fa-trash-can"></i></button>
+            </td>
+          </tr>
+
+          <!-- Edit Station Modal -->
+          <div class="modal fade" id="editStationModal{{ station.uid }}" tabindex="-1" aria-labelledby="editStationModalLabel{{ station.uid }}" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+              <div class="modal-content">
+                <div class="modal-header">
+                  <h5 class="modal-title" id="editStationModalLabel{{ station.uid }}">{{ station.name }}</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                  <form action="{{ url_for('updateUserManualStation', username=username, id=station.uid) }}" method="post" autocomplete="off">
+                    <div class="form-group mb-3">
+                      <label for="name{{ station.uid }}">{{ originStationName }}</label>
+                      <input type="text" class="form-control" id="name{{ station.uid }}" name="name" value="{{ station.name }}" required>
+                    </div>
+                    <div class="form-group mb-3">
+                      <label for="lat{{ station.uid }}">Latitude</label>
+                      <input type="number" step="any" class="form-control" id="lat{{ station.uid }}" name="lat" value="{{ station.lat }}" required>
+                    </div>
+                    <div class="form-group mb-3">
+                      <label for="lng{{ station.uid }}">Longitude</label>
+                      <input type="number" step="any" class="form-control" id="lng{{ station.uid }}" name="lng" value="{{ station.lng }}" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary w-100">{{ submit }}</button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteStationModal" tabindex="-1" aria-labelledby="deleteStationModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteStationModalLabel">{{ confirm_deletion }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>{{ confirm_delete_manual_station }}</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ cancel }}</button>
+        <form id="deleteStationForm" action="" method="post">
+          <button type="submit" class="btn btn-danger">{{ delete }}</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  $(document).ready(function () {
+    $('#manualStationsTable').DataTable({
+      order: [],
+      responsive: true,
+      lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]]
+    });
+
+    $('#deleteStationModal').on('show.bs.modal', function (event) {
+      var button = $(event.relatedTarget);
+      var stationId = button.data('station-id');
+      var form = $('#deleteStationForm');
+      var actionUrl = "{{ url_for('deleteUserManualStation', username=username, id=0) }}".replace('/0/delete', '/' + stationId + '/delete');
+      form.attr('action', actionUrl);
+    });
+  });
+</script>
+
+{% endblock %}

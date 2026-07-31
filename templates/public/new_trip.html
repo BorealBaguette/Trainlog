@@ -1,5 +1,168 @@
 {% extends "layout.html" %}
 {% block content %}
+{% include "includes/trainset_display.html" %}
+<style>
+/* Controls, not facts: at rest they sit at the meta line's own weight (the primary
+   blue read as a third coloured fact next to the coins and the leaf), and take the
+   accent colour only on hover or once open, where it means "active". */
+.publicTsToggle {
+  cursor: pointer;
+  color: #a8adb3;
+  margin-left: 7px;
+  text-decoration: none;
+  vertical-align: baseline;
+}
+.publicTsToggle:hover,
+.publicTsToggle.open { color: #0d6efd; }
+/* Action row under the proportion bars: ride-along and tag Play share one style */
+.tripActionButtons {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 2px;
+}
+.tripActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #fff;
+  text-decoration: none;
+}
+.tripActionBtn:hover { color: #fff; filter: brightness(0.92); }
+.tripActionBtn.rideAlongBtn { background: #4caf50; }
+.tripActionBtn.playBtn { background: #0d6efd; }
+/* Wagon images are sized in JS against the strip's median height (normalizeStrip), so
+   each source's px-per-metre cancels out and relative proportions are gently preserved;
+   the scroll wrapper's default 16px bottom padding keeps the scrollbar clear of the pills. */
+.publicTrainset .compo-strip { min-width: 0; }
+.publicTrainset .wagon-placeholder-img { height: 19px; }
+/* Re-assert the pill padding: the global ".events span" rule inflates it */
+.publicTrainset .ts-nom { padding: 1px 5px; }
+/* ── Itinerary leg rhythm ───────────────────────────────────────────────────
+   A leg stacks station / operator / duration / vehicle / price with nothing but
+   <br>s between them, so it reads as one dense block. Drop the <br>s and drive
+   the spacing from margins instead, which gives an even rhythm regardless of
+   which rows a given trip actually has. */
+.events .itinerary-trip > span { line-height: 1.45; }
+.events .itinerary-trip > span > br { display: none; }
+.events .itinerary-trip > span > strong { display: block; margin-bottom: 6px; }
+.events .itinerary-trip > span > div { margin-top: 6px; }
+.events .itinerary-trip > span > div:first-of-type { margin-top: 0; }
+/* The vehicle/trainset panel is its own group — set it slightly further apart. */
+.events .publicVehicle,
+.events .publicTrainset { margin-top: 9px; }
+.events .duration { color: #8a8a8a; }
+
+/* ── Leg facts: operators + line, then a meta line of icon/value pairs ───────
+   Every one of these rows is built from spans, which the blanket `.events span`
+   rule pads by 1.5em and hangs the leg connector ::before off. Reset both here,
+   then let flex + gap do the spacing (so an empty fact simply disappears). */
+.events .legOperators,
+.events .legMeta { display: flex; flex-wrap: wrap; align-items: center; }
+.events .legOperators { gap: 5px 7px; }
+.events .legMeta { gap: 2px 6px; }
+.events .legOperators span,
+.events .legMeta span { padding: 0; position: static; }
+.events .legOperators span::before,
+.events .legMeta span::before { content: none; }
+/* The logo/name adjacency margins would double up on top of the flex gap. */
+.events .legOperators > * { margin-left: 0; }
+
+.events .legMetaItem { display: inline-flex; align-items: baseline; gap: 4px; white-space: nowrap; }
+.legMetaIcon { color: #b6b6b6; font-size: 0.9em; }
+.legMetaSep { color: #d5d5d5; }
+/* The icons keep their identity colours, desaturated so they read as a family and
+   sit below the station names in the hierarchy rather than above them. */
+.legIconLine   { color: #8c9bb0; }
+.legIconTicket { color: #6f9e6f; }
+.legIconPrice  { color: #bfa055; }
+/* Line name: same icon+value shape as the measurements, but a shade darker and a
+   touch heavier — it names the service rather than measuring it. */
+.events .legLine {
+  color: #5f5f5f;
+  font-weight: 500;
+  white-space: normal;
+  max-width: 100%;
+  overflow-wrap: anywhere;   /* a long line name wraps, never widens the leg */
+}
+
+/* Money and carbon: icon-only while the leg is at rest, short value revealed when
+   it is selected. The tooltip keeps the full figure (original currency, g/km) in
+   both states — this is the touch-reachable half of it, shown one leg at a time so
+   the itinerary stays as calm as it is collapsed. */
+/* `.popupInfo` sets 1.2em, which made the money/carbon icons out-shout the row
+   they sit in — normalise them to the meta line's own size. */
+.events .legMeta .popupInfo { font-size: 1em; }
+/* The leaf's colour is computed from the carbon intensity, so it can't be set
+   here — desaturate it instead, to the same level as the fixed icons above. */
+.events .legMeta .carbon-icon { font-size: 1em; filter: saturate(0.7); }
+.legValue { display: none; }
+.events .itinerary-trip.active .legValue { display: inline; }
+.events .itinerary-trip.active .legMeta { color: #7a7a7a; }
+
+.publicVehicle {
+  font-size: 0.82em;
+  line-height: 1.3;
+  color: #666;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+}
+/* The itinerary's global `.events span` rule pads EVERY span it contains by
+   1.5em and gives it a connector ::before. Both wreck an inline layout built from
+   spans (that 1.5em is the gap that pushed the registration away from its flag),
+   so reset them panel-wide. Scoped under .events to outrank the global rule. */
+.events .publicVehicle span { padding: 0; position: static; }
+.events .publicVehicle span::before { content: none; }
+/* Type and registration share one line, wrapping only if the leg is narrow. */
+.publicVehicleHead { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 7px; }
+/* Re-assert the separator AFTER the blanket ::before reset above, which would
+   otherwise blank it out too (it is a span inside .publicVehicle). */
+.events .publicVehicle .publicVehicleType + .publicVehicleReg::before {
+  content: "·"; color: #bbb; margin-right: 3px;
+}
+.publicVehicleReg { display: inline-flex; align-items: baseline; gap: 4px; }
+.publicVehicleRegText {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  letter-spacing: 0.02em;
+  color: #555;
+}
+/* The global .flag rule jumps to 26px above 1500px — sized for table rows, far too
+   big for this panel. Pin it to the panel's own text size. */
+.publicVehicle .flag { font-size: 1.15em !important; line-height: 1; vertical-align: baseline !important; }
+/* The global .airframe rule offsets it for a table row's baseline; here it is a
+   block of its own and must stay modest next to the itinerary text. */
+.publicVehicle .airframe {
+  position: static;
+  margin-left: 0;
+  display: block;
+  height: auto;
+  max-height: 34px;
+  max-width: 100%;
+  width: auto;
+}
+/* The shape doubles as the photo's click target; the photo replaces it in place. */
+.publicVehicleMedia.is-clickable { cursor: pointer; }
+.publicVehicleMedia.is-clickable:hover { opacity: 0.85; }
+.publicVehicleMedia.is-loading { opacity: 0.5; }
+.publicVehiclePhotoBtn { color: #a8adb3; text-decoration: none; font-size: 0.95em; }
+.publicVehiclePhotoBtn:hover, .publicVehiclePhotoBtn.open { color: #0d6efd; }
+/* Third-party thumbnails vary wildly in size — cap and frame them so every leg
+   looks the same regardless of what comes back. */
+.publicVehicle .vehiclePhotoContainer {
+  max-width: min(240px, 100%);
+  border-radius: 4px;
+  overflow: hidden;
+  line-height: 0;
+}
+.publicVehicle .vehiclePhotoContainer img { display: block; width: 100%; height: auto; }
+.publicVehicle .vehiclePhotoAttr { font-size: 0.72em; padding: .15em .3em; line-height: 1.2; }
+</style>
 <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
 <link rel="stylesheet" href="{{ url_for('static',filename='styles/new_map.css') }}">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
@@ -331,6 +494,20 @@
   position: relative;   /* anchors the badge; no layout change */
   z-index: 1;           /* keep rows above the trip-card overlay below */
   cursor: pointer;
+  max-width: 100%;
+}
+/* `.events li` is a flex row, so the leg's <span> is a flex item and sizes to
+   max-content: ONE over-wide child (an open trainset strip) stretched the whole
+   leg, which stopped the chip rows wrapping and made the sidebar scroll sideways.
+   Cap the item at the row width — nothing may grow the leg past the panel; the
+   strip's own scroll box is the only thing allowed to scroll. */
+.events .itinerary-trip > span { flex: 1 1 auto; min-width: 0; max-width: 100%; }
+.events .itinerary-trip .publicTrainset,
+.events .itinerary-trip .publicVehicle { max-width: 100%; }
+.events .itinerary-trip .trainset-inline-scroll {
+  max-width: 100%;
+  align-self: stretch;  /* .ts-inline-wrapper is align-items:flex-start, which
+                           would otherwise shrink-wrap it to the strip's width */
 }
 
 /* "Transfert" is wrapped in a span, which would otherwise inherit the
@@ -399,17 +576,6 @@
     <div class="itineraryWrapper">
       <ul class="events" id="itinerary">
         <div id="tripDetails">
-        {% if show_ride_along %}
-        <button
-          id="rideAlong"
-          onClick="showRideAlongModal()"
-          style="display:inline-flex;align-items:center;gap:8px;padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;font-size:14px;margin-bottom:8px;"
-        >
-          <i class="fa-solid fa-copy"></i>
-          {{ rideAlong }}
-        </button>
-        {% endif %}
-
         <div id="rideAlongModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
           <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
             <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
@@ -450,6 +616,20 @@
             </div>
           {% if num_hidden_trips > 0 %}
             <div id="hiddenTripsInfo">(+{{ num_hidden_trips }} {% if num_hidden_trips == 1 %}{{ trip_view_hidden_trips_singular }}{% else %}{{ trip_view_hidden_trips_plural }}{% endif %})</div>
+          {% endif %}
+          {% if show_ride_along or tag_uuid %}
+            <div class="tripActionButtons">
+              {% if show_ride_along %}
+              <button id="rideAlong" onClick="showRideAlongModal()" class="tripActionBtn rideAlongBtn">
+                <i class="fa-solid fa-copy"></i> {{ rideAlong }}
+              </button>
+              {% endif %}
+              {% if tag_uuid %}
+              <a class="tripActionBtn playBtn" href="{{ url_for('multi_trip', tagUuid=tag_uuid) }}">
+                <i class="fa-solid fa-play"></i> {{ play_tag }}
+              </a>
+              {% endif %}
+            </div>
           {% endif %}
           <br>
           <div id="tripDate"></div>              
@@ -554,6 +734,7 @@ function planValidate() {
 
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+<script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
 <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
 
 <script>
@@ -592,9 +773,20 @@ const dateOptionsShort = { month: 'short', day: 'numeric' };
 // Plan views with undated (relative) trips label the timeline "Day N" instead of
 // showing the (anchored) calendar date.
 const relativeDates = {{ 'true' if relativeDates else 'false' }};
+// Plan views have no Leaflet fallback page, so the WebGL failure path below must
+// not redirect them to a non-existent /public/leaflet/plan/ route.
+const isPlanView = {{ 'true' if plan else 'false' }};
 function planDayLabel(trip) {
     var d = trip && trip.trip ? trip.trip.day_number : null;
     return d != null ? ("{{ day|default('Day') }} " + d) : null;
+}
+// Departure-day identity of a plan leg: its Day number when relative, its date when
+// precise-dated. Legs with neither carry no key and never start a new day group.
+function planDayKey(trip) {
+    if (!trip || !trip.trip) return null;
+    if (trip.trip.day_number != null) return 'D' + trip.trip.day_number;
+    var d = trip.trip.start_date;
+    return (d && String(d).length > 2) ? 'A' + d : null;
 }
 
 function addDelayToTime(timeStr, delaySeconds) {
@@ -651,6 +843,183 @@ function tripGroup(t) {
   return 1;                 // dated
 }
 
+/* Render a trainset strip (light style) into a leg's collapsed container.
+   Uses _wagonImgSrc/_makePlaceholder/_attributionText from trainset_display.html. */
+function renderPublicTrainset($container, ts) {
+    var units = ts.units || [];
+    var strip = $('<div class="compo-strip ts-strip"></div>');
+    units.forEach(function(u, i) {
+        var isFirst = (i === 0), isLast = (i === units.length - 1);
+        var wagon = $('<div class="compo-wagon ts-unit"></div>');
+        if (u.image) {
+            var img = $('<img>').attr({ src: _wagonImgSrc(u), title: u.label || '' });
+            if (u.px_per_meter) img.attr('data-ppm', u.px_per_meter);
+            img.on('error', (function(iF, iL, pT) { return function() { $(this).replaceWith(_makePlaceholder(true, iF, iL, pT)); }; })(isFirst, isLast, u._phType));
+            wagon.append(img);
+        } else {
+            wagon.append(_makePlaceholder(true, isFirst, isLast, u._phType));
+        }
+        wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline">' + esc(u.label || '') + '</span>');
+        strip.append(wagon);
+    });
+    if (!strip.children().length) return;
+    // No pixel measuring: the leg's flex item is capped at the row width (see the
+    // .itinerary-trip > span rules above), so max-width:100% here is both correct
+    // and resize-proof — the strip scrolls inside the leg, never widening it.
+    var scroller = $('<div class="trainset-inline-scroll"></div>').append(strip);
+    var attr = _attributionText(units);
+    if (attr) scroller.attr('title', attr);
+    $container.addClass('ts-inline-wrapper').append(scroller);
+    if (ts.label) {
+        $container.append($('<div class="ts-inline-label"></div>').text(ts.label));
+    }
+    // Size images against the strip's median (cancels each source's px-per-metre) with a
+    // gentle proportional exponent + clamp, then re-fit the highlight card since the leg's
+    // height settles only once images load.
+    normalizeStrip(strip[0], {
+        target: 20, min: 14, max: 34,
+        onApply: function() {
+            if (typeof highlightedTripUid !== 'undefined' && highlightedTripUid != null) {
+                positionTripCard(highlightedTripUid);
+            }
+        }
+    });
+}
+
+/* Air/ferry counterparts of renderPublicTrainset. Both are rendered lazily, on the
+   first expand of a leg, because the photo lookups are deliberate user-triggered
+   requests (see the fetch* notes in vehicle_display.js). */
+var AIRLINERS_BASE = "{{ url_for('static', filename='images/airliners') }}".replace(/\/$/, '');
+var REGISTRATIONS_URL = "{{ url_for('static', filename='data/registrations.json') }}";
+var VESSEL_PHOTO_URL = "{{ url_for('getVesselPhoto') }}";
+
+// Content arriving async (shape, photo) changes the leg's height, so the white
+// highlight card has to be re-fitted whenever anything lands.
+function refitTripCard() {
+    if (typeof highlightedTripUid !== 'undefined' && highlightedTripUid != null) {
+        positionTripCard(highlightedTripUid);
+    }
+}
+
+/* The panel is one header line (type · flag reg) followed by the shape and the
+   photo, so a leg stays compact whichever of those three actually resolve. */
+function vehiclePanel($container, label) {
+    var $head = $('<div class="publicVehicleHead"></div>');
+    if (label) $head.append($('<span class="publicVehicleType"></span>').text(label));
+    $container.append($head);
+    return $head;
+}
+
+// Flag + registration, appended to the header line. The flag arrives later.
+function appendReg($head, reg) {
+    var $reg = $('<span class="publicVehicleReg"></span>')
+        .append('<span class="publicVehicleFlag"></span>')
+        .append($('<span class="publicVehicleRegText"></span>').text(reg));
+    $head.append($reg);
+    return function showFlag(country) {
+        if (!country) return;
+        $reg.find('.publicVehicleFlag').html(getTooltipNew(country))
+            .find('[data-toggle="tooltip"]').tooltip();
+        refitTripCard();
+    };
+}
+
+/* The photo sits behind a click, swapping in for the airframe shape rather than
+   stacking beside it (the two say the same thing). Deferring it also keeps the
+   external lookup on a deliberate user action. The click target is the shape
+   itself; with no shape to click (no artwork, or a ship) a camera button in the
+   header takes its place. */
+function enablePhotoToggle($head, $media, fetchPhoto) {
+    var hasShape = $media.children().length > 0;
+    // No tooltip text: every lang file is kept fully in sync (1085 keys) and there is
+    // no existing photo string to reuse, so the camera icon and the pointer cursor
+    // carry the affordance rather than shipping an untranslated English label.
+    // The icon shows for aircraft and ships alike so the two read identically; where
+    // a shape exists it becomes an additional, larger click target for the same action.
+    var $btn = $('<a href="javascript:void(0);" class="publicVehiclePhotoBtn"><i class="fas fa-camera"></i></a>');
+    $head.append($btn);
+    if (hasShape) $media.addClass('is-clickable');
+
+    var $photo = null, showingPhoto = false, pending = false;
+
+    function render(photo) {
+        if (!photo) {                       // nothing found — retire the affordance
+            $media.removeClass('is-clickable').removeAttr('title');
+            $btn.remove();
+            refitTripCard();
+            return;
+        }
+        $photo = $(photoHTML(photo)).hide();
+        $media.append($photo);
+        $photo.find('img')
+            .on('load', refitTripCard)
+            // ship_pictures rows can outlive their file on disk (the whole local
+            // cache is absent in dev) — drop the frame rather than show a broken icon.
+            .on('error', function() {
+                $photo.remove(); $photo = null; showingPhoto = false;
+                $media.children().show(); $btn.remove(); refitTripCard();
+            });
+        swap(true);
+    }
+
+    function swap(toPhoto) {
+        showingPhoto = toPhoto;
+        if (!$photo) return;
+        $media.children().not($photo).toggle(!toPhoto);
+        $photo.toggle(toPhoto);
+        $btn.toggleClass('open', toPhoto);
+        refitTripCard();
+    }
+
+    function toggle(e) {
+        if (e) e.stopPropagation();         // don't toggle the leg highlight
+        if ($photo) { swap(!showingPhoto); return; }
+        if (pending) return;
+        pending = true;
+        $media.addClass('is-loading');
+        fetchPhoto().then(function(photo) {
+            pending = false;
+            $media.removeClass('is-loading');
+            render(photo);
+        });
+    }
+
+    $btn.on('click', toggle);
+    if (hasShape) $media.on('click', toggle);
+}
+
+// `info` may be null: a flight can be logged with only a registration and no type.
+function renderPublicAirframe($container, info, reg) {
+    var $head = vehiclePanel($container, info && info.label);
+    var $media = $('<div class="publicVehicleMedia"></div>').appendTo($container);
+    if (info) {
+        // The shape's height is only known once it decodes (or it removed itself on
+        // a miss) — re-fit either way.
+        var img = loadAirframe(AIRLINERS_BASE, info.code, refitTripCard);
+        if (img) $media.append(img);
+    }
+    if (!reg) return;
+    var showFlag = appendReg($head, reg);
+    loadRegistrations(REGISTRATIONS_URL).then(function(registrations) {
+        showFlag(regCountry(reg, registrations));
+    });
+    enablePhotoToggle($head, $media, function() { return fetchAircraftPhoto(reg); });
+}
+
+function renderPublicVessel($container, reg, country) {
+    var $head = vehiclePanel($container, null);
+    var $media = $('<div class="publicVehicleMedia"></div>').appendTo($container);
+    var showFlag = appendReg($head, reg);
+    // Flag up front from the ship_pictures join. Vessels not yet in that cache have
+    // no country until something fetches them, so fall back to the photo response.
+    showFlag(country);
+    enablePhotoToggle($head, $media, function() {
+        var promise = fetchVesselPhoto(VESSEL_PHOTO_URL, reg);
+        if (!country) promise.then(function(photo) { if (photo) showFlag(photo.country); });
+        return promise;
+    });
+}
+
 function createCarbonInfo(carbonFootprint, tripLength, langId) {
   if (!carbonFootprint || carbonFootprint <= 0) {
     return null;
@@ -662,8 +1031,13 @@ function createCarbonInfo(carbonFootprint, tripLength, langId) {
   const co2PerKmText = formatCO2PerKm(co2PerKm, langId);
   const tooltipText = `${totalCarbonText} (${co2PerKmText})`;
   
-  return `<div class="popupInfo carbon_popupInfo" popupinfo_content="${tooltipText}">
-            <i class="fas fa-leaf carbon-icon" style="color: ${color};"></i>
+  // "1.2 kg CO₂eq" → "1.2 kg" inline: the leaf already says what is being measured,
+  // and the full figure (plus the per-km rate) stays in the tooltip. The leaf keeps
+  // its colour — unlike the other icons here, it encodes carbon intensity.
+  const shortCarbonText = totalCarbonText.replace(' CO₂eq', '');
+
+  return `<div class="popupInfo carbon_popupInfo legMetaItem" popupinfo_content="${tooltipText}">
+            <i class="fas fa-leaf carbon-icon" style="color: ${color};"></i><span class="legValue">${shortCarbonText}</span>
           </div>`;
 }
 
@@ -868,12 +1242,15 @@ function buildItinerary(trips, prices) {
         let changeTime = 0;
         let actualChangeTime = 0;
 
-        // Plan day boundary: the next leg starts on a later "Day N". A "Jour N" header
-        // is inserted there, so we must NOT also draw a transfer connector (dangling dots).
+        // Plan day boundary: the next leg departs on a later day. A header is inserted
+        // there, so we must NOT also draw a transfer connector (dangling dots).
+        // A plan mixes relative legs (Day N) and precise-dated ones, so the grouping key
+        // is the day number when there is one and the departure date otherwise — same
+        // rule as the day separators on the plan edit page.
         var nextLeg = trips[index + 1];
         var planDayBoundary = relativeDates && nextLeg
-            && nextLeg.trip.day_number != null && trip.trip.day_number != null
-            && nextLeg.trip.day_number !== trip.trip.day_number;
+            && planDayKey(trip) != null && planDayKey(nextLeg) != null
+            && planDayKey(trip) !== planDayKey(nextLeg);
         var isLastTrip = (trip === trips[trips.length - 1]);
 
         if (trip != trips[trips.length - 1]) {
@@ -932,6 +1309,16 @@ function buildItinerary(trips, prices) {
         let operatorContents = [];
         if (trip.trip.multi_operators) {
             trip.trip.multi_operators.forEach(multiOperator => {
+                // An operator without a logo (free text, or one whose logo isn't in
+                // the DB) is listed by name — dropping it would silently lose it.
+                if (!multiOperator.logo_url) {
+                    operatorContents.push(
+                        $('<span>').addClass('itineraryOperatorName')
+                                   .text(multiOperator.operator_name || '')
+                    );
+                    return;
+                }
+
                 let imgElement = $("<img>")
                     .attr("src", "/static/" + multiOperator.logo_url)
                     .attr("class", "itineraryOperatorLogo");
@@ -940,7 +1327,7 @@ function buildItinerary(trips, prices) {
                     .attr("class", "popupInfo operator_popupInfo")
                     .attr("popupInfo_content", multiOperator.operator_name)
                     .append(imgElement);
-                    
+
                 operatorContents.push(divElement);
             });
         } else if (trip.trip.logo_url) {
@@ -955,21 +1342,57 @@ function buildItinerary(trips, prices) {
                 
             operatorContents.push(divElement);
         } else {
-            operatorContents.push(document.createTextNode(trip.trip.operator || ''));
+            // No logo at all: one name chip per comma-separated operator.
+            String(trip.trip.operator || '').split(',').forEach(function(name) {
+                name = name.trim();
+                if (name) {
+                    operatorContents.push($('<span>').addClass('itineraryOperatorName').text(name));
+                }
+            });
         }
 
-        let operatorLogoOrText;
-        if (operatorContents.length) {
-            operatorLogoOrText = $('<div>').append(operatorContents);
-        }
+        // The operator row is purely "who ran it": logos, plus a name chip for each
+        // operator with no logo. The line name is a different category and lives in
+        // the meta line below, where its icon identifies it.
+        let operatorDisplay = $('<div>').addClass('legOperators');
+        if (trip.trip.operator) operatorDisplay.append(operatorContents);
 
-        let lineOrNot = trip.trip.line_name != "" ?
-            (typeof operatorLogoOrText === 'object' ?
-                operatorLogoOrText.append(document.createTextNode(" - " + trip.trip.line_name)) :
-                operatorLogoOrText) :
-            operatorLogoOrText;
-        
-        let operatorDisplay = $("<div>").append(trip.trip.operator != "" ? lineOrNot : null);
+        // Vehicle detail panel, appended under the duration line. A wagon strip is
+        // heavy, so trains stay behind a toggle and render on first open; air and
+        // ferry are light enough to show inline (only their photo is click-gated).
+        var tsContainer = $(); // empty jQuery object → .append() no-op when nothing to show
+        var tsToggle = null;   // appended to the duration line below
+
+        var tsInfo = trip.trip.trainset;
+        var tripReg = (trip.trip.reg || '').trim();
+        var isAir = ['air', 'helicopter'].includes(trip.trip.type);
+        var airInfo = isAir ? airframeInfo(trip.trip) : null;
+        if (tsInfo && tsInfo.units && tsInfo.units.length) {
+            tsContainer = $('<div>').addClass('publicTrainset').hide();
+            tsToggle = $('<a href="javascript:void(0);" class="publicTsToggle"><i class="fas fa-train"></i></a>')
+                .attr('title', tsInfo.label || '');
+            tsToggle.on('click', (function(container, toggle) {
+                return function(e) {
+                    e.stopPropagation(); // don't toggle the leg highlight
+                    if (!container.data('rendered')) {
+                        renderPublicTrainset(container, tsInfo);
+                        container.data('rendered', 1);
+                    }
+                    container.toggle();
+                    toggle.toggleClass('open');
+                    refitTripCard(); // the leg's height changed
+                };
+            })(tsContainer, tsToggle));
+        } else if (isAir && (airInfo || tripReg)) {
+            // Air and ferry render inline rather than behind a toggle: the aircraft
+            // type, registration and shape are cheap and always worth showing. Only
+            // the photo is click-gated, from inside the panel.
+            tsContainer = $('<div>').addClass('publicVehicle');
+            renderPublicAirframe(tsContainer, airInfo, tripReg);
+        } else if (trip.trip.type === 'ferry' && tripReg) {
+            tsContainer = $('<div>').addClass('publicVehicle');
+            renderPublicVessel(tsContainer, tripReg, trip.trip.vessel_country);
+        }
 
         let endTimeDisplay, startTimeDisplay;
         if (dayChangeTrip) {
@@ -1021,7 +1444,10 @@ function buildItinerary(trips, prices) {
                 let originalCurrency = formatCurrency("{{langId}}", trip.trip.ticket_price, trip.trip.ticket_currency);
                 formattedTicketPrice += ` (${originalCurrency})`;
             }
-            formattedTicketInfo = `<div class="popupInfo ticket_popupInfo" popupinfo_content="${formattedTicketPrice}"><i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i></div>`;
+            // Inline value is the ticket's share of the price alone — its *name* is
+            // free text with no short form, so that stays in the tooltip.
+            let shortTicketPrice = formatCurrency("{{langId}}", trip.trip.ticket_price_in_user_currency, trip.trip.user_currency);
+            formattedTicketInfo = `<div class="popupInfo ticket_popupInfo legMetaItem" popupinfo_content="${formattedTicketPrice}"><i class="fa-solid fa-ticket legMetaIcon legIconTicket"></i><span class="legValue">${shortTicketPrice}</span></div>`;
         }
         if (isNumber(trip.trip.price_in_user_currency)) {
             formattedTripPrice = formatCurrency("{{langId}}", trip.trip.price_in_user_currency, trip.trip.user_currency);
@@ -1029,11 +1455,16 @@ function buildItinerary(trips, prices) {
                 let originalCurrency = formatCurrency("{{langId}}", trip.trip.price, trip.trip.currency);
                 formattedTripPrice += ` (${originalCurrency})`;
             }
-            formattedTripInfo = `<div class="popupInfo trip_popupInfo" popupinfo_content="${formattedTripPrice}"><i style="color:#D4AF37;" class="fa-solid fa-coins"></i></div>`;
+            // Inline value is the user-currency amount alone; the tooltip keeps the
+            // original currency too. `.legValue` shows only on the selected leg.
+            let shortTripPrice = formatCurrency("{{langId}}", trip.trip.price_in_user_currency, trip.trip.user_currency);
+            formattedTripInfo = `<div class="popupInfo trip_popupInfo legMetaItem" popupinfo_content="${formattedTripPrice}"><i class="fa-solid fa-coins legMetaIcon legIconPrice"></i><span class="legValue">${shortTripPrice}</span></div>`;
         }
         
         if (formattedTicketInfo || formattedTripInfo) {
-            formattedPrice = (formattedTicketInfo || '') + (formattedTicketInfo && formattedTripInfo ? '  ' : '') + (formattedTripInfo || '');
+            // The dot separators are themselves `.legValue`s: with the values hidden
+            // the row is bare icons spaced by the flex gap, exactly as before.
+            formattedPrice = (formattedTicketInfo || '') + (formattedTicketInfo && formattedTripInfo ? '<span class="legValue legMetaSep">·</span>' : '') + (formattedTripInfo || '');
         }
 {% endif %}
 
@@ -1041,15 +1472,29 @@ function buildItinerary(trips, prices) {
         var formattedCarbon = createCarbonInfo(trip.trip.carbon_footprint, trip.trip.trip_length, "{{langId}}");
 {% endif %}
 
+        // Meta line: each fact is an icon + its value, joined by thin dots, so the
+        // leg reads as facts rather than as one run-on "10min - 70km" string.
         var actualDuration = getActualTripDuration(trip.trip);
-        var kmPart = trip.trip.trip_length > 0 ? " - " + mToKm(trip.trip.trip_length) + "km" : "";
-        var durationDisplay;
+        var durationValue;
         if (actualDuration !== trip.trip.trip_duration[1]) {
           var durationClass = actualDuration > trip.trip.trip_duration[1] ? 'delay-time' : 'early-time';
-          durationDisplay = '<s>' + secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + '</s> <span class="' + durationClass + '">' + secondsToDhm(actualDuration, "{{langId}}") + '</span>' + kmPart;
+          durationValue = '<s>' + secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + '</s> <span class="' + durationClass + '">' + secondsToDhm(actualDuration, "{{langId}}") + '</span>';
         } else {
-          durationDisplay = secondsToDhm(trip.trip.trip_duration[1], "{{langId}}") + kmPart;
+          durationValue = secondsToDhm(trip.trip.trip_duration[1], "{{langId}}");
         }
+        // The line name gets its own row: it is the only variable-length fact here,
+        // and inline it pushed the duration and distance onto separate lines.
+        var lineDisplay = trip.trip.line_name
+            ? $('<div>').addClass('legMeta').html(
+                '<span class="legMetaItem legLine"><i class="fa-solid fa-route legMetaIcon legIconLine"></i>' + esc(trip.trip.line_name) + '</span>')
+            : $();
+
+        var metaParts = [];
+        metaParts.push('<span class="legMetaItem"><i class="fa-regular fa-clock legMetaIcon"></i>' + durationValue + '</span>');
+        if (trip.trip.trip_length > 0) {
+          metaParts.push('<span class="legMetaItem"><i class="fa-solid fa-arrows-left-right legMetaIcon"></i>' + mToKm(trip.trip.trip_length) + ' km</span>');
+        }
+        var durationDisplay = metaParts.join('<span class="legMetaSep">·</span>');
 
         // Badge numbers matching the map's numbered markers (hidden in collection mode)
         var originBadge = (!isCollection && markerNumbersByIndex[index] && markerNumbersByIndex[index].originNumber != null)
@@ -1064,15 +1509,17 @@ function buildItinerary(trips, prices) {
             ).append(
                 $('<span>').attr("class", trip.trip.type).append(
                     $('<strong>').text(trip.trip.origin_station)
-                ).append('<br>').append(operatorDisplay).append(
-                    $("<div>").attr("class", "duration " + trip.trip.trip_duration[0]).append($('<div>').html(durationDisplay))
-                ).append('<br>').append(
+                ).append('<br>').append(operatorDisplay).append(lineDisplay).append(
+                    $("<div>").attr("class", "duration " + trip.trip.trip_duration[0]).append(
+                        tsToggle ? $('<div>').addClass('legMeta').html(durationDisplay).append(tsToggle)
+                                 : $('<div>').addClass('legMeta').html(durationDisplay))
+                ).append(tsContainer).append('<br>').append(
                     {% if 'price' in request.args and 'carbon' in request.args %} // Modified conditional
-                        $("<div>").append($('<div>').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? ' ' : '') + (formattedCarbon || '')))
+                        $("<div>").append($('<div>').addClass('legMeta').html((formattedPrice || '') + (formattedPrice && formattedCarbon ? '<span class="legValue legMetaSep">·</span>' : '') + (formattedCarbon || '')))
                     {% elif 'price' in request.args %} // Modified conditional
-                        $("<div>").append($('<div>').html(formattedPrice || ''))
+                        $("<div>").append($('<div>').addClass('legMeta').html(formattedPrice || ''))
                     {% elif 'carbon' in request.args %} // Added conditional
-                        $("<div>").append($('<div>').html(formattedCarbon || ''))
+                        $("<div>").append($('<div>').addClass('legMeta').html(formattedCarbon || ''))
                     {% else %}
                         $("<div>").append($('<div>').html(''))
                     {% endif %}
@@ -1156,6 +1603,223 @@ function calculatePosition(trip) {
     return Math.min(Math.max(progress, 0), 1);
 }
 
+// While a flight is actually in the air, replace its straight geodesic with the real
+// flown-so-far track and estimate only the remainder.
+//
+// This is fetched separately from the trip data on purpose: trip paths are cached
+// client-side in IndexedDB, so a live track served through that route would freeze at
+// whatever point the page first loaded and never update.
+//
+// Cost is bounded server-side, not here: the refresh floor is per trip and shared by
+// every viewer, so polling on a timer cannot run up the FR24 bill.
+// In-progress trips are drawn from their own `current-trips` source (the main source's
+// red current line is hidden below), split into the part already travelled and the part
+// still to come. Kept as a function so a live flight track can re-run it with real data.
+let currentPositionMarkers = {};
+
+// How long past its scheduled arrival a flight may still be in the air. Matches the
+// server's own grace period.
+const LIVE_GRACE_HOURS = 6;
+
+// Flights that might currently be airborne.
+//
+// Deliberately not just `time === 'current'`: computeTimeStatus reads the timetable, and
+// a delayed flight is marked 'past' the instant its scheduled arrival passes even though
+// it is still flying — which is exactly when live tracking matters most. The server owns
+// the real decision and ignores anything outside its own window, so asking about a
+// recently-landed-on-paper flight costs nothing when it has genuinely landed.
+function liveCandidates(trips) {
+    const now = moment.utc();
+    return trips.filter(t => {
+        if (!t.trip) return false;
+        const type = t.trip.type;
+        if (type !== 'air' && type !== 'helicopter') return false;
+        if (t.time === 'current') return true;
+        const end = t.trip.utc_filtered_end_datetime;
+        if (typeof end !== 'string') return false;
+        const ended = moment.utc(end);
+        return now.isAfter(ended) && now.diff(ended, 'hours', true) <= LIVE_GRACE_HOURS;
+    });
+}
+
+function buildCurrentTripFeatures(trips) {
+    const features = [];
+    trips.forEach(trip => {
+        // liveTracked overrides the timetable: if the server handed us a live track the
+        // aircraft is provably still flying, whatever computeTimeStatus decided from the
+        // scheduled arrival time.
+        if (trip.time !== 'current' && !trip.liveTracked) return;
+
+        const isTracked = !!(trip.liveTracked && trip.liveDestination && trip.livePath);
+        // Convert to [lng, lat] and expand air routes to geodesic before splitting
+        let fullCoords = (isTracked ? trip.livePath : trip.path).map(c => [c[1], c[0]]);
+        let splitIndex;
+
+        if (isTracked && fullCoords.length >= 2) {
+            // FR24's public track usually begins at the first airborne radar contact,
+            // a few km into the climb-out, so bridge back to the departure airport or
+            // the route appears to start in mid-air beside it. Counts as already
+            // travelled: the aircraft is demonstrably past it.
+            if (trip.liveOrigin) {
+                const orig = [trip.liveOrigin[1], trip.liveOrigin[0]];
+                fullCoords = MapLibreUtils.createGeodesicLine(orig, fullCoords[0])
+                    .concat(fullCoords);
+            }
+            // livePath is the real flown-so-far track, so the split point is the
+            // aircraft's actual position rather than a guess from the timetable, and
+            // only the leftover leg to the destination has to be estimated.
+            splitIndex = fullCoords.length - 1;
+            const dest = [trip.liveDestination[1], trip.liveDestination[0]];
+            fullCoords = fullCoords.concat(
+                MapLibreUtils.createGeodesicLine(fullCoords[splitIndex], dest)
+            );
+        } else {
+            if (trip.trip.type === 'air' && fullCoords.length === 2) {
+                fullCoords = MapLibreUtils.createGeodesicLine(fullCoords[0], fullCoords[1]);
+            }
+            splitIndex = Math.floor(calculatePosition(trip) * fullCoords.length);
+        }
+
+        const pastCoords = fullCoords.slice(0, splitIndex + 1);
+        const futureCoords = fullCoords.slice(splitIndex);
+
+        const props = (suffix, time) => ({
+            id: trip.trip.uid + suffix,
+            type: trip.trip.type,
+            time: time,
+            year: trip.trip.start_datetime !== 1 && trip.trip.start_datetime !== -1
+                ? trip.trip.start_datetime.substring(0, 4)
+                : null,
+            origin: trip.trip.origin_station,
+            destination: trip.trip.destination_station
+        });
+
+        // Future path feature (styled as plannedFuture), pushed first so the full
+        // trip line draws over it.
+        if (futureCoords.length > 1) {
+            features.push({
+                type: 'Feature',
+                geometry: { type: 'LineString', coordinates: futureCoords },
+                properties: props('_future', 'plannedFuture')
+            });
+        }
+        // Full trip feature (styled as past)
+        features.push({
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: fullCoords },
+            properties: props('_full', 'past')
+        });
+
+        // Marker at the current position. Reused rather than recreated, otherwise every
+        // live refresh would stack another pin on the map.
+        const pegPosition = pastCoords[pastCoords.length - 1]; // already [lng, lat]
+        const isLive = isTracked;
+        const kind = isLive ? 'live' : 'calc';
+        // Measured over several points, not the last two: consecutive track samples can
+        // be metres apart, and a bearing taken across that jitters the aircraft around
+        // wildly on every refresh.
+        const heading = isLive && pastCoords.length >= 2
+            ? bearingBetween(
+                pastCoords[Math.max(0, pastCoords.length - 6)], pegPosition)
+            : 0;
+
+        const existing = currentPositionMarkers[trip.trip.uid];
+        if (existing && existing.kind === kind) {
+            existing.marker.setLngLat(pegPosition);
+            if (isLive) {
+                setMarkerHeading(existing.marker, heading);
+                existing.marker.setPopup(
+                    new maplibregl.Popup({ offset: 25 }).setText(livePositionLabel(trip))
+                );
+            }
+        } else {
+            // A trip starts out estimated and becomes live once the first track arrives,
+            // so the marker has to be swapped rather than just moved.
+            if (existing) existing.marker.remove();
+            currentPositionMarkers[trip.trip.uid] = {
+                kind: kind,
+                marker: createCustomMarker(
+                    pegPosition,
+                    kind,
+                    isLive ? livePositionLabel(trip) : {{ currentPosition|tojson }},
+                    heading
+                )
+            };
+        }
+    });
+    return features;
+}
+
+// Initial compass bearing from a to b, both [lng, lat].
+function bearingBetween(a, b) {
+    const toRad = d => d * Math.PI / 180;
+    const lat1 = toRad(a[1]), lat2 = toRad(b[1]), dLng = toRad(b[0] - a[0]);
+    const y = Math.sin(dLng) * Math.cos(lat2);
+    const x = Math.cos(lat1) * Math.sin(lat2)
+            - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
+    return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+// "Live position · 09:42" — the clock time of the fix rather than "x minutes ago",
+// which would need plural rules in every language for no real gain. A stored fix can
+// be up to one refresh interval old, so showing when it was taken is the honest form.
+function livePositionLabel(trip) {
+    // tojson, not a bare quoted substitution: an apostrophe in a translation would
+    // otherwise terminate the string literal and break the page.
+    const label = {{ livePosition|tojson }};
+    if (!trip.liveUpdated) return label;
+    const when = new Date(trip.liveUpdated * 1000)
+        .toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    return `${label} · ${when}`;
+}
+
+// While a flight is actually in the air, replace its straight geodesic with the real
+// flown-so-far track and estimate only the remainder.
+//
+// This is fetched separately from the trip data on purpose: trip paths are cached
+// client-side in IndexedDB, so a live track served through that route would freeze at
+// whatever point the page first loaded and never update.
+//
+// Cost is bounded server-side, not here: the refresh floor is per trip and shared by
+// every viewer, so polling on a timer cannot run up the FR24 bill.
+function startLiveTracking(trips, features) {
+    const candidates = liveCandidates(trips);
+    if (!candidates.length) return;
+    const ids = candidates.map(t => t.trip.uid).join(',');
+
+    const refresh = () => {
+        fetch(`/live_tracks/${ids}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(liveTracks => {
+                if (!liveTracks || !Object.keys(liveTracks).length) return;
+                // Updates the main source (and its shadow) to follow the real track...
+                MapLibreUtils.applyLiveTracks(trips, liveTracks, features);
+                const tripsSource = map.getSource('trips');
+                if (tripsSource) tripsSource.setData({ type: 'FeatureCollection', features });
+                // ...and rebuilds the visible current-trip lines from the same data, so
+                // the two sources cannot disagree about where the aircraft is.
+                const currentSource = map.getSource('current-trips');
+                if (currentSource) {
+                    currentSource.setData({
+                        type: 'FeatureCollection',
+                        features: buildCurrentTripFeatures(trips)
+                    });
+                }
+                // The live feed is the first altitude this trip has ever had (a flight
+                // logged in advance is a flat 2-point line), so the 3D layer had nothing
+                // to draw at first render and has to be rebuilt now.
+                MapLibreUtils.build3DFlightLayer(map, trips, {
+                    toggleTitle: {{ flight3dToggle|tojson }}
+                }).catch(err => console.warn('3D flight layer failed:', err));
+            })
+            // A live overlay is decoration; never let it break the map it sits on.
+            .catch(err => console.warn('Live track refresh failed:', err));
+    };
+
+    refresh();
+    setInterval(refresh, 60000);
+}
+
 // Place polylines using MapLibre
 function placePolylines(trips) {
     if (trips.length === 0) {
@@ -1182,6 +1846,8 @@ function placePolylines(trips) {
     MapLibreUtils.build3DFlightLayer(map, trips, { toggleTitle: {{ flight3dToggle|tojson }} }).catch(err =>
         console.warn('3D flight layer failed:', err)
     );
+
+    startLiveTracking(trips, features);
 
     // Click an itinerary leg to highlight (and zoom to) that trip on the map.
     $('#itinerary').off('click.highlight').on('click.highlight', '.itinerary-trip', function() {
@@ -1436,73 +2102,13 @@ if (numberedMarkers.length > 0) {
     }
 {% endif %}
     // Handle current trips with position markers
-    const currentTripFeatures = [];
-        trips.forEach(trip => {
-            if (trip.time === 'current') {
-                const progress = calculatePosition(trip);
+    const currentTripFeatures = buildCurrentTripFeatures(trips);
 
-                // Convert to [lng, lat] and expand air routes to geodesic before splitting
-                let fullCoords = trip.path.map(c => [c[1], c[0]]);
-                if (trip.trip.type === 'air' && fullCoords.length === 2) {
-                    fullCoords = MapLibreUtils.createGeodesicLine(fullCoords[0], fullCoords[1]);
-                }
-
-                // Split the expanded path
-                const splitIndex = Math.floor(progress * fullCoords.length);
-                const pastCoords = fullCoords.slice(0, splitIndex + 1);
-                const futureCoords = fullCoords.slice(splitIndex);
-                
-                // Create full trip feature (will be styled as past)
-                const fullTripFeature = {
-                    type: 'Feature',
-                    geometry: {
-                        type: 'LineString',
-                        coordinates: fullCoords
-                    },
-                    properties: {
-                        id: trip.trip.uid + '_full',
-                        type: trip.trip.type,
-                        time: 'past',
-                        year: trip.trip.start_datetime !== 1 && trip.trip.start_datetime !== -1
-                            ? trip.trip.start_datetime.substring(0, 4)
-                            : null,
-                        origin: trip.trip.origin_station,
-                        destination: trip.trip.destination_station
-                    }
-                };
-                
-                // Create future path feature (will be styled as plannedFuture)
-                if (futureCoords.length > 1) {
-                    const futureFeature = {
-                        type: 'Feature',
-                        geometry: {
-                            type: 'LineString',
-                            coordinates: futureCoords
-                        },
-                        properties: {
-                            id: trip.trip.uid + '_future',
-                            type: trip.trip.type,
-                            time: 'plannedFuture',
-                            year: trip.trip.start_datetime !== 1 && trip.trip.start_datetime !== -1
-                                ? trip.trip.start_datetime.substring(0, 4)
-                                : null,
-                            origin: trip.trip.origin_station,
-                            destination: trip.trip.destination_station
-                        }
-                    };
-                    currentTripFeatures.push(futureFeature);
-                }
-                
-                currentTripFeatures.push(fullTripFeature);
-                
-                // Place marker at current position
-                const pegPosition = pastCoords[pastCoords.length - 1]; // already [lng, lat]
-                createCustomMarker(pegPosition, 'calc', 'Current Position');
-            }
-        });
-
-        // Add current trip features to the map
-        if (currentTripFeatures.length > 0) {
+        // Add current trip features to the map. Also set up when a flight merely *might*
+        // be airborne: a delayed one reads as 'past' at load, so it contributes no
+        // features yet, but the source and layers have to exist for the live refresh to
+        // have somewhere to put its track.
+        if (currentTripFeatures.length > 0 || liveCandidates(trips).length > 0) {
             // Add source for current trips
             map.addSource('current-trips', {
                 type: 'geojson',
@@ -1726,6 +2332,26 @@ function setHighlightFilter(filter) {
 // (but not including) the "Transfert" text under the arrival station, so it reads
 // as a single lifted box around the trip.
 let tripCardEl = null;
+// Screen x of the first visible glyph in a leg's <time> cell, or null.
+// Delay display stacks two times with <br>, so measure the longest rendered line.
+let _timeMeasureCtx = null;
+function timeGlyphLeft(li) {
+    const t = li.querySelector('time');
+    if (!t) return null;
+    const r = t.getBoundingClientRect();
+    const cs = getComputedStyle(t);
+    let longest = 0;
+    (t.innerText || '').split('\n').forEach(line => {
+        const len = line.trim().length; // trim() also strips the nbsp padding
+        if (len > longest) longest = len;
+    });
+    longest = Math.min(longest, 10); // the box is 10ch — glyphs can't start left of it
+    if (!_timeMeasureCtx) _timeMeasureCtx = document.createElement('canvas').getContext('2d');
+    _timeMeasureCtx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+    const chW = _timeMeasureCtx.measureText('0').width;
+    return r.right - (parseFloat(cs.paddingRight) || 0) - longest * chW;
+}
+
 function positionTripCard(uid) {
     const itin = document.getElementById('itinerary');
     if (!itin) return;
@@ -1746,13 +2372,18 @@ function positionTripCard(uid) {
     const stationBottom = (arrStrong || arrLi).getBoundingClientRect().bottom;
 
     const PAD_V = 18;        // breathing room above/below the content inside the box
-    const INSET_LEFT = 35;   // left margin off the row edge (+ = inset right)
     const INSET_RIGHT = 0;  // right margin off the row edge (smaller = further right; - = past edge)
+
+    // Left edge: just left of the widest time's first glyph. Times are
+    // right-aligned in a fixed 10ch monospace box padded with nbsp, so the card
+    // may cross the blank padding but not real glyphs ("07:08(+31)" fills the box).
+    let anchorLeft = Math.min(timeGlyphLeft(depLi) ?? Infinity, timeGlyphLeft(arrLi) ?? Infinity);
+    if (!isFinite(anchorLeft)) anchorLeft = dRect.left + 35;
 
     // Position from the row's real rect (the #itinerary box is shifted off-screen
     // on the left by .itineraryWrapper{left:-60px}, so CSS left/right can't be used).
-    tripCardEl.style.left = (dRect.left - iRect.left + INSET_LEFT) + 'px';
-    tripCardEl.style.width = Math.max(0, dRect.width - INSET_LEFT - INSET_RIGHT) + 'px';
+    tripCardEl.style.left = (anchorLeft - iRect.left - 6) + 'px';
+    tripCardEl.style.width = Math.max(0, dRect.right - anchorLeft + 6 - INSET_RIGHT) + 'px';
     tripCardEl.style.top = (dRect.top - iRect.top - PAD_V) + 'px';
     const cardBottom = stationBottom + PAD_V;
     tripCardEl.style.height = Math.max(0, cardBottom - dRect.top + PAD_V) + 'px';
@@ -1816,10 +2447,23 @@ function highlightTrip(uid, opts) {
 }
 const colorblindMode = {{ 'true' if colorblind else 'false' }};
 // Create custom markers
-function createCustomMarker(coordinates, type, popupText) {
+// Aim a live-position marker along a compass bearing.
+//
+// Uses MapLibre's own marker rotation rather than a CSS transform on the element: a CSS
+// rotation is fixed in screen space, so rotating the map would swing the track around
+// underneath a plane that stubbornly kept pointing the same way on screen. setRotation
+// combined with rotationAlignment:'map' (set at construction) is measured against the
+// map, so the aircraft stays glued to its heading however the map is turned.
+//
+// The Font Awesome plane glyph points east, hence the -90.
+function setMarkerHeading(marker, bearing) {
+    marker.setRotation((bearing || 0) - 90);
+}
+
+function createCustomMarker(coordinates, type, popupText, rotation) {
     const el = document.createElement('div');
     el.className = `marker-icon marker-${type}`;
-    
+
     // Set marker styles based on type
     let anchorY = 41; // Default anchor for bottom-pointed markers
     switch(type) {
@@ -1852,15 +2496,41 @@ function createCustomMarker(coordinates, type, popupText) {
             el.style.width = '25px';
             el.style.height = '41px';
             break;
+
+        // Real observed position from the live flight feed. calc.png means "we worked
+        // this out from the timetable", which would be actively misleading here, so an
+        // aircraft pointed along its actual heading is used instead.
+        case 'live':
+            el.innerHTML = '<i class="fa-solid fa-plane"></i>';
+            el.style.width = '28px';
+            el.style.height = '28px';
+            el.style.display = 'flex';
+            el.style.alignItems = 'center';
+            el.style.justifyContent = 'center';
+            el.style.fontSize = '18px';
+            // A darker shade of the air green: same family as the route it sits on,
+            // dark enough not to disappear into it.
+            el.style.color = '#2b7a12';
+            // Outline so the aircraft stays legible over both land and sea.
+            el.style.textShadow = '0 0 3px #fff, 0 0 3px #fff, 0 0 3px #fff';
+            break;
     }
     
     el.style.backgroundSize = '100% 100%';
     el.style.cursor = 'pointer';
-    
+
+    const isLive = type === 'live';
     // Create marker with proper anchor point (bottom center of the icon)
-    const marker = new maplibregl.Marker({ 
+    const marker = new maplibregl.Marker({
         element: el,
-        anchor: 'bottom' // This ensures the bottom of the marker points to the location
+        // A pin points at its location from above; an aircraft sits ON it, so it centres.
+        anchor: isLive ? 'center' : 'bottom', // pin tips point at the location
+        // Heading is a property of the world, not of the screen: aligning rotation to
+        // the map means turning the map turns the aircraft along with its track. Pitch
+        // stays viewport-aligned so the silhouette doesn't flatten away when tilted.
+        rotationAlignment: isLive ? 'map' : 'auto',
+        pitchAlignment: isLive ? 'viewport' : 'auto',
+        rotation: isLive ? (rotation || 0) - 90 : 0
     })
         .setLngLat(coordinates)
         .addTo(map);
@@ -1933,7 +2603,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeMapAndTrips().catch(err => {
         const msg = err?.message || '';
         if ((msg.includes('webglcontextcreationerror') || msg.includes('Failed to initialize WebGL'))
-            && window.location.pathname.includes('/public/')) {
+            && window.location.pathname.includes('/public/') && !isPlanView) {
             window.location.href = window.location.pathname.replace('/public/', '/public/leaflet/') + window.location.search;
         } else {
             console.error(err);

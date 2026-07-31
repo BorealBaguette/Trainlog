@@ -55,7 +55,7 @@
         <form id="uploadGPXForm" action="{{ url_for('upload_gpx', username=username) }}" method="post" enctype="multipart/form-data" autocomplete="off">
           <div class="mb-4">
             <label for="gpx_files" class="form-label fw-semibold">{{ select_gpx_files }}</label>
-            <input type="file" class="form-control" id="gpx_files" name="gpx_files" accept=".gpx" multiple required>
+            <input type="file" class="form-control" id="gpx_files" name="gpx_files" accept=".gpx,.kml" multiple required>
             <small class="text-muted">{{ gpx_file_help_text }}</small>
           </div>
           <div class="mb-4">
