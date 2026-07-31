@@ -12,7 +12,7 @@ from .edits import (
 )
 from .trip import Trip
 from .update_trip import update_trip
-from .utils import compare_trip, get_current_trip_id
+from .utils import get_current_trip_id
 
 __all__ = [
     Trip.__name__,
@@ -25,6 +25,5 @@ __all__ = [
     update_trip.__name__,
     delete_ticket_from_db.__name__,
     update_trip_type.__name__,
-    compare_trip.__name__,
     get_current_trip_id.__name__,
 ]

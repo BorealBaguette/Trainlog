@@ -5,8 +5,6 @@ from enum import Enum
 
 from src.carbon import calculate_carbon_footprint_for_trip
 from src.paths import Path
-from src.sqlite_legacy import pathConn
-from src.utils import get_username, managed_cursor
 
 
 def _strip_tags(value):
@@ -112,49 +110,6 @@ class Trip:
 
     def values(self):
         return tuple(vars(self).values())
-
-    @staticmethod
-    def from_pg(trip):
-        with managed_cursor(pathConn) as cursor:
-            path = cursor.execute(
-                "select path from paths where trip_id = ?", trip.trip_id
-            ).fetchone()["path"]
-        return Trip(
-            get_username(trip["user_id"]),
-            trip["user_id"],
-            trip["origin_station"],
-            trip["destination_station"],
-            trip["start_datetime"],
-            trip["end_datetime"],
-            trip["trip_length"],
-            trip["estimated_trip_duration"],
-            trip["operator"],
-            trip["countries"],
-            trip["manual_trip_duration"],
-            trip["utc_start_datetime"],
-            trip["utc_end_datetime"],
-            trip["created"],
-            trip["last_modified"],
-            trip["line_name"],
-            trip["trip_type"],
-            trip["material_type"],
-            trip["material_type_advanced"],
-            trip["seat"],
-            trip["reg"],
-            trip["waypoints"],
-            trip["notes"],
-            trip["price"],
-            trip["currency"],
-            trip["purchasing_date"],
-            trip["ticket_id"],
-            path,
-            trip["is_project"],
-            trip["trip_id"],
-            trip["visibility"],
-            trip["departure_delay"],
-            trip["arrival_delay"],
-            route_source=trip["route_source"],
-        )
 
     def _json_safe(self, value):
         if isinstance(value, (datetime.datetime, datetime.date)):
