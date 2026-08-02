@@ -1084,10 +1084,13 @@ function processHiddenData(rowIdx, columns){
                 // on desktop nothing is hidden by responsive, so the extras would be
                 // invisible with no way to reach them. Force the column into the
                 // detail row instead — same mechanism the delay columns use.
-                // On the card the compact cell is shown but is just as capped, so the
-                // list has to come down here even though operator is a card field.
                 if (operatorsOverflow(operatorRow)) { col.hidden = true; col._forceDetail = true; }
             }
+            // The card shows the operator on the meta line, but capped to that line's
+            // height — too small to read a wordmark. So it always comes down here as
+            // well, where a single logo gets the full-size cell rendering and several
+            // get renderOperatorList's one-per-line form.
+            if (cardMode) { col.hidden = true; col._forceDetail = true; }
         }
         if (col.title == "{{material_type}}" && isTrain) {
             var rowData = tableObject.row(rowIdx).data();
