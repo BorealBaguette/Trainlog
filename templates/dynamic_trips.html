@@ -34,6 +34,12 @@
         background: rgba(0,0,0,0.05);
     }
 
+    #selectPageCheckbox {
+        vertical-align: middle;
+        margin-right: 4px;
+        cursor: pointer;
+    }
+
     /* Common styling */
     th[data-sort-field]::before,
     th[data-sort-field]::after {
@@ -141,7 +147,6 @@
 
 <div class="multiLink">
     <button class="btn btn-secondary btn-lg multiCancel" onclick="deselectAll();">✕</button>
-    <button id="selectPageTripsButton" type="button" class="btn btn-outline-primary btn-lg multiSelectAll" onclick="tableObject.rows({ page: 'current' }).select();">{{ selectPage }}</button>
     <button id="shareTripButton" type="button" class="btn btn-primary btn-lg multiTrip">{{ shareTrip }}</button>
     <div class="btn-group dropup">
         <button type="button" class="btn btn-lg dropdown-toggle btn-secondary multiDropdown" data-bs-toggle="dropdown" aria-expanded="false"></button>
@@ -169,7 +174,7 @@
         <thead>
             <tr>
                 <th data-orderable="false" data-priority="100001" data-sort-field="type">Type</th>
-                <th data-orderable="false" class="all" data-sort-field="origin_station">{{originStation}}</th>
+                <th data-orderable="false" class="all" data-sort-field="origin_station"><input type="checkbox" id="selectPageCheckbox" title="{{ selectPage }}"> {{originStation}}</th>
                 <th data-orderable="false" class="all" data-sort-field="destination_station">{{destinationStation}}</th>
                 <th data-orderable="false" class="all" data-sort-field="temporal">{{tripStartDate}}</th>
                 <th data-orderable="false" data-sort-field="start_time">{{tripStartTime}}</th>
@@ -1423,6 +1428,7 @@ var table = $('#tripRows');
     resetObjects();
     updateSelectionMessage();
     addPageJumpInput();
+    updateSelectPageCheckbox();
 
     // Sync table state to URL
     var searchVal = tableObject.search();
@@ -1460,6 +1466,7 @@ var table = $('#tripRows');
     });
     showMultilink();
     updateSelectionMessage();
+    updateSelectPageCheckbox();
 }).on('deselect', function(e, dt, type, indexes) {
     var deselectedRows = tableObject.rows(indexes).data().toArray();
     deselectedRows.forEach(function(row) {
@@ -1473,6 +1480,7 @@ var table = $('#tripRows');
         hideMultilink();
     }
     updateSelectionMessage();
+    updateSelectPageCheckbox();
 });
 
 // Update ?next= on the href just before navigation so it reflects the current URL (including filters/sort/page)
@@ -1597,7 +1605,22 @@ function updateHeaderIndicators() {
 }
 
 // Header click → custom sort
-$(document).on('click', 'th[data-sort-field]', function() {
+$(document).on('click', '#selectPageCheckbox', function(e) {
+    e.stopPropagation();
+});
+
+$(document).on('change', '#selectPageCheckbox', function() {
+    if (this.checked) {
+        tableObject.rows({ page: 'current' }).select();
+    } else {
+        tableObject.rows({ page: 'current' }).deselect();
+    }
+});
+
+$(document).on('click', 'th[data-sort-field]', function(e) {
+    if ($(e.target).is('#selectPageCheckbox')) {
+        return;
+    }
     const field = $(this).data('sort-field');
     if (customSort.field === field) {
         customSort.dir = customSort.dir === 'asc' ? 'desc' : 'asc';
@@ -1636,7 +1659,13 @@ function showMultilink() {
 function hideMultilink() {
     $('.multiLink').css('display', 'none');
     $('.bottom-space').remove();
-} 
+}
+
+function updateSelectPageCheckbox() {
+    var pageRows = tableObject.rows({ page: 'current' });
+    var selectedOnPage = tableObject.rows({ page: 'current', selected: true });
+    $('#selectPageCheckbox').prop('checked', pageRows.count() > 0 && selectedOnPage.count() === pageRows.count());
+}
 
 
 function updateSelectionMessage() {
