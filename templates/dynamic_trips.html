@@ -75,6 +75,270 @@
     /* Dated future trips shown on the past page via the "show upcoming" toggle */
     tr.upcoming-trip > td { opacity: 0.65; }
 
+    /* Expand arrow for the details row. Responsive draws this itself only for
+       `details.type: 'inline'`, where the control is whichever column happens to be
+       first on screen; this table names the type column as the control instead (see
+       the DataTables config), so the arrow is drawn here, on that column, in the same
+       shape Responsive uses. The existing `td.noHidden::before` rule hides it on rows
+       with nothing to expand. */
+    #dataTable tbody td.col-type { cursor: pointer; }
+    #dataTable tbody td.col-type::before {
+        content: "";
+        display: inline-block;
+        box-sizing: border-box;
+        margin-right: 0.5em;
+        border-top: 5px solid transparent;
+        border-left: 10px solid rgba(0, 0, 0, 0.5);
+        border-bottom: 5px solid transparent;
+        border-right: 0;
+    }
+    #dataTable tbody tr.dtr-expanded > td.col-type::before {
+        border-top: 10px solid rgba(0, 0, 0, 0.5);
+        border-left: 5px solid transparent;
+        border-bottom: 0;
+        border-right: 5px solid transparent;
+    }
+
+    /* --- Mobile card layout ---
+       On a phone one table row cannot hold two station names, so both ended up
+       ellipsed to uselessness. Below 768px each row is re-laid out as a card: the
+       origin, the destination and a meta line (date, departure, distance, operator)
+       each get their own line and wrap in full, with the type logo in a left gutter
+       and the actions kebab in the right one. Everything else stays in the detail
+       row, which processHiddenData now fills from the complement of the card fields.
+
+       All of this is scoped through `.trip-card-host > #dataTable`: Responsive clones
+       the whole table — id included — into an off-screen 1px div to measure how wide
+       each column would naturally be, and if these rules reached that copy every
+       column would measure as a full-width block and Responsive would conclude that
+       nothing needs hiding. The child combinator excludes it, since the clone sits one
+       div deeper than the real table. */
+    @media screen and (max-width: 767px) {
+        /* The side padding keeps the cards off the edge of the viewport, which .trips
+           sits flush against below 600px. */
+        .trip-card-host > #dataTable { padding: 12px 3px 0; border-collapse: separate; }
+
+        /* Column titles say nothing next to labelled card lines, and they no longer
+           line up with anything. Neither this rule nor a `> thead > tr` one took on
+           their own in testing, so hideCardHeader() also hides the header row DataTables
+           itself reports, on every draw; whichever of the two lands, the other is inert.
+           Written as a descendant of the direct-child table so it stays clear of the
+           off-screen copy Responsive measures column widths in (see below). */
+        .trip-card-host > #dataTable thead { display: none !important; }
+
+        .trip-card-host > #dataTable,
+        .trip-card-host > #dataTable > tbody,
+        .trip-card-host > #dataTable > tbody > tr { display: block; width: auto; }
+
+        .trip-card-host > #dataTable > tbody > tr {
+            position: relative;
+            margin-bottom: 8px;
+            padding: 8px 34px 8px 44px;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+        }
+
+        /* An open detail row is part of the card above it, not a card of its own. */
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded {
+            margin-bottom: 0;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+        }
+        .trip-card-host > #dataTable > tbody > tr.child {
+            padding: 0 10px 6px 10px;
+            border-top: 0;
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+        }
+
+        .trip-card-host > #dataTable > tbody > tr > td {
+            display: none;
+            max-width: none;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
+            padding: 0;
+            border: 0;
+            box-shadow: none !important;
+        }
+
+        /* DataTables paints the selection as an inset box-shadow on each cell plus
+           white text, which on a card would tint the text lines but not the padding
+           around them, and bleach the ones it does not cover. The card takes the
+           colour instead and the text keeps its own; the white plate behind logos is
+           dropped too, since it exists for the solid-blue selection this replaces. */
+        .trip-card-host > #dataTable > tbody > tr.selected {
+            background-color: #e7f0fb;
+            border-color: #0d6efd;
+            box-shadow: inset 0 0 0 1px #0d6efd;
+        }
+        .trip-card-host > #dataTable > tbody > tr.selected > * { color: inherit; }
+        .trip-card-host > #dataTable > tbody > tr.selected td img {
+            background: none;
+            padding: 0;
+        }
+
+        /* Responsive hides a column with an inline `display: none`, so showing a card
+           field back takes !important. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin,
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest,
+        .trip-card-host > #dataTable > tbody > tr > td.child,
+        .trip-card-host > #dataTable > tbody > tr > td.dt-empty { display: block !important; }
+
+        .trip-card-host > #dataTable > tbody > tr > td.col-date,
+        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length,
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator { display: inline-block !important; }
+
+        .trip-card-host > #dataTable > tbody > tr > td.col-type,
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions {
+            display: block !important;
+            position: absolute;
+        }
+
+        /* The two lines are identical — they are the same kind of thing, and
+           top-to-bottom already reads as origin-then-destination, so neither an arrow
+           nor a weight difference is needed to tell them apart. */
+        /* Bold, but a slate grey rather than the body's near-black: black bold was too
+           much contrast against the meta line, and a middle weight is not an option —
+           the page is set in Arial, which ships regular and bold only, so 500 rounds
+           straight back down to 400. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin,
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest {
+            font-weight: 700;
+            color: #4b5563;
+            line-height: 1.3;
+            padding: 1px 0;
+        }
+
+        /* A station name that does not fit wraps under its own first letter, not back
+           under the flag. A hanging indent cannot do this — the flag is a glyph of
+           unknown width, so any fixed indent is wrong by however much it misses — so
+           the name gets its own column: the flag stays put and the name, an anonymous
+           flex item, wraps inside the space that is left. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin .stationName,
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest .stationName {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+            /* Anonymous items cannot be styled, so a name whose longest word overruns
+               the column has to be allowed to break from here, where it inherits. */
+            overflow-wrap: break-word;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin .flag,
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest .flag { flex: 0 0 auto; }
+
+        /* Meta line. Each value gets a fixed slot so the line reads as columns down the
+           list — dates, times, durations and distances are all different lengths, and
+           left to themselves every card put its operator logo somewhere else. The
+           widths are minimums, sized to the longest ordinary value (a date, "23h 59m",
+           "1234 km"), so an outlier — a delay badge, a multi-day duration — pushes its
+           own row wider instead of being clipped. Slots are kept rather than dropped
+           when a value is missing, so the columns hold. The separator leads each slot
+           rather than trailing the value before it, so the dots line up as a column of
+           their own instead of sitting wherever the previous value happened to end. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-date,
+        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length,
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator {
+            margin-top: 3px;
+            color: #6c757d;
+            font-size: 0.8rem;
+            vertical-align: middle;
+            box-sizing: border-box;
+            padding-right: 0.2em;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-time:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator:not(:empty)::before {
+            content: "\00b7";
+            margin-right: 0.4em;
+            color: #adb5bd;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-date { min-width: 6em; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-time { min-width: 3.6em; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration { min-width: 4.7em; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-length { min-width: 4.8em; }
+        /* renderDuration wraps its value in a div, which would take the whole line. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration .duration { display: inline; }
+        /* The operator cell carries logos sized for a full-height table row, and the
+           multi-operator grid sizes its own box and items inline, so both the box and
+           what is in it have to be brought down to the meta line's height. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorLogo {
+            max-height: 18px;
+            /* Narrower than the 100px the table cell allows: the operator is the last
+               slot on the meta line, and a wide wordmark at full size pushes itself
+               onto a line of its own on a narrow phone. */
+            max-width: 72px;
+            margin-right: 0;
+            vertical-align: middle;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid {
+            height: 22px !important;
+            margin-right: 0;
+            vertical-align: middle;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGridLogo {
+            max-height: 10px !important;
+            max-width: 46px !important;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGridText {
+            font-size: 0.55rem !important;
+            line-height: 10px !important;
+        }
+
+        /* The left gutter is the card's one control — it is the details column (see
+           responsive.details in the config) — so it is shaded like a button and
+           stretched over the card's full height to be a target worth aiming at. The
+           type logo sits above the expand arrow; everything outside the gutter selects
+           the row instead. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-type {
+            display: flex !important;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 4px;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 36px;
+            background: #f8f9fa;
+            border-right: 1px solid #eef1f4;
+            border-radius: 7px 0 0 7px;
+        }
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-type { border-bottom-left-radius: 0; }
+        .trip-card-host > #dataTable > tbody > tr.selected > td.col-type {
+            background: #dbe7fa;
+            border-right-color: #c3d8f5;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-type .operatorLogo {
+            max-height: 24px;
+            max-width: 24px;
+            margin-right: 0;
+        }
+        /* The arrow is a ::before, so it would otherwise come out above the logo, and
+           its inline-row right margin is meaningless in this column. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-type::before {
+            order: 2;
+            margin-right: 0;
+            transform: scale(1.3);
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions { right: 0; top: 2px; }
+
+        /* The select-page checkbox once the script has moved it out of the header. */
+        .mobile-select-page {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin: 0;
+            white-space: nowrap;
+        }
+    }
+
 </style>
 
 {% include "includes/trainset_display.html" %}
@@ -173,7 +437,10 @@
     <table id="dataTable" class="display responsive" style="width:100%">
         <thead>
             <tr>
-                <th data-orderable="false" data-priority="100001" data-sort-field="type">Type</th>
+                {# `all`, not the lowest priority it used to carry: this column is the
+                   details control (responsive.details.target: 0), so it has to stay on
+                   screen at every width — it is also the card's expand gutter. #}
+                <th data-orderable="false" class="all" data-sort-field="type">Type</th>
                 <th data-orderable="false" class="all" data-sort-field="origin_station"><input type="checkbox" id="selectPageCheckbox" title="{{ selectPage }}"> {{originStation}}</th>
                 <th data-orderable="false" class="all" data-sort-field="destination_station">{{destinationStation}}</th>
                 <th data-orderable="false" class="all" data-sort-field="temporal">{{tripStartDate}}</th>
@@ -594,7 +861,50 @@ function isEllipsisActive(el){
   }
 }
 
+// Columns the mobile card shows in full (see the card rules in the stylesheet above).
+// Everything else belongs in the detail row, whatever Responsive itself decided to
+// hide — on a wide phone it keeps more columns than the card has room for, and those
+// would otherwise be reachable from neither place.
+var CARD_COLUMN_CLASSES = ['col-type', 'col-origin', 'col-dest', 'col-date', 'col-time', 'col-duration', 'col-length', 'col-operator', 'col-actions'];
+
+function isCardLayout() {
+    // Scroller replaces the table with a virtualised one split across two tables, so
+    // the card rules are not applied there and neither is this.
+    return !scroll && window.matchMedia('(max-width: 767px)').matches;
+}
+
+// Cells that select their row on click. The default excludes the first cell, the last
+// one and the origin (which carries the expand control); on a card the control has
+// moved to the type gutter, so every text line of the card selects instead.
+var CARD_SELECT_SELECTOR = 'td.col-origin, td.col-dest, td.col-date, td.col-time, td.col-duration, td.col-length, td.col-operator';
+var DEFAULT_SELECT_SELECTOR = 'td:not(:nth-child(2)):not(:last-child):not(:first-child)';
+
+// The stylesheet's rule for this did not take in testing, so the header row is also
+// hidden here, off the node DataTables reports as its header rather than a selector of
+// our own, and on every draw in case anything rebuilds it. The row is hidden, not the
+// thead: Responsive measures column widths in an off-screen copy it builds from cloned
+// header cells, and an inline style on the thead would be cloned along with it.
+function hideCardHeader() {
+    if (!isCardLayout()) return;
+    $(tableObject.table().header()).find('tr').hide();
+}
+
+function cardColumnIndexes() {
+    // Read off the column definitions rather than the header: DataTables applies
+    // columns.className to the body cells only, so the <th> does not carry it.
+    var indexes = [];
+    tableObject.settings()[0].aoColumns.forEach(function(col, i) {
+        var classes = (col.sClass || '').split(/\s+/);
+        if (classes.some(function(c) { return CARD_COLUMN_CLASSES.indexOf(c) !== -1; })) {
+            indexes.push(i);
+        }
+    });
+    return indexes;
+}
+
 function processHiddenData(rowIdx, columns){
+    var cardMode = isCardLayout();
+    var cardCols = cardMode ? cardColumnIndexes() : [];
     var isAir = ["air", "helicopter"].includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
     var isFerry = $(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText == "ferry";
     var isTrain = TRAIN_TYPES.includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
@@ -774,7 +1084,9 @@ function processHiddenData(rowIdx, columns){
                 // on desktop nothing is hidden by responsive, so the extras would be
                 // invisible with no way to reach them. Force the column into the
                 // detail row instead — same mechanism the delay columns use.
-                if (operatorsOverflow(operatorRow)) col.hidden = true;
+                // On the card the compact cell is shown but is just as capped, so the
+                // list has to come down here even though operator is a card field.
+                if (operatorsOverflow(operatorRow)) { col.hidden = true; col._forceDetail = true; }
             }
         }
         if (col.title == "{{material_type}}" && isTrain) {
@@ -810,9 +1122,13 @@ function processHiddenData(rowIdx, columns){
                 col.data = formatted;
             }
         }
+        // Delayed trips get the planned-vs-actual breakdown down here. Departure and
+        // duration are on the card too, but only as the compact badge form, so they
+        // are forced into the detail row rather than left out of it as a card field.
         if (col.title == "{{tripStartTime}}" || col.title == "{{tripEndTime}}" || col.title == "{{tripDuration}}" || col.title == "{{tripSpeed}}") {
             var rowData = tableObject.row(rowIdx).data();
             if (col.title == "{{tripStartTime}}" && rowData.departure_delay) {
+                col._forceDetail = true;
                 const cls = rowData.departure_delay > 0 ? 'delay-late' : 'delay-early';
                 const actual = addSecsToDisplayTime(rowData.start_time, rowData.departure_delay);
                 col.data = `<span class="planned-value">${rowData.start_time}</span> <span class="${cls}">${actual}</span>`;
@@ -834,6 +1150,7 @@ function processHiddenData(rowIdx, columns){
                     const cls = delaySecs > 0 ? 'delay-late' : 'delay-early';
                     col.data = `<div class="duration ${rowData.trip_duration[0]}"><span class="planned-value">${scheduledStr}</span> <span class="${cls}">${actualStr}</span></div>`;
                     col.hidden = true;
+                    col._forceDetail = true;
                 }
             }
             if (col.title == "{{tripSpeed}}" && rowData.trip_length > 0) {
@@ -872,9 +1189,11 @@ function processHiddenData(rowIdx, columns){
                 }
                 if (pairs.length) displayData = pairs.join('<br>');
             }
-            var show = stationCols.indexOf(col.columnIndex) !== -1
-                ? stationsBelow
-                : (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node()));
+            var show = cardMode
+                ? (cardCols.indexOf(col.columnIndex) === -1 || col._forceDetail)
+                : stationCols.indexOf(col.columnIndex) !== -1
+                    ? stationsBelow
+                    : (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node()));
             return show && col.data != ""?
             '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'">'+
                 '<td><strong>'+label+':</strong>'+'</td> '+
@@ -882,7 +1201,7 @@ function processHiddenData(rowIdx, columns){
             '</tr>' :
             '';
         }
-        else if (col.hidden) {
+        else if (cardMode ? cardCols.indexOf(col.columnIndex) === -1 : col.hidden) {
             var id = $(col.data).attr("data-tripId");
             return `
                 <tr data-dt-row="${col.rowIndex}" data-dt-column="${col.columnIndex}">
@@ -1322,22 +1641,27 @@ var table = $('#tripRows');
             }
         }
     },
+    // The col-* classes are the hooks the mobile card layout lays out on (see the
+    // stylesheet at the top of this file) and the set CARD_COLUMN_CLASSES reads to
+    // decide what belongs on the card rather than in the detail row. They are set
+    // here rather than on the <th> so they survive whichever columns the isPublic
+    // branches below add or drop.
     columns: [
-        { data: 'type', render: renderType },
-        { data: 'origin_station', render: renderStation },
-        { data: 'destination_station', render: renderStation },
-        { data: 'start_date', className: 'tripDate' },
-        { data: 'start_time', render: renderStartTime },
+        { data: 'type', render: renderType, className: 'col-type' },
+        { data: 'origin_station', render: renderStation, className: 'col-origin' },
+        { data: 'destination_station', render: renderStation, className: 'col-dest' },
+        { data: 'start_date', className: 'tripDate col-date' },
+        { data: 'start_time', render: renderStartTime, className: 'col-time' },
         { data: 'end_time', render: renderEndTime },
-        { data: 'trip_duration', render: renderDuration },
-        { data: 'trip_length', render: renderLength },
+        { data: 'trip_duration', render: renderDuration, className: 'col-duration' },
+        { data: 'trip_length', render: renderLength, className: 'col-length' },
         {
             data: null,
             render: renderSpeed,
             defaultContent: "N/A",
             orderable: false
         },
-        { data: 'operator', render: renderOperators },
+        { data: 'operator', render: renderOperators, className: 'col-operator' },
         {data: 'line_name', render: renderLineName},
         { data: 'countries', render: renderFlags },
         {
@@ -1365,7 +1689,8 @@ var table = $('#tripRows');
         { data: 'tags' },
         {
             data: null,
-            render: renderButton
+            render: renderButton,
+            className: 'col-actions'
         },
     ],
     rowId: 'id',
@@ -1401,7 +1726,7 @@ var table = $('#tripRows');
     paging: true,
     select: {
         style: 'multi+shift',
-        selector: 'td:not(:nth-child(2)):not(:last-child):not(:first-child)'
+        selector: isCardLayout() ? CARD_SELECT_SELECTOR : DEFAULT_SELECT_SELECTOR
     },
     initComplete: function(){
         addPageJumpInput();
@@ -1412,6 +1737,17 @@ var table = $('#tripRows');
     pagingType: $(window).width() < 768 ? "numbers" : "simple_numbers",
     responsive: {
         details: {
+            // The control is the type column rather than Responsive's default
+            // "first visible column, inline": that put the expand target on the origin
+            // cell, which on a phone card means tapping a station name opens the
+            // details while tapping the line right below it selects the row. As a
+            // column it is the type logo — the left gutter of the card, and the same
+            // place the arrow already sat on desktop. The type column is NOT given the
+            // dtr-control class: Responsive treats a class-designated control column
+            // as its own and hides it whenever nothing needs expanding, and this one
+            // carries data. The arrow is drawn by this page's stylesheet instead.
+            type: 'column',
+            target: 0,
             renderer: function(api, rowIdx, columns) {
                 var data = processHiddenData(rowIdx, columns);
                 return data ? $('<table/>').append(data) : false;
@@ -1421,6 +1757,7 @@ var table = $('#tripRows');
 }).on('responsive-display', function(e, datatable, row, showHide, update) {
     resetObjects();
 }).on('draw', function() {
+    hideCardHeader();
     tableObject.rows().every(function(rowIdx, tableLoop, rowLoop) {
         var row = this.node();
         var data = this.data();
@@ -1491,6 +1828,50 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
     var base = $(this).attr('href').split('?')[0];
     $(this).attr('href', base + '?next=' + encodeURIComponent(window.location.href));
 });
+
+// Mobile card layout. The class goes on the table's parent, not the table, so the
+// rules can be written as `.trip-card-host > #dataTable` and miss the measuring copy
+// Responsive clones (id and classes included) one level deeper — see the stylesheet.
+// With Scroller on, the table is split in two and virtualised, so cards stay off.
+if (!scroll) {
+    $('#dataTable').parent().addClass('trip-card-host');
+
+    // Card mode drops the header row — its titles line up with nothing once the rows
+    // are cards — so the select-page checkbox it carries moves up into the controls
+    // bar. The checkbox is moved rather than duplicated: its handlers are delegated
+    // off document and updateSelectPageCheckbox looks it up by id, so both keep
+    // working wherever it sits.
+    (function() {
+        var mq = window.matchMedia('(max-width: 767px)');
+        function applyCardChrome(isMobile) {
+            hideCardHeader();
+            if (!isMobile) $(tableObject.table().header()).find('tr').show();
+
+            var $cb = $('#selectPageCheckbox');
+            if (!$cb.length) return;
+            var $moved = $cb.closest('.mobile-select-page');
+            if (isMobile === Boolean($moved.length)) return;
+            if (isMobile) {
+                $('<label class="mobile-select-page"></label>')
+                    .append($cb)
+                    .append(document.createTextNode('{{ selectPage }}'))
+                    .prependTo($(tableObject.table().container()).find('.dt-controls'));
+            } else {
+                $('#dataTable thead th[data-sort-field="origin_station"]').prepend($cb);
+                $moved.remove();
+            }
+        }
+        applyCardChrome(mq.matches);
+        mq.addEventListener('change', function(e) {
+            applyCardChrome(e.matches);
+            tableObject.select.selector(e.matches ? CARD_SELECT_SELECTOR : DEFAULT_SELECT_SELECTOR);
+            // Detail rows are built from the complement of the card fields, so what
+            // belongs in them changes with the layout.
+            tableObject.responsive.recalc();
+            resetObjects();
+        });
+    })();
+}
 
 (function() {
     var $btn = $('<label>{{sortLabel}} <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
@@ -1720,7 +2101,10 @@ $('.deleteButton').off('click').on('click', function() {
         ));
         $(this.node()).children().each(
             function(index, element){
-                if ($(element).hasClass("dtr-control"))
+                // The type cell is the details control (responsive.details.target: 0),
+                // so it is the one that carries the expand arrow and the noHidden
+                // state — Responsive no longer marks a cell with dtr-control.
+                if ($(element).hasClass("col-type"))
                 {
                   controlElement = $(element)
                 }
