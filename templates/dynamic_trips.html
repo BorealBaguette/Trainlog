@@ -141,6 +141,7 @@
 
 <div class="multiLink">
     <button class="btn btn-secondary btn-lg multiCancel" onclick="deselectAll();">✕</button>
+    <button id="selectPageTripsButton" type="button" class="btn btn-outline-primary btn-lg multiSelectAll" onclick="tableObject.rows({ page: 'current' }).select();">{{ selectPage }}</button>
     <button id="shareTripButton" type="button" class="btn btn-primary btn-lg multiTrip">{{ shareTrip }}</button>
     <div class="btn-group dropup">
         <button type="button" class="btn btn-lg dropdown-toggle btn-secondary multiDropdown" data-bs-toggle="dropdown" aria-expanded="false"></button>

@@ -146,6 +146,7 @@
     "routes": "移動経路",
     "stations": "訪問駅",
     "shareTrip": "リンクを作成",
+    "selectPage": "ページを選択",
     "confirmDelete": "この記録を削除しますか？",
     "confirmMultiDelete": "${tripNumber} の記録を削除しようとしています。よろしいですか？",
     "confirmConfirm": "本当に、ほんとうに、いいですか？",

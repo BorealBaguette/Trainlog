@@ -146,6 +146,7 @@
     "routes": "Prijeđene rute",
     "stations": "Posjećene postaje",
     "shareTrip": "Stvori poveznicu",
+    "selectPage": "Odaberi stranicu",
     "confirmDelete": "Jeste li sigurni da želite izbrisati ovo putovanje?",
     "confirmMultiDelete": "Pred vama je brisanje ${tripNumber} putovanja, jeste li sigurni?",
     "confirmConfirm": "Stvarno, STVARNO sigurni?",

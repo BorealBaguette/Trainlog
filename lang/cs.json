@@ -146,6 +146,7 @@
     "routes": "Ujeté trasy",
     "stations": "Navštívené stanice",
     "shareTrip": "Vytvořit odkaz",
+    "selectPage": "Vybrat stránku",
     "confirmDelete": "Opravdu chcete smazat tuto cestu?",
     "confirmMultiDelete": "Chystáte se smazat ${tripNumber} cest, jste si jistí?",
     "confirmConfirm": "Opravdu JSTE SI JISTI?",

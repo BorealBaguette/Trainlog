@@ -146,6 +146,7 @@
     "routes": "Resta rutter",
     "stations": "Besökta stationer",
     "shareTrip": "Skapa länk",
+    "selectPage": "Välj sida",
     "confirmDelete": "Är du säker på att du vill radera denna resa?",
     "confirmMultiDelete": "Du är på väg att radera ${tripNumber} resor, är du säker?",
     "confirmConfirm": "Är du VERKLIGEN säker?",

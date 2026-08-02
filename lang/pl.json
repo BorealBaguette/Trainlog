@@ -146,6 +146,7 @@
     "routes": "Przebyte trasy",
     "stations": "Odwiedzone stacje",
     "shareTrip": "Udostępnij",
+    "selectPage": "Zaznacz stronę",
     "confirmDelete": "Czy na pewno chcesz usunąć tę podróż?",
     "confirmMultiDelete": "Potwierdź usunięcie podróży ${tripNumber}.",
     "confirmConfirm": "Naprawdę NAPRAWDĘ?",
