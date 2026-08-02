@@ -72,6 +72,7 @@ appPath = os.path.realpath(__file__).rsplit("/", 1)[0]
 os.chdir(appPath)
 
 # set up logging before local modules are imported
+os.makedirs("logs", exist_ok=True)  # logging.conf's bmcFileHandler writes here
 logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
@@ -150,6 +151,9 @@ from src.api.vagonweb import vagonweb_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
 from src.api.finance import finance_blueprint
+from src.api.bmc import bmc_blueprint, reconcile_pending_events
+from src.api.discord_oauth import discord_oauth_blueprint
+from src.discord_bot import sync_discord_tier
 from src.api.carbon import carbon_blueprint
 from src.api.wrapped import wrapped_blueprint, DISTANCE_COMPARISONS, DURATION_COMPARISONS
 from src.api.stats import stats_blueprint, fetch_stats, get_distinct_stat_years
@@ -279,6 +283,8 @@ app.register_blueprint(wagons_admin_blueprint, url_prefix="/api/admin/wagons")
 app.register_blueprint(vagonweb_blueprint, url_prefix="/api/admin/vagonweb")
 app.register_blueprint(feature_requests_blueprint)
 app.register_blueprint(finance_blueprint)
+app.register_blueprint(bmc_blueprint)
+app.register_blueprint(discord_oauth_blueprint)
 app.register_blueprint(news_blueprint)
 app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
@@ -7245,7 +7251,24 @@ def getAdminUsersData():
     }
 
     # Fetch all users (this could be optimized further with database-level pagination)
-    all_users = {user.username: user.toDict() for user in User.query.all()}
+    all_users = {}
+    for user in User.query.all():
+        row = user.toDict()
+        # Owner-only view: not exposed via toDict() elsewhere. premium_tier +
+        # bmc_supporter_id together tell manual (/toggle_role) grants apart from
+        # BMC-automated ones — a manual grant never gets a supporter_id pinned.
+        row["premium_tier"] = user.premium_tier
+        row["bmc_supporter_id"] = user.bmc_supporter_id
+        row["premium_cancel_at"] = user.premium_cancel_at.isoformat() if user.premium_cancel_at else None
+        # Computed once here (not re-derived in the search filter below) so the
+        # "stale"/"cancelled" search terms don't need to re-parse the ISO string.
+        # premium_cancel_at comes back naive from SQLite (tzinfo isn't preserved
+        # on the round trip) even though it was written as a UTC value — compare
+        # against a naive-but-UTC "now" to match, or this raises TypeError.
+        row["premium_stale"] = bool(
+            user.premium_cancel_at and user.premium_cancel_at <= datetime.now(UTC).replace(tzinfo=None)
+        )
+        all_users[user.username] = row
 
     # Initialize trips and length for all users
     for user in all_users.values():
@@ -7302,12 +7325,32 @@ def getAdminUsersData():
     # Apply search filter
     if search_value:
         search_lower = search_value.lower()
+        # Lets "translator"/"admin"/etc. in the search box find users with that
+        # role flag set, alongside the existing username/email/lang matching.
+        role_search_names = {
+            "admin": "admin",
+            "alpha": "alpha",
+            "translator": "translator",
+            "premium": "premium",
+            "feature_admin": "feature admin",
+        }
+        # "stale"/"expired" finds overdue-but-not-yet-revoked cancellations;
+        # "cancelled"/"cancels" finds any flagged cancellation, overdue or not.
+        stale_terms = {"stale", "expired"}
+        cancelled_terms = {"cancelled", "canceled", "cancels", "cancel"}
         users_list = [
             user
             for user in users_list
             if search_lower in user["username"].lower()
             or search_lower in user.get("email", "").lower()
             or search_lower in user.get("lang", "").lower()
+            or any(
+                search_lower in name
+                for key, name in role_search_names.items()
+                if user.get(key)
+            )
+            or (user.get("premium_stale") and any(search_lower in t for t in stale_terms))
+            or (user.get("premium_cancel_at") and any(search_lower in t for t in cancelled_terms))
         ]
 
     # Sort users
@@ -7385,9 +7428,11 @@ def getAdminStats():
             if user["last_login"] is None:
                 user["last_login"] = user_data["last_modified"]
 
-                # Check if user was active today
-                if user["last_login"] > datetime.now() - timedelta(days=1):
-                    active_today += 1
+            # Check if user was active today
+            if user["last_login"] and user["last_login"] > datetime.now() - timedelta(
+                days=1
+            ):
+                active_today += 1
 
     # Calculate statistics
     for user in all_users.values():
@@ -8775,7 +8820,26 @@ def toggle_role(uid, role, action):
     # Set the role to True for 'make' or False for 'remove'
     setattr(user, role, action == "make")
 
+    if role == "premium":
+        # Manual grants are intentionally never assigned a tier and never touch
+        # Discord — tier assignment and role sync are BMC-webhook-only concepts,
+        # so a manual grant stays "Manual" until/unless a real webhook confirms
+        # an actual tier for this user (see apply_membership_status).
+        user.premium_tier = None
+        # A manual action (either direction) supersedes any pending BMC
+        # cancellation flag — the owner reviewing it here is the resolution.
+        user.premium_cancel_at = None
+
     authDb.session.commit()
+
+    if role == "premium" and action == "remove":
+        # Asymmetric on purpose: a manual grant doesn't touch Discord (no
+        # confirmed tier to base a role on), but an explicit manual revoke
+        # should still strip whatever tier role they currently hold — leaving
+        # it in place would mean Trainlog says "not premium" while Discord
+        # still shows a paid tier.
+        sync_discord_tier(user, None)
+
     return jsonify(success=True)
 
 
@@ -8823,15 +8887,8 @@ def user_settings(username):
     flight_3d_checked = "checked" if user.flight_3d else ""
     live_tracking_checked = "checked" if user.live_tracking else ""
 
-    # Temporary: preview the redesigned settings page with ?v2=1 (owner only).
-    template = (
-        "user_settings_v2.html"
-        if request.args.get("v2") and session.get("userinfo", {}).get("is_owner")
-        else "user_settings.html"
-    )
-
     return render_template(
-        template,
+        "user_settings.html",
         currencyOptions=get_available_currencies(),
         title=lang[session["userinfo"]["lang"]]["user_settings"],
         username=username,
@@ -8847,6 +8904,9 @@ def user_settings(username):
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
         user_globe=user.globe,
+        discord_id=user.discord_id,
+        user_email=user.email,
+        pending_email=user.pending_email,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -8943,6 +9003,63 @@ def regenerate_mcp_token(username):
     user.mcp_token = secrets.token_urlsafe(32)
     authDb.session.commit()
     return redirect(url_for("api_settings", username=username))
+
+
+@app.route("/u/<username>/change_email", methods=["POST"])
+@login_required
+def request_email_change(username):
+    """Request a change of the account's login email. A confirmation link is
+    emailed to the new address rather than trusting it immediately, so a user
+    can't take over an inbox they don't control. Confirming also re-matches
+    any Buy Me a Coffee membership webhook that arrived for that email before
+    it was linked to this account (see reconcile_pending_events)."""
+    user = User.query.filter_by(username=username).first()
+    email = request.form.get("email", "").strip().lower()
+    if not email:
+        flash("Please enter an email address", "error")
+        return redirect(url_for("user_settings", username=username))
+    if email == user.email:
+        flash("That is already your email", "error")
+        return redirect(url_for("user_settings", username=username))
+    if User.query.filter_by(email=email).first():
+        flash("That email is already in use", "error")
+        return redirect(url_for("user_settings", username=username))
+
+    token = secrets.token_hex(32)
+    user.pending_email = email
+    user.email_verify_token = token
+    authDb.session.commit()
+
+    link = url_for("confirm_email_change", token=token, _external=True)
+    sendEmail(
+        email,
+        "Confirm your new email - Trainlog",
+        f'Click to confirm this is your new Trainlog email: <a href="{link}">{link}</a>',
+    )
+    flash("Check your inbox to confirm your new email", "success")
+    return redirect(url_for("user_settings", username=username))
+
+
+@app.route("/confirm_email/<token>", methods=["GET"])
+def confirm_email_change(token):
+    user = User.query.filter_by(email_verify_token=token).first()
+    if not user:
+        flash("Invalid or expired confirmation link", "error")
+        return redirect(url_for("login"))
+
+    if User.query.filter_by(email=user.pending_email).first():
+        flash("That email is already in use", "error")
+        return redirect(url_for("login"))
+
+    user.email = user.pending_email
+    user.pending_email = None
+    user.email_verify_token = None
+    authDb.session.commit()
+
+    reconcile_pending_events(user)
+
+    flash("Email updated", "success")
+    return redirect(url_for("user_settings", username=user.username))
 
 
 @app.route("/u/<username>/settings_app", methods=["GET", "POST"])
@@ -11000,8 +11117,29 @@ def getTagInvitesNumber():
         return '<i class="incoming-request-number bi bi-plus-circle-fill"></i>'
 
 
+def getStalePremiumCount():
+    """Owner-only: count of premium users whose BMC cancellation was flagged
+    (see flag_pending_cancellation) and whose paid-through period has already
+    passed — i.e. overdue for a manual /toggle_role revoke."""
+    if not session.get("userinfo", {}).get("is_owner"):
+        return ""
+    # Same naive-vs-aware caveat as row["premium_stale"] in getAdminUsersData —
+    # premium_cancel_at round-trips through SQLite as naive-but-UTC-valued.
+    count = User.query.filter(
+        User.premium_cancel_at.isnot(None),
+        User.premium_cancel_at <= datetime.now(UTC).replace(tzinfo=None),
+    ).count()
+    if count == 0:
+        return ""
+    elif count < 10:
+        return f'<i class="incoming-request-number bi bi-{count}-circle-fill"></i>'
+    else:
+        return '<i class="incoming-request-number bi bi-plus-circle-fill"></i>'
+
+
 app.jinja_env.globals.update(getFriendsRequestsNumber=getFriendsRequestsNumber)
 app.jinja_env.globals.update(getTagInvitesNumber=getTagInvitesNumber)
+app.jinja_env.globals.update(getStalePremiumCount=getStalePremiumCount)
 
 
 @app.route("/admin/refreshCurrency", methods=["GET"])
@@ -12074,6 +12212,65 @@ def ensure_auth_db_columns():
             sqlalchemy.text(
                 "ALTER TABLE user ADD COLUMN live_tracking BOOLEAN NOT NULL DEFAULT 0"
             )
+        )
+        authDb.session.commit()
+    if "discord_id" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN discord_id VARCHAR(30)")
+        )
+        authDb.session.commit()
+    if "discord_username" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN discord_username VARCHAR(50)")
+        )
+        authDb.session.commit()
+    if "pending_email" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN pending_email VARCHAR(100)")
+        )
+        authDb.session.commit()
+    if "email_verify_token" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN email_verify_token VARCHAR(100)")
+        )
+        authDb.session.commit()
+    if "premium_tier" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN premium_tier VARCHAR(20)")
+        )
+        authDb.session.commit()
+    if "bmc_supporter_id" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN bmc_supporter_id VARCHAR(30)")
+        )
+        authDb.session.commit()
+    if "premium_cancel_at" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN premium_cancel_at DATETIME")
+        )
+        authDb.session.commit()
+
+    # Same idempotent-ALTER treatment for pending_bmc_event: create_all() created
+    # the table before `tier` existed on the model, so it needs a manual ALTER too.
+    existing_pending_bmc_event = {
+        row[1]
+        for row in authDb.session.execute(
+            sqlalchemy.text("PRAGMA table_info(pending_bmc_event)")
+        )
+    }
+    if existing_pending_bmc_event and "tier" not in existing_pending_bmc_event:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE pending_bmc_event ADD COLUMN tier VARCHAR(20)")
+        )
+        authDb.session.commit()
+    if existing_pending_bmc_event and "claim_token" not in existing_pending_bmc_event:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE pending_bmc_event ADD COLUMN claim_token VARCHAR(64)")
+        )
+        authDb.session.commit()
+    if existing_pending_bmc_event and "supporter_id" not in existing_pending_bmc_event:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE pending_bmc_event ADD COLUMN supporter_id VARCHAR(30)")
         )
         authDb.session.commit()
 
