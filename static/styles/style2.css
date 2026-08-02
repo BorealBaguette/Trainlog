@@ -329,12 +329,8 @@ td .operatorList .operatorListName{
   height: 30px;
 }
 
-button.multiSelectAll{
-  width:22%;
-}
-
 button.multiTrip{
-  width:44%;
+  width:66%;
 }
 
 button.multiCancel{
