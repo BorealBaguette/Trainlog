@@ -1263,13 +1263,10 @@
                 axisPointer: { type: 'shadow' },
                 formatter: commonTooltipFormatter 
             },
-            grid: {
-                containLabel: true,
-                width: '80%',
-                height: '85%',
-                bottom: '10%',
-                top: '10%'
-            },
+            // containLabel still grows the gutter to fit real axis-label content
+            // (country names, operator logos) — this just removes the default
+            // ~10% padding that was reserved on top of that.
+            grid: { containLabel: true, left: '10px', width: '80%', height: '85%', bottom: '10%', top: '10%' },
             series: createSeries(dataToUse, getColor(tripType),
                 dataKey === 'material' ? params => params.name
                     : dataKey === 'routes' ? params => formatRouteLabel(params.name)
