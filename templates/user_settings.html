@@ -4,156 +4,461 @@
 
 {% include "includes/trip_cards.html" %}
 
-<div id="form">
-  <h2 class="header">{{user_settings}} {{username}}</h2>
-  {% if is_owner %}
-  <div class="alert alert-info d-flex justify-content-between align-items-center py-2 px-3">
-    <span><i class="fa-solid fa-wand-magic-sparkles me-1"></i> {{ settingsRedesignNote }}</span>
-    <a class="btn btn-sm btn-primary" href="{{ url_for('user_settings', username=username, v2=1) }}">{{ settingsRedesignPreview }}</a>
-  </div>
-  {% endif %}
-  <div>
-    <form autocomplete="off" method="POST">
+<style>
+  .settings2 { max-width: 1000px; margin: 0 auto; padding: 2.5rem 1.5rem 4rem; }
+  .settings2-title {
+    font-size: 2rem; font-weight: 800; letter-spacing: -0.02em; color: #212529;
+    margin: 0 0 0.4rem; display: flex; align-items: center; gap: 0.65rem;
+  }
+  .settings2-title i { color: #0d6efd; font-size: 1.6rem; }
+  .settings2-sub { color: #6c757d; margin: 0 0 2.25rem; font-size: 0.95rem; }
 
-      <br>
-      <label for="share_level">{{shareLevelLabel}}</label>
-      <div class="input-group">
-        <label class="input-group-text" for=""><i class="bi bi-funnel"></i></label>
-        <select class="form-select" id="share_level" name="share_level">
-          <option value="0" data-details="{{shareLevel0Details}}" data-icon="fa-solid fa-lock" {% if share_level==0
-            %}selected{% endif %}>{{shareLevel0}}</option>
-          <option value="1" data-details="{{shareLevel1Details}}" data-icon="fa-solid fa-link" {% if share_level==1
-            %}selected{% endif %}>{{shareLevel1}}</option>
-          <option value="2" data-details="{{shareLevel2Details}}" data-icon="fa-solid fa-globe" {% if share_level==2
-            %}selected{% endif %}>{{shareLevel2}}</option>
-        </select>
+  .settings2-shell { display: flex; gap: 2.25rem; align-items: flex-start; }
+
+  /* Nav: vertical pills on desktop, horizontal scrollable strip on mobile */
+  .settings2-nav-col { flex: 0 0 230px; position: sticky; top: 1.5rem; }
+  .settings2-nav { display: flex; flex-direction: column; flex-wrap: nowrap; gap: 8px; padding-left: 0; margin-bottom: 0; }
+  .settings2-navlink {
+    display: flex; align-items: center; gap: 12px;
+    padding: 12px 16px; border-radius: 10px; border: none; background: transparent;
+    text-align: left; color: #495057; font-weight: 500; font-size: 0.95rem;
+    transition: background 0.15s, color 0.15s;
+  }
+  .settings2-navlink i { width: 18px; text-align: center; color: #868e96; }
+  .settings2-navlink:hover { background: #f1f3f5; }
+  .settings2-navlink.active { background: #0d6efd; color: #fff; }
+  .settings2-navlink.active i { color: #fff; }
+
+  .settings2-content-col { flex: 1 1 auto; min-width: 0; }
+
+  .settings2-card {
+    background: #fff; border: 1px solid #e9ecef; border-radius: 16px;
+    padding: 2rem 2.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    min-height: 320px;
+  }
+  .settings2-card-title {
+    font-size: 1.2rem; font-weight: 700; margin: 0 0 1.5rem;
+    display: flex; align-items: center; gap: 0.6rem;
+  }
+  .settings2-card-title i { color: #0d6efd; }
+  .settings2-label { font-size: 0.8rem; font-weight: 600; color: #6c757d; margin: 1.5rem 0 0.4rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  .settings2-label:first-of-type { margin-top: 0; }
+  .settings2-hint { color: #6c757d; font-size: 0.85rem; margin: 0.4rem 0 0; }
+  .settings2-hr { margin: 1.75rem 0; border-color: #e9ecef; }
+  .settings2-toggle-row .form-check { margin-bottom: 0.9rem; }
+  .settings2-toggle-row .form-check:last-child { margin-bottom: 0; }
+  .settings2-save { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e9ecef; }
+
+  .settings2-integration-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
+    padding: 1rem 0;
+  }
+  .settings2-integration-row + .settings2-integration-row { border-top: 1px solid #f1f3f5; }
+
+  .settings2-role-badge {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    padding: 0.4rem 0.8rem; border-radius: 999px; color: #fff;
+    font-size: 0.82rem; font-weight: 600;
+  }
+
+  /* Searchable combo (custom dropdown): flag stays in the left icon box only,
+     never in the collapsed button text; the open list shows a flag per row
+     plus a real search box, since flag-in-list/no-flag-collapsed can't be
+     done with a native <select>. */
+  .settings2-combo { position: relative; }
+  .settings2-combo-btn { display: flex; align-items: center; cursor: pointer; }
+  .settings2-combo-panel {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+    background: #fff; border: 1px solid #dee2e6; border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12); overflow: hidden;
+  }
+  .settings2-combo-panel.show { display: block; }
+  .settings2-combo-search { border: none; border-bottom: 1px solid #e9ecef; border-radius: 0; }
+  .settings2-combo-search:focus { box-shadow: none; border-color: #0d6efd; }
+  .settings2-combo-list { max-height: 260px; overflow-y: auto; padding: 4px; }
+  .settings2-combo-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 8px 10px; border: none; background: none; border-radius: 6px;
+    text-align: left; font-size: 0.9rem; color: #212529;
+  }
+  .settings2-combo-item:hover { background: #f1f3f5; }
+  .settings2-combo-item.active { background: #e7f0ff; color: #0d6efd; font-weight: 600; }
+  .settings2-combo-flag { width: 1.3em; text-align: center; flex: none; }
+  .settings2-combo-empty { padding: 10px; color: #6c757d; font-size: 0.85rem; text-align: center; }
+
+  /* Mobile: nav becomes a compact wrapping grid of pills above the content,
+     so every section is visible at once without horizontal scrolling. */
+  @media (max-width: 767px) {
+    .settings2-shell { flex-direction: column; align-items: stretch; }
+    .settings2-nav-col { position: static; flex: none; width: 100%; }
+    .settings2-nav {
+      flex-direction: row; flex-wrap: wrap; gap: 6px;
+    }
+    .settings2-navlink {
+      flex: 1 1 auto; justify-content: center; padding: 8px 10px;
+      font-size: 0.8rem; gap: 6px;
+    }
+    .settings2-navlink span { display: inline; }
+    .settings2 { padding: 1.75rem 1rem 3rem; }
+    .settings2-card { padding: 1.5rem; min-height: 220px; }
+  }
+
+  @media (max-width: 420px) {
+    .settings2-navlink span { display: none; }
+    .settings2-navlink { flex: 0 1 auto; padding: 10px 12px; }
+  }
+</style>
+
+<div class="settings2">
+  <h2 class="settings2-title"><i class="fa-solid fa-sliders"></i> {{user_settings}}</h2>
+  <p class="settings2-sub">{{username}}</p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      {% for category, message in messages %}
+        <div class="alert alert-{{ 'danger' if category == 'error' else 'success' }} alert-dismissible fade show" role="alert">
+          {{ message }}
+          <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+      {% endfor %}
+    {% endif %}
+  {% endwith %}
+
+  <!-- Empty on purpose: fields below attach to it via form="settingsForm" so they
+       can live in whichever tab-pane makes sense without ever nesting <form>s. -->
+  <form id="settingsForm" method="POST" autocomplete="off"></form>
+
+  <div class="settings2-shell">
+    <div class="settings2-nav-col">
+      <div class="settings2-nav-wrap">
+        <div class="nav settings2-nav" role="tablist" aria-orientation="vertical">
+          <button class="settings2-navlink active" data-bs-toggle="pill" data-bs-target="#tab-preferences" type="button" role="tab">
+            <i class="fa-solid fa-sliders"></i><span>{{ settingsSectionGeneral }}</span>
+          </button>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-privacy" type="button" role="tab">
+            <i class="fa-solid fa-shield-halved"></i><span>{{ settingsSectionPrivacy }}</span>
+          </button>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-appearance" type="button" role="tab">
+            <i class="fa-solid fa-palette"></i><span>{{ settingsSectionAppearance }}</span>
+          </button>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-account" type="button" role="tab">
+            <i class="fa-solid fa-user"></i><span>{{ settingsSectionAccount }}</span>
+          </button>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-integrations" type="button" role="tab">
+            <i class="fa-solid fa-plug"></i><span>{{ settingsSectionIntegrations }}</span>
+          </button>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-data" type="button" role="tab">
+            <i class="fa-solid fa-database"></i><span>{{ settingsSectionData }}</span>
+          </button>
+        </div>
       </div>
+    </div>
 
-      <!-- Display the details based on the selected shareLevel -->
-      <div class="mt-3 text" id="share-level-details">
+    <div class="settings2-content-col">
+      <div class="tab-content">
+
+        <!-- Privacy & sharing -->
+        <div class="tab-pane fade" id="tab-privacy" role="tabpanel">
+          <div class="settings2-card">
+            <h3 class="settings2-card-title"><i class="fa-solid fa-shield-halved"></i> {{ settingsSectionPrivacy }}</h3>
+
+            <label class="settings2-label" for="share_level">{{shareLevelLabel}}</label>
+            <div class="settings2-combo" data-combo="share_level">
+              <div class="input-group">
+                <label class="input-group-text" id="share_level-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="share_level-btn">
+                  <span id="share_level-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="share_level" name="share_level" form="settingsForm" value="{{ share_level }}">
+              <div class="settings2-combo-panel" id="share_level-panel">
+                <input type="text" class="form-control settings2-combo-search" id="share_level-search" autocomplete="off">
+                <div class="settings2-combo-list" id="share_level-list">
+                  <button type="button" class="settings2-combo-item" data-value="0" data-icon="fa-solid fa-lock" data-label="{{shareLevel0}}" data-details="{{shareLevel0Details}}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="1" data-icon="fa-solid fa-link" data-label="{{shareLevel1}}" data-details="{{shareLevel1Details}}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="2" data-icon="fa-solid fa-globe" data-label="{{shareLevel2}}" data-details="{{shareLevel2Details}}"></button>
+                </div>
+                <div class="settings2-combo-empty" id="share_level-empty" style="display:none;">No results</div>
+              </div>
+            </div>
+            <div class="settings2-hint" id="share-level-details"></div>
+
+            <hr class="settings2-hr">
+
+            <div class="settings2-toggle-row">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="leaderboard" name="leaderboard" form="settingsForm" {{leaderboard_checked}} />
+                <label class="form-check-label" for="leaderboard">
+                  {{ (leaderboardText|replace("{leaderboard_url}", url_for('leaderboard')))|safe }}
+                </label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="friend_search" name="friend_search" form="settingsForm"
+                  {{friend_search_checked}} />
+                <label class="form-check-label" for="friend_search">
+                  {{friendSearchText|safe }}
+                </label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="appear_on_global" name="appear_on_global" form="settingsForm" {{
+                  appear_on_global_checked }} />
+                <label class="form-check-label" for="appear_on_global">
+                  {{ appearOnGlobalText|replace("{global_live_map}", url_for('live_map'))|safe }}
+                </label>
+              </div>
+            </div>
+
+            <div class="settings2-save">
+              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Appearance & map -->
+        <div class="tab-pane fade" id="tab-appearance" role="tabpanel">
+          <div class="settings2-card">
+            <h3 class="settings2-card-title"><i class="fa-solid fa-palette"></i> {{ settingsSectionAppearance }}</h3>
+
+            <div class="settings2-toggle-row">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="colorblind" name="colorblind" form="settingsForm"
+                    {{colorblind_checked}} />
+                <label class="form-check-label" for="colorblind">
+                    {{colorblindMode|safe }}
+                </label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="globe" name="globe" form="settingsForm" {% if user_globe %}checked{% endif %}>
+                <label class="form-check-label" for="globe">{{ globeLabel }}</label>
+              </div>
+            </div>
+
+            <hr class="settings2-hr">
+
+            <label class="settings2-label">{{ tilesetLabel }}</label>
+            <button type="button" class="form-select text-start" id="tileserverPickerBtn" style="cursor:pointer;">
+              <i class="fa-solid fa-map me-2" id="tileserverPickerIcon"></i><span id="tileserverPickerLabel"></span>
+            </button>
+            <input type="hidden" id="tileserver" name="tileserver" form="settingsForm" value="{{ user_tileserver }}">
+
+            {% if is_premium %}
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" id="orm-enabled" name="orm_enabled" form="settingsForm">
+              <label class="form-check-label" for="orm-enabled">
+                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> Enable OpenRailwayMap overlay
+              </label>
+            </div>
+
+            <div id="orm-options" class="mt-2 p-3 bg-light rounded" style="display: none;">
+              <label class="settings2-label mt-0" for="orm-type">Railway Layer Type</label>
+              <select class="form-select" name="orm_type" id="orm-type" form="settingsForm">
+                <option value="standard">Standard</option>
+                <option value="maxspeed">Max Speed</option>
+                <option value="signals">Signals</option>
+                <option value="electrified">Electrified</option>
+                <option value="gauge">Track Gauge</option>
+              </select>
+            </div>
+
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" id="flight_3d" name="flight_3d" form="settingsForm" {{ flight_3d_checked }}>
+              <label class="form-check-label" for="flight_3d">
+                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ flight3dSetting }}
+              </label>
+            </div>
+
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" id="live_tracking" name="live_tracking" form="settingsForm" {{ live_tracking_checked }}>
+              <label class="form-check-label" for="live_tracking">
+                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ liveTrackingSetting }}
+              </label>
+            </div>
+            {% endif %}
+
+            <div class="settings2-save">
+              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- General preferences -->
+        <div class="tab-pane fade show active" id="tab-preferences" role="tabpanel">
+          <div class="settings2-card">
+            <h3 class="settings2-card-title"><i class="fa-solid fa-sliders"></i> {{ settingsSectionGeneral }}</h3>
+
+            <label class="settings2-label" for="default_landing">{{defaultLanding}}</label>
+            <div class="settings2-combo" data-combo="default_landing">
+              <div class="input-group">
+                <label class="input-group-text" id="default_landing-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="default_landing-btn">
+                  <span id="default_landing-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="default_landing" name="default_landing" form="settingsForm"
+                value="{{ 'map' if default_landing=='new_map' else default_landing }}">
+              <div class="settings2-combo-panel" id="default_landing-panel">
+                <input type="text" class="form-control settings2-combo-search" id="default_landing-search" autocomplete="off">
+                <div class="settings2-combo-list" id="default_landing-list">
+                  <button type="button" class="settings2-combo-item" data-value="dashboard" data-icon="fa-solid fa-house" data-label="{{user_dashboard}}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="map" data-icon="fa-solid fa-map" data-label="{{map}}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="trips" data-icon="fa-solid fa-clock-rotate-left" data-label="{{trips}}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="projects" data-icon="fa-solid fa-list-ul" data-label="{{projectList}}"></button>
+                </div>
+                <div class="settings2-combo-empty" id="default_landing-empty" style="display:none;">No results</div>
+              </div>
+            </div>
+
+            <label class="settings2-label" for="lang">{{language}}</label>
+            <div class="settings2-combo" data-combo="lang">
+              <div class="input-group">
+                <label class="input-group-text" id="lang-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="lang-btn">
+                  <span id="lang-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="lang" name="lang" form="settingsForm" value="{{ langs[0].code }}">
+              <div class="settings2-combo-panel" id="lang-panel">
+                <input type="text" class="form-control settings2-combo-search" id="lang-search" autocomplete="off">
+                <div class="settings2-combo-list" id="lang-list">
+                  {% for lang in langs %}
+                  <button type="button" class="settings2-combo-item" data-value="{{ lang.code }}" data-raw="{{ lang.name }}"></button>
+                  {% endfor %}
+                </div>
+                <div class="settings2-combo-empty" id="lang-empty" style="display:none;">No results</div>
+              </div>
+            </div>
+
+            <label class="settings2-label" for="user_currency">{{currency}}</label>
+            <div class="settings2-combo" data-combo="user_currency">
+              <div class="input-group">
+                <label class="input-group-text" id="user_currency-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="user_currency-btn">
+                  <span id="user_currency-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="user_currency" name="user_currency" form="settingsForm" value="{{ user_currency }}">
+              <div class="settings2-combo-panel" id="user_currency-panel">
+                <input type="text" class="form-control settings2-combo-search" id="user_currency-search" autocomplete="off">
+                <div class="settings2-combo-list" id="user_currency-list">
+                  {% for currency in currencyOptions %}
+                  <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}"></button>
+                  {% endfor %}
+                </div>
+                <div class="settings2-combo-empty" id="user_currency-empty" style="display:none;">No results</div>
+              </div>
+            </div>
+
+            <div class="settings2-save">
+              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Account -->
+        <div class="tab-pane fade" id="tab-account" role="tabpanel">
+          <div class="settings2-card">
+            <h3 class="settings2-card-title"><i class="fa-solid fa-user"></i> {{ settingsSectionAccount }}</h3>
+
+            <label class="settings2-label">{{ accountEmailLabel }}</label>
+            <p class="mb-1 fw-semibold">{{ user_email }}</p>
+            {% if pending_email %}
+            <p class="settings2-hint">{{ changeEmailPendingHelp|replace("{pending_email}", pending_email) }}</p>
+            {% else %}
+            <p class="settings2-hint">{{ changeEmailHelp }}</p>
+            {% endif %}
+            <form method="POST" action="{{ url_for('request_email_change', username=username) }}" class="d-flex gap-2 flex-wrap mt-2">
+              <input type="email" class="form-control" name="email" placeholder="new@example.com" value="{{ pending_email or '' }}" style="max-width: 320px;">
+              <button type="submit" class="btn btn-outline-primary">{{ pending_email and resendButton or changeEmailButton }}</button>
+            </form>
+
+            {% if is_admin or is_feature_admin or is_premium or is_translator or is_alpha %}
+            <hr class="settings2-hr">
+            <label class="settings2-label">{{ rolesLabel }}</label>
+            <div class="d-flex flex-wrap gap-2">
+              {% if is_admin %}
+              <span class="settings2-role-badge" style="background:#E74C3C;"><i class="fa-solid fa-chess-rook"></i> {{ roleAdmin }}</span>
+              {% endif %}
+              {% if is_feature_admin %}
+              <span class="settings2-role-badge" style="background:#2ECC71;"><i class="fa-solid fa-shield-halved"></i> {{ roleFeatureAdmin }}</span>
+              {% endif %}
+              {% if is_premium %}
+              <span class="settings2-role-badge" style="background:#00CED1;"><i class="fa-solid fa-gem"></i> {{ rolePremium }}</span>
+              {% endif %}
+              {% if is_translator %}
+              <span class="settings2-role-badge" style="background:#3498DB;"><i class="fa-solid fa-language"></i> {{ roleTranslator }}</span>
+              {% endif %}
+              {% if is_alpha %}
+              <span class="settings2-role-badge" style="background:#9B59B6;"><i class="fa-solid fa-flask"></i> {{ roleAlpha }}</span>
+              {% endif %}
+            </div>
+            {% endif %}
+          </div>
+        </div>
+
+        <!-- Integrations -->
+        <div class="tab-pane fade" id="tab-integrations" role="tabpanel">
+          <div class="settings2-card">
+            <h3 class="settings2-card-title"><i class="fa-solid fa-plug"></i> {{ settingsSectionIntegrations }}</h3>
+
+            <div class="settings2-integration-row">
+              <div>
+                <div class="fw-semibold"><i class="fa-brands fa-discord me-1"></i> Discord</div>
+                {% if discord_id %}
+                <div class="text-success small"><i class="fa-solid fa-check"></i> {{ discordConnectedLabel }}</div>
+                {% else %}
+                <div class="settings2-hint">{{ discordHint }}</div>
+                {% endif %}
+              </div>
+              {% if discord_id %}
+              <form method="POST" action="{{ url_for('discord_oauth.unlink') }}">
+                <button type="submit" class="btn btn-sm btn-outline-secondary">{{ unlinkButton }}</button>
+              </form>
+              {% else %}
+              <a class="btn btn-primary btn-sm" href="{{ url_for('discord_oauth.connect') }}">{{ connectDiscordButton }}</a>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+
+        <!-- Data -->
+        <div class="tab-pane fade" id="tab-data" role="tabpanel">
+          <div class="settings2-card">
+            <h3 class="settings2-card-title"><i class="fa-solid fa-database"></i> {{ settingsSectionData }}</h3>
+
+            <div class="settings2-integration-row">
+              <div>
+                <div class="fw-semibold"><i class="fa-solid fa-file-export me-1"></i> {{exportText}}</div>
+              </div>
+              <a class="btn btn-outline-primary btn-sm" href="{{ url_for('export', username=username)}}">{{export}}</a>
+            </div>
+
+            <div class="settings2-integration-row">
+              <div>
+                <div class="fw-semibold"><i class="fa-solid fa-file-import me-1"></i> {{importText}}</div>
+              </div>
+              <button type="button" class="btn btn-outline-primary btn-sm" id="importTrainlogBtn">{{import}}</button>
+            </div>
+
+            <div class="settings2-integration-row">
+              <div>
+                <div class="fw-semibold"><i class="fa-solid fa-plane me-1"></i> {{import}} MFR24</div>
+                <div class="settings2-hint">{{ MFR24 }} <a href="https://my.flightradar24.com/settings/export">My Flightradar</a></div>
+              </div>
+              <button type="button" class="btn btn-outline-primary btn-sm" id="importMFR24Btn">{{import}}</button>
+            </div>
+
+            <div class="settings2-integration-row">
+              <div>
+                <div class="fw-semibold"><i class="fa-solid fa-trash me-1"></i> {{clearCache}}</div>
+                <div class="settings2-hint">{{clearCacheLabel|safe}}</div>
+              </div>
+              <button type="button" class="btn btn-outline-danger btn-sm" id="clear-cache">{{clearCache}}</button>
+            </div>
+          </div>
+        </div>
+
       </div>
-      <hr>
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" id="leaderboard" name="leaderboard" {{leaderboard_checked}} />
-        <label class="form-check-label" for="leaderboard">
-          {{ (leaderboardText|replace("{leaderboard_url}", url_for('leaderboard')))|safe }}
-        </label>
-      </div>
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" id="friend_search" name="friend_search"
-          {{friend_search_checked}} />
-        <label class="form-check-label" for="friend_search">
-          {{friendSearchText|safe }}
-        </label>
-      </div>
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" id="appear_on_global" name="appear_on_global" {{
-          appear_on_global_checked }} />
-        <label class="form-check-label" for="appear_on_global">
-          {{ appearOnGlobalText|replace("{global_live_map}", url_for('live_map'))|safe }}
-        </label>
-      </div>
-      <div class="form-check form-switch">
-        <input class="form-check-input" type="checkbox" id="colorblind" name="colorblind"
-            {{colorblind_checked}} />
-        <label class="form-check-label" for="colorblind">
-            {{colorblindMode|safe }}
-        </label>
-      </div>
-      <hr>
-      <label for="default_landing">{{defaultLanding}}</label>
-      <select class="form-select" name="default_landing" id="default_landing">
-        <option value="dashboard" {% if default_landing=="dashboard" %}selected{% endif %}>🏠 {{user_dashboard}}</option>
-        <option value="map" {% if default_landing=="map" or default_landing=="new_map" %}selected{% endif %}>🗺️ {{map}}</option>
-        <option value="trips" {% if default_landing=="trips" %}selected{% endif %}>🕰️ {{trips}}</option>
-        <option value="projects" {% if default_landing=="projects" %}selected{% endif %}>🕒 {{projectList}}</option>
-      </select>
-
-      <label for="lang">{{language}}</label>
-      <select class="form-select" name="lang">
-        {% for lang in langs %}
-        <option value="{{lang.code}}">{{lang.name}}</option>
-        {% endfor %}
-      </select>
-      <label for="user_currency">{{currency}}</label>
-      <select class="form-select" name="user_currency" id="user_currency">
-        {% for currency in currencyOptions %}
-        <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" {% if
-          currency['currency']==user_currency %}selected{% endif %}>
-          {{ currency['currency'] }}
-        </option>
-        {% endfor %}
-      </select>
-      <hr>
-      <label>{{ tilesetLabel }}</label>
-      <button type="button" class="form-select text-start" id="tileserverPickerBtn" style="cursor:pointer;">
-        <i class="fa-solid fa-map me-2" id="tileserverPickerIcon"></i><span id="tileserverPickerLabel"></span>
-      </button>
-      <input type="hidden" id="tileserver" name="tileserver" value="{{ user_tileserver }}">
-
-      {% if is_premium %}
-      <div class="form-check form-switch mt-2">
-        <input class="form-check-input" type="checkbox" id="orm-enabled" name="orm_enabled">
-        <label class="form-check-label" for="orm-enabled">
-          <i class="fa-solid fa-gem" style="color: #00CED1;"></i> Enable OpenRailwayMap overlay
-        </label>
-      </div>
-
-      <div id="orm-options" class="mt-2 p-3 bg-light rounded" style="display: none;">
-        <label for="orm-type">Railway Layer Type</label>
-        <select class="form-select" name="orm_type" id="orm-type">
-          <option value="standard">🛤️ Standard</option>
-          <option value="maxspeed">🏃 Max Speed</option>
-          <option value="signals">🚦 Signals</option>
-          <option value="electrified">⚡ Electrified</option>
-          <option value="gauge">📏 Track Gauge</option>
-        </select>
-      </div>
-
-      <div class="form-check form-switch mt-2">
-        <input class="form-check-input" type="checkbox" id="flight_3d" name="flight_3d" {{ flight_3d_checked }}>
-        <label class="form-check-label" for="flight_3d">
-          <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ flight3dSetting }}
-        </label>
-      </div>
-
-      <div class="form-check form-switch mt-2">
-        <input class="form-check-input" type="checkbox" id="live_tracking" name="live_tracking" {{ live_tracking_checked }}>
-        <label class="form-check-label" for="live_tracking">
-          <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ liveTrackingSetting }}
-        </label>
-      </div>
-      {% endif %}
-
-      <div class="form-check form-switch mt-2">
-        <input class="form-check-input" type="checkbox" id="globe" name="globe" {% if user_globe %}checked{% endif %}>
-        <label class="form-check-label" for="globe">{{ globeLabel }}</label>
-      </div>
-
-      <hr>
-      <label>{{exportText}}</label>
-      <a class="btn btn-labeled btn-primary" href="{{ url_for('export', username=username)}}"><span
-          class="btn-label "><i class="fa-solid fa-file-export"></i></span>{{export}}</a>
-      <label>{{importText}}</label>
-      <button type="button" class="btn btn-labeled btn-primary" id="importTrainlogBtn">
-        <span class="btn-label"><i class="fa-solid fa-file-import"></i></span>{{import}}
-      </button>
-      <hr>
-      <label for="filename">{{MFR24}} <a href="https://my.flightradar24.com/settings/export">My Flightradar</a></label>
-      <button type="button" class="btn btn-labeled btn-primary" id="importMFR24Btn">
-        <span class="btn-label"><i class="fa-solid fa-plane"></i></span>{{import}} MFR24
-      </button>
-
-      <hr>
-      <label for="clear-cache">{{clearCacheLabel | safe}}</label>
-      <label>
-        <span id="clear-cache" class="btn btn-labeled btn-danger"><span class="btn-label "><i
-              class="fa-solid fa-trash"></i></span>{{clearCache}}</span>
-      </label>
-
-
-      <button id=submit type="submit" onclick="">{{submit}}</button>
-    </form>
+    </div>
   </div>
 </div>
 
@@ -161,28 +466,162 @@
 {% include "includes/tileserver_picker.html" %}
 
 <script>
-  // Share-level help text + icon
-  function updateDetails() {
-    let selectedIconClass = $('#share_level option:selected').data('icon');
-    $('.input-group-text i').attr('class', selectedIconClass);
-    const selectedDetails = $('#share_level option:selected').data('details')
-      .replace("{public_link}", "{{ url_for('public', username=username, _external=True, _scheme='https') }}");
-    $('#share-level-details').html(selectedDetails);
+  // Searchable combo: flag box + button (closed state, no flag in the text)
+  // and a filterable list panel (open state, flag per row + real search).
+  function normalizeSearch(s) {
+    return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   }
-  $(document).ready(function () {
-    updateDetails();
-    $('#share_level').on('change', updateDetails);
-  });
 
-  // Currency flags
-  const currencySelect = document.getElementById('user_currency');
-  for (let option of currencySelect.options) {
-    option.text = `${getFlagEmoji(option.dataset.country)} ${option.text}`;
+  function initCombo(id, { onApply } = {}) {
+    const wrap = document.querySelector(`[data-combo="${id}"]`);
+    const btn = document.getElementById(`${id}-btn`);
+    const label = document.getElementById(`${id}-label`);
+    const icon = document.getElementById(`${id}-icon`);
+    const hidden = document.getElementById(id);
+    const panel = document.getElementById(`${id}-panel`);
+    const search = document.getElementById(`${id}-search`);
+    const empty = document.getElementById(`${id}-empty`);
+    const items = Array.from(document.getElementById(`${id}-list`).children);
+    if (!wrap || !btn || !hidden) return null;
+
+    function apply(item) {
+      if (!item) return;
+      hidden.value = item.dataset.value;
+      label.textContent = item.dataset.label;
+      icon.innerHTML = item.dataset.flag || '';
+      items.forEach(i => i.classList.toggle('active', i === item));
+      if (onApply) onApply(item);
+    }
+
+    function select(item) {
+      apply(item);
+      close();
+    }
+
+    function open() {
+      panel.classList.add('show');
+      search.value = '';
+      filter('');
+      search.focus();
+      document.addEventListener('click', onDocClick);
+    }
+    function close() {
+      panel.classList.remove('show');
+      document.removeEventListener('click', onDocClick);
+    }
+    function onDocClick(e) {
+      if (!wrap.contains(e.target)) close();
+    }
+    function filter(query) {
+      const q = normalizeSearch(query.trim());
+      let anyVisible = false;
+      items.forEach(item => {
+        const match = !q || item.dataset.search.includes(q);
+        item.style.display = match ? '' : 'none';
+        anyVisible = anyVisible || match;
+      });
+      if (empty) empty.style.display = anyVisible ? 'none' : '';
+    }
+
+    btn.addEventListener('click', () => {
+      panel.classList.contains('show') ? close() : open();
+    });
+    search.addEventListener('input', () => filter(search.value));
+    search.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { close(); btn.focus(); }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        select(items.find(i => i.style.display !== 'none'));
+      }
+    });
+    items.forEach(item => item.addEventListener('click', () => select(item)));
+
+    return { apply, items };
   }
+
+  // Currency: lead with the human-readable name so typing "norwegian" finds
+  // NOK; the flag only ever shows in the icon box and the open list rows.
+  let currencyNames = null;
+  try {
+    currencyNames = new Intl.DisplayNames([langId], { type: 'currency' });
+  } catch (e) {}
+  const currencyCombo = initCombo('user_currency');
+  if (currencyCombo) {
+    currencyCombo.items.forEach(item => {
+      const code = item.dataset.value;
+      let name = currencyNames ? currencyNames.of(code) : null;
+      if (name) name = name.charAt(0).toUpperCase() + name.slice(1);
+      const flag = getFlagEmoji(item.dataset.country);
+      item.dataset.label = name ? `${name} (${code})` : code;
+      item.dataset.flag = flag;
+      item.dataset.search = normalizeSearch(`${item.dataset.label} ${code}`);
+      item.innerHTML = `<span class="settings2-combo-flag">${flag}</span><span>${item.dataset.label}</span>`;
+    });
+    currencyCombo.apply(currencyCombo.items.find(i => i.dataset.value === document.getElementById('user_currency').value));
+  }
+
+  // Language: translations ship as "🇫🇷 Français" — split the flag out into
+  // the icon box / list rows and leave the button text as just the name.
+  const langCombo = initCombo('lang');
+  if (langCombo) {
+    langCombo.items.forEach(item => {
+      const chars = Array.from(item.dataset.raw);
+      let flag = '', name = item.dataset.raw;
+      if (chars.length && /\p{Regional_Indicator}/u.test(chars[0])) {
+        flag = chars.slice(0, 2).join('');
+        name = chars.slice(2).join('').trim();
+      }
+      name = name.charAt(0).toUpperCase() + name.slice(1);
+      item.dataset.label = name;
+      item.dataset.flag = flag;
+      item.dataset.search = normalizeSearch(`${name} ${item.dataset.value}`);
+      item.innerHTML = `<span class="settings2-combo-flag">${flag}</span><span>${name}</span>`;
+    });
+    langCombo.apply(langCombo.items.find(i => i.dataset.value === document.getElementById('lang').value));
+  }
+
+  // Shared setup for combos whose items already carry a static data-icon
+  // (FA class) and data-label from the template — just wire up search/flag.
+  function initStaticCombo(id, opts) {
+    const combo = initCombo(id, opts);
+    if (!combo) return null;
+    combo.items.forEach(item => {
+      item.dataset.flag = `<i class="${item.dataset.icon}"></i>`;
+      item.dataset.search = normalizeSearch(item.dataset.label);
+      item.innerHTML = `<span class="settings2-combo-flag">${item.dataset.flag}</span><span>${item.dataset.label}</span>`;
+    });
+    combo.apply(combo.items.find(i => i.dataset.value === document.getElementById(id).value));
+    return combo;
+  }
+
+  initStaticCombo('default_landing');
+
+  initStaticCombo('share_level', {
+    onApply: (item) => {
+      const details = item.dataset.details
+        .replace("{public_link}", "{{ url_for('public', username=username, _external=True, _scheme='https') }}");
+      document.getElementById('share-level-details').innerHTML = details;
+    }
+  });
 
   // Clear cache
   document.getElementById("clear-cache").addEventListener("click", function () {
     localforage.clear().then(() => alert("{{cacheCleared}}")).catch(() => alert("{{cacheError}}"));
   });
+
+  // Remember which settings tab was active across a save (full page reload)
+  (function () {
+    const tabButtons = document.querySelectorAll('.settings2-navlink');
+    const stored = sessionStorage.getItem('settingsActiveTab');
+    if (stored) {
+      const target = document.querySelector(`.settings2-navlink[data-bs-target="${stored}"]`);
+      if (target) new bootstrap.Tab(target).show();
+    }
+    tabButtons.forEach(btn => {
+      btn.addEventListener('shown.bs.tab', () => {
+        sessionStorage.setItem('settingsActiveTab', btn.getAttribute('data-bs-target'));
+      });
+    });
+  })();
 </script>
 {% endblock %}
