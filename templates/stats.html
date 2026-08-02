@@ -235,20 +235,27 @@
         return value.split(' - ').map(extractStationCode).join(' - ');
     }
 
+    // Total length of a row's stacked bar, whatever the mode.
+    function itemTotal(item) {
+        if (isCombinedMode) {
+            return Object.values(item.tripTypes || {}).reduce(
+                (sum, t) => sum + (t.past || 0) + (t.plannedFuture || 0), 0);
+        }
+        return (item.past || 0) + (item.plannedFuture || 0);
+    }
+
     function calculateMaxValue(dataArray) {
         if (!dataArray || dataArray.length === 0) return 0;
-        
-        const values = dataArray.map(item => {
-            if (isCombinedMode) {
-                // In combined mode, sum up the values from all trip types within the item
-                return Object.values(item.tripTypes || {}).reduce((sum, t) => sum + (t.past || 0) + (t.plannedFuture || 0), 0);
-            } else {
-                // In single mode, just sum past and plannedFuture
-                return (item.past || 0) + (item.plannedFuture || 0);
-            }
-        });
-        
-        return Math.max(...values);
+        return Math.max(...dataArray.map(itemTotal));
+    }
+
+    var labelMeasureContext = document.createElement('canvas').getContext('2d');
+
+    // Approximates the rendered width of a bar label (ECharts defaults: 12px
+    // sans-serif) so we can tell whether it fits next to the bar.
+    function measureLabelWidth(text) {
+        labelMeasureContext.font = '12px sans-serif';
+        return labelMeasureContext.measureText(text).width;
     }
 
     function getDurationAxisConfig(maxSeconds, lang) {
@@ -372,11 +379,8 @@
     }
 
     window.addEventListener('resize', function() {
-        Object.keys(chartsInstances).forEach(key => {
-            if (chartsInstances[key]) {
-                chartsInstances[key].resize();
-            }
-        });
+        Object.keys(chartsInstances).forEach(key => resizeChart(chartsInstances[key]));
+        if (currentChart) resizeChart(currentChart);
     });
 
     // ============================================
@@ -679,29 +683,88 @@
         return colorMap[type] || '#000000';
     }
 
-    // Bar label shown just inside the axis line, on the first stacked segment
-    // (which always starts at the axis) — lets a category chart carry its
-    // name inline instead of in the axis gutter.
-    function categoryLabelConfig(labelFormatter) {
+    // Category charts carry their name as a bar label instead of an axis label.
+    // The label hugs the end of its bar, on whichever side has the room —
+    // decided per row once the bars have been measured (computeLabelPlacement):
+    //  - 'outside':     in the free space right of the bar, nothing covered.
+    //  - 'insideEnd':   ending at the end of the past segment, when the space
+    //                   right of the bar is too small but the segment is wide
+    //                   enough. Stopping at the past segment rather than the
+    //                   bar tip keeps the pill off the hatched planned-future
+    //                   part, so the past/future boundary stays readable.
+    //  - 'insideStart': from the axis line, last resort for a label wider than
+    //                   both — right-aligning it would spill past the axis.
+    // 'outside' anchors on the last stacked segment (its right edge is the end
+    // of the whole bar); the two inside positions anchor on the first segment,
+    // which spans the past values from the axis. Labels are emitted on both
+    // anchors and hidden per data item, so a row only ever shows one.
+    //
+    // Combined mode is the exception: past and planned-future segments there
+    // alternate per trip type, so there is no single "end of past" to cling to
+    // and 'insideEnd' falls back to the end of the whole bar.
+    function insideEndAnchorsOnPast() {
+        return !isCombinedMode;
+    }
+
+    // A background pill keeps an inside label legible regardless of which
+    // (possibly dark) bar color ends up underneath it — the visible color at
+    // that spot varies per row in combined mode.
+    var INSIDE_LABEL_PILL = {
+        backgroundColor: 'rgba(255, 255, 255, 0.85)',
+        padding: [2, 5],
+        borderRadius: 3
+    };
+
+    function baseLabelConfig(labelFormatter, position) {
         if (!labelFormatter) return undefined;
         return {
             show: true,
-            position: 'insideLeft',
+            position: position,
             formatter: labelFormatter,
             color: '#1a1a1a',
             fontSize: 12,
-            // A background pill keeps the label legible regardless of which
-            // (possibly dark) bar color ends up underneath it — the visible
-            // color at that spot varies per row in combined mode.
-            backgroundColor: 'rgba(255, 255, 255, 0.85)',
-            padding: [2, 5],
-            borderRadius: 3
+            padding: [2, 5]
         };
     }
 
-    function createSeries(data, color, labelFormatter) {
+    // Both inside positions live on this anchor; 'insideEnd' rows override the
+    // position per item.
+    function insideLabelConfig(labelFormatter) {
+        if (!labelFormatter) return undefined;
+        return Object.assign(baseLabelConfig(labelFormatter, 'insideLeft'), INSIDE_LABEL_PILL);
+    }
+
+    function barEndLabelConfig(labelFormatter) {
+        return baseLabelConfig(labelFormatter, 'right');
+    }
+
+    // Per-item override for the first stacked segment, which carries both
+    // inside positions (the series default is 'insideLeft').
+    function insideLabel(labelFormatter, placement, index) {
+        if (!labelFormatter) return undefined;
+        const actual = placement ? placement[index] : 'insideStart';
+        if (actual === 'insideStart') return { label: { show: true } };
+        if (actual === 'insideEnd' && insideEndAnchorsOnPast()) {
+            return { label: { show: true, position: 'insideRight' } };
+        }
+        return { label: { show: false } };
+    }
+
+    // Per-item override for the bar-end anchor: 'outside' keeps the series
+    // default, and in combined mode it also takes 'insideEnd'.
+    function barEndLabel(labelFormatter, placement, index) {
+        if (!labelFormatter) return undefined;
+        const actual = placement ? placement[index] : 'insideStart';
+        if (actual === 'outside') return { label: { show: true } };
+        if (actual === 'insideEnd' && !insideEndAnchorsOnPast()) {
+            return { label: Object.assign({ show: true, position: 'insideRight' }, INSIDE_LABEL_PILL) };
+        }
+        return { label: { show: false } };
+    }
+
+    function createSeries(data, color, labelFormatter, placement) {
         if (isCombinedMode) {
-            return createCombinedSeries(data, labelFormatter);
+            return createCombinedSeries(data, labelFormatter, placement);
         }
 
         return [
@@ -709,40 +772,52 @@
                 name: '{{past}}',
                 type: 'bar',
                 stack: 'Total',
-                label: categoryLabelConfig(labelFormatter),
-                data: data.map(item => ({ value: item.past, itemStyle: { color: color } }))
+                label: insideLabelConfig(labelFormatter),
+                data: data.map((item, i) => ({
+                    value: item.past,
+                    itemStyle: { color: color },
+                    ...insideLabel(labelFormatter, placement, i)
+                }))
             },
             {
+                // Last series of the stack, so its right edge is the end of the
+                // whole bar — the anchor for tip-hugging labels.
                 name: '{{plannedFuture}}',
                 type: 'bar',
                 stack: 'Total',
-                data: data.map(item => ({
+                label: barEndLabelConfig(labelFormatter),
+                data: data.map((item, i) => ({
                     value: item.plannedFuture,
-                    itemStyle: { color: createPattern(color) }
+                    itemStyle: { color: createPattern(color) },
+                    ...barEndLabel(labelFormatter, placement, i)
                 }))
             }
         ];
     }
 
-    function createCombinedSeries(data, labelFormatter) {
+    function createCombinedSeries(data, labelFormatter, placement) {
         const series = [];
+        const lastIndex = AVAILABLE_TRIP_TYPES.length - 1;
 
         // Create series for each trip type (past and planned future)
         AVAILABLE_TRIP_TYPES.forEach((tripType, typeIndex) => {
             const color = getColor(tripType);
             const label = TRIP_TYPE_LABELS[tripType] || tripType;
+            const isFirst = typeIndex === 0;
+            const isLast = typeIndex === lastIndex;
 
             // Past trips for this type
             series.push({
                 name: `${label} ({{past}})`,
                 type: 'bar',
                 stack: 'Total',  // Changed from 'Past' to 'Total'
-                label: typeIndex === 0 ? categoryLabelConfig(labelFormatter) : undefined,
-                data: data.map(item => {
+                label: isFirst ? insideLabelConfig(labelFormatter) : undefined,
+                data: data.map((item, i) => {
                     const tripTypeData = item.tripTypes && item.tripTypes[tripType];
                     return {
                         value: tripTypeData ? tripTypeData.past : 0,
-                        itemStyle: { color: color }
+                        itemStyle: { color: color },
+                        ...(isFirst ? insideLabel(labelFormatter, placement, i) : {})
                     };
                 })
             });
@@ -752,17 +827,74 @@
                 name: `${label} ({{plannedFuture}})`,
                 type: 'bar',
                 stack: 'Total',  // Changed from 'Future' to 'Total'
-                data: data.map(item => {
+                label: isLast ? barEndLabelConfig(labelFormatter) : undefined,
+                data: data.map((item, i) => {
                     const tripTypeData = item.tripTypes && item.tripTypes[tripType];
                     return {
                         value: tripTypeData ? tripTypeData.plannedFuture : 0,
-                        itemStyle: { color: createPattern(color) }
+                        itemStyle: { color: createPattern(color) },
+                        ...(isLast ? barEndLabel(labelFormatter, placement, i) : {})
                     };
                 })
             });
         });
 
         return series;
+    }
+
+    // ============================================
+    // INLINE BAR LABEL PLACEMENT
+    // ============================================
+    // Right edge of the plotting area, in canvas pixels.
+    function plotAreaRight(chart, fallbackRightInset) {
+        try {
+            var rect = chart.getModel().getComponent('grid').coordinateSystem.getRect();
+            return rect.x + rect.width;
+        } catch (e) {
+            return chart.getWidth() - (fallbackRightInset || 0);
+        }
+    }
+
+    function computeLabelPlacement(chart, data, labelFormatter) {
+        var yAxis = chart.getOption().yAxis || [];
+        var categories = (yAxis[0] && yAxis[0].data) || [];
+        var rightEdge = plotAreaRight(chart, 20);
+
+        var barStart = chart.convertToPixel({ xAxisIndex: 0 }, 0);
+
+        return data.map(function (item, i) {
+            var barEnd = chart.convertToPixel({ xAxisIndex: 0 }, itemTotal(item));
+            // What an inside label has to fit in: the past segment it clings to.
+            var insideEnd = insideEndAnchorsOnPast()
+                ? chart.convertToPixel({ xAxisIndex: 0 }, item.past || 0)
+                : barEnd;
+            var text = labelFormatter({ name: categories[i] });
+            // 10px label padding + a little breathing room from the bar/edge.
+            var needed = measureLabelWidth(text) + 18;
+            if ((rightEdge - barEnd) >= needed) return 'outside';
+            if ((insideEnd - barStart) >= needed) return 'insideEnd';
+            return 'insideStart';
+        });
+    }
+
+    // Second render pass: now that the bars have real pixel positions, re-emit
+    // the series with each label shown on the anchor that fits. Stored on the
+    // instance so a resize can redo the decision.
+    function applyInlineLabels(chart, data, color, labelFormatter) {
+        if (!labelFormatter) return;
+        chart.relayoutLabels = function () {
+            chart.setOption({
+                series: createSeries(data, color, labelFormatter,
+                    computeLabelPlacement(chart, data, labelFormatter))
+            });
+        };
+        chart.relayoutLabels();
+    }
+
+    function resizeChart(chart) {
+        if (!chart) return;
+        chart.resize();
+        if (chart.relayoutLabels) chart.relayoutLabels();
     }
 
     // ============================================
@@ -1012,6 +1144,10 @@
         });
 
 
+        var materialLabel = params => params.name;
+        var routeLabel = params => formatRouteLabel(params.name);
+        var stationLabel = params => extractStationCode(params.name);
+
         var materialMax = calculateMaxValue(dataToUse.material);
         var materialValueAxisOptions = (currentMetric === 'duration')
             ? getDurationAxisConfig(materialMax, LANG)
@@ -1032,8 +1168,9 @@
                 },
                 xAxis: materialValueAxisOptions,
                 grid: inlineLabelGridConfig,
-                series: createSeries(dataToUse.material, getColor(tripType), params => params.name)
+                series: createSeries(dataToUse.material, getColor(tripType), materialLabel)
             });
+            applyInlineLabels(materialChart, dataToUse.material, getColor(tripType), materialLabel);
         }
 
         // Routes Chart
@@ -1058,8 +1195,9 @@
             },
             xAxis: routesValueAxisOptions,
             grid: inlineLabelGridConfig,
-            series: createSeries(dataToUse.routes, getColor(tripType), params => formatRouteLabel(params.name))
+            series: createSeries(dataToUse.routes, getColor(tripType), routeLabel)
         });
+        applyInlineLabels(routesChart, dataToUse.routes, getColor(tripType), routeLabel);
 
         // Stations Chart
         var stationsMax = calculateMaxValue(dataToUse.stations);
@@ -1077,12 +1215,13 @@
             },
             xAxis: stationsValueAxisOptions,
             grid: inlineLabelGridConfig,
-            series: createSeries(dataToUse.stations, getColor(tripType), params => extractStationCode(params.name))
+            series: createSeries(dataToUse.stations, getColor(tripType), stationLabel)
         });
+        applyInlineLabels(stationsChart, dataToUse.stations, getColor(tripType), stationLabel);
 
         // Resize all charts after show/hide changes column widths
         setTimeout(() => {
-            Object.values(chartsInstances).forEach(c => c && c.resize());
+            Object.values(chartsInstances).forEach(resizeChart);
         }, 50);
     }
 
@@ -1254,8 +1393,13 @@
                 }
             };
 
+        var labelFormatter = dataKey === 'material' ? params => params.name
+            : dataKey === 'routes' ? params => formatRouteLabel(params.name)
+            : dataKey === 'stations' ? params => extractStationCode(params.name)
+            : undefined;
+
         var option = {
-            title: { 
+            title: {
                 text: chartsInstances[dataKey.replace('chart-', '')]?.getOption()?.title?.[0]?.text || ''
             },
             tooltip: {
@@ -1267,11 +1411,7 @@
             // (country names, operator logos) — this just removes the default
             // ~10% padding that was reserved on top of that.
             grid: { containLabel: true, left: '10px', width: '80%', height: '85%', bottom: '10%', top: '10%' },
-            series: createSeries(dataToUse, getColor(tripType),
-                dataKey === 'material' ? params => params.name
-                    : dataKey === 'routes' ? params => formatRouteLabel(params.name)
-                    : dataKey === 'stations' ? params => extractStationCode(params.name)
-                    : undefined)
+            series: createSeries(dataToUse, getColor(tripType), labelFormatter)
         };
 
         // Configure axes based on chart type
@@ -1343,6 +1483,16 @@
         }
 
         chartInstance.setOption(option);
+        applyInlineLabels(chartInstance, dataToUse, getColor(tripType), labelFormatter);
+        // Scrolling the slider rescales the value axis, so the fit decision has
+        // to be made again for the rows now on screen.
+        var relayoutting = false;
+        chartInstance.on('dataZoom', function () {
+            if (relayoutting || !chartInstance.relayoutLabels) return;
+            relayoutting = true;
+            chartInstance.relayoutLabels();
+            relayoutting = false;
+        });
         currentChart = chartInstance;
     }
 
