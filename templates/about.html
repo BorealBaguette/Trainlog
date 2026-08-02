@@ -7,61 +7,360 @@
     {% include "bootstrap/no_user_nav.html" %}
 {% endif %}
 
-{% macro render_flattened_list(base_key) %}
-    <ul>
-    {% for key, value in translations.items() if key.startswith(base_key) %}
-        {% set parts = key[(base_key|length):].split('_') %}
-        {% if parts|length == 1 %}
-            <!-- Render top-level item -->
-            <li>{{ value|safe }}</li>
-        {% elif parts|length == 2 %}
-            <!-- Render second-level nested list -->
-            <ul>
-                <li>{{ value|safe }}</li>
-            </ul>
-        {% elif parts|length == 3 %}
-            <!-- Render third-level nested list -->
-            <ul>
-                <ul>
-                    <li>{{ value|safe }}</li>
-                </ul>
-            </ul>
-        {% elif parts|length == 4 %}
-            <!-- Render fourth-level nested list -->
-            <ul>
-                <ul>
-                    <ul>
-                        <li>{{ value|safe }}</li>
-                    </ul>
-                </ul>
-            </ul>
-        {% endif %}
-    {% endfor %}
-    </ul>
-{% endmacro %}
+<style>
+  .about-page {
+    --ac: #207cca; --ac-deep: #1a5f9c; --ac-soft: rgba(32,124,202,.12);
+    --ink: #1f2733; --muted: #6c7686; --hair: #e3e8ef; --paper: #f6f8fb;
+    max-width: 900px; margin: 0 auto; padding: 1.75rem 1.25rem 4rem;
+  }
+  .about-hero h1 {
+    font-size: 1.9rem; font-weight: 800; letter-spacing: -.02em; margin: 0 0 .5rem;
+    display: flex; align-items: center; gap: .55rem; color: var(--ink);
+  }
+  .about-hero h1 i { color: var(--ac); }
+  .about-hero p { color: var(--muted); font-size: 1.02rem; max-width: 640px; margin: 0 0 1.5rem; }
 
-<div id="form" class="aboutForm">
-    <h2 class="header">{{ translations['about'] }}</h2>
-    <div>
-        <p>{{ translations['aboutText'] }}</p><br>
-        <h4>{{ translations['aboutHeader'] }}</h4>
-        {{ render_flattened_list('aboutItems') }}<br>
-        <h4>{{ translations['helpHeader'] }}</h4>
-        {{ render_flattened_list('helpItems') }}<br>
-        <br><br>
-        <center>
-            <span>
-                <a href="https://www.buymeacoffee.com/Trainlog">
-                    <img src="https://img.buymeacoffee.com/button-api/?text={{ translations['supportTrainlog'] }}&emoji=&slug=Trainlog&button_colour=5F7FFF&font_colour=ffffff&font_family=Arial&outline_colour=000000&coffee_colour=FFDD00" />
-                </a>
-            </span>
-            <span>
-                <a href="https://discord.com/invite/2FhrFTQKvU">
-                    <img src="{{ url_for('static', filename='images/discord.png') }}" />
-                </a>
-            </span>
-        </center>
+  .about-tabs-wrap {
+    position: relative; margin: 0 -1.25rem 1.5rem; padding: 0 1.25rem;
+  }
+  .about-tabs-wrap::after {
+    content: ""; position: absolute; top: 0; right: 0; bottom: 0; width: 2.5rem;
+    background: linear-gradient(to left, #fff, transparent); pointer-events: none;
+  }
+  .about-tabs.nav-pills {
+    flex-wrap: nowrap; gap: .4rem; margin-bottom: 0;
+    overflow-x: auto; scrollbar-width: none; padding-bottom: .2rem;
+  }
+  .about-tabs.nav-pills::-webkit-scrollbar { display: none; }
+  .about-tabs .nav-item { flex: 0 0 auto; }
+  .about-tabs .nav-link {
+    color: var(--ink); background: #fff; border: 1px solid var(--hair);
+    border-radius: 999px; padding: .5rem 1.1rem; font-weight: 600; font-size: .92rem;
+    display: inline-flex; align-items: center; gap: .5rem; white-space: nowrap;
+  }
+  /* Enough room on desktop to lay every pill out at once: drop the scroll
+     strip (mouse-wheel horizontal scroll is a poor affordance) for a
+     centered, wrapped cluster instead. */
+  @media (min-width: 900px) {
+    .about-tabs-wrap::after { display: none; }
+    .about-tabs.nav-pills { flex-wrap: wrap; overflow-x: visible; justify-content: center; }
+  }
+  .about-tabs .nav-link i { color: var(--ac); }
+  .about-tabs .nav-link.active { background: var(--ac); border-color: var(--ac); color: #fff; }
+  .about-tabs .nav-link.active i { color: #fff; }
+
+  .about-panel { background: #fff; border: 1px solid var(--hair); border-radius: 14px; padding: 1.75rem; }
+  .about-block { margin-bottom: 1.6rem; }
+  .about-block:last-child { margin-bottom: 0; }
+  .about-block h5 {
+    font-weight: 700; font-size: 1.02rem; margin: 0 0 .4rem;
+    display: flex; align-items: center; gap: .5rem; color: var(--ink);
+  }
+  .about-block h5 i { color: var(--ac); width: 1.1em; text-align: center; }
+  .about-block p { color: var(--muted); margin: 0 0 .4rem; line-height: 1.55; }
+  .about-block p:last-child { margin-bottom: 0; }
+
+  .about-feature-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 1rem; margin: 1.25rem 0 .5rem;
+  }
+  @media (max-width: 700px) {
+    .about-feature-grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 460px) {
+    .about-feature-grid { grid-template-columns: 1fr; }
+  }
+  .about-feature {
+    background: var(--paper); border: 1px solid var(--hair); border-radius: 12px; padding: 1rem 1.1rem;
+  }
+  .about-feature i { color: var(--ac); font-size: 1.15rem; margin-bottom: .4rem; display: block; }
+  .about-feature h6 { font-weight: 700; margin: 0 0 .25rem; color: var(--ink); }
+  .about-feature p { color: var(--muted); font-size: .88rem; margin: 0; line-height: 1.45; }
+
+  .about-cta {
+    display: inline-flex; align-items: center; gap: .4rem; margin-top: .5rem;
+    background: var(--ac-soft); color: var(--ac-deep); border-radius: 999px;
+    padding: .3rem .85rem; font-size: .85rem; font-weight: 600; text-decoration: none;
+  }
+  .about-cta:hover { background: var(--ac); color: #fff; }
+
+  .about-badge { height: 42px; display: inline-block; margin-top: .5rem; }
+</style>
+
+<div class="about-page">
+  <div class="about-hero">
+    <h1><i class="fa-solid fa-train"></i>{{ translations['about'] }}</h1>
+    <p>{{ translations['about_lead'] }}</p>
+  </div>
+
+  <div class="about-tabs-wrap">
+  <ul class="nav nav-pills about-tabs" id="aboutTabs" role="tablist">
+    <li class="nav-item" role="presentation">
+      <button class="nav-link active" id="about-tab-overview" data-bs-toggle="pill" data-bs-target="#about-pane-overview" type="button" role="tab">
+        <i class="bi bi-compass"></i>{{ translations['about_tab_overview'] }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="about-tab-log" data-bs-toggle="pill" data-bs-target="#about-pane-log" type="button" role="tab">
+        <i class="bi bi-signpost-split"></i>{{ translations['about_tab_log'] }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="about-tab-organize" data-bs-toggle="pill" data-bs-target="#about-pane-organize" type="button" role="tab">
+        <i class="bi bi-collection"></i>{{ translations['about_tab_organize'] }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="about-tab-explore" data-bs-toggle="pill" data-bs-target="#about-pane-explore" type="button" role="tab">
+        <i class="bi bi-globe-americas"></i>{{ translations['about_tab_explore'] }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="about-tab-data" data-bs-toggle="pill" data-bs-target="#about-pane-data" type="button" role="tab">
+        <i class="bi bi-database"></i>{{ translations['about_tab_data'] }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="about-tab-advanced" data-bs-toggle="pill" data-bs-target="#about-pane-advanced" type="button" role="tab">
+        <i class="fa-solid fa-screwdriver-wrench"></i>{{ translations['about_tab_advanced'] }}
+      </button>
+    </li>
+    <li class="nav-item" role="presentation">
+      <button class="nav-link" id="about-tab-credits" data-bs-toggle="pill" data-bs-target="#about-pane-credits" type="button" role="tab">
+        <i class="bi bi-info-circle"></i>{{ translations['about_tab_credits'] }}
+      </button>
+    </li>
+  </ul>
+  </div>
+
+  <div class="tab-content">
+
+    <!-- Overview -->
+    <div class="tab-pane fade show active about-panel" id="about-pane-overview" role="tabpanel">
+      <p>{{ translations['about_ov_p1'] }}</p>
+
+      <div class="about-feature-grid">
+        <div class="about-feature">
+          <i class="bi bi-map"></i>
+          <h6>{{ translations['about_ov_feat_map_h'] }}</h6>
+          <p>{{ translations['about_ov_feat_map_p'] }}</p>
+        </div>
+        <div class="about-feature">
+          <i class="bi bi-bar-chart"></i>
+          <h6>{{ translations['about_ov_feat_stats_h'] }}</h6>
+          <p>{{ translations['about_ov_feat_stats_p'] }}</p>
+        </div>
+        <div class="about-feature">
+          <i class="bi bi-share"></i>
+          <h6>{{ translations['about_ov_feat_share_h'] }}</h6>
+          <p>{{ translations['about_ov_feat_share_p'] }}</p>
+        </div>
+        <div class="about-feature">
+          <i class="bi bi-people"></i>
+          <h6>{{ translations['about_ov_feat_community_h'] }}</h6>
+          <p>{{ translations['about_ov_feat_community_p'] }}</p>
+        </div>
+        <div class="about-feature">
+          <i class="bi bi-tags"></i>
+          <h6>{{ translations['about_ov_feat_organize_h'] }}</h6>
+          <p>{{ translations['about_ov_feat_organize_p'] }}</p>
+        </div>
+        <div class="about-feature">
+          <i class="bi bi-arrow-left-right"></i>
+          <h6>{{ translations['about_ov_feat_data_h'] }}</h6>
+          <p>{{ translations['about_ov_feat_data_p'] }}</p>
+        </div>
+      </div>
+
+      <div class="about-block">
+        <p class="mb-1">{{ translations['about_ov_news_p'] }}
+          <a class="about-cta" href="{{ url_for('news.news') }}"><i class="fa-solid fa-newspaper"></i>{{ translations['about_discover'] }}</a>
+        </p>
+      </div>
     </div>
+
+    <!-- Log & route -->
+    <div class="tab-pane fade about-panel" id="about-pane-log" role="tabpanel">
+      <div class="about-block">
+        <h5><i class="bi bi-search"></i>{{ translations['about_log_search_h'] }}</h5>
+        <p>{{ translations['about_log_search_p1'] }}</p>
+        <p>{{ translations['about_log_search_p2'] }}</p>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-signpost-2"></i>{{ translations['about_log_route_h'] }}</h5>
+        <p>{{ translations['about_log_route_p1'] }}</p>
+        <p>{{ translations['about_log_route_p2'] }}</p>
+        <p>{{ translations['about_log_route_p3'] }}</p>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-sliders"></i>{{ translations['about_log_fields_h'] }}</h5>
+        <p>{{ translations['about_log_fields_p1'] }}</p>
+      </div>
+    </div>
+
+    <!-- Organize -->
+    <div class="tab-pane fade about-panel" id="about-pane-organize" role="tabpanel">
+      <div class="about-block">
+        <h5><i class="bi bi-table"></i>{{ translations['about_org_display_h'] }}</h5>
+        <p>{{ translations['about_org_display_p'] }}</p>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-tags"></i>{{ translations['about_org_tags_h'] }}</h5>
+        <p>{{ translations['about_org_tags_p'] }}</p>
+        {% if username != "public" %}
+        <a class="about-cta" href="{{ url_for('tag_list', username=username) }}"><i class="bi bi-tags"></i>{{ translations['about_discover'] }}</a>
+        {% endif %}
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-signpost"></i>{{ translations['about_org_plans_h'] }}</h5>
+        <p>{{ translations['about_org_plans_p'] }}</p>
+        {% if username != "public" %}
+        <a class="about-cta" href="{{ url_for('plan_list', username=username) }}"><i class="bi bi-signpost"></i>{{ translations['about_discover'] }}</a>
+        {% endif %}
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-people"></i>{{ translations['about_org_friends_h'] }}</h5>
+        <p>{{ translations['about_org_friends_p'] }}</p>
+        {% if username != "public" %}
+        <a class="about-cta" href="{{ url_for('friends', username=username) }}"><i class="bi bi-people"></i>{{ translations['about_discover'] }}</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Explore & share -->
+    <div class="tab-pane fade about-panel" id="about-pane-explore" role="tabpanel">
+      <div class="about-block">
+        <h5><i class="bi bi-bar-chart"></i>{{ translations['about_explore_stats_h'] }}</h5>
+        <p>{{ translations['about_explore_stats_p'] }}</p>
+        {% if username != "public" %}
+        <a class="about-cta" href="{{ url_for('stats', username=username) }}"><i class="bi bi-bar-chart"></i>{{ translations['about_discover'] }}</a>
+        {% endif %}
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-stars"></i>{{ translations['about_explore_wrapped_h'] }}</h5>
+        <p>{{ translations['about_explore_wrapped_p'] }}</p>
+        {% if username != "public" %}
+        <a class="about-cta" href="{{ url_for('wrapped.wrapped', username=username) }}"><i class="bi bi-stars"></i>{{ translations['about_discover'] }}</a>
+        {% endif %}
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-clock-history"></i>{{ translations['about_explore_timeline_h'] }}</h5>
+        <p>{{ translations['about_explore_timeline_p'] }}</p>
+        {% if username != "public" %}
+        <a class="about-cta" href="{{ url_for('timeline.timeline', username=username) }}"><i class="bi bi-clock-history"></i>{{ translations['about_discover'] }}</a>
+        {% endif %}
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-grid-3x3"></i>{{ translations['about_explore_squares_h'] }}</h5>
+        <p>{{ translations['about_explore_squares_p'] }}</p>
+        {% if username != "public" %}
+        <a class="about-cta" href="{{ url_for('visited_squares', username=username) }}"><i class="bi bi-grid-3x3"></i>{{ translations['about_discover'] }}</a>
+        {% endif %}
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-broadcast"></i>{{ translations['about_explore_livemap_h'] }}</h5>
+        <p>{{ translations['about_explore_livemap_p'] }}</p>
+        <a class="about-cta" href="{{ url_for('live_map') }}"><i class="bi bi-broadcast"></i>{{ translations['about_discover'] }}</a>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-trophy"></i>{{ translations['about_explore_leaderboard_h'] }}</h5>
+        <p>{{ translations['about_explore_leaderboard_p'] }}</p>
+        <a class="about-cta" href="{{ url_for('leaderboard') }}"><i class="bi bi-trophy"></i>{{ translations['about_discover'] }}</a>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-share"></i>{{ translations['about_explore_share_h'] }}</h5>
+        <p>{{ translations['about_explore_share_p'] }}</p>
+      </div>
+    </div>
+
+    <!-- Data -->
+    <div class="tab-pane fade about-panel" id="about-pane-data" role="tabpanel">
+      <div class="about-block">
+        <h5><i class="bi bi-shield-check"></i>{{ translations['about_data_ownership_h'] }}</h5>
+        <p>{{ translations['about_data_ownership_p1'] }}</p>
+        <p>{{ translations['about_data_ownership_p2'] }}</p>
+        <p>{{ translations['about_data_ownership_p3'] }}</p>
+        <p>{{ translations['about_data_ownership_p4'] }}</p>
+        <a class="about-cta" href="{{ url_for('privacy') }}"><i class="bi bi-shield-check"></i>{{ translations['about_discover'] }}</a>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-file-earmark-arrow-down"></i>{{ translations['about_data_export_h'] }}</h5>
+        <p>{{ translations['about_data_export_p'] }}</p>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-signpost-2"></i>{{ translations['about_data_gpx_h'] }}</h5>
+        <p>{{ translations['about_data_gpx_p'] }}</p>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-file-earmark-arrow-up"></i>{{ translations['about_data_import_h'] }}</h5>
+        <p>{{ translations['about_data_import_p'] }}</p>
+        {% if username != "public" %}
+        <a class="about-cta" href="{{ url_for('user_settings', username=username) }}"><i class="bi bi-gear"></i>{{ translations['about_discover'] }}</a>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Advanced -->
+    <div class="tab-pane fade about-panel" id="about-pane-advanced" role="tabpanel">
+      <div class="about-block">
+        <h5><i class="fa-solid fa-screwdriver-wrench"></i>{{ translations['about_adv_trainset_h'] }}</h5>
+        <p>{{ translations['about_adv_trainset_p'] }}</p>
+        <a class="about-cta" href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i>{{ translations['about_discover'] }}</a>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-geo-alt"></i>{{ translations['about_adv_manual_h'] }}</h5>
+        <p>{{ translations['about_adv_manual_p'] }}</p>
+        {% if username != "public" %}
+        <a class="about-cta" href="{{ url_for('userManualStations', username=username) }}"><i class="bi bi-geo-alt"></i>{{ translations['about_discover'] }}</a>
+        {% endif %}
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-clock-history"></i>{{ translations['about_adv_delay_h'] }}</h5>
+        <p>{{ translations['about_adv_delay_p'] }}</p>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-sliders2"></i>{{ translations['about_adv_settings_h'] }}</h5>
+        <p>{{ translations['about_adv_settings_p'] }}</p>
+        {% if username != "public" %}
+        <a class="about-cta" href="{{ url_for('user_settings', username=username) }}"><i class="bi bi-sliders2"></i>{{ translations['about_discover'] }}</a>
+        {% endif %}
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-gem"></i>{{ translations['about_adv_premium_h'] }}</h5>
+        <p>{{ translations['about_adv_premium_p']|safe }}</p>
+      </div>
+    </div>
+
+    <!-- Credits & help -->
+    <div class="tab-pane fade about-panel" id="about-pane-credits" role="tabpanel">
+      <div class="about-block">
+        <h5><i class="bi bi-globe2"></i>{{ translations['about_credits_project_h'] }}</h5>
+        <p>{{ translations['about_credits_origin']|safe }}</p>
+        <p>{{ translations['about_credits_oss']|safe }}</p>
+        <p>{{ translations['about_credits_funding_p'] }}</p>
+        <a href="https://www.buymeacoffee.com/Trainlog">
+          <img class="about-badge" src="https://img.buymeacoffee.com/button-api/?text={{ translations['supportTrainlog'] }}&emoji=&slug=Trainlog&button_colour=5F7FFF&font_colour=ffffff&font_family=Arial&outline_colour=000000&coffee_colour=FFDD00" />
+        </a>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-heart"></i>{{ translations['about_credits_h'] }}</h5>
+        <p>{{ translations['about_credits_osm']|safe }}</p>
+        <p>{{ translations['about_credits_photon']|safe }}</p>
+        <p>{{ translations['about_credits_osrm']|safe }}</p>
+        <p>{{ translations['about_credits_maps']|safe }}</p>
+        <p>{{ translations['about_credits_lang'] }}</p>
+      </div>
+      <div class="about-block">
+        <h5><i class="bi bi-life-preserver"></i>{{ translations['about_help_h'] }}</h5>
+        <p>{{ translations['about_help_discord'] }}</p>
+        <a href="https://discord.com/invite/2FhrFTQKvU">
+          <img class="about-badge" src="{{ url_for('static', filename='images/discord.png') }}" />
+        </a>
+        <p>{{ translations['about_help_contact']|safe }}</p>
+      </div>
+    </div>
+
+  </div>
 </div>
 
 {% endblock %}
