@@ -257,12 +257,15 @@ def _send_claim_email(email: str, token: str) -> None:
     sendEmail(
         email,
         "Trainlog: link your membership",
+        "Hello,<br><br>"
         "We received a Buy Me a Coffee membership under this email address, but "
         "couldn't find a matching Trainlog account.<br><br>"
         "If this is you, log in to Trainlog (or sign up first if you don't have "
         f'an account yet), then click this link to activate your membership: '
         f'<a href="{link}">{link}</a><br><br>'
-        "If you weren't expecting this, you can safely ignore this email.",
+        "If you weren't expecting this, you can safely ignore this email.<br><br>"
+        "Thanks,<br>"
+        "The Trainlog team",
     )
 
 

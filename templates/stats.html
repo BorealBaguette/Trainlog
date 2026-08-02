@@ -213,6 +213,28 @@
         );
     }
 
+    function truncateLabel(label) {
+        return label.length > 15 ? label.slice(0, 12) + '...' : label;
+    }
+
+    // Station/airport names are stored as "🇫🇷 Name (CODE)" — show just the
+    // trailing code to keep labels short, full name stays available via the
+    // tooltip (which reads the untouched category value).
+    function extractStationCode(value) {
+        if (value === '{{others}}') return value;
+        var match = value.match(/\(([^()]+)\)\s*$/);
+        if (match) {
+            var flag = value.match(/^[\u{1F1E6}-\u{1F1FF}]{2}/u);
+            return (flag ? flag[0] + ' ' : '') + match[1];
+        }
+        return value;
+    }
+
+    function formatRouteLabel(value) {
+        if (value === '{{others}}') return value;
+        return value.split(' - ').map(extractStationCode).join(' - ');
+    }
+
     function calculateMaxValue(dataArray) {
         if (!dataArray || dataArray.length === 0) return 0;
         
@@ -299,6 +321,7 @@
         max: axisMax,
         interval: interval,
         axisLabel: {
+            hideOverlap: true,
             formatter: function (value) {
                 const displayValue = value / divisor;
                 return new Intl.NumberFormat(lang, {
@@ -656,23 +679,44 @@
         return colorMap[type] || '#000000';
     }
 
-    function createSeries(data, color) {
+    // Bar label shown just inside the axis line, on the first stacked segment
+    // (which always starts at the axis) — lets a category chart carry its
+    // name inline instead of in the axis gutter.
+    function categoryLabelConfig(labelFormatter) {
+        if (!labelFormatter) return undefined;
+        return {
+            show: true,
+            position: 'insideLeft',
+            formatter: labelFormatter,
+            color: '#1a1a1a',
+            fontSize: 12,
+            // A background pill keeps the label legible regardless of which
+            // (possibly dark) bar color ends up underneath it — the visible
+            // color at that spot varies per row in combined mode.
+            backgroundColor: 'rgba(255, 255, 255, 0.85)',
+            padding: [2, 5],
+            borderRadius: 3
+        };
+    }
+
+    function createSeries(data, color, labelFormatter) {
         if (isCombinedMode) {
-            return createCombinedSeries(data);
+            return createCombinedSeries(data, labelFormatter);
         }
-        
+
         return [
             {
                 name: '{{past}}',
                 type: 'bar',
                 stack: 'Total',
+                label: categoryLabelConfig(labelFormatter),
                 data: data.map(item => ({ value: item.past, itemStyle: { color: color } }))
             },
             {
                 name: '{{plannedFuture}}',
                 type: 'bar',
                 stack: 'Total',
-                data: data.map(item => ({ 
+                data: data.map(item => ({
                     value: item.plannedFuture,
                     itemStyle: { color: createPattern(color) }
                 }))
@@ -680,19 +724,20 @@
         ];
     }
 
-    function createCombinedSeries(data) {
+    function createCombinedSeries(data, labelFormatter) {
         const series = [];
-        
+
         // Create series for each trip type (past and planned future)
-        AVAILABLE_TRIP_TYPES.forEach(tripType => {
+        AVAILABLE_TRIP_TYPES.forEach((tripType, typeIndex) => {
             const color = getColor(tripType);
             const label = TRIP_TYPE_LABELS[tripType] || tripType;
-            
+
             // Past trips for this type
             series.push({
                 name: `${label} ({{past}})`,
                 type: 'bar',
                 stack: 'Total',  // Changed from 'Past' to 'Total'
+                label: typeIndex === 0 ? categoryLabelConfig(labelFormatter) : undefined,
                 data: data.map(item => {
                     const tripTypeData = item.tripTypes && item.tripTypes[tripType];
                     return {
@@ -701,7 +746,7 @@
                     };
                 })
             });
-            
+
             // Planned future trips for this type
             series.push({
                 name: `${label} ({{plannedFuture}})`,
@@ -716,7 +761,7 @@
                 })
             });
         });
-        
+
         return series;
     }
 
@@ -803,9 +848,12 @@
             bottom: '28px',
             left: isMobile() ? '60px' : '120px'
         };
-        var vGridConfig = {
-            bottom: '120px',
-            left: '28px'
+        // Material/Routes/Stations carry their category name as an inline bar
+        // label instead of an axis label, so the axis gutter can shrink down.
+        var inlineLabelGridConfig = {
+            bottom: '28px',
+            left: '10px',
+            right: '20px'
         };
         var yGridConfig = {
             bottom: '28px',
@@ -850,18 +898,21 @@
             months: data.months
         };
 
-        var truncateLabel = function(label) {
-            return label.length > 15 ? label.slice(0, 12) + '...' : label;
-        };
-
         var commonCatAxisOptions = {
             type: 'category',
             axisLabel: {
                 rotate: 40,
+                hideOverlap: true,
                 formatter: function(value) {
                     return expandedMode ? value : truncateLabel(value);
                 }
             }
+        };
+
+        var commonCatYAxisOptions = {
+            type: 'category',
+            inverse: true,
+            axisLabel: { show: false }
         };
 
         var commonValAxisOptions = {
@@ -870,6 +921,7 @@
             max: undefined,
             interval: undefined,
             axisLabel: {
+                hideOverlap: true,
                 formatter: function (value) {
                     if(currentMetric === 'km'){
                         return mToKm(value) + ' km';
@@ -897,6 +949,7 @@
                 type: 'category',
                 inverse: true,
                 axisLabel: {
+                    hideOverlap: true,
                     formatter: function (value) {
                         return !isMobile() ? value : value.slice(-5);
                     }
@@ -973,13 +1026,13 @@
             materialChart.setOption({
                 title: { text: "{{material_type}}" },
                 tooltip: commonTooltipConfig,
-                xAxis: {
-                    ...commonCatAxisOptions,
+                yAxis: {
+                    ...commonCatYAxisOptions,
                     data: dataToUse.material.map(item => item.material)
                 },
-                yAxis: materialValueAxisOptions,
-                grid: vGridConfig,
-                series: createSeries(dataToUse.material, getColor(tripType))
+                xAxis: materialValueAxisOptions,
+                grid: inlineLabelGridConfig,
+                series: createSeries(dataToUse.material, getColor(tripType), params => params.name)
             });
         }
 
@@ -993,8 +1046,8 @@
         routesChart.setOption({
             title: { text: '{{routes}}' },
             tooltip: commonTooltipConfig,
-            xAxis: {
-                ...commonCatAxisOptions,
+            yAxis: {
+                ...commonCatYAxisOptions,
                 data: dataToUse.routes.map(item => {
                     try {
                         return JSON.parse(item.route).join(' - ');
@@ -1003,9 +1056,9 @@
                     }
                 })
             },
-            yAxis: routesValueAxisOptions,
-            grid: vGridConfig,
-            series: createSeries(dataToUse.routes, getColor(tripType))
+            xAxis: routesValueAxisOptions,
+            grid: inlineLabelGridConfig,
+            series: createSeries(dataToUse.routes, getColor(tripType), params => formatRouteLabel(params.name))
         });
 
         // Stations Chart
@@ -1018,13 +1071,13 @@
         stationsChart.setOption({
             title: { text: '{{stations}}' },
             tooltip: commonTooltipConfig,
-            xAxis: {
-                ...commonCatAxisOptions,
+            yAxis: {
+                ...commonCatYAxisOptions,
                 data: dataToUse.stations.map(item => item.station)
             },
-            yAxis: stationsValueAxisOptions,
-            grid: vGridConfig,
-            series: createSeries(dataToUse.stations, getColor(tripType))
+            xAxis: stationsValueAxisOptions,
+            grid: inlineLabelGridConfig,
+            series: createSeries(dataToUse.stations, getColor(tripType), params => extractStationCode(params.name))
         });
 
         // Resize all charts after show/hide changes column widths
@@ -1192,6 +1245,7 @@
             : { // Recreate the simple formatter for other metrics
                 type: 'value',
                 axisLabel: {
+                    hideOverlap: true,
                     formatter: function (value) {
                         if(currentMetric === 'km') return mToKm(value) + ' km';
                         else if (currentMetric === 'carbon') return value >= 1e9 ? (value / 1e9) + ' Mt' : value >= 1e6 ? (value / 1e6) + ' kt' : value >= 1e3 ? (value / 1e3) + ' t' : value + ' kg';
@@ -1209,37 +1263,50 @@
                 axisPointer: { type: 'shadow' },
                 formatter: commonTooltipFormatter 
             },
-            grid: { 
-                containLabel: true, 
-                width: '80%', 
+            grid: {
+                containLabel: true,
+                width: '80%',
                 height: '85%',
                 bottom: '10%',
                 top: '10%'
             },
-            series: createSeries(dataToUse, getColor(tripType))
+            series: createSeries(dataToUse, getColor(tripType),
+                dataKey === 'material' ? params => params.name
+                    : dataKey === 'routes' ? params => formatRouteLabel(params.name)
+                    : dataKey === 'stations' ? params => extractStationCode(params.name)
+                    : undefined)
         };
 
         // Configure axes based on chart type
-        if (['countries', 'operators'].includes(dataKey)) {
+        if (['countries', 'operators', 'material', 'routes', 'stations'].includes(dataKey)) {
+            // Material/Routes/Stations carry their name as an inline bar label
+            // instead of an axis label (see categoryLabelConfig).
             option.yAxis = {
                 type: 'category',
                 inverse: true,
-                axisLabel: dataKey === 'operators'
-                    ? operatorAxisLabelConfig()
-                    : {
+                axisLabel: dataKey === 'operators' ? operatorAxisLabelConfig()
+                    : dataKey === 'countries' ? {
+                        hideOverlap: true,
                         formatter: function (value) {
                             return !isMobile() ? value : value.slice(-5);
                         }
-                    },
-                data: dataToUse.map(item =>
-                    dataKey === 'countries'
-                        ? (item.country === "{{others}}" ? item.country : `${regionNames.of(item.country)} ${getFlagEmoji(item.country)}`)
-                        : item.operator
-                )
+                    } : { show: false },
+                data: dataToUse.map(item => {
+                    if (dataKey === 'countries') {
+                        return item.country === "{{others}}" ? item.country : `${regionNames.of(item.country)} ${getFlagEmoji(item.country)}`;
+                    }
+                    if (dataKey === 'operators') return item.operator;
+                    if (dataKey === 'material') return item.material;
+                    if (dataKey === 'routes') {
+                        try { return JSON.parse(item.route).join(' - '); }
+                        catch(e) { return item.route; }
+                    }
+                    return item.station;
+                })
             };
             option.xAxis = valueAxisOptions;
-            
-            // Add vertical slider for countries/operators
+
+            // Add vertical slider
             option.dataZoom = [
                 {
                     type: 'slider',
@@ -1253,20 +1320,15 @@
         } else {
             option.xAxis = {
                 type: 'category',
-                axisLabel: { rotate: 45 },
+                axisLabel: { rotate: 45, hideOverlap: true },
                 data: dataToUse.map(item => {
-                    if (dataKey === 'material') return item.material;
-                    if (dataKey === 'routes') {
-                        try { return JSON.parse(item.route).join(' - '); }
-                        catch(e) { return item.route; }
-                    }
                     if (dataKey === 'years') return item.year;
                     if (dataKey === 'months') return formatMonthLabel(item.month);
                     return item.station;
                 })
             };
             option.yAxis = valueAxisOptions;
-            
+
             // Add horizontal slider for other charts
             if (!['years', 'months'].includes(dataKey)) {
                 option.dataZoom = [
