@@ -146,6 +146,7 @@
     "routes": "Zrugggleiti Strecki",
     "stations": "Bsuechti Statione",
     "shareTrip": "Link erstelle",
+    "selectPage": "Syte uswähle",
     "confirmDelete": "Sind Sie sicher, dass Sie die Reise lösche wennd?",
     "confirmMultiDelete": "Sie sind im Begriff, ${tripNumber} Fahrte z lösche. Sind Sie sicher?",
     "confirmConfirm": "Würkli WÜRKLI sicher?",

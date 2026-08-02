@@ -323,21 +323,27 @@ td .operatorList .operatorListName{
    display:none;
    z-index: 100;
    text-align:center;
- }
+}
 
 .bottom-space{
   height: 30px;
 }
 
- button.multiTrip{
-  width:66%;
- }
- button.multiCancel{
+button.multiSelectAll{
+  width:22%;
+}
+
+button.multiTrip{
+  width:44%;
+}
+
+button.multiCancel{
   width:50px;
- }
- button.multiDropdown{
+}
+
+button.multiDropdown{
   width:50px;
- }
+}
  
  .button{
      border-radius: 10px;

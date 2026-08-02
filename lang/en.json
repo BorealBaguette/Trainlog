@@ -146,6 +146,7 @@
     "routes": "Traveled routes",
     "stations": "Visited stations",
     "shareTrip": "Create link",
+    "selectPage": "Select page",
     "confirmDelete": "Are you sure you want to delete this trip ?",
     "confirmMultiDelete": "You're about to delete ${tripNumber} trips, are you sure ?",
     "confirmConfirm": "Really REALLY sure ?",
