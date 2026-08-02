@@ -850,7 +850,10 @@ function processHiddenData(rowIdx, columns){
         }
         if (col.title != ""){
             var thAttrTitle = $($('#dataTable thead th').get(col.columnIndex)).attr('title');
-            var label = thAttrTitle || col.title;
+            // col.title is the header's full innerHTML (e.g. carries the select-page
+            // checkbox on the origin_station column) - strip it down to plain text
+            // so the checkbox doesn't get cloned into every row's detail label.
+            var label = thAttrTitle || $('<div>').html(col.title).text().trim();
             // For icon-only columns, pair each icon with its tooltip text, one line per item
             var displayData = col.data;
             if (thAttrTitle) {
