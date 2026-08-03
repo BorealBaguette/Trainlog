@@ -1005,6 +1005,28 @@
     </div>
 </div>
 
+<div class="modal fade" id="customRowsModal" tabindex="-1" aria-hidden="true" style="padding-top: 56px">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-list-ol me-2"></i>{{rowsCustom}}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="customRowsForm">
+                <div class="modal-body">
+                    <label class="form-label" for="customRowsInput">{{trips}}</label>
+                    <input type="number" class="form-control" id="customRowsInput" min="1" max="500" step="1" required>
+                    <div class="form-text">1–500</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{cancel}}</button>
+                    <button type="submit" class="btn btn-primary">{{save}}</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="sortModal" tabindex="-1" aria-hidden="true" style="padding-top: 56px">
     <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
@@ -2041,8 +2063,78 @@ var table = $('#tripRows');
     var isPast = {{ (not projects)|lower }};
     var _urlSortParam = _urlParams.get('sort');
     var _initialPage = parseInt(_urlParams.get('page') || '1', 10);
-    var _initialRows = parseInt(_urlParams.get('rows') || '10', 10);
-    var _validRows = [10, 50, 100, -1].includes(_initialRows) ? _initialRows : 10;
+    /* --- Auto page length ---
+       "As many trips as fit without a scrollbar." The count cannot be derived exactly
+       before the rows exist — a card's height depends on how its station names wrap and
+       on whether its operator logos stack — so this measures the real thing after each
+       draw and caches the two numbers it needs (median row height, and the chrome above
+       plus below the rows). The count itself is NOT cached: recomputing it from the
+       current innerHeight means a window resized between visits is honoured on the next
+       load. The first ever visit uses the fallbacks below and is right within a row.
+
+       Card and table layouts have their own entry: their row heights differ by more
+       than a factor of two, and the breakpoint can be crossed between visits. */
+    // First-visit-only estimates; every later visit uses the measured cookie.
+    var AUTO_FIT_FALLBACK = { card: { row: 100, chrome: 230 }, table: { row: 54, chrome: 260 } };
+    // Covers sub-pixel row heights and whatever sits outside the measured container
+    // (page padding, a footer): cheaper to come up a few px short than to earn a
+    // scrollbar for the sake of one more row.
+    var AUTO_FIT_BUFFER = 8;
+    var AUTO_ROWS_MIN = 3, AUTO_ROWS_MAX = 100;
+    var _autoFitTimer = null;
+
+    function autoFitCookieName() { return isCardLayout() ? 'autoFitCard' : 'autoFitTable'; }
+
+    function autoRowCount() {
+        var fallback = AUTO_FIT_FALLBACK[isCardLayout() ? 'card' : 'table'];
+        var stored = (getCookie(autoFitCookieName()) || '').split(':');
+        var rowH = parseFloat(stored[0]) || fallback.row;
+        var chromeH = parseFloat(stored[1]);
+        if (!(chromeH >= 0)) chromeH = fallback.chrome;
+        var fits = Math.floor((window.innerHeight - chromeH - AUTO_FIT_BUFFER) / rowH);
+        return Math.max(AUTO_ROWS_MIN, Math.min(AUTO_ROWS_MAX, fits));
+    }
+
+    // Scroller virtualises the rows and does its own viewport maths (scrollY above), so
+    // auto-fit is for the paged layout only.
+    // An explicit ?rows= wins and is kept as given (any sane count, or -1 for "all");
+    // its absence is what "auto" means, so nothing has to be written to the URL for it.
+    var _initialRows = parseInt(_urlParams.get('rows') || '', 10);
+    var _rowsValid = _initialRows === -1 || (_initialRows >= 1 && _initialRows <= 500);
+    var _autoRowsActive = !scroll && !_rowsValid;
+    var _autoRows = scroll ? 10 : autoRowCount();
+    var _validRows = _autoRowsActive ? _autoRows : (_rowsValid ? _initialRows : _autoRows);
+
+    /* The length menu. 10 is gone — auto replaced it as the default, and it was only
+       ever there as that default. The custom entry's value is a sentinel intercepted
+       before DataTables can apply it (see the capture-phase listener further down).
+
+       Auto stays first because the "is auto selected" test is by index: when the
+       computed count happens to equal one of the fixed options the two entries are
+       indistinguishable by value, and a <select> resolves a duplicate value to the
+       earliest matching option — which is the one we want it to mean. */
+    var ROWS_CUSTOM = -2;
+    var ROWS_FIXED = [50, 100];
+
+    /* The numeric options, in numeric order. A pinned count that is not already one of
+       the fixed options earns an entry of its own — without one the select has nothing
+       to show for the length actually in force — and it has to be sorted into place
+       rather than appended, or it lands after "all" and reads as debris. */
+    function _rowOptionValues(pinned) {
+        var values = ROWS_FIXED.slice();
+        if (pinned > 0 && pinned !== _autoRows && values.indexOf(pinned) === -1) {
+            values.push(pinned);
+        }
+        return values.sort(function(a, b) { return a - b; });
+    }
+
+    function _buildLengthMenu() {
+        var numeric = _rowOptionValues(_autoRowsActive ? 0 : _validRows);
+        return [
+            [_autoRows].concat(numeric, [-1, ROWS_CUSTOM]),
+            ['{{rowsAuto}} (' + _autoRows + ')'].concat(numeric, ["{{dtAll}}", '{{rowsCustom}}'])
+        ];
+    }
     var customSort = { field: 'temporal', dir: isPast ? 'desc' : 'asc', label: '{{tripStartTime}}' };
     if (_urlSortParam) {
         var _sp = _urlSortParam.split(':');
@@ -2180,7 +2272,7 @@ var table = $('#tripRows');
         }
     },
     order: [],
-    lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "{{dtAll}}"]],
+    lengthMenu: scroll ? [[10, 50, 100, -1], [10, 50, 100, "{{dtAll}}"]] : _buildLengthMenu(),
     pageLength: _validRows,
     displayStart: Math.max(0, _initialPage - 1) * (_validRows > 0 ? _validRows : 0),
     paging: true,
@@ -2249,13 +2341,19 @@ var table = $('#tripRows');
     } else {
         url.searchParams.delete('page');
     }
+    // Auto is the default, so it is the absence of ?rows= rather than any value —
+    // writing the computed count would freeze it and defeat the point on the next load.
     var _len = tableObject.page.len();
-    if (_len !== 10) {
-        url.searchParams.set('rows', _len);
-    } else {
+    if (_autoRowsActive || (scroll && _len === 10)) {
         url.searchParams.delete('rows');
+    } else {
+        url.searchParams.set('rows', _len);
     }
     history.replaceState({}, '', url);
+    // Deferred because the operator logos are still loading as draw fires, and an
+    // unloaded logo measures short. Also debounces the burst of draws on init.
+    clearTimeout(_autoFitTimer);
+    _autoFitTimer = setTimeout(recordAutoFitMetrics, 400);
 }).on('select', function(e, dt, type, indexes) {
     var selectedRows = tableObject.rows(indexes).data().toArray();
     selectedRows.forEach(function(row) {
@@ -2282,6 +2380,140 @@ var table = $('#tripRows');
     updateSelectionMessage();
     updateSelectPageCheckbox();
 });
+
+// Any use of the length menu is the user overriding auto — including re-picking the
+// auto entry, which is a no-op for the count but pins it, so the reading is by index
+// rather than by comparing the value against _autoRows.
+tableObject.on('length.dt', function() {
+    var sel = lengthSelect();
+    _autoRowsActive = !scroll && Boolean(sel) && sel.selectedIndex === 0;
+});
+
+function lengthSelect() {
+    return $(tableObject.table().container()).find('div.dt-length select').get(0);
+}
+
+if (!scroll) {
+    var customRowsModal = new bootstrap.Modal(document.getElementById('customRowsModal'));
+
+    /* The custom entry is a menu action, not a length, so its sentinel must never
+       reach DataTables — which would take -2 for a page length and ask the server for
+       it. A capture-phase listener on the container runs before the listeners bound to
+       the select itself, so stopping propagation here is enough to keep it away. */
+    tableObject.table().container().addEventListener('change', function(e) {
+        var sel = lengthSelect();
+        if (!sel || e.target !== sel || parseInt(sel.value, 10) !== ROWS_CUSTOM) return;
+        e.stopPropagation();
+        // Leave the select showing the length still in force, not the sentinel, in
+        // case the modal is dismissed.
+        var current = tableObject.page.len();
+        $(sel).val(String(current));
+        $('#customRowsInput').val(current > 0 ? current : '');
+        customRowsModal.show();
+    }, true);
+
+    $('#customRowsModal').on('shown.bs.modal', function() {
+        $('#customRowsInput').trigger('focus').trigger('select');
+    });
+
+    $('#customRowsForm').on('submit', function(e) {
+        e.preventDefault();
+        var n = parseInt($('#customRowsInput').val(), 10);
+        if (!(n >= 1 && n <= 500)) return;
+
+        // Rebuilt rather than spliced, so the new count sorts into place and any count
+        // pinned earlier drops out — only one custom value is ever in play.
+        var sel = lengthSelect();
+        if (sel) {
+            var numeric = _rowOptionValues(n);
+            var $sel = $(sel).empty();
+            $sel.append($('<option>').val(_autoRows).text('{{rowsAuto}} (' + _autoRows + ')'));
+            numeric.forEach(function(v) { $sel.append($('<option>').val(v).text(v)); });
+            $sel.append($('<option>').val(-1).text("{{dtAll}}"));
+            $sel.append($('<option>').val(ROWS_CUSTOM).text('{{rowsCustom}}'));
+            $sel.val(String(n));
+        }
+        _autoRowsActive = false;
+        customRowsModal.hide();
+        tableObject.page.len(n).draw();
+    });
+}
+
+/* Measures what the last draw actually produced and caches it for the next load: the
+   median row height (rows differ — a card with a wrapped station name is taller) and
+   the chrome, which is everything above the first row plus everything below the last.
+   Deriving chrome by subtraction like this counts the navbar, toolbar, pager and info
+   line without naming any of them, so it stays correct as those change. */
+/* The distance from an element's bottom edge to the end of the page's content, walked
+   structurally: at each level, whatever follows the node in flow, plus the padding,
+   border and margin its parent closes with.
+
+   Measured this way rather than subtracted from a document height because BOTH of those
+   heights are viewport-clamped here — documentElement.scrollHeight reports at least the
+   viewport, and `html, body { height: 100% }` in style2.css does the same to the body
+   box. Subtracting from either makes leftover whitespace look like chrome, so chrome
+   grows as the row count falls, which shrinks the count again next load and walks the
+   table down a row per visit. Nothing below depends on how many rows were drawn.
+
+   What this catches that a container-relative measurement missed: `.trips` carries a
+   70px bottom margin, 5em below 600px, to clear the fixed selection bar — a full row's
+   worth of trailing whitespace sitting outside the DataTables container. */
+function spaceBelow(el) {
+    var total = 0;
+    var node = el;
+    while (node && node !== document.body && node.parentElement) {
+        for (var sib = node.nextElementSibling; sib; sib = sib.nextElementSibling) {
+            var scs = window.getComputedStyle(sib);
+            // Out-of-flow boxes take up no space — the selection bar that margin is
+            // reserved for is itself fixed, so counting it would double up.
+            if (scs.display === 'none' || scs.position === 'fixed' || scs.position === 'absolute') continue;
+            total += $(sib).outerHeight(true);
+        }
+        var pcs = window.getComputedStyle(node.parentElement);
+        total += (parseFloat(pcs.paddingBottom) || 0)
+               + (parseFloat(pcs.borderBottomWidth) || 0)
+               + (parseFloat(pcs.marginBottom) || 0);
+        node = node.parentElement;
+    }
+    return total;
+}
+
+function recordAutoFitMetrics() {
+    if (scroll) return;
+    // An open detail row sits between the rows as a sibling and would be read as
+    // trailing space, and its parent row is taller than the median it feeds.
+    if ($('#dataTable > tbody > tr.child').length) return;
+    // The gear panel stands the toolbar up taller while it is open; measuring then
+    // would cache a chrome height the closed toolbar never actually has.
+    if ($('.dt-controls-secondary.show').length) return;
+    // Likewise the clearance .bottom-space adds in flow while the selection bar is up:
+    // real space, but only while trips are checked, so not part of the resting chrome.
+    if ($('.bottom-space').length) return;
+    var rows = $('#dataTable > tbody > tr').not('.child, .dtr-expanded').filter(function() {
+        return !$(this).find('> td.dt-empty').length;
+    });
+    // Two rows is the floor for a median worth trusting; a part-filled last page is
+    // fine, but a single row is as likely to be the outlier as the norm.
+    if (rows.length < 2) return;
+
+    var heights = rows.map(function() { return $(this).outerHeight(true); }).get()
+                      .filter(function(h) { return h > 0; })
+                      .sort(function(a, b) { return a - b; });
+    if (heights.length < 2) return;
+    // Kept fractional: rounding here while the chrome below is derived from the true
+    // height leaves the count a hair short of a whole row, and floor() then drops one
+    // row on every single load.
+    var rowH = heights[Math.floor(heights.length / 2)];
+
+    // Document coordinates, so this is independent of how far the page is scrolled.
+    var first = rows.first(), last = rows.last();
+    var above = first.offset().top;
+
+    var below = spaceBelow(last.get(0));
+    if (!(rowH > 0) || above < 0 || below < 0) return;
+
+    setCookie(autoFitCookieName(), rowH.toFixed(2) + ':' + Math.round(above + below), 30);
+}
 
 // Update ?next= on the href just before navigation so it reflects the current URL (including filters/sort/page)
 $(document).on('mousedown', '.editButton, .copyButton', function() {

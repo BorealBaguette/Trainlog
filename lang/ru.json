@@ -148,6 +148,8 @@
     "shareTrip": "Создать ссылку",
     "selectPage": "Выбрать страницу",
     "listOptions": "Опции",
+    "rowsAuto": "Авто",
+    "rowsCustom": "Другое…",
     "confirmDelete": "Вы уверены, что хотите удалить это путешествие?",
     "confirmMultiDelete": "Вы собираетесь удалить ${tripNumber} путешествия, вы уверены?",
     "confirmConfirm": "Вы уверены на СТО процентов?",

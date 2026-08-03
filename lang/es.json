@@ -148,6 +148,8 @@
     "shareTrip": "Crear enlace",
     "selectPage": "Seleccionar página",
     "listOptions": "Opciones",
+    "rowsAuto": "Auto",
+    "rowsCustom": "Personalizado…",
     "confirmDelete": "¿Estás seguro de que quieres eliminar este viaje?",
     "confirmMultiDelete": "Estás a punto de eliminar ${tripNumber} viajes, ¿estás seguro?",
     "confirmConfirm": "¿Realmente, REALMENTE seguro?",

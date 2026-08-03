@@ -148,6 +148,8 @@
     "shareTrip": "Udostępnij",
     "selectPage": "Zaznacz stronę",
     "listOptions": "Opcje",
+    "rowsAuto": "Auto",
+    "rowsCustom": "Niestandardowe…",
     "confirmDelete": "Czy na pewno chcesz usunąć tę podróż?",
     "confirmMultiDelete": "Potwierdź usunięcie podróży ${tripNumber}.",
     "confirmConfirm": "Naprawdę NAPRAWDĘ?",

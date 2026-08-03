@@ -148,6 +148,8 @@
     "shareTrip": "リンクを作成",
     "selectPage": "ページを選択",
     "listOptions": "オプション",
+    "rowsAuto": "自動",
+    "rowsCustom": "カスタム…",
     "confirmDelete": "この記録を削除しますか？",
     "confirmMultiDelete": "${tripNumber} の記録を削除しようとしています。よろしいですか？",
     "confirmConfirm": "本当に、ほんとうに、いいですか？",

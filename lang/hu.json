@@ -148,6 +148,8 @@
     "shareTrip": "Link létrehozása",
     "selectPage": "Oldal kijelölése",
     "listOptions": "Beállítások",
+    "rowsAuto": "Auto",
+    "rowsCustom": "Egyéni…",
     "confirmDelete": "Biztosan törli ezt az utazást?",
     "confirmMultiDelete": "${tripNumber} utazás törlésére készül, biztos benne?",
     "confirmConfirm": "Tényleg TÉNYLEG biztos?",
