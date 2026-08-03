@@ -314,17 +314,42 @@
             max-width: 64px;
             margin-right: 0;
         }
+        /* renderOperatorGrid lays its items out for a table cell — wide and one row deep,
+           since a row cannot grow taller but has 100px to spend across. The gutter is the
+           opposite shape, so the grid is turned on its side here: two operators stack
+           instead of sitting side by side, and every logo gets the gutter's full width
+           rather than half of it. Three and four still need the second column, and keep
+           the 2x2 they already had, just taller.
+
+           :has counts the items, since the count only exists in the markup. Where it is
+           not supported the inline layout stands — two side by side, as before — which is
+           cramped but correct, so there is nothing to fall back to. */
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid {
-            height: 26px !important;
+            height: 42px !important;
             margin-right: 0;
+            align-items: center;
+            justify-items: center;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGridLogo {
-            max-height: 12px !important;
-            max-width: 38px !important;
+            max-height: 19px !important;
+            max-width: 30px !important;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGridText {
-            font-size: 0.55rem !important;
-            line-height: 12px !important;
+            font-size: 0.5rem !important;
+            line-height: 19px !important;
+            max-width: 30px !important;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid:has(> :nth-child(2):last-child) {
+            grid-template-columns: auto !important;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid:has(> :nth-child(2):last-child) .operatorGridLogo {
+            max-height: 20px !important;
+            max-width: 64px !important;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid:has(> :nth-child(2):last-child) .operatorGridText {
+            font-size: 0.6rem !important;
+            line-height: 20px !important;
+            max-width: 64px !important;
         }
 
         /* The left gutter is the card's one control — it is the details column (see
