@@ -133,7 +133,13 @@
         .trip-card-host > #dataTable > tbody > tr {
             position: relative;
             margin-bottom: 8px;
-            padding: 8px 34px 8px 44px;
+            /* The right padding clears the operator gutter, which the kebab shares (see the
+               col-operator rule further down). The minimum height is what keeps those two
+               apart: they are pinned to opposite ends of the strip, so a short card — two
+               lines, or an open one whose meta line has gone — would otherwise let the
+               kebab ride up over the logo. */
+            padding: 8px 82px 8px 44px;
+            min-height: 80px;
             border: 1px solid #dee2e6;
             border-radius: 8px;
             background: #fff;
@@ -147,6 +153,9 @@
         }
         .trip-card-host > #dataTable > tbody > tr.child {
             padding: 0 10px 6px 10px;
+            /* The card's minimum height is there to keep the two gutter items apart; the
+               detail row has no gutter, so it would only be padded out for nothing. */
+            min-height: 0;
             border-top: 0;
             border-top-left-radius: 0;
             border-top-right-radius: 0;
@@ -189,8 +198,7 @@
         .trip-card-host > #dataTable > tbody > tr > td.col-date,
         .trip-card-host > #dataTable > tbody > tr > td.col-time,
         .trip-card-host > #dataTable > tbody > tr > td.col-duration,
-        .trip-card-host > #dataTable > tbody > tr > td.col-length,
-        .trip-card-host > #dataTable > tbody > tr > td.col-operator { display: inline-block !important; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-length { display: inline-block !important; }
 
         .trip-card-host > #dataTable > tbody > tr > td.col-type,
         .trip-card-host > #dataTable > tbody > tr > td.col-actions {
@@ -230,20 +238,16 @@
         .trip-card-host > #dataTable > tbody > tr > td.col-origin .flag,
         .trip-card-host > #dataTable > tbody > tr > td.col-dest .flag { flex: 0 0 auto; }
 
-        /* Meta line. Each value gets a fixed slot so the line reads as columns down the
-           list — dates, times, durations and distances are all different lengths, and
-           left to themselves every card put its operator logo somewhere else. The
-           widths are minimums, sized to the longest ordinary value (a date, "23h 59m",
-           "1234 km"), so an outlier — a delay badge, a multi-day duration — pushes its
-           own row wider instead of being clipped. Slots are kept rather than dropped
-           when a value is missing, so the columns hold. The separator leads each slot
-           rather than trailing the value before it, so the dots line up as a column of
-           their own instead of sitting wherever the previous value happened to end. */
+        /* Meta line. The values simply follow one another, separated by a leading dot on
+           each slot rather than a trailing one on the slot before, so the dots read as
+           separators and not as punctuation on the previous value. There are no fixed
+           slot widths: the operator, the one item that made the line's width unpredictable
+           from card to card, now has its own place in the right gutter, and the four text
+           values left are short enough that a phone fits them without help. */
         .trip-card-host > #dataTable > tbody > tr > td.col-date,
         .trip-card-host > #dataTable > tbody > tr > td.col-time,
         .trip-card-host > #dataTable > tbody > tr > td.col-duration,
-        .trip-card-host > #dataTable > tbody > tr > td.col-length,
-        .trip-card-host > #dataTable > tbody > tr > td.col-operator {
+        .trip-card-host > #dataTable > tbody > tr > td.col-length {
             margin-top: 3px;
             color: #6c757d;
             font-size: 0.8rem;
@@ -253,42 +257,74 @@
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-time:not(:empty)::before,
         .trip-card-host > #dataTable > tbody > tr > td.col-duration:not(:empty)::before,
-        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before,
-        .trip-card-host > #dataTable > tbody > tr > td.col-operator:not(:empty)::before {
+        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before {
             content: "\00b7";
             margin-right: 0.4em;
             color: #adb5bd;
         }
-        .trip-card-host > #dataTable > tbody > tr > td.col-date { min-width: 6em; }
-        .trip-card-host > #dataTable > tbody > tr > td.col-time { min-width: 3.6em; }
-        .trip-card-host > #dataTable > tbody > tr > td.col-duration { min-width: 4.7em; }
-        .trip-card-host > #dataTable > tbody > tr > td.col-length { min-width: 4.8em; }
+        /* An open card drops the meta line: everything on it is repeated, labelled and
+           full size, in the detail row just below (see META_COLUMN_CLASSES), so leaving
+           it up would say the same things twice at two different levels. The station
+           names stay, and the detail row moves up to meet them. The operator is not part
+           of this — it lives in the gutter, not on the line, and stays put. */
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-date,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-duration,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-length { display: none !important; }
+
         /* renderDuration wraps its value in a div, which would take the whole line. */
         .trip-card-host > #dataTable > tbody > tr > td.col-duration .duration { display: inline; }
+
+        /* The operator gets a reserved column in the right gutter: on the meta line it was
+           a variable-width item that pushed the text values around and had to be shrunk to
+           the line's height to fit. It takes the top of the gutter — it identifies the trip,
+           like the station names it now sits beside, where the kebab is only a control and
+           reads fine below it. The column is the same width on every card whether or not the
+           trip has an operator, so nothing shifts; the card's right padding is what keeps the
+           station names clear of it. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator {
+            display: flex !important;
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 74px;
+            /* Centred, not pinned to the top: the left gutter holds its icon and arrow as
+               one centred stack, and pushing these two to opposite ends of the card gave
+               the right side its weight at the corners while the left had it in the
+               middle. The bottom padding is the kebab's band — the logo centres in what
+               is left, so the two of them read as a centred pair like the other gutter. */
+            align-items: center;
+            justify-content: center;
+            padding: 0 5px 35px;
+            background: #f8f9fa;
+            border-left: 1px solid #eef1f4;
+            border-radius: 0 7px 7px 0;
+        }
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-operator { border-bottom-right-radius: 0; }
+        .trip-card-host > #dataTable > tbody > tr.selected > td.col-operator {
+            background: #dbe7fa;
+            border-left-color: #c3d8f5;
+        }
         /* The operator cell carries logos sized for a full-height table row, and the
            multi-operator grid sizes its own box and items inline, so both the box and
-           what is in it have to be brought down to the meta line's height. */
+           what is in it have to be brought down to the gutter's width. */
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorLogo {
-            max-height: 18px;
-            /* Narrower than the 100px the table cell allows: the operator is the last
-               slot on the meta line, and a wide wordmark at full size pushes itself
-               onto a line of its own on a narrow phone. */
-            max-width: 72px;
+            max-height: 26px;
+            max-width: 64px;
             margin-right: 0;
-            vertical-align: middle;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid {
-            height: 22px !important;
+            height: 26px !important;
             margin-right: 0;
-            vertical-align: middle;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGridLogo {
-            max-height: 10px !important;
-            max-width: 46px !important;
+            max-height: 12px !important;
+            max-width: 38px !important;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGridText {
             font-size: 0.55rem !important;
-            line-height: 10px !important;
+            line-height: 12px !important;
         }
 
         /* The left gutter is the card's one control — it is the details column (see
@@ -301,11 +337,15 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            gap: 4px;
             left: 0;
             top: 0;
             bottom: 0;
             width: 36px;
+            /* The same split as the right gutter: the type icon centres in the space above
+               a reserved band, and the arrow sits in the band (see the ::before rule
+               below). Both gutters then read as one thing over a foot, at the same
+               heights, instead of one being a tight stack and the other a spread pair. */
+            padding-bottom: 35px;
             background: #f8f9fa;
             border-right: 1px solid #eef1f4;
             border-radius: 7px 0 0 7px;
@@ -320,14 +360,45 @@
             max-width: 24px;
             margin-right: 0;
         }
-        /* The arrow is a ::before, so it would otherwise come out above the logo, and
-           its inline-row right margin is meaningless in this column. */
+        /* The arrow takes the gutter's foot, level with the kebab across the card. Taken
+           out of the flow rather than ordered after the logo, so the logo centres on the
+           space above it and not on the pair; its inline-row right margin is meaningless
+           here. The offset centres a 10px triangle in the 30px band that starts 5px up. */
         .trip-card-host > #dataTable > tbody > tr > td.col-type::before {
-            order: 2;
+            position: absolute;
+            left: 50%;
+            bottom: 15px;
             margin-right: 0;
-            transform: scale(1.3);
+            transform: translateX(-50%) scale(1.3);
         }
-        .trip-card-host > #dataTable > tbody > tr > td.col-actions { right: 0; top: 2px; }
+        /* The kebab sits at the foot of that same gutter — it is drawn over the operator
+           cell, which is the strip, rather than inside it, since the two are separate
+           columns. Bare dots: the strip is what carries the weight opposite the logo, so
+           the control does not need a plate of its own to hold the corner. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions {
+            display: flex !important;
+            right: 0;
+            bottom: 5px;
+            width: 74px;
+            height: 30px;
+            align-items: center;
+            justify-content: center;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions .modalButton {
+            padding: 4px 10px;
+            /* .btn-link underlines its content, and a FontAwesome glyph is text as far as
+               that is concerned. */
+            text-decoration: none;
+            color: #6c757d;
+        }
+        /* Horizontal dots. A column of three under a wordmark echoed the tall left gutter
+           and made the control look like it was sliding off the bottom of the card; lying
+           down it reads as a wide, settled foot instead. Rotated rather than swapped for
+           fa-ellipsis, because renderButton draws this same icon at every width and only
+           the card wants it turned — the glyph is symmetric, so the two are identical. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions .actionKebab {
+            transform: rotate(90deg);
+        }
 
         /* The select-page checkbox once the script has moved it out of the header. */
         .mobile-select-page {
@@ -867,6 +938,15 @@ function isEllipsisActive(el){
 // would otherwise be reachable from neither place.
 var CARD_COLUMN_CLASSES = ['col-type', 'col-origin', 'col-dest', 'col-date', 'col-time', 'col-duration', 'col-length', 'col-operator', 'col-actions'];
 
+// The meta line — the compact `date · time · duration · distance` strip under the station
+// names. It is a summary of fields the detail row labels properly, so an open card hides it
+// (see the .dtr-expanded rule in the stylesheet) and these columns come down into the detail
+// row instead, where they line up with everything else rather than being repeated in two
+// places at two levels. The operator is deliberately not one of them: it has its own column
+// in the card's right gutter and stays legible there, open or shut, so sending it down as
+// well would be the repetition this avoids.
+var META_COLUMN_CLASSES = ['col-date', 'col-time', 'col-duration', 'col-length'];
+
 function isCardLayout() {
     // Scroller replaces the table with a virtualised one split across two tables, so
     // the card rules are not applied there and neither is this.
@@ -889,22 +969,29 @@ function hideCardHeader() {
     $(tableObject.table().header()).find('tr').hide();
 }
 
-function cardColumnIndexes() {
+function columnIndexesWithClass(wanted) {
     // Read off the column definitions rather than the header: DataTables applies
     // columns.className to the body cells only, so the <th> does not carry it.
     var indexes = [];
     tableObject.settings()[0].aoColumns.forEach(function(col, i) {
         var classes = (col.sClass || '').split(/\s+/);
-        if (classes.some(function(c) { return CARD_COLUMN_CLASSES.indexOf(c) !== -1; })) {
+        if (classes.some(function(c) { return wanted.indexOf(c) !== -1; })) {
             indexes.push(i);
         }
     });
     return indexes;
 }
 
+function cardColumnIndexes() {
+    return columnIndexesWithClass(CARD_COLUMN_CLASSES);
+}
+
 function processHiddenData(rowIdx, columns){
     var cardMode = isCardLayout();
     var cardCols = cardMode ? cardColumnIndexes() : [];
+    // Card fields that are on the card but still belong down here: the meta line hides
+    // itself while the card is open, so its values only exist in the detail row.
+    var metaCols = cardMode ? columnIndexesWithClass(META_COLUMN_CLASSES) : [];
     var isAir = ["air", "helicopter"].includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
     var isFerry = $(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText == "ferry";
     var isTrain = TRAIN_TYPES.includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
@@ -1086,10 +1173,11 @@ function processHiddenData(rowIdx, columns){
                 // detail row instead — same mechanism the delay columns use.
                 if (operatorsOverflow(operatorRow)) { col.hidden = true; col._forceDetail = true; }
             }
-            // The card shows the operator on the meta line, but capped to that line's
-            // height — too small to read a wordmark. So it always comes down here as
-            // well, where a single logo gets the full-size cell rendering and several
-            // get renderOperatorList's one-per-line form.
+            // The card's gutter shows the operator as a logo and nothing else, so an open
+            // card also names it in the detail row, where it gets a label and — for a
+            // multi-operator trip — renderOperatorList's one-per-line form. Unlike the
+            // meta line, the gutter is not hidden while the card is open: it is card
+            // furniture alongside the type logo, and blanking it would leave a hole.
             if (cardMode) { col.hidden = true; col._forceDetail = true; }
         }
         if (col.title == "{{material_type}}" && isTrain) {
@@ -1193,7 +1281,7 @@ function processHiddenData(rowIdx, columns){
                 if (pairs.length) displayData = pairs.join('<br>');
             }
             var show = cardMode
-                ? (cardCols.indexOf(col.columnIndex) === -1 || col._forceDetail)
+                ? (cardCols.indexOf(col.columnIndex) === -1 || metaCols.indexOf(col.columnIndex) !== -1 || col._forceDetail)
                 : stationCols.indexOf(col.columnIndex) !== -1
                     ? stationsBelow
                     : (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node()));
