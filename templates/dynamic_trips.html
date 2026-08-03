@@ -1411,7 +1411,7 @@ function processHiddenData(rowIdx, columns){
                 // Shared tags open the animated multiTrip view, not the
                 // single-owner public page
                 var tagHref = tag.is_shared
-                    ? "{{url_for('multi_trip', tagUuid='')}}" + tag.uuid
+                    ? "{{url_for('multi_trip', tagId='')}}" + tag.uuid
                     : "{{url_for('public_trip', tagId='')}}" + tag.uuid;
                 var a = $('<a>')
                     .attr('href', tagHref)
