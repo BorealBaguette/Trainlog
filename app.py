@@ -4667,6 +4667,9 @@ def render_public_trip_page(
     countries = []
     length = 0
 
+    # this needs to be done before changing the tripIds variable
+    multitrip_url = url_for("multi_trip", tripIds=tripIds, tagId=tagId, ticketId=ticketId)
+
     if tripIds is None and tagId is not None:
         with pg_session() as pg:
             result = pg.execute(
@@ -4849,7 +4852,7 @@ def render_public_trip_page(
         title=lang[session["userinfo"]["lang"]]["sharedLink"],
         collection_voyage=tag_type,
         tag_description=tag_name,
-        tag_uuid=tagId,
+        multitrip_url=multitrip_url,
         special_og=True,
         tileserver=tileserver,
         globe=globe,
