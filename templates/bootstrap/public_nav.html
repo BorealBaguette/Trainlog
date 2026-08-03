@@ -1,7 +1,10 @@
 <nav class="navbar navbar-expand-lg navbar-light bg-light">
   <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('login') }}">
-      <img src="{{ url_for('static',filename='images/logo_square.png') }}" width="30" height="30" alt="">
+      {# Wordmark while the links are collapsed, square mark once they are out — see
+         the same swap in navigation.html. This navbar expands at lg, not xl. #}
+      <img class="d-lg-none" src="{{ url_for('static',filename='images/logo.png') }}" width="96" height="32" alt="Trainlog">
+      <img class="d-none d-lg-inline" src="{{ url_for('static',filename='images/logo_square.png') }}" width="30" height="30" alt="Trainlog">
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>

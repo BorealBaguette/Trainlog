@@ -147,6 +147,7 @@
     "stations": "访问过的站点",
     "shareTrip": "创建链接",
     "selectPage": "选择本页",
+    "listOptions": "选项",
     "confirmDelete": "确定要删除此次旅行吗？",
     "confirmMultiDelete": "您即将删除 ${tripNumber} 次旅行，确定吗？",
     "confirmConfirm": "真的真的确定吗？",

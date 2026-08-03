@@ -147,6 +147,7 @@
     "stations": "Odwiedzone stacje",
     "shareTrip": "Udostępnij",
     "selectPage": "Zaznacz stronę",
+    "listOptions": "Opcje",
     "confirmDelete": "Czy na pewno chcesz usunąć tę podróż?",
     "confirmMultiDelete": "Potwierdź usunięcie podróży ${tripNumber}.",
     "confirmConfirm": "Naprawdę NAPRAWDĘ?",

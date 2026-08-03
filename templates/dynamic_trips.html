@@ -123,7 +123,9 @@
            stray line between the last card and the pager. */
         .trip-card-host { border-bottom: none !important; }
         .trip-card-host > #dataTable {
-            padding: 12px 3px 0;
+            /* 10px is the shared side gutter: the toolbar above takes the same, so
+               the search row, the options panel and the cards all line up on it. */
+            padding: 12px 10px 0;
             border-collapse: separate;
             border-bottom: none !important;
         }
@@ -509,7 +511,7 @@
            line with whatever switch happened to land beside it. The label is dropped
            for a placeholder (set by applyCardChrome) so the input gets the words'
            width too. */
-        .trips-cards .dt-controls { row-gap: 8px; }
+        .trips-cards .dt-controls { row-gap: 8px; padding: 0 10px; }
         .trips-cards .dt-controls .dt-search {
             flex: 1 1 100%;
             order: -1;
@@ -556,7 +558,7 @@
            secondary to the search above them, so they share one quiet size. */
         .trips-cards .dt-controls,
         .trips-cards .dt-controls .form-check-label,
-        .trips-cards .dt-controls > label {
+        .trips-cards .dt-controls label {
             font-size: 0.85rem;
             color: #495057;
         }
@@ -569,6 +571,107 @@
             background-color: #fff;
         }
         .trips-cards .dt-controls .form-check { margin-bottom: 0; min-height: 0; }
+
+        /* The search row now carries a gear button ahead of the input; the row
+           itself takes over the "full-width first line" job the .dt-search rule
+           above used to do alone, and hands the input a plain auto-basis so it
+           just fills what's left beside the gear. */
+        .trips-cards .dt-search-row {
+            order: -1;
+            flex: 1 1 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .trips-cards .dt-search-row .dt-search {
+            flex: 1 1 auto;
+            order: 0;
+        }
+        /* Page-select, length, sort and the two switches, hidden until the gear is
+           tapped. (The desktop half of this pair — which dissolves both wrappers
+           again — is the min-width block further down; everything here is already
+           inside the max-width:767px query.)
+
+           Wrapping these centred put two controls on one line and one on the next at
+           whatever widths happened to fall out, which read as debris. As a panel they
+           get one column instead: a labelled row each, left-aligned on a common edge,
+           in the reading order below (the DOM order is an accident of how each control
+           got appended, so `order` sets it explicitly). */
+        .trips-cards .dt-controls-secondary {
+            display: none;
+            flex: 1 1 100%;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
+            margin-top: 2px;
+            padding: 14px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+        }
+        .trips-cards .dt-controls-secondary.show { display: flex; }
+        .trips-cards .dt-controls-secondary > * { margin: 0; }
+        /* Sort and length are "label + control" pairs; keeping them inline-flex with a
+           small gap holds the control against its words rather than stretching the two
+           to the panel's width. */
+        .trips-cards .dt-controls-secondary > .dt-sort-control { order: 1; }
+        .trips-cards .dt-controls-secondary > .dt-length { order: 2; }
+        /* Both the wrapper and any inner label get the row treatment: DataTables puts
+           the select beside a label in .dt-length, and whether the label wraps it or
+           sits next to it differs by build. */
+        .trips-cards .dt-controls-secondary > .dt-sort-control,
+        .trips-cards .dt-controls-secondary > .dt-length,
+        .trips-cards .dt-controls-secondary > .dt-length label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+        }
+        /* The switches carry Bootstrap's padding-left + floated input, which leaves the
+           control and its words on separate lines once the row is this narrow. */
+        .trips-cards .dt-controls-secondary > .form-check {
+            order: 3;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 0;
+            padding-left: 0;
+        }
+        .trips-cards .dt-controls-secondary > .form-check .form-check-input {
+            flex: 0 0 auto;
+            float: none;
+            margin: 0;
+        }
+        /* Select-page is the one action among the settings, so it sits last and takes
+           the panel's full width the way a button would; the extra top margin is the
+           only separation it needs, the filled shape already sets it apart. */
+        .trips-cards .dt-controls-secondary > .mobile-select-page {
+            order: 4;
+            justify-content: center;
+            height: 38px;
+            margin-top: 4px;
+        }
+        /* The toolbar's blanket label colour outweighs .mobile-select-page.checked on
+           specificity, which left the checked pill dark-on-blue; this outweighs it back. */
+        .trips-cards .dt-controls-secondary > .mobile-select-page.checked { color: #fff; }
+        .trips-cards .dt-options-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 40px;
+            height: 40px;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            background: #fff;
+            color: #495057;
+            font-size: 1rem;
+        }
+        .trips-cards .dt-options-toggle.open {
+            background: #eff5fd;
+            border-color: #c3d8f5;
+            color: #207cca;
+        }
 
         /* --- Pagination ---
            Numbers only (the prev/next hiding is in style2.css); each number becomes a
@@ -649,6 +752,19 @@
            :active above); rows already flash their selection colour through the
            select handler. */
         .trip-card-host > #dataTable > tbody > tr > td.col-type:active { background: #e9edf1; }
+    }
+
+    /* The gear and its collapsible group are a phone affordance only, but the two
+       wrappers they need are built into the DOM at every width (moving controls in
+       and out of them on resize would strand the handlers bound to them). Above the
+       card breakpoint the wrappers dissolve with display:contents, so the length
+       menu, sort button and switches become direct flex children of .dt-controls
+       again and lay out exactly as they did before — and the gear itself goes away.
+       The DOM order the JS builds is chosen so this reproduces the original order. */
+    @media screen and (min-width: 768px) {
+        .trips-cards .dt-search-row,
+        .trips-cards .dt-controls-secondary { display: contents; }
+        .trips-cards .dt-options-toggle { display: none; }
     }
 
     /* The selection bar is fixed to the viewport bottom below 600px (style2.css); a
@@ -2211,10 +2327,15 @@ if (!scroll) {
             var $moved = $cb.closest('.mobile-select-page');
             if (isMobile === Boolean($moved.length)) return;
             if (isMobile) {
+                // Lands in the collapsible options group when it exists (it's built
+                // once, after this runs for the first time); falls back to the
+                // toolbar itself on that first run.
+                var $controls = $(tableObject.table().container()).find('.dt-controls');
+                var $optionsGroup = $controls.find('.dt-controls-secondary');
                 $('<label class="mobile-select-page"></label>')
                     .append($cb)
                     .append(document.createTextNode('{{ selectPage }}'))
-                    .prependTo($(tableObject.table().container()).find('.dt-controls'));
+                    .prependTo($optionsGroup.length ? $optionsGroup : $controls);
             } else {
                 $('#dataTable thead th[data-sort-field="origin_station"]').prepend($cb);
                 $moved.remove();
@@ -2233,7 +2354,7 @@ if (!scroll) {
 }
 
 (function() {
-    var $btn = $('<label>{{sortLabel}} <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
+    var $btn = $('<label class="dt-sort-control">{{sortLabel}} <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
     $(tableObject.table().container()).find('.dt-controls .dt-search').before($btn);
     updateSortButton();
 })();
@@ -2253,6 +2374,30 @@ if (!scroll) {
     </div>`);
     $(tableObject.table().container()).find('.dt-controls .dt-search').before($futureSwitch);
 {% endif %}
+
+if (!scroll) {
+    // A gear icon joins the search input on its own row; below 768px (see the CSS)
+    // it is the trigger that reveals everything else — page-select, length, sort,
+    // the two switches. Above that width both wrappers are display:contents and the
+    // gear is hidden, so the toolbar renders as it always did. That equivalence is
+    // why the group is *prepended*: flattened, [group, searchRow] reproduces the
+    // original child order (length, sort, switches, search), whereas appending it
+    // would put the search first.
+    var $controls = $(tableObject.table().container()).find('.dt-controls');
+    var $search = $controls.find('.dt-search');
+    var $optionsToggle = $(`<button type="button" class="dt-options-toggle" title="{{ listOptions }}"><i class="fas fa-gear"></i></button>`);
+    var $searchRow = $('<div class="dt-search-row"></div>');
+    $search.before($searchRow);
+    $searchRow.append($optionsToggle, $search);
+
+    var $optionsGroup = $('<div class="dt-controls-secondary"></div>');
+    $controls.children().not('.dt-search-row').appendTo($optionsGroup);
+    $controls.prepend($optionsGroup);
+    $optionsToggle.on('click', function() {
+        $(this).toggleClass('open');
+        $optionsGroup.toggleClass('show');
+    });
+}
 
 // Sort modal
 const sortGroups = [
@@ -3206,7 +3351,7 @@ $('#submitBtn').on('click', function() {
             var searchContainer = $('.dt-search');
             if (searchContainer.length && !searchContainer.find('.search-help-icon').length) {
                 var $input = searchContainer.find('input');
-                var $wrapper = $('<span style="display:inline-flex;align-items:center;gap:1px;"></span>');
+                var $wrapper = $('<span style="display:inline-flex;align-items:center;gap:3px;"></span>');
                 $input.after($wrapper);
                 $wrapper.append($input);
                 var helpIcon = $('<i class="fas fa-info-circle search-help-icon" data-bs-toggle="modal" data-bs-target="#smartSearchHelpModal" style="cursor:pointer;"></i>');

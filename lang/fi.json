@@ -147,6 +147,7 @@
     "stations": "Vieraillut asemat",
     "shareTrip": "Luo linkki",
     "selectPage": "Valitse sivu",
+    "listOptions": "Asetukset",
     "confirmDelete": "Haluatko varmasti poistaa tämän matkan?",
     "confirmMultiDelete": "Olet poistamassa ${tripNumber} matkaa, oletko varma?",
     "confirmConfirm": "Oletko TÄYSIN varma?",
