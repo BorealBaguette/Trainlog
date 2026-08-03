@@ -116,7 +116,17 @@
     @media screen and (max-width: 767px) {
         /* The side padding keeps the cards off the edge of the viewport, which .trips
            sits flush against below 600px. */
-        .trip-card-host > #dataTable { padding: 12px 3px 0; border-collapse: separate; }
+        /* DataTables closes a footerless table with a dark rule — put on the
+           .dt-scroll-body wrapper (which is the very div the trip-card-host class
+           lands on) by `div.dt-container.dt-empty-footer .dt-scroll-body`, and on
+           the table itself in the unscrolled layout. Either way it would draw a
+           stray line between the last card and the pager. */
+        .trip-card-host { border-bottom: none !important; }
+        .trip-card-host > #dataTable {
+            padding: 12px 3px 0;
+            border-collapse: separate;
+            border-bottom: none !important;
+        }
 
         /* Column titles say nothing next to labelled card lines, and they no longer
            line up with anything. Neither this rule nor a `> thead > tr` one took on
@@ -132,17 +142,21 @@
 
         .trip-card-host > #dataTable > tbody > tr {
             position: relative;
-            margin-bottom: 8px;
-            /* The right padding clears the operator gutter, which the kebab shares (see the
-               col-operator rule further down). The minimum height is what keeps those two
-               apart: they are pinned to opposite ends of the strip, so a short card — two
-               lines, or an open one whose meta line has gone — would otherwise let the
-               kebab ride up over the logo. */
-            padding: 8px 82px 8px 44px;
-            min-height: 80px;
-            border: 1px solid #dee2e6;
-            border-radius: 8px;
+            margin-bottom: 10px;
+            /* The right padding clears the operator column, which the actions pill shares
+               (see the col-operator rule further down). The minimum height is what keeps
+               those two apart: the logo centres above the pill's band, so a short card —
+               two lines, or an open one whose meta line has gone — would otherwise let
+               them collide. */
+            padding: 10px 80px 10px 44px;
+            min-height: 82px;
+            /* A hairline lighter than the old #dee2e6 plus a whisper of shadow: the
+               border alone read as a wireframe, the shadow alone smudged on low-DPI
+               screens; together each card sits just proud of the page. */
+            border: 1px solid #e3e7eb;
+            border-radius: 10px;
             background: #fff;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
         }
 
         /* An open detail row is part of the card above it, not a card of its own. */
@@ -150,6 +164,8 @@
             margin-bottom: 0;
             border-bottom-left-radius: 0;
             border-bottom-right-radius: 0;
+            /* The card's shadow would fall across the seam onto its own detail row. */
+            box-shadow: none;
         }
         .trip-card-host > #dataTable > tbody > tr.child {
             padding: 0 10px 6px 10px;
@@ -159,6 +175,8 @@
             border-top: 0;
             border-top-left-radius: 0;
             border-top-right-radius: 0;
+            /* The open pair casts one shadow, from its true bottom edge. */
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
         }
 
         .trip-card-host > #dataTable > tbody > tr > td {
@@ -216,8 +234,9 @@
         .trip-card-host > #dataTable > tbody > tr > td.col-origin,
         .trip-card-host > #dataTable > tbody > tr > td.col-dest {
             font-weight: 700;
+            font-size: 0.95rem;
             color: #4b5563;
-            line-height: 1.3;
+            line-height: 1.35;
             padding: 1px 0;
         }
 
@@ -275,43 +294,45 @@
         /* renderDuration wraps its value in a div, which would take the whole line. */
         .trip-card-host > #dataTable > tbody > tr > td.col-duration .duration { display: inline; }
 
-        /* The operator gets a reserved column in the right gutter: on the meta line it was
-           a variable-width item that pushed the text values around and had to be shrunk to
-           the line's height to fit. It takes the top of the gutter — it identifies the trip,
-           like the station names it now sits beside, where the kebab is only a control and
-           reads fine below it. The column is the same width on every card whether or not the
-           trip has an operator, so nothing shifts; the card's right padding is what keeps the
-           station names clear of it. */
+        /* A meta line that cannot fit breaks as two columns of two — date over duration,
+           time over distance — instead of inline wrap's three-and-an-orphan. The class
+           is set per row by updateMetaWrap(), which measures the natural one-line layout;
+           50% cells work because the four tds are adjacent in the DOM with no text nodes
+           between them (hidden cells in between have no boxes). */
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-date,
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-duration,
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-length {
+            width: 50%;
+            margin-top: 2px;
+        }
+        /* The duration opens the second line, so its leading separator dot goes. */
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-duration::before { content: none; }
+
+        /* The operator's reserved column on the right. No strip behind it: shading both
+           edges made the card read as three boxes, and put the operator's wordmark and
+           the kebab in one grey slab where neither looked at home. The left gutter keeps
+           its fill because it is a control; the right side is content on the card
+           itself — the logo floats on white, centred in the space above the actions
+           pill's band, level with the station names it belongs with. The column is the
+           same width whether or not the trip has an operator, so nothing shifts. */
         .trip-card-host > #dataTable > tbody > tr > td.col-operator {
             display: flex !important;
             position: absolute;
             right: 0;
             top: 0;
             bottom: 0;
-            width: 74px;
-            /* Centred, not pinned to the top: the left gutter holds its icon and arrow as
-               one centred stack, and pushing these two to opposite ends of the card gave
-               the right side its weight at the corners while the left had it in the
-               middle. The bottom padding is the kebab's band — the logo centres in what
-               is left, so the two of them read as a centred pair like the other gutter. */
+            width: 76px;
             align-items: center;
             justify-content: center;
-            padding: 0 5px 35px;
-            background: #f8f9fa;
-            border-left: 1px solid #eef1f4;
-            border-radius: 0 7px 7px 0;
-        }
-        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-operator { border-bottom-right-radius: 0; }
-        .trip-card-host > #dataTable > tbody > tr.selected > td.col-operator {
-            background: #dbe7fa;
-            border-left-color: #c3d8f5;
+            padding: 0 8px 40px;
         }
         /* The operator cell carries logos sized for a full-height table row, and the
            multi-operator grid sizes its own box and items inline, so both the box and
            what is in it have to be brought down to the gutter's width. */
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorLogo {
-            max-height: 26px;
-            max-width: 64px;
+            max-height: 28px;
+            max-width: 60px;
             margin-right: 0;
         }
         /* renderOperatorGrid lays its items out for a table cell — wide and one row deep,
@@ -332,24 +353,24 @@
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGridLogo {
             max-height: 19px !important;
-            max-width: 30px !important;
+            max-width: 28px !important;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGridText {
             font-size: 0.5rem !important;
             line-height: 19px !important;
-            max-width: 30px !important;
+            max-width: 28px !important;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid:has(> :nth-child(2):last-child) {
             grid-template-columns: auto !important;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid:has(> :nth-child(2):last-child) .operatorGridLogo {
             max-height: 20px !important;
-            max-width: 64px !important;
+            max-width: 60px !important;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid:has(> :nth-child(2):last-child) .operatorGridText {
             font-size: 0.6rem !important;
             line-height: 20px !important;
-            max-width: 64px !important;
+            max-width: 60px !important;
         }
 
         /* The left gutter is the card's one control — it is the details column (see
@@ -366,14 +387,13 @@
             top: 0;
             bottom: 0;
             width: 36px;
-            /* The same split as the right gutter: the type icon centres in the space above
-               a reserved band, and the arrow sits in the band (see the ::before rule
-               below). Both gutters then read as one thing over a foot, at the same
-               heights, instead of one being a tight stack and the other a spread pair. */
+            /* The same split as the right column: the type icon centres in the space
+               above a reserved band, and the arrow sits in the band (see the ::before
+               rule below), level with the actions pill across the card. */
             padding-bottom: 35px;
             background: #f8f9fa;
             border-right: 1px solid #eef1f4;
-            border-radius: 7px 0 0 7px;
+            border-radius: 9px 0 0 9px;
         }
         .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-type { border-bottom-left-radius: 0; }
         .trip-card-host > #dataTable > tbody > tr.selected > td.col-type {
@@ -385,10 +405,10 @@
             max-width: 24px;
             margin-right: 0;
         }
-        /* The arrow takes the gutter's foot, level with the kebab across the card. Taken
-           out of the flow rather than ordered after the logo, so the logo centres on the
-           space above it and not on the pair; its inline-row right margin is meaningless
-           here. The offset centres a 10px triangle in the 30px band that starts 5px up. */
+        /* The arrow takes the gutter's foot, level with the actions pill across the card.
+           Taken out of the flow rather than ordered after the logo, so the logo centres
+           on the space above it and not on the pair; its inline-row right margin is
+           meaningless here. */
         .trip-card-host > #dataTable > tbody > tr > td.col-type::before {
             position: absolute;
             left: 50%;
@@ -396,42 +416,250 @@
             margin-right: 0;
             transform: translateX(-50%) scale(1.3);
         }
-        /* The kebab sits at the foot of that same gutter — it is drawn over the operator
-           cell, which is the strip, rather than inside it, since the two are separate
-           columns. Bare dots: the strip is what carries the weight opposite the logo, so
-           the control does not need a plate of its own to hold the corner. */
+        /* The actions control, under the operator. Bare dots always looked orphaned down
+           here and a square plate looked like a second gutter; a small pill finally
+           reads as what it is — a button — and matches the toolbar's control language.
+           It sits level with the arrow at the foot of the left gutter. */
         .trip-card-host > #dataTable > tbody > tr > td.col-actions {
             display: flex !important;
             right: 0;
-            bottom: 5px;
-            width: 74px;
-            height: 30px;
-            align-items: center;
+            bottom: 8px;
+            width: 76px;
             justify-content: center;
         }
         .trip-card-host > #dataTable > tbody > tr > td.col-actions .modalButton {
-            padding: 4px 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 28px;
+            padding: 0;
             /* .btn-link underlines its content, and a FontAwesome glyph is text as far as
                that is concerned. */
             text-decoration: none;
-            color: #6c757d;
+            color: #8a93a2;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 999px;
         }
-        /* Horizontal dots. A column of three under a wordmark echoed the tall left gutter
-           and made the control look like it was sliding off the bottom of the card; lying
-           down it reads as a wide, settled foot instead. Rotated rather than swapped for
-           fa-ellipsis, because renderButton draws this same icon at every width and only
-           the card wants it turned — the glyph is symmetric, so the two are identical. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions .modalButton:active {
+            background: #e9edf1;
+            color: #495057;
+        }
+        .trip-card-host > #dataTable > tbody > tr.selected > td.col-actions .modalButton {
+            background: #eff5fd;
+            border-color: #c3d8f5;
+        }
+        /* Horizontal dots. A column of three under a wordmark echoed the tall left gutter;
+           lying down they fill the pill. Rotated rather than swapped for fa-ellipsis,
+           because renderButton draws this same icon at every width and only the card
+           wants it turned — the glyph is symmetric, so the two are identical. */
         .trip-card-host > #dataTable > tbody > tr > td.col-actions .actionKebab {
             transform: rotate(90deg);
+            font-size: 0.85em;
         }
 
-        /* The select-page checkbox once the script has moved it out of the header. */
+        /* The select-page control, once the script has moved the header checkbox down
+           into the toolbar — dressed as a toggle button, because a naked checkbox read
+           as a stray form field between the toolbar's pill controls. The checkbox itself
+           stays in the DOM (every handler and updateSelectPageCheckbox key off it) but
+           is hidden; the label carries a checkmark and takes the fill when checked, via
+           the .checked class updateSelectPageCheckbox maintains. Clicking the label
+           toggles the checkbox natively — it is the control's label. */
         .mobile-select-page {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            height: 32px;
+            padding: 0 12px;
+            margin: 0;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+        }
+        .mobile-select-page input {
+            position: absolute;
+            width: 0;
+            height: 0;
+            margin: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .mobile-select-page::before {
+            content: "\f00c";
+            font-family: "Font Awesome 6 Free", "Font Awesome 5 Free", FontAwesome;
+            font-weight: 900;
+            font-size: 0.7rem;
+            color: #ced4da;
+        }
+        .mobile-select-page.checked {
+            background: #207cca;
+            border-color: #207cca;
+            color: #fff;
+        }
+        .mobile-select-page.checked::before { color: #fff; }
+
+        /* --- Toolbar ---
+           The controls bar keeps its wrapping-row layout from the dom string, but the
+           search is pulled to a full-width first row of its own (order + 100% basis):
+           it is the control people actually reach for, and inline it shared a wrapped
+           line with whatever switch happened to land beside it. The label is dropped
+           for a placeholder (set by applyCardChrome) so the input gets the words'
+           width too. */
+        .trips-cards .dt-controls { row-gap: 8px; }
+        .trips-cards .dt-controls .dt-search {
+            flex: 1 1 100%;
+            order: -1;
             display: flex;
             align-items: center;
-            gap: 6px;
-            margin: 0;
-            white-space: nowrap;
+            gap: 4px;
+            margin-bottom: 0;
+            text-align: left;
+        }
+        .trips-cards .dt-controls .dt-search label { display: none; }
+        /* The input arrives wrapped in an inline-flex span together with the help icon
+           (see the search-help-icon setup); the wrapper has to pass the stretch through.
+           !important because the span's display is set inline. */
+        .trips-cards .dt-controls .dt-search > span {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: flex !important;
+            align-items: center;
+        }
+        .trips-cards .dt-controls .dt-search input {
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 40px;
+            padding: 0 14px;
+            /* 16px is the threshold below which iOS zooms the page on focus. */
+            font-size: 16px;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            background: #fff;
+        }
+        .trips-cards .dt-controls .dt-search input:focus {
+            outline: none;
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+        }
+        /* The help icon rides inside the search row; padding makes it a tappable
+           target rather than a 16px glyph. */
+        .trips-cards .dt-controls .search-help-icon {
+            padding: 10px 8px;
+            font-size: 1.1rem;
+            color: #6c757d;
+        }
+        /* The second row's controls — length menu, sort, switches, select-page — are
+           secondary to the search above them, so they share one quiet size. */
+        .trips-cards .dt-controls,
+        .trips-cards .dt-controls .form-check-label,
+        .trips-cards .dt-controls > label {
+            font-size: 0.85rem;
+            color: #495057;
+        }
+        .trips-cards .dt-controls .dt-length select,
+        .trips-cards .dt-controls .dt-sort-btn {
+            height: 32px;
+            font-size: 0.85rem;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background-color: #fff;
+        }
+        .trips-cards .dt-controls .form-check { margin-bottom: 0; min-height: 0; }
+
+        /* --- Pagination ---
+           Numbers only (the prev/next hiding is in style2.css); each number becomes a
+           finger-sized tile and the current page takes the brand blue the desktop
+           header row uses. The info line drops below the pager, in caption grey — it
+           reports, the pager acts, and the actionable row reads better first. */
+        .trips-cards .dt-controls-bottom { flex-direction: column; row-gap: 4px; }
+        .trips-cards .dt-controls-bottom .dt-paging { order: -1; }
+        .trips-cards .dt-controls-bottom .dt-paging nav {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .trips-cards .dt-controls-bottom .dt-paging .dt-paging-button {
+            min-width: 38px;
+            height: 38px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 6px;
+            margin: 0 2px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            color: #374151 !important;
+        }
+        .trips-cards .dt-controls-bottom .dt-paging .dt-paging-button.current,
+        .trips-cards .dt-controls-bottom .dt-paging .dt-paging-button.current:hover {
+            background: #207cca !important;
+            border-color: #207cca;
+            color: #fff !important;
+        }
+        .trips-cards .dt-controls-bottom .dt-paging .page-jump-input {
+            width: 56px !important;
+            height: 38px;
+            margin-left: 8px !important;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .trips-cards .dt-controls-bottom .dt-info {
+            padding: 0;
+            font-size: 0.8rem;
+            color: #6c757d;
+            text-align: center;
+        }
+
+        /* --- Detail row typography ---
+           processHiddenData renders each label as <strong>Label:</strong>. On the card
+           the values are the content; the labels step back into small caption capitals
+           so the eye lands on the right column. */
+        .trip-card-host > #dataTable td.child table tr td:first-child strong {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #8a93a2;
+        }
+        .trip-card-host > #dataTable td.child table tr td { font-size: 0.9rem; }
+
+        /* --- Empty state ---
+           The empty-table row inherits the card shell — gutter paddings and a minimum
+           height sized for two gutter items it does not have. :has() strips that; where
+           it is unsupported the message just sits off-centre in a tall card. */
+        .trip-card-host > #dataTable > tbody > tr:has(> td.dt-empty) {
+            padding: 0;
+            min-height: 0;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.dt-empty {
+            padding: 28px 16px;
+            text-align: center;
+            color: #6c757d;
+        }
+
+        /* --- Touch feedback ---
+           The expand gutter acknowledges the finger (the actions pill has its own
+           :active above); rows already flash their selection colour through the
+           select handler. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-type:active { background: #e9edf1; }
+    }
+
+    /* The selection bar is fixed to the viewport bottom below 600px (style2.css); a
+       top hairline and shadow separate it from the cards scrolling under it, and the
+       safe-area inset keeps it off iPhone home indicators. */
+    @media screen and (max-width: 600px) {
+        .multiLink {
+            border-top: 1px solid #e9ecef;
+            box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.08);
+            padding-top: 8px;
+            padding-bottom: calc(5px + env(safe-area-inset-bottom));
         }
     }
 
@@ -1951,6 +2179,10 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
 // With Scroller on, the table is split in two and virtualised, so cards stay off.
 if (!scroll) {
     $('#dataTable').parent().addClass('trip-card-host');
+    // The toolbar/pagination polish keys off this class rather than .dt-container so
+    // it stays clear of the Scroller variant, whose search keeps its visible label
+    // (applyCardChrome, which supplies the placeholder, does not run there).
+    $(tableObject.table().container()).addClass('trips-cards');
 
     // Card mode drops the header row — its titles line up with nothing once the rows
     // are cards — so the select-page checkbox it carries moves up into the controls
@@ -1962,6 +2194,17 @@ if (!scroll) {
         function applyCardChrome(isMobile) {
             hideCardHeader();
             if (!isMobile) $(tableObject.table().header()).find('tr').show();
+
+            // The card toolbar hides the search's label and lets the input take the
+            // row, so the label's text moves inside as a placeholder (sans the
+            // trailing colon the language string carries).
+            var $search = $(tableObject.table().container()).find('.dt-search');
+            var $searchInput = $search.find('input');
+            if (isMobile) {
+                $searchInput.attr('placeholder', $search.find('label').text().replace(/\s*:\s*$/, ''));
+            } else {
+                $searchInput.removeAttr('placeholder');
+            }
 
             var $cb = $('#selectPageCheckbox');
             if (!$cb.length) return;
@@ -2164,7 +2407,11 @@ function hideMultilink() {
 function updateSelectPageCheckbox() {
     var pageRows = tableObject.rows({ page: 'current' });
     var selectedOnPage = tableObject.rows({ page: 'current', selected: true });
-    $('#selectPageCheckbox').prop('checked', pageRows.count() > 0 && selectedOnPage.count() === pageRows.count());
+    var allSelected = pageRows.count() > 0 && selectedOnPage.count() === pageRows.count();
+    var $cb = $('#selectPageCheckbox').prop('checked', allSelected);
+    // The mobile toolbar shows this checkbox as a toggle button; the fill state lives
+    // on the label, which CSS cannot reach from the input without :has().
+    $cb.closest('.mobile-select-page').toggleClass('checked', allSelected);
 }
 
 
@@ -2189,6 +2436,32 @@ function updateSelectionMessage() {
 }
 
 resetObjects();
+
+// Meta lines that wrap get re-laid as two columns of two (tr.meta-2x2 in the
+// stylesheet) instead of leaving one value orphaned on a second line. Wrap is
+// detected on the natural single-line layout — class off, then compare the meta
+// cells' offsets within the card — so the class always reflects the current
+// content and width. Cells hidden with the meta line (open cards) have no
+// offsetParent and drop out, leaving those rows untouched.
+function updateMetaWrap() {
+    var $rows = $('#dataTable > tbody > tr').not('.child');
+    if (!isCardLayout()) { $rows.removeClass('meta-2x2'); return; }
+    $rows.each(function() {
+        var $tr = $(this).removeClass('meta-2x2');
+        var tops = [];
+        $tr.children('td.col-date, td.col-time, td.col-duration, td.col-length').each(function() {
+            if (this.offsetParent) tops.push(this.offsetTop);
+        });
+        if (tops.length > 1 && Math.max.apply(null, tops) - Math.min.apply(null, tops) > 4) {
+            $tr.addClass('meta-2x2');
+        }
+    });
+}
+var _metaWrapRaf;
+$(window).on('resize', function() {
+    cancelAnimationFrame(_metaWrapRaf);
+    _metaWrapRaf = requestAnimationFrame(updateMetaWrap);
+});
 
 function resetObjects(){
     // Reenable tooltips in hidden fields
@@ -2243,6 +2516,8 @@ $('.deleteButton').off('click').on('click', function() {
             controlElement.toggleClass("noHidden", !hasHidden);
         }
     });
+
+    updateMetaWrap();
 }
 
 // True only when viewing your own trips (you may change their visibility).
