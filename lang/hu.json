@@ -147,6 +147,7 @@
     "stations": "Meglátogatott állomások",
     "shareTrip": "Link létrehozása",
     "selectPage": "Oldal kijelölése",
+    "listOptions": "Beállítások",
     "confirmDelete": "Biztosan törli ezt az utazást?",
     "confirmMultiDelete": "${tripNumber} utazás törlésére készül, biztos benne?",
     "confirmConfirm": "Tényleg TÉNYLEG biztos?",

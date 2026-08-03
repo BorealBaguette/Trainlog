@@ -147,6 +147,7 @@
     "stations": "Stasjoner",
     "shareTrip": "Opprett lenke",
     "selectPage": "Velg side",
+    "listOptions": "Alternativer",
     "confirmDelete": "Er du sikker på at du vil slette denne reisen?",
     "confirmMultiDelete": "Du er i ferd med å slette ${tripNumber} reiser, er du sikker?",
     "confirmConfirm": "Virkelig HELT sikker?",

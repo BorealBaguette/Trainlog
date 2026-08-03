@@ -4,7 +4,12 @@
 <nav class="navbar navbar-expand-xl navbar-light bg-light">
   <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('landing') }}">
-      <img src="{{ url_for('static',filename='images/logo_square.png') }}" width="30" height="30" alt="">
+      {# Below xl the links are behind the toggler, leaving a wide empty band between
+         the two — the wordmark fills it. At xl and up the links need that width back,
+         so the square mark returns. The breakpoint is navbar-expand-xl's, so the swap
+         happens exactly when the toggler does. #}
+      <img class="d-xl-none" src="{{ url_for('static',filename='images/logo.png') }}" width="96" height="32" alt="Trainlog">
+      <img class="d-none d-xl-inline" src="{{ url_for('static',filename='images/logo_square.png') }}" width="30" height="30" alt="Trainlog">
     </a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNavDropdown" aria-controls="navbarNavDropdown" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>

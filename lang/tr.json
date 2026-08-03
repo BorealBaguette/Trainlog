@@ -147,6 +147,7 @@
     "stations": "Ziyaret edilen istasyonlar",
     "shareTrip": "Link oluştur",
     "selectPage": "Sayfayı seç",
+    "listOptions": "Seçenekler",
     "confirmDelete": "Bu yolculuğu silmek istediğinizden emin misiniz?",
     "confirmMultiDelete": "${tripNumber} adet yolculuğu siliyorsunuz. Devam etmek istediğinizden emin misiniz?",
     "confirmConfirm": "Gerçekten ama gerçekten emin misiniz?",

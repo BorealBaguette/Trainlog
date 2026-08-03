@@ -147,6 +147,7 @@
     "stations": "Відвідані станції",
     "shareTrip": "Створити посилання",
     "selectPage": "Вибрати сторінку",
+    "listOptions": "Опції",
     "confirmDelete": "Ви впевнені, що хочете видалити цю подорож?",
     "confirmMultiDelete": "Ви збираєтеся видалити ${tripNumber} подорожей, ви впевнені?",
     "confirmConfirm": "Дійсно, ДІЙСНО впевнені?",

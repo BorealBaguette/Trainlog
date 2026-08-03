@@ -147,6 +147,7 @@
     "stations": "Külastatud jaamad",
     "shareTrip": "Loo link",
     "selectPage": "Vali leht",
+    "listOptions": "Valikud",
     "confirmDelete": "Kas olete kindel, et soovite selle reisi kustutada?",
     "confirmMultiDelete": "Te kavatsete kustutada ${tripNumber} reisi, kas olete kindel?",
     "confirmConfirm": "Tõesti TÕESTI kindel?",

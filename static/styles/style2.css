@@ -86,7 +86,12 @@
 }
 
 .navbar {
-  z-index: 2000;
+  /* Bootstrap's fixed-chrome level. This has to stay under the modal layer
+     (backdrop 1050, modal 1055): at 2000 the navbar painted over the top of every
+     modal on the site — edit_copy's map modal carries an inline z-index:5000 to
+     work around exactly that. Still clears page content and Leaflet, whose panes
+     and controls top out at 1000. */
+  z-index: 1030;
   box-shadow: 0px 1px 5px grey;
 }
 .navbar-nav>li>.dropdown-menu { 

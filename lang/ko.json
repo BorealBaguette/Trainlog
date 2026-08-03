@@ -147,6 +147,7 @@
     "stations": "방문한 역",
     "shareTrip": "링크 만들기",
     "selectPage": "페이지 선택",
+    "listOptions": "옵션",
     "confirmDelete": "이 여정을 진짜 삭제할까요?",
     "confirmMultiDelete": "${tripNumber}개의 여정을 삭제하려고 해요, 삭제할까요?",
     "confirmConfirm": "진짜로 그렇게 하시려고요?",
