@@ -641,6 +641,20 @@ body.markers-hidden .marker-red-green {
           {% if num_hidden_trips > 0 %}
             <div id="hiddenTripsInfo">(+{{ num_hidden_trips }} {% if num_hidden_trips == 1 %}{{ trip_view_hidden_trips_singular }}{% else %}{{ trip_view_hidden_trips_plural }}{% endif %})</div>
           {% endif %}
+          {% if show_ride_along or tag_uuid %}
+            <div class="tripActionButtons">
+              {% if show_ride_along %}
+              <button id="rideAlong" onClick="showRideAlongModal()" class="tripActionBtn rideAlongBtn">
+                <i class="fa-solid fa-copy"></i> {{ rideAlong }}
+              </button>
+              {% endif %}
+              {% if tag_uuid %}
+              <a class="tripActionBtn playBtn" href="{{ url_for('multi_trip', tagId=tag_uuid) }}">
+                <i class="fa-solid fa-play"></i> {{ play_tag }}
+              </a>
+              {% endif %}
+            </div>
+          {% endif %}
           <br>
           <div id="tripDate"></div>              
         </div>

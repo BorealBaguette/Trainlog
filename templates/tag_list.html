@@ -118,7 +118,7 @@
           {% for tag in tagsList %}
           {# Shared tags mix several users' trips: they open the animated
              multiTrip view, never the single-owner public page #}
-          {% set tag_url = url_for('multi_trip', tagUuid=tag.uuid) if tag.is_shared else url_for('public_trip', tagId=tag.uuid) %}
+          {% set tag_url = url_for('multi_trip', tagId=tag.uuid) if tag.is_shared else url_for('public_trip', tagId=tag.uuid) %}
           <tr>
             <td>
               <a class='tagLink' href="{{ tag_url }}">{% if tag.is_shared %}<i class="fas fa-users"></i> {% endif %}{{ tag.name }}</a>

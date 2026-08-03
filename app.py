@@ -4744,7 +4744,7 @@ def render_public_trip_page(
                 {"uuid": tagId},
             ).fetchone()
         if shared:
-            return redirect(url_for("multi_trip", tagUuid=tagId))
+            return redirect(url_for("multi_trip", tagId=tagId))
     elif tripIds is None and ticketId is not None:
         with pg_session() as pg:
             result = pg.execute(
@@ -4790,7 +4790,7 @@ def render_public_trip_page(
     # Legacy multi-owner tags (from before attach_tag checked ownership) are as
     # broken on this single-owner page as shared tags — send them along too.
     if tagId is not None and len(set(usernames.values())) > 1:
-        return redirect(url_for("multi_trip", tagUuid=tagId))
+        return redirect(url_for("multi_trip", tagId=tagId))
     users_by_name = {
         username: User.query.filter_by(username=username).first()
         for username in set(usernames.values())
@@ -4936,9 +4936,12 @@ def public_trip_leaflet(tripIds=None, tagId=None, ticketId=None):
 def public_trip_legacy(tripIds=None, tagId=None, ticketId=None):
     if tripIds:
         return redirect(url_for("public_trip", tripIds=tripIds), 301)
-    if tagId:
+    elif tagId:
         return redirect(url_for("public_trip", tagId=tagId), 301)
-    return redirect(url_for("public_trip", ticketId=request.view_args.get("ticketId")), 301)
+    elif ticketId:
+        return redirect(url_for("public_trip", ticketId=ticketId), 301)
+    else:
+        abort(410)
 
 
 @app.route("/public/trip/<tripIds>")
@@ -4965,8 +4968,8 @@ def public_trip_poster(tripIds=None, tagId=None, ticketId=None):
 
 
 @app.route("/public/multiTrip/<tripIds>")
-@app.route("/public/multiTrip/tag/<tagUuid>")
-def multi_trip(tripIds=None, tagUuid=None):
+@app.route("/public/multiTrip/tag/<tagId>")
+def multi_trip(tripIds=None, tagId=None):
     """
     Public Trip
     """
@@ -4982,7 +4985,7 @@ def multi_trip(tripIds=None, tagUuid=None):
                 WHERE tags.uuid = :uuid
                 GROUP BY tags.name
                 """,
-                {"uuid": tagUuid},
+                {"uuid": tagId},
             ).fetchone()
             tripIds = result["trip_ids"] if result else None
             tag_name = result["name"] if result else None
