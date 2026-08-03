@@ -1082,23 +1082,8 @@ async function initializeMapAndTrips() {
 
     var trips = response[0];
     var prices = response[1];
-    // A plan arrives already ordered (sort_order, then day/time) and that order is
-    // authored by the user — keep it verbatim. Real trips get the chronological sort.
-    if (!relativeDates) {
-        trips.reverse();
-        trips.sort(function(a, b) {
-          // Block order first (past, dated, future); within the dated block, chronological.
-          if (tripGroup(a) !== tripGroup(b)) return tripGroup(a) - tripGroup(b);
-          var getKey = function(t) {
-            try {
-              var dt = t.trip.utc_filtered_start_datetime;
-              var ts = new Date(String(dt).replace(' ', 'T') + 'Z').getTime();
-              return isNaN(ts) ? 0 : ts + (t.trip.departure_delay || 0) * 1000;
-            } catch(e) { return 0; }
-          };
-          return getKey(a) - getKey(b);
-        });
-    }
+    // Trips from getPublicTrips (and thus from processPublicTrips) already come sorted by actual_departure_time (i.e. departure_time + departure_delay).
+    // Therefor, no need to sort them here.
 
     // Keep a reference for itinerary<->map linking, and number the transfer points.
     currentTrips = trips;
