@@ -4900,26 +4900,40 @@ def public_trip(tripIds=None, tagId=None, ticketId=None):
 
 @app.route("/public/multiTrip/<tripIds>")
 @app.route("/public/multiTrip/tag/<tagId>")
-def multi_trip(tripIds=None, tagId=None):
-    """
-    Public Trip
-    """
+@app.route("/public/multiTrip/ticket/<ticketId>")
+def multi_trip(tripIds=None, tagId=None, ticketId=None):
     tag_name = None
-    if tripIds is None:
-        with pg_session() as pg:
-            result = pg.execute(
-                """
-                SELECT string_agg(tags_associations.trip_id::text, ',') AS trip_ids,
-                       tags.name AS name
-                FROM tags_associations
-                LEFT JOIN tags ON tags.uid = tags_associations.tag_id
-                WHERE tags.uuid = :uuid
-                GROUP BY tags.name
-                """,
-                {"uuid": tagId},
-            ).fetchone()
-            tripIds = result["trip_ids"] if result else None
-            tag_name = result["name"] if result else None
+    if not tripIds:
+        if tagId:
+            with pg_session() as pg:
+                result = pg.execute(
+                    """
+                    SELECT string_agg(tags_associations.trip_id::text, ',') AS trip_ids,
+                        tags.name AS tag_name
+                    FROM tags_associations
+                    LEFT JOIN tags ON tags.uid = tags_associations.tag_id
+                    WHERE tags.uuid = :uuid
+                    GROUP BY tags.name
+                    """,
+                    {"uuid": tagId},
+                ).fetchone()
+                tripIds = result["trip_ids"] if result else None
+                tag_name = result["tag_name"] if result else None
+        elif ticketId:
+            with pg_session() as pg:
+                result = pg.execute(
+                    """
+                    SELECT string_agg(trips.trip_id::text, ',') AS trip_ids,
+                        tickets.name AS ticket_name
+                    FROM trips
+                    LEFT JOIN tickets ON trips.ticket_id = tickets.uid
+                    WHERE tickets.uid = :uid
+                    GROUP BY tickets.name
+                    """,
+                    {"uid": ticketId},
+                ).fetchone()
+                tripIds = result["trip_ids"] if result else None
+                tag_name = result["ticket_name"] if result else None
         if not tripIds:
             abort(410)
 
