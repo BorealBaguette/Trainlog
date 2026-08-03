@@ -230,7 +230,12 @@ td.noHidden{
 }
 
 .trips{
-  margin-bottom: 70px;
+  /* No standing bottom reservation. The selection bar is fixed and only exists while
+     trips are checked, and showMultilink() appends .bottom-space to clear it exactly
+     then — so a permanent margin here reserved the same room a second time, and cost
+     ~70px of dead whitespace on every visit: enough to raise a scrollbar on a page
+     whose content otherwise fit, and to cost the auto-fit page length a row or two.
+     The clearance it used to contribute moved into .bottom-space below. */
   padding: 25px;
 }
 
@@ -331,7 +336,9 @@ td .operatorList .operatorListName{
 }
 
 .bottom-space{
-  height: 30px;
+  /* Appended to the body while the selection bar is shown, to clear it. Carries the
+     full clearance now (was 30px here plus a standing 70px margin on .trips). */
+  height: 100px;
 }
 
 button.multiTrip{
@@ -509,7 +516,6 @@ td.child table tr:not(:last-child) td{
 
   .trips{
     padding: 0px;
-    margin-bottom:5em;
   }
 
   .multiLink{
@@ -522,7 +528,8 @@ td.child table tr:not(:last-child) td{
   }
 
   .bottom-space{
-    height: 15px;
+    /* As above: was 15px plus a standing 5em margin on .trips. */
+    height: 95px;
   }
 }
 

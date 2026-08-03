@@ -148,6 +148,8 @@
     "shareTrip": "Link aanmaken",
     "selectPage": "Pagina selecteren",
     "listOptions": "Opties",
+    "rowsAuto": "Auto",
+    "rowsCustom": "Aangepast…",
     "confirmDelete": "Weet je zeker dat je deze trip wilt verwijderen?",
     "confirmMultiDelete": "Je staat op het punt om ${tripNumber} trips te verwijderen, weet je het zeker ?",
     "confirmConfirm": "ECHT zeker?",

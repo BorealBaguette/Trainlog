@@ -148,6 +148,8 @@
     "shareTrip": "Створити посилання",
     "selectPage": "Вибрати сторінку",
     "listOptions": "Опції",
+    "rowsAuto": "Авто",
+    "rowsCustom": "Інше…",
     "confirmDelete": "Ви впевнені, що хочете видалити цю подорож?",
     "confirmMultiDelete": "Ви збираєтеся видалити ${tripNumber} подорожей, ви впевнені?",
     "confirmConfirm": "Дійсно, ДІЙСНО впевнені?",

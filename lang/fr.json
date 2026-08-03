@@ -148,6 +148,8 @@
     "shareTrip": "Créer lien",
     "selectPage": "Sélectionner la page",
     "listOptions": "Options",
+    "rowsAuto": "Auto",
+    "rowsCustom": "Personnalisé…",
     "confirmDelete": "Êtes-vous sûr de vouloir supprimer ce trajet ?",
     "confirmMultiDelete": "Vous êtes sur le point de supprimer ${tripNumber} trajets, êtes-vous sûr ?",
     "confirmConfirm": "Vraiment VRAIMENT sûr ?",

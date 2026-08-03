@@ -148,6 +148,8 @@
     "shareTrip": "Skapa länk",
     "selectPage": "Välj sida",
     "listOptions": "Alternativ",
+    "rowsAuto": "Auto",
+    "rowsCustom": "Anpassat…",
     "confirmDelete": "Är du säker på att du vill radera denna resa?",
     "confirmMultiDelete": "Du är på väg att radera ${tripNumber} resor, är du säker?",
     "confirmConfirm": "Är du VERKLIGEN säker?",

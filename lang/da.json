@@ -148,6 +148,8 @@
     "shareTrip": "Opret link",
     "selectPage": "Vælg side",
     "listOptions": "Indstillinger",
+    "rowsAuto": "Auto",
+    "rowsCustom": "Brugerdefineret…",
     "confirmDelete": "Er du sikker på, at du vil slette denne rejse?",
     "confirmMultiDelete": "Du er ved at slette ${tripNumber} rejser, er du sikker?",
     "confirmConfirm": "Helt sikker?",

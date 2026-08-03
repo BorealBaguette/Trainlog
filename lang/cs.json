@@ -148,6 +148,8 @@
     "shareTrip": "Vytvořit odkaz",
     "selectPage": "Vybrat stránku",
     "listOptions": "Možnosti",
+    "rowsAuto": "Auto",
+    "rowsCustom": "Vlastní…",
     "confirmDelete": "Opravdu chcete smazat tuto cestu?",
     "confirmMultiDelete": "Chystáte se smazat ${tripNumber} cest, jste si jistí?",
     "confirmConfirm": "Opravdu JSTE SI JISTI?",

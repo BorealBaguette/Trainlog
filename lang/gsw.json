@@ -148,6 +148,8 @@
     "shareTrip": "Link erstelle",
     "selectPage": "Syte uswähle",
     "listOptions": "Optione",
+    "rowsAuto": "Auto",
+    "rowsCustom": "Benutzerdefiniert…",
     "confirmDelete": "Sind Sie sicher, dass Sie die Reise lösche wennd?",
     "confirmMultiDelete": "Sie sind im Begriff, ${tripNumber} Fahrte z lösche. Sind Sie sicher?",
     "confirmConfirm": "Würkli WÜRKLI sicher?",
