@@ -1339,9 +1339,7 @@ var CARD_COLUMN_CLASSES = ['col-type', 'col-origin', 'col-dest', 'col-date', 'co
 var META_COLUMN_CLASSES = ['col-date', 'col-time', 'col-duration', 'col-length'];
 
 function isCardLayout() {
-    // Scroller replaces the table with a virtualised one split across two tables, so
-    // the card rules are not applied there and neither is this.
-    return !scroll && window.matchMedia('(max-width: 767px)').matches;
+    return window.matchMedia('(max-width: 767px)').matches;
 }
 
 // Cells that select their row on click. The default excludes the first cell, the last
@@ -2058,7 +2056,6 @@ var table = $('#tripRows');
     }
 
     var _urlParams = new URLSearchParams(window.location.search);
-    var scroll = _urlParams.get('scroll') === 'true';
     var initialSearch = _urlParams.get('search') || '';
     var isPast = {{ (not projects)|lower }};
     var _urlSortParam = _urlParams.get('sort');
@@ -2095,14 +2092,21 @@ var table = $('#tripRows');
         return Math.max(AUTO_ROWS_MIN, Math.min(AUTO_ROWS_MAX, fits));
     }
 
-    // Scroller virtualises the rows and does its own viewport maths (scrollY above), so
-    // auto-fit is for the paged layout only.
-    // An explicit ?rows= wins and is kept as given (any sane count, or -1 for "all");
-    // its absence is what "auto" means, so nothing has to be written to the URL for it.
-    var _initialRows = parseInt(_urlParams.get('rows') || '', 10);
+    /* Where the page length comes from, in order: an explicit ?rows= (so a shared or
+       bookmarked link keeps meaning what it said), then whatever this browser last
+       chose, then auto.
+
+       The remembered choice is a cookie rather than a user setting on purpose: a phone
+       and a desktop want different lengths, and the same account uses both. ROWS_COOKIE
+       holds either a count or the string 'auto' — 'auto' has to be storable distinctly,
+       because "no preference yet" and "explicitly chose auto" both mean auto today but
+       only the first should follow a change of default later. parseInt('auto') is NaN,
+       which fails the range test below and lands on auto either way. */
+    var ROWS_COOKIE = 'tripsRows';
+    var _initialRows = parseInt(_urlParams.get('rows') || getCookie(ROWS_COOKIE) || '', 10);
     var _rowsValid = _initialRows === -1 || (_initialRows >= 1 && _initialRows <= 500);
-    var _autoRowsActive = !scroll && !_rowsValid;
-    var _autoRows = scroll ? 10 : autoRowCount();
+    var _autoRowsActive = !_rowsValid;
+    var _autoRows = autoRowCount();
     var _validRows = _autoRowsActive ? _autoRows : (_rowsValid ? _initialRows : _autoRows);
 
     /* The length menu. 10 is gone — auto replaced it as the default, and it was only
@@ -2145,8 +2149,6 @@ var table = $('#tripRows');
     serverSide: true,
     pageJump:true,
     searchDelay: 1000,
-    scrollY: scroll == true ? $(window).height() - 300 : null,
-    scroller: scroll,
     dom: '<"dt-controls d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mb-2"lf>rt<"dt-controls-bottom d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mt-2"ip>',
     columnDefs: [{ orderable: false, targets: '_all' }],
     // Every column is orderable:false and sorting runs through the "Trier" dropdown
@@ -2272,7 +2274,7 @@ var table = $('#tripRows');
         }
     },
     order: [],
-    lengthMenu: scroll ? [[10, 50, 100, -1], [10, 50, 100, "{{dtAll}}"]] : _buildLengthMenu(),
+    lengthMenu: _buildLengthMenu(),
     pageLength: _validRows,
     displayStart: Math.max(0, _initialPage - 1) * (_validRows > 0 ? _validRows : 0),
     paging: true,
@@ -2344,7 +2346,7 @@ var table = $('#tripRows');
     // Auto is the default, so it is the absence of ?rows= rather than any value —
     // writing the computed count would freeze it and defeat the point on the next load.
     var _len = tableObject.page.len();
-    if (_autoRowsActive || (scroll && _len === 10)) {
+    if (_autoRowsActive) {
         url.searchParams.delete('rows');
     } else {
         url.searchParams.set('rows', _len);
@@ -2386,14 +2388,79 @@ var table = $('#tripRows');
 // rather than by comparing the value against _autoRows.
 tableObject.on('length.dt', function() {
     var sel = lengthSelect();
-    _autoRowsActive = !scroll && Boolean(sel) && sel.selectedIndex === 0;
+    _autoRowsActive = Boolean(sel) && sel.selectedIndex === 0;
+    // Remembered per browser, so this device opens on the same length next time. The
+    // custom-value path routes through here too — it sets the length via the API, which
+    // fires this — so there is nothing to persist separately.
+    setCookie(ROWS_COOKIE, _autoRowsActive ? 'auto' : String(tableObject.page.len()), 365);
 });
 
 function lengthSelect() {
     return $(tableObject.table().container()).find('div.dt-length select').get(0);
 }
 
-if (!scroll) {
+/* Two bits of tidying for the length select.
+
+   A native <select> is always as wide as its widest option, so the box sat permanently
+   sized for "Personnalisé…" whatever was actually picked. And the auto entry needs its
+   full "Auto (13)" label in the open list, where it has to be distinguishable from the
+   plain counts, but reads as clutter in a closed box — there, the number alone says the
+   same thing.
+
+   So the auto option carries the short label while the list is closed and the full one
+   while it is open, and the box is re-measured to whatever is actually showing. Both
+   key off options[0] being the auto entry, which is what the "is auto selected" test
+   already relies on. */
+var _lengthRuler = null;
+
+function setLengthAutoExpanded(expanded) {
+    var sel = lengthSelect();
+    if (!sel || !sel.options.length) return;
+    sel.options[0].text = expanded ? '{{rowsAuto}} (' + _autoRows + ')' : String(_autoRows);
+}
+
+function fitLengthSelect() {
+    var sel = lengthSelect();
+    if (!sel) return;
+    var opt = sel.options[sel.selectedIndex];
+    if (!opt) return;
+    if (!_lengthRuler) {
+        _lengthRuler = document.createElement('span');
+        _lengthRuler.setAttribute('aria-hidden', 'true');
+        _lengthRuler.style.cssText = 'position:absolute;top:-9999px;left:-9999px;white-space:pre;';
+        document.body.appendChild(_lengthRuler);
+    }
+    var cs = window.getComputedStyle(sel);
+    ['fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'letterSpacing'].forEach(function(prop) {
+        _lengthRuler.style[prop] = cs[prop];
+    });
+    _lengthRuler.textContent = opt.text;
+    /* The text, plus the padding and borders the theme draws, plus room for the arrow
+       the browser paints inside the box. That last one is not measurable from script
+       and differs by platform, so it is an allowance — erring wide, since a couple of
+       spare pixels only look generous where too few would clip the arrow. */
+    var chrome = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+               + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth) + 26;
+    sel.style.width = Math.ceil(_lengthRuler.offsetWidth + chrome) + 'px';
+}
+
+// Closed state: short auto label, box sized to it.
+function refreshLengthSelect() {
+    setLengthAutoExpanded(false);
+    fitLengthSelect();
+}
+
+(function() {
+    // Delegated, so it survives the select being rebuilt by the custom-value path.
+    // The label is swapped on mousedown, before the browser paints the option list.
+    $(tableObject.table().container())
+        .on('mousedown focus', 'div.dt-length select', function() { setLengthAutoExpanded(true); })
+        .on('blur change', 'div.dt-length select', refreshLengthSelect);
+    refreshLengthSelect();
+})();
+
+
+{
     var customRowsModal = new bootstrap.Modal(document.getElementById('customRowsModal'));
 
     /* The custom entry is a menu action, not a length, so its sentinel must never
@@ -2432,6 +2499,7 @@ if (!scroll) {
             $sel.append($('<option>').val(-1).text("{{dtAll}}"));
             $sel.append($('<option>').val(ROWS_CUSTOM).text('{{rowsCustom}}'));
             $sel.val(String(n));
+            refreshLengthSelect();
         }
         _autoRowsActive = false;
         customRowsModal.hide();
@@ -2479,7 +2547,6 @@ function spaceBelow(el) {
 }
 
 function recordAutoFitMetrics() {
-    if (scroll) return;
     // An open detail row sits between the rows as a sibling and would be read as
     // trailing space, and its parent row is taller than the median it feeds.
     if ($('#dataTable > tbody > tr.child').length) return;
@@ -2524,12 +2591,8 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
 // Mobile card layout. The class goes on the table's parent, not the table, so the
 // rules can be written as `.trip-card-host > #dataTable` and miss the measuring copy
 // Responsive clones (id and classes included) one level deeper — see the stylesheet.
-// With Scroller on, the table is split in two and virtualised, so cards stay off.
-if (!scroll) {
+{
     $('#dataTable').parent().addClass('trip-card-host');
-    // The toolbar/pagination polish keys off this class rather than .dt-container so
-    // it stays clear of the Scroller variant, whose search keeps its visible label
-    // (applyCardChrome, which supplies the placeholder, does not run there).
     $(tableObject.table().container()).addClass('trips-cards');
 
     // Card mode drops the header row — its titles line up with nothing once the rows
@@ -2607,7 +2670,7 @@ if (!scroll) {
     $(tableObject.table().container()).find('.dt-controls .dt-search').before($futureSwitch);
 {% endif %}
 
-if (!scroll) {
+{
     // A gear icon joins the search input on its own row; below 768px (see the CSS)
     // it is the trigger that reveals everything else — page-select, length, sort,
     // the two switches. Above that width both wrappers are display:contents and the
@@ -2793,7 +2856,7 @@ function updateSelectPageCheckbox() {
 
 
 function updateSelectionMessage() {
-    if (new URLSearchParams(window.location.search).get('scroll') != 'true') {
+    {
         var message = checkedTrips.length === 0
             ? ""
             : pluralize(dtRowsSelected, checkedTrips.length);
