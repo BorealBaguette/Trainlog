@@ -223,7 +223,7 @@ function loadTrips() {
         contentType: 'application/json',
         data: JSON.stringify({ tripIds: {{ tripIds | tojson }} })
     }).done(function(data) {
-        tripsData = data[0].reverse();
+        tripsData = data[0];
         coloursData = data[2];
         // With a single user there is nothing to disambiguate: use the normal
         // per-type trip colours instead of per-user ones
