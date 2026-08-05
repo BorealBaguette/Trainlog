@@ -1182,5 +1182,21 @@
     "overnight": "Über Nacht",
     "busRouterDedicated": "Mit em spezielle Bus-Router brächnet.",
     "busRouterFallback": "Für die Regioon gits kein Bus-Router, drum isch de Auto-Router bruucht worde. D Route cha über Strasse gah, wo für Büs gsperrt sind.",
-    "busRouterFallbackError": "De Bus-Router het nöd gantwortet, drum isch de Auto-Router bruucht worde. D Route cha über Strasse gah, wo für Büs gsperrt sind."
+    "busRouterFallbackError": "De Bus-Router het nöd gantwortet, drum isch de Auto-Router bruucht worde. D Route cha über Strasse gah, wo für Büs gsperrt sind.",
+    "statsLines": "Linie",
+    "statsVehicles": "Fahrzüg",
+    "statsVessels": "Schiff",
+    "statsAircraft": "Flugzüg",
+    "statsTrainsets": "Zugskompositione",
+    "statsDelay": "Verspötig",
+    "statsChartSettings": "Diagramm",
+    "statsChartSettingsTitle": "Aazeigti Diagramm",
+    "statsChartSettingsHelp": "Wähl us, weli Diagramm uf de Statistikssite erschiine. Diagramm ohni Date wärded automatisch usblendet.",
+    "statsChartSettingsReset": "Alli aazeige",
+    "statsAxisBreak": "Z gross Balke kürze",
+    "statsAxisBreakHelp": "Wenn ein Balke alli andere erdrückt, wird er kürzt, damit die andere läsbar bliibed. Klick uf en Unterbruch, zum en ufklappe.",
+    "statsAirportsVisited": "Bsuechti Flughäfe",
+    "statsTerminalsVisited": "Bsuechti Terminals",
+    "statsStopsVisited": "Bsuechti Haltstelle",
+    "statsPlacesVisited": "Bsuechti Ort"
 }

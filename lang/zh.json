@@ -1181,5 +1181,21 @@
     "overnight": "过夜",
     "busRouterDedicated": "使用专用的公交路线规划器计算。",
     "busRouterFallback": "该地区没有公交路线规划器，因此使用了汽车路线规划器。路线可能经过公交车禁止通行的道路。",
-    "busRouterFallbackError": "公交路线规划器没有响应，因此使用了汽车路线规划器。路线可能经过公交车禁止通行的道路。"
+    "busRouterFallbackError": "公交路线规划器没有响应，因此使用了汽车路线规划器。路线可能经过公交车禁止通行的道路。",
+    "statsLines": "线路",
+    "statsVehicles": "车辆",
+    "statsVessels": "船舶",
+    "statsAircraft": "航空器",
+    "statsTrainsets": "编组",
+    "statsDelay": "延误",
+    "statsChartSettings": "图表",
+    "statsChartSettingsTitle": "显示的图表",
+    "statsChartSettingsHelp": "选择在统计页面上显示哪些图表。没有数据的图表会自动隐藏。",
+    "statsChartSettingsReset": "全部显示",
+    "statsAxisBreak": "截断过长的条形",
+    "statsAxisBreakHelp": "当某个条形远超其他条形时将其截断，以保持其余条形可读。点击截断处可展开。",
+    "statsAirportsVisited": "访问过的机场",
+    "statsTerminalsVisited": "访问过的码头",
+    "statsStopsVisited": "访问过的车站",
+    "statsPlacesVisited": "访问过的地点"
 }

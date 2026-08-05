@@ -1184,5 +1184,21 @@
     "overnight": "Natten over",
     "busRouterDedicated": "Beregnet med den dedikerede busrouter.",
     "busRouterFallback": "Ingen busrouter dækker dette område, så bilrouteren blev brugt. Ruten kan følge veje, som busser ikke må køre på.",
-    "busRouterFallbackError": "Busrouteren svarede ikke, så bilrouteren blev brugt. Ruten kan følge veje, som busser ikke må køre på."
+    "busRouterFallbackError": "Busrouteren svarede ikke, så bilrouteren blev brugt. Ruten kan følge veje, som busser ikke må køre på.",
+    "statsLines": "Linjer",
+    "statsVehicles": "Køretøjer",
+    "statsVessels": "Skibe",
+    "statsAircraft": "Fly",
+    "statsTrainsets": "Togsæt",
+    "statsDelay": "Forsinkelse",
+    "statsChartSettings": "Diagrammer",
+    "statsChartSettingsTitle": "Viste diagrammer",
+    "statsChartSettingsHelp": "Vælg hvilke diagrammer der skal vises på statistiksiden. Diagrammer uden data skjules automatisk.",
+    "statsChartSettingsReset": "Vis alle",
+    "statsAxisBreak": "Afkort overdimensionerede søjler",
+    "statsAxisBreakHelp": "Når én søjle overskygger de andre, afkortes den, så de øvrige forbliver læsbare. Klik på et brud for at folde det ud.",
+    "statsAirportsVisited": "Besøgte lufthavne",
+    "statsTerminalsVisited": "Besøgte terminaler",
+    "statsStopsVisited": "Besøgte stoppesteder",
+    "statsPlacesVisited": "Besøgte steder"
 }

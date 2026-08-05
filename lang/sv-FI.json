@@ -1184,5 +1184,21 @@
     "overnight": "Över natten",
     "busRouterDedicated": "Beräknad med den dedikerade bussroutern.",
     "busRouterFallback": "Ingen bussrouter täcker det här området, så bilroutern användes. Rutten kan följa vägar som bussar inte får köra på.",
-    "busRouterFallbackError": "Bussroutern svarade inte, så bilroutern användes. Rutten kan följa vägar som bussar inte får köra på."
+    "busRouterFallbackError": "Bussroutern svarade inte, så bilroutern användes. Rutten kan följa vägar som bussar inte får köra på.",
+    "statsLines": "Linjer",
+    "statsVehicles": "Fordon",
+    "statsVessels": "Fartyg",
+    "statsAircraft": "Flygplan",
+    "statsTrainsets": "Tågsätt",
+    "statsDelay": "Försening",
+    "statsChartSettings": "Diagram",
+    "statsChartSettingsTitle": "Synliga diagram",
+    "statsChartSettingsHelp": "Välj vilka diagram som ska visas på statistiksidan. Diagram utan data döljs automatiskt.",
+    "statsChartSettingsReset": "Visa alla",
+    "statsAxisBreak": "Kapa överdimensionerade staplar",
+    "statsAxisBreakHelp": "När en stapel överskuggar de andra kapas den så att övriga förblir läsbara. Klicka på ett brott för att fälla ut det.",
+    "statsAirportsVisited": "Besökta flygstationer",
+    "statsTerminalsVisited": "Besökta terminaler",
+    "statsStopsVisited": "Besökta hållplatser",
+    "statsPlacesVisited": "Besökta platser"
 }

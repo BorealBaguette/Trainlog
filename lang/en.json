@@ -1181,5 +1181,21 @@
     "licensedToTrainlog": "Licensed to Trainlog",
     "busRouterDedicated": "Routed with the dedicated bus router.",
     "busRouterFallback": "No bus router covers this area, so the car router was used. The route may follow roads buses cannot use.",
-    "busRouterFallbackError": "The bus router did not answer, so the car router was used. The route may follow roads buses cannot use."
+    "busRouterFallbackError": "The bus router did not answer, so the car router was used. The route may follow roads buses cannot use.",
+    "statsLines": "Lines",
+    "statsVehicles": "Vehicles",
+    "statsVessels": "Vessels",
+    "statsAircraft": "Aircraft",
+    "statsDelay": "Delay",
+    "statsChartSettings": "Charts",
+    "statsChartSettingsTitle": "Visible charts",
+    "statsChartSettingsHelp": "Choose which charts to show on the statistics page. Charts with no data are hidden automatically.",
+    "statsChartSettingsReset": "Show all",
+    "statsTrainsets": "Trainsets",
+    "statsAxisBreak": "Cut oversized bars",
+    "statsAxisBreakHelp": "When one bar dwarfs the rest, cut it so the others stay readable. Click a cut to expand it.",
+    "statsAirportsVisited": "Visited airports",
+    "statsTerminalsVisited": "Visited terminals",
+    "statsStopsVisited": "Visited stops",
+    "statsPlacesVisited": "Visited places"
 }

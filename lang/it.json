@@ -1184,5 +1184,21 @@
     "overnight": "Notturno",
     "busRouterDedicated": "Calcolato con il router dedicato agli autobus.",
     "busRouterFallback": "Nessun router per autobus copre quest'area, quindi è stato usato quello per auto. Il percorso potrebbe seguire strade vietate agli autobus.",
-    "busRouterFallbackError": "Il router per autobus non ha risposto, quindi è stato usato quello per auto. Il percorso potrebbe seguire strade vietate agli autobus."
+    "busRouterFallbackError": "Il router per autobus non ha risposto, quindi è stato usato quello per auto. Il percorso potrebbe seguire strade vietate agli autobus.",
+    "statsLines": "Linee",
+    "statsVehicles": "Veicoli",
+    "statsVessels": "Navi",
+    "statsAircraft": "Aerei",
+    "statsTrainsets": "Composizioni",
+    "statsDelay": "Ritardo",
+    "statsChartSettings": "Grafici",
+    "statsChartSettingsTitle": "Grafici visibili",
+    "statsChartSettingsHelp": "Scegli quali grafici mostrare nella pagina delle statistiche. I grafici senza dati vengono nascosti automaticamente.",
+    "statsChartSettingsReset": "Mostra tutti",
+    "statsAxisBreak": "Taglia le barre sproporzionate",
+    "statsAxisBreakHelp": "Quando una barra schiaccia le altre, viene tagliata per mantenere leggibile il resto. Clicca su un taglio per espanderlo.",
+    "statsAirportsVisited": "Aeroporti frequentati",
+    "statsTerminalsVisited": "Terminal frequentati",
+    "statsStopsVisited": "Fermate frequentate",
+    "statsPlacesVisited": "Luoghi frequentati"
 }

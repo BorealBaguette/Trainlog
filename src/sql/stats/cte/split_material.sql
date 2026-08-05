@@ -12,7 +12,7 @@ WITH RECURSIVE material_split AS (
             WHEN POSITION(',' IN material_type) > 0 THEN TRIM(SUBSTRING(material_type FROM POSITION(',' IN material_type) + 1))
             ELSE NULL
         END AS rest,
-        trip_length, is_past, is_planned_future, is_project, trip_duration, carbon
+        trip_length, is_past, is_planned_future, is_project, trip_duration, carbon, arrival_delay
     FROM time_categories
     WHERE is_project IS FALSE
 
@@ -30,7 +30,7 @@ WITH RECURSIVE material_split AS (
             WHEN POSITION(',' IN rest) > 0 THEN TRIM(SUBSTRING(rest FROM POSITION(',' IN rest) + 1))
             ELSE NULL
         END,
-        trip_length, is_past, is_planned_future,  is_project, trip_duration, carbon
+        trip_length, is_past, is_planned_future,  is_project, trip_duration, carbon, arrival_delay
     FROM material_split
     WHERE rest IS NOT NULL AND TRIM(rest) != ''
 )

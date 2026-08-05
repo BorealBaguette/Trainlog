@@ -1181,5 +1181,21 @@
     "overnight": "夜間",
     "busRouterDedicated": "バス専用の経路探索で計算されました。",
     "busRouterFallback": "この地域に対応するバス用の経路探索がないため、自動車用を使用しました。バスが通行できない道路を通る可能性があります。",
-    "busRouterFallbackError": "バス用の経路探索が応答しなかったため、自動車用を使用しました。バスが通行できない道路を通る可能性があります。"
+    "busRouterFallbackError": "バス用の経路探索が応答しなかったため、自動車用を使用しました。バスが通行できない道路を通る可能性があります。",
+    "statsLines": "路線",
+    "statsVehicles": "車両",
+    "statsVessels": "船舶",
+    "statsAircraft": "機体",
+    "statsTrainsets": "編成",
+    "statsDelay": "遅延",
+    "statsChartSettings": "グラフ",
+    "statsChartSettingsTitle": "表示するグラフ",
+    "statsChartSettingsHelp": "統計ページに表示するグラフを選択します。データのないグラフは自動的に非表示になります。",
+    "statsChartSettingsReset": "すべて表示",
+    "statsAxisBreak": "極端に長い棒を省略する",
+    "statsAxisBreakHelp": "1 本の棒が他を圧倒する場合、他が読めるように省略します。省略部分をクリックすると展開します。",
+    "statsAirportsVisited": "訪問空港",
+    "statsTerminalsVisited": "訪問ターミナル",
+    "statsStopsVisited": "訪問バス停",
+    "statsPlacesVisited": "訪問地点"
 }

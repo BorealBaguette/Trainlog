@@ -1182,5 +1182,21 @@
     "overnight": "Yön yli",
     "busRouterDedicated": "Reititetty erillisellä bussireitittimellä.",
     "busRouterFallback": "Tälle alueelle ei ole bussireititintä, joten käytettiin autoreititintä. Reitti voi kulkea teitä, joille bussit eivät saa ajaa.",
-    "busRouterFallbackError": "Bussireititin ei vastannut, joten käytettiin autoreititintä. Reitti voi kulkea teitä, joille bussit eivät saa ajaa."
+    "busRouterFallbackError": "Bussireititin ei vastannut, joten käytettiin autoreititintä. Reitti voi kulkea teitä, joille bussit eivät saa ajaa.",
+    "statsLines": "Linjat",
+    "statsVehicles": "Kulkuvälineet",
+    "statsVessels": "Alukset",
+    "statsAircraft": "Lentokoneet",
+    "statsTrainsets": "Junayksiköt",
+    "statsDelay": "Viivästys",
+    "statsChartSettings": "Kaaviot",
+    "statsChartSettingsTitle": "Näytettävät kaaviot",
+    "statsChartSettingsHelp": "Valitse, mitkä kaaviot näkyvät tilastosivulla. Kaaviot, joissa ei ole tietoja, piilotetaan automaattisesti.",
+    "statsChartSettingsReset": "Näytä kaikki",
+    "statsAxisBreak": "Katkaise ylisuuret palkit",
+    "statsAxisBreakHelp": "Kun yksi palkki peittää muut, se katkaistaan, jotta muut pysyvät luettavina. Napsauta katkaisua laajentaaksesi sen.",
+    "statsAirportsVisited": "Vieraillut lentoasemat",
+    "statsTerminalsVisited": "Vieraillut terminaalit",
+    "statsStopsVisited": "Vieraillut pysäkit",
+    "statsPlacesVisited": "Vieraillut paikat"
 }

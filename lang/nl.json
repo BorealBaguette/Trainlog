@@ -1184,5 +1184,21 @@
     "overnight": "'s Nachts",
     "busRouterDedicated": "Berekend met de speciale busrouter.",
     "busRouterFallback": "Voor dit gebied is er geen busrouter, dus is de autorouter gebruikt. De route kan wegen volgen die voor bussen verboden zijn.",
-    "busRouterFallbackError": "De busrouter reageerde niet, dus is de autorouter gebruikt. De route kan wegen volgen die voor bussen verboden zijn."
+    "busRouterFallbackError": "De busrouter reageerde niet, dus is de autorouter gebruikt. De route kan wegen volgen die voor bussen verboden zijn.",
+    "statsLines": "Lijnen",
+    "statsVehicles": "Voertuigen",
+    "statsVessels": "Schepen",
+    "statsAircraft": "Vliegtuigen",
+    "statsTrainsets": "Treinstellen",
+    "statsDelay": "Vertraging",
+    "statsChartSettings": "Grafieken",
+    "statsChartSettingsTitle": "Zichtbare grafieken",
+    "statsChartSettingsHelp": "Kies welke grafieken op de statistiekpagina verschijnen. Grafieken zonder gegevens worden automatisch verborgen.",
+    "statsChartSettingsReset": "Alles tonen",
+    "statsAxisBreak": "Te grote balken afkappen",
+    "statsAxisBreakHelp": "Als één balk de rest overschaduwt, wordt hij afgekapt zodat de andere leesbaar blijven. Klik op een onderbreking om deze uit te klappen.",
+    "statsAirportsVisited": "Bezochte luchthavens",
+    "statsTerminalsVisited": "Bezochte terminals",
+    "statsStopsVisited": "Bezochte haltes",
+    "statsPlacesVisited": "Bezochte plaatsen"
 }

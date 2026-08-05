@@ -1181,5 +1181,21 @@
     "overnight": "Éjszaka át",
     "busRouterDedicated": "Az útvonal a dedikált buszútvonaltervezővel készült.",
     "busRouterFallback": "Ezt a területet nem fedi buszútvonaltervező, ezért az autós tervező készítette. Az útvonal olyan utakon is haladhat, ahol buszok nem közlekedhetnek.",
-    "busRouterFallbackError": "A buszútvonaltervező nem válaszolt, ezért az autós tervező készítette. Az útvonal olyan utakon is haladhat, ahol buszok nem közlekedhetnek."
+    "busRouterFallbackError": "A buszútvonaltervező nem válaszolt, ezért az autós tervező készítette. Az útvonal olyan utakon is haladhat, ahol buszok nem közlekedhetnek.",
+    "statsLines": "Vonalak",
+    "statsVehicles": "Járművek",
+    "statsVessels": "Hajók",
+    "statsAircraft": "Repülőgépek",
+    "statsTrainsets": "Szerelvények",
+    "statsDelay": "Késés",
+    "statsChartSettings": "Diagramok",
+    "statsChartSettingsTitle": "Látható diagramok",
+    "statsChartSettingsHelp": "Válaszd ki, mely diagramok jelenjenek meg a statisztikai oldalon. Az adat nélküli diagramok automatikusan elrejtődnek.",
+    "statsChartSettingsReset": "Összes megjelenítése",
+    "statsAxisBreak": "Túl hosszú oszlopok vágása",
+    "statsAxisBreakHelp": "Ha egy oszlop elnyomja a többit, a rendszer elvágja, hogy a többi olvasható maradjon. Kattints a vágásra a kibontásához.",
+    "statsAirportsVisited": "Meglátogatott repülőterek",
+    "statsTerminalsVisited": "Meglátogatott terminálok",
+    "statsStopsVisited": "Meglátogatott megállók",
+    "statsPlacesVisited": "Meglátogatott helyek"
 }
