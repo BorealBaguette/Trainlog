@@ -1181,5 +1181,8 @@
     "settingsSectionAccount": "Account",
     "settingsSectionIntegrations": "Integrazioni",
     "discordHint": "Collega il tuo account Discord per ricevere automaticamente il tuo ruolo premium.",
-    "overnight": "Notturno"
+    "overnight": "Notturno",
+    "busRouterDedicated": "Calcolato con il router dedicato agli autobus.",
+    "busRouterFallback": "Nessun router per autobus copre quest'area, quindi è stato usato quello per auto. Il percorso potrebbe seguire strade vietate agli autobus.",
+    "busRouterFallbackError": "Il router per autobus non ha risposto, quindi è stato usato quello per auto. Il percorso potrebbe seguire strade vietate agli autobus."
 }

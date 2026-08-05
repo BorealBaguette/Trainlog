@@ -1178,5 +1178,8 @@
     "settingsSectionAccount": "계정",
     "settingsSectionIntegrations": "연동",
     "discordHint": "Discord 계정을 연결하면 프리미엄 역할을 자동으로 받습니다.",
-    "overnight": "야간"
+    "overnight": "야간",
+    "busRouterDedicated": "전용 버스 경로 검색으로 계산되었습니다.",
+    "busRouterFallback": "이 지역을 지원하는 버스 경로 검색이 없어 자동차 경로 검색을 사용했습니다. 버스가 통행할 수 없는 도로를 지날 수 있습니다.",
+    "busRouterFallbackError": "버스 경로 검색이 응답하지 않아 자동차 경로 검색을 사용했습니다. 버스가 통행할 수 없는 도로를 지날 수 있습니다."
 }

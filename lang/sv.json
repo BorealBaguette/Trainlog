@@ -1181,5 +1181,8 @@
     "settingsSectionAccount": "Konto",
     "settingsSectionIntegrations": "Integrationer",
     "discordHint": "Anslut ditt Discord-konto för att automatiskt få din premium-roll.",
-    "overnight": "Över natten"
+    "overnight": "Över natten",
+    "busRouterDedicated": "Beräknad med den dedikerade bussroutern.",
+    "busRouterFallback": "Ingen bussrouter täcker det här området, så bilroutern användes. Rutten kan följa vägar som bussar inte får köra på.",
+    "busRouterFallbackError": "Bussroutern svarade inte, så bilroutern användes. Rutten kan följa vägar som bussar inte får köra på."
 }

@@ -1181,5 +1181,8 @@
     "settingsSectionAccount": "Conta",
     "settingsSectionIntegrations": "Integrações",
     "discordHint": "Conecte sua conta do Discord para receber automaticamente sua função premium.",
-    "overnight": "Durante a noite"
+    "overnight": "Durante a noite",
+    "busRouterDedicated": "Calculado com o roteador dedicado a ônibus.",
+    "busRouterFallback": "Nenhum roteador de ônibus cobre esta área, então o roteador de carro foi usado. A rota pode seguir vias proibidas para ônibus.",
+    "busRouterFallbackError": "O roteador de ônibus não respondeu, então o roteador de carro foi usado. A rota pode seguir vias proibidas para ônibus."
 }

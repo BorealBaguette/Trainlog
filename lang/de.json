@@ -1181,5 +1181,8 @@
     "settingsSectionAccount": "Konto",
     "settingsSectionIntegrations": "Integrationen",
     "discordHint": "Verknüpfe dein Discord-Konto, um deine Premium-Rolle automatisch zu erhalten.",
-    "overnight": "Über Nacht"
+    "overnight": "Über Nacht",
+    "busRouterDedicated": "Mit dem dedizierten Bus-Router berechnet.",
+    "busRouterFallback": "Für dieses Gebiet gibt es keinen Bus-Router, daher wurde der Auto-Router verwendet. Die Route kann über Straßen führen, die für Busse gesperrt sind.",
+    "busRouterFallbackError": "Der Bus-Router hat nicht geantwortet, daher wurde der Auto-Router verwendet. Die Route kann über Straßen führen, die für Busse gesperrt sind."
 }

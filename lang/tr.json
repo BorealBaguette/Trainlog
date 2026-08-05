@@ -1178,5 +1178,8 @@
     "settingsSectionAccount": "Hesap",
     "settingsSectionIntegrations": "Entegrasyonlar",
     "discordHint": "Premium rolünüzü otomatik olarak almak için Discord hesabınızı bağlayın.",
-    "overnight": "Gece boyunca"
+    "overnight": "Gece boyunca",
+    "busRouterDedicated": "Rota, özel otobüs yönlendiricisiyle hesaplandı.",
+    "busRouterFallback": "Bu bölgeyi kapsayan bir otobüs yönlendiricisi yok, bu yüzden araba yönlendiricisi kullanıldı. Rota, otobüslerin giremeyeceği yollardan geçebilir.",
+    "busRouterFallbackError": "Otobüs yönlendiricisi yanıt vermedi, bu yüzden araba yönlendiricisi kullanıldı. Rota, otobüslerin giremeyeceği yollardan geçebilir."
 }

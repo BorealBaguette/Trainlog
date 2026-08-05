@@ -1178,5 +1178,8 @@
     "settingsSectionAccount": "Fiók",
     "settingsSectionIntegrations": "Integrációk",
     "discordHint": "Kapcsold össze a Discord-fiókodat, hogy automatikusan megkapd a prémium szerepkörödet.",
-    "overnight": "Éjszaka át"
+    "overnight": "Éjszaka át",
+    "busRouterDedicated": "Az útvonal a dedikált buszútvonaltervezővel készült.",
+    "busRouterFallback": "Ezt a területet nem fedi buszútvonaltervező, ezért az autós tervező készítette. Az útvonal olyan utakon is haladhat, ahol buszok nem közlekedhetnek.",
+    "busRouterFallbackError": "A buszútvonaltervező nem válaszolt, ezért az autós tervező készítette. Az útvonal olyan utakon is haladhat, ahol buszok nem közlekedhetnek."
 }

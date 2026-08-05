@@ -1181,5 +1181,8 @@
     "settingsSectionAccount": "Konto",
     "settingsSectionIntegrations": "Integrasjoner",
     "discordHint": "Koble til Discord-kontoen din for å motta premium-rollen din automatisk.",
-    "overnight": "Natten over"
+    "overnight": "Natten over",
+    "busRouterDedicated": "Beregnet med den dedikerte bussruteren.",
+    "busRouterFallback": "Ingen bussruter dekker dette området, så bilruteren ble brukt. Ruten kan følge veier busser ikke har lov til å kjøre på.",
+    "busRouterFallbackError": "Bussruteren svarte ikke, så bilruteren ble brukt. Ruten kan følge veier busser ikke har lov til å kjøre på."
 }

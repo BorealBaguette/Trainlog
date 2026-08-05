@@ -1184,5 +1184,8 @@
     "settingsSectionAccount": "Účet",
     "settingsSectionIntegrations": "Integrace",
     "discordHint": "Propojte svůj Discord účet a automaticky získejte svou prémiovou roli.",
-    "overnight": "Přes noc"
+    "overnight": "Přes noc",
+    "busRouterDedicated": "Trasa vypočítána vyhrazeným autobusovým směrovačem.",
+    "busRouterFallback": "Tuto oblast nepokrývá žádný autobusový směrovač, proto byl použit automobilový. Trasa může vést po silnicích, kam autobusy nesmí.",
+    "busRouterFallbackError": "Autobusový směrovač neodpověděl, proto byl použit automobilový. Trasa může vést po silnicích, kam autobusy nesmí."
 }

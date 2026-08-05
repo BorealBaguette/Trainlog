@@ -1184,5 +1184,8 @@
     "settingsSectionAccount": "Konto",
     "settingsSectionIntegrations": "Integracje",
     "discordHint": "Połącz swoje konto Discord, aby automatycznie otrzymać rolę premium.",
-    "overnight": "Nocny"
+    "overnight": "Nocny",
+    "busRouterDedicated": "Trasa wyznaczona dedykowanym routerem autobusowym.",
+    "busRouterFallback": "Ten obszar nie jest objęty routerem autobusowym, więc użyto routera samochodowego. Trasa może prowadzić drogami, po których autobusy nie mogą jeździć.",
+    "busRouterFallbackError": "Router autobusowy nie odpowiedział, więc użyto routera samochodowego. Trasa może prowadzić drogami, po których autobusy nie mogą jeździć."
 }

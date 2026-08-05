@@ -1178,5 +1178,8 @@
     "settingsSectionAccount": "账户",
     "settingsSectionIntegrations": "集成",
     "discordHint": "连接您的 Discord 账户以自动获得高级会员身份组。",
-    "overnight": "过夜"
+    "overnight": "过夜",
+    "busRouterDedicated": "使用专用的公交路线规划器计算。",
+    "busRouterFallback": "该地区没有公交路线规划器，因此使用了汽车路线规划器。路线可能经过公交车禁止通行的道路。",
+    "busRouterFallbackError": "公交路线规划器没有响应，因此使用了汽车路线规划器。路线可能经过公交车禁止通行的道路。"
 }

@@ -1178,5 +1178,8 @@
     "settingsSectionAccount": "アカウント",
     "settingsSectionIntegrations": "連携",
     "discordHint": "Discordアカウントを連携すると、プレミアムロールが自動的に付与されます。",
-    "overnight": "夜間"
+    "overnight": "夜間",
+    "busRouterDedicated": "バス専用の経路探索で計算されました。",
+    "busRouterFallback": "この地域に対応するバス用の経路探索がないため、自動車用を使用しました。バスが通行できない道路を通る可能性があります。",
+    "busRouterFallbackError": "バス用の経路探索が応答しなかったため、自動車用を使用しました。バスが通行できない道路を通る可能性があります。"
 }
