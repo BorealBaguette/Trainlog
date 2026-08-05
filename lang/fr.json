@@ -1181,5 +1181,21 @@
     "licensedToTrainlog": "Sous licence pour Trainlog",
     "busRouterDedicated": "Calculé avec le routeur bus dédié.",
     "busRouterFallback": "Aucun routeur bus ne couvre cette zone : le routeur voiture a été utilisé. L'itinéraire peut emprunter des routes interdites aux bus.",
-    "busRouterFallbackError": "Le routeur bus n'a pas répondu : le routeur voiture a été utilisé. L'itinéraire peut emprunter des routes interdites aux bus."
+    "busRouterFallbackError": "Le routeur bus n'a pas répondu : le routeur voiture a été utilisé. L'itinéraire peut emprunter des routes interdites aux bus.",
+    "statsLines": "Lignes",
+    "statsVehicles": "Véhicules",
+    "statsVessels": "Navires",
+    "statsAircraft": "Aéronefs",
+    "statsDelay": "Retard",
+    "statsChartSettings": "Graphiques",
+    "statsChartSettingsTitle": "Graphiques affichés",
+    "statsChartSettingsHelp": "Choisissez les graphiques à afficher sur la page des statistiques. Les graphiques sans données sont masqués automatiquement.",
+    "statsChartSettingsReset": "Tout afficher",
+    "statsTrainsets": "Rames",
+    "statsAxisBreak": "Couper les barres démesurées",
+    "statsAxisBreakHelp": "Quand une barre écrase les autres, la couper pour garder les autres lisibles. Cliquez sur une coupure pour la développer.",
+    "statsAirportsVisited": "Aéroports fréquentés",
+    "statsTerminalsVisited": "Embarcadères fréquentés",
+    "statsStopsVisited": "Arrêts fréquentés",
+    "statsPlacesVisited": "Lieux fréquentés"
 }

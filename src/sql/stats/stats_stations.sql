@@ -8,7 +8,8 @@
         is_planned_future, 
         trip_length,
         trip_duration,
-        carbon
+        carbon,
+        arrival_delay
     FROM time_categories
     UNION ALL
     SELECT 
@@ -17,7 +18,8 @@
         is_planned_future, 
         trip_length,
         trip_duration,
-        carbon
+        carbon,
+        arrival_delay
     FROM time_categories
 )
 SELECT 
@@ -30,8 +32,14 @@ SELECT
     SUM(trip_duration * is_past) AS "pastDuration",
     SUM(trip_duration * is_planned_future) AS "plannedFutureDuration",
     SUM(carbon * is_past) AS "pastCO2",
-    SUM(carbon * is_planned_future) AS "plannedFutureCO2"
+    SUM(carbon * is_planned_future) AS "plannedFutureCO2",
+    SUM(COALESCE(arrival_delay, 0) * is_past) AS "pastDelay",
+    SUM(COALESCE(arrival_delay, 0) * is_planned_future) AS "plannedFutureDelay"
 FROM stations
 GROUP BY station
 ORDER BY count DESC
-LIMIT 10000;
+-- Capped well below the old 10000: the page charts the top 10 and the
+-- fullscreen view scrolls 20 rows at a time, so 1000 is ~50 screens of
+-- depth. The tail was pure payload — it made a heavy user's stats response
+-- several megabytes of rows nothing ever drew.
+LIMIT 1000;

@@ -1187,5 +1187,21 @@
     "overnight": "Nocny",
     "busRouterDedicated": "Trasa wyznaczona dedykowanym routerem autobusowym.",
     "busRouterFallback": "Ten obszar nie jest objęty routerem autobusowym, więc użyto routera samochodowego. Trasa może prowadzić drogami, po których autobusy nie mogą jeździć.",
-    "busRouterFallbackError": "Router autobusowy nie odpowiedział, więc użyto routera samochodowego. Trasa może prowadzić drogami, po których autobusy nie mogą jeździć."
+    "busRouterFallbackError": "Router autobusowy nie odpowiedział, więc użyto routera samochodowego. Trasa może prowadzić drogami, po których autobusy nie mogą jeździć.",
+    "statsLines": "Linie",
+    "statsVehicles": "Pojazdy",
+    "statsVessels": "Statki",
+    "statsAircraft": "Samoloty",
+    "statsTrainsets": "Składy",
+    "statsDelay": "Opóźnienie",
+    "statsChartSettings": "Wykresy",
+    "statsChartSettingsTitle": "Widoczne wykresy",
+    "statsChartSettingsHelp": "Wybierz, które wykresy mają być widoczne na stronie statystyk. Wykresy bez danych są ukrywane automatycznie.",
+    "statsChartSettingsReset": "Pokaż wszystkie",
+    "statsAxisBreak": "Przycinaj zbyt długie słupki",
+    "statsAxisBreakHelp": "Gdy jeden słupek przytłacza pozostałe, zostaje przycięty, aby reszta pozostała czytelna. Kliknij przerwę, aby ją rozwinąć.",
+    "statsAirportsVisited": "Odwiedzone lotniska",
+    "statsTerminalsVisited": "Odwiedzone terminale",
+    "statsStopsVisited": "Odwiedzone przystanki",
+    "statsPlacesVisited": "Odwiedzone miejsca"
 }

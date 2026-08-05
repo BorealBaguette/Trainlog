@@ -1187,5 +1187,21 @@
     "overnight": "Preko noći",
     "busRouterDedicated": "Ruta izračunata namjenskim autobusnim usmjerivačem.",
     "busRouterFallback": "Ovo područje ne pokriva autobusni usmjerivač pa je korišten automobilski. Ruta može ići cestama kojima autobusi ne smiju prometovati.",
-    "busRouterFallbackError": "Autobusni usmjerivač nije odgovorio pa je korišten automobilski. Ruta može ići cestama kojima autobusi ne smiju prometovati."
+    "busRouterFallbackError": "Autobusni usmjerivač nije odgovorio pa je korišten automobilski. Ruta može ići cestama kojima autobusi ne smiju prometovati.",
+    "statsLines": "Linije",
+    "statsVehicles": "Vozila",
+    "statsVessels": "Brodovi",
+    "statsAircraft": "Zrakoplovi",
+    "statsTrainsets": "Garniture",
+    "statsDelay": "Kašnjenje",
+    "statsChartSettings": "Grafikoni",
+    "statsChartSettingsTitle": "Prikazani grafikoni",
+    "statsChartSettingsHelp": "Odaberite koji se grafikoni prikazuju na stranici statistike. Grafikoni bez podataka automatski se skrivaju.",
+    "statsChartSettingsReset": "Prikaži sve",
+    "statsAxisBreak": "Skrati predugačke stupce",
+    "statsAxisBreakHelp": "Kad jedan stupac zasjeni ostale, presiječe se kako bi ostali ostali čitljivi. Kliknite na prekid da ga proširite.",
+    "statsAirportsVisited": "Posjećene zračne luke",
+    "statsTerminalsVisited": "Posjećeni terminali",
+    "statsStopsVisited": "Posjećena stajališta",
+    "statsPlacesVisited": "Posjećena mjesta"
 }

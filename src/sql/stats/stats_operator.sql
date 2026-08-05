@@ -20,7 +20,9 @@
         SUM(trip_duration * (is_past + is_planned_future)) AS "totalDuration",
         SUM(carbon * is_past) AS "pastCO2",
         SUM(carbon * is_planned_future) AS "plannedFutureCO2",
-        SUM(carbon * (is_past + is_planned_future)) AS "totalCO2"
+        SUM(carbon * (is_past + is_planned_future)) AS "totalCO2",
+        SUM(COALESCE(arrival_delay, 0) * is_past) AS "pastDelay",
+        SUM(COALESCE(arrival_delay, 0) * is_planned_future) AS "plannedFutureDelay"
     FROM split_operators
     -- Exactly one of the two is non-null per row, so each operator (or group, or
     -- unmatched spelling) is counted once.
@@ -51,7 +53,8 @@ SELECT
     t."pastTrips", t."plannedFutureTrips", t."totalTrips",
     t."pastKm", t."plannedFutureKm", t."totalKm",
     t."pastDuration", t."plannedFutureDuration", t."totalDuration",
-    t."pastCO2", t."plannedFutureCO2", t."totalCO2"
+    t."pastCO2", t."plannedFutureCO2", t."totalCO2",
+    t."pastDelay", t."plannedFutureDelay"
 FROM operator_totals t
 LEFT JOIN display_member d ON d.grouping_id = t.grouping_id
 LEFT JOIN operators o ON o.operator_id = d.operator_id

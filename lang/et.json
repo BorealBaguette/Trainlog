@@ -1181,5 +1181,21 @@
     "overnight": "Üleöö",
     "busRouterDedicated": "Marsruut arvutatud spetsiaalse bussimarsruuteriga.",
     "busRouterFallback": "Selle piirkonna jaoks pole bussimarsruuterit, seetõttu kasutati automarsruuterit. Marsruut võib kulgeda teedel, kuhu bussid ei tohi sõita.",
-    "busRouterFallbackError": "Bussimarsruuter ei vastanud, seetõttu kasutati automarsruuterit. Marsruut võib kulgeda teedel, kuhu bussid ei tohi sõita."
+    "busRouterFallbackError": "Bussimarsruuter ei vastanud, seetõttu kasutati automarsruuterit. Marsruut võib kulgeda teedel, kuhu bussid ei tohi sõita.",
+    "statsLines": "Liinid",
+    "statsVehicles": "Sõidukid",
+    "statsVessels": "Laevad",
+    "statsAircraft": "Lennukid",
+    "statsTrainsets": "Rongikoosseisud",
+    "statsDelay": "Hilinemine",
+    "statsChartSettings": "Graafikud",
+    "statsChartSettingsTitle": "Nähtavad graafikud",
+    "statsChartSettingsHelp": "Vali, millised graafikud statistikalehel kuvatakse. Andmeteta graafikud peidetakse automaatselt.",
+    "statsChartSettingsReset": "Näita kõiki",
+    "statsAxisBreak": "Lõika liiga pikad tulbad",
+    "statsAxisBreakHelp": "Kui üks tulp varjutab kõik teised, lõigatakse see läbi, et ülejäänud jääksid loetavaks. Klõpsa katkestusel selle avamiseks.",
+    "statsAirportsVisited": "Külastatud lennujaamad",
+    "statsTerminalsVisited": "Külastatud terminalid",
+    "statsStopsVisited": "Külastatud peatused",
+    "statsPlacesVisited": "Külastatud kohad"
 }

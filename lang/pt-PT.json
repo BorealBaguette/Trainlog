@@ -1184,5 +1184,21 @@
     "overnight": "Durante a noite",
     "busRouterDedicated": "Calculado com o roteador dedicado a autocarros.",
     "busRouterFallback": "Nenhum roteador de autocarros cobre esta área, pelo que foi usado o de automóvel. O percurso pode seguir estradas proibidas a autocarros.",
-    "busRouterFallbackError": "O roteador de autocarros não respondeu, pelo que foi usado o de automóvel. O percurso pode seguir estradas proibidas a autocarros."
+    "busRouterFallbackError": "O roteador de autocarros não respondeu, pelo que foi usado o de automóvel. O percurso pode seguir estradas proibidas a autocarros.",
+    "statsLines": "Linhas",
+    "statsVehicles": "Veículos",
+    "statsVessels": "Embarcações",
+    "statsAircraft": "Aviões",
+    "statsTrainsets": "Composições",
+    "statsDelay": "Atraso",
+    "statsChartSettings": "Gráficos",
+    "statsChartSettingsTitle": "Gráficos visíveis",
+    "statsChartSettingsHelp": "Escolha que gráficos aparecem na página de estatísticas. Os gráficos sem dados são ocultados automaticamente.",
+    "statsChartSettingsReset": "Mostrar todos",
+    "statsAxisBreak": "Cortar barras desproporcionadas",
+    "statsAxisBreakHelp": "Quando uma barra ofusca as restantes, é cortada para que as outras continuem legíveis. Clique num corte para o expandir.",
+    "statsAirportsVisited": "Aeroportos visitados",
+    "statsTerminalsVisited": "Terminais visitados",
+    "statsStopsVisited": "Paragens visitadas",
+    "statsPlacesVisited": "Locais visitados"
 }

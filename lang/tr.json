@@ -1181,5 +1181,21 @@
     "overnight": "Gece boyunca",
     "busRouterDedicated": "Rota, özel otobüs yönlendiricisiyle hesaplandı.",
     "busRouterFallback": "Bu bölgeyi kapsayan bir otobüs yönlendiricisi yok, bu yüzden araba yönlendiricisi kullanıldı. Rota, otobüslerin giremeyeceği yollardan geçebilir.",
-    "busRouterFallbackError": "Otobüs yönlendiricisi yanıt vermedi, bu yüzden araba yönlendiricisi kullanıldı. Rota, otobüslerin giremeyeceği yollardan geçebilir."
+    "busRouterFallbackError": "Otobüs yönlendiricisi yanıt vermedi, bu yüzden araba yönlendiricisi kullanıldı. Rota, otobüslerin giremeyeceği yollardan geçebilir.",
+    "statsLines": "Hatlar",
+    "statsVehicles": "Araçlar",
+    "statsVessels": "Gemiler",
+    "statsAircraft": "Uçaklar",
+    "statsTrainsets": "Tren setleri",
+    "statsDelay": "Gecikme",
+    "statsChartSettings": "Grafikler",
+    "statsChartSettingsTitle": "Görünen grafikler",
+    "statsChartSettingsHelp": "İstatistik sayfasında hangi grafiklerin görüneceğini seçin. Verisi olmayan grafikler otomatik olarak gizlenir.",
+    "statsChartSettingsReset": "Tümünü göster",
+    "statsAxisBreak": "Aşırı uzun çubukları kes",
+    "statsAxisBreakHelp": "Bir çubuk diğerlerini ezdiğinde, kalanlar okunabilir kalsın diye kesilir. Genişletmek için kesiğe tıklayın.",
+    "statsAirportsVisited": "Ziyaret edilen havalimanları",
+    "statsTerminalsVisited": "Ziyaret edilen iskeleler",
+    "statsStopsVisited": "Ziyaret edilen duraklar",
+    "statsPlacesVisited": "Ziyaret edilen yerler"
 }

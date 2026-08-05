@@ -1184,5 +1184,21 @@
     "overnight": "Über Nacht",
     "busRouterDedicated": "Mit dem dedizierten Bus-Router berechnet.",
     "busRouterFallback": "Für dieses Gebiet gibt es keinen Bus-Router, daher wurde der Auto-Router verwendet. Die Route kann über Straßen führen, die für Busse gesperrt sind.",
-    "busRouterFallbackError": "Der Bus-Router hat nicht geantwortet, daher wurde der Auto-Router verwendet. Die Route kann über Straßen führen, die für Busse gesperrt sind."
+    "busRouterFallbackError": "Der Bus-Router hat nicht geantwortet, daher wurde der Auto-Router verwendet. Die Route kann über Straßen führen, die für Busse gesperrt sind.",
+    "statsLines": "Linien",
+    "statsVehicles": "Fahrzeuge",
+    "statsVessels": "Schiffe",
+    "statsAircraft": "Flugzeuge",
+    "statsTrainsets": "Zuggarnituren",
+    "statsDelay": "Verspätung",
+    "statsChartSettings": "Diagramme",
+    "statsChartSettingsTitle": "Angezeigte Diagramme",
+    "statsChartSettingsHelp": "Wählen Sie aus, welche Diagramme auf der Statistikseite erscheinen. Diagramme ohne Daten werden automatisch ausgeblendet.",
+    "statsChartSettingsReset": "Alle anzeigen",
+    "statsAxisBreak": "Übergroße Balken kürzen",
+    "statsAxisBreakHelp": "Wenn ein Balken alle anderen erdrückt, wird er gekürzt, damit die übrigen lesbar bleiben. Klicken Sie auf eine Unterbrechung, um sie aufzuklappen.",
+    "statsAirportsVisited": "Besuchte Flughäfen",
+    "statsTerminalsVisited": "Besuchte Terminals",
+    "statsStopsVisited": "Besuchte Haltestellen",
+    "statsPlacesVisited": "Besuchte Orte"
 }
