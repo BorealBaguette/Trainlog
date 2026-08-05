@@ -3447,7 +3447,9 @@ function submitMassEdit() {
         if (failed) {
             alert(failed.error || 'Error');
         } else {
-            tableObject.ajax.reload();
+            // false keeps the current page — a mass edit never changes the row
+            // count, so resetting paging would just throw the user back to page 1.
+            tableObject.ajax.reload(null, false);
             $('#massEditModal').modal('hide');
             deselectAll();
         }
