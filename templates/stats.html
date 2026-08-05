@@ -224,20 +224,29 @@
 .statsTip .statsTipSub { padding-left: 10px; }
 
 /* A consist is wide and shallow, and nothing swaps in asynchronously here, so
-   this one sizes to its content instead of holding a fixed frame. */
+   this one sizes to its content instead of holding a fixed frame.
+
+   The rake is cut into rows by bakeStrip rather than by `flex-wrap`, because
+   the browser's greedy wrap leaves the tail of a long set stranded alone on
+   the last row. Each row is its own element, so nothing here may re-wrap. */
 .statsTip .statsTipMedia.strip {
     width: auto;
     max-width: 760px;
-    flex-wrap: wrap;          /* a long rake continues on the next row */
-    align-content: flex-end;
     row-gap: 4px;
     height: auto;
     min-height: 34px;
     padding: 8px 6px;
     display: flex;
-    align-items: flex-end;   /* the cars sit on a rail */
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
     background: #f7f8f9;
+}
+
+.statsTip .statsTipMedia.strip .statsTipStripRow {
+    display: flex;
+    align-items: flex-end;   /* the cars sit on a rail */
+    justify-content: center;
 }
 
 .statsTip .statsTipMedia.strip img {
@@ -621,7 +630,9 @@
             // Spelled out on the bar rather than left to the axis logo alone:
             // the logo distinguishes them for anyone who recognises it, and an
             // operator with no logo has nothing to distinguish it at all.
-            category: item => item.operator ? `${item.line} · ${item.operator}` : item.line,
+            // Operator first: it is what the axis logo beside the label already
+            // says, so the two agree left-to-right instead of crossing over.
+            category: item => item.operator ? `${item.operator} · ${item.line}` : item.line,
             // Combined mode re-merges rows across trip types by identifier, and
             // the identifier here is the pair. Without this a line run by a bus
             // company and a tram company would fold back into one row.
@@ -1695,30 +1706,220 @@
         return stripOven;
     }
 
-    // Re-emit the sized strip as markup, scaled down as one piece if the rake is
-    // longer than the tooltip is wide. Scaling every car by the same factor
-    // keeps the proportions normalizeStrip just worked out.
+    // Cut a rake into rows the way the browser would: fill a row, start a new
+    // one when the next car no longer fits. Cars keep their order, so this is
+    // also the FEWEST rows the rake can occupy at that scale.
+    function greedyRows(widths, limit) {
+        const rows = [];
+        let row = [], width = 0;
+        widths.forEach((w, i) => {
+            if (row.length && width + w > limit) { rows.push(row); row = []; width = 0; }
+            row.push(i);
+            width += w;
+        });
+        if (row.length) rows.push(row);
+        return rows;
+    }
+
+    // The same cut, but with the rows made as even as they can be. Greedy
+    // filling is what strands a single car under a full-width rake; cutting a
+    // twelve-car set as 6+6 instead of 11+1 reads as one train seen twice
+    // rather than as a train and an afterthought.
+    //
+    // Cars can't be reordered, so the only freedom is where the breaks go:
+    // a small dynamic program over (start car, rows left), scoring each row by
+    // how far its length strays from the average row. Squared, so one very
+    // short row costs more than two slightly short ones. Rakes are a dozen
+    // cars at most, so the table is tiny.
+    //
+    // Rows rarely come out exactly even, and a train that gets shorter as it
+    // goes down looks deliberate where one that grows looks like it overflowed.
+    // TOP_HEAVY breaks near-ties towards the wider row on top: weighting each
+    // row's width by how many rows are left puts the width early. It has to
+    // stay far below the cost of an actually worse split — a couple of pixels
+    // of imbalance, not a car's worth.
+    var TOP_HEAVY = 1e-3;
+
+    // Used only for rakes too long to search exhaustively; chooseLayout below
+    // is what normally decides the breaks.
+    function balancedRows(widths, rowCount, limit) {
+        const n = widths.length;
+        const prefix = [0];
+        widths.forEach((w, i) => prefix.push(prefix[i] + w));
+        const average = prefix[n] / rowCount;
+
+        // cost[j][i] — best score for cars i.. laid out in j rows, and the car
+        // that starts the row after the first of them.
+        const cost = [[]], next = [[]];
+        for (let i = 0; i <= n; i++) cost[0][i] = (i === n ? 0 : Infinity);
+
+        for (let j = 1; j <= rowCount; j++) {
+            cost[j] = []; next[j] = [];
+            for (let i = n; i >= 0; i--) {
+                let best = Infinity, bestEnd = -1;
+                for (let end = i + 1; end <= n; end++) {
+                    const width = prefix[end] - prefix[i];
+                    if (width > limit) break;          // and only wider from here
+                    const rest = cost[j - 1][end];
+                    if (rest === Infinity) continue;
+                    const score = rest + Math.pow(width - average, 2)
+                        - TOP_HEAVY * j * width;
+                    if (score < best) { best = score; bestEnd = end; }
+                }
+                cost[j][i] = best; next[j][i] = bestEnd;
+            }
+        }
+
+        if (cost[rowCount][0] === Infinity) return greedyRows(widths, limit);
+
+        const rows = [];
+        let start = 0;
+        for (let j = rowCount; j > 0; j--) {
+            const end = next[j][start];
+            rows.push(Array.from({ length: end - start }, (_, k) => start + k));
+            start = end;
+        }
+        return rows;
+    }
+
+    // Where the breaks go and how much the rake shrinks are the same decision,
+    // not two: a locomotive is half the length of the coaches behind it, so
+    // splitting a sixteen-car set down the middle gives a top row a coach-width
+    // shorter than the bottom one — even by count, small-headed to look at.
+    // Pulling one more car up fixes that, and costs a few percent of scale.
+    //
+    // So every split is priced with the scale it would need (a row can never be
+    // wider than the strip, so the widest row sets it), and the three things
+    // that make a rake look wrong trade off against each other:
+    //
+    //   spread  — how far the longest and shortest rows are apart
+    //   ascend  — how much of that is a row LONGER than the one above it, which
+    //             is the part that reads as a mistake rather than as tapering
+    //   shrink  — how far below their natural size the cars ended up
+    //
+    // Weights are in fractions of the strip width. ASCEND above 1 is what lets
+    // a car move up: it makes a bottom-heavy split cost more than the extra
+    // unevenness of the top-heavy one, while a rake that already splits evenly
+    // (spread and ascend both nil) still beats anything bought with shrinking.
+    var LAYOUT_ASCEND = 6;
+    var LAYOUT_SHRINK = 1.5;
+    // Enumerating every split is C(cars-1, rows-1); a dozen cars in three rows
+    // is a few hundred. The budget catches the pathological rake before it can
+    // stall a tooltip, and balancedRows takes over.
+    var LAYOUT_BUDGET = 20000;
+
+    // The best (scale, breaks) pair for a given number of rows, or null if none
+    // of them leaves the cars legible.
+    function chooseLayout(widths, rowCount, limit, natural, legible) {
+        const n = widths.length;
+        if (rowCount > n) return null;
+
+        const prefix = [0];
+        widths.forEach((w, i) => prefix.push(prefix[i] + w));
+
+        let best = null, budget = LAYOUT_BUDGET;
+
+        // Walk the cut positions: `cuts` holds the car each closed row ended on.
+        (function place(start, rowsLeft, cuts) {
+            if (budget-- < 0) return;
+            if (rowsLeft === 0) {
+                if (start !== n) return;
+
+                let from = 0;
+                const rows = cuts.map(end => {
+                    const width = prefix[end] - prefix[from];
+                    from = end;
+                    return width;
+                });
+                const scale = Math.min(natural, limit / Math.max.apply(null, rows));
+                if (!legible(scale)) return;
+
+                let ascend = 0;
+                for (let i = 1; i < rows.length; i++) {
+                    ascend += Math.max(0, (rows[i] - rows[i - 1]) * scale);
+                }
+                const spread = (Math.max.apply(null, rows)
+                    - Math.min.apply(null, rows)) * scale;
+                const cost = (spread + LAYOUT_ASCEND * ascend) / limit
+                    + LAYOUT_SHRINK * (natural - scale) / natural;
+                if (!best || cost < best.cost) best = { cost, scale, cuts: cuts.slice() };
+                return;
+            }
+
+            // Leave at least one car for each row still to come.
+            for (let end = start + 1; end <= n - rowsLeft + 1; end++) {
+                cuts.push(end);
+                place(end, rowsLeft - 1, cuts);
+                cuts.pop();
+            }
+        })(0, rowCount, []);
+
+        if (!best) return null;
+
+        let start = 0;
+        const rows = best.cuts.map(end => {
+            const row = Array.from({ length: end - start }, (_, k) => start + k);
+            start = end;
+            return row;
+        });
+        return { scale: best.scale, rows };
+    }
+
+    // Re-emit the sized strip as markup. Scaling every car by the same factor
+    // keeps the proportions normalizeStrip just worked out, so the only two
+    // decisions left are how much to shrink the whole rake and where to break
+    // it. Fewer rows always wins — a set that misses one row by half a car is
+    // squeezed onto it rather than spilling over — but only as far as
+    // STRIP_MIN_CAR_HEIGHT, below which a car stops reading as a vehicle.
     function bakeStrip(strip) {
         const cars = Array.from(strip.querySelectorAll('img'))
             .filter(img => img.naturalHeight || img.getBoundingClientRect().height);
         if (!cars.length) return '';
 
         const boxes = cars.map(img => img.getBoundingClientRect());
-        const total = boxes.reduce((sum, box) => sum + box.width, 0);
-        const shortest = Math.min.apply(null, boxes.map(box => box.height));
+        const heights = boxes.map(box => box.height);
+        const widths = boxes.map(box => box.width);
+        const total = widths.reduce((sum, w) => sum + w, 0);
+        const shortest = Math.min.apply(null, heights);
+        const widest = Math.max.apply(null, widths);
 
-        // Fit on one row if it can, but never at the cost of legibility.
-        let scale = total > STRIP_CONTENT_WIDTH ? STRIP_CONTENT_WIDTH / total : 1;
-        if (shortest * scale < STRIP_MIN_CAR_HEIGHT) {
-            scale = Math.min(1, STRIP_MIN_CAR_HEIGHT / shortest);
+        // A double-deck coach drawn wider than the whole tooltip has to come
+        // down whatever the height rule says — it has no row to spill onto.
+        const natural = Math.min(1, STRIP_CONTENT_WIDTH / widest);
+        // Shrinking below the natural size is what needs justifying; the size
+        // normalizeStrip chose is always allowed, even for stubby artwork that
+        // is already under the minimum.
+        const legible = s => s >= natural || s * shortest >= STRIP_MIN_CAR_HEIGHT;
+
+        // Fewest rows first, so a rake that misses one row by half a car is
+        // squeezed onto it instead of spilling. Only once a row count proves
+        // impossible to render legibly does the next one get a look.
+        const most = greedyRows(widths.map(w => w * natural), STRIP_CONTENT_WIDTH).length;
+        let scale = natural, rows = null;
+
+        for (let k = 1; k <= most && !rows; k++) {
+            const layout = chooseLayout(
+                widths, k, STRIP_CONTENT_WIDTH, natural, legible);
+            if (layout) { scale = layout.scale; rows = layout.rows; }
         }
 
-        return '<div class="statsTipMedia strip">' + cars.map((img, i) => {
-            const height = boxes[i].height * scale;
-            return `<img src="${escapeHtml(img.src)}" alt=""`
-                + ` style="height:${height.toFixed(1)}px"`
-                + ` onerror="this.style.display='none'">`;
-        }).join('') + '</div>';
+        // A rake long enough to blow the search budget, or one whose artwork is
+        // already below the legible height: fall back to the even split at the
+        // natural size, wrapped greedily if even that can't be cut.
+        if (!rows) {
+            const sized = widths.map(w => w * natural);
+            const fallback = greedyRows(sized, STRIP_CONTENT_WIDTH);
+            rows = balancedRows(sized, fallback.length, STRIP_CONTENT_WIDTH);
+        }
+
+        return '<div class="statsTipMedia strip">' + rows.map(row =>
+            '<div class="statsTipStripRow">' + row.map(i => {
+                const height = heights[i] * scale;
+                return `<img src="${escapeHtml(cars[i].src)}" alt=""`
+                    + ` style="height:${height.toFixed(1)}px"`
+                    + ` onerror="this.style.display='none'">`;
+            }).join('') + '</div>'
+        ).join('') + '</div>';
     }
 
     function ensureStrip(key, units) {
