@@ -287,6 +287,16 @@
   .mode-table .mode-name i { color: var(--primary-color); width: 14px; text-align: center; }
   .mode-table .mode-num { text-align: right; font-size: 0.82rem; font-weight: 600; color: #111827; white-space: nowrap; }
   .mode-table .mode-unit { font-size: 0.72rem; font-weight: 400; color: var(--text-muted); margin-left: 1px; }
+  .mode-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-width: 575px) {
+    .mode-table td, .mode-table thead th { padding-left: 0.5rem; padding-right: 0.5rem; }
+    .mode-table td { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+    .mode-table .mode-name,
+    .mode-table .mode-num { font-size: 0.78rem; }
+    /* header already says "Trajets" — drop the per-row repeat */
+    .mode-table .mode-unit-trips { display: none; }
+    .mode-table .mode-name { white-space: normal; }
+  }
   .change-up   { color: #059669; font-size: 0.75rem; margin-left: 0.3rem; }
   .change-down { color: #dc2626; font-size: 0.75rem; margin-left: 0.3rem; }
 
@@ -1279,16 +1289,16 @@ function renderModeStats(d, scope) {
   const trs = rows.map(r => `
     <tr>
       <td class="mode-name"><i class="${tripIcon(r.type)}"></i>${TYPE_LABELS[r.type] || r.type}</td>
-      <td class="mode-num">${fmt(r.trips)}<span class="mode-unit">{{ trips }}</span></td>
+      <td class="mode-num">${fmt(r.trips)}<span class="mode-unit mode-unit-trips">{{ trips }}</span></td>
       <td class="mode-num">${fmt(Math.round(r.km))}<span class="mode-unit">km</span></td>
       <td class="mode-num">${r.sec > 0 ? secondsToDhm(r.sec, "{{ langId }}") : "—"}</td>
     </tr>`).join("");
-  el.innerHTML = `<table class="table completion-table mode-table"><thead><tr>
+  el.innerHTML = `<div class="mode-table-wrap"><table class="table completion-table mode-table"><thead><tr>
     <th>{{ mode }}</th>
     <th style="text-align:right;">{{ trips }}</th>
     <th style="text-align:right;">km</th>
     <th style="text-align:right;">{{ hoursOnTrains }}</th>
-  </tr></thead><tbody>${trs}</tbody></table>`;
+  </tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
 function updateScopeLabels(scope, year) {
