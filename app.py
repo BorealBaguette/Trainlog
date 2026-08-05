@@ -5192,11 +5192,34 @@ def get_admin_stats_api(tripType, year=None):
     stats = fetch_stats(None, tripType, year)
     return jsonify(stats)
 
+# The stats page has three dimensions and they are equally important, so all
+# three sit in the path, always in the same order: year, trip type, metric. The
+# year that means "every year" is the literal segment "all" rather than a missing
+# one — an omitted segment is what made the shorter forms ambiguous, since
+# /stats/2024/train and /stats/train/km are both two segments and Flask cannot
+# tell which is which.
+#
+# The shorter forms stay registered: they are what existing links and bookmarks
+# use. They resolve to the same page, and the client rewrites the address to the
+# full form once it has loaded.
+STATS_METRICS = ("trips", "km", "duration", "carbon", "delay")
+
+
+def stats_path_args(year, metric):
+    """Normalise the year and metric segments of a stats URL."""
+    return (
+        None if year in (None, "all") else year,
+        metric if metric in STATS_METRICS else "trips",
+    )
+
+
+@app.route("/public/<username>/stats/<year>/<tripType>/<metric>")
 @app.route("/public/<username>/stats/<year>/<tripType>")
 @app.route("/public/<username>/stats/<tripType>")
 @app.route("/public/<username>/stats")
 @public_required
-def public_stats(username, tripType=None, year=None):
+def public_stats(username, tripType=None, year=None, metric=None):
+    year, metric = stats_path_args(year, metric)
     if tripType in ('poi', 'accommodation', 'restaurant', 'walk', 'cycle', 'car'):
         abort(401)
     with pg_session() as pg:
@@ -5214,12 +5237,24 @@ def public_stats(username, tripType=None, year=None):
 
     if tripType is None:
         return redirect(
-            url_for("public_stats", username=username, tripType="train", year=year)
+            url_for(
+                "public_stats",
+                username=username,
+                tripType="train",
+                year=year or "all",
+                metric=metric,
+            )
         )
     distinctStatYears = get_distinct_stat_years(username, tripType)
     if year is not None and year not in distinctStatYears:
         return redirect(
-            url_for("public_stats", username=username, tripType=tripType, year=None)
+            url_for(
+                "public_stats",
+                username=username,
+                tripType=tripType,
+                year="all",
+                metric=metric,
+            )
         )
 
     return render_template(
@@ -5230,6 +5265,7 @@ def public_stats(username, tripType=None, year=None):
         title=lang[session["userinfo"]["lang"]]["stats"],
         username=username,
         statYear=year,
+        statMetric=metric,
         logosList=listOperatorsLogos(),
         tripType=tripType,
         publicDistinctTypes=types,
@@ -5239,11 +5275,13 @@ def public_stats(username, tripType=None, year=None):
     )
 
 
+@app.route("/admin/stats/<year>/<tripType>/<metric>")
 @app.route("/admin/stats/<tripType>")
 @app.route("/admin/stats/<year>/<tripType>")
 @app.route("/admin/stats")
 @owner_required
-def admin_stats(tripType=None, year=None):
+def admin_stats(tripType=None, year=None, metric=None):
+    year, metric = stats_path_args(year, metric)
     with pg_session() as pg:
         rows = pg.execute(
             "SELECT DISTINCT trip_type FROM trips WHERE trip_type NOT IN ('poi', 'accommodation', 'restaurant')"
@@ -5253,17 +5291,24 @@ def admin_stats(tripType=None, year=None):
     }
 
     if tripType is None:
-        return redirect(url_for("admin_stats", tripType="train", year=year))
+        return redirect(
+            url_for(
+                "admin_stats", tripType="train", year=year or "all", metric=metric
+            )
+        )
 
     distinctStatYears = get_distinct_stat_years(None, tripType)  # Pass None for admin
     if year is not None and year not in distinctStatYears:
-        return redirect(url_for("admin_stats", tripType=tripType, year=None))
+        return redirect(
+            url_for("admin_stats", tripType=tripType, year="all", metric=metric)
+        )
 
     return render_template(
         "stats.html",
         nav="bootstrap/navigation.html",
         username=getUser(),
         statYear=year,
+        statMetric=metric,
         logosList=listOperatorsLogos(),
         tripType=tripType,
         admin=True,
@@ -5273,19 +5318,33 @@ def admin_stats(tripType=None, year=None):
     )
 
 
+@app.route("/u/<username>/stats/<year>/<tripType>/<metric>")
 @app.route("/u/<username>/stats/<year>/<tripType>")
 @app.route("/u/<username>/stats/<tripType>")
 @app.route("/u/<username>/stats")
 @login_required
-def stats(username, tripType=None, year=None):
+def stats(username, tripType=None, year=None, metric=None):
+    year, metric = stats_path_args(year, metric)
     if tripType is None:
         return redirect(
-            url_for("stats", username=username, tripType="train", year=year)
+            url_for(
+                "stats",
+                username=username,
+                tripType="train",
+                year=year or "all",
+                metric=metric,
+            )
         )
     distinctStatYears = get_distinct_stat_years(username, tripType)
     if year is not None and year not in distinctStatYears:
         return redirect(
-            url_for("stats", username=username, tripType=tripType, year=None)
+            url_for(
+                "stats",
+                username=username,
+                tripType=tripType,
+                year="all",
+                metric=metric,
+            )
         )
 
     return render_template(
@@ -5296,6 +5355,7 @@ def stats(username, tripType=None, year=None):
         title=lang[session["userinfo"]["lang"]]["stats"],
         username=username,
         statYear=year,
+        statMetric=metric,
         logosList=listOperatorsLogos(),
         tripType=tripType,
         distinctStatYears=distinctStatYears,
