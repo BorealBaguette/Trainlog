@@ -7218,40 +7218,114 @@ def operator_autocomplete_meta(operator_type):
     return hints, canonical
 
 
-@app.route("/getAdminUsersData", methods=["POST"])
-@owner_required
-def getAdminUsersData():
-    """
-    Server-side processing endpoint for DataTables.
-    Returns paginated user data based on DataTables parameters.
-    """
-    # Get DataTables parameters
-    draw = int(request.form.get("draw", 1))
-    start = int(request.form.get("start", 0))
-    length = int(request.form.get("length", 10))
-    search_value = request.form.get("search[value]", "")
-    show_inactive = request.form.get("showInactive", "false") == "true"
+# ── /admin user table ──────────────────────────────────────────────────────
+# The table is server-side processed, so *every* page/sort/search re-enters
+# getAdminUsersData. Assembling the snapshot means loading every User row plus a
+# full trips aggregate, which is far too slow to redo per keystroke — so the
+# assembled rows are cached for a short TTL and invalidated explicitly by the
+# mutations reachable from that page (role toggle, rename, delete).
+_ADMIN_USERS_CACHE_TTL = 60  # seconds
+_admin_users_cache = {"built_at": None, "rows": None}
 
-    # Get sorting parameters
-    order_column = int(request.form.get("order[0][column]", 1))
-    order_dir = request.form.get("order[0][dir]", "asc")
+ADMIN_PREMIUM_TIER_LABELS = {
+    "trainlogger": "Trainlogger",
+    "first_class": "1st Class Logger",
+    "rail_baron": "Rail Baron",
+}
 
-    # Column mapping for sorting
-    column_map = {
-        1: "username",
-        2: "lang",
-        3: "active",
-        4: "share_level",
-        5: "trips",
-        6: "length",
-        7: "trips_per_day",
-        8: "last_login",
-        9: "email",
-        10: "creation_date",
-    }
+ADMIN_SHARE_LABELS = {0: "Private", 1: "Link shared", 2: "Public"}
 
-    # Fetch all users (this could be optimized further with database-level pagination)
-    all_users = {}
+# Language names are rendered client-side (getLangTooltip), so the server needs
+# its own copy to make "german", "swedish"… searchable alongside the raw code.
+ADMIN_LANG_NAMES = {
+    "en": "English", "zh": "Chinese", "nl": "Dutch", "de": "German",
+    "fr": "French", "fi": "Finnish", "es": "Spanish", "it": "Italian",
+    "no": "Norwegian", "sv": "Swedish", "cs": "Czech", "pl": "Polish",
+    "tr": "Turkish", "hu": "Hungarian", "da": "Danish", "hr": "Croatian",
+    "et": "Estonian", "ja": "Japanese", "ru": "Russian", "uk": "Ukrainian",
+    "sv-FI": "Finland Swedish", "gsw": "Swiss German", "ko": "Korean",
+    "pt-BR": "Brazilian Portuguese", "pt-PT": "Portuguese",
+}
+
+
+def invalidate_admin_users_cache():
+    """Drop the cached /admin snapshot so the next request rebuilds it."""
+    _admin_users_cache["built_at"] = None
+    _admin_users_cache["rows"] = None
+
+
+def _admin_search_haystack(user):
+    """Every piece of info the admin table shows for this user, as one lowercase
+    blob. Search terms are matched against it at word boundaries (see
+    _filter_admin_users), so "act" finds "active" but "active" doesn't find
+    "inactive". Never add a token that *contains* another meaningful term
+    (e.g. "nopremium"), or negation and plain search both misfire."""
+    parts = [
+        user["username"],
+        user.get("email") or "",
+        user.get("lang") or "",
+        ADMIN_LANG_NAMES.get(user.get("lang"), ""),
+        str(user["uid"]),
+        "active" if user["active"] else "inactive",
+        ADMIN_SHARE_LABELS.get(user.get("share_level"), "unknown"),
+        str(user["trips"]),
+        str(round((user["length"] or 0) / 1000)),
+    ]
+
+    if user.get("discord_id"):
+        parts += ["discord", user.get("discord_username") or "", str(user["discord_id"])]
+    for role, label in (
+        ("admin", "admin"),
+        ("alpha", "alpha"),
+        ("translator", "translator"),
+        ("feature_admin", "feature_admin featureadmin"),
+        ("leaderboard", "leaderboard"),
+    ):
+        if user.get(role):
+            parts.append(label)
+
+    if user.get("premium"):
+        parts.append("premium")
+        if user.get("bmc_supporter_id"):
+            parts += [
+                "automated bmc supporter",
+                str(user["bmc_supporter_id"]),
+                user.get("premium_tier") or "",
+                ADMIN_PREMIUM_TIER_LABELS.get(user.get("premium_tier"), ""),
+            ]
+        else:
+            parts.append("manual")
+    if user.get("premium_cancel_at"):
+        parts.append("cancelled canceled cancels cancellation")
+        parts.append(user["premium_cancel_at"][:10])
+    if user.get("premium_stale"):
+        parts.append("stale expired overdue")
+
+    # Dates are still datetimes here (the row is serialised after this runs), so
+    # "2026-07" matches a last login or a signup month.
+    for key in ("last_login", "creation_date"):
+        value = user.get(key)
+        if value:
+            parts.append(
+                value.strftime("%Y-%m-%d") if hasattr(value, "strftime") else str(value)[:10]
+            )
+
+    return " ".join(p for p in parts if p).lower()
+
+
+def _build_admin_user_rows():
+    """One full snapshot of the /admin table: every user enriched with their trip
+    totals, activity flag and search blob. Everything the endpoints need is
+    derived here so the per-request path is filter + sort + slice only."""
+    now = datetime.now()
+    active_cutoff = now - timedelta(days=90)
+    # premium_cancel_at comes back naive from SQLite (tzinfo isn't preserved on
+    # the round trip) even though it was written as a UTC value — compare
+    # against a naive-but-UTC "now" to match, or this raises TypeError.
+    utc_now_naive = datetime.now(UTC).replace(tzinfo=None)
+
+    rows = []
+    by_uid = {}
     for user in User.query.all():
         row = user.toDict()
         # Owner-only view: not exposed via toDict() elsewhere. premium_tier +
@@ -7259,133 +7333,179 @@ def getAdminUsersData():
         # BMC-automated ones — a manual grant never gets a supporter_id pinned.
         row["premium_tier"] = user.premium_tier
         row["bmc_supporter_id"] = user.bmc_supporter_id
-        row["premium_cancel_at"] = user.premium_cancel_at.isoformat() if user.premium_cancel_at else None
-        # Computed once here (not re-derived in the search filter below) so the
-        # "stale"/"cancelled" search terms don't need to re-parse the ISO string.
-        # premium_cancel_at comes back naive from SQLite (tzinfo isn't preserved
-        # on the round trip) even though it was written as a UTC value — compare
-        # against a naive-but-UTC "now" to match, or this raises TypeError.
-        row["premium_stale"] = bool(
-            user.premium_cancel_at and user.premium_cancel_at <= datetime.now(UTC).replace(tzinfo=None)
+        row["premium_cancel_at"] = (
+            user.premium_cancel_at.isoformat() if user.premium_cancel_at else None
         )
-        all_users[user.username] = row
+        row["premium_stale"] = bool(
+            user.premium_cancel_at and user.premium_cancel_at <= utc_now_naive
+        )
+        row["trips"] = 0
+        row["length"] = 0
+        rows.append(row)
+        # trips.user_id is User.uid — resolving it per row via get_username()
+        # was one SQLite query per user with trips.
+        by_uid[user.uid] = row
 
-    # Initialize trips and length for all users
-    for user in all_users.values():
-        user["trips"] = 0
-        user["length"] = 0
-
-    # Fetch users with trips from PostgreSQL
     with pg_session() as pg:
-        admin_stats_rows = pg.execute(
+        trip_rows = pg.execute(
             "SELECT user_id, count(*) AS trips, sum(trip_length) AS length,"
             " max(last_modified) AS last_modified FROM trips GROUP BY user_id"
         ).fetchall()
-    for user_data in admin_stats_rows:
-        username = get_username(user_data["user_id"])
-        if username in all_users:
-            user = all_users[username]
-            user["trips"] = user_data["trips"]
-            user["length"] = user_data["length"]
-
-            if user["last_login"] is None:
-                user["last_login"] = user_data["last_modified"]
-
-    # Process users
-    users_list = []
-    for user in all_users.values():
-        # Determine if user is active
-        if (
-            user["trips"] > 0
-            and user["last_login"]
-            and user["last_login"] > datetime.now() - timedelta(days=90)
-            and user["username"] not in ["demo", "test"]
-        ):
-            user["active"] = True
-        else:
-            user["active"] = False
-
-        # Filter by active status
-        if not show_inactive and not user["active"]:
+    for trip_row in trip_rows:
+        row = by_uid.get(trip_row["user_id"])
+        if row is None:
             continue
+        row["trips"] = trip_row["trips"]
+        row["length"] = trip_row["length"] or 0
+        if row["last_login"] is None:
+            row["last_login"] = trip_row["last_modified"]
 
-        # Calculate trips per day
-        days_since_creation = (datetime.now() - user["creation_date"]).days or 1
-        user["trips_per_day"] = round(user["trips"] / days_since_creation, 2)
-
-        # Convert datetime objects to ISO format strings for JSON serialization
-        if user.get("last_login"):
-            user["last_login"] = user["last_login"].isoformat()
-        if user.get("creation_date"):
-            user["creation_date"] = user["creation_date"].isoformat()
-
-        # Add to list
-        users_list.append(user)
-
-    # Apply search filter
-    if search_value:
-        search_lower = search_value.lower()
-        # Lets "translator"/"admin"/etc. in the search box find users with that
-        # role flag set, alongside the existing username/email/lang matching.
-        role_search_names = {
-            "admin": "admin",
-            "alpha": "alpha",
-            "translator": "translator",
-            "premium": "premium",
-            "feature_admin": "feature admin",
-        }
-        # "stale"/"expired" finds overdue-but-not-yet-revoked cancellations;
-        # "cancelled"/"cancels" finds any flagged cancellation, overdue or not.
-        stale_terms = {"stale", "expired"}
-        cancelled_terms = {"cancelled", "canceled", "cancels", "cancel"}
-        users_list = [
-            user
-            for user in users_list
-            if search_lower in user["username"].lower()
-            or search_lower in user.get("email", "").lower()
-            or search_lower in user.get("lang", "").lower()
-            or any(
-                search_lower in name
-                for key, name in role_search_names.items()
-                if user.get(key)
+    for row in rows:
+        row["active"] = bool(
+            row["trips"] > 0
+            and row["last_login"]
+            and row["last_login"] > active_cutoff
+            and row["username"] not in ("demo", "test")
+        )
+        row["active_today"] = bool(
+            row["last_login"] and row["last_login"] > now - timedelta(days=1)
+        )
+        days_since_creation = (now - row["creation_date"]).days or 1
+        row["trips_per_day"] = round(row["trips"] / days_since_creation, 2)
+        # Sortable stand-ins for the two rendered-only columns, so ordering by
+        # them means something (Premium sorts manual/tier, Status by activity).
+        row["premium_label"] = (
+            ""
+            if not row["premium"]
+            else (
+                "Manual"
+                if not row["bmc_supporter_id"]
+                else ADMIN_PREMIUM_TIER_LABELS.get(
+                    row["premium_tier"], row["premium_tier"] or "unknown tier"
+                )
             )
-            or (user.get("premium_stale") and any(search_lower in t for t in stale_terms))
-            or (user.get("premium_cancel_at") and any(search_lower in t for t in cancelled_terms))
-        ]
+        )
+        row["share_label"] = ADMIN_SHARE_LABELS.get(row["share_level"], "Unknown")
+        row["_search"] = _admin_search_haystack(row)
+        # Serialised last, so everything above works with real datetimes.
+        if row["last_login"]:
+            row["last_login"] = row["last_login"].isoformat()
+        if row["creation_date"]:
+            row["creation_date"] = row["creation_date"].isoformat()
 
-    # Sort users
-    if order_column in column_map:
-        sort_key = column_map[order_column]
-        reverse = order_dir == "desc"
+    return rows
 
-        # Special handling for different data types
-        if sort_key in ["trips", "length", "trips_per_day"]:
-            users_list.sort(key=lambda x: x.get(sort_key, 0), reverse=reverse)
-        elif sort_key in ["last_login", "creation_date"]:
-            users_list.sort(
-                key=lambda x: x.get(sort_key) or datetime.min, reverse=reverse
-            )
-        elif sort_key == "active":
-            users_list.sort(key=lambda x: x.get(sort_key, False), reverse=reverse)
-        else:
-            users_list.sort(key=lambda x: x.get(sort_key, "").lower(), reverse=reverse)
 
-    # Get total count before pagination
+def get_admin_user_rows():
+    cached = _admin_users_cache
+    if (
+        cached["rows"] is not None
+        and cached["built_at"] is not None
+        and (datetime.now() - cached["built_at"]).total_seconds() < _ADMIN_USERS_CACHE_TTL
+    ):
+        return cached["rows"]
+    rows = _build_admin_user_rows()
+    cached["rows"] = rows
+    cached["built_at"] = datetime.now()
+    return rows
+
+
+def _filter_admin_users(rows, search_value):
+    """Space-separated terms, ANDed; a leading "-" negates a term. Terms match at
+    word boundaries against the row's search blob, so they behave as prefixes
+    ("prem" → premium) without bleeding across words ("active" ≠ "inactive")."""
+    terms = [t for t in search_value.lower().split() if t and t != "-"]
+    if not terms:
+        return rows
+
+    positives, negatives = [], []
+    for term in terms:
+        target = negatives if term.startswith("-") else positives
+        target.append(re.compile(r"\b" + re.escape(term.lstrip("-"))))
+
+    return [
+        row
+        for row in rows
+        if all(p.search(row["_search"]) for p in positives)
+        and not any(n.search(row["_search"]) for n in negatives)
+    ]
+
+
+# Columns the table is allowed to order by, keyed on the DataTables `data` name
+# the client sends for the ordered column (so adding/moving a column can't
+# silently sort by the wrong field, as a positional map did).
+ADMIN_SORT_FIELDS = {
+    "username": ("username", ""),
+    "email": ("email", ""),
+    "lang": ("lang", ""),
+    "active": ("active", False),
+    "share_label": ("share_label", ""),
+    "trips": ("trips", 0),
+    "length": ("length", 0),
+    "trips_per_day": ("trips_per_day", 0),
+    "last_login": ("last_login", ""),
+    "creation_date": ("creation_date", ""),
+    "premium_label": ("premium_label", ""),
+}
+
+
+@app.route("/getAdminUsersData", methods=["POST"])
+@owner_required
+def getAdminUsersData():
+    """
+    Server-side processing endpoint for DataTables.
+    Returns paginated user data based on DataTables parameters.
+    """
+    draw = int(request.form.get("draw", 1))
+    start = int(request.form.get("start", 0))
+    length = int(request.form.get("length", 10))
+    search_value = request.form.get("search[value]", "")
+    show_inactive = request.form.get("showInactive", "false") == "true"
+
+    order_column = request.form.get("order[0][column]")
+    order_dir = request.form.get("order[0][dir]", "asc")
+    sort_field = (
+        request.form.get(f"columns[{order_column}][data]", "")
+        if order_column is not None
+        else ""
+    )
+
+    all_rows = get_admin_user_rows()
+    users_list = (
+        all_rows if show_inactive else [row for row in all_rows if row["active"]]
+    )
+    records_total = len(users_list)
+
+    users_list = _filter_admin_users(users_list, search_value)
+
+    if sort_field in ADMIN_SORT_FIELDS:
+        key, default = ADMIN_SORT_FIELDS[sort_field]
+        users_list = sorted(
+            users_list,
+            key=lambda row: (
+                (row.get(key) or default).lower()
+                if isinstance(default, str)
+                else (row.get(key) if row.get(key) is not None else default)
+            ),
+            reverse=order_dir == "desc",
+        )
+
     total_filtered = len(users_list)
 
-    # Apply pagination
     if length != -1:  # -1 means show all
         users_list = users_list[start : start + length]
 
-    # Prepare response
-    response = {
-        "draw": draw,
-        "recordsTotal": len(all_users),
-        "recordsFiltered": total_filtered,
-        "data": users_list,
-    }
-
-    return jsonify(response)
+    return jsonify(
+        {
+            "draw": draw,
+            "recordsTotal": records_total,
+            "recordsFiltered": total_filtered,
+            # The search blob is a server-side index, not display data.
+            "data": [
+                {k: v for k, v in row.items() if k != "_search"} for row in users_list
+            ],
+        }
+    )
 
 
 @app.route("/getAdminStats", methods=["GET"])
@@ -7395,7 +7515,8 @@ def getAdminStats():
     Returns aggregated statistics without user data.
     This is called once on page load to populate the summary stats.
     """
-    # Initialize counters and dictionaries
+    rows = get_admin_user_rows()
+
     active_users = 0
     active_today = 0
     total_trips = 0
@@ -7403,77 +7524,28 @@ def getAdminStats():
     total_langs = {}
     active_langs = {}
 
-    # Fetch all users from the auth database
-    all_users = {user.username: user.toDict() for user in User.query.all()}
-    total_users = len(all_users)
-
-    # Initialize trips and length for all users
-    for user in all_users.values():
-        user["trips"] = 0
-        user["length"] = 0
-
-    # Fetch users with trips from PostgreSQL
-    with pg_session() as pg:
-        admin_stats_rows = pg.execute(
-            "SELECT user_id, count(*) AS trips, sum(trip_length) AS length,"
-            " max(last_modified) AS last_modified FROM trips GROUP BY user_id"
-        ).fetchall()
-    for user_data in admin_stats_rows:
-        username = get_username(user_data["user_id"])
-        if username in all_users:
-            user = all_users[username]
-            user["trips"] = user_data["trips"]
-            user["length"] = user_data["length"]
-
-            if user["last_login"] is None:
-                user["last_login"] = user_data["last_modified"]
-
-            # Check if user was active today
-            if user["last_login"] and user["last_login"] > datetime.now() - timedelta(
-                days=1
-            ):
-                active_today += 1
-
-    # Calculate statistics
-    for user in all_users.values():
-        # Update total language count
-        if user["lang"] in total_langs:
-            total_langs[user["lang"]] += 1
-        else:
-            total_langs[user["lang"]] = 1
-
-        # Check if the user is active
-        if (
-            user["trips"] > 0
-            and user["last_login"]
-            and user["last_login"] > datetime.now() - timedelta(days=90)
-            and user["username"] not in ["demo", "test"]
-        ):
+    for user in rows:
+        total_langs[user["lang"]] = total_langs.get(user["lang"], 0) + 1
+        if user["active"]:
             active_users += 1
-
-            # Update active language count
-            if user["lang"] in active_langs:
-                active_langs[user["lang"]] += 1
-            else:
-                active_langs[user["lang"]] = 1
-
-        # Update totals
+            active_langs[user["lang"]] = active_langs.get(user["lang"], 0) + 1
+        if user["trips"] and user["active_today"]:
+            active_today += 1
         total_trips += user["trips"]
         total_km += user["length"]
 
-    # Prepare response data
-    response_data = {
-        "stats": {
-            "total_users": total_users,
-            "active_users": active_users,
-            "active_today": active_today,
-            "total_trips": total_trips,
-            "total_km": total_km,
-            "langs": {"total": total_langs, "active": active_langs},
+    return jsonify(
+        {
+            "stats": {
+                "total_users": len(rows),
+                "active_users": active_users,
+                "active_today": active_today,
+                "total_trips": total_trips,
+                "total_km": total_km,
+                "langs": {"total": total_langs, "active": active_langs},
+            }
         }
-    }
-
-    return jsonify(response_data)
+    )
 
 
 @app.route("/getLeaderboardUsers/<type>", methods=["GET"])
@@ -7549,6 +7621,7 @@ def delete_user(uid):
             )
         authDb.session.delete(user)
         authDb.session.commit()
+        invalidate_admin_users_cache()
     except Exception as e:
         print(e)
 
@@ -7601,6 +7674,7 @@ def rename_user(uid):
         print(e)
         return jsonify(success=False, error=str(e)), 500
 
+    invalidate_admin_users_cache()
     return jsonify(success=True)
 
 
@@ -8831,6 +8905,7 @@ def toggle_role(uid, role, action):
         user.premium_cancel_at = None
 
     authDb.session.commit()
+    invalidate_admin_users_cache()
 
     if role == "premium" and action == "remove":
         # Asymmetric on purpose: a manual grant doesn't touch Discord (no
