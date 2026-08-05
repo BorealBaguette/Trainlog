@@ -102,9 +102,9 @@
     /* --- Mobile card layout ---
        On a phone one table row cannot hold two station names, so both ended up
        ellipsed to uselessness. Below 768px each row is re-laid out as a card: the
-       origin, the destination and a meta line (date, departure, distance, operator)
-       each get their own line and wrap in full, with the type logo in a left gutter
-       and the actions kebab in the right one. Everything else stays in the detail
+       origin, the destination and a meta line (date, distance, duration, times) each
+       get their own line and wrap in full, with the type logo in a left gutter and the
+       actions kebab in the right one. Everything else stays in the detail
        row, which processHiddenData now fills from the complement of the card fields.
 
        All of this is scoped through `.trip-card-host > #dataTable`: Responsive clones
@@ -139,10 +139,16 @@
         .trip-card-host > #dataTable thead { display: none !important; }
 
         .trip-card-host > #dataTable,
-        .trip-card-host > #dataTable > tbody,
-        .trip-card-host > #dataTable > tbody > tr { display: block; width: auto; }
+        .trip-card-host > #dataTable > tbody { display: block; width: auto; }
 
+        /* The card is a wrapping flex row rather than a block, so that the meta line's
+           values can be reordered: the arrival is the column right after the departure
+           in the table, but on the card the duration goes between them, and `order` is
+           the only way to say so without touching the table's own column order. */
         .trip-card-host > #dataTable > tbody > tr {
+            display: flex;
+            flex-wrap: wrap;
+            width: auto;
             position: relative;
             margin-bottom: 10px;
             /* The right padding clears the operator column, which the actions pill shares
@@ -213,12 +219,33 @@
         .trip-card-host > #dataTable > tbody > tr > td.col-origin,
         .trip-card-host > #dataTable > tbody > tr > td.col-dest,
         .trip-card-host > #dataTable > tbody > tr > td.child,
-        .trip-card-host > #dataTable > tbody > tr > td.dt-empty { display: block !important; }
+        .trip-card-host > #dataTable > tbody > tr > td.dt-empty {
+            display: block !important;
+            flex: 0 0 100%;
+            /* A flex item does not shrink below its content by default, so a long
+               station name would push the card wider than the viewport. */
+            min-width: 0;
+        }
 
         .trip-card-host > #dataTable > tbody > tr > td.col-date,
-        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length,
         .trip-card-host > #dataTable > tbody > tr > td.col-duration,
-        .trip-card-host > #dataTable > tbody > tr > td.col-length { display: inline-block !important; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime { display: block !important; }
+
+        /* Card line order, independent of where the columns sit in the table. The two
+           times come last and stay side by side, which is what lets one arrow sit between
+           them and serve both — so the pair reads as one value, `08:16 → 08:40`, and the
+           line has room for the distance again. Broken in two (tr.meta-2x2, below) the
+           pair drops whole to the second line, arrow and all. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin { order: 1; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest { order: 2; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-date { order: 3; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-length { order: 4; }
+        /* 5 is the line break the two-line layout inserts here (tr.meta-2x2, below). */
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration { order: 6; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-time { order: 7; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime { order: 8; }
 
         .trip-card-host > #dataTable > tbody > tr > td.col-type,
         .trip-card-host > #dataTable > tbody > tr > td.col-actions {
@@ -259,57 +286,114 @@
         .trip-card-host > #dataTable > tbody > tr > td.col-origin .flag,
         .trip-card-host > #dataTable > tbody > tr > td.col-dest .flag { flex: 0 0 auto; }
 
-        /* Meta line. The values simply follow one another, separated by a leading dot on
-           each slot rather than a trailing one on the slot before, so the dots read as
-           separators and not as punctuation on the previous value. There are no fixed
-           slot widths: the operator, the one item that made the line's width unpredictable
-           from card to card, now has its own place in the right gutter, and the four text
-           values left are short enough that a phone fits them without help. */
+        /* Meta line: date, distance, duration, and the two times as one value, on one
+           line where the card has room for one. The values simply follow one another at
+           their own widths — the operator, the one item that made the line's width
+           unpredictable from card to card, has its own place in the right gutter.
+
+           Every slot opens with an icon of its own — calendar, route, hourglass, clock —
+           rather than closing with a separator, so each mark reads as belonging to the
+           value after it and the spacing is the same everywhere: one gap between slots,
+           then icon, then a hair before the value. Every icon occupies the same 1em box,
+           so the values read at an even rhythm however long each one is. */
         .trip-card-host > #dataTable > tbody > tr > td.col-date,
-        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length,
         .trip-card-host > #dataTable > tbody > tr > td.col-duration,
-        .trip-card-host > #dataTable > tbody > tr > td.col-length {
+        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime {
+            flex: 0 0 auto;
+            min-width: 0;
             margin-top: 3px;
             color: #6c757d;
             font-size: 0.8rem;
-            vertical-align: middle;
             box-sizing: border-box;
-            padding-right: 0.2em;
+            /* The one gap between slots. All the other spacing on the line is fixed, so
+               this is the only number that sets how far apart the values read. */
+            padding-right: 0.85em;
         }
-        .trip-card-host > #dataTable > tbody > tr > td.col-time:not(:empty)::before,
+        /* Except between the two times, which are one slot: the departure closes up to
+           the arrow so that `08:16 → 08:40` reads as a single value with the arrow inside
+           it, rather than as two slots that happen to be adjacent. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-time { padding-right: 0.35em; }
+
+        /* The icons are Font Awesome's own glyphs, addressed by codepoint rather than by
+           putting an <i> in the cell: the cells are column values shared with the desktop
+           table, and only the card wants a mark in front of them. Solid (900) is the one
+           free weight that has all five.
+
+           Font Awesome centres its glyphs on the em box, which sits lower than the text
+           they label — aligned on the baseline the icons hang below the digits. Aligning
+           the box on `middle` instead puts the glyph's centre on the text's. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-date:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before,
         .trip-card-host > #dataTable > tbody > tr > td.col-duration:not(:empty)::before,
-        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before {
-            content: "\00b7";
-            margin-right: 0.4em;
+        .trip-card-host > #dataTable > tbody > tr > td.col-time:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime:not(:empty)::before {
+            display: inline-block;
+            width: 1em;
+            margin-right: 0.3em;
+            text-align: center;
+            vertical-align: middle;
+            /* `middle` puts the glyph's centre on the text's x-height centre, which is a
+               shade below where the eye wants a mark that labels a line of digits: the
+               digits have no descenders, so their optical centre sits higher than the
+               font's. A pixel back up. */
+            position: relative;
+            top: -1px;
             color: #adb5bd;
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            font-size: 0.78em;
+            line-height: 1;
         }
+        .trip-card-host > #dataTable > tbody > tr > td.col-date:not(:empty)::before { content: "\f133"; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before { content: "\f4d7"; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration:not(:empty)::before { content: "\f252"; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-time:not(:empty)::before { content: "\f017"; }
+        /* The arrow is the arrival's mark, and it is the whole of what separates the two
+           times: one glyph doing the work of a separator and a label at once, in either
+           layout, since the pair never breaks apart. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime:not(:empty)::before { content: "\f061"; }
+
+        /* A meta line that cannot fit breaks in two — date and distance, then duration and
+           the times — instead of wrap's three-and-an-orphan. The class is set per row by
+           updateMetaWrap(), which measures the natural one-line layout.
+
+           The break is a flex item of zero height and full width, generated on the row
+           itself and ordered between the distance and the duration: everything before it
+           fills the first line, everything after starts the second. Nothing is aligned
+           into columns across the two lines, and that is the point — a column has to be
+           as wide as the widest thing in it, so the moment the departure shared one with
+           the distance above it, a long distance pushed the arrow away from its time and
+           the pair stopped reading as one value. Each line is packed from the left
+           instead, and the times keep their own spacing whatever else is on the card. */
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2::before {
+            content: "";
+            flex: 0 0 100%;
+            height: 0;
+            order: 5;
+        }
+        /* An open card has no meta line left to break. */
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2.dtr-expanded::before { content: none; }
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-duration,
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-endtime {
+            margin-top: 2px;
+        }
+
         /* An open card drops the meta line: everything on it is repeated, labelled and
            full size, in the detail row just below (see META_COLUMN_CLASSES), so leaving
            it up would say the same things twice at two different levels. The station
            names stay, and the detail row moves up to meet them. The operator is not part
            of this — it lives in the gutter, not on the line, and stays put. */
         .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-date,
-        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-length,
         .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-duration,
-        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-length { display: none !important; }
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-endtime { display: none !important; }
 
         /* renderDuration wraps its value in a div, which would take the whole line. */
         .trip-card-host > #dataTable > tbody > tr > td.col-duration .duration { display: inline; }
-
-        /* A meta line that cannot fit breaks as two columns of two — date over duration,
-           time over distance — instead of inline wrap's three-and-an-orphan. The class
-           is set per row by updateMetaWrap(), which measures the natural one-line layout;
-           50% cells work because the four tds are adjacent in the DOM with no text nodes
-           between them (hidden cells in between have no boxes). */
-        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-date,
-        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-time,
-        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-duration,
-        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-length {
-            width: 50%;
-            margin-top: 2px;
-        }
-        /* The duration opens the second line, so its leading separator dot goes. */
-        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-duration::before { content: none; }
 
         /* The operator's reserved column on the right. No strip behind it: shading both
            edges made the card read as three boxes, and put the operator's wordmark and
@@ -1327,16 +1411,17 @@ function isEllipsisActive(el){
 // Everything else belongs in the detail row, whatever Responsive itself decided to
 // hide — on a wide phone it keeps more columns than the card has room for, and those
 // would otherwise be reachable from neither place.
-var CARD_COLUMN_CLASSES = ['col-type', 'col-origin', 'col-dest', 'col-date', 'col-time', 'col-duration', 'col-length', 'col-operator', 'col-actions'];
+var CARD_COLUMN_CLASSES = ['col-type', 'col-origin', 'col-dest', 'col-date', 'col-length', 'col-duration', 'col-time', 'col-endtime', 'col-operator', 'col-actions'];
 
-// The meta line — the compact `date · time · duration · distance` strip under the station
-// names. It is a summary of fields the detail row labels properly, so an open card hides it
-// (see the .dtr-expanded rule in the stylesheet) and these columns come down into the detail
-// row instead, where they line up with everything else rather than being repeated in two
+// The meta line — the compact `date, distance, duration, departure → arrival` strip
+// under the station names, which breaks in two when it does not fit (see updateMetaWrap).
+// It is a summary of fields the detail row labels properly, so an open card hides it (see
+// the .dtr-expanded rule in the stylesheet) and these columns come down into the detail row
+// instead, where they line up with everything else rather than being repeated in two
 // places at two levels. The operator is deliberately not one of them: it has its own column
 // in the card's right gutter and stays legible there, open or shut, so sending it down as
 // well would be the repetition this avoids.
-var META_COLUMN_CLASSES = ['col-date', 'col-time', 'col-duration', 'col-length'];
+var META_COLUMN_CLASSES = ['col-date', 'col-length', 'col-duration', 'col-time', 'col-endtime'];
 
 function isCardLayout() {
     return window.matchMedia('(max-width: 767px)').matches;
@@ -1345,7 +1430,7 @@ function isCardLayout() {
 // Cells that select their row on click. The default excludes the first cell, the last
 // one and the origin (which carries the expand control); on a card the control has
 // moved to the type gutter, so every text line of the card selects instead.
-var CARD_SELECT_SELECTOR = 'td.col-origin, td.col-dest, td.col-date, td.col-time, td.col-duration, td.col-length, td.col-operator';
+var CARD_SELECT_SELECTOR = 'td.col-origin, td.col-dest, td.col-date, td.col-length, td.col-duration, td.col-time, td.col-endtime, td.col-operator';
 var DEFAULT_SELECT_SELECTOR = 'td:not(:nth-child(2)):not(:last-child):not(:first-child)';
 
 // The stylesheet's rule for this did not take in testing, so the header row is also
@@ -2206,7 +2291,7 @@ var table = $('#tripRows');
         { data: 'destination_station', render: renderStation, className: 'col-dest' },
         { data: 'start_date', className: 'tripDate col-date' },
         { data: 'start_time', render: renderStartTime, className: 'col-time' },
-        { data: 'end_time', render: renderEndTime },
+        { data: 'end_time', render: renderEndTime, className: 'col-endtime' },
         { data: 'trip_duration', render: renderDuration, className: 'col-duration' },
         { data: 'trip_length', render: renderLength, className: 'col-length' },
         {
@@ -2877,19 +2962,20 @@ function updateSelectionMessage() {
 
 resetObjects();
 
-// Meta lines that wrap get re-laid as two columns of two (tr.meta-2x2 in the
-// stylesheet) instead of leaving one value orphaned on a second line. Wrap is
-// detected on the natural single-line layout — class off, then compare the meta
-// cells' offsets within the card — so the class always reflects the current
-// content and width. Cells hidden with the meta line (open cards) have no
-// offsetParent and drop out, leaving those rows untouched.
+// The meta line breaks in two (tr.meta-2x2 in the stylesheet) only when it does not
+// fit on one, so a card with room keeps the single line. Wrap is
+// detected on the natural one-line layout — class off, then compare the meta cells'
+// offsets within the card — so the class always reflects the current content and
+// width, and the measurement never sees the layout it decides on. Cells hidden with
+// the meta line (open cards) have no offsetParent and drop out, leaving those rows
+// untouched.
 function updateMetaWrap() {
     var $rows = $('#dataTable > tbody > tr').not('.child');
     if (!isCardLayout()) { $rows.removeClass('meta-2x2'); return; }
     $rows.each(function() {
         var $tr = $(this).removeClass('meta-2x2');
         var tops = [];
-        $tr.children('td.col-date, td.col-time, td.col-duration, td.col-length').each(function() {
+        $tr.children('td.col-date, td.col-length, td.col-duration, td.col-time, td.col-endtime').each(function() {
             if (this.offsetParent) tops.push(this.offsetTop);
         });
         if (tops.length > 1 && Math.max.apply(null, tops) - Math.min.apply(null, tops) > 4) {

@@ -35,20 +35,39 @@
 /* distance + info icon share one row */
 #sidebar .route-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 11px; }
 
-/* "adjust the markers" hint tucked behind a small info icon */
-#sidebar .route-meta .route-hint { margin: 0; }
-#sidebar .route-hint { margin: 0 0 10px; }
+/* hint (route notes / which bus router answered): a small badge pinned to the
+   distance chip's top-right corner, opening a floating bubble below it */
+#sidebar .route-dist-wrap { position: relative; display: inline-block; }
+#sidebar .route-hint { position: absolute; top: -5px; right: -7px; margin: 0; line-height: 0; }
 #sidebar .route-hint summary {
-  list-style: none; cursor: pointer; width: 22px; height: 22px; border-radius: 50%;
+  list-style: none; cursor: pointer; width: 15px; height: 15px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
-  background: #eef1f5; color: #7a8494; transition: background .12s, color .12s;
+  background: #dfe4ea; color: #5f6874; border: 2px solid #fff;
+  font-size: 9px; line-height: 1; transition: background .12s, color .12s;
 }
 #sidebar .route-hint summary::-webkit-details-marker { display: none; }
 #sidebar .route-hint summary::marker { content: ""; }
-#sidebar .route-hint summary:hover { background: #e2e7ee; color: #4b5563; }
-#sidebar .route-hint[open] summary { margin-bottom: 7px; }
-#sidebar .route-hint[open] { flex-basis: 100%; } /* when open, drop to its own line for readable text */
-#sidebar .route-hint > div { font-size: .82em; line-height: 1.45; color: #6b7280; }
+#sidebar .route-hint summary:hover { background: #cdd4dd; color: #374151; }
+
+#sidebar .route-bubble {
+  position: absolute; top: calc(100% + 7px); left: -6px; z-index: 1200;
+  width: max-content; max-width: 230px;
+  background: #fff; border: 1px solid #e5e7eb; border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(17, 24, 39, .13);
+  padding: 7px 9px; font-size: .78rem; line-height: 1.4; color: #4b5563;
+  white-space: normal; text-align: left;
+}
+#sidebar .route-bubble::before { /* caret pointing back up at the badge */
+  content: ""; position: absolute; top: -5px; left: 8px; width: 8px; height: 8px;
+  background: #fff; border-left: 1px solid #e5e7eb; border-top: 1px solid #e5e7eb;
+  transform: rotate(45deg);
+}
+
+/* amber when the car router was used as a bus fallback */
+#sidebar .route-hint-warn summary { background: #f5c877; color: #7c4a03; }
+#sidebar .route-hint-warn summary:hover { background: #efb954; color: #7c4a03; }
+#sidebar .route-hint-warn .route-bubble { color: #92400e; border-color: #f0d9ab; }
+#sidebar .route-hint-warn .route-bubble::before { border-color: #f0d9ab; }
 
 /* freehand mode toggle rides on the distance/info row, pushed to the right */
 #sidebar .route-meta .freehand-toggle-btn { margin-left: auto; }
@@ -96,6 +115,14 @@
   background: #eaf5ee; color: #226b43; border-color: #bcdfc9; margin-bottom: 0;
 }
 #sidebar .submit-continue:hover { background: #dcefe3; border-color: #2e8b57; }
+
+/* map control that re-opens the closed panel */
+.reopen-panel-control { border: none; box-shadow: none; }
+.reopen-panel-btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 34px; height: 34px; padding: 0; border-radius: 8px;
+  box-shadow: 0 1px 5px rgba(0, 0, 0, .28);
+}
 
 /* close (x) */
 .leaflet-sidebar .close { font-size: 22px; color: #9ca3af; }
