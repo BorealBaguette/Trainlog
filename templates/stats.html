@@ -337,7 +337,28 @@
 
     var isCombinedMode = tripType === 'combined';
     
-    var currentMetric = 'trips';
+    // Year, trip type and metric are the three dimensions of this page and they
+    // are equally important, so all three live in the path, in that order. "all"
+    // is the year that means every year: a real segment rather than an omitted
+    // one, which is what keeps the form unambiguous.
+    //
+    // Built by substitution rather than by string concatenation so the shape of
+    // the URL stays Flask's business — the three route families sit at different
+    // prefixes and only one of them carries a username.
+    const STATS_URL_TEMPLATE =
+        {% if admin %}"{{ url_for('admin_stats', year='__YEAR__', tripType='__TYPE__', metric='__METRIC__') }}"
+        {% elif is_public %}"{{ url_for('public_stats', username=username, year='__YEAR__', tripType='__TYPE__', metric='__METRIC__') }}"
+        {% else %}"{{ url_for('stats', username=username, year='__YEAR__', tripType='__TYPE__', metric='__METRIC__') }}"
+        {% endif %};
+
+    function statsPageUrl(year, type, metric) {
+        return STATS_URL_TEMPLATE
+            .replace('__YEAR__', encodeURIComponent(year || 'all'))
+            .replace('__TYPE__', encodeURIComponent(type))
+            .replace('__METRIC__', encodeURIComponent(metric));
+    }
+
+    var currentMetric = "{{statMetric if statMetric else 'trips'}}";
     var statsData = null;
     var combinedStatsData = null;
     // Airport code -> city, sent alongside the air payloads (see
@@ -487,6 +508,9 @@
     //   title        chart heading
     //   appliesTo    trip types the chart means something for (null = all)
     //   category     row -> the string shown on the category axis
+    //   mergeKey     row -> what makes two rows the same row in combined mode.
+    //                Only needed where idKey alone isn't the identity (lines,
+    //                which are only unique within an operator).
     //   inlineLabel  category -> bar label. Set means the category rides on the
     //                bar itself and the axis gutter collapses, which is what
     //                makes long free-text labels (lines, stations) usable.
@@ -588,6 +612,20 @@
             dataset: 'lines',
             idKey: 'line',
             title: "{{statsLines}}",
+            // A line name is only unique within a network — tram 1 exists in
+            // half the cities in Europe — so the operator is part of the row's
+            // identity, not decoration on it. The server groups by both; here
+            // that has to reach the category, because ECharts keys its axis on
+            // the category string and two bars called "1" would collapse.
+            //
+            // Spelled out on the bar rather than left to the axis logo alone:
+            // the logo distinguishes them for anyone who recognises it, and an
+            // operator with no logo has nothing to distinguish it at all.
+            category: item => item.operator ? `${item.line} · ${item.operator}` : item.line,
+            // Combined mode re-merges rows across trip types by identifier, and
+            // the identifier here is the pair. Without this a line run by a bus
+            // company and a tram company would fold back into one row.
+            mergeKey: item => item.line + '\u0000' + (item.operator || ''),
             // A line almost always runs under one operator, so its logo says
             // more at a glance than the bare line code does.
             image: item => operatorLogoUrl(item.operator),
@@ -600,12 +638,15 @@
             axisImage: true,
             imageAspect: LOGO_ASPECT,
             inlineLabel: value => value,
-            tooltipHeader: (item, name) => `
+            // The bare line name, not the category: the operator is already in
+            // the header as its logo, and repeating it in the headline made the
+            // tooltip read "390 · RATP" beside the RATP mark.
+            tooltipHeader: item => `
                 <div class="statsTipLineHead">
                     ${operatorMark(item.operator)}
                     <div class="statsTipLineText"><span
                         class="statsTipKicker">{{lineName}}&nbsp;:</span><span
-                        class="statsTipHeadline">${escapeHtml(name)}</span></div>
+                        class="statsTipHeadline">${escapeHtml(item.line)}</span></div>
                 </div>
             `
         },
@@ -683,8 +724,12 @@
     // Which trip types may contribute rows to a dataset, so combined mode
     // doesn't quietly merge back in what the restriction just excluded.
     function datasetApplies(dataset, type) {
-        const spec = CHARTS.find(entry => entry.dataset === dataset);
+        const spec = chartByDataset(dataset);
         return !spec || chartApplies(spec, type);
+    }
+
+    function chartByDataset(dataset) {
+        return CHARTS.find(spec => spec.dataset === dataset);
     }
 
     function chartByKey(key) {
@@ -885,89 +930,167 @@
             + flags * FLAG_WIDTH;
     }
 
-    function getDurationAxisConfig(maxSeconds, lang) {
-    // Define time units in seconds
+    // Time units in seconds.
     const YEAR_S = 31557600;   // 365.25 * 24 * 3600
     const MONTH_S = 2629800;    // 30.4375 * 24 * 3600
     const WEEK_S = 604800;      // 7 * 24 * 3600
     const DAY_S = 86400;
     const HOUR_S = 3600;
     const MINUTE_S = 60;
-    
-    let unit = 'second';
-    let divisor = 1;
-    let interval;
-    
-    // Helper function to find the best interval with nice multiples
+
+    // Smallest first: the only thing that walks this is the step-up in
+    // brokenDurationScale.
+    const DURATION_UNITS = [
+        { unit: 'second', seconds: 1 },
+        { unit: 'minute', seconds: MINUTE_S },
+        { unit: 'hour', seconds: HOUR_S },
+        { unit: 'day', seconds: DAY_S },
+        { unit: 'week', seconds: WEEK_S },
+        { unit: 'month', seconds: MONTH_S },
+        { unit: 'year', seconds: YEAR_S }
+    ];
+
+    // Aim for about five ticks, landing on a round multiple of the unit.
     function findNiceInterval(maxValue, baseUnit, niceMultiples) {
-        const targetTicks = 5; // Aim for around 5-10 ticks
-        const targetInterval = maxValue / targetTicks;
-        
-        // Find the closest nice multiple
-        let bestInterval = niceMultiples[0] * baseUnit;
+        const target = maxValue / 5;
+        let best = niceMultiples[0] * baseUnit;
         for (const multiple of niceMultiples) {
-            const candidateInterval = multiple * baseUnit;
-            if (candidateInterval >= targetInterval) {
-                bestInterval = candidateInterval;
-                break;
-            }
+            const candidate = multiple * baseUnit;
+            if (candidate >= target) { best = candidate; break; }
         }
-        return bestInterval;
+        return best;
     }
-    
-    // Determine the Scale and Interval
-    if (maxSeconds >= 2 * YEAR_S) {
-        unit = 'year';
-        divisor = YEAR_S;
-        interval = findNiceInterval(maxSeconds, YEAR_S, [1, 2, 5, 10, 20, 50, 100]);
-    } else if (maxSeconds >= 2 * MONTH_S) {
-        unit = 'month';
-        divisor = MONTH_S;
-        interval = findNiceInterval(maxSeconds, MONTH_S, [1, 2, 3, 6, 12]);
-    } else if (maxSeconds >= 2 * WEEK_S) {
-        unit = 'week';
-        divisor = WEEK_S;
-        interval = findNiceInterval(maxSeconds, WEEK_S, [1, 2, 4, 8, 12]);
-    } else if (maxSeconds >= 2 * DAY_S) {
-        unit = 'day';
-        divisor = DAY_S;
-        interval = findNiceInterval(maxSeconds, DAY_S, [1, 2, 3, 7, 14, 30]);
-    } else if (maxSeconds >= 2 * HOUR_S) {
-        unit = 'hour';
-        divisor = HOUR_S;
-        interval = findNiceInterval(maxSeconds, HOUR_S, [1, 2, 3, 6, 12, 24]);
-    } else if (maxSeconds >= 2 * MINUTE_S) {
-        unit = 'minute';
-        divisor = MINUTE_S;
-        interval = findNiceInterval(maxSeconds, MINUTE_S, [1, 2, 5, 10, 15, 30, 60]);
-    } else {
-        // For seconds, use nice intervals
-        const niceIntervals = [1, 2, 5, 10, 15, 30, 60];
-        const targetInterval = maxSeconds / 5;
-        interval = niceIntervals.find(i => i >= targetInterval) || 1;
+
+    // The unit a duration scale should be read in, and how far apart its ticks
+    // sit. Both come out of the largest value the scale has to carry: two days
+    // of travel is read in hours, two years of it in months.
+    function durationScale(maxSeconds) {
+        if (maxSeconds >= 2 * YEAR_S)
+            return { unit: 'year', divisor: YEAR_S, interval: findNiceInterval(maxSeconds, YEAR_S, [1, 2, 5, 10, 20, 50, 100]) };
+        if (maxSeconds >= 2 * MONTH_S)
+            return { unit: 'month', divisor: MONTH_S, interval: findNiceInterval(maxSeconds, MONTH_S, [1, 2, 3, 6, 12]) };
+        if (maxSeconds >= 2 * WEEK_S)
+            return { unit: 'week', divisor: WEEK_S, interval: findNiceInterval(maxSeconds, WEEK_S, [1, 2, 4, 8, 12]) };
+        if (maxSeconds >= 2 * DAY_S)
+            return { unit: 'day', divisor: DAY_S, interval: findNiceInterval(maxSeconds, DAY_S, [1, 2, 3, 7, 14, 30]) };
+        if (maxSeconds >= 2 * HOUR_S)
+            return { unit: 'hour', divisor: HOUR_S, interval: findNiceInterval(maxSeconds, HOUR_S, [1, 2, 3, 6, 12, 24]) };
+        if (maxSeconds >= 2 * MINUTE_S)
+            return { unit: 'minute', divisor: MINUTE_S, interval: findNiceInterval(maxSeconds, MINUTE_S, [1, 2, 5, 10, 15, 30, 60]) };
+        const nice = [1, 2, 5, 10, 15, 30, 60];
+        return { unit: 'second', divisor: 1, interval: nice.find(i => i >= maxSeconds / 5) || 1 };
     }
-    
-    const axisMax = Math.ceil(maxSeconds / interval) * interval;
-    
-    return {
-        type: 'value',
-        min: 0,
-        max: axisMax,
-        interval: interval,
-        axisLabel: {
-            hideOverlap: true,
-            formatter: function (value) {
-                const displayValue = value / divisor;
-                return new Intl.NumberFormat(lang, {
-                    style: 'unit',
-                    unit: unit,
-                    unitDisplay: 'short',
-                    maximumFractionDigits: 0
-                }).format(displayValue);
-            }
+
+    // The scale for an axis with a break in it — one scale carrying two
+    // magnitudes at once.
+    //
+    // Taken from the readable part BELOW the cut, and used for the whole axis.
+    // Sizing it off the axis maximum instead is the original bug: a chart topped
+    // by six weeks of "others" labelled every tick under it "0 sem.".
+    //
+    // A second, coarser unit above the cut — "6 sem." where this says "42 j" —
+    // was tried and dropped. ECharts puts at most two ticks past the cut, at
+    // values fixed by the tear and the axis end, and a coarse unit can only label
+    // those without lying when they happen to land on a whole one of it. Measured
+    // over 541 broken axes that was 6% of the time, and four fifths of those read
+    // as a mixed pair — "41 j" beside "6 sem.", a day apart in different units.
+    // The geometry is against it: a break exists because the top segment is a
+    // thin stub, and a thin stub does not span a whole week.
+    function brokenDurationScale(belowCut, maxSeconds) {
+        let scale = durationScale(belowCut);
+        // A four-digit label ("13 885 h") is worse than a coarser unit.
+        while (maxSeconds / scale.divisor >= 1000) {
+            const next = DURATION_UNITS.find(entry => entry.seconds > scale.divisor);
+            if (!next) break;
+            scale = {
+                unit: next.unit,
+                divisor: next.seconds,
+                interval: Math.max(scale.interval, next.seconds)
+            };
         }
-    };
-}
+        return {
+            unit: scale.unit,
+            divisor: scale.divisor,
+            // A tick can only be a whole number of units if the spacing is one.
+            interval: Math.max(scale.divisor, Math.round(scale.interval / scale.divisor) * scale.divisor)
+        };
+    }
+
+    // What the far side of a break reads in: whatever unit the value is a
+    // sensible number of, to one decimal.
+    //
+    // The near side is a real scale — evenly spaced ticks you measure bars
+    // against — so it stays whole units of one size. The far side is not: it is
+    // one or two ticks marking where a single dominant bar ends, and the tear
+    // between them says the scale is not continuous anyway. Holding it to the
+    // near side's unit for the sake of whole numbers is what produced "857 h",
+    // which nobody reads as five weeks.
+    function coarseDurationLabel(seconds, lang) {
+        const ladder = DURATION_UNITS.slice().reverse();
+        const scale = ladder.find(entry => Math.abs(seconds) >= entry.seconds) || ladder[ladder.length - 1];
+        return new Intl.NumberFormat(lang, {
+            style: 'unit',
+            unit: scale.unit,
+            unitDisplay: 'short',
+            maximumFractionDigits: 1
+        }).format(seconds / scale.seconds);
+    }
+
+    function formatDurationIn(seconds, scale, lang) {
+        return new Intl.NumberFormat(lang, {
+            style: 'unit',
+            unit: scale.unit,
+            unitDisplay: 'short',
+            maximumFractionDigits: 0
+        }).format(seconds / scale.divisor);
+    }
+
+    function getDurationAxisConfig(maxSeconds, lang, axisBreak) {
+        if (!axisBreak) {
+            const scale = durationScale(maxSeconds);
+            return {
+                type: 'value',
+                min: 0,
+                max: Math.ceil(maxSeconds / scale.interval) * scale.interval,
+                interval: scale.interval,
+                axisLabel: {
+                    hideOverlap: true,
+                    formatter: value => formatDurationIn(value, scale, lang)
+                }
+            };
+        }
+
+        const scale = brokenDurationScale(axisBreak.start, maxSeconds);
+        const nearEdgeLabel = coarseDurationLabel(axisBreak.end, lang);
+        return {
+            type: 'value',
+            min: 0,
+            // Tight to the data, in units of the tick spacing. Rounding the axis
+            // up to a whole coarse unit is what wrecked the layout once: ECharts
+            // divides the width between the two segments in proportion to the
+            // span each covers, so a max rounded up to the next whole week handed
+            // most of the chart to a stretch of scale with nothing in it and
+            // squeezed every bar into the left tenth.
+            max: snap(Math.ceil(maxSeconds / scale.interval) * scale.interval),
+            interval: scale.interval,
+            axisLabel: {
+                hideOverlap: true,
+                formatter: function (value) {
+                    if (value <= axisBreak.start) return formatDurationIn(value, scale, lang);
+                    const label = coarseDurationLabel(value, lang);
+                    // The far edge of the tear and the end of the axis sit one
+                    // tick apart, which at this resolution is usually the same
+                    // text twice. Keep the edge — that is the tick ECharts
+                    // always places, where the axis end is offered only
+                    // sometimes — and drop the repeat.
+                    if (value > axisBreak.end + scale.interval * 1e-6 && label === nearEdgeLabel) {
+                        return '';
+                    }
+                    return label;
+                }
+            }
+        };
+    }
 
     // ECharts rich-text keys only accept [a-zA-Z0-9_], so a category value can't
     // be used as one: non-latin names (京都市交) would normalize to an empty key
@@ -1129,11 +1252,18 @@
             Object.keys(idKeys).forEach(dataset => {
                 if (!datasetApplies(dataset, tripType)) return;
                 const idKey = idKeys[dataset];
+                // Usually the identifier is the whole identity. Where it isn't —
+                // a line, which is only itself within one operator — the spec
+                // says what the pair is. The seeded row still takes its
+                // identifier from the item, never from the key, so a composite
+                // key never ends up in the field the charts read.
+                const spec = chartByDataset(dataset);
+                const identity = spec && spec.mergeKey;
                 (allTypeData[tripType][dataset] || []).forEach(item => {
-                    const key = item[idKey];
-                    if (key === undefined) return;
+                    if (item[idKey] === undefined) return;
+                    const key = identity ? identity(item) : item[idKey];
                     const row = merged[dataset][key]
-                        || (merged[dataset][key] = { [idKey]: key, tripTypes: {} });
+                        || (merged[dataset][key] = { [idKey]: item[idKey], tripTypes: {} });
                     // Keep whatever decoration the first contributing type
                     // carried (operator logo, vessel photo), so merged rows can
                     // still show an image.
@@ -1768,17 +1898,14 @@
     }
 
     function valueAxisConfig(maxValue, axisBreak) {
+        // The duration axis sizes its unit and tick spacing from the values, and
+        // a break changes which values matter — so it needs telling. Everything
+        // else keeps ECharts' own tick choice either way.
         const config = isDurationLike(currentMetric)
-            ? getDurationAxisConfig(maxValue, LANG)
+            ? getDurationAxisConfig(maxValue, LANG, axisBreak)
             : commonValAxisOptions();
 
         if (axisBreak) {
-            // The duration axis pins an explicit max and tick interval chosen
-            // for an unbroken scale; both fight the break's own layout, so hand
-            // it back to ECharts and keep only the time formatter.
-            delete config.min;
-            delete config.max;
-            delete config.interval;
             config.breaks = [{ start: axisBreak.start, end: axisBreak.end, gap: '3%' }];
             config.breakArea = { expandOnClick: true };
         }
@@ -2022,9 +2149,21 @@
         // reading has to be, and using it for both keeps the two edges on the
         // same footing as each other and as the ticks around them. 6720 and
         // 130593 become 7000 and 130000, not 6800 and 130000.
+        //
+        // A duration is not read in powers of ten — 500000 seconds is not a
+        // round anything — so there the step is the unit the near side of the cut
+        // is labelled in, which puts both edges on whole days or whole hours like
+        // every other tick.
+        //
+        // The far edge takes the same small step, not the coarse unit the top
+        // segment is labelled in: the step is how much scale is left beyond the
+        // cut, and the width the segment is given follows that span directly. A
+        // week-wide stub takes most of the chart with it.
         const from = runnerUp * AXIS_BREAK_HEADROOM;
         const to = top - from * AXIS_BREAK_TAIL;
-        const step = Math.pow(10, Math.floor(Math.log10(from)));
+        const step = isDurationLike(currentMetric)
+            ? brokenDurationScale(from, top).divisor
+            : Math.pow(10, Math.floor(Math.log10(from)));
 
         const start = snap(Math.ceil(from / step) * step);
         // Nearest, not down: flooring turned 130593 into 129000 when 130000 is
@@ -2208,14 +2347,17 @@
     // ============================================
     var IS_ADMIN = "{{ 'true' if admin else 'false' }}" === "true";
 
-    function statsUrl(type) {
+    // The JSON endpoint, which is a different thing from the page URL that
+    // statsPageUrl builds — these two were both called statsUrl once, and since
+    // function declarations hoist, the address bar ended up pointing at the API.
+    function statsApiUrl(type) {
         const base = IS_ADMIN ? '/admin/getStats' : `/u/${username}/getStats`;
         return statYear ? `${base}/${statYear}/${type}` : `${base}/${type}`;
     }
 
     async function fetchStatsData() {
         try {
-            const response = await fetch(statsUrl(tripType));
+            const response = await fetch(statsApiUrl(tripType));
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -2244,7 +2386,7 @@
             while (queue.length) {
                 const type = queue.shift();
                 try {
-                    const response = await fetch(statsUrl(type));
+                    const response = await fetch(statsApiUrl(type));
                     if (response.ok) collected[type] = await response.json();
                 } catch (error) {
                     console.error(`Error fetching stats for ${type}:`, error);
@@ -2301,6 +2443,12 @@
         if (!METRICS_CONFIG[newMetric]?.enabled) return;
 
         currentMetric = newMetric;
+        // The address follows, but the page does not reload: every metric is in
+        // the payload already, so switching is a re-render. Replace rather than
+        // push — the metric is a way of looking at the page, not a page of its
+        // own, and a back button that walks through every metric you tried is a
+        // nuisance.
+        history.replaceState(null, '', statsPageUrl(statYear, tripType, currentMetric));
         renderCharts(currentDisplayData());
     }
 
@@ -2461,57 +2609,26 @@
     // ============================================
     // EVENT HANDLERS
     // ============================================
-    $("#statsSelectYear").change(function() {
-        var selectedYear = $(this).val();
-        var isPublic = "{{ 'true' if is_public else 'false' }}";
-        var isAdmin = "{{ 'true' if admin else 'false' }}";
-        var currentTripType = tripType;
-
-        var redirectUrl;
-        if (isAdmin == "true") {
-            redirectUrl = selectedYear === "all" ? 
-                '{{ url_for("admin_stats", tripType="TRIPTYPE") }}'.replace("TRIPTYPE", currentTripType) :
-                '{{ url_for("admin_stats", year="YEAR", tripType="TRIPTYPE") }}'.replace("YEAR", selectedYear).replace("TRIPTYPE", currentTripType);
-        } else if (isPublic == "true") {
-            redirectUrl = selectedYear === "all" ?
-                '{{ url_for("public_stats", username=username, tripType="TRIPTYPE") }}'.replace("TRIPTYPE", currentTripType) :
-                '{{ url_for("public_stats", username=username, year="YEAR", tripType="TRIPTYPE") }}'.replace("YEAR", selectedYear).replace("TRIPTYPE", currentTripType);
-        } else {
-            redirectUrl = selectedYear === "all" ?
-                '{{ url_for("stats", username=username, tripType="TRIPTYPE") }}'.replace("TRIPTYPE", currentTripType) :
-                '{{ url_for("stats", username=username, year="YEAR", tripType="TRIPTYPE") }}'.replace("YEAR", selectedYear).replace("TRIPTYPE", currentTripType);
-        }
-
-        window.location.href = redirectUrl;
+    // Both selectors navigate: the payload is per year and per trip type, so
+    // there is nothing to re-render from. The metric rides along untouched,
+    // which is the whole point of it being in the path.
+    $("#statsSelectYear").change(function () {
+        window.location.href = statsPageUrl($(this).val(), tripType, currentMetric);
     });
 
-    $("#statsSelectTripType").change(function() {
-        var newTripType = $(this).val();
-        var isPublic = "{{ 'true' if is_public else 'false' }}";
-        var isAdmin = "{{ 'true' if admin else 'false' }}";
-        
-        var redirectUrl;
-        if (isAdmin == "true") {
-            redirectUrl = yearDefined == "true" ?
-                '{{ url_for("admin_stats", year=statYear, tripType="") }}' + newTripType :
-                '{{ url_for("admin_stats", tripType="") }}' + newTripType;
-        } else if (isPublic == "true") {
-            redirectUrl = yearDefined == "true" ?
-                '{{ url_for("public_stats", username=username, year=statYear, tripType="") }}' + newTripType :
-                '{{ url_for("public_stats", username=username, tripType="") }}' + newTripType;
-        } else {
-            redirectUrl = yearDefined == "true" ?
-                '{{ url_for("stats", username=username, year=statYear, tripType="") }}' + newTripType :
-                '{{ url_for("stats", username=username, tripType="") }}' + newTripType;
-        }
-
-        window.location.href = redirectUrl;
+    $("#statsSelectTripType").change(function () {
+        window.location.href = statsPageUrl(statYear, $(this).val(), currentMetric);
     });
 
     // ============================================
     // INITIALIZATION
     // ============================================
     async function initializeStats() {
+        // The shorter routes still serve this page, and links to them carry two
+        // of the three dimensions or fewer. Rewrite the address to the full form
+        // so what is in the URL always matches what is on screen.
+        history.replaceState(null, '', statsPageUrl(statYear, tripType, currentMetric));
+
         const wrapper = document.getElementById('metricSelectorWrapper');
         if (wrapper) {
             wrapper.innerHTML = createMetricSelector();
