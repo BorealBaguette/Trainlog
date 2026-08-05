@@ -7235,6 +7235,16 @@ ADMIN_PREMIUM_TIER_LABELS = {
 
 ADMIN_SHARE_LABELS = {0: "Private", 1: "Link shared", 2: "Public"}
 
+# The Premium column sorts by what the membership is worth, not by the label's
+# spelling: none < manual grant < the BMC tiers in ascending price order.
+ADMIN_PREMIUM_RANKS = {
+    None: 0,
+    "manual": 1,
+    "trainlogger": 2,
+    "first_class": 3,
+    "rail_baron": 4,
+}
+
 # Language names are rendered client-side (getLangTooltip), so the server needs
 # its own copy to make "german", "swedish"… searchable alongside the raw code.
 ADMIN_LANG_NAMES = {
@@ -7385,6 +7395,16 @@ def _build_admin_user_rows():
                 )
             )
         )
+        # An unknown/new tier sorts above the ones we know, so it can't hide at
+        # the bottom of the list unnoticed.
+        row["premium_rank"] = (
+            0
+            if not row["premium"]
+            else ADMIN_PREMIUM_RANKS.get(
+                "manual" if not row["bmc_supporter_id"] else row["premium_tier"],
+                len(ADMIN_PREMIUM_RANKS),
+            )
+        )
         row["share_label"] = ADMIN_SHARE_LABELS.get(row["share_level"], "Unknown")
         row["_search"] = _admin_search_haystack(row)
         # Serialised last, so everything above works with real datetimes.
@@ -7445,7 +7465,9 @@ ADMIN_SORT_FIELDS = {
     "trips_per_day": ("trips_per_day", 0),
     "last_login": ("last_login", ""),
     "creation_date": ("creation_date", ""),
-    "premium_label": ("premium_label", ""),
+    # The Premium column is sent as `premium_label` by the client but ordered on
+    # the tier rank behind it (see ADMIN_PREMIUM_RANKS).
+    "premium_label": ("premium_rank", 0),
 }
 
 
