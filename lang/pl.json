@@ -339,7 +339,7 @@
     "OC": "Oceania",
     "countriesLoadingMessage": "<h3>Cierpliwości! Obliczanie pokrycia sieci kolejowej.</h3><br> Obliczanie pokrycia sieci kolejowej może zająć nawet kilka minut, zwłaszcza w przypadku krajów z rozbudowaną siecią kolejową. (To znakomity moment na filiżankę ulubionego napoju z WARSu ☕)",
     "notes": "Notatki",
-    "subdivisions": "Podziałki",
+    "subdivisions": "Jednostki administracyjne",
     "invalidEmail": "Proszę wprowadzić prawidłowy adres e-mail.",
     "usernameNoEmail": "Proszę nie używać adresu e-mail jako nazwy użytkownika.",
     "price": "Cena",
