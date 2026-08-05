@@ -557,8 +557,11 @@
             inlineLabel: value => value
         },
         {
-            // Trains get their consist where other types get their vehicle: the
-            // lead car on the axis, the whole rake on hover.
+            // Trains get their consist as well as their vehicle: the lead car on
+            // the axis, the whole rake on hover. It sits before the vehicles
+            // chart because on rail the consist is the more meaningful reading —
+            // but both are shown, since a fleet number is still the only thing
+            // that identifies the individual unit.
             key: 'trainsets',
             dataset: 'trainsets',
             idKey: 'trainset',
@@ -618,10 +621,6 @@
                 'air': "{{statsAircraft}}",
                 'helicopter': "{{statsAircraft}}"
             })[tripType] || "{{statsVehicles}}",
-            // On rail the consist chart says this better: `reg` there is a bare
-            // fleet number ("2", "256") that means nothing on its own. Same
-            // list as the trainsets chart, so the two swap rather than stack.
-            excludes: ['train', 'tram', 'metro', 'rail', 'funicular'],
             // A cached vessel photo for ferries, the airframe silhouette for
             // flights. Tooltip only: these are full pictures, far too big to
             // stack down a category axis.
@@ -670,7 +669,6 @@
     ];
 
     function chartApplies(spec, type) {
-        if (spec.excludes && spec.excludes.includes(type)) return false;
         return !spec.appliesTo || spec.appliesTo.includes(type);
     }
 
@@ -753,6 +751,16 @@
 
     function isMobile() {
         return getScreenSize() < 750;
+    }
+
+    // Tooltips are placed differently where there is no hover: see
+    // rowAnchoredPosition. Touch-capable laptops keep the pointer behaviour —
+    // what matters is that the pointer CAN hover, not that a screen can be
+    // touched — so a coarse-only pointer is the test, with the narrow-screen
+    // case folded in for phones reporting themselves as fine-pointered.
+    function isTouchTooltip() {
+        return isMobile()
+            || (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
     }
 
     function formatMonthLabel(monthNumber) {
@@ -1897,6 +1905,27 @@
 
         return function (point, params, dom, rect, size) {
             const index = params && params[0] ? params[0].dataIndex : null;
+
+            // Without hover there is no "the pointer is still on this row", so
+            // none of the anchoring below applies. A tap is a single event at an
+            // arbitrary spot, and the latched anchor — taken from whichever bar
+            // happened to be tapped first — would place every later panel from a
+            // position the finger left long ago.
+            //
+            // So on touch the panel is parked, not anchored: centred across the
+            // chart and pinned to whichever half the tap did NOT land in, so it
+            // never covers the bar it describes. Measured live rather than from
+            // the high-water box, because a phone-width chart is easily narrower
+            // than the widest panel it can produce and clamping to that would
+            // push every panel to the same corner.
+            if (isTouchTooltip()) {
+                const [viewW, viewH] = size.viewSize;
+                const [boxW, boxH] = size.contentSize;
+                const x = Math.max(6, Math.min((viewW - boxW) / 2, viewW - boxW - 6));
+                const y = point[1] > viewH / 2 ? 6 : Math.max(6, viewH - boxH - 6);
+                return [x, y];
+            }
+
             if (acrossBars === null) {
                 acrossBars = spec && spec.vertical ? point[1] : point[0];
             }
@@ -1942,8 +1971,15 @@
             axisPointer: { type: 'shadow' },
             extraCssText: 'border-radius:8px;padding:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);', borderWidth: 0,
             formatter: asyncPhotoFormatter(spec, rows, images),
-            confine: true,  // ADD THIS - keeps tooltip within chart container
-            appendToBody: true,  // ADD THIS - appends to body for better positioning
+            confine: true,   // keep the panel inside the chart box
+            // Positions returned by `position` are chart-relative either way,
+            // but under appendToBody ECharts converts them to page coordinates
+            // against document.body. That conversion is taken once, when the
+            // panel is placed, so anything that moves the chart afterwards —
+            // scrolling on a phone, a URL bar collapsing and reflowing the page —
+            // leaves the panel behind at the old page position. Kept off touch,
+            // where the panel then lives in the chart container and moves with it.
+            appendToBody: !isTouchTooltip(),
             position: rowAnchoredPosition(spec)
         };
     }
