@@ -250,8 +250,8 @@
 }
 
 .statsTip .statsTipMedia.strip img {
-    /* normalizeStrip decided the height; width follows the aspect ratio. */
-    width: auto;
+    /* Both dimensions are written onto each car by bakeStrip, so the panel
+       measures its final size before a single image has resolved. */
     flex: 0 0 auto;
 }
 
@@ -1190,6 +1190,8 @@
     window.addEventListener('resize', function() {
         Object.keys(chartsInstances).forEach(key => resizeChart(chartsInstances[key]));
         if (currentChart) resizeChart(currentChart);
+        // Consist strips are cut to a width, so they are re-cut with the charts.
+        if (typeof restripForWidth === 'function') restripForWidth();
     });
 
     // ============================================
@@ -1683,7 +1685,19 @@
     // full line over.
     var STRIP_MAX_WIDTH = 760;
     var STRIP_PADDING_X = 12;
-    var STRIP_CONTENT_WIDTH = STRIP_MAX_WIDTH - STRIP_PADDING_X - 2;
+    // The strip's own margin from the viewport edge, matching the `calc(100vw -
+    // 40px)` the narrow-screen rule caps it at. On a phone that cap, not the
+    // 760, is what the rake has to be laid out in — computing rows against the
+    // desktop width is what pushed the cars out past the tooltip's edge.
+    var STRIP_VIEWPORT_MARGIN = 40;
+
+    function stripContentWidth() {
+        const viewport = window.innerWidth || STRIP_MAX_WIDTH;
+        const outer = Math.min(STRIP_MAX_WIDTH, viewport - STRIP_VIEWPORT_MARGIN);
+        // Nothing sensible can be laid out below this, and a floor keeps the
+        // arithmetic from going negative on a very narrow viewport.
+        return Math.max(160, outer - STRIP_PADDING_X - 2);
+    }
 
     // Below this a car stops reading as a vehicle. A rake too long to fit at
     // this height wraps onto another row rather than shrinking further — the
@@ -1692,6 +1706,13 @@
     // seven-car set still fits on one line, which covers most multiple units.
     var STRIP_MIN_CAR_HEIGHT = 20;
     var stripCache = {};
+    // Row breaks are baked into the cached markup, so they are only valid for
+    // the width they were computed at. A rotation or a resized window has to
+    // throw the lot away rather than serve a desktop layout to a phone.
+    var stripCacheWidth = 0;
+    // The units each cached strip was built from, so a resize can bake them
+    // again without waiting for the charts to be rebuilt.
+    var stripUnits = {};
     var stripOven = null;
 
     function ovenElement() {
@@ -1803,10 +1824,28 @@
     // (spread and ascend both nil) still beats anything bought with shrinking.
     var LAYOUT_ASCEND = 6;
     var LAYOUT_SHRINK = 1.5;
-    // Enumerating every split is C(cars-1, rows-1); a dozen cars in three rows
-    // is a few hundred. The budget catches the pathological rake before it can
-    // stall a tooltip, and balancedRows takes over.
-    var LAYOUT_BUDGET = 20000;
+    // Enumerating every split is C(cars-1, rows-1): fine for a dozen cars in two
+    // or three rows, hopeless for a doubled TGV set on a phone, which is twenty
+    // cars over eight rows and fifty thousand splits. Past this many the search
+    // is restricted to cuts within LAYOUT_WINDOW cars of where an exactly even
+    // split would put them, which is where every layout worth having lives —
+    // the top-heavy one is a single car's shift off the even one — and turns the
+    // search back into a few thousand nodes.
+    var LAYOUT_FULL_SEARCH = 4000;
+    var LAYOUT_WINDOW = 1;
+    // Backstop for the case the window still can't tame; balancedRows takes over.
+    var LAYOUT_BUDGET = 60000;
+
+    // How many splits a full enumeration would visit, given up on as soon as it
+    // is clearly over the limit — these numbers overflow fast.
+    function splitCount(cars, rows) {
+        let count = 1;
+        for (let i = 1; i <= rows - 1; i++) {
+            count = count * (cars - 1 - (rows - 1) + i) / i;
+            if (count > LAYOUT_FULL_SEARCH) return Infinity;
+        }
+        return count;
+    }
 
     // The best (scale, breaks) pair for a given number of rows, or null if none
     // of them leaves the cars legible.
@@ -1816,6 +1855,19 @@
 
         const prefix = [0];
         widths.forEach((w, i) => prefix.push(prefix[i] + w));
+
+        // Where an even-by-width split would cut, for the windowed search. Cuts
+        // are counted in cars, so the window follows the artwork: a row of long
+        // coaches and a row of short vans both get one car of slack either way.
+        const ideal = [];
+        if (splitCount(n, rowCount) === Infinity) {
+            let car = 0;
+            for (let j = 1; j < rowCount; j++) {
+                const target = prefix[n] * j / rowCount;
+                while (car < n && prefix[car] < target) car++;
+                ideal.push(car);
+            }
+        }
 
         let best = null, budget = LAYOUT_BUDGET;
 
@@ -1846,8 +1898,16 @@
                 return;
             }
 
-            // Leave at least one car for each row still to come.
-            for (let end = start + 1; end <= n - rowsLeft + 1; end++) {
+            // Leave at least one car for each row still to come, and — when the
+            // search is windowed — stay near where the even split would cut.
+            let first = start + 1, last = n - rowsLeft + 1;
+            if (ideal.length) {
+                // The last row has no choice: it ends on the last car.
+                const around = rowsLeft === 1 ? n : ideal[rowCount - rowsLeft];
+                first = Math.max(first, around - LAYOUT_WINDOW);
+                last = Math.min(last, around + LAYOUT_WINDOW);
+            }
+            for (let end = first; end <= last; end++) {
                 cuts.push(end);
                 place(end, rowsLeft - 1, cuts);
                 cuts.pop();
@@ -1879,13 +1939,16 @@
         const boxes = cars.map(img => img.getBoundingClientRect());
         const heights = boxes.map(box => box.height);
         const widths = boxes.map(box => box.width);
-        const total = widths.reduce((sum, w) => sum + w, 0);
         const shortest = Math.min.apply(null, heights);
         const widest = Math.max.apply(null, widths);
+        // Whatever the strip has to fit into RIGHT NOW — a phone in portrait
+        // gives a third of the desktop width, and every decision below is
+        // relative to it.
+        const limit = stripContentWidth();
 
         // A double-deck coach drawn wider than the whole tooltip has to come
         // down whatever the height rule says — it has no row to spill onto.
-        const natural = Math.min(1, STRIP_CONTENT_WIDTH / widest);
+        const natural = Math.min(1, limit / widest);
         // Shrinking below the natural size is what needs justifying; the size
         // normalizeStrip chose is always allowed, even for stubby artwork that
         // is already under the minimum.
@@ -1894,12 +1957,11 @@
         // Fewest rows first, so a rake that misses one row by half a car is
         // squeezed onto it instead of spilling. Only once a row count proves
         // impossible to render legibly does the next one get a look.
-        const most = greedyRows(widths.map(w => w * natural), STRIP_CONTENT_WIDTH).length;
+        const most = greedyRows(widths.map(w => w * natural), limit).length;
         let scale = natural, rows = null;
 
         for (let k = 1; k <= most && !rows; k++) {
-            const layout = chooseLayout(
-                widths, k, STRIP_CONTENT_WIDTH, natural, legible);
+            const layout = chooseLayout(widths, k, limit, natural, legible);
             if (layout) { scale = layout.scale; rows = layout.rows; }
         }
 
@@ -1908,22 +1970,53 @@
         // natural size, wrapped greedily if even that can't be cut.
         if (!rows) {
             const sized = widths.map(w => w * natural);
-            const fallback = greedyRows(sized, STRIP_CONTENT_WIDTH);
-            rows = balancedRows(sized, fallback.length, STRIP_CONTENT_WIDTH);
+            const fallback = greedyRows(sized, limit);
+            rows = balancedRows(sized, fallback.length, limit);
         }
 
-        return '<div class="statsTipMedia strip">' + rows.map(row =>
+        // Widths are written out alongside the heights, and the strip is given
+        // the width of its longest row, so the panel measures the same on its
+        // first layout as on its last. Left to `width:auto` a car has no width
+        // until its image resolves, so the tooltip was measured narrow, placed
+        // to the right of the cursor, and then thrown back against the left
+        // edge a frame later when the rake finally took up its real space.
+        const rowWidths = rows.map(row =>
+            row.reduce((sum, i) => sum + widths[i] * scale, 0));
+
+        return `<div class="statsTipMedia strip" style="width:${
+            Math.max.apply(null, rowWidths).toFixed(1)}px">` + rows.map(row =>
             '<div class="statsTipStripRow">' + row.map(i => {
-                const height = heights[i] * scale;
                 return `<img src="${escapeHtml(cars[i].src)}" alt=""`
-                    + ` style="height:${height.toFixed(1)}px"`
+                    + ` style="width:${(widths[i] * scale).toFixed(1)}px`
+                    + `;height:${(heights[i] * scale).toFixed(1)}px"`
                     + ` onerror="this.style.display='none'">`;
             }).join('') + '</div>'
         ).join('') + '</div>';
     }
 
+    // The width the cached markup was cut for is no longer the width on screen
+    // — a rotation, a resized window. Everything baked at the old width is
+    // wrong, and the oven goes with it so the rebuilt strips start clean.
+    //
+    // Rebuilding immediately rather than just emptying the cache: `prepare`
+    // only runs when a chart's formatter is built, so a strip dropped now and
+    // not replaced would leave the tooltip picture-less until the next render.
+    function restripForWidth() {
+        const width = stripContentWidth();
+        if (width === stripCacheWidth) return;
+        stripCacheWidth = width;
+
+        const known = stripUnits;
+        stripUnits = {};
+        stripCache = {};
+        if (stripOven) stripOven.innerHTML = '';
+        Object.keys(known).forEach(key => ensureStrip(key, known[key]));
+    }
+
     function ensureStrip(key, units) {
+        restripForWidth();      // width is settled first; no recursion after
         if (key in stripCache || !units || !units.length) return;
+        stripUnits[key] = units;
         stripCache[key] = '';   // claim it, so a second pass doesn't rebuild
 
         const strip = document.createElement('div');
@@ -1944,10 +2037,16 @@
         ovenElement().appendChild(strip);
 
         // onApply fires again as each image finishes loading, so the cache
-        // converges on the fully-sized version.
+        // converges on the fully-sized version. An image that lands after a
+        // resize belongs to the discarded build and must not overwrite the
+        // strip that has since been cut for the new width.
+        const builtFor = stripCacheWidth;
         normalizeStrip(strip, {
             target: 40, min: 18, max: 70,
-            onApply: function () { stripCache[key] = bakeStrip(strip); }
+            onApply: function () {
+                if (builtFor !== stripCacheWidth) return;
+                stripCache[key] = bakeStrip(strip);
+            }
         });
     }
 
@@ -2230,9 +2329,34 @@
         let alongBars = null;    // reset whenever the hovered bar changes
         let widestBox = 0;
         let tallestBox = 0;
+        let placed = null;       // the coordinates handed back for that bar
+        let placedFor = '';
 
         return function (point, params, dom, rect, size) {
             const index = params && params[0] ? params[0].dataIndex : null;
+
+            // One bar, one position. ECharts asks again on every mousemove and
+            // hands back a contentSize measured from the panel as it currently
+            // stands, which for a consist strip settles over a frame or two as
+            // the rows take their heights; re-deriving the placement from that
+            // had the panel twitching for as long as the pointer sat still.
+            //
+            // Held rather than cached outright, and the test is whether the
+            // panel still FITS where it was put, not whether the arithmetic
+            // came out the same. A box that grew as it rendered gives a
+            // different answer every frame while remaining perfectly well
+            // placed; only a box that no longer fits inside the chart has
+            // actually earned a move.
+            const stamp = index + '@' + size.viewSize.join('x');
+            const settle = candidate => {
+                const [viewW, viewH] = size.viewSize;
+                const [boxW, boxH] = size.contentSize;
+                const fits = placed && stamp === placedFor
+                    && placed[0] + boxW <= viewW - 5 && placed[1] + boxH <= viewH - 5;
+                if (!fits) placed = candidate;
+                placedFor = stamp;
+                return placed;
+            };
 
             // Without hover there is no "the pointer is still on this row", so
             // none of the anchoring below applies. A tap is a single event at an
@@ -2246,12 +2370,24 @@
             // the high-water box, because a phone-width chart is easily narrower
             // than the widest panel it can produce and clamping to that would
             // push every panel to the same corner.
+            //
+            // A narrow window on a desktop lands here too — the test folds in
+            // screen width — so this branch does get a live pointer moving
+            // across it, and it has to hold still under one just like the
+            // hover branch does. Which half the panel parks in is decided from
+            // the pointer's first position on the bar, not its latest: deciding
+            // it live flipped the panel top-to-bottom as the cursor crossed the
+            // middle of the chart.
             if (isTouchTooltip()) {
                 const [viewW, viewH] = size.viewSize;
                 const [boxW, boxH] = size.contentSize;
+                if (index !== anchoredIndex) {
+                    anchoredIndex = index;
+                    alongBars = point[1];
+                }
                 const x = Math.max(6, Math.min((viewW - boxW) / 2, viewW - boxW - 6));
-                const y = point[1] > viewH / 2 ? 6 : Math.max(6, viewH - boxH - 6);
-                return [x, y];
+                const y = alongBars > viewH / 2 ? 6 : Math.max(6, viewH - boxH - 6);
+                return settle([x, y]);
             }
 
             if (acrossBars === null) {
@@ -2288,7 +2424,7 @@
 
             x = Math.max(6, Math.min(x, viewWidth - boxWidth - 6));
             y = Math.max(6, Math.min(y, viewHeight - boxHeight - 6));
-            return [x, y];
+            return settle([x, y]);
         };
     }
 
