@@ -2,6 +2,7 @@ import json
 import logging
 import re
 import shlex
+import tempfile
 import time
 from collections import Counter
 from pathlib import Path
@@ -10,6 +11,7 @@ from flask import Blueprint, jsonify, request
 
 from src.pg import pg_session
 from src.utils import admin_required
+from src.wagon_cuts import crop_side, segments, strip_width, suggest_cuts
 
 logger = logging.getLogger(__name__)
 
@@ -338,6 +340,151 @@ def upload_wagon_image(wname: str):
     return jsonify({"saved": f"{rel_noext}.{ext}", "image_ext": ext}), 200
 
 
+_SIDE_LABEL = {"_L": "L view", "_R": "R view"}
+
+
+def _uploaded_sides(image_type: str) -> list[tuple[str, object]]:
+    """
+    The uploaded file(s) for this image type, as (filename suffix, FileStorage).
+
+    'sides' takes one file per view and either may be omitted; the other types take a
+    single file under 'file'. Empty slots are dropped, so the result may be empty.
+    """
+    if image_type == "sides":
+        pairs = [("_L", request.files.get("file_l")), ("_R", request.files.get("file_r"))]
+    else:
+        suffix = {"sides_L": "_L", "sides_R": "_R"}.get(image_type, "")
+        pairs = [(suffix, request.files.get("file"))]
+    return [(sfx, f) for sfx, f in pairs if f and f.filename]
+
+
+@wagons_admin_blueprint.route("suggest-cuts", methods=["POST"])
+@admin_required
+def suggest_wagon_cuts():
+    """
+    Propose where an uploaded multi-car strip can be split into individual cars.
+
+    Nothing is stored: the file is analysed in a temp directory and thrown away. The
+    admin edits the suggestion in the browser and the real crop happens at create
+    time, from the same file uploaded again.
+    """
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "file required"}), 400
+    try:
+        ext = _detect_ext(f)
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 400
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / f"strip.{ext}"
+        f.save(str(path))
+        try:
+            cuts = suggest_cuts(path)
+            width = strip_width(path)
+        except Exception as e:                       # a corrupt but well-signed file
+            logger.warning("cut suggestion failed: %s", e)
+            return jsonify({"error": "could not read that image"}), 400
+
+    return jsonify({"width": width, "cuts": cuts})
+
+
+def _create_split(base_fields: dict, image_type: str, cuts: list[int],
+                  units: list[dict]):
+    """
+    Create one wagon per car of a multi-car strip.
+
+    The uploaded file(s) are cut at `cuts` and each slice is saved under its own
+    car's name. All the catalogue fields other than name and label are shared — one
+    strip is one set of vehicles, drawn by one author under one licence.
+
+    An R view is the same set seen from the other side, so car *i* sits at the
+    mirrored x-range in it — but only when an L view was uploaded to define the
+    order. An R-only upload is cut as it is drawn.
+    """
+    if not all(isinstance(u, dict) for u in units):
+        return jsonify({"error": "each car must be an object"}), 400
+
+    sides = _uploaded_sides(image_type)
+    if not sides:
+        return jsonify({"error": "splitting a strip needs an uploaded image"}), 400
+
+    with tempfile.TemporaryDirectory() as tmp:
+        staged = []
+        for suffix, f in sides:
+            try:
+                ext = _detect_ext(f)
+            except ValueError as e:
+                return jsonify({"error": f"{_SIDE_LABEL.get(suffix, 'file')}: {e}"}), 400
+            path = Path(tmp) / f"src{suffix or '_P'}.{ext}"
+            f.save(str(path))
+            staged.append((suffix, path, ext))
+
+        widths = {strip_width(p) for _, p, _ in staged}
+        if len(widths) > 1:
+            return jsonify({"error": "the L and R views must have the same width to "
+                                     "be cut at the same positions"}), 400
+        width = widths.pop()
+
+        if any(not 0 < c < width for c in cuts):
+            return jsonify({"error": "cut positions must lie inside the image"}), 400
+        spans = segments(cuts, width)
+        if len(units) != len(spans):
+            return jsonify({
+                "error": f"expected {len(spans)} car(s), got {len(units)}"
+            }), 400
+
+        names = [_sanitize_name((u.get("name") or "").strip()) for u in units]
+        if any(not n for n in names) or len(set(names)) != len(names):
+            return jsonify({"error": "each car needs a distinct name"}), 400
+
+        with pg_session() as pg:
+            taken = pg.execute(
+                "SELECT name FROM wagons WHERE name = ANY(:names)", {"names": names}
+            ).fetchall()
+        if taken:
+            return jsonify(
+                {"error": "already exists: " + ", ".join(r["name"] for r in taken)}
+            ), 409
+
+        mirror_r = any(sfx == "_L" for sfx, _, _ in staged)
+        rows = []
+        for i, (x0, x1) in enumerate(spans):
+            image_path = f"{CUSTOM_FOLDER}/{names[i]}"
+            image_ext = "gif"
+            for suffix, src, ext in staged:
+                dest = WAGONS_ROOT / f"{image_path}{suffix}.{ext}"
+                dest.resolve().relative_to(WAGONS_ROOT)      # path-traversal guard
+                crop_side(src, dest, x0, x1,
+                          mirror_box=(suffix == "_R" and mirror_r))
+                image_ext = ext
+            rows.append({
+                **base_fields,
+                "name": names[i],
+                "label": (units[i].get("label") or "").strip() or names[i],
+                "image": image_path,
+                "image_type": image_type,
+                "image_ext": image_ext,
+            })
+
+    with pg_session() as pg:
+        for row in rows:
+            pg.execute(
+                """
+                INSERT INTO wagons (category, subcategory, label, era, image, name,
+                                    notes, image_type, image_ext, px_per_meter, author,
+                                    license, gauge, countries)
+                VALUES (:category, :subcategory, :label, :era, :image, :name,
+                        :notes, :image_type, :image_ext, :px_per_meter, :author,
+                        :license, :gauge, :countries)
+                """,
+                row,
+            )
+
+    return jsonify({"name": rows[0]["name"], "label": rows[0]["label"],
+                    "created": [r["name"] for r in rows]}), 201
+
+
 @wagons_admin_blueprint.route("", methods=["POST"])
 @admin_required
 def create_wagon():
@@ -381,6 +528,30 @@ def create_wagon():
         if px_per_meter <= 0:
             return jsonify({"error": "px_per_meter must be positive"}), 400
 
+    base_fields = {
+        "category":     category or None,
+        "subcategory":  subcategory or None,
+        "era":          era or None,
+        "notes":        notes or None,
+        "px_per_meter": px_per_meter,
+        "author":       author or None,
+        "license":      license_ or None,
+        "gauge":        gauge,
+        "countries":    countries,
+    }
+
+    # A strip holding several cars is cut into one wagon per car instead, each with
+    # its own name, label and slice of the picture.
+    try:
+        cuts  = sorted({int(c) for c in json.loads(request.form.get("cuts") or "[]")})
+        units = json.loads(request.form.get("units") or "[]")
+    except (TypeError, ValueError):
+        return jsonify({"error": "cuts and units must be JSON"}), 400
+    if cuts:
+        if not isinstance(units, list):
+            return jsonify({"error": "units must be a list"}), 400
+        return _create_split(base_fields, image_type, cuts, units)
+
     # PK / image base path: explicit if given, otherwise derived from the label.
     # An explicit name must be free — silently suffixing it would surprise the caller.
     with pg_session() as pg:
@@ -399,35 +570,11 @@ def create_wagon():
     # detected extension wins for the row (defaulting to 'gif' if nothing was uploaded).
     errors = []
     image_ext = "gif"
-    if image_type == "sides":
-        for side, key in (("L", "file_l"), ("R", "file_r")):
-            f = request.files.get(key)
-            if f and f.filename:
-                try:
-                    image_ext = _save_image(f, f"{image_path}_{side}")
-                except ValueError as e:
-                    errors.append(f"{key}: {e}")
-    elif image_type == "sides_L":
-        f = request.files.get("file")
-        if f and f.filename:
-            try:
-                image_ext = _save_image(f, f"{image_path}_L")
-            except ValueError as e:
-                errors.append(f"file: {e}")
-    elif image_type == "sides_R":
-        f = request.files.get("file")
-        if f and f.filename:
-            try:
-                image_ext = _save_image(f, f"{image_path}_R")
-            except ValueError as e:
-                errors.append(f"file: {e}")
-    else:
-        f = request.files.get("file")
-        if f and f.filename:
-            try:
-                image_ext = _save_image(f, image_path)
-            except ValueError as e:
-                errors.append(f"file: {e}")
+    for suffix, f in _uploaded_sides(image_type):
+        try:
+            image_ext = _save_image(f, f"{image_path}{suffix}")
+        except ValueError as e:
+            errors.append(f"{_SIDE_LABEL.get(suffix, 'file')}: {e}")
 
     if errors:
         return jsonify({"error": "; ".join(errors)}), 400
@@ -443,20 +590,12 @@ def create_wagon():
                     :gauge, :countries)
             """,
             {
-                "category":     category or None,
-                "subcategory":  subcategory or None,
-                "label":        label,
-                "era":          era or None,
-                "image":        image_path,
-                "name":         name,
-                "notes":        notes or None,
-                "image_type":   image_type,
-                "image_ext":    image_ext,
-                "px_per_meter": px_per_meter,
-                "author":       author or None,
-                "license":      license_ or None,
-                "gauge":        gauge,
-                "countries":    countries,
+                **base_fields,
+                "label":      label,
+                "image":      image_path,
+                "name":       name,
+                "image_type": image_type,
+                "image_ext":  image_ext,
             },
         )
 
