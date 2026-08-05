@@ -1179,5 +1179,8 @@
     "settingsSectionAccount": "Konto",
     "settingsSectionIntegrations": "Integratione",
     "discordHint": "Verbind dis Discord-Konto zum automatisch dini Premium-Rolle becho.",
-    "overnight": "Über Nacht"
+    "overnight": "Über Nacht",
+    "busRouterDedicated": "Mit em spezielle Bus-Router brächnet.",
+    "busRouterFallback": "Für die Regioon gits kein Bus-Router, drum isch de Auto-Router bruucht worde. D Route cha über Strasse gah, wo für Büs gsperrt sind.",
+    "busRouterFallbackError": "De Bus-Router het nöd gantwortet, drum isch de Auto-Router bruucht worde. D Route cha über Strasse gah, wo für Büs gsperrt sind."
 }

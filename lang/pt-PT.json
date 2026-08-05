@@ -1181,5 +1181,8 @@
     "settingsSectionAccount": "Conta",
     "settingsSectionIntegrations": "Integrações",
     "discordHint": "Ligue a sua conta Discord para receber automaticamente a sua função premium.",
-    "overnight": "Durante a noite"
+    "overnight": "Durante a noite",
+    "busRouterDedicated": "Calculado com o roteador dedicado a autocarros.",
+    "busRouterFallback": "Nenhum roteador de autocarros cobre esta área, pelo que foi usado o de automóvel. O percurso pode seguir estradas proibidas a autocarros.",
+    "busRouterFallbackError": "O roteador de autocarros não respondeu, pelo que foi usado o de automóvel. O percurso pode seguir estradas proibidas a autocarros."
 }

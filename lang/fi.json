@@ -1179,5 +1179,8 @@
     "settingsSectionAccount": "Tili",
     "settingsSectionIntegrations": "Integraatiot",
     "discordHint": "Yhdistä Discord-tilisi saadaksesi premium-roolisi automaattisesti.",
-    "overnight": "Yön yli"
+    "overnight": "Yön yli",
+    "busRouterDedicated": "Reititetty erillisellä bussireitittimellä.",
+    "busRouterFallback": "Tälle alueelle ei ole bussireititintä, joten käytettiin autoreititintä. Reitti voi kulkea teitä, joille bussit eivät saa ajaa.",
+    "busRouterFallbackError": "Bussireititin ei vastannut, joten käytettiin autoreititintä. Reitti voi kulkea teitä, joille bussit eivät saa ajaa."
 }

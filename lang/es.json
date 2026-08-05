@@ -1181,5 +1181,8 @@
     "settingsSectionAccount": "Cuenta",
     "settingsSectionIntegrations": "Integraciones",
     "discordHint": "Vincula tu cuenta de Discord para recibir automáticamente tu rol premium.",
-    "overnight": "Nocturno"
+    "overnight": "Nocturno",
+    "busRouterDedicated": "Calculado con el enrutador de autobús dedicado.",
+    "busRouterFallback": "Ningún enrutador de autobús cubre esta zona, por lo que se usó el de coche. La ruta puede seguir carreteras prohibidas a los autobuses.",
+    "busRouterFallbackError": "El enrutador de autobús no respondió, por lo que se usó el de coche. La ruta puede seguir carreteras prohibidas a los autobuses."
 }

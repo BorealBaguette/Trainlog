@@ -1178,5 +1178,8 @@
     "discordHint": "Connectez votre compte Discord pour recevoir automatiquement votre rôle premium.",
     "manage_manual_stations": "Gares manuelles",
     "confirm_delete_manual_station": "Voulez-vous vraiment supprimer cette gare manuelle ?",
-    "licensedToTrainlog": "Sous licence pour Trainlog"
+    "licensedToTrainlog": "Sous licence pour Trainlog",
+    "busRouterDedicated": "Calculé avec le routeur bus dédié.",
+    "busRouterFallback": "Aucun routeur bus ne couvre cette zone : le routeur voiture a été utilisé. L'itinéraire peut emprunter des routes interdites aux bus.",
+    "busRouterFallbackError": "Le routeur bus n'a pas répondu : le routeur voiture a été utilisé. L'itinéraire peut emprunter des routes interdites aux bus."
 }

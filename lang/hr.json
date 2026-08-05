@@ -1184,5 +1184,8 @@
     "settingsSectionAccount": "Račun",
     "settingsSectionIntegrations": "Integracije",
     "discordHint": "Povežite svoj Discord račun kako biste automatski dobili premium ulogu.",
-    "overnight": "Preko noći"
+    "overnight": "Preko noći",
+    "busRouterDedicated": "Ruta izračunata namjenskim autobusnim usmjerivačem.",
+    "busRouterFallback": "Ovo područje ne pokriva autobusni usmjerivač pa je korišten automobilski. Ruta može ići cestama kojima autobusi ne smiju prometovati.",
+    "busRouterFallbackError": "Autobusni usmjerivač nije odgovorio pa je korišten automobilski. Ruta može ići cestama kojima autobusi ne smiju prometovati."
 }

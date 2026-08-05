@@ -1178,5 +1178,8 @@
     "settingsSectionAccount": "Konto",
     "settingsSectionIntegrations": "Integratsioonid",
     "discordHint": "Ühenda oma Discordi konto, et saada oma premium-roll automaatselt.",
-    "overnight": "Üleöö"
+    "overnight": "Üleöö",
+    "busRouterDedicated": "Marsruut arvutatud spetsiaalse bussimarsruuteriga.",
+    "busRouterFallback": "Selle piirkonna jaoks pole bussimarsruuterit, seetõttu kasutati automarsruuterit. Marsruut võib kulgeda teedel, kuhu bussid ei tohi sõita.",
+    "busRouterFallbackError": "Bussimarsruuter ei vastanud, seetõttu kasutati automarsruuterit. Marsruut võib kulgeda teedel, kuhu bussid ei tohi sõita."
 }

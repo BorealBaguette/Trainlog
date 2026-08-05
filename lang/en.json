@@ -1178,5 +1178,8 @@
     "discordHint": "Link your Discord account to receive your premium role automatically.",
     "manage_manual_stations": "Manual stations",
     "confirm_delete_manual_station": "Are you sure you want to delete this manual station?",
-    "licensedToTrainlog": "Licensed to Trainlog"
+    "licensedToTrainlog": "Licensed to Trainlog",
+    "busRouterDedicated": "Routed with the dedicated bus router.",
+    "busRouterFallback": "No bus router covers this area, so the car router was used. The route may follow roads buses cannot use.",
+    "busRouterFallbackError": "The bus router did not answer, so the car router was used. The route may follow roads buses cannot use."
 }
