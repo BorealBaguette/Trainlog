@@ -57,7 +57,7 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
 
         routing_groups = [
             {
-                "countries": {"AL", "AD", "AT", "PT", "BE", "BA", "BG", "HR", "CY", "CZ", "DK", "EE", "FO", "FI", "FR", "DE", "GR", "GG", "JE", "HU", "IS", "IE", "GB", "IM", "IT", "XK", "LV", "LI", "LT", "LU", "MK", "MT", "MD", "MC", "ME", "NL", "NO", "PL", "PT", "RO", "RS", "SK", "SI", "ES", "SE", "CH"},
+                "countries": {"AL", "AD", "AT", "AX", "PT", "BE", "BA", "BG", "HR", "CY", "CZ", "DK", "EE", "FO", "FI", "FR", "DE", "GR", "GG", "JE", "HU", "IS", "IE", "GB", "IM", "IT", "XK", "LV", "LI", "LT", "LU", "MK", "MT", "MD", "MC", "ME", "NL", "NO", "PL", "PT", "RO", "RS", "SK", "SI", "ES", "SE", "CH"},
                 "router": routers["trainlog"],
             },
             {
