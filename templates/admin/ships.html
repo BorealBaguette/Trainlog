@@ -109,7 +109,8 @@
                     </td>
                     <td>
                         <button class="btn btn-warning btn-sm edit-ship-btn" data-bs-toggle="modal" data-bs-target="#shipModal"
-                            data-vessel-id="{{ ship.uid }}" data-imo="{{ ship.imo or '' }}"><i class="fa-regular fa-pen-to-square"></i></button>
+                            data-vessel-id="{{ ship.uid }}" data-imo="{{ ship.imo or '' }}"
+                            data-name="{{ ship.name or '' }}" data-trainlog-id="{{ ship.trainlog_id }}"><i class="fa-regular fa-pen-to-square"></i></button>
                         <button class="btn btn-danger btn-sm delete-ship-btn" data-vessel-id="{{ ship.uid }}"><i class="fa-regular fa-trash-can"></i></button>
                     </td>
                 </tr>
@@ -133,13 +134,22 @@
                         <label for="imo">IMO</label>
                         <input type="text" class="form-control" id="imo" name="imo"
                                inputmode="numeric" pattern="[0-9]{7}" placeholder="7 digits">
+                        <small class="form-text text-muted">
+                            The hull's permanent number. Leave it empty for a ship that has
+                            none — it keeps its Trainlog ID <span id="shipTrainlogId" class="fw-bold"></span> instead.
+                        </small>
                     </div>
-                    {# The hull holds nothing else. Its name, MMSI, flag and photo are
-                       properties of a registration and are edited under Periods. #}
-                    <small class="form-text text-muted">
-                        The hull's permanent number. Leave it empty for a ship that has none —
-                        it gets a Trainlog ID instead. Name, MMSI and flag are set per period.
-                    </small>
+                    {# The name is a registration's, not the hull's, but a hull with no IMO
+                       would otherwise open an empty form with nothing to identify it by.
+                       This edits the CURRENT period — which for almost every ship is the
+                       only one. Renames and flags are under Periods. #}
+                    <div class="form-group">
+                        <label for="name">Current name</label>
+                        <input type="text" class="form-control" id="name" name="name">
+                        <small class="form-text text-muted">
+                            The name it goes by now. Earlier names, flags and MMSIs are under Periods.
+                        </small>
+                    </div>
                     <div id="shipFormError" class="text-danger mt-2" style="display: none;"></div>
                     <button type="submit" class="btn btn-primary mt-2">Save</button>
                 </form>
@@ -571,6 +581,8 @@
     $(document).on('click', '.edit-ship-btn', function() {
         $('#vessel_id').val($(this).data('vessel-id'));
         $('#imo').val($(this).data('imo') || '');
+        $('#name').val($(this).data('name') || '');
+        $('#shipTrainlogId').text($(this).data('trainlog-id') || '');
         $('#shipFormError').hide();
     });
 
@@ -579,6 +591,8 @@
     function clearForm() {
         $('#shipForm')[0].reset();
         $('#vessel_id').val('');
+        // A new hull has no Trainlog ID until it is saved — it is generated from the uid.
+        $('#shipTrainlogId').text('');
         $('#shipFormError').hide();
     }
 

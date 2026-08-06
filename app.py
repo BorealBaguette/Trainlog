@@ -10159,17 +10159,26 @@ def ships():
     The vessel register, one row per HULL.
 
     A hull is permanent and carries only its numbers: the IMO, or the synthetic
-    trainlog_id where it has none. Its name, MMSI, flag and photo all belong to a
-    registration — the hull under one identity, from a date — and are edited through the
-    Periods view, because a ship that has been renamed has no single one of any of them.
+    trainlog_id where it has none. Its MMSI, flag and photo all belong to a registration —
+    the hull under one identity, from a date — and are edited through the Periods view,
+    because a ship that has been renamed has no single one of any of them.
+
+    The current name is the exception: this form edits it directly, because a hull with no
+    IMO would otherwise open a form with nothing in it at all.
     """
     if request.method == "POST":
         vessel_id = (request.form.get("vessel_id") or "").strip()
+        name = (request.form.get("name") or "").strip() or None
 
         try:
             imo = _clean_vessel_number(request.form.get("imo"), 7, "IMO")
         except ValueError as exc:
             return jsonify({"success": False, "error": str(exc)}), 400
+
+        if not (imo or name):
+            return jsonify(
+                {"success": False, "error": "Give at least a name or an IMO"}
+            ), 400
 
         with pg_session() as pg:
             # An IMO identifies one hull, so it cannot sit on two. A hull with no IMO is
@@ -10195,15 +10204,37 @@ def ships():
                     ), 409
 
             if vessel_id:
+                uid = int(vessel_id)
                 pg.execute(
                     "UPDATE vessels SET imo = :imo, updated_on = CURRENT_TIMESTAMP"
                     " WHERE uid = :uid",
-                    {"imo": imo, "uid": int(vessel_id)},
+                    {"imo": imo, "uid": uid},
                 )
             else:
-                pg.execute(
-                    "INSERT INTO vessels (imo) VALUES (:imo)", {"imo": imo}
-                )
+                uid = pg.execute(
+                    "INSERT INTO vessels (imo) VALUES (:imo) RETURNING uid", {"imo": imo}
+                ).scalar()
+
+            # The name belongs to a registration. This form edits the current one — for
+            # almost every ship the only one — so that a hull with no IMO is not an empty
+            # form with nothing to identify it by. A hull that has no registration yet
+            # (known only by its number) gets its first.
+            if name:
+                registration_id = pg.execute(
+                    "SELECT vessel_identity(:uid, NULL)", {"uid": uid}
+                ).scalar()
+                if registration_id:
+                    pg.execute(
+                        "UPDATE vessel_registrations SET name = :name,"
+                        " updated_on = CURRENT_TIMESTAMP WHERE uid = :uid",
+                        {"name": name, "uid": registration_id},
+                    )
+                else:
+                    pg.execute(
+                        "INSERT INTO vessel_registrations (vessel_id, name)"
+                        " VALUES (:vessel_id, :name)",
+                        {"vessel_id": uid, "name": name},
+                    )
 
         return jsonify({"success": True})
 
