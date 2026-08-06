@@ -3,7 +3,7 @@
  * A ship answers to three written identifiers — its name, its 7-digit IMO and its
  * 9-digit MMSI — and `vessels` holds all three on one row (migration 0054). What gets
  * STORED in a trip's `reg` is the hull key — the ship's IMO, or a synthetic id where it
- * has none. A name is neither unique nor permanent (several ships are called Express,
+ * has none — on a hidden input, so the visible field can show the ship's name instead. A name is neither unique nor permanent (several ships are called Express,
  * and ships get renamed), and an MMSI is reissued when a ship changes flag. What gets
  * DISPLAYED is the name the ship carried on the trip's own date, resolved at read time.
  *
@@ -60,17 +60,6 @@
     return '';
   }
 
-  // What the picked suggestion writes into the field: the hull key the server hands
-  // back in `value` — the ship's IMO, or its synthetic trainlog_id where it has none.
-  //
-  // The hull rather than the name or the MMSI on purpose. Both of those change when a
-  // ship is sold or re-flagged; the hull never does, so a trip pinned to it keeps
-  // resolving, and its displayed name is the one the ship carried on the day of the
-  // crossing (migration 0056).
-  function storedValue(vessel) {
-    return vessel.value || '';
-  }
-
   // Which suggestion (if any) the typed text actually IS, rather than merely starts.
   // The endpoint does prefix and substring matching, so "977" comes back with Megastar
   // attached — that is a suggestion, not a resolution, and must not be labelled as one.
@@ -89,6 +78,31 @@
     var $input = $(input);
     var $hint = $(hint);
     if (!$input.length) return;
+
+    /* The field SHOWS the ship's name and the form POSTS the hull key. A key is an
+       internal handle — 'TL0000110' means nothing to anybody — and it was the last place
+       one still faced the user, on the edit page of a trip that had been migrated.
+       Moving the input's `name` onto a hidden sibling separates the two: both forms
+       submit through $('form').serializeArray(), which takes hidden inputs and skips
+       inputs without a name, so the trip keeps storing exactly what it stored before.
+       If this script never runs the visible input keeps its own name and behaves as it
+       always did. */
+    var $key = $('<input type="hidden">')
+      .attr('name', $input.attr('name') || 'reg')
+      .val($input.val());
+    $input.after($key).removeAttr('name');
+
+    // Free text is stored as typed; only a ship we recognise is stored by its key.
+    function setStored(value) { $key.val(value == null ? '' : value); }
+
+    // Show the ship, store the key. Called on selection and whenever typed text turns
+    // out to name a ship exactly.
+    function showVessel(vessel) {
+      setHint(vessel);
+      if (!vessel) return;
+      setStored(vessel.value);
+      $input.val(vesselNames(vessel).name);
+    }
 
     /* What the number in the field actually is: the ship's flag, its name, and its
        cached photo as a thumbnail that zooms on hover — enough to tell at a glance that
@@ -132,10 +146,19 @@
     // Name the ship a typed identifier stands for. Called on load and after edits, so
     // a number pasted in by hand is named too, not only one picked from the list.
     function resolve(term) {
-      if (!term || term.trim().length < 2) { setHint(null); return; }
+      if (!term || term.trim().length < 2) {
+        setHint(null);
+        setStored(term);            // free text, including an empty field
+        return;
+      }
       $.getJSON(url, { query: term.trim(), at: tripDate() })
-        .done(function (data) { setHint(exactMatch(data || [])); })
-        .fail(function () { setHint(null); });
+        .done(function (data) {
+          var vessel = exactMatch(data || []);
+          // Typing a name or a number in full is the same act as picking it from the
+          // list; anything else is free text and is stored as written.
+          if (vessel) showVessel(vessel); else { setHint(null); setStored(term); }
+        })
+        .fail(function () { setHint(null); setStored(term); });
     }
 
     $input.autocomplete({
@@ -146,7 +169,9 @@
             response($.map(data || [], function (vessel) {
               return {
                 label: vesselLabel(vessel),
-                value: storedValue(vessel),
+                // What lands in the visible field: the name. The key goes to the
+                // hidden input in showVessel().
+                value: vesselNames(vessel).name,
                 vessel: vessel
               };
             }));
@@ -154,16 +179,21 @@
           .fail(function () { response([]); });
       },
       select: function (event, ui) {
-        setHint(ui.item.vessel);
+        showVessel(ui.item.vessel);
+        // jQuery UI would write ui.item.value into the field next; showVessel has
+        // already put the ship's name there, and they are the same string.
       }
     });
 
+    // What the user typed is what gets resolved...
     $input.on('change blur', function () { resolve($input.val()); });
-    // Changing the trip's date can change which ship the same reg names, so the hint
-    // follows it.
-    $(document).on('change', '#newTripStartDate, #newTripStartOnlyDate, #onlyDate',
-                   function () { resolve($input.val()); });
-    resolve($input.val());
+
+    // ...but everywhere else the stored key is the thing to ask about: it is canonical,
+    // where the visible text is only a name, and after a rename the two differ. Changing
+    // the trip's date can change which name that key answers to, so the field follows.
+    function reresolve() { resolve($key.val() || $input.val()); }
+    $(document).on('change', '#newTripStartDate, #newTripStartOnlyDate, #onlyDate', reresolve);
+    reresolve();
   }
 
   window.initVesselField = initVesselField;

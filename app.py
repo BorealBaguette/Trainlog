@@ -10723,9 +10723,14 @@ def vesselAutocomplete():
                    OR (:normalized <> '' AND r.name_key LIKE '%' || :normalized || '%')
                    OR v.imo LIKE :starts
                    OR r.mmsi LIKE :starts
-                -- Deliberately NOT matched on trainlog_id: it is a synthetic key with no
-                -- meaning to anybody, and suggesting it would invite people to type it.
-                -- vessel_resolve still accepts it, which is what trips actually hold.
+                   -- Whatever the text resolves to EXACTLY, which is how a reg already
+                   -- stored on a trip names its ship. It matters for the synthetic
+                   -- trainlog_id: a ship with no IMO has one in every trip that logged
+                   -- it, and without this the edit form could not name the ship it was
+                   -- showing. Note this matches only on a complete key — typing 'TL00'
+                   -- resolves to nothing — so the id is still never *suggested*, which
+                   -- is what would invite people to type it.
+                   OR v.uid = vessel_resolve(:query)
                 ORDER BY v.uid,
                          (r.name_key LIKE :normalized || '%') DESC NULLS LAST,
                          (r.uid = cur.uid) DESC,
