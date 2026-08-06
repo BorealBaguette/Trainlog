@@ -10251,7 +10251,16 @@ def ships():
                 -- towards the same hull; the register is sorted by it, which puts the
                 -- ships worth curating at the top.
                 WITH trip_counts AS (
-                    SELECT vessel_resolve(reg) AS vessel_id, COUNT(*) AS trips
+                    SELECT vessel_resolve(reg) AS vessel_id,
+                           COUNT(*) AS trips,
+                           -- Who mostly runs her. Decoration, but a useful one: the
+                           -- operator is often what identifies a small ferry, where the
+                           -- name is generic and the hull has no IMO. mode() ignores
+                           -- NULLs and NULLIF keeps blanks from winning; the first name
+                           -- only, since a ferry is rarely a multi-operator trip.
+                           MODE() WITHIN GROUP (
+                               ORDER BY NULLIF(btrim(split_part(operator, ',', 1)), '')
+                           ) AS operator
                     FROM trips
                     WHERE trip_type = 'ferry' AND reg IS NOT NULL AND btrim(reg) <> ''
                     GROUP BY 1
@@ -10273,11 +10282,30 @@ def ships():
                        ) AS former_names,
                        p.local_image_path,
                        COALESCE(c.trips, 0) AS trips,
+                       c.operator,
+                       o.short_name AS operator_name,
+                       o.logo_url AS operator_logo,
                        (SELECT COUNT(*) FROM vessel_registrations a WHERE a.vessel_id = v.uid)
                            AS registrations
                 FROM vessels v
                 LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
                 LEFT JOIN trip_counts c ON c.vessel_id = v.uid
+                -- That operator name resolved through operator_aliases, exactly as a
+                -- trip resolves its own (see get_trip.sql), so a ferry logged as SNCM
+                -- picks up the logo held under Corsica Linea. The current logo: this is
+                -- a register of ships, not a history of liveries.
+                LEFT JOIN LATERAL (
+                    SELECT op.short_name,
+                           (SELECT l.logo_url FROM operator_logos l
+                            WHERE l.operator_id = op.operator_id
+                            ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
+                            LIMIT 1) AS logo_url
+                    FROM operator_aliases a
+                    JOIN operators op ON op.operator_id = a.operator_id
+                    WHERE a.normalized = operator_normalize(c.operator)
+                    ORDER BY (a.operator_type = 'operator') DESC, a.operator_id
+                    LIMIT 1
+                ) o ON TRUE
                 LEFT JOIN LATERAL (
                     SELECT local_image_path
                     FROM ship_pictures
@@ -10644,6 +10672,27 @@ def delete_ship_registration():
     return jsonify({"success": True})
 
 
+def _parse_at(value):
+    """
+    The moment to resolve a vessel at, or None for "now".
+
+    Callers hand this straight from a trip, and a trip's date is not always a date: the
+    legacy shape carries 1 (project) and -1 (unknown) as sentinels, and a form field can
+    be half-typed. Anything that is not a real timestamp means "no date to go on", which
+    is exactly what None already means here — a 500 would be the wrong answer to a trip
+    that simply has no date.
+    """
+    value = (value or "").strip()
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
+
+
 def _vessel_normalize(pg, text_value):
     """A written name folded to its comparison key — prefix, case and punctuation
     dropped. The DB function is the single definition of that folding (migration 0055),
@@ -10669,7 +10718,7 @@ def vesselAutocomplete():
     query = (request.args.get("query") or "").strip()
     # The trip's date, when the form has one: the suggestion then names the ship as it
     # was then, which is what the trip will display.
-    at = (request.args.get("at") or "").strip() or None
+    at = _parse_at(request.args.get("at"))
     if len(query) < 2:
         return jsonify([])
 
@@ -11276,7 +11325,7 @@ def getVesselPhoto():
     carried in 2017 (migration 0056).
     """
     vesselName = request.args.get("vesselName")
-    at = (request.args.get("at") or "").strip() or None
+    at = _parse_at(request.args.get("at"))
     with pg_session() as pg:
         result = get_vessel_picture(vesselName, pg, at)
     return jsonify(result)

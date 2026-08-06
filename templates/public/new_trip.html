@@ -1405,8 +1405,11 @@ function buildItinerary(trips, prices) {
         } else if (trip.trip.type === 'ferry' && tripReg) {
             tsContainer = $('<div>').addClass('publicVehicle');
             // The trip's own date, so the lookup answers with the ship as it was then.
+            // Undated trips carry the legacy 1 / -1 sentinels as numbers, not strings —
+            // those mean "no date", and the lookup then answers with the current identity.
+            var vesselAt = (typeof trip.trip.start_datetime === 'string') ? trip.trip.start_datetime : '';
             renderPublicVessel(tsContainer, tripReg, trip.trip.vessel_country,
-                               trip.trip.vessel_name, trip.trip.start_datetime);
+                               trip.trip.vessel_name, vesselAt);
         }
 
         let endTimeDisplay, startTimeDisplay;
