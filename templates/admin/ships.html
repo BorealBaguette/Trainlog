@@ -14,6 +14,16 @@
     #shipTable thead th span.dt-column-title { flex-grow: 0; }
 
     /* .ship-thumb (the hover photo preview) is shared with the trip forms: style2.css. */
+
+    /* The photo cell in the Periods table: thumbnail on the left, its attribution beside
+       it, so the credit reads as belonging to the picture rather than floating under the
+       row. Capped, or a long CC author name pushes the actions off the table. */
+    #periodsTable .period-photo { display: flex; align-items: center; gap: .5rem; }
+    #periodsTable .period-credit { max-width: 22rem; line-height: 1.25; }
+    #periodsTable .period-credit a { white-space: nowrap; }
+    /* The credit editor opens as a row of the table; set apart so it reads as attached to
+       the row above rather than as another period. */
+    #periodsTable tr.credit-editor > td { background: rgba(0, 0, 0, .03); }
 </style>
 
 <div class="container">
@@ -28,23 +38,13 @@
     </p>
     <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#shipModal" onclick="clearForm()">Add Ship</button>
-        <!-- Wikidata backfill. Preview first: the dry run reports exactly what would
-             change and writes nothing, and both take tens of seconds (several SPARQL
-             round trips to an external service). -->
-        <button type="button" id="backfillPreviewBtn" class="btn btn-outline-secondary" onclick="previewBackfill()">
-            <i class="fa-solid fa-magnifying-glass"></i> Preview backfill
-        </button>
-        <!-- Enabled by a preview, and applies that preview: the second press sends the
-             plan back rather than asking Wikidata again, so what gets written is what
-             was shown. -->
-        <button type="button" id="backfillApplyBtn" class="btn btn-outline-success" onclick="applyBackfill()" disabled>
-            <i class="fa-solid fa-cloud-arrow-down"></i> Apply preview
-        </button>
-        <span id="backfillSpinner" class="text-muted" style="display:none;">
-            <i class="fa-solid fa-spinner fa-spin"></i> <span>Querying Wikidata…</span>
-        </span>
+        <!-- Its own page: the backfill is a worklist to sit down with — a slow scan, then
+             decisions to make one at a time — which is more than an overlay on top of the
+             register can hold. -->
+        <a href="/admin/ships/backfill" class="btn btn-outline-secondary">
+            <i class="fa-solid fa-wand-magic-sparkles"></i> Wikidata backfill
+        </a>
     </div>
-    <div id="backfillResult" class="alert alert-secondary" style="display:none; max-height:400px; overflow:auto;"></div>
     <table id="shipTable">
         <thead>
             {# Hull facts only. A name, an MMSI and a flag all belong to a registration,
@@ -174,7 +174,10 @@
 
 <!-- Registrations (periods) of one hull -->
 <div class="modal fade" id="periodsModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-lg modal-dialog-centered">
+    {# modal-xl: the history table carries seven columns, one of them a photo with its
+       attribution under it, and the form below is two rows of fields. At lg it all
+       wrapped into itself. #}
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">Periods — <span id="periodsShipName"></span></h5>
@@ -185,53 +188,96 @@
                     Newest first. A period runs until the next one starts; an empty date means
                     “from the beginning”. Trips are counted by the period their date falls in.
                 </p>
-                <table class="table table-sm align-middle">
-                    <thead>
-                        <tr>
-                            <th>From</th><th>Name</th><th>Flag</th><th>MMSI</th>
-                            <th>Trips</th><th>Photo</th><th></th>
-                        </tr>
-                    </thead>
-                    <tbody id="periodsBody"></tbody>
-                </table>
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle" id="periodsTable">
+                        <thead>
+                            <tr>
+                                <th>From</th><th>Name</th><th>Flag</th><th>MMSI</th>
+                                <th class="text-end">Trips</th><th>Photo &amp; credit</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="periodsBody"></tbody>
+                    </table>
+                </div>
                 <input type="file" id="periodRowUpload" accept="image/*" style="display:none;">
 
-                <hr>
-                <form id="periodForm" enctype="multipart/form-data">
-                    <input type="hidden" id="period_vessel_id" name="vessel_id">
-                    <input type="hidden" id="period_registration_id" name="registration_id">
-                    <div class="row g-2">
-                        <div class="col-md-3">
-                            <label for="period_effective_date" class="form-label">From</label>
-                            <input type="date" class="form-control" id="period_effective_date" name="effective_date">
-                        </div>
-                        <div class="col-md-4">
-                            <label for="period_name" class="form-label">Name</label>
-                            <input type="text" class="form-control" id="period_name" name="name">
-                        </div>
-                        <div class="col-md-2">
-                            <label for="period_mmsi" class="form-label">MMSI</label>
-                            <input type="text" class="form-control" id="period_mmsi" name="mmsi"
-                                   inputmode="numeric" pattern="[0-9]{9}" placeholder="9 digits">
-                        </div>
-                        <div class="col-md-3">
-                            <label for="period_country" class="form-label">Flag</label>
-                            <select class="form-control" id="period_country" name="country_code">
-                                <option value=""></option>
-                                {% for code, emoji in country_list.items() %}
-                                    <option value="{{ code }}" data-code="{{ code }}">{{ emoji }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="col-md-6">
-                            <label for="period_picture" class="form-label">Photo</label>
-                            <input type="file" class="form-control" id="period_picture" name="ship_picture">
-                        </div>
+                <div class="card mt-3">
+                    <div class="card-header py-2 fw-bold" id="periodFormTitle">Add a period</div>
+                    <div class="card-body">
+                        <form id="periodForm" enctype="multipart/form-data">
+                            <input type="hidden" id="period_vessel_id" name="vessel_id">
+                            <input type="hidden" id="period_registration_id" name="registration_id">
+                            <div class="row g-3">
+                                <div class="col-md-3">
+                                    <label for="period_effective_date" class="form-label">From</label>
+                                    <input type="date" class="form-control" id="period_effective_date" name="effective_date">
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="period_name" class="form-label">Name</label>
+                                    <input type="text" class="form-control" id="period_name" name="name">
+                                </div>
+                                <div class="col-md-2">
+                                    <label for="period_mmsi" class="form-label">MMSI</label>
+                                    <input type="text" class="form-control" id="period_mmsi" name="mmsi"
+                                           inputmode="numeric" pattern="[0-9]{9}" placeholder="9 digits">
+                                </div>
+                                <div class="col-md-3">
+                                    <label for="period_country" class="form-label">Flag</label>
+                                    {# selectpicker for the live search: 250 countries is too many
+                                       to scroll, and the same widget the ticket and trip forms use. #}
+                                    <select class="form-control selectpicker" id="period_country" name="country_code"
+                                            data-live-search="true" data-size="10" title="—">
+                                        <option value=""></option>
+                                        {% for code, emoji in country_list.items() %}
+                                            <option value="{{ code }}" data-code="{{ code }}">{{ emoji }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {# Fenced off from the fields above, because these three describe
+                               the file and not the ship — and because for anything but your
+                               own photograph the credit is the condition of showing it at
+                               all: a CC BY-SA picture published without its author and
+                               licence is a breach. #}
+                            <fieldset class="border rounded p-2 mt-3">
+                                <legend class="float-none w-auto px-2 fs-6 text-muted">Photo</legend>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label for="period_picture" class="form-label">File</label>
+                                        <input type="file" class="form-control" id="period_picture"
+                                               name="ship_picture" accept="image/*">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="period_photo_author" class="form-label">Author</label>
+                                        <input type="text" class="form-control" id="period_photo_author"
+                                               name="photo_author" placeholder="who took it">
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label for="period_photo_license" class="form-label">Licence</label>
+                                        <input type="text" class="form-control" id="period_photo_license"
+                                               name="photo_license" placeholder="e.g. CC BY-SA 4.0">
+                                    </div>
+                                    <div class="col-12">
+                                        <small class="text-muted">
+                                            Author and licence describe the file chosen here; an empty
+                                            author means the photo is credited to nobody. To correct the
+                                            credit on a photo already on file, use <em>edit</em> beside
+                                            it in the table.
+                                        </small>
+                                    </div>
+                                </div>
+                            </fieldset>
+
+                            <div id="periodFormError" class="text-danger mt-2" style="display:none;"></div>
+                            <div class="mt-3">
+                                <button type="submit" class="btn btn-primary" id="periodSubmit">Add period</button>
+                                <button type="button" class="btn btn-link" onclick="clearPeriodForm()">Clear</button>
+                            </div>
+                        </form>
                     </div>
-                    <div id="periodFormError" class="text-danger mt-2" style="display:none;"></div>
-                    <button type="submit" class="btn btn-primary mt-2" id="periodSubmit">Add period</button>
-                    <button type="button" class="btn btn-link mt-2" onclick="clearPeriodForm()">Clear</button>
-                </form>
+                </div>
             </div>
         </div>
     </div>
@@ -266,7 +312,11 @@
 
         // After the table is up: the picker is a modal detail, and nothing it might
         // throw should be able to leave the register itself uninitialised.
+        // Names into the options first, then the widget over them — bootstrap-select
+        // renders the option text as it finds it, so refreshing after is what makes the
+        // search match on country names rather than on bare codes.
         updateCountryNames(document.getElementById('period_country'), true);
+        $('#period_country').selectpicker();
 
     });
 
@@ -320,108 +370,6 @@
             });
     });
 
-    // Only NULLs are ever filled, so anything curated here survives a re-run — the
-    // buttons can be pressed again whenever the register drifts.
-    //
-    // Two steps on purpose. The preview is the slow half (it queries Wikidata) and
-    // writes nothing; applying posts that same plan back, so the rows written are the
-    // rows that were shown, and a second Wikidata round trip cannot quietly disagree
-    // with the first.
-    var backfillPlan = null;
-
-    function backfillRequest(data, done) {
-        $('#backfillSpinner').show();
-        $('#backfillResult').hide();
-        $('#backfillPreviewBtn, #backfillApplyBtn').prop('disabled', true);
-        $.ajax({
-            type: 'POST',
-            url: '/admin/ships/backfill',
-            data: data,
-            success: function(res) {
-                $('#backfillSpinner').hide();
-                $('#backfillResult').html(renderBackfill(res)).show();
-                done(res);
-            },
-            error: function(xhr) {
-                $('#backfillSpinner').hide();
-                $('#backfillPreviewBtn').prop('disabled', false);
-                var message = (xhr.responseJSON && xhr.responseJSON.error) || 'Backfill failed';
-                $('#backfillResult').text(message).show();
-            }
-        });
-    }
-
-    function previewBackfill() {
-        $('#backfillSpinner').find('span').text('Querying Wikidata…');
-        backfillRequest({}, function(res) {
-            backfillPlan = { filled: res.filled, created: res.created };
-            $('#backfillPreviewBtn').prop('disabled', false);
-            // Nothing to write is not an error, but there is nothing to apply either.
-            $('#backfillApplyBtn').prop('disabled', !(res.filled.length || res.created.length));
-        });
-    }
-
-    function applyBackfill() {
-        if (!backfillPlan) return;
-        var total = backfillPlan.filled.length + backfillPlan.created.length;
-        if (!confirm('Write the ' + total + ' change(s) shown above?')) return;
-        $('#backfillSpinner').find('span').text('Writing…');
-        backfillRequest({ plan: JSON.stringify(backfillPlan) }, function(res) {
-            // The plan has been consumed and the table underneath is now stale.
-            backfillPlan = null;
-            $('#backfillPreviewBtn').prop('disabled', false);
-            setTimeout(function() { location.reload(); }, 4000);
-        });
-    }
-
-    function renderBackfill(res) {
-        var esc = function(v) { return $('<div>').text(v == null ? '' : v).html(); };
-        var out = '<strong>' + (res.applied ? 'Applied' : 'Preview — nothing written yet') + '</strong><ul>';
-        out += '<li>' + res.filled.length + (res.applied ? ' vessel(s) completed' : ' existing vessel(s) would be completed') + '</li>';
-        out += '<li>' + res.created.length + (res.applied ? ' vessel(s) created' : ' vessel(s) would be created') + ' from unmatched trip regs</li>';
-        if (res.suggestions.length) {
-            out += '<li>' + res.suggestions.length + ' name-only candidate(s) — enter these by hand</li>';
-        }
-        if (res.skipped && res.skipped.length) {
-            out += '<li>' + res.skipped.length + ' skipped (the register moved since the preview)</li>';
-        }
-        out += '</ul>';
-
-        if (res.filled.length) {
-            out += '<details open><summary>Completed</summary><ul>';
-            res.filled.forEach(function(f) {
-                var parts = Object.keys(f.changes).map(function(k) { return k + '=' + esc(f.changes[k]); });
-                out += '<li>#' + f.uid + ' ' + esc(f.label) + ': ' + parts.join(', ') + '</li>';
-            });
-            out += '</ul></details>';
-        }
-        if (res.created.length) {
-            out += '<details open><summary>Created</summary><ul>';
-            res.created.forEach(function(c) {
-                out += '<li>' + esc(c.reg) + ' → ' + esc(c.name || '(no name)')
-                     + ' (IMO ' + esc(c.imo || '—') + ', MMSI ' + esc(c.mmsi || '—') + ')</li>';
-            });
-            out += '</ul></details>';
-        }
-        if (res.skipped && res.skipped.length) {
-            out += '<details><summary>Skipped</summary><ul>';
-            res.skipped.forEach(function(m) { out += '<li>' + esc(m) + '</li>'; });
-            out += '</ul></details>';
-        }
-        if (res.suggestions.length) {
-            // Never written: several real ships share a name, so a label match is a
-            // lead for a human and not a fact.
-            out += '<details><summary>Name matches (manual entry only)</summary><ul>';
-            res.suggestions.forEach(function(s) {
-                out += '<li>' + esc(s.name) + ': '
-                     + (s.ambiguous ? '<em>several ships share this name</em>'
-                                    : 'IMO ' + esc(s.imo || '—') + ', MMSI ' + esc(s.mmsi || '—'))
-                     + '</li>';
-            });
-            out += '</ul></details>';
-        }
-        return out;
-    }
 
     /* ── Periods (the registrations of one hull) ──────────────────────────────
        A hull is shown in the table as it is now; this is where its history lives.
@@ -449,7 +397,7 @@
     // uid -> row, so the edit button carries an integer and never a serialised name.
     var periodsById = {};
 
-    function loadPeriods() {
+    function loadPeriods(then) {
         $('#periodsBody').html('<tr><td colspan="7" class="text-muted">'
             + '<i class="fa-solid fa-spinner fa-spin"></i> Loading…</td></tr>');
         $.getJSON('/admin/ships/' + periodsVesselId + '/registrations')
@@ -474,43 +422,144 @@
                     try { name = regionNames.of(r.country); } catch (e) { name = r.country; }
                     flag = getFlagEmoji(r.country) + '\u00a0' + esc(name);
                 }
+                /* Picture and credit as one block: the attribution belongs beside the
+                   thing it credits, and putting it in its own column would leave a wide
+                   empty one for the many periods that have no photo at all. */
                 var photo = r.image
-                    ? '<span class="ship-thumb">'
-                      + '<img src="' + esc(r.image) + '" width="56" height="34" loading="lazy" alt="">'
+                    ? '<div class="period-photo">'
+                      + '<span class="ship-thumb">'
+                      + '<img src="' + esc(r.image) + '" width="72" height="44" loading="lazy" alt="">'
                       + '<img class="ship-thumb-full" src="' + esc(r.image) + '" loading="lazy" alt="">'
                       + '</span>'
-                    : '';
+                      // What is printed under this picture wherever it is shown, and a way
+                      // in to correct it. A Commons file with no author here is shown
+                      // without the credit its licence requires, which is the case worth
+                      // being able to see at a glance.
+                      + '<div class="period-credit small">' + creditLine(r)
+                      + ' <a href="#" class="credit-edit-btn" data-uid="' + r.uid + '"'
+                      + ' title="Edit source, author and licence">'
+                      + '<i class="fa-regular fa-pen-to-square"></i> edit</a></div>'
+                      + '</div>'
+                    : '<span class="text-muted small">no photo</span>';
                 return '<tr>'
-                     + '<td>' + (r.effective_date ? esc(r.effective_date) : '<em class="text-muted">from the start</em>')
+                     + '<td class="text-nowrap">'
+                     + (r.effective_date ? esc(r.effective_date) : '<em class="text-muted">from the start</em>')
                      + (r.is_current ? ' <span class="badge bg-success">current</span>' : '') + '</td>'
                      + '<td>' + esc(r.name || '') + '</td>'
-                     + '<td>' + flag + '</td>'
+                     + '<td class="text-nowrap">' + flag + '</td>'
                      + '<td>' + esc(r.mmsi || '') + '</td>'
-                     + '<td>' + r.trips + '</td>'
+                     + '<td class="text-end">' + r.trips + '</td>'
                      + '<td>' + photo + '</td>'
-                     + '<td class="text-end">'
+                     + '<td class="text-end text-nowrap">'
+                     // Grouped and kept on one line: three or four small icon buttons
+                     // wrapping mid-column is what made this row look broken.
+                     + '<div class="btn-group btn-group-sm" role="group">'
                      // Upload a picture you have, or go and look one up. Both act on
                      // this period alone, so a photo of the ship under its former name
                      // cannot land on the current one.
-                     + '<button class="btn btn-outline-secondary btn-sm period-upload-btn" data-uid="' + r.uid + '"'
+                     + '<button class="btn btn-outline-secondary period-upload-btn" data-uid="' + r.uid + '"'
                      + ' title="Upload a photo for this period">'
-                     + '<i class="fa-solid fa-upload"></i></button> '
+                     + '<i class="fa-solid fa-upload"></i></button>'
                      + (r.image ? '' :
-                        '<button class="btn btn-secondary btn-sm period-fetch-btn" data-uid="' + r.uid + '"'
-                        + ' title="Look one up online">'
-                        + '<i class="fa-solid fa-camera"></i></button> ')
-                     + '<button class="btn btn-warning btn-sm period-edit-btn" data-uid="' + r.uid + '">'
-                     + '<i class="fa-regular fa-pen-to-square"></i></button> '
-                     + '<button class="btn btn-danger btn-sm period-delete-btn" data-uid="' + r.uid + '">'
-                     + '<i class="fa-regular fa-trash-can"></i></button>'
-                     + '</td></tr>';
+                        '<button class="btn btn-outline-secondary period-fetch-btn" data-uid="' + r.uid + '"'
+                        + ' title="Look a photo up online">'
+                        + '<i class="fa-solid fa-camera"></i></button>')
+                     + '<button class="btn btn-warning period-edit-btn" data-uid="' + r.uid + '"'
+                     + ' title="Edit this period"><i class="fa-regular fa-pen-to-square"></i></button>'
+                     + '<button class="btn btn-danger period-delete-btn" data-uid="' + r.uid + '"'
+                     + ' title="Delete this period"><i class="fa-regular fa-trash-can"></i></button>'
+                     + '</div></td></tr>';
             }).join('');
             $('#periodsBody').html(body || '<tr><td colspan="7" class="text-muted">No periods recorded yet.</td></tr>');
+            if (then) { then(); }
         });
     }
 
     $(document).on('click', '.period-edit-btn', function() { editPeriod(periodsById[$(this).data('uid')]); });
     $(document).on('click', '.period-delete-btn', function() { deletePeriod($(this).data('uid')); });
+
+    /* ── A photo's provenance ─────────────────────────────────────────────────
+       Where the picture came from and under what licence (migration 0057). It is what
+       gets printed under the photo on the trip pages, so it is shown here rather than
+       being invisible in the database: a Commons file whose author is missing is being
+       published in breach of its licence, and only this line says so. */
+    var SOURCE_LABELS = {
+        vesselfinder: '©Vesselfinder.com',
+        wikimedia: 'Wikimedia Commons',
+        upload: 'uploaded here'
+    };
+
+    function creditLine(r) {
+        var esc = function(v) { return $('<div>').text(v == null ? '' : v).html(); };
+        var parts = [];
+        if (r.author) { parts.push(esc(r.author)); }
+        if (r.license) { parts.push(esc(r.license)); }
+        var label = SOURCE_LABELS[r.source] || (r.source ? esc(r.source) : null);
+        if (!label && !parts.length) {
+            // No source at all: nothing knows how to credit it. Worth flagging, since
+            // every photo arrived from somewhere.
+            return '<span class="text-danger">no source recorded</span>';
+        }
+        // A licence with nobody to credit is the case that breaks: say so instead of
+        // printing half an attribution.
+        if (r.source === 'wikimedia' && !r.author) {
+            parts.unshift('<span class="text-danger">author missing</span>');
+        }
+        return '<span class="text-muted">' + [label].concat(parts).filter(Boolean).join(' · ')
+             + '</span>';
+    }
+
+    /* Edited in a row of its own under the period rather than in a second modal: the
+       periods table is already inside one, and stacking two is how a dialog ends up
+       unclosable. */
+    $(document).on('click', '.credit-edit-btn', function(e) {
+        e.preventDefault();
+        var r = periodsById[$(this).data('uid')];
+        var $row = $(this).closest('tr');
+        if ($row.next().hasClass('credit-editor')) { $row.next().remove(); return; }
+        $('.credit-editor').remove();
+        var esc = function(v) { return $('<div>').text(v == null ? '' : v).html(); };
+        var option = function(value, label) {
+            return '<option value="' + value + '"' + (r.source === value ? ' selected' : '')
+                 + '>' + label + '</option>';
+        };
+        $row.after('<tr class="credit-editor"><td colspan="7">'
+            + '<form class="row g-2 align-items-end credit-form" data-picture="' + r.picture_id + '">'
+            + '<div class="col-md-3"><label class="form-label small mb-0">Source</label>'
+            + '<select class="form-control form-control-sm" name="source">'
+            + option('upload', 'Uploaded here') + option('wikimedia', 'Wikimedia Commons')
+            + option('vesselfinder', 'Vesselfinder (image search)')
+            + '</select></div>'
+            + '<div class="col-md-4"><label class="form-label small mb-0">Author</label>'
+            + '<input type="text" class="form-control form-control-sm" name="photo_author"'
+            + ' value="' + esc(r.author || '') + '" placeholder="who took it"></div>'
+            + '<div class="col-md-3"><label class="form-label small mb-0">Licence</label>'
+            + '<input type="text" class="form-control form-control-sm" name="photo_license"'
+            + ' value="' + esc(r.license || '') + '" placeholder="e.g. CC BY-SA 4.0"></div>'
+            + '<div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm">Save</button>'
+            + ' <button type="button" class="btn btn-link btn-sm credit-cancel">Cancel</button></div>'
+            + (r.referrer_url
+               ? '<div class="col-12 small"><a href="' + esc(r.referrer_url) + '" target="_blank"'
+                 + ' rel="noopener noreferrer">the page it came from</a></div>'
+               : '')
+            + '</form></td></tr>');
+    });
+
+    $(document).on('click', '.credit-cancel', function() { $(this).closest('.credit-editor').remove(); });
+
+    $(document).on('submit', '.credit-form', function(e) {
+        e.preventDefault();
+        var $form = $(this);
+        var data = $form.serializeArray();
+        data.push({ name: 'picture_id', value: $form.data('picture') });
+        $('#periodFormError').hide();
+        $.post('/admin/ships/registrations/photo_credit', $.param(data))
+            .done(function() { periodsChanged = true; loadPeriods(); })
+            .fail(function(xhr) {
+                $('#periodFormError')
+                    .text((xhr.responseJSON && xhr.responseJSON.error) || 'Could not save').show();
+            });
+    });
 
     /* No cached photo for this period: go and look for one. The lookup is the same
        Google Images search /getVesselPhoto runs on a miss, but aimed at THIS period —
@@ -529,10 +578,19 @@
         data.append('registration_id', $(this).data('uid'));
         data.append('ship_picture', this.files[0]);
         $('#periodFormError').hide();
+        var uid = $(this).data('uid');
         $.ajax({
             type: 'POST', url: '/admin/ships/registrations/upload_photo',
             data: data, processData: false, contentType: false,
-            success: function() { periodsChanged = true; loadPeriods(); },
+            // Straight into the credit editor: a picture uploaded from the row came
+            // with no author or licence, and this is the moment the admin knows what
+            // they are. Leaving it as it stands says "mine, no credit needed".
+            success: function() {
+                periodsChanged = true;
+                loadPeriods(function() {
+                    $('.credit-edit-btn[data-uid="' + uid + '"]').trigger('click');
+                });
+            },
             error: function(xhr) {
                 var message = (xhr.responseJSON && xhr.responseJSON.error) || 'Upload failed';
                 $('#periodFormError').text(message).show();
@@ -564,16 +622,24 @@
         $('#period_effective_date').val(r.effective_date || '');
         $('#period_name').val(r.name || '');
         $('#period_mmsi').val(r.mmsi || '');
-        $('#period_country').val(r.country || '');
+        $('#period_country').val(r.country || '').selectpicker('refresh');
         $('#periodSubmit').text('Save period');
+        $('#periodFormTitle').text('Editing the period from '
+            + (r.effective_date || 'the start'));
         $('#periodFormError').hide();
+        // The form is below a table that can be several rows long; without this an edit
+        // click looks as though it did nothing.
+        document.getElementById('periodForm').scrollIntoView({ block: 'nearest' });
     }
 
     function clearPeriodForm() {
         $('#periodForm')[0].reset();
+        // reset() restores the <select>'s value but not the widget drawn over it.
+        $('#period_country').selectpicker('refresh');
         $('#period_vessel_id').val(periodsVesselId);
         $('#period_registration_id').val('');
         $('#periodSubmit').text('Add period');
+        $('#periodFormTitle').text('Add a period');
         $('#periodFormError').hide();
     }
 

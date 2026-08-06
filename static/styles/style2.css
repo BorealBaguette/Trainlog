@@ -1861,8 +1861,15 @@ html, body {
 
 /* Hover preview for a cached ship photo — the admin register and the ferry
    registration field on the trip forms. A thumbnail in the flow, with the full picture
-   as an absolutely positioned sibling that only becomes visible on hover, so the row
-   stays one line high and nothing reflows. */
+   as a sibling that only becomes visible on hover, so the row stays one line high and
+   nothing reflows.
+
+   Positioned FIXED, and placed by ship_thumb.js. It was absolute, which meant any
+   scroll container between the thumbnail and the page clipped it: a table-responsive
+   wrapper, a scrollable modal body, DataTables' own wrapper — the preview was cut off
+   at the edge of the box it lived in, which is most of the places it is used. A fixed
+   element is laid out against the viewport and no ancestor's overflow can crop it.
+   Bootstrap sets transform:none on a shown modal dialog, so this holds inside one too. */
 .ship-thumb {
   position: relative;
   display: inline-block;
@@ -1875,15 +1882,19 @@ html, body {
 }
 .ship-thumb .ship-thumb-full {
   display: none;
-  position: absolute;
-  bottom: 100%;
-  left: 0;
+  position: fixed;
   z-index: 1080;          /* above DataTables' header, below Bootstrap modals */
   max-width: 420px;
+  max-height: 60vh;
+  width: auto;
+  height: auto;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
   border-radius: 4px;
   background: #fff;
+  pointer-events: none;   /* never stands between the cursor and what is under it */
 }
+/* The fallback when the script has not run: fixed with no offsets lands the picture at
+   its own place in the flow, beside the thumbnail — misaligned, but visible. */
 .ship-thumb:hover .ship-thumb-full {
   display: block;
 }

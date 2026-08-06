@@ -88,6 +88,7 @@ from src.currency import get_available_currencies, get_exchange_rate
 from scripts.backfill_vessels import apply_plan as backfill_apply_plan
 from scripts.backfill_vessels import build_plan as backfill_build_plan
 from src.g_search import (
+    fetch_commons_picture,
     fetch_picture_for_registration,
     find_vessel_ids,
     get_vessel_picture,
@@ -10331,27 +10332,42 @@ def ships():
     )
 
 
-@app.route("/admin/ships/backfill", methods=["POST"])
+@app.route("/admin/ships/backfill", methods=["GET", "POST"])
 @admin_required
 def backfill_ships():
     """
     Fill the register's gaps from Wikidata, on demand.
 
-    Two calls, not one: a POST with no plan builds one (the slow half — several SPARQL
-    round trips, tens of seconds) and writes nothing, and a POST carrying that plan back
-    writes exactly it, with no network at all. So "apply" after a preview applies the
-    numbers that were previewed rather than whatever a second query happens to return.
+    GET is the page: a worklist of what Wikidata could add, in three piles — fields it
+    can fill in on a number match, photos it can license properly, and names only a human
+    can resolve. It is a page rather than an overlay because working through it is a
+    session, not a glance.
+
+    POST is its two calls. With no plan it builds one (the slow half — several SPARQL
+    round trips, tens of seconds) and writes nothing; carrying a plan back writes exactly
+    it, with no network at all. So what gets written is what was on screen rather than
+    whatever a second query happens to return, and the page can hand back a subset when
+    the admin unticks a row.
 
     Safe to re-run: only NULLs are ever filled, so a name or number curated here always
     survives. Every item is re-checked against the register at write time, since a plan
     can be minutes old.
     """
+    if request.method == "GET":
+        return render_template(
+            "admin/ships_backfill.html",
+            username=getUser(),
+            nav="bootstrap/navigation.html",
+            **lang[session["userinfo"]["lang"]],
+            **session["userinfo"],
+        )
+
     raw_plan = request.form.get("plan")
 
     try:
         if raw_plan:
             written = backfill_apply_plan(json.loads(raw_plan))
-            result = {**written, "suggestions": [], "applied": True}
+            result = {**written, "suggestions": [], "photos": [], "applied": True}
         else:
             result = {
                 **backfill_build_plan(report_names=True),
@@ -10381,6 +10397,18 @@ def delete_ship():
         )
 
     return jsonify({"success": True})
+
+
+def _photo_credit_fields():
+    """The author and licence submitted alongside a photo, as bind params.
+
+    Both are optional and both are free text: a licence is whatever the file says it is
+    ("CC BY-SA 4.0", "Public domain"), and there is no list to constrain it to.
+    """
+    return {
+        "author": (request.form.get("photo_author") or "").strip() or None,
+        "license": (request.form.get("photo_license") or "").strip() or None,
+    }
 
 
 @app.route("/admin/ships/<int:vessel_id>/registrations")
@@ -10417,12 +10445,18 @@ def ship_registrations(vessel_id):
             )
             SELECT r.uid, r.mmsi, r.name, r.country_code, r.effective_date,
                    p.local_image_path,
+                   -- Where the photo came from and under what licence (migration 0057).
+                   -- Shown, not just stored: a CC BY-SA file must be credited to be shown
+                   -- at all, so an admin has to be able to see that the credit is there
+                   -- and to put it right when it is not.
+                   p.uid AS picture_id, p.source, p.author, p.license, p.referrer_url,
                    (r.uid = vessel_identity(r.vessel_id, NULL)) AS is_current,
                    COALESCE(pt.trips, 0) AS trips
             FROM vessel_registrations r
             LEFT JOIN period_trips pt ON pt.registration_id = r.uid
             LEFT JOIN LATERAL (
-                SELECT local_image_path FROM ship_pictures
+                SELECT uid, local_image_path, source, author, license, referrer_url
+                FROM ship_pictures
                 WHERE registration_id = r.uid AND local_image_path IS NOT NULL
                 ORDER BY fetch_date DESC NULLS LAST, uid DESC
                 LIMIT 1
@@ -10451,6 +10485,11 @@ def ship_registrations(vessel_id):
                     if row["local_image_path"]
                     else None
                 ),
+                "picture_id": row["picture_id"],
+                "source": row["source"],
+                "author": row["author"],
+                "license": row["license"],
+                "referrer_url": row["referrer_url"],
                 "is_current": bool(row["is_current"]),
                 "trips": row["trips"],
             }
@@ -10560,18 +10599,163 @@ def save_ship_registration():
             pg.execute(
                 """
                 INSERT INTO ship_pictures
-                    (registration_id, vessel_name, country_code, local_image_path)
-                VALUES (:registration_id, :vessel_name, :country_code, :local_image_path)
+                    (registration_id, vessel_name, country_code, local_image_path,
+                     source, author, license)
+                VALUES (:registration_id, :vessel_name, :country_code, :local_image_path,
+                        'upload', :author, :license)
                 """,
                 {
                     "registration_id": uid,
                     "vessel_name": name,
                     "country_code": country_code,
                     "local_image_path": filename,
+                    # An upload is also how somebody else's photo gets in. Given an
+                    # author, the display credits it; left empty it is treated as the
+                    # admin's own and needs none.
+                    **_photo_credit_fields(),
                 },
             )
 
     return jsonify({"success": True, "uid": uid})
+
+
+@app.route("/admin/ships/backfill/photo", methods=["POST"])
+@admin_required
+def use_commons_photo():
+    """
+    Replace one registration's photo with the freely-licensed one from Wikimedia Commons.
+
+    Offered rather than applied, because it is a visible change and the Commons file may
+    be older or show the ship in another livery. What it buys is a licence: the search
+    photos are copyrighted stills credited to whoever hosted them, where a Commons file
+    carries an author and a licence that permits the use.
+
+    The old row is left in place — it simply stops being the newest, which is the one
+    every reader picks.
+    """
+    registration_id = request.form.get("registration_id")
+    image_url = (request.form.get("image") or "").strip() or None
+    if not registration_id or not image_url:
+        return jsonify({"success": False, "error": "Nothing to fetch"}), 400
+
+    try:
+        with pg_session() as pg:
+            stored = fetch_commons_picture(pg, int(registration_id), image_url)
+    except Exception as exc:
+        logger.exception("Commons photo import failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+
+    if not stored:
+        return jsonify(
+            {"success": False, "error": "No usable licence on that file"}
+        ), 422
+
+    return jsonify(
+        {"success": True, "image": f"/static/images/ship_pictures/{stored}"}
+    )
+
+
+@app.route("/admin/ships/backfill/confirm", methods=["POST"])
+@admin_required
+def confirm_backfill_suggestion():
+    """
+    Accept one name-match suggestion from the backfill preview.
+
+    The backfill never writes these itself: a ship's name is not unique, so matching one
+    against Wikidata's label finds the right hull most of the time and the wrong one the
+    rest. Confirming is therefore a human act — but a human act should be one click, not
+    a form to retype, which is what this is.
+
+    A candidate with no IMO and no MMSI is still assignable — plenty of small ferries
+    have neither, and the register can hold a ship known only by name and flag. It gets a
+    trainlog_id like any other hull.
+
+    Creates the hull and its first registration, and then REWRITES the trips: every
+    ferry trip whose reg named this ship now holds the hull key instead — the IMO, or the
+    synthetic trainlog_id where there is none. That is the same rewrite migration 0056
+    ran for the ships it already knew, and it is the point of the exercise: those trips
+    stop depending on a spelling and start resolving to a hull.
+
+    The numbers are refused if they belong to something else already, since that is the
+    case where the match was wrong.
+    """
+    name = (request.form.get("name") or "").strip() or None
+    # The candidate's country of registry, when Wikidata knows it. It is the flag the
+    # created registration starts with; an admin can correct it under Periods.
+    country_code = (request.form.get("country_code") or "").strip() or None
+    # And its photo on Wikimedia Commons, if it has one — fetched with its author and
+    # licence, since that is the condition of showing it at all.
+    image_url = (request.form.get("image") or "").strip() or None
+    try:
+        imo = _clean_vessel_number(request.form.get("imo"), 7, "IMO")
+        mmsi = _clean_vessel_number(request.form.get("mmsi"), 9, "MMSI")
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+    if not name:
+        return jsonify({"success": False, "error": "No name given"}), 400
+
+    with pg_session() as pg:
+        # If the name already resolves, the register has moved on since the preview.
+        if pg.execute("SELECT vessel_resolve(:name)", {"name": name}).scalar():
+            return jsonify(
+                {"success": False, "error": f"{name} already names a ship"}
+            ), 409
+
+        if imo and pg.execute(
+            "SELECT 1 FROM vessels WHERE imo = :imo", {"imo": imo}
+        ).fetchone():
+            return jsonify(
+                {"success": False, "error": f"IMO {imo} is already another hull"}
+            ), 409
+        if mmsi and pg.execute(
+            "SELECT 1 FROM vessel_registrations WHERE mmsi = :mmsi", {"mmsi": mmsi}
+        ).fetchone():
+            return jsonify(
+                {"success": False, "error": f"MMSI {mmsi} is already another ship"}
+            ), 409
+
+        # The Wikidata item the admin picked. Worth keeping: with several namesakes the
+        # choice is a judgement, and this is the only record of which one was made.
+        wikidata = (request.form.get("wikidata") or "").strip() or None
+        vessel_id = pg.execute(
+            "INSERT INTO vessels (imo, notes) VALUES (:imo, :notes) RETURNING uid",
+            {"imo": imo, "notes": f"wikidata:{wikidata}" if wikidata else None},
+        ).scalar()
+        registration_id = pg.execute(
+            "INSERT INTO vessel_registrations (vessel_id, name, mmsi, country_code)"
+            " VALUES (:vessel_id, :name, :mmsi, :country_code) RETURNING uid",
+            {
+                "vessel_id": vessel_id,
+                "name": name,
+                "mmsi": mmsi,
+                "country_code": country_code,
+            },
+        ).scalar()
+        if image_url:
+            try:
+                fetch_commons_picture(pg, registration_id, image_url)
+            except Exception:
+                # A ship created without its photo is still a ship created; the picture
+                # can be fetched or uploaded from the Periods view afterwards.
+                logger.exception("Commons photo import failed for %s", image_url)
+
+        # The trips that named it can now point at the hull, exactly as the migration
+        # did for the ships it already knew.
+        trips = pg.execute(
+            """
+            UPDATE trips SET reg = COALESCE(v.imo, v.trainlog_id)
+            FROM vessels v
+            WHERE v.uid = :vessel_id
+              AND trips.trip_type = 'ferry'
+              AND trips.reg IS NOT NULL AND btrim(trips.reg) <> ''
+              AND vessel_resolve(trips.reg) = v.uid
+              AND btrim(trips.reg) <> COALESCE(v.imo, v.trainlog_id)
+            """,
+            {"vessel_id": vessel_id},
+        ).rowcount
+
+    return jsonify({"success": True, "vessel_id": vessel_id, "trips": trips})
 
 
 @app.route("/admin/ships/registrations/upload_photo", methods=["POST"])
@@ -10608,20 +10792,56 @@ def upload_ship_registration_photo():
         pg.execute(
             """
             INSERT INTO ship_pictures
-                (registration_id, vessel_name, country_code, local_image_path)
-            VALUES (:registration_id, :vessel_name, :country_code, :local_image_path)
+                (registration_id, vessel_name, country_code, local_image_path,
+                 source, author, license)
+            VALUES (:registration_id, :vessel_name, :country_code, :local_image_path,
+                    'upload', :author, :license)
             """,
             {
                 "registration_id": registration["uid"],
                 "vessel_name": registration["name"],
                 "country_code": registration["country_code"],
                 "local_image_path": filename,
+                **_photo_credit_fields(),
             },
         )
 
     return jsonify(
         {"success": True, "image": f"/static/images/ship_pictures/{filename}"}
     )
+
+
+@app.route("/admin/ships/registrations/photo_credit", methods=["POST"])
+@admin_required
+def edit_ship_photo_credit():
+    """
+    Correct the provenance of a photo already on file.
+
+    The credit under a picture is drawn from its row (migration 0057), so a wrong or
+    missing one can only be fixed here. It matters beyond tidiness: a CC BY-SA file shown
+    without its author and licence is a licence breach, and an upload wrongly marked as a
+    search result is credited to Vesselfinder for a photo Vesselfinder never took.
+    """
+    picture_id = request.form.get("picture_id")
+    source = (request.form.get("source") or "").strip() or None
+    if not picture_id:
+        return jsonify({"success": False, "error": "No photo given"}), 400
+    if source not in (None, "upload", "wikimedia", "vesselfinder"):
+        return jsonify({"success": False, "error": f"Unknown source {source}"}), 400
+
+    with pg_session() as pg:
+        updated = pg.execute(
+            """
+            UPDATE ship_pictures
+            SET source = :source, author = :author, license = :license
+            WHERE uid = :uid
+            """,
+            {"uid": int(picture_id), "source": source, **_photo_credit_fields()},
+        ).rowcount
+
+    if not updated:
+        return jsonify({"success": False, "error": "Unknown photo"}), 404
+    return jsonify({"success": True})
 
 
 @app.route("/admin/ships/registrations/fetch_photo", methods=["POST"])
