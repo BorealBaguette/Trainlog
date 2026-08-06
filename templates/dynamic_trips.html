@@ -1584,15 +1584,14 @@ function processHiddenData(rowIdx, columns){
                 if(data && data.image){
                     country = data.country || "";
                     var thumbnail = data.image;
-                    var attr = ''; 
                     var image = new Image();
                     image.src = thumbnail;
                     $('#preload').append(image);                    
                     var link = data.link;
-                    
-                    if (link && link.length > 0) {
-                        attr = `©Vesselfinder.com`;
-                    }
+                    // Credit as the row says: a Commons photo names its author and
+                    // licence (that is the condition of showing it), an upload needs
+                    // nothing, vesselfinder gets its own line.
+                    var attr = data.attribution || '';
 
                     // The lookup may know the ship's name where the row did not — a
                     // trip logged by IMO or MMSI still reads as the ship.
@@ -1606,7 +1605,11 @@ function processHiddenData(rowIdx, columns){
                         "data-container":"body",
                         placement: 'top',
                         content: function(){
-                            return `<div class="vehiclePhotoContainer"><img width=600px src="${thumbnail}"/>${link ? `<a href="${link}" class="vehiclePhotoAttr">${attr}</a>` : ''}</div>`;
+                            var credit = attr
+                                ? (link ? `<a href="${link}" class="vehiclePhotoAttr">${attr}</a>`
+                                        : `<span class="vehiclePhotoAttr">${attr}</span>`)
+                                : '';
+                            return `<div class="vehiclePhotoContainer"><img width=600px src="${thumbnail}"/>${credit}</div>`;
                         }
                     });
                     if (country != ""){

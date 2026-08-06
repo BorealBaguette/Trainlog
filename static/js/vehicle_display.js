@@ -135,7 +135,10 @@
           return {
             thumb: d.image,
             link: d.link || '',
-            attr: d.link ? '©Vesselfinder.com' : '',
+            // The credit comes with the photo now that they arrive from more than one
+            // place: vesselfinder, Wikimedia Commons (whose licence requires naming the
+            // author) or an admin's own upload, which needs none.
+            attr: d.attribution || '',
             country: d.country || '',
             // The ship's name, whichever of name/IMO/MMSI was searched for. Empty
             // when no name is on record; callers keep showing what was typed.
@@ -168,9 +171,14 @@
 
   function photoHTML(photo) {
     if (!photo || !photo.thumb) return '';
-    var credit = photo.link
-      ? '<a href="' + escAttr(photo.link) + '" target="_blank" rel="noopener" class="vehiclePhotoAttr">' + escAttr(photo.attr) + '</a>'
-      : '';
+    // A photo may need a credit without having a page to link to, and an admin's own
+    // upload needs none at all — so the credit hangs off the text, not the link.
+    var credit = '';
+    if (photo.attr) {
+      credit = photo.link
+        ? '<a href="' + escAttr(photo.link) + '" target="_blank" rel="noopener" class="vehiclePhotoAttr">' + escAttr(photo.attr) + '</a>'
+        : '<span class="vehiclePhotoAttr">' + escAttr(photo.attr) + '</span>';
+    }
     return '<div class="vehiclePhotoContainer"><img src="' + escAttr(photo.thumb) + '" alt="">' + credit + '</div>';
   }
 

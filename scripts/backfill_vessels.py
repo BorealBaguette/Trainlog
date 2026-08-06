@@ -37,78 +37,13 @@ import argparse
 import json
 import logging
 import re
-import urllib.parse
-import urllib.request
 
+# The Wikidata access lives in src/ because the photo lookup needs it too.
 from src.pg import pg_session
+from src.wikidata import lookup, sparql
+from src.wikidata import value as _value
 
 logger = logging.getLogger(__name__)
-
-SPARQL_URL = "https://query.wikidata.org/sparql"
-
-# Wikidata asks for a descriptive agent identifying the client; anonymous or
-# library-default agents are throttled or refused outright.
-USER_AGENT = "Trainlog/1.0 (https://trainlog.me; vessel register backfill)"
-
-# How many identifiers go into one VALUES clause. The endpoint has a 60s query
-# timeout and these queries are index lookups, so this is about staying well
-# inside it rather than about result size.
-CHUNK = 250
-
-
-def sparql(query):
-    url = f"{SPARQL_URL}?{urllib.parse.urlencode({'query': query, 'format': 'json'})}"
-    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(request, timeout=180) as response:
-        return json.load(response)["results"]["bindings"]
-
-
-def _value(binding, key):
-    entry = binding.get(key)
-    return entry["value"] if entry else None
-
-
-def lookup(identifiers, prop):
-    """
-    {identifier: {name, imo, mmsi}} for the ones Wikidata knows, keyed on `prop`
-    (P458 for IMO, P587 for MMSI).
-
-    A number matching several items is dropped: that means Wikidata disagrees with
-    itself about which hull it belongs to, and there is nothing to choose by.
-    """
-    found = {}
-    dropped = set()
-
-    for start in range(0, len(identifiers), CHUNK):
-        chunk = identifiers[start : start + CHUNK]
-        values = " ".join('"%s"' % i for i in chunk)
-        rows = sparql(
-            f"""
-            SELECT ?key ?shipLabel ?imo ?mmsi WHERE {{
-                VALUES ?key {{ {values} }}
-                ?ship wdt:{prop} ?key.
-                OPTIONAL {{ ?ship wdt:P458 ?imo }}
-                OPTIONAL {{ ?ship wdt:P587 ?mmsi }}
-                SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
-            }}
-            """
-        )
-        for row in rows:
-            key = _value(row, "key")
-            candidate = {
-                "name": _value(row, "shipLabel"),
-                "imo": _value(row, "imo"),
-                "mmsi": _value(row, "mmsi"),
-            }
-            if key in found and found[key] != candidate:
-                dropped.add(key)
-            found[key] = candidate
-
-    for key in dropped:
-        logger.warning("%s %s matches several Wikidata items — skipped", prop, key)
-        found.pop(key, None)
-
-    return found
 
 
 # Which table each identifier lives on since migration 0056: the IMO is the hull's, the
@@ -127,6 +62,28 @@ def _claimed_elsewhere(pg, column, value, uid=None):
             {"value": value, "uid": uid},
         ).fetchone()
     )
+
+
+# ITU maritime identification digits: the first three of an MMSI name the flag state
+# that issued it. The same table the photo lookup uses, loaded lazily so the CLI does not
+# pay for it when only the numeric passes run.
+_MIDS_PATH = "static/data/mids.json"
+_mids = None
+
+
+def _flag_from_mmsi(mmsi):
+    """The country an MMSI was issued by, or None."""
+    global _mids
+    if not mmsi or len(mmsi) < 3:
+        return None
+    if _mids is None:
+        try:
+            with open(_MIDS_PATH) as handle:
+                _mids = json.load(handle)
+        except OSError:
+            _mids = {}
+    entry = _mids.get(mmsi[:3])
+    return entry[0] if entry else None
 
 
 def _valid_number(value, digits):
@@ -170,6 +127,74 @@ def _proposed_changes(vessel, source):
             changes[column] = incoming
 
     return changes
+
+
+def _photo_candidates(pg):
+    """
+    Registrations whose photo could be a freely-licensed one instead.
+
+    Every cached photo so far came from an image search: a copyrighted still, credited to
+    the site that hosted it, kept on our disk. Where Wikidata knows the ship by number and
+    has a P18, Commons offers the same ship under a licence that permits the use — with an
+    author to credit, which is the condition attached.
+
+    Offered, not applied: replacing a picture is a visible change and the Commons file may
+    be worse, older, or of the ship in another livery. Photos an admin uploaded are left
+    alone entirely.
+    """
+    rows = pg.execute(
+        """
+        SELECT r.uid AS registration_id,
+               r.name,
+               v.imo,
+               r.mmsi,
+               p.local_image_path AS current_image,
+               p.source AS current_source
+        FROM vessel_registrations r
+        JOIN vessels v ON v.uid = r.vessel_id
+        LEFT JOIN LATERAL (
+            SELECT local_image_path, source
+            FROM ship_pictures
+            WHERE registration_id = r.uid AND local_image_path IS NOT NULL
+            ORDER BY fetch_date DESC NULLS LAST, uid DESC
+            LIMIT 1
+        ) p ON TRUE
+        WHERE (v.imo IS NOT NULL OR r.mmsi IS NOT NULL)
+          -- Already free, or the admin's own: nothing to offer.
+          AND (p.source IS NULL OR p.source = 'vesselfinder')
+        """
+    ).fetchall()
+    if not rows:
+        return []
+
+    by_imo = lookup([r["imo"] for r in rows if r["imo"]], "P458")
+    by_mmsi = lookup([r["mmsi"] for r in rows if r["mmsi"]], "P587")
+
+    candidates = []
+    for row in rows:
+        source = by_imo.get(row["imo"]) or by_mmsi.get(row["mmsi"]) or {}
+        image = source.get("image")
+        if not image:
+            continue
+        candidates.append(
+            {
+                "registration_id": row["registration_id"],
+                "name": row["name"],
+                "imo": row["imo"],
+                "mmsi": row["mmsi"],
+                "current_image": (
+                    f"/static/images/ship_pictures/{row['current_image']}"
+                    if row["current_image"]
+                    else None
+                ),
+                "current_source": row["current_source"],
+                "image": image,
+            }
+        )
+
+    # Ships with no picture at all first: those gain the most.
+    candidates.sort(key=lambda c: (c["current_image"] is not None, c["name"] or ""))
+    return candidates
 
 
 def build_plan(report_names=False):
@@ -254,10 +279,17 @@ def build_plan(report_names=False):
                 }
             )
 
+        photos = []
         if report_names:
             suggestions = _name_candidates(pg)
+            photos = _photo_candidates(pg)
 
-    return {"filled": filled, "created": created, "suggestions": suggestions}
+    return {
+        "filled": filled,
+        "created": created,
+        "suggestions": suggestions,
+        "photos": photos,
+    }
 
 
 def apply_plan(plan):
@@ -378,6 +410,7 @@ def backfill(apply=False, report_names=False):
         "filled": written["filled"],
         "created": written["created"],
         "suggestions": plan["suggestions"],
+        "photos": plan.get("photos", []),
         "skipped": written["skipped"],
         "applied": True,
     }
@@ -385,35 +418,91 @@ def backfill(apply=False, report_names=False):
 
 def _name_candidates(pg):
     """
-    Ferry regs that are a name we hold no vessel for, and what Wikidata has under that
-    exact English label. Reported only — see the module docstring on why a name match is
-    never written automatically.
+    Ferry regs that are a name we hold no vessel for, and every ship Wikidata has under
+    that exact English label.
+
+    These are suggestions, never writes. A ship's name is not unique — several real ships
+    are called Gotland, Esperanza or Europalink — so a label match is a lead for a human
+    to confirm. Every candidate is returned rather than only the unambiguous ones,
+    together with the two things that actually tell them apart:
+
+      * where the trips went, from each trip's own `countries` breakdown. A ferry logged
+        between Finland and Sweden is not the Gotland registered in Panama.
+      * where each candidate is registered, from Wikidata's country (P17).
+
+    Each carries the number of trips riding on it, because that is what says which are
+    worth the click.
     """
-    regs = [
-        row[0]
-        for row in pg.execute(
-            """
-            SELECT DISTINCT btrim(reg) FROM trips
+    rows = pg.execute(
+        """
+        WITH unresolved AS (
+            SELECT trip_id,
+                   btrim(reg) AS reg,
+                   operator,
+                   -- Free text in principle; a malformed value must not abort the query.
+                   CASE WHEN countries ~ '^\s*\{' THEN countries::jsonb END AS countries
+            FROM trips
             WHERE trip_type = 'ferry'
               AND reg IS NOT NULL AND btrim(reg) <> ''
               AND btrim(reg) !~ '^[0-9]+$'
               AND vessel_resolve(reg) IS NULL
-            """
-        ).fetchall()
-    ]
+        ),
+        per_country AS (
+            -- Metres travelled per country across all the trips naming this ship, so the
+            -- country it mostly sails in comes first.
+            --
+            -- Two shapes in the wild: a plain distance ({"NO": 56501}) and a breakdown by
+            -- traction ({"NO": {"elec": 0, "nonelec": 24497.5}}). Anything else counts as
+            -- zero — the ordering is a hint, and a country that appears at all is the part
+            -- that matters.
+            SELECT u.reg,
+                   c.key AS country,
+                   SUM(
+                       CASE jsonb_typeof(c.value)
+                           WHEN 'number' THEN c.value::numeric
+                           WHEN 'object' THEN (
+                               SELECT COALESCE(SUM(part.value::numeric), 0)
+                               FROM jsonb_each_text(c.value) AS part
+                               WHERE part.value ~ '^-?[0-9]+(\.[0-9]+)?$'
+                           )
+                           ELSE 0
+                       END
+                   ) AS metres
+            FROM unresolved u, LATERAL jsonb_each(u.countries) c
+            GROUP BY 1, 2
+        )
+        SELECT u.reg,
+               COUNT(*) AS trips,
+               (SELECT array_agg(p.country ORDER BY p.metres DESC)
+                  FROM per_country p WHERE p.reg = u.reg) AS countries,
+               -- Who ran the trips. The strongest signal of the three in practice: two
+               -- ships may share a name and a flag, but not an operator on the route
+               -- somebody actually sailed.
+               MODE() WITHIN GROUP (
+                   ORDER BY NULLIF(btrim(split_part(u.operator, ',', 1)), '')
+               ) AS operator
+        FROM unresolved u
+        GROUP BY u.reg
+        """
+    ).fetchall()
+    by_reg = {row["reg"]: row for row in rows}
+    regs = list(by_reg)
 
     candidates = {}
     for start in range(0, len(regs), 40):
         values = " ".join('"%s"@en' % r.replace('"', "") for r in regs[start : start + 40])
         try:
-            rows = sparql(
+            found = sparql(
                 f"""
-                SELECT ?label ?shipLabel ?imo ?mmsi WHERE {{
+                SELECT ?label ?ship ?imo ?mmsi ?iso ?operatorLabel ?image WHERE {{
                     VALUES ?label {{ {values} }}
                     ?ship rdfs:label ?label.
                     ?ship wdt:P31/wdt:P279* wd:Q11446.
                     OPTIONAL {{ ?ship wdt:P458 ?imo }}
                     OPTIONAL {{ ?ship wdt:P587 ?mmsi }}
+                    OPTIONAL {{ ?ship wdt:P17 ?country. ?country wdt:P297 ?iso }}
+                    OPTIONAL {{ ?ship wdt:P137 ?operator }}
+                    OPTIONAL {{ ?ship wdt:P18 ?image }}
                     SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
                 }}
                 """
@@ -421,22 +510,97 @@ def _name_candidates(pg):
         except Exception as exc:  # a name chunk failing must not lose the numeric work
             logger.warning("name lookup chunk failed: %s", exc)
             continue
-        for row in rows:
-            candidates.setdefault(_value(row, "label"), []).append(
-                {"imo": _value(row, "imo"), "mmsi": _value(row, "mmsi")}
+
+        for row in found:
+            label = _value(row, "label")
+            ship = _value(row, "ship")
+            # One ship yields several rows when it has been flagged in several countries;
+            # they are the same candidate wearing different ensigns.
+            entry = candidates.setdefault(label, {}).setdefault(
+                ship,
+                {"imo": None, "mmsi": None, "countries": [], "operators": [], "image": None},
+            )
+            entry["imo"] = entry["imo"] or _valid_number(_value(row, "imo"), 7)
+            entry["mmsi"] = entry["mmsi"] or _valid_number(_value(row, "mmsi"), 9)
+            iso = _value(row, "iso")
+            if iso and iso not in entry["countries"]:
+                entry["countries"].append(iso)
+            operator = _value(row, "operatorLabel")
+            # A ship changes hands, so Wikidata lists every operator it has had; all of
+            # them are worth showing, since the trip may be from any era.
+            if operator and operator not in entry["operators"]:
+                entry["operators"].append(operator)
+            # A freely-licensed photo on Commons, if the item has one. Only the link is
+            # collected here; it is downloaded, with its attribution, when an admin
+            # actually picks this candidate.
+            entry["image"] = entry["image"] or _value(row, "image")
+
+    # Those operator names resolved to the logos the rest of the site draws, through
+    # operator_aliases exactly as a trip resolves its own.
+    logos = {}
+    operator_names = {row["operator"] for row in rows if row["operator"]}
+    if operator_names:
+        for found in pg.execute(
+            """
+            SELECT o.written, op.short_name,
+                   (SELECT l.logo_url FROM operator_logos l
+                    WHERE l.operator_id = op.operator_id
+                    ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
+                    LIMIT 1) AS logo_url
+            FROM UNNEST(CAST(:names AS text[])) AS o(written)
+            JOIN operator_aliases a ON a.normalized = operator_normalize(o.written)
+            JOIN operators op ON op.operator_id = a.operator_id
+            """,
+            {"names": sorted(operator_names)},
+        ).fetchall():
+            logos.setdefault(
+                found["written"], {"name": found["short_name"], "logo": found["logo_url"]}
             )
 
-    # Flattened for the caller: an unambiguous label carries its numbers, an
-    # ambiguous one carries only the warning. Neither is ever written.
-    return [
-        {
-            "name": name,
-            "imo": matches[0]["imo"] if len(matches) == 1 else None,
-            "mmsi": matches[0]["mmsi"] if len(matches) == 1 else None,
-            "ambiguous": len(matches) > 1,
-        }
-        for name, matches in sorted(candidates.items())
-    ]
+    suggestions = []
+    for name, ships in candidates.items():
+        row = by_reg.get(name)
+        operator = row["operator"] if row else None
+        resolved = logos.get(operator or "", {})
+        options = []
+        for uri, ship in ships.items():
+            countries = list(ship["countries"])
+            # Wikidata records a country for only a minority of ships, but an MMSI is
+            # itself a flag-state allocation — so where it is silent, the number says it.
+            derived = _flag_from_mmsi(ship["mmsi"])
+            if derived and derived not in countries:
+                countries.append(derived)
+            options.append(
+                {
+                    "imo": ship["imo"],
+                    "mmsi": ship["mmsi"],
+                    "countries": countries,
+                    "operators": ship["operators"],
+                    "image": ship["image"],
+                    "wikidata": uri.rsplit("/", 1)[-1],
+                }
+            )
+        # Something to go on first: a candidate with no number at all cannot be assigned.
+        options.sort(key=lambda o: (o["imo"] is None, o["mmsi"] is None, o["imo"] or ""))
+        suggestions.append(
+            {
+                "name": name,
+                "trips": row["trips"] if row else 0,
+                "trip_countries": list(row["countries"] or []) if row else [],
+                "trip_operator": resolved.get("name") or operator,
+                "trip_operator_logo": resolved.get("logo"),
+                "options": options,
+                # Kept for the CLI and for callers that only want the easy case.
+                "ambiguous": len(options) > 1,
+                "imo": options[0]["imo"] if len(options) == 1 else None,
+                "mmsi": options[0]["mmsi"] if len(options) == 1 else None,
+            }
+        )
+
+    # Busiest first: a name on forty trips is worth confirming, one on a single trip
+    # probably is not.
+    suggestions.sort(key=lambda s: (-s["trips"], s["name"]))
+    return suggestions
 
 
 if __name__ == "__main__":
@@ -474,10 +638,14 @@ if __name__ == "__main__":
     if result["suggestions"]:
         print(f"\n{len(result['suggestions'])} name-only candidate(s) for manual entry:")
         for item in result["suggestions"]:
-            if item["ambiguous"]:
-                print(f"  {item['name']}: AMBIGUOUS — several ships share this name")
-            else:
-                print(f"  {item['name']}: imo={item['imo']} mmsi={item['mmsi']}")
+            where = "/".join(item["trip_countries"]) or "?"
+            print(f"  {item['name']} ({item['trips']} trips, sailed in {where}"
+                  f", operator {item['trip_operator'] or '?'}):")
+            for option in item["options"]:
+                flag = "/".join(option["countries"]) or "?"
+                run_by = ", ".join(option["operators"]) or "?"
+                print(f"      imo={option['imo']} mmsi={option['mmsi']}"
+                      f" flag={flag} operator={run_by} wikidata={option['wikidata']}")
 
     if not args.apply:
         print("\nRe-run with --apply to write.")
