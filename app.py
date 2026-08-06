@@ -85,7 +85,9 @@ from py.coverage import (
     has_coverage_file,
 )
 from src.currency import get_available_currencies, get_exchange_rate
-from src.g_search import get_vessel_picture
+from scripts.backfill_vessels import apply_plan as backfill_apply_plan
+from scripts.backfill_vessels import build_plan as backfill_build_plan
+from src.g_search import find_vessel_ids, get_vessel_picture
 from py.image_generator import generate_image
 from src.sql.leaderboards import get_leaderboard_countries_query
 from src.sql.percents import upsert_percent_query
@@ -8715,7 +8717,7 @@ def get_trips_api_internal(username, is_public=False):
     # elide the airliners join (count query) and avoids the tickets join entirely.
     # Columns are referenced at the FilteredTrips level; ticket name and tags are
     # correlated EXISTS subqueries (the CTE no longer joins tickets).
-    def _global_search_predicate(param, operator_ids=None):
+    def _global_search_predicate(param, operator_ids=None, vessel_ids=None):
         like = (
             "remove_diacritics(LOWER({col})) LIKE remove_diacritics(LOWER(:" + param + "))"
         )
@@ -8752,6 +8754,14 @@ def get_trips_api_internal(username, is_public=False):
                 "EXISTS (SELECT 1 FROM trip_operators tvg"
                 f" WHERE tvg.trip_id = FilteredTrips.uid AND tvg.operator_id = ANY(:{param}_operator_ids))"
             )
+        # Same idea for ships, which answer to a name, an IMO and an MMSI alike: a
+        # trip logged as '9773064' displays as Megastar, so searching either has to
+        # find it. Scoped to ferries — the lookup is per row, and only there is `reg`
+        # a ship — and only added when the term actually names a known vessel.
+        if vessel_ids:
+            terms.append(
+                f"(type = 'ferry' AND vessel_resolve(reg) = ANY(:{param}_vessel_ids))"
+            )
         return "(" + " OR ".join(terms) + ")"
 
     if search_value:
@@ -8759,8 +8769,12 @@ def get_trips_api_internal(username, is_public=False):
         global_operator_ids = find_operator_ids(search_value)
         if global_operator_ids:
             search_params["search_operator_ids"] = global_operator_ids
+        with pg_session() as pg:
+            global_vessel_ids = find_vessel_ids(pg, search_value)
+        if global_vessel_ids:
+            search_params["search_vessel_ids"] = global_vessel_ids
         additional_conditions.append(
-            _global_search_predicate("search", global_operator_ids)
+            _global_search_predicate("search", global_operator_ids, global_vessel_ids)
         )
 
     # Negative global terms ("!term"): keep only trips where NO field matches the
@@ -8773,8 +8787,14 @@ def get_trips_api_internal(username, is_public=False):
         neg_operator_ids = find_operator_ids(neg_term)
         if neg_operator_ids:
             search_params[f"{neg_param}_operator_ids"] = neg_operator_ids
+        with pg_session() as pg:
+            neg_vessel_ids = find_vessel_ids(pg, neg_term)
+        if neg_vessel_ids:
+            search_params[f"{neg_param}_vessel_ids"] = neg_vessel_ids
         additional_conditions.append(
-            f"NOT COALESCE({_global_search_predicate(neg_param, neg_operator_ids)}, FALSE)"
+            "NOT COALESCE("
+            f"{_global_search_predicate(neg_param, neg_operator_ids, neg_vessel_ids)}"
+            ", FALSE)"
         )
 
     # Build the queries
@@ -8882,6 +8902,30 @@ def get_trips_api_internal(username, is_public=False):
             trip["is_geodesic"] = direct_flight_map.get(trip["uid"], False)
         else:
             trip["is_geodesic"] = None
+
+    # Ships are shown by name whichever of name/IMO/MMSI was logged in `reg`
+    # (migration 0054). Resolved here, for the page's ferry rows only, rather than as
+    # a column on the CTE: the CTE is evaluated over every trip that passes the
+    # filters, and this is needed for the twenty-odd actually being drawn.
+    ferry_regs = {
+        trip["reg"].strip()
+        for trip in trip_dicts
+        if trip["type"] == "ferry" and (trip.get("reg") or "").strip()
+    }
+    if ferry_regs:
+        with pg_session() as pg:
+            names = {
+                row["reg"]: row["name"]
+                for row in pg.execute(
+                    "SELECT r AS reg, NULLIF(btrim(v.name), '') AS name"
+                    " FROM UNNEST(CAST(:regs AS text[])) AS r"
+                    " LEFT JOIN vessels v ON v.uid = vessel_resolve(r)",
+                    {"regs": sorted(ferry_regs)},
+                ).fetchall()
+            }
+        for trip in trip_dicts:
+            if trip["type"] == "ferry":
+                trip["vessel_name"] = names.get((trip.get("reg") or "").strip())
 
     # If public, remove price information
     if is_public:
@@ -10084,66 +10128,116 @@ def adminManual():
     )
 
 
+def _clean_vessel_number(value, digits, label):
+    """A submitted IMO or MMSI, or None when the field was left empty.
+
+    Raises ValueError with a message for the admin when it is neither — the DB has the
+    same check, but a constraint violation reaches the browser as a 500.
+    """
+    value = (value or "").strip()
+    if not value:
+        return None
+    if not (value.isdigit() and len(value) == digits):
+        raise ValueError(f"{label} must be exactly {digits} digits")
+    return value
+
+
 @app.route("/admin/ships", methods=["GET", "POST"])
 @admin_required
 def ships():
+    """
+    The vessel register: name, IMO and MMSI as three separate fields of one ship, plus
+    its flag and photo. Any of the three matches a trip's `reg` (migration 0054), and
+    the name is what every display then shows.
+    """
     if request.method == "POST":
-        original_vessel_name = request.form.get("original_vessel_name")
-        vessel_name = request.form.get("vessel_name")
-        country_code = request.form.get("country_code")
+        vessel_id = (request.form.get("vessel_id") or "").strip()
+        name = (request.form.get("name") or "").strip() or None
+        country_code = (request.form.get("country_code") or "").strip() or None
         file = request.files.get("ship_picture")
 
-        local_image_path = None
+        try:
+            imo = _clean_vessel_number(request.form.get("imo"), 7, "IMO")
+            mmsi = _clean_vessel_number(request.form.get("mmsi"), 9, "MMSI")
+        except ValueError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 400
 
-        # If a new image is uploaded, save it
-        if file:
-            filename = f"{country_code}_{vessel_name}.jpg".replace(" ", "_").replace(
-                "/", ""
-            )
-            filepath = os.path.join("static/images/ship_pictures", filename)
-            file.save(filepath)
-            local_image_path = filename
+        if not (name or imo or mmsi):
+            return jsonify(
+                {"success": False, "error": "Give at least a name, an IMO or an MMSI"}
+            ), 400
 
         with pg_session() as pg:
-            if original_vessel_name:  # If original_vessel_name is set, it's an update
-                # Update ship data
-                if local_image_path:  # If a new image was uploaded, update it
-                    pg.execute(
-                        """
-                        UPDATE ship_pictures
-                        SET vessel_name = :vessel_name, country_code = :country_code, local_image_path = :local_image_path
-                        WHERE vessel_name = :original_vessel_name
-                        """,
-                        {
-                            "vessel_name": vessel_name,
-                            "country_code": country_code,
-                            "local_image_path": local_image_path,
-                            "original_vessel_name": original_vessel_name,
-                        },
-                    )
-                else:  # If no new image, just update text fields
-                    pg.execute(
-                        """
-                        UPDATE ship_pictures
-                        SET vessel_name = :vessel_name, country_code = :country_code
-                        WHERE vessel_name = :original_vessel_name
-                        """,
-                        {
-                            "vessel_name": vessel_name,
-                            "country_code": country_code,
-                            "original_vessel_name": original_vessel_name,
-                        },
-                    )
-            else:  # Otherwise, it's an insert
+            # A number belongs to one hull, so it cannot sit on two rows — the unique
+            # indexes say so too, but a 409 is a usable answer and a constraint
+            # violation is not.
+            clash = pg.execute(
+                """
+                SELECT uid, name FROM vessels
+                WHERE uid <> COALESCE(CAST(NULLIF(:vessel_id, '') AS INTEGER), -1)
+                  AND ((:imo IS NOT NULL AND imo = :imo)
+                       OR (:mmsi IS NOT NULL AND mmsi = :mmsi))
+                LIMIT 1
+                """,
+                {"vessel_id": vessel_id, "imo": imo, "mmsi": mmsi},
+            ).fetchone()
+            if clash:
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": f"Already used by vessel #{clash['uid']}"
+                        f" ({clash['name'] or 'unnamed'})",
+                    }
+                ), 409
+
+            params = {
+                "name": name,
+                "imo": imo,
+                "mmsi": mmsi,
+                "country_code": country_code,
+            }
+            if vessel_id:
                 pg.execute(
                     """
-                    INSERT INTO ship_pictures (vessel_name, country_code, local_image_path)
-                    VALUES (:vessel_name, :country_code, :local_image_path)
+                    UPDATE vessels
+                    SET name = :name, imo = :imo, mmsi = :mmsi,
+                        country_code = :country_code, updated_on = CURRENT_TIMESTAMP
+                    WHERE uid = :uid
+                    """,
+                    {**params, "uid": int(vessel_id)},
+                )
+                uid = int(vessel_id)
+            else:
+                uid = pg.execute(
+                    """
+                    INSERT INTO vessels (name, imo, mmsi, country_code)
+                    VALUES (:name, :imo, :mmsi, :country_code)
+                    RETURNING uid
+                    """,
+                    params,
+                ).scalar()
+
+            # An uploaded photo becomes the newest cached one for this vessel, which
+            # is the one every reader picks. The filename carries the same
+            # country/name/number shape the search writes, and the uid keeps two
+            # uploads for one ship from overwriting each other.
+            if file and file.filename:
+                label = name or imo or mmsi or str(uid)
+                filename = (
+                    f"{country_code or 'XX'}_{label}_{uid}.jpg".replace(" ", "_")
+                    .replace("/", "")
+                )
+                file.save(os.path.join("static/images/ship_pictures", filename))
+                pg.execute(
+                    """
+                    INSERT INTO ship_pictures (vessel_id, vessel_name, country_code, local_image_path)
+                    VALUES (:vessel_id, :vessel_name, :country_code, :local_image_path)
                     """,
                     {
-                        "vessel_name": vessel_name,
+                        "vessel_id": uid,
+                        "vessel_name": name,
                         "country_code": country_code,
-                        "local_image_path": local_image_path,
+                        "local_image_path": filename,
                     },
                 )
 
@@ -10152,12 +10246,40 @@ def ships():
     with pg_session() as pg:
         shipList = [
             dict(row._mapping)
-            for row in pg.execute("SELECT * FROM ship_pictures").fetchall()
+            for row in pg.execute(
+                """
+                -- How many logged trips each ship actually accounts for. Resolved
+                -- through vessel_resolve, so a trip logged by IMO counts towards the
+                -- same ship as one logged by name; the register is sorted by it, which
+                -- puts the ships worth curating at the top.
+                WITH trip_counts AS (
+                    SELECT vessel_resolve(reg) AS vessel_id, COUNT(*) AS trips
+                    FROM trips
+                    WHERE trip_type = 'ferry' AND reg IS NOT NULL AND btrim(reg) <> ''
+                    GROUP BY 1
+                )
+                SELECT v.uid, v.name, v.imo, v.mmsi, v.country_code,
+                       p.local_image_path, COALESCE(c.trips, 0) AS trips
+                FROM vessels v
+                LEFT JOIN trip_counts c ON c.vessel_id = v.uid
+                LEFT JOIN LATERAL (
+                    SELECT local_image_path
+                    FROM ship_pictures
+                    WHERE vessel_id = v.uid AND local_image_path IS NOT NULL
+                    ORDER BY fetch_date DESC NULLS LAST, uid DESC
+                    LIMIT 1
+                ) p ON TRUE
+                ORDER BY COALESCE(c.trips, 0) DESC, v.name NULLS LAST, v.uid
+                """
+            ).fetchall()
         ]
 
     return render_template(
         "admin/ships.html",
         shipList=shipList,
+        # For the registration-country picker, same list every other country select
+        # on the site is built from.
+        country_list=get_all_countries(),
         username=getUser(),
         nav="bootstrap/navigation.html",
         **lang[session["userinfo"]["lang"]],
@@ -10165,18 +10287,146 @@ def ships():
     )
 
 
+@app.route("/admin/ships/backfill", methods=["POST"])
+@admin_required
+def backfill_ships():
+    """
+    Fill the register's gaps from Wikidata, on demand.
+
+    Two calls, not one: a POST with no plan builds one (the slow half — several SPARQL
+    round trips, tens of seconds) and writes nothing, and a POST carrying that plan back
+    writes exactly it, with no network at all. So "apply" after a preview applies the
+    numbers that were previewed rather than whatever a second query happens to return.
+
+    Safe to re-run: only NULLs are ever filled, so a name or number curated here always
+    survives. Every item is re-checked against the register at write time, since a plan
+    can be minutes old.
+    """
+    raw_plan = request.form.get("plan")
+
+    try:
+        if raw_plan:
+            written = backfill_apply_plan(json.loads(raw_plan))
+            result = {**written, "suggestions": [], "applied": True}
+        else:
+            result = {
+                **backfill_build_plan(report_names=True),
+                "skipped": [],
+                "applied": False,
+            }
+    except (ValueError, TypeError) as exc:
+        return jsonify({"success": False, "error": f"Malformed plan: {exc}"}), 400
+    except Exception as exc:
+        logger.exception("Vessel backfill failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+
+    return jsonify({"success": True, **result})
+
+
 @app.route("/admin/ships/delete", methods=["POST"])
 @admin_required
 def delete_ship():
-    vessel_name = request.form.get("vessel_name")
+    vessel_id = request.form.get("vessel_id")
 
     with pg_session() as pg:
+        # Cached photos go with it (ON DELETE CASCADE); the files stay on disk, as
+        # they always have.
         pg.execute(
-            "DELETE FROM ship_pictures WHERE vessel_name = :vessel_name",
-            {"vessel_name": vessel_name},
+            "DELETE FROM vessels WHERE uid = :uid",
+            {"uid": int(vessel_id)},
         )
 
     return jsonify({"success": True})
+
+
+def _vessel_normalize(pg, text_value):
+    """A written name folded to its comparison key — prefix, case and punctuation
+    dropped. The DB function is the single definition of that folding (migration 0055),
+    so the query side asks it rather than reimplementing it in Python."""
+    return pg.execute(
+        "SELECT COALESCE(vessel_normalize(:value), '')", {"value": text_value}
+    ).scalar()
+
+
+# Undecorated, like /api/airportAutocomplete and /getAirliners: the vessel register is
+# reference data, not anybody's trips. (login_required could not be used here anyway —
+# it resolves the caller from a `username` view argument this route has no reason for.)
+@app.route("/vesselAutocomplete")
+def vesselAutocomplete():
+    """
+    Vessel suggestions for the ferry `reg` field, matched on name, IMO or MMSI alike.
+
+    Every field is returned and the client decides what to store — the IMO, in
+    preference to the MMSI and to the name, since only the numbers are unique and
+    permanent (see vessel_field.js). The name is never the stored form and never needs
+    to be: it is resolved back out of the number wherever a trip is displayed.
+    """
+    query = (request.args.get("query") or "").strip()
+    if len(query) < 2:
+        return jsonify([])
+
+    with pg_session() as pg:
+        rows = pg.execute(
+            """
+            SELECT v.uid, v.name, v.imo, v.mmsi, v.country_code, p.local_image_path,
+                   -- Whether this row is the one the query NAMES, as opposed to one it
+                   -- merely resembles. The same resolver every display goes through, so
+                   -- the field cannot disagree with what the trip will show.
+                   (v.uid = vessel_resolve(:query)) AS is_exact
+            FROM vessels v
+            -- The newest cached photo, so a picked suggestion can be eyeballed without
+            -- a second request — and without touching /getVesselPhoto, whose misses run
+            -- a Google Images search.
+            LEFT JOIN LATERAL (
+                SELECT local_image_path
+                FROM ship_pictures
+                WHERE vessel_id = v.uid AND local_image_path IS NOT NULL
+                ORDER BY fetch_date DESC NULLS LAST, uid DESC
+                LIMIT 1
+            ) p ON TRUE
+            WHERE v.name ILIKE :contains
+               -- Matched on the folded key as well, so the ship-type prefix and the
+               -- punctuation stop mattering: 'MS Fjordtroll', 'M/S Fjordtroll' and
+               -- 'Fjordtroll' are one search (vessel_normalize, migration 0055).
+               OR (:normalized <> '' AND v.name_key LIKE '%' || :normalized || '%')
+               OR v.imo LIKE :starts
+               OR v.mmsi LIKE :starts
+            -- Prefix matches first: typing "Sten" wants Stena Line's fleet before a
+            -- ship merely containing the letters. Folded, so 'M/S Sten…' ranks with it.
+            ORDER BY (v.name_key LIKE :normalized || '%') DESC NULLS LAST,
+                     v.name NULLS LAST, v.uid
+            LIMIT 15
+            """,
+            {
+                "contains": f"%{query}%",
+                "starts": f"{query}%",
+                # Folded here rather than in SQL so the empty result (a query of pure
+                # punctuation) can be guarded above instead of matching everything.
+                "normalized": _vessel_normalize(pg, query),
+                "query": query,
+            },
+        ).fetchall()
+
+    return jsonify(
+        [
+            {
+                # Kept for callers that want one string; the field itself reads the
+                # individual columns and prefers the IMO.
+                "value": row["imo"] or row["mmsi"] or (row["name"] or "").strip(),
+                "name": row["name"],
+                "imo": row["imo"],
+                "mmsi": row["mmsi"],
+                "country": row["country_code"],
+                "image": (
+                    f"/static/images/ship_pictures/{row['local_image_path']}"
+                    if row["local_image_path"]
+                    else None
+                ),
+                "exact": bool(row["is_exact"]),
+            }
+            for row in rows
+        ]
+    )
 
 
 @app.route("/getAirliners")
@@ -11980,21 +12230,20 @@ def get_current_trips_data(public_only=True):
     with pg_session() as pg:
         rows = pg.execute("""
             SELECT trips.*, airliners.manufacturer, airliners.model,
-                   sp.country_code AS vessel_country
+                   v.country_code AS vessel_country, v.vessel_name
             FROM trips
             -- Air trips store the ICAO type code in material_type; airliners carries
             -- the readable manufacturer/model shown in the popup.
             LEFT JOIN airliners ON trips.material_type = airliners.iata
-            -- A ship's flag state only lives in ship_pictures, so surface it here or
-            -- the flag could not appear until the photo had been fetched. vessel_name
-            -- is not unique, hence the lateral pick (duplicates agree on country).
+            -- A ship's flag state and name only live in `vessels`, so surface them
+            -- here or the flag could not appear until the photo had been fetched.
+            -- `reg` is resolved by name, IMO or MMSI (migration 0054).
             LEFT JOIN LATERAL (
-                SELECT country_code
-                FROM ship_pictures
-                WHERE vessel_name = trips.reg
-                ORDER BY fetch_date DESC NULLS LAST, uid DESC
-                LIMIT 1
-            ) sp ON TRUE
+                SELECT vessels.country_code, NULLIF(btrim(vessels.name), '') AS vessel_name
+                FROM vessels
+                WHERE trips.trip_type = 'ferry'
+                  AND vessels.uid = vessel_resolve(trips.reg)
+            ) v ON TRUE
             WHERE (utc_start_datetime + COALESCE(departure_delay, 0) * interval '1 second') <= NOW()
               AND (utc_end_datetime + COALESCE(arrival_delay, 0) * interval '1 second') >= NOW()
               AND (visibility = 'public' OR (visibility IS NULL AND trip_type NOT IN ('poi', 'accommodation', 'restaurant', 'walk', 'cycle', 'car')))

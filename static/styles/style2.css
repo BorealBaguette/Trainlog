@@ -1858,3 +1858,32 @@ html, body {
     min-height: calc(100% - 3.5rem);
   }
 }
+
+/* Hover preview for a cached ship photo — the admin register and the ferry
+   registration field on the trip forms. A thumbnail in the flow, with the full picture
+   as an absolutely positioned sibling that only becomes visible on hover, so the row
+   stays one line high and nothing reflows. */
+.ship-thumb {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+}
+.ship-thumb > img:first-child {
+  object-fit: cover;
+  border-radius: 3px;
+  cursor: zoom-in;
+}
+.ship-thumb .ship-thumb-full {
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  z-index: 1080;          /* above DataTables' header, below Bootstrap modals */
+  max-width: 420px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+  border-radius: 4px;
+  background: #fff;
+}
+.ship-thumb:hover .ship-thumb-full {
+  display: block;
+}

@@ -1574,19 +1574,25 @@ function processHiddenData(rowIdx, columns){
             
             var url = `{{url_for('getVesselPhoto')}}?vesselName=${reg}`
             $.get( url, function( data ) {
-                if(data.length > 0){
-                    country = data[2];
-                    var thumbnail = data[0];
+                // { image, link, country, name } — or null when nothing is found.
+                if(data && data.image){
+                    country = data.country || "";
+                    var thumbnail = data.image;
                     var attr = ''; 
                     var image = new Image();
                     image.src = thumbnail;
                     $('#preload').append(image);                    
-                    var link = data[1];
+                    var link = data.link;
                     
                     if (link && link.length > 0) {
                         attr = `©Vesselfinder.com`;
                     }
 
+                    // The lookup may know the ship's name where the row did not — a
+                    // trip logged by IMO or MMSI still reads as the ship.
+                    if (data.name) {
+                        $(`#vehiclePhoto${rowIdx}`).text(data.name);
+                    }
                     $(`#vehiclePhoto${rowIdx}`).attr("data-img", thumbnail);
                     $(`#vehiclePhoto${rowIdx}`).popover({
                         html: true,
@@ -2060,6 +2066,16 @@ function renderPlainText(data, type, row) {
     return data;
 }
 
+/* A ferry's `reg` holds whatever identified the ship to the user — its name, its IMO
+   or its MMSI. It always reads as the name: `vessel_name` is resolved server-side from
+   all three (migration 0054) and is absent only for a vessel we hold no record of,
+   which keeps showing what was typed. Sorting and filtering still work on the stored
+   value, so `type !== 'display'` is left alone. */
+function renderReg(data, type, row) {
+    if (type === 'display') return sanitize((row && row.vessel_name) || data || '');
+    return data;
+}
+
 function renderMaterialType(data, type, row){
     if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
         var adv = row.material_type_advanced || '';
@@ -2323,7 +2339,7 @@ var table = $('#tripRows');
             render: renderMaterialType,
             defaultContent: "",
         },
-        { data: 'reg', render: renderPlainText },
+        { data: 'reg', render: renderReg },
         { data: 'seat', render: renderPlainText },
         { data: 'notes', render: renderPlainText },
         { data: 'tags' },

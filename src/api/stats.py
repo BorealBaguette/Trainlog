@@ -140,24 +140,40 @@ def get_airport_cities(pg, stats):
 
 def attach_vessel_photos(pg, vehicles):
     """
-    Give each ferry row its cached vessel photo, if there is one.
+    Give each ferry row its cached vessel photo and ensign, if there are any.
 
-    Reads `ship_pictures` directly and only. The /getVesselPhoto endpoint must
-    not be used here: on a cache miss it runs a Google Images search and
-    downloads the result, so pointing a chart at it would fire a search per bar
-    per page load. A vessel with no cached photo simply gets none.
+    Reads the database directly and only. The /getVesselPhoto endpoint must not
+    be used here: on a cache miss it runs a Google Images search and downloads
+    the result, so pointing a chart at it would fire a search per bar per page
+    load. A vessel with no cached photo simply gets none.
+
+    Rows arrive keyed by vessel_display_name(reg) — the ship's name where it is
+    known, and the folded `reg` where it is not — so the lookup is built the same
+    way round: one entry per vessel under its own name, plus its IMO and MMSI for
+    the rows still showing a number because no name has been recorded yet.
     """
-    cached = {
-        row[0].strip().upper(): (row[1], row[2])
-        for row in pg.execute(
-            "SELECT vessel_name, local_image_path, country_code FROM ship_pictures"
-            " WHERE vessel_name IS NOT NULL AND local_image_path IS NOT NULL"
-        ).fetchall()
-    }
+    cached = {}
+    for row in pg.execute(
+        """
+        SELECT v.name, v.imo, v.mmsi, v.country_code, p.local_image_path
+        FROM vessels v
+        LEFT JOIN LATERAL (
+            SELECT local_image_path
+            FROM ship_pictures
+            WHERE vessel_id = v.uid AND local_image_path IS NOT NULL
+            ORDER BY fetch_date DESC NULLS LAST, uid DESC
+            LIMIT 1
+        ) p ON TRUE
+        """
+    ).fetchall():
+        entry = (row["local_image_path"], row["country_code"])
+        name = (row["name"] or "").strip()
+        for key in (name.upper(), row["imo"], row["mmsi"]):
+            if key:
+                cached.setdefault(key, entry)
 
     for vehicle in vehicles:
-        # `vehicle` is already UPPER(TRIM(reg)) from the query.
-        path, country = cached.get(vehicle["vehicle"], (None, None))
+        path, country = cached.get(vehicle["vehicle"].strip().upper(), (None, None))
         if path:
             vehicle["image"] = f"/static/images/ship_pictures/{path}"
         if country:
@@ -504,6 +520,11 @@ def fetch_stats(username, trip_type, year=None, datasets=ALL_DATASETS):
         for name in datasets:
             if name in CATEGORY_DATASETS:
                 query_func, id_column = CATEGORY_DATASETS[name]
+                # The vehicles dimension is registrations everywhere except at sea,
+                # where it is ships and one ship answers to three different written
+                # identifiers — see stats_vessels.
+                if name == "vehicles" and trip_type == "ferry":
+                    query_func = stats_sql.stats_vessels
                 stats[name] = get_stats_category(
                     pg=pg,
                     query_func=query_func,
@@ -513,8 +534,8 @@ def fetch_stats(username, trip_type, year=None, datasets=ALL_DATASETS):
                     year=year,
                 )
 
-        # A vessel's photo and ensign only exist server-side, in the
-        # ship_pictures cache. Aircraft need nothing here: the browser derives
+        # A vessel's photo and ensign only exist server-side, in `vessels` and
+        # its photo cache. Aircraft need nothing here: the browser derives
         # the flag from the tail number and fetches the photo itself.
         if trip_type == "ferry" and stats.get("vehicles"):
             attach_vessel_photos(pg, stats["vehicles"])

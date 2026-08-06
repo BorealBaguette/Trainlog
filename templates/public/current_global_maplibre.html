@@ -216,10 +216,13 @@ function vehicleHTML(trip) {
   if (!info && !reg) return '';
 
   const type = info ? `<span class="popup-vehicle-type">${esc(info.label)}</span>` : '';
+  // A ship is logged by name, IMO or MMSI and always shown by name (migration 0054);
+  // `vessel_name` is the resolved one, absent for a vessel we hold no record of.
+  const vesselName = isFerry ? (trip.vessel_name || '').trim() : '';
   const regEl = reg
     ? `<span class="popup-reg" data-reg="${esc(reg)}" data-kind="${isAir ? 'air' : 'ship'}"
-             data-country="${esc(trip.vessel_country || '')}">
-         <span class="popup-reg-flag"></span><span class="popup-reg-text">${esc(reg)}</span>
+             data-country="${esc(trip.vessel_country || '')}" data-name="${esc(vesselName)}">
+         <span class="popup-reg-flag"></span><span class="popup-reg-text">${esc(vesselName || reg)}</span>
        </span>`
     : '';
   // The shape shows by default and doubles as the photo's click target; with no
@@ -254,9 +257,10 @@ function hydrateVehicle(popupEl) {
     };
 
     // Both kinds get their flag up front: aircraft from the registration prefix,
-    // ships from the ship_pictures join. A vessel absent from that cache has no
-    // country until something fetches it — the photo response fills it in below.
+    // ships from the vessel join. A vessel we hold no record of has no country until
+    // something fetches it — the photo response fills it in below.
     const knownCountry = regEl.getAttribute('data-country');
+    const knownName = regEl.getAttribute('data-name');
     if (isAir) {
       loadRegistrations(REGISTRATIONS_URL)
         .then(registrations => showFlag(regCountry(reg, registrations)));
@@ -300,7 +304,12 @@ function hydrateVehicle(popupEl) {
         media.classList.remove('is-loading');
         // The popup may have been closed/replaced while the request was in flight.
         if (!media.isConnected) return;
-        if (!isAir && !knownCountry && photo) showFlag(photo.country);
+        if (!isAir && photo) {
+          if (!knownCountry) showFlag(photo.country);
+          // The lookup may know the ship's name where the join did not.
+          const text = regEl.querySelector('.popup-reg-text');
+          if (!knownName && photo.name && text) text.textContent = photo.name;
+        }
         if (!photo) {                       // nothing found — retire the affordance
           media.classList.remove('is-clickable');
           btn.remove();
@@ -309,7 +318,7 @@ function hydrateVehicle(popupEl) {
         photoEl = document.createElement('div');
         photoEl.innerHTML = photoHTML(photo);
         media.appendChild(photoEl);
-        // ship_pictures rows can outlive their file on disk (the whole local cache
+        // Cached photo rows can outlive their file on disk (the whole local cache
         // is absent in dev) — drop the frame rather than show a broken icon.
         const pic = photoEl.querySelector('img');
         if (pic) pic.addEventListener('error', () => {
