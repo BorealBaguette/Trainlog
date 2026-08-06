@@ -1572,7 +1572,13 @@ function processHiddenData(rowIdx, columns){
             var reg = col.data;
             var country = ""
             
-            var url = `{{url_for('getVesselPhoto')}}?vesselName=${reg}`
+            // The trip's date, so a crossing from before a rename keeps the name and
+            // flag the ship carried then. The sentinels (1 / -1) are "no date"; the
+            // lookup then answers with the current identity, which is all there is.
+            var tripData = tableObject.row(rowIdx).data() || {};
+            var tripAt = (typeof tripData.start_datetime === 'string') ? tripData.start_datetime : '';
+            var url = `{{url_for('getVesselPhoto')}}?vesselName=${encodeURIComponent(reg)}`
+                    + (tripAt ? `&at=${encodeURIComponent(tripAt)}` : '')
             $.get( url, function( data ) {
                 // { image, link, country, name } — or null when nothing is found.
                 if(data && data.image){

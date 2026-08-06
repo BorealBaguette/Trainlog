@@ -111,11 +111,18 @@ def lookup(identifiers, prop):
     return found
 
 
+# Which table each identifier lives on since migration 0056: the IMO is the hull's, the
+# MMSI belongs to one of its registrations.
+_NUMBER_TABLES = {"imo": "vessels", "mmsi": "vessel_registrations"}
+
+
 def _claimed_elsewhere(pg, column, value, uid=None):
-    """Whether a vessel other than `uid` already holds this IMO/MMSI."""
+    """Whether a row other than `uid` already holds this IMO/MMSI. `uid` is the hull for
+    an IMO and the registration for an MMSI — the row that would be written."""
+    table = _NUMBER_TABLES[column]
     return bool(
         pg.execute(
-            f"SELECT 1 FROM vessels WHERE {column} = :value"
+            f"SELECT 1 FROM {table} WHERE {column} = :value"
             " AND (CAST(:uid AS INTEGER) IS NULL OR uid <> CAST(:uid AS INTEGER)) LIMIT 1",
             {"value": value, "uid": uid},
         ).fetchone()
@@ -178,10 +185,16 @@ def build_plan(report_names=False):
     suggestions = []
 
     with pg_session() as pg:
+        # A hull with its current identity, flattened — the three fields the passes
+        # below fill in, wherever they happen to live now (migration 0056).
         vessels = [
             dict(row._mapping)
             for row in pg.execute(
-                "SELECT uid, name, imo, mmsi FROM vessels"
+                """
+                SELECT v.uid, v.imo, r.uid AS registration_id, r.name, r.mmsi
+                FROM vessels v
+                LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+                """
             ).fetchall()
         ]
 
@@ -263,29 +276,60 @@ def apply_plan(plan):
     with pg_session() as pg:
         for item in plan.get("filled") or []:
             vessel = pg.execute(
-                "SELECT uid, name, imo, mmsi FROM vessels WHERE uid = :uid",
+                """
+                SELECT v.uid, v.imo, r.uid AS registration_id, r.name, r.mmsi
+                FROM vessels v
+                LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+                WHERE v.uid = :uid
+                """,
                 {"uid": item["uid"]},
             ).fetchone()
             if not vessel:
                 skipped.append(f"vessel #{item['uid']} no longer exists")
                 continue
 
-            changes = _proposed_changes(dict(vessel._mapping), item.get("changes") or {})
+            vessel = dict(vessel._mapping)
+            changes = _proposed_changes(vessel, item.get("changes") or {})
+            registration_id = vessel["registration_id"]
+
             for column in ("imo", "mmsi"):
-                if column in changes and _claimed_elsewhere(pg, column, changes[column], item["uid"]):
+                if column not in changes:
+                    continue
+                owner = vessel["uid"] if column == "imo" else registration_id
+                if _claimed_elsewhere(pg, column, changes[column], owner):
                     skipped.append(
                         f"vessel #{item['uid']}: {column.upper()} {changes[column]} is taken"
                     )
                     changes.pop(column)
+
+            # The name and MMSI belong to a registration; a hull that has none cannot
+            # take them until someone records one.
+            if not registration_id:
+                for column in ("name", "mmsi"):
+                    if changes.pop(column, None):
+                        skipped.append(
+                            f"vessel #{item['uid']}: no registration to put its {column} on"
+                        )
             if not changes:
                 continue
 
-            assignments = ", ".join(f"{c} = :{c}" for c in changes)
-            pg.execute(
-                f"UPDATE vessels SET {assignments}, updated_on = CURRENT_TIMESTAMP"
-                " WHERE uid = :uid",
-                {**changes, "uid": item["uid"]},
-            )
+            hull_changes = {k: v for k, v in changes.items() if k == "imo"}
+            registration_changes = {k: v for k, v in changes.items() if k != "imo"}
+
+            if hull_changes:
+                assignments = ", ".join(f"{c} = :{c}" for c in hull_changes)
+                pg.execute(
+                    f"UPDATE vessels SET {assignments}, updated_on = CURRENT_TIMESTAMP"
+                    " WHERE uid = :uid",
+                    {**hull_changes, "uid": vessel["uid"]},
+                )
+            if registration_changes:
+                assignments = ", ".join(f"{c} = :{c}" for c in registration_changes)
+                pg.execute(
+                    f"UPDATE vessel_registrations SET {assignments},"
+                    " updated_on = CURRENT_TIMESTAMP WHERE uid = :uid",
+                    {**registration_changes, "uid": registration_id},
+                )
             applied_filled.append({**item, "changes": changes})
 
         for item in plan.get("created") or []:
@@ -305,9 +349,19 @@ def apply_plan(plan):
                 skipped.append(f"{reg}: nothing left to identify it by")
                 continue
 
-            pg.execute(
-                "INSERT INTO vessels (name, imo, mmsi) VALUES (:name, :imo, :mmsi)", row
-            )
+            # A new ship is a hull plus the one identity we know it by.
+            vessel_id = pg.execute(
+                "INSERT INTO vessels (imo) VALUES (:imo) RETURNING uid",
+                {"imo": row["imo"]},
+            ).scalar()
+            if row["name"] or row["mmsi"]:
+                pg.execute(
+                    """
+                    INSERT INTO vessel_registrations (vessel_id, name, mmsi)
+                    VALUES (:vessel_id, :name, :mmsi)
+                    """,
+                    {"vessel_id": vessel_id, "name": row["name"], "mmsi": row["mmsi"]},
+                )
             applied_created.append({**item, **row})
 
     return {"filled": applied_filled, "created": applied_created, "skipped": skipped}

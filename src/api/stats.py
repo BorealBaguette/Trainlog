@@ -147,28 +147,37 @@ def attach_vessel_photos(pg, vehicles):
     the result, so pointing a chart at it would fire a search per bar per page
     load. A vessel with no cached photo simply gets none.
 
-    Rows arrive keyed by vessel_display_name(reg) — the ship's name where it is
-    known, and the folded `reg` where it is not — so the lookup is built the same
-    way round: one entry per vessel under its own name, plus its IMO and MMSI for
-    the rows still showing a number because no name has been recorded yet.
+    Rows arrive keyed by vessel_display_name(reg, NULL) — the hull's CURRENT name
+    where it is known, and the folded `reg` where it is not — so the lookup is
+    built the same way round: one entry per hull under its current name, plus every
+    key a bar might still be showing instead (its IMO, its synthetic id, and the
+    MMSI of any registration) for the ships no name has been recorded for.
     """
     cached = {}
     for row in pg.execute(
         """
-        SELECT v.name, v.imo, v.mmsi, v.country_code, p.local_image_path
+        SELECT v.imo, v.trainlog_id, cur.name, cur.country_code,
+               p.local_image_path,
+               ARRAY(SELECT a.mmsi FROM vessel_registrations a
+                     WHERE a.vessel_id = v.uid AND a.mmsi IS NOT NULL) AS mmsis
         FROM vessels v
+        -- The hull as it is now: that is what the chart is labelled with.
+        LEFT JOIN vessel_registrations cur ON cur.uid = vessel_identity(v.uid, NULL)
+        -- Its newest photo, from any registration — a bar showing one ship is better
+        -- served by an older picture of it than by none.
         LEFT JOIN LATERAL (
-            SELECT local_image_path
-            FROM ship_pictures
-            WHERE vessel_id = v.uid AND local_image_path IS NOT NULL
-            ORDER BY fetch_date DESC NULLS LAST, uid DESC
+            SELECT sp.local_image_path
+            FROM ship_pictures sp
+            JOIN vessel_registrations a ON a.uid = sp.registration_id
+            WHERE a.vessel_id = v.uid AND sp.local_image_path IS NOT NULL
+            ORDER BY (a.uid = cur.uid) DESC, sp.fetch_date DESC NULLS LAST, sp.uid DESC
             LIMIT 1
         ) p ON TRUE
         """
     ).fetchall():
         entry = (row["local_image_path"], row["country_code"])
         name = (row["name"] or "").strip()
-        for key in (name.upper(), row["imo"], row["mmsi"]):
+        for key in [name.upper(), row["imo"], row["trainlog_id"], *(row["mmsis"] or [])]:
             if key:
                 cached.setdefault(key, entry)
 
