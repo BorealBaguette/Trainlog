@@ -612,6 +612,11 @@ function updateCountryNames(selectElement, formatFlagEmoji = false) {
   const options = selectElement.options;
   for (let i = 0; i < options.length; i++) {
       const code = options[i].getAttribute('data-code');
+      // A select may carry a placeholder option with no country at all. Intl's
+      // DisplayNames.of() throws a RangeError on anything that is not a region code, and
+      // an uncaught throw here kills the rest of the caller's ready block — which is how
+      // an empty first option once left a whole form unbound and submitting natively.
+      if (!code) continue;
       const countryName = regionNames.of(code); // Get the country name from Intl.DisplayNames
       options[i].textContent = (formatFlagEmoji ? getFlagEmoji(options[i].value) : options[i].value) + '\xa0\xa0' + countryName; // Update option text
   }

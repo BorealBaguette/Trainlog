@@ -27,10 +27,11 @@
  *   onLoad(img) fires after the image has decoded — hook container relayout here,
  *   since the height it adds is not known until then.
  *
- * fetchAircraftPhoto(reg) / fetchVesselPhoto(endpoint, reg)
+ * fetchAircraftPhoto(reg) / fetchVesselPhoto(endpoint, reg, at)
  *   Resolve a registration to { thumb, link, attr, country } or null; a vessel also
  *   resolves a `name`, since a ship may be logged by name, IMO or MMSI and is always
- *   shown by name. Both are memoised per registration for the page's lifetime, so
+ *   shown by name — the one it carried at `at`, the trip's own date, so a crossing keeps
+ *   the ship as it was rather than as it is now. Both are memoised per registration for the page's lifetime, so
  *   reopening a popup or re-toggling a leg costs nothing and a repeated vehicle is
  *   fetched once.
  *
@@ -118,11 +119,14 @@
     return photoCache[key];
   }
 
-  function fetchVesselPhoto(endpoint, reg) {
+  function fetchVesselPhoto(endpoint, reg, at) {
     if (!reg) return Promise.resolve(null);
-    var key = 'ship:' + reg;
+    // `at` is part of the key: one ship answers with different names on different dates
+    // once it has been renamed, so two trips on the same hull are two lookups.
+    var key = 'ship:' + reg + '@' + (at || '');
     if (!photoCache[key]) {
-      photoCache[key] = fetch(endpoint + '?vesselName=' + encodeURIComponent(reg))
+      photoCache[key] = fetch(endpoint + '?vesselName=' + encodeURIComponent(reg)
+                              + (at ? '&at=' + encodeURIComponent(at) : ''))
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
           // The endpoint answers `null` when it finds nothing — guard the shape

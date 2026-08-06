@@ -1010,7 +1010,7 @@ function renderPublicAirframe($container, info, reg) {
    `name` is the resolved one from the trip's vessel join, absent for a vessel we hold
    no record of — the raw reg then stands in, and is replaced if the photo lookup
    turns out to know the ship after all. */
-function renderPublicVessel($container, reg, country, name) {
+function renderPublicVessel($container, reg, country, name, at) {
     var $head = vehiclePanel($container, null);
     var $media = $('<div class="publicVehicleMedia"></div>').appendTo($container);
     var showFlag = appendReg($head, name || reg);
@@ -1018,7 +1018,7 @@ function renderPublicVessel($container, reg, country, name) {
     // until something fetches them, so fall back to the photo response.
     showFlag(country);
     enablePhotoToggle($head, $media, function() {
-        var promise = fetchVesselPhoto(VESSEL_PHOTO_URL, reg);
+        var promise = fetchVesselPhoto(VESSEL_PHOTO_URL, reg, at);
         if (!country || !name) {
             promise.then(function(photo) {
                 if (!photo) return;
@@ -1404,7 +1404,9 @@ function buildItinerary(trips, prices) {
             renderPublicAirframe(tsContainer, airInfo, tripReg);
         } else if (trip.trip.type === 'ferry' && tripReg) {
             tsContainer = $('<div>').addClass('publicVehicle');
-            renderPublicVessel(tsContainer, tripReg, trip.trip.vessel_country, trip.trip.vessel_name);
+            // The trip's own date, so the lookup answers with the ship as it was then.
+            renderPublicVessel(tsContainer, tripReg, trip.trip.vessel_country,
+                               trip.trip.vessel_name, trip.trip.start_datetime);
         }
 
         let endTimeDisplay, startTimeDisplay;

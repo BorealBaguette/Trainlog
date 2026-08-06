@@ -18,9 +18,8 @@ SELECT
     -- client-side, but a ship's only lives in `vessels`, so surface it here —
     -- otherwise the flag could not appear until the photo had been fetched.
     v.country_code AS vessel_country,
-    -- The ship's name, whichever of name/IMO/MMSI the user actually typed into `reg`
-    -- (migration 0054). NULL for a vessel we hold no record of, and the display then
-    -- falls back to `reg` as written.
+    -- The ship's name as it was on this trip's date (migration 0056). NULL for a
+    -- vessel we hold no record of, and the display then falls back to `reg` as written.
     v.vessel_name,
     CASE
         WHEN NOW() > base.utc_filtered_end_datetime
@@ -60,14 +59,21 @@ SELECT
     END AS logo_url
 FROM base
 LEFT JOIN airliners ON base.material_type = airliners.iata
--- The vessel `reg` names, by name, IMO or MMSI (vessel_resolve, migration 0054).
+-- The ship `reg` names, AS IT WAS ON THIS TRIP'S DATE: `reg` holds the hull, and the
+-- name and flag come from whichever registration was in force then (migration 0056).
+-- A crossing keeps the name the ship carried that day even after it is sold and
+-- renamed; an undated trip takes the current identity.
+--
 -- Ferries only: an aircraft registration is not a ship and must not be looked up as
 -- one, and the lookup would otherwise run for every trip of every type.
 LEFT JOIN LATERAL (
-    SELECT vessels.country_code, NULLIF(btrim(vessels.name), '') AS vessel_name
-    FROM vessels
+    SELECT r.country_code, NULLIF(btrim(r.name), '') AS vessel_name
+    FROM vessel_registrations r
     WHERE base.trip_type = 'ferry'
-      AND vessels.uid = vessel_resolve(base.reg)
+      AND r.uid = vessel_identity(
+              vessel_resolve(base.reg),
+              base.utc_filtered_start_datetime
+          )
 ) v ON TRUE
 -- The trip's first operator, resolved through operator_aliases. Replaces an exact
 -- match of operators.short_name against the whole `operator` text, which needed an
