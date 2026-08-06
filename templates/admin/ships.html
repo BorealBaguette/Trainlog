@@ -225,14 +225,39 @@
                                 <div class="col-md-3">
                                     <label for="period_country" class="form-label">Flag</label>
                                     {# selectpicker for the live search: 250 countries is too many
-                                       to scroll, and the same widget the ticket and trip forms use. #}
+                                       to scroll, and the same widget the ticket and trip forms use.
+                                       No empty <option> of our own: title= makes bootstrap-select
+                                       insert its own placeholder option at index 0, and a second
+                                       blank one only shows up as an unlabelled first row in the
+                                       list. Clearing selects the plugin's. #}
+                                    {# container="body": the menu lives in a modal-dialog-scrollable,
+                                       whose body is an overflow container — drawn in place, the
+                                       menu is clipped by it, and since the field sits near the
+                                       bottom of the screen it opens upwards and loses its search
+                                       box under the modal header. Appended to <body> it is clipped
+                                       by nothing; bootstrap-select positions it against the button
+                                       and lifts its z-index above the modal. #}
                                     <select class="form-control selectpicker" id="period_country" name="country_code"
-                                            data-live-search="true" data-size="10" title="—">
-                                        <option value=""></option>
+                                            data-live-search="true" data-size="10" title="—"
+                                            data-container="body">
                                         {% for code, emoji in country_list.items() %}
                                             <option value="{{ code }}" data-code="{{ code }}">{{ emoji }}</option>
                                         {% endfor %}
                                     </select>
+                                    {# Named and initialised here, while the document is still
+                                       parsing, and NOT in $(document).ready. bootstrap-select
+                                       auto-initialises every .selectpicker from its own
+                                       DOMContentLoaded listener, and jQuery's ready callbacks
+                                       run after that (Deferred.then defers to a timeout), so an
+                                       updateCountryNames() at ready rewrites the <option> text
+                                       long after the menu has been built from it — which is why
+                                       the list showed bare flags with no country names. Doing it
+                                       here means the widget is built from the finished options
+                                       and the auto-init is a no-op. #}
+                                    <script>
+                                        updateCountryNames(document.getElementById('period_country'), true);
+                                        $('#period_country').selectpicker();
+                                    </script>
                                 </div>
                             </div>
 
@@ -310,14 +335,8 @@
             },
         });
 
-        // After the table is up: the picker is a modal detail, and nothing it might
-        // throw should be able to leave the register itself uninitialised.
-        // Names into the options first, then the widget over them — bootstrap-select
-        // renders the option text as it finds it, so refreshing after is what makes the
-        // search match on country names rather than on bare codes.
-        updateCountryNames(document.getElementById('period_country'), true);
-        $('#period_country').selectpicker();
-
+        // The country picker is named and built beside its own <select>, before
+        // DOMContentLoaded — see the comment there.
     });
 
     /* Bound by delegation and outside $(document).ready on purpose. These were inside
@@ -622,7 +641,14 @@
         $('#period_effective_date').val(r.effective_date || '');
         $('#period_name').val(r.name || '');
         $('#period_mmsi').val(r.mmsi || '');
-        $('#period_country').val(r.country || '').selectpicker('refresh');
+        /* selectpicker('val'), never .val() + 'refresh'. bootstrap-select 1.14.0-beta3
+           rebuilds its option cache by APPENDING to it (buildData pushes onto
+           selectpicker.main.data instead of replacing it), so every refresh doubles the
+           list and leaves the previously selected copy still marked selected — which is
+           how editing a second period put two flags side by side in the button and a
+           second, unlabelled set of rows in the dropdown. 'val' sets the selection
+           through the widget and re-renders without touching the cache. */
+        $('#period_country').selectpicker('val', r.country || '');
         $('#periodSubmit').text('Save period');
         $('#periodFormTitle').text('Editing the period from '
             + (r.effective_date || 'the start'));
@@ -634,8 +660,11 @@
 
     function clearPeriodForm() {
         $('#periodForm')[0].reset();
-        // reset() restores the <select>'s value but not the widget drawn over it.
-        $('#period_country').selectpicker('refresh');
+        // reset() restores the <select>'s value but not the widget drawn over it — and
+        // not the widget's own idea of what is selected. 'val' with an empty string
+        // deselects every option, so the DOM falls back to the placeholder at index 0.
+        // (Not 'refresh': see editPeriod.)
+        $('#period_country').selectpicker('val', '');
         $('#period_vessel_id').val(periodsVesselId);
         $('#period_registration_id').val('');
         $('#periodSubmit').text('Add period');
