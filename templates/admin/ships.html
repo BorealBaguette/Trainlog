@@ -3,14 +3,52 @@
 
 {% include nav %}
 
+<style>
+    /* DataTables 2 lays each header out as a flex row with `justify-content:
+       space-between` and the title at `flex-grow: 1`, so the sort arrows are pushed to
+       the far right edge of the column. On a narrow header they land right after the
+       label, on a wide one they drift halfway across the table and read as belonging to
+       the next column. Stop the title growing and every arrow sits the same 4px after
+       its own label. */
+    #shipTable thead th div.dt-column-header { justify-content: flex-start; }
+    #shipTable thead th span.dt-column-title { flex-grow: 0; }
+
+    /* .ship-thumb (the hover photo preview) is shared with the trip forms: style2.css. */
+</style>
+
 <div class="container">
     <h1 class="mt-3">Ships</h1>
-    <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#shipModal" onclick="clearForm()">Add Ship</button>
+    <p class="text-muted">
+        One row per ship. A trip's registration matches on the name, the IMO or the MMSI —
+        whichever the user typed — and always displays as the name.
+    </p>
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
+        <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#shipModal" onclick="clearForm()">Add Ship</button>
+        <!-- Wikidata backfill. Preview first: the dry run reports exactly what would
+             change and writes nothing, and both take tens of seconds (several SPARQL
+             round trips to an external service). -->
+        <button type="button" id="backfillPreviewBtn" class="btn btn-outline-secondary" onclick="previewBackfill()">
+            <i class="fa-solid fa-magnifying-glass"></i> Preview backfill
+        </button>
+        <!-- Enabled by a preview, and applies that preview: the second press sends the
+             plan back rather than asking Wikidata again, so what gets written is what
+             was shown. -->
+        <button type="button" id="backfillApplyBtn" class="btn btn-outline-success" onclick="applyBackfill()" disabled>
+            <i class="fa-solid fa-cloud-arrow-down"></i> Apply preview
+        </button>
+        <span id="backfillSpinner" class="text-muted" style="display:none;">
+            <i class="fa-solid fa-spinner fa-spin"></i> <span>Querying Wikidata…</span>
+        </span>
+    </div>
+    <div id="backfillResult" class="alert alert-secondary" style="display:none; max-height:400px; overflow:auto;"></div>
     <table id="shipTable">
         <thead>
             <tr>
-                <th scope="col">Vessel Name</th>
-                <th scope="col">Country Code</th>
+                <th scope="col">Name</th>
+                <th scope="col">Trips</th>
+                <th scope="col">IMO</th>
+                <th scope="col">MMSI</th>
+                <th scope="col">Registration country</th>
                 <th scope="col">Image</th>
                 <th scope="col" data-orderable="false">Actions</th>
             </tr>
@@ -18,13 +56,46 @@
         <tbody>
             {% for ship in shipList %}
                 <tr>
-                    <td>{{ ship.vessel_name }}</td>
-                    <td>{{ ship.country_code }}</td>
-                    <td><img src="/static/images/ship_pictures/{{ ship.local_image_path }}" width="200px"></td>
+                    <td>{{ ship.name or '' }}</td>
+                    <td>{{ ship.trips }}</td>
+                    {# The numbers link out to vesselfinder — the same source the cached
+                       photos are credited to, so a doubtful row can be checked against
+                       the place the photo came from. #}
+                    <td>
+                        {% if ship.imo %}
+                            <a href="https://www.vesselfinder.com/vessels/details/{{ ship.imo }}"
+                               target="_blank" rel="noopener noreferrer">{{ ship.imo }}</a>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if ship.mmsi %}
+                            <a href="https://www.vesselfinder.com/?mmsi={{ ship.mmsi }}"
+                               target="_blank" rel="noopener noreferrer">{{ ship.mmsi }}</a>
+                        {% endif %}
+                    </td>
+                    {# Filled in on ready with the flag emoji + localised country name
+                       (getFlagEmoji / regionNames, both already global — see util.js and
+                       bootstrap/layout.html). The code stays as the cell's text until
+                       then, so a JS failure degrades to what was shown before. #}
+                    <td class="ship-country" data-code="{{ ship.country_code or '' }}">{{ ship.country_code or '' }}</td>
+                    <td>
+                        {% if ship.local_image_path %}
+                            {# Thumbnail only, and lazily: several hundred ships means the
+                               page would otherwise fetch the whole photo library on load.
+                               The full picture appears on hover. #}
+                            <span class="ship-thumb">
+                                <img src="/static/images/ship_pictures/{{ ship.local_image_path }}"
+                                     width="80" height="48" loading="lazy" decoding="async" alt="">
+                                <img class="ship-thumb-full"
+                                     src="/static/images/ship_pictures/{{ ship.local_image_path }}"
+                                     loading="lazy" decoding="async" alt="">
+                            </span>
+                        {% endif %}
+                    </td>
                     <td>
                         <button class="btn btn-warning btn-sm" data-bs-toggle="modal" data-bs-target="#shipModal"
-                            onclick="editShip('{{ ship.vessel_name }}', '{{ ship.country_code }}', '{{ ship.local_image_path }}')"><i class="fa-regular fa-pen-to-square"></i></button>
-                        <button class="btn btn-danger btn-sm" onclick="deleteShip('{{ ship.vessel_name }}')"><i class="fa-regular fa-trash-can"></i></button>
+                            onclick='editShip({{ ship | tojson }})'><i class="fa-regular fa-pen-to-square"></i></button>
+                        <button class="btn btn-danger btn-sm" onclick="deleteShip({{ ship.uid }})"><i class="fa-regular fa-trash-can"></i></button>
                     </td>
                 </tr>
             {% endfor %}
@@ -42,20 +113,43 @@
             </div>
             <div class="modal-body">
                 <form id="shipForm" enctype="multipart/form-data">
-                    <input type="hidden" id="original_vessel_name" name="original_vessel_name">
+                    <input type="hidden" id="vessel_id" name="vessel_id">
                     <div class="form-group">
-                        <label for="vessel_name">Vessel Name</label>
-                        <input type="text" class="form-control" id="vessel_name" name="vessel_name" required>
+                        <label for="name">Name</label>
+                        <input type="text" class="form-control" id="name" name="name">
                     </div>
                     <div class="form-group">
-                        <label for="country_code">Country Code</label>
-                        <input type="text" class="form-control" id="country_code" name="country_code" required>
+                        <label for="imo">IMO</label>
+                        <input type="text" class="form-control" id="imo" name="imo"
+                               inputmode="numeric" pattern="[0-9]{7}" placeholder="7 digits">
+                    </div>
+                    <div class="form-group">
+                        <label for="mmsi">MMSI</label>
+                        <input type="text" class="form-control" id="mmsi" name="mmsi"
+                               inputmode="numeric" pattern="[0-9]{9}" placeholder="9 digits">
+                    </div>
+                    <div class="form-group">
+                        <label for="country_code">Registration country</label>
+                        {# The ship's flag state. Stored as the 2-letter code it always
+                           was; picked from the same country list as every other country
+                           select on the site, so it cannot be typed wrong. #}
+                        <select class="form-control selectpicker" id="country_code" name="country_code"
+                                data-live-search="true" data-size="10" title="—">
+                            <option value=""></option>
+                            {% for code, emoji in country_list.items() %}
+                                <option value="{{ code }}" data-code="{{ code }}">{{ emoji }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                     <div class="form-group">
                         <label for="ship_picture">Picture</label>
                         <input type="file" class="form-control" id="ship_picture" name="ship_picture">
                     </div>
-                    <button type="submit" class="btn btn-primary">Save</button>
+                    <!-- At least one identifier is required; which one is up to the admin,
+                         so no single field can be marked required. -->
+                    <small class="form-text text-muted">Name, IMO or MMSI — at least one.</small>
+                    <div id="shipFormError" class="text-danger mt-2" style="display: none;"></div>
+                    <button type="submit" class="btn btn-primary mt-2">Save</button>
                 </form>
             </div>
         </div>
@@ -65,8 +159,24 @@
 <!-- Initialize DataTable -->
 <script>
     $(document).ready(function() {
+        // Before DataTables initialises, so the rendered name is what it indexes for
+        // sorting and search — and so rows on later pages, which it detaches from the
+        // DOM, are converted too.
+        $('td.ship-country').each(function() {
+            var code = $(this).data('code');
+            if (!code) { $(this).text(''); return; }
+            // regionNames.of() throws on anything that is not a region code, and
+            // country_code is free text an admin typed.
+            var name;
+            try { name = regionNames.of(code); } catch (e) { name = code; }
+            $(this).text(getFlagEmoji(code) + '\u00a0\u00a0' + name);
+        });
+
         $('#shipTable').DataTable({
             responsive: true,
+            // Busiest ships first: those are the ones whose missing name or number is
+            // actually showing up on somebody's trips.
+            order: [[1, 'desc']],
             language: {
                 info: "{{dtInfo}}",
                 paginate: {
@@ -86,9 +196,15 @@
             },
         });
 
+        // After the table is up: the picker is a modal detail, and nothing it might
+        // throw should be able to leave the register itself uninitialised.
+        updateCountryNames(document.getElementById('country_code'), true);
+        $('#country_code').selectpicker();
+
         $('#shipForm').on('submit', function(e) {
             e.preventDefault();
             const formData = new FormData(this);
+            $('#shipFormError').hide();
 
             $.ajax({
                 type: 'POST',
@@ -99,30 +215,142 @@
                 success: function(response) {
                     location.reload();
                 },
-                error: function(error) {
-                    console.log('Error:', error);
+                // A duplicate IMO/MMSI or a malformed one comes back as a message
+                // rather than a reload — the admin has to change something first.
+                error: function(xhr) {
+                    var message = (xhr.responseJSON && xhr.responseJSON.error) || 'Could not save';
+                    $('#shipFormError').text(message).show();
                 }
             });
         });
     });
 
-    function editShip(vessel_name, country_code, local_image_path) {
-        $('#original_vessel_name').val(vessel_name);
-        $('#vessel_name').val(vessel_name);
-        $('#country_code').val(country_code);
+    // Only NULLs are ever filled, so anything curated here survives a re-run — the
+    // buttons can be pressed again whenever the register drifts.
+    //
+    // Two steps on purpose. The preview is the slow half (it queries Wikidata) and
+    // writes nothing; applying posts that same plan back, so the rows written are the
+    // rows that were shown, and a second Wikidata round trip cannot quietly disagree
+    // with the first.
+    var backfillPlan = null;
+
+    function backfillRequest(data, done) {
+        $('#backfillSpinner').show();
+        $('#backfillResult').hide();
+        $('#backfillPreviewBtn, #backfillApplyBtn').prop('disabled', true);
+        $.ajax({
+            type: 'POST',
+            url: '/admin/ships/backfill',
+            data: data,
+            success: function(res) {
+                $('#backfillSpinner').hide();
+                $('#backfillResult').html(renderBackfill(res)).show();
+                done(res);
+            },
+            error: function(xhr) {
+                $('#backfillSpinner').hide();
+                $('#backfillPreviewBtn').prop('disabled', false);
+                var message = (xhr.responseJSON && xhr.responseJSON.error) || 'Backfill failed';
+                $('#backfillResult').text(message).show();
+            }
+        });
+    }
+
+    function previewBackfill() {
+        $('#backfillSpinner').find('span').text('Querying Wikidata…');
+        backfillRequest({}, function(res) {
+            backfillPlan = { filled: res.filled, created: res.created };
+            $('#backfillPreviewBtn').prop('disabled', false);
+            // Nothing to write is not an error, but there is nothing to apply either.
+            $('#backfillApplyBtn').prop('disabled', !(res.filled.length || res.created.length));
+        });
+    }
+
+    function applyBackfill() {
+        if (!backfillPlan) return;
+        var total = backfillPlan.filled.length + backfillPlan.created.length;
+        if (!confirm('Write the ' + total + ' change(s) shown above?')) return;
+        $('#backfillSpinner').find('span').text('Writing…');
+        backfillRequest({ plan: JSON.stringify(backfillPlan) }, function(res) {
+            // The plan has been consumed and the table underneath is now stale.
+            backfillPlan = null;
+            $('#backfillPreviewBtn').prop('disabled', false);
+            setTimeout(function() { location.reload(); }, 4000);
+        });
+    }
+
+    function renderBackfill(res) {
+        var esc = function(v) { return $('<div>').text(v == null ? '' : v).html(); };
+        var out = '<strong>' + (res.applied ? 'Applied' : 'Preview — nothing written yet') + '</strong><ul>';
+        out += '<li>' + res.filled.length + (res.applied ? ' vessel(s) completed' : ' existing vessel(s) would be completed') + '</li>';
+        out += '<li>' + res.created.length + (res.applied ? ' vessel(s) created' : ' vessel(s) would be created') + ' from unmatched trip regs</li>';
+        if (res.suggestions.length) {
+            out += '<li>' + res.suggestions.length + ' name-only candidate(s) — enter these by hand</li>';
+        }
+        if (res.skipped && res.skipped.length) {
+            out += '<li>' + res.skipped.length + ' skipped (the register moved since the preview)</li>';
+        }
+        out += '</ul>';
+
+        if (res.filled.length) {
+            out += '<details open><summary>Completed</summary><ul>';
+            res.filled.forEach(function(f) {
+                var parts = Object.keys(f.changes).map(function(k) { return k + '=' + esc(f.changes[k]); });
+                out += '<li>#' + f.uid + ' ' + esc(f.label) + ': ' + parts.join(', ') + '</li>';
+            });
+            out += '</ul></details>';
+        }
+        if (res.created.length) {
+            out += '<details open><summary>Created</summary><ul>';
+            res.created.forEach(function(c) {
+                out += '<li>' + esc(c.reg) + ' → ' + esc(c.name || '(no name)')
+                     + ' (IMO ' + esc(c.imo || '—') + ', MMSI ' + esc(c.mmsi || '—') + ')</li>';
+            });
+            out += '</ul></details>';
+        }
+        if (res.skipped && res.skipped.length) {
+            out += '<details><summary>Skipped</summary><ul>';
+            res.skipped.forEach(function(m) { out += '<li>' + esc(m) + '</li>'; });
+            out += '</ul></details>';
+        }
+        if (res.suggestions.length) {
+            // Never written: several real ships share a name, so a label match is a
+            // lead for a human and not a fact.
+            out += '<details><summary>Name matches (manual entry only)</summary><ul>';
+            res.suggestions.forEach(function(s) {
+                out += '<li>' + esc(s.name) + ': '
+                     + (s.ambiguous ? '<em>several ships share this name</em>'
+                                    : 'IMO ' + esc(s.imo || '—') + ', MMSI ' + esc(s.mmsi || '—'))
+                     + '</li>';
+            });
+            out += '</ul></details>';
+        }
+        return out;
+    }
+
+    function editShip(ship) {
+        $('#vessel_id').val(ship.uid);
+        $('#name').val(ship.name || '');
+        $('#imo').val(ship.imo || '');
+        $('#mmsi').val(ship.mmsi || '');
+        $('#country_code').val(ship.country_code || '').selectpicker('refresh');
+        $('#shipFormError').hide();
     }
 
     function clearForm() {
         $('#shipForm')[0].reset();
-        $('#original_vessel_name').val('');
+        // reset() restores the <select>'s default option but not the widget drawn over it.
+        $('#country_code').selectpicker('refresh');
+        $('#vessel_id').val('');
+        $('#shipFormError').hide();
     }
 
-    function deleteShip(vessel_name) {
+    function deleteShip(vessel_id) {
         if (confirm('Are you sure you want to delete this ship?')) {
             $.ajax({
                 type: 'POST',
                 url: '/admin/ships/delete',
-                data: { vessel_name: vessel_name },
+                data: { vessel_id: vessel_id },
                 success: function(response) {
                     location.reload();
                 },

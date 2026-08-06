@@ -28,9 +28,11 @@
  *   since the height it adds is not known until then.
  *
  * fetchAircraftPhoto(reg) / fetchVesselPhoto(endpoint, reg)
- *   Resolve a registration to { thumb, link, attr, country } or null. Both are
- *   memoised per registration for the page's lifetime, so reopening a popup or
- *   re-toggling a leg costs nothing and a repeated vehicle is fetched once.
+ *   Resolve a registration to { thumb, link, attr, country } or null; a vessel also
+ *   resolves a `name`, since a ship may be logged by name, IMO or MMSI and is always
+ *   shown by name. Both are memoised per registration for the page's lifetime, so
+ *   reopening a popup or re-toggling a leg costs nothing and a repeated vehicle is
+ *   fetched once.
  *
  *   Call these only in response to a user action (opening a popup / expanding a
  *   leg), never during a bulk render: aircraft photos hit the planespotters API,
@@ -123,14 +125,17 @@
       photoCache[key] = fetch(endpoint + '?vesselName=' + encodeURIComponent(reg))
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
-          // The endpoint answers `null` (not []) when it finds nothing — guard the
-          // shape before indexing, which is what makes the trips table throw today.
-          if (!Array.isArray(d) || !d.length || !d[0]) return null;
+          // The endpoint answers `null` when it finds nothing — guard the shape
+          // before reading it, which is what makes the trips table throw today.
+          if (!d || !d.image) return null;
           return {
-            thumb: d[0],
-            link: d[1] || '',
-            attr: d[1] ? '©Vesselfinder.com' : '',
-            country: d[2] || ''
+            thumb: d.image,
+            link: d.link || '',
+            attr: d.link ? '©Vesselfinder.com' : '',
+            country: d.country || '',
+            // The ship's name, whichever of name/IMO/MMSI was searched for. Empty
+            // when no name is on record; callers keep showing what was typed.
+            name: d.name || ''
           };
         })
         .catch(function () { return null; });

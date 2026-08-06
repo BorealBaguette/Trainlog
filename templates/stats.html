@@ -447,7 +447,7 @@
 
     // Aircraft registration prefix -> country, from the shared table the trip
     // pages already use. Loaded once before the first render, then a sync
-    // lookup. Ferries don't need it: their ensign comes from ship_pictures.
+    // lookup. Ferries don't need it: their ensign comes from the vessel record.
     var REGISTRATIONS_URL = "{{ url_for('static', filename='data/registrations.json') }}";
     var registrations = {};
 

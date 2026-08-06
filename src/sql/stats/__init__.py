@@ -113,6 +113,17 @@ stats_months = ComposedSqlTemplate(
 stats_lines = ComposedSqlTemplate(
     "src/sql/stats/stats_lines.sql", ["base_filter", "time_categories"]
 )
+# Ferries group by the ship rather than by the spelling: `reg` holds a name for one
+# trip, that ship's IMO for the next and its MMSI for a third, and each used to draw
+# its own bar. vessel_display_name (migration 0054) resolves all three to one name,
+# and folds the case of anything it does not recognise exactly as the registration
+# grouping below does.
+stats_vessels = _column_stats(
+    "reg",
+    "vehicle",
+    group_expr="vessel_display_name(reg, TRUE)",
+)
+
 stats_vehicles = _column_stats(
     "reg",
     "vehicle",
