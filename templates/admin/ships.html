@@ -54,6 +54,7 @@
                 <th scope="col">IMO</th>
                 <th scope="col">Trainlog ID</th>
                 <th scope="col">Currently</th>
+                <th scope="col">Operator</th>
                 <th scope="col">Trips</th>
                 <th scope="col">Periods</th>
                 <th scope="col" data-orderable="false">Actions</th>
@@ -95,6 +96,19 @@
                                row's text, so this is what makes "Amorella" match a ship
                                now sailing as Mega Victoria. #}
                             <div class="text-muted small">ex {{ ship.former_names | join(', ') }}</div>
+                        {% endif %}
+                    </td>
+                    {# Decoration: whoever runs her on most of the logged trips. Often the
+                       clearest identification of a small ferry, whose name is generic and
+                       whose hull has no IMO. Resolved through operator_aliases, so a
+                       spelling variant still finds the logo. #}
+                    <td>
+                        {% if ship.operator_logo %}
+                            <img src="/static/{{ ship.operator_logo }}" alt="{{ ship.operator_name }}"
+                                 height="20" loading="lazy" decoding="async"
+                                 style="max-width:90px;object-fit:contain;vertical-align:middle;">
+                        {% elif ship.operator %}
+                            <span class="text-muted small">{{ ship.operator }}</span>
                         {% endif %}
                     </td>
                     <td>{{ ship.trips }}</td>
@@ -229,8 +243,8 @@
         $('#shipTable').DataTable({
             responsive: true,
             // Busiest hulls first: those are the ones whose missing name or number is
-            // actually showing up on somebody's trips. (Column 3 is Trips.)
-            order: [[3, 'desc']],
+            // actually showing up on somebody's trips. (Column 4 is Trips.)
+            order: [[4, 'desc']],
             language: {
                 info: "{{dtInfo}}",
                 paginate: {
