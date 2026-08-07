@@ -116,6 +116,13 @@
             <button class="btn btn-warning btn-sm edit-ship-btn" data-bs-toggle="modal" data-bs-target="#shipModal"
                 data-vessel-id="{{ ship.uid }}" data-imo="{{ ship.imo or '' }}"
                 data-name="{{ ship.name or '' }}" data-trainlog-id="{{ ship.trainlog_id }}"><i class="fa-regular fa-pen-to-square"></i></button>
+            {# The same ship reaches the register more than once, once per spelling
+               nobody recognised. This is the way back: fold this row into the one that
+               is the ship. #}
+            <button class="btn btn-secondary btn-sm merge-ship-btn"
+                    data-vessel-id="{{ ship.uid }}"
+                    data-label="{{ ship.name or ship.imo or ship.trainlog_id }}"
+                    title="Merge into another hull"><i class="fa-solid fa-code-merge"></i></button>
             <button class="btn btn-danger btn-sm delete-ship-btn" data-vessel-id="{{ ship.uid }}"><i class="fa-regular fa-trash-can"></i></button>
         {% endif %}
     </td>
