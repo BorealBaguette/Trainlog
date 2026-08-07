@@ -52,10 +52,16 @@ def fetch_commons_picture(pg, registration_id, file_url):
 
     Returns the stored path, or None.
     """
-    title = urllib.parse.unquote((file_url or "").rstrip("/").rsplit("/", 1)[-1])
-    if not title:
-        return None
-    if not title.lower().startswith("file:"):
+    # Either a Special:FilePath URL (what Wikidata's P18 gives) or a bare "File:…" title
+    # (what the Commons search returns) — a title may itself contain a slash, so it is
+    # taken whole rather than split on one.
+    value = (file_url or "").strip()
+    if value.lower().startswith("file:"):
+        title = value
+    else:
+        title = urllib.parse.unquote(value.rstrip("/").rsplit("/", 1)[-1])
+        if not title:
+            return None
         title = "File:" + title
 
     response = requests.get(
@@ -125,6 +131,66 @@ def fetch_commons_picture(pg, registration_id, file_url):
         },
     )
     return filename
+
+
+def search_commons_images(query, limit=12):
+    """
+    Photos on Wikimedia Commons matching a free-text query, with their credits.
+
+    For the ship that has nothing but a name: Wikidata's P18 route needs an IMO or an
+    MMSI (see find_ship_image), and a hull logged only as "Pont-Aven" has neither until
+    somebody puts one in. Searching the file namespace by name finds the picture; what it
+    cannot do is know it is the right ship, so this only ever RETURNS candidates — an
+    admin looks at them and picks one, which is the same judgement the backfill asks for
+    on names.
+
+    Each candidate carries the author and licence read from the file page, so the choice
+    is made knowing whether the photo may be shown at all.
+    """
+    query = (query or "").strip()
+    if not query:
+        return []
+
+    response = requests.get(
+        COMMONS_API,
+        params={
+            "action": "query",
+            "format": "json",
+            "generator": "search",
+            # Namespace 6 is File:. srsearch alone would return article pages, which
+            # carry no image to store.
+            "gsrnamespace": 6,
+            "gsrsearch": query,
+            "gsrlimit": limit,
+            "prop": "imageinfo",
+            "iiprop": "extmetadata|url|mime",
+            "iiurlwidth": 320,
+        },
+        headers={"User-Agent": COMMONS_AGENT},
+        timeout=30,
+    )
+    if response.status_code != 200:
+        return []
+
+    pages = (response.json().get("query") or {}).get("pages") or {}
+    candidates = []
+    # The API returns pages in a dict; `index` is the only thing carrying the search
+    # ranking, and the best match first is the point of a search.
+    for page in sorted(pages.values(), key=lambda p: p.get("index", 0)):
+        info = (page.get("imageinfo") or [None])[0]
+        if not info or not (info.get("mime") or "").startswith("image/"):
+            continue
+        meta = info.get("extmetadata") or {}
+        candidates.append(
+            {
+                "title": page["title"],
+                "thumb": info.get("thumburl") or info.get("url"),
+                "page": info.get("descriptionurl"),
+                "author": _strip_html((meta.get("Artist") or {}).get("value")),
+                "license": _strip_html((meta.get("LicenseShortName") or {}).get("value")),
+            }
+        )
+    return candidates
 
 
 def resolve_vessel(pg, identifier, at=None):
