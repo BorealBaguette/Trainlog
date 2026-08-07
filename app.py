@@ -10574,6 +10574,30 @@ def ship_wikidata_search():
     return jsonify({"success": True, "results": results})
 
 
+def _unresolved_trips(pg, reg):
+    """
+    The ferry trips logged under this text that still resolve to no hull.
+
+    Read BEFORE anything is written, in both the register and the merge paths: once a row
+    exists that resolves the name, "trips that resolve to nothing" no longer describes
+    them, and a name two hulls share would be settled by vessel_resolve's own tie-break
+    (lowest uid) rather than by the admin who is looking at it.
+    """
+    return [
+        row[0]
+        for row in pg.execute(
+            """
+            SELECT trip_id FROM trips
+            WHERE trip_type = 'ferry'
+              AND reg IS NOT NULL AND btrim(reg) <> ''
+              AND vessel_normalize(reg) = vessel_normalize(:reg)
+              AND vessel_resolve(reg) IS NULL
+            """,
+            {"reg": reg},
+        ).fetchall()
+    ]
+
+
 @app.route("/admin/ships/adopt", methods=["POST"])
 @admin_required
 def adopt_ship():
@@ -10590,10 +10614,18 @@ def adopt_ship():
     The trips are chosen BEFORE the row exists, while they still resolve to nothing. Two
     hulls may end up sharing a name, and vessel_resolve settles that by uid; picking the
     trips afterwards would quietly hand them to whichever hull won.
+
+    `merge_into` registers nothing and moves the trips onto a hull already held. That is
+    the answer when the number given belongs to one — "IMO 9107796, Polarlys" logged as
+    text, against a Polarlys the register has had all along. The clash is reported with
+    the hull it clashed with, so the page can offer the merge in place of the refusal:
+    the two are the same ship, and a second row for her is exactly what should not be
+    created.
     """
     reg = (request.form.get("reg") or "").strip()
     name = (request.form.get("name") or "").strip() or reg
     country_code = (request.form.get("country_code") or "").strip() or None
+    merge_into = (request.form.get("merge_into") or "").strip()
 
     if not reg:
         return jsonify({"success": False, "error": "No reg given"}), 400
@@ -10605,40 +10637,82 @@ def adopt_ship():
         return jsonify({"success": False, "error": str(exc)}), 400
 
     with pg_session() as pg:
+        # Merging: the hull exists and is not touched. Its name, numbers and periods are
+        # what is already known about the ship, and they outrank a form filled in from
+        # the text of a trip — all that is missing is the trips.
+        if merge_into:
+            hull = pg.execute(
+                """
+                SELECT v.uid, v.imo, v.trainlog_id, r.name
+                FROM vessels v
+                LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+                WHERE v.uid = :uid
+                """,
+                {"uid": int(merge_into)},
+            ).fetchone()
+            if not hull:
+                return jsonify({"success": False, "error": "No such hull"}), 400
+
+            trip_ids = _unresolved_trips(pg, reg)
+            if trip_ids:
+                pg.execute(
+                    "UPDATE trips SET reg = :key WHERE trip_id = ANY(:ids)",
+                    {"key": hull["imo"] or hull["trainlog_id"], "ids": trip_ids},
+                )
+            return jsonify(
+                {
+                    "success": True,
+                    "merged": True,
+                    "vessel_id": hull["uid"],
+                    "name": hull["name"] or reg,
+                    "trips": len(trip_ids),
+                }
+            )
+
         if imo:
             clash = pg.execute(
-                "SELECT uid FROM vessels WHERE imo = :imo", {"imo": imo}
+                """
+                SELECT v.uid, r.name
+                FROM vessels v
+                LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+                WHERE v.imo = :imo
+                """,
+                {"imo": imo},
             ).fetchone()
             if clash:
                 return jsonify(
-                    {"success": False, "error": f"IMO {imo} is already hull #{clash['uid']}"}
+                    {
+                        "success": False,
+                        "error": f"IMO {imo} is already hull #{clash['uid']}"
+                        f" ({clash['name'] or 'unnamed'})",
+                        # What makes the merge offerable rather than just refused.
+                        "vessel_id": clash["uid"],
+                        "label": clash["name"] or imo,
+                    }
                 ), 409
         if mmsi:
             clash = pg.execute(
-                "SELECT vessel_id FROM vessel_registrations WHERE mmsi = :mmsi",
+                """
+                SELECT r.vessel_id, c.name
+                FROM vessel_registrations r
+                LEFT JOIN vessel_registrations c
+                       ON c.uid = vessel_identity(r.vessel_id, NULL)
+                WHERE r.mmsi = :mmsi
+                """,
                 {"mmsi": mmsi},
             ).fetchone()
             if clash:
                 return jsonify(
                     {
                         "success": False,
-                        "error": f"MMSI {mmsi} belongs to hull #{clash['vessel_id']}",
+                        "error": f"MMSI {mmsi} belongs to hull #{clash['vessel_id']}"
+                        f" ({clash['name'] or 'unnamed'})",
+                        "vessel_id": clash["vessel_id"],
+                        "label": clash["name"] or mmsi,
                     }
                 ), 409
 
-        trip_ids = [
-            row[0]
-            for row in pg.execute(
-                """
-                SELECT trip_id FROM trips
-                WHERE trip_type = 'ferry'
-                  AND reg IS NOT NULL AND btrim(reg) <> ''
-                  AND vessel_normalize(reg) = vessel_normalize(:reg)
-                  AND vessel_resolve(reg) IS NULL
-                """,
-                {"reg": reg},
-            ).fetchall()
-        ]
+        trip_ids = _unresolved_trips(pg, reg)
 
         hull = pg.execute(
             "INSERT INTO vessels (imo) VALUES (:imo) RETURNING uid, trainlog_id",
