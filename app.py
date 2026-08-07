@@ -10514,6 +10514,150 @@ def ship_row(vessel_id):
     return render_template("admin/ship_row.html", ship=rows[0])
 
 
+@app.route("/admin/ships/lookup")
+@admin_required
+def ship_lookup():
+    """
+    Hulls matching a few typed characters, for picking one to merge into.
+
+    Deliberately not the register query: this is a chooser, so it wants a name, a number
+    and a photo for twenty rows, not trip counts and operator logos for eight hundred.
+    Searches every name a hull has carried, since the row being merged away is often the
+    one holding the spelling being searched for.
+    """
+    query = (request.args.get("q") or "").strip()
+    exclude = request.args.get("exclude") or 0
+    if not query:
+        return jsonify({"success": True, "results": []})
+
+    with pg_session() as pg:
+        rows = pg.execute(
+            """
+            SELECT v.uid, v.imo, v.trainlog_id, r.name, p.local_image_path
+            FROM vessels v
+            LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+            LEFT JOIN LATERAL (
+                SELECT local_image_path
+                FROM ship_pictures
+                WHERE registration_id = r.uid AND local_image_path IS NOT NULL
+                ORDER BY fetch_date DESC NULLS LAST, uid DESC
+                LIMIT 1
+            ) p ON TRUE
+            WHERE v.uid <> CAST(:exclude AS INTEGER)
+              AND (v.imo LIKE :like
+                   OR v.trainlog_id ILIKE :like
+                   OR EXISTS (SELECT 1 FROM vessel_registrations a
+                              WHERE a.vessel_id = v.uid AND a.name ILIKE :like))
+            ORDER BY r.name NULLS LAST, v.uid
+            LIMIT 20
+            """,
+            {"like": f"%{query}%", "exclude": exclude},
+        ).fetchall()
+
+    return jsonify(
+        {
+            "success": True,
+            "results": [
+                {
+                    "uid": row["uid"],
+                    "imo": row["imo"],
+                    "trainlog_id": row["trainlog_id"],
+                    "name": row["name"],
+                    "image": (
+                        f"/static/images/ship_pictures/{row['local_image_path']}"
+                        if row["local_image_path"]
+                        else None
+                    ),
+                }
+                for row in rows
+            ],
+        }
+    )
+
+
+@app.route("/admin/ships/merge", methods=["POST"])
+@admin_required
+def merge_ships():
+    """
+    Fold one hull into another: the trips move, and the hull merged away is deleted.
+
+    The same ship reaches the register more than once — logged as "John Paul II", as
+    "St John Paul Ii" and as "MV Saint John Paul II", each spelling resolving to nothing
+    and each registered in its turn. They are one hull with three rows, and the only way
+    back is to say which row is the ship.
+
+    What moves is the trips, and a photo where the survivor has none. What does NOT move
+    is the loser's registrations: they are dated periods of a hull, and grafting an
+    undated one onto another hull makes it the newest — which would rename the survivor
+    to the misspelling being merged away. They go with the row (ON DELETE CASCADE).
+    """
+    source_id = (request.form.get("source_id") or "").strip()
+    target_id = (request.form.get("target_id") or "").strip()
+    if not (source_id and target_id):
+        return jsonify({"success": False, "error": "Two hulls are needed"}), 400
+    if source_id == target_id:
+        return jsonify({"success": False, "error": "That is the same hull"}), 400
+
+    with pg_session() as pg:
+        hulls = {
+            row["uid"]: row
+            for row in pg.execute(
+                """
+                SELECT v.uid, v.imo, v.trainlog_id,
+                       vessel_identity(v.uid, NULL) AS registration_id
+                FROM vessels v WHERE v.uid IN (:source, :target)
+                """,
+                {"source": int(source_id), "target": int(target_id)},
+            ).fetchall()
+        }
+        source = hulls.get(int(source_id))
+        target = hulls.get(int(target_id))
+        if not (source and target):
+            return jsonify({"success": False, "error": "No such hull"}), 400
+
+        # Resolved to ids first: after the UPDATE these trips resolve to the target, and
+        # after the DELETE the source is gone — neither can be used to find them again.
+        trip_ids = [
+            row[0]
+            for row in pg.execute(
+                """
+                SELECT trip_id FROM trips
+                WHERE trip_type = 'ferry'
+                  AND reg IS NOT NULL AND btrim(reg) <> ''
+                  AND vessel_resolve(reg) = :source
+                """,
+                {"source": source["uid"]},
+            ).fetchall()
+        ]
+        if trip_ids:
+            pg.execute(
+                "UPDATE trips SET reg = :key WHERE trip_id = ANY(:ids)",
+                {"key": target["imo"] or target["trainlog_id"], "ids": trip_ids},
+            )
+
+        # A photo is worth keeping: it is the same ship, and the row being merged away
+        # may be the one somebody found a picture for. Only where the survivor has none,
+        # so a curated photo is never displaced by an older one.
+        if source["registration_id"] and target["registration_id"]:
+            pg.execute(
+                """
+                UPDATE ship_pictures SET registration_id = :target
+                WHERE registration_id = :source
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ship_pictures q
+                      WHERE q.registration_id = :target AND q.local_image_path IS NOT NULL
+                  )
+                """,
+                {"source": source["registration_id"], "target": target["registration_id"]},
+            )
+
+        # Registrations and any photo left on them go with it (ON DELETE CASCADE); the
+        # image files stay on disk, as they do for a plain delete.
+        pg.execute("DELETE FROM vessels WHERE uid = :uid", {"uid": source["uid"]})
+
+    return jsonify({"success": True, "vessel_id": target["uid"], "trips": len(trip_ids)})
+
+
 @app.route("/admin/ships/prune", methods=["POST"])
 @admin_required
 def prune_ships():

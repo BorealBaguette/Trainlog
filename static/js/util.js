@@ -1727,3 +1727,27 @@ function pluralize(forms, n) {
   return form.replace('{n}', n);
 }
 window.pluralize = pluralize;
+
+/* A bootstrap-select search box inside a modal.
+ *
+ * Bootstrap's modal enforces its own focus: it listens for focusin on the document and
+ * pulls focus straight back to the dialog whenever something outside it is focused. A
+ * selectpicker with data-container="body" draws its menu — and its live-search input —
+ * as a child of <body>, which is outside the dialog by that test, so clicking the search
+ * box focused it and lost it in the same tick and nothing could be typed.
+ *
+ * data-container="body" is not optional for those pickers: inside a scrollable modal the
+ * menu is otherwise clipped by the modal's own overflow. So the focus grab is what has
+ * to give. This handler runs before Bootstrap's — it is bound at load, Bootstrap binds
+ * its own each time a modal is shown — and stops the event reaching it for anything
+ * belonging to a dropdown.
+ *
+ * Global, because the same pairing appears on the ship register, the wagon admin, the
+ * ticket form and the map filters.
+ */
+document.addEventListener('focusin', function (event) {
+  var target = event.target;
+  if (target && target.closest && target.closest('.bootstrap-select, .bs-searchbox, .dropdown-menu')) {
+    event.stopImmediatePropagation();
+  }
+});

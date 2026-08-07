@@ -25,11 +25,11 @@
     #shipTable { table-layout: fixed; width: 100%; }
     #shipTable th:nth-child(1), #shipTable td:nth-child(1) { width: 9%; }   /* IMO */
     #shipTable th:nth-child(2), #shipTable td:nth-child(2) { width: 11%; }  /* Trainlog ID */
-    #shipTable th:nth-child(3), #shipTable td:nth-child(3) { width: 27%; }  /* Currently */
+    #shipTable th:nth-child(3), #shipTable td:nth-child(3) { width: 25%; }  /* Currently */
     #shipTable th:nth-child(4), #shipTable td:nth-child(4) { width: 17%; }  /* Operator */
     #shipTable th:nth-child(5), #shipTable td:nth-child(5) { width: 15%; }  /* Trips */
     #shipTable th:nth-child(6), #shipTable td:nth-child(6) { width: 9%; }   /* Periods */
-    #shipTable th:nth-child(7), #shipTable td:nth-child(7) { width: 12%; }  /* Actions */
+    #shipTable th:nth-child(7), #shipTable td:nth-child(7) { width: 14%; }  /* Actions: three buttons */
     /* Under a fixed layout a cell no longer widens for its content, so the ones holding
        a number or a pair of buttons say so rather than wrapping. */
     #shipTable td:nth-child(1), #shipTable td:nth-child(2),
@@ -127,6 +127,40 @@
             {% endfor %}
         </tbody>
     </table>
+</div>
+
+<!-- Two rows of the register that are one ship -->
+<div class="modal fade" id="mergeModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Merge <span id="mergeSource"></span> into…</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <p class="text-muted small">
+                    Its trips move onto whichever hull you pick, and this row is then deleted
+                    — with its periods, which belong to it and not to the ship. A photo comes
+                    across only if the hull you pick has none.
+                </p>
+                <input type="hidden" id="merge_source_id">
+                <div class="row g-2 align-items-end">
+                    <div class="col-8">
+                        <label for="mergeQuery" class="form-label small mb-0">Search the register</label>
+                        <input type="text" class="form-control form-control-sm" id="mergeQuery"
+                               placeholder="name, IMO or Trainlog ID">
+                    </div>
+                    <div class="col-4">
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="mergeSearchBtn">
+                            <i class="fa-solid fa-magnifying-glass"></i> Search
+                        </button>
+                    </div>
+                </div>
+                <div id="mergeResults" class="mt-2"></div>
+                <div id="mergeError" class="text-danger mt-2" style="display:none;"></div>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- One logged name becomes a hull -->
@@ -543,6 +577,76 @@
         $('#onlyUnregistered').prop('checked', false).closest('.form-check').remove();
         shipTable.draw(false);
     }
+
+    /* ── Two hulls that are one ship ──────────────────────────────────────────
+       The register acquires a row per spelling nobody recognised — John Paul II, St John
+       Paul Ii, MV Saint John Paul II — and this folds them back together. Merging is
+       one-way and one at a time: pick the row that is wrong, then say which row is the
+       ship. Three rows take two merges. */
+    $(document).on('click', '.merge-ship-btn', function() {
+        var label = $(this).data('label');
+        $('#merge_source_id').val($(this).data('vessel-id'));
+        $('#mergeSource').text(label);
+        // Prefilled with the name it is being merged away from — the other spellings of
+        // one ship are usually a search away from each other.
+        $('#mergeQuery').val(label);
+        $('#mergeResults').empty();
+        $('#mergeError').hide();
+        new bootstrap.Modal(document.getElementById('mergeModal')).show();
+        $('#mergeSearchBtn').trigger('click');
+    });
+
+    $(document).on('click', '#mergeSearchBtn', function() {
+        var $results = $('#mergeResults');
+        $results.html('<span class="text-muted small">'
+            + '<i class="fa-solid fa-spinner fa-spin"></i> Searching…</span>');
+        $.getJSON('/admin/ships/lookup',
+                  { q: $('#mergeQuery').val(), exclude: $('#merge_source_id').val() })
+            .done(function(res) {
+                var esc = function(v) { return $('<div>').text(v == null ? '' : v).html(); };
+                if (!res.results.length) {
+                    $results.html('<span class="text-muted small">No hull matches that.</span>');
+                    return;
+                }
+                $results.html('<div class="list-group list-group-flush">'
+                    + res.results.map(function(r) {
+                        return '<a href="#" class="list-group-item list-group-item-action'
+                             + ' d-flex gap-2 align-items-center merge-pick"'
+                             + ' data-vessel-id="' + r.uid + '"'
+                             + ' data-label="' + esc(r.name || r.trainlog_id).replace(/'/g, '&#39;') + '">'
+                             + (r.image ? '<img src="' + esc(r.image) + '" width="60" height="38"'
+                                          + ' style="object-fit:cover;" alt="">' : '')
+                             + '<span><strong>' + esc(r.name || 'unnamed') + '</strong>'
+                             + '<br><span class="small text-muted">'
+                             + esc(r.imo ? 'IMO ' + r.imo : r.trainlog_id) + '</span></span></a>';
+                    }).join('') + '</div>');
+            })
+            .fail(function() {
+                $results.html('<span class="text-danger small">Search failed</span>');
+            });
+    });
+
+    $(document).on('click', '.merge-pick', function(e) {
+        e.preventDefault();
+        var sourceId = $('#merge_source_id').val();
+        var targetId = $(this).data('vessel-id');
+        if (!confirm('Move the trips of ' + $('#mergeSource').text() + ' onto '
+                   + $(this).data('label') + ' and delete the row it came from?')) return;
+        $('#mergeError').hide();
+        $.post('/admin/ships/merge', { source_id: sourceId, target_id: targetId })
+            .done(function(res) {
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('mergeModal')).hide();
+                var $gone = shipRow(sourceId);
+                disposeTooltips($gone);
+                shipTable.row($gone).remove().draw(false);
+                // The survivor, with the trips and possibly the photo it has just gained.
+                refreshShipRow(res.vessel_id);
+            })
+            .fail(function(xhr) {
+                $('#mergeError')
+                    .text((xhr.responseJSON && xhr.responseJSON.error) || 'Could not merge').show();
+            });
+    });
 
     /* ── Registering a name that is not in the register ───────────────────────── */
     // The row the register form was opened from, so that on success the unregistered row
