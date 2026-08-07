@@ -630,26 +630,54 @@
 
     /* Straight into the new ship's periods on success: registering her is half the job —
        the flag, the dates and the photo are the other half, and they all live there.
-       periodsChanged is set so that closing that modal reloads the page, which is what
-       takes the row out of the list below and puts it in the register above. */
-    $(document).on('submit', '#adoptForm', function(e) {
-        e.preventDefault();
+       The row is swapped in place and the counter kept, so nothing here reloads. */
+    function submitAdopt(extra) {
         $('#adoptError').hide();
-        $.post('/admin/ships/adopt', $(this).serialize())
+        var data = $('#adoptForm').serialize() + (extra ? '&' + extra : '');
+        $.post('/admin/ships/adopt', data)
             .done(function(res) {
                 bootstrap.Modal.getOrCreateInstance(document.getElementById('adoptModal')).hide();
-                // The name's row becomes the hull's, in place. Then straight into the
-                // periods, where the flag, the dates and the photo are.
-                refreshShipRow(res.vessel_id, adoptRow);
+                // The name's row becomes the hull's, in place. On a merge that hull was
+                // already in the table, so its own row is refreshed with the trips it has
+                // just gained and the unregistered one is simply dropped.
+                if (res.merged) {
+                    disposeTooltips(adoptRow);
+                    // Drawn straight away rather than left to the refresh below: if that
+                    // request fails, the row that has just been merged away should not
+                    // still be sitting in the table.
+                    shipTable.row(adoptRow).remove().draw(false);
+                    refreshShipRow(res.vessel_id);
+                } else {
+                    refreshShipRow(res.vessel_id, adoptRow);
+                }
                 countUnregistered(-1);
                 adoptRow = null;
                 openPeriods(res.vessel_id, res.name);
             })
             .fail(function(xhr) {
-                $('#adoptError')
-                    .text((xhr.responseJSON && xhr.responseJSON.error) || 'Could not register')
-                    .show();
+                var body = xhr.responseJSON || {};
+                var esc = function(v) { return $('<div>').text(v == null ? '' : v).html(); };
+                /* A number that belongs to a hull we already hold is not a refusal but a
+                   question: this ship IS that ship, logged as text. Offering the merge
+                   here is what stops a second row being created for her. */
+                $('#adoptError').html(esc(body.error || 'Could not register')
+                    + (body.vessel_id
+                       ? ' <button type="button" class="btn btn-sm btn-primary ms-2 merge-btn"'
+                         + ' data-vessel-id="' + body.vessel_id + '">Move the trips onto '
+                         + esc(body.label) + '</button>'
+                       : '')).show();
             });
+    }
+
+    $(document).on('submit', '#adoptForm', function(e) {
+        e.preventDefault();
+        submitAdopt();
+    });
+
+    // Merging writes nothing to the hull — it keeps its own name, numbers and periods,
+    // which are better than anything this form could offer — and only takes the trips.
+    $(document).on('click', '.merge-btn', function() {
+        submitAdopt('merge_into=' + $(this).data('vessel-id'));
     });
 
     /* Bound by delegation and outside $(document).ready on purpose. These were inside
