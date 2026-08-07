@@ -86,6 +86,128 @@ def lookup(identifiers, prop):
     return found
 
 
+WIKIDATA_API = "https://www.wikidata.org/w/api.php"
+
+# Q11446 is "ship". Anything below it in the subclass tree counts — a ferry, a ro-ro, a
+# cruise ship are all subclasses several steps down.
+SHIP_CLASS = "Q11446"
+
+
+def api(params, timeout=30):
+    url = f"{WIKIDATA_API}?{urllib.parse.urlencode({**params, 'format': 'json'})}"
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        return json.load(response)
+
+
+def search_ships(name, limit=15):
+    """
+    Ships whose name matches, as [{qid, name, description, imo, mmsi, country, operator,
+    image}], best match first.
+
+    Two calls on purpose. wbsearchentities does the matching — it is the same index the
+    Wikidata site search uses, so it forgives case, accents and a missing "MS", where a
+    SPARQL regex over labels is both stricter and slow enough to time out. SPARQL then
+    reads the properties off the handful of items it returned.
+
+    Non-ships are dropped: a name like "Normandie" matches a region, a battle and a
+    hotel before it matches the ferry. Anything carrying an IMO or an MMSI is kept even
+    if its class says otherwise, since those numbers are only ever issued to ships.
+    """
+    name = (name or "").strip()
+    if not name:
+        return []
+
+    order = {}
+
+    def collect(qids):
+        for qid in qids:
+            order.setdefault(qid, len(order))
+
+    # Full text, restricted to items that carry a ship's numbers. This is what finds the
+    # ferry: the item is titled "MS Pont-Aven", and a prefix search for "Pont-Aven"
+    # returns the commune, the art movement and a dozen paintings before it. IMO first,
+    # then MMSI for the small ferry that has no IMO at all.
+    for statement in ("P458", "P587"):
+        try:
+            hits = api(
+                {
+                    "action": "query",
+                    "list": "search",
+                    "srsearch": f"{name} haswbstatement:{statement}",
+                    "srlimit": limit,
+                }
+            )
+            collect(hit["title"] for hit in hits["query"]["search"])
+        except Exception as exc:
+            logger.warning("Wikidata full-text search failed for %r: %s", name, exc)
+
+    # And the label index, which catches a ship Wikidata holds no number for — and
+    # forgives case and accents, where the search above is stricter.
+    try:
+        hits = api(
+            {
+                "action": "wbsearchentities",
+                "search": name,
+                "language": "en",
+                "uselang": "en",
+                "type": "item",
+                "limit": limit,
+            }
+        )
+        collect(hit["id"] for hit in hits.get("search") or [])
+    except Exception as exc:
+        logger.warning("Wikidata label search failed for %r: %s", name, exc)
+
+    if not order:
+        return []
+
+    values = " ".join("wd:%s" % qid for qid in order)
+
+    rows = sparql(
+        f"""
+        SELECT ?ship ?shipLabel ?shipDescription ?imo ?mmsi ?image ?code ?operatorLabel WHERE {{
+            VALUES ?ship {{ {values} }}
+            FILTER(EXISTS {{ ?ship wdt:P31/wdt:P279* wd:{SHIP_CLASS} }}
+                   || EXISTS {{ ?ship wdt:P458 [] }} || EXISTS {{ ?ship wdt:P587 [] }})
+            OPTIONAL {{ ?ship wdt:P458 ?imo }}
+            OPTIONAL {{ ?ship wdt:P587 ?mmsi }}
+            OPTIONAL {{ ?ship wdt:P18 ?image }}
+            OPTIONAL {{ ?ship wdt:P137 ?operator }}
+            # The flag state as an ISO code (P297), which is what the register stores.
+            # P8047 is "country of registry" — the flag she actually sails under, and
+            # what ship items carry; P17 is the fallback for an item that only has that.
+            OPTIONAL {{ ?ship wdt:P8047|wdt:P17 ?country. ?country wdt:P297 ?code }}
+            SERVICE wikibase:label {{ bd:serviceParam wikibase:language "en". }}
+        }}
+        """,
+        timeout=60,
+    )
+
+    # An item with two values for a property (two MMSIs over its life, say) comes back as
+    # two rows. First one wins, and the rest are folded in.
+    found = {}
+    for row in rows:
+        qid = (value(row, "ship") or "").rsplit("/", 1)[-1]
+        if qid in found:
+            continue
+        label = value(row, "shipLabel")
+        found[qid] = {
+            "qid": qid,
+            # The label service answers with the bare Q-id for an item with no English
+            # label; that is not a name to offer as one.
+            "name": None if label == qid else label,
+            "description": value(row, "shipDescription"),
+            "imo": value(row, "imo"),
+            "mmsi": value(row, "mmsi"),
+            "country": (value(row, "code") or "").upper() or None,
+            "operator": value(row, "operatorLabel"),
+            "image": value(row, "image"),
+        }
+
+    return sorted(found.values(), key=lambda item: order.get(item["qid"], 99))
+
+
 def find_ship_image(imo=None, mmsi=None):
     """
     A freely-licensed photo of the ship carrying this IMO or MMSI, as a Commons file URL,

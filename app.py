@@ -92,7 +92,9 @@ from src.g_search import (
     fetch_picture_for_registration,
     find_vessel_ids,
     get_vessel_picture,
+    search_commons_images,
 )
+from src.wikidata import search_ships as wikidata_search_ships
 from py.image_generator import generate_image
 from src.sql.leaderboards import get_leaderboard_countries_query
 from src.sql.percents import upsert_percent_query
@@ -10153,6 +10155,107 @@ def _clean_vessel_number(value, digits, label):
     return value
 
 
+# The register itself, as one query (see _register_rows).
+SHIP_REGISTER_SQL = """
+            -- How many logged trips each hull actually accounts for. Resolved
+            -- through vessel_resolve, so trips logged under an old name count
+            -- towards the same hull; the register is sorted by it, which puts the
+            -- ships worth curating at the top.
+            WITH trip_counts AS (
+                SELECT vessel_resolve(reg) AS vessel_id,
+                       COUNT(*) AS trips,
+                       -- How many people, not just how many crossings: forty trips by
+                       -- one commuter and forty by forty travellers are different
+                       -- ships to be curating.
+                       COUNT(DISTINCT user_id) AS users,
+                       -- Who mostly runs her. Decoration, but a useful one: the
+                       -- operator is often what identifies a small ferry, where the
+                       -- name is generic and the hull has no IMO. mode() ignores
+                       -- NULLs and NULLIF keeps blanks from winning; the first name
+                       -- only, since a ferry is rarely a multi-operator trip.
+                       MODE() WITHIN GROUP (
+                           ORDER BY NULLIF(btrim(split_part(operator, ',', 1)), '')
+                       ) AS operator
+                FROM trips
+                WHERE trip_type = 'ferry' AND reg IS NOT NULL AND btrim(reg) <> ''
+                GROUP BY 1
+            )
+            SELECT v.uid, v.imo, v.trainlog_id,
+                   -- The hull as it is NOW. Not columns of the hull — it has none of
+                   -- these — but the most recent registration's, so a row can be
+                   -- recognised at a glance. The history is under Periods.
+                   r.name, r.country_code,
+                   -- Every other name it has carried. Shown as "ex …" and, because
+                   -- DataTables searches the text of a row, that is also what makes
+                   -- a hull findable by a name it no longer goes by.
+                   ARRAY(
+                       SELECT a.name FROM vessel_registrations a
+                       WHERE a.vessel_id = v.uid
+                         AND a.name IS NOT NULL
+                         AND a.uid IS DISTINCT FROM r.uid
+                       ORDER BY a.effective_date DESC NULLS LAST, a.uid DESC
+                   ) AS former_names,
+                   p.local_image_path,
+                   COALESCE(c.trips, 0) AS trips,
+                   COALESCE(c.users, 0) AS users,
+                   c.operator,
+                   o.short_name AS operator_name,
+                   o.logo_url AS operator_logo,
+                   (SELECT COUNT(*) FROM vessel_registrations a WHERE a.vessel_id = v.uid)
+                       AS registrations
+            FROM vessels v
+            LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+            LEFT JOIN trip_counts c ON c.vessel_id = v.uid
+            -- That operator name resolved through operator_aliases, exactly as a
+            -- trip resolves its own (see get_trip.sql), so a ferry logged as SNCM
+            -- picks up the logo held under Corsica Linea. The current logo: this is
+            -- a register of ships, not a history of liveries.
+            LEFT JOIN LATERAL (
+                SELECT op.short_name,
+                       (SELECT l.logo_url FROM operator_logos l
+                        WHERE l.operator_id = op.operator_id
+                        ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
+                        LIMIT 1) AS logo_url
+                FROM operator_aliases a
+                JOIN operators op ON op.operator_id = a.operator_id
+                WHERE a.normalized = operator_normalize(c.operator)
+                ORDER BY (a.operator_type = 'operator') DESC, a.operator_id
+                LIMIT 1
+            ) o ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT local_image_path
+                FROM ship_pictures
+                WHERE registration_id = r.uid AND local_image_path IS NOT NULL
+                ORDER BY fetch_date DESC NULLS LAST, uid DESC
+                LIMIT 1
+            ) p ON TRUE
+            -- One row or all of them: the same query serves the page and the single-row
+            -- refresh the table does over ajax after an edit, so a row that comes back can
+            -- never disagree with the one it replaces. CAST, because a bind parameter that
+            -- is only ever compared to NULL has no type psycopg2 can infer.
+            WHERE (CAST(:vessel_id AS INTEGER) IS NULL OR v.uid = CAST(:vessel_id AS INTEGER))
+            ORDER BY COALESCE(c.trips, 0) DESC, r.name NULLS LAST, v.uid
+            
+"""
+
+
+def _register_rows(pg, vessel_id=None):
+    """The register's rows — all of them, or the one hull asked for."""
+    return [
+        # The flag is rendered here rather than in the template: get_flag_emoji is a
+        # plain helper, not a Jinja global, and every other page that shows a flag
+        # server-side does the same.
+        dict(
+            row._mapping,
+            flag=get_flag_emoji(row["country_code"]) if row["country_code"] else "",
+            unregistered=False,
+        )
+        for row in pg.execute(
+            SHIP_REGISTER_SQL, {"vessel_id": vessel_id}
+        ).fetchall()
+    ]
+
+
 @app.route("/admin/ships", methods=["GET", "POST"])
 @admin_required
 def ships():
@@ -10237,64 +10340,49 @@ def ships():
                         {"vessel_id": uid, "name": name},
                     )
 
-        return jsonify({"success": True})
+        # The uid, so the caller can fetch back the row it has just changed (or created)
+        # instead of reloading the page.
+        return jsonify({"success": True, "vessel_id": uid})
 
     with pg_session() as pg:
-        shipList = [
-            # The flag is rendered here rather than in the template: get_flag_emoji is a
-            # plain helper, not a Jinja global, and every other page that shows a flag
-            # server-side does the same.
-            dict(row._mapping, flag=get_flag_emoji(row["country_code"]) if row["country_code"] else "")
+        shipList = _register_rows(pg)
+
+        # What people have logged that the register does not know: a ferry trip whose
+        # reg resolves to no hull at all. Almost always a name typed by hand. These join
+        # the register in ONE table — an unregistered ship is a ship, it just has no row
+        # yet, and keeping it in a list of its own meant scrolling between two tables to
+        # see whether a name was already held under another spelling.
+        unlinked = [
+            dict(row._mapping, unregistered=True)
             for row in pg.execute(
                 """
-                -- How many logged trips each hull actually accounts for. Resolved
-                -- through vessel_resolve, so trips logged under an old name count
-                -- towards the same hull; the register is sorted by it, which puts the
-                -- ships worth curating at the top.
-                WITH trip_counts AS (
-                    SELECT vessel_resolve(reg) AS vessel_id,
+                -- Grouped by the NORMALISED name, so "MS Pont-Aven", "Pont Aven" and
+                -- "pont-aven" are one ship and one decision, exactly as vessel_resolve
+                -- would treat them once the row exists. The spelling offered back is the
+                -- commonest one; the others are shown so a mis-grouping is visible.
+                WITH unlinked AS (
+                    SELECT vessel_normalize(reg) AS name_key,
+                           MODE() WITHIN GROUP (ORDER BY btrim(reg)) AS reg,
                            COUNT(*) AS trips,
-                           -- Who mostly runs her. Decoration, but a useful one: the
-                           -- operator is often what identifies a small ferry, where the
-                           -- name is generic and the hull has no IMO. mode() ignores
-                           -- NULLs and NULLIF keeps blanks from winning; the first name
-                           -- only, since a ferry is rarely a multi-operator trip.
+                           COUNT(DISTINCT user_id) AS users,
+                           ARRAY_AGG(DISTINCT btrim(reg)) AS spellings,
+                           -- Who runs her, as in the register above: on a ship with
+                           -- nothing but a generic name, the operator is what says which
+                           -- ship it is.
                            MODE() WITHIN GROUP (
                                ORDER BY NULLIF(btrim(split_part(operator, ',', 1)), '')
                            ) AS operator
                     FROM trips
-                    WHERE trip_type = 'ferry' AND reg IS NOT NULL AND btrim(reg) <> ''
+                    WHERE trip_type = 'ferry'
+                      AND reg IS NOT NULL AND btrim(reg) <> ''
+                      -- Punctuation only normalises to nothing, and a registration must
+                      -- have a name or an MMSI — there is nothing here to create.
+                      AND vessel_normalize(reg) IS NOT NULL
+                      AND vessel_resolve(reg) IS NULL
                     GROUP BY 1
                 )
-                SELECT v.uid, v.imo, v.trainlog_id,
-                       -- The hull as it is NOW. Not columns of the hull — it has none of
-                       -- these — but the most recent registration's, so a row can be
-                       -- recognised at a glance. The history is under Periods.
-                       r.name, r.country_code,
-                       -- Every other name it has carried. Shown as "ex …" and, because
-                       -- DataTables searches the text of a row, that is also what makes
-                       -- a hull findable by a name it no longer goes by.
-                       ARRAY(
-                           SELECT a.name FROM vessel_registrations a
-                           WHERE a.vessel_id = v.uid
-                             AND a.name IS NOT NULL
-                             AND a.uid IS DISTINCT FROM r.uid
-                           ORDER BY a.effective_date DESC NULLS LAST, a.uid DESC
-                       ) AS former_names,
-                       p.local_image_path,
-                       COALESCE(c.trips, 0) AS trips,
-                       c.operator,
-                       o.short_name AS operator_name,
-                       o.logo_url AS operator_logo,
-                       (SELECT COUNT(*) FROM vessel_registrations a WHERE a.vessel_id = v.uid)
-                           AS registrations
-                FROM vessels v
-                LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
-                LEFT JOIN trip_counts c ON c.vessel_id = v.uid
-                -- That operator name resolved through operator_aliases, exactly as a
-                -- trip resolves its own (see get_trip.sql), so a ferry logged as SNCM
-                -- picks up the logo held under Corsica Linea. The current logo: this is
-                -- a register of ships, not a history of liveries.
+                SELECT u.*, o.short_name AS operator_name, o.logo_url AS operator_logo
+                FROM unlinked u
                 LEFT JOIN LATERAL (
                     SELECT op.short_name,
                            (SELECT l.logo_url FROM operator_logos l
@@ -10303,25 +10391,32 @@ def ships():
                             LIMIT 1) AS logo_url
                     FROM operator_aliases a
                     JOIN operators op ON op.operator_id = a.operator_id
-                    WHERE a.normalized = operator_normalize(c.operator)
+                    WHERE a.normalized = operator_normalize(u.operator)
                     ORDER BY (a.operator_type = 'operator') DESC, a.operator_id
                     LIMIT 1
                 ) o ON TRUE
-                LEFT JOIN LATERAL (
-                    SELECT local_image_path
-                    FROM ship_pictures
-                    WHERE registration_id = r.uid AND local_image_path IS NOT NULL
-                    ORDER BY fetch_date DESC NULLS LAST, uid DESC
-                    LIMIT 1
-                ) p ON TRUE
-                ORDER BY COALESCE(c.trips, 0) DESC, r.name NULLS LAST, v.uid
+                ORDER BY u.trips DESC, u.reg
                 """
             ).fetchall()
         ]
 
+    # One list, one table. The unregistered rows carry the register's own keys — the
+    # logged text stands in for the name, and everything a hull has and they have not is
+    # simply absent — so the template renders both from the same loop and DataTables
+    # sorts and searches across the two.
+    shipList = shipList + [
+        dict(row, name=row["reg"], registrations=0, uid=None, imo=None,
+             trainlog_id=None, flag="", former_names=[], local_image_path=None)
+        for row in unlinked
+    ]
+    shipList.sort(key=lambda s: (-(s["trips"] or 0), (s["name"] or "").lower()))
+
     return render_template(
         "admin/ships.html",
         shipList=shipList,
+        # The one-click cleanup below acts on exactly these, and the button says how many.
+        unusedCount=sum(1 for s in shipList if not s["unregistered"] and not s["trips"]),
+        unregisteredCount=sum(1 for s in shipList if s["unregistered"]),
         # For the flag picker in the Periods form, same list every other country select
         # on the site is built from.
         country_list=get_all_countries(),
@@ -10397,6 +10492,249 @@ def delete_ship():
         )
 
     return jsonify({"success": True})
+
+
+@app.route("/admin/ships/<int:vessel_id>/row")
+@admin_required
+def ship_row(vessel_id):
+    """
+    One hull's row of the register, as the HTML the table holds.
+
+    What the page fetches after an edit instead of reloading itself: the register is a
+    table of several hundred rows, most of them with a photo, and re-fetching all of it
+    to show that one name changed is the reload this replaces. Rendered from the same
+    partial the table is built from, so the row that comes back cannot drift from the
+    one it replaces.
+    """
+    with pg_session() as pg:
+        rows = _register_rows(pg, vessel_id)
+
+    if not rows:
+        return "", 404
+    return render_template("admin/ship_row.html", ship=rows[0])
+
+
+@app.route("/admin/ships/prune", methods=["POST"])
+@admin_required
+def prune_ships():
+    """
+    Drop every hull no trip resolves to.
+
+    A hull earns its row by being sailed on. One with no trip at all is nearly always a
+    mistake — a typo'd IMO, a duplicate created before the name resolved, a row from a
+    trip since deleted or re-typed — and it costs the register nothing to be rid of it,
+    because registering the ship again is the same three fields.
+
+    Photos go with it (ON DELETE CASCADE on ship_pictures); the files stay on disk, as
+    they do for a single delete. Note this reaches a hull an admin added by hand and has
+    not logged a trip on yet, which is the one case where it is not a mistake — hence a
+    button that says how many, and not something that runs on its own.
+    """
+    with pg_session() as pg:
+        deleted = pg.execute(
+            """
+            -- The used set is resolved ONCE, over the ferry trips, rather than per hull:
+            -- vessel_resolve is four index lookups a call, and asking it per vessel per
+            -- trip is the shape that took the periods endpoint to a minute (0056).
+            WITH used AS (
+                SELECT DISTINCT vessel_resolve(reg) AS uid
+                FROM trips
+                WHERE trip_type = 'ferry' AND reg IS NOT NULL AND btrim(reg) <> ''
+            )
+            DELETE FROM vessels
+            WHERE uid NOT IN (SELECT uid FROM used WHERE uid IS NOT NULL)
+            RETURNING uid
+            """
+        ).fetchall()
+
+    # The uids, not just the count: the page takes those rows out of the table itself
+    # rather than reloading to find them gone.
+    return jsonify({"success": True, "deleted": [row[0] for row in deleted]})
+
+
+@app.route("/admin/ships/wikidata_search")
+@admin_required
+def ship_wikidata_search():
+    """
+    Ships on Wikidata matching a name, with their numbers and their photo.
+
+    The counterpart to the backfill, which goes the other way: it matches a hull we hold
+    by its IMO or MMSI, and can do nothing for a ship logged as a bare name. This finds
+    the item by name so the numbers can be filled in from it — and once there is a
+    number, everything else in the register works.
+
+    Candidates only, as with the Commons search: several real ships share a name, and
+    Wikidata cannot tell which one somebody sailed on.
+    """
+    try:
+        results = wikidata_search_ships(request.args.get("q"))
+    except Exception as exc:
+        logger.exception("Wikidata ship search failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+    return jsonify({"success": True, "results": results})
+
+
+@app.route("/admin/ships/adopt", methods=["POST"])
+@admin_required
+def adopt_ship():
+    """
+    Turn a name people have been logging into a hull of its own.
+
+    The register only knows a ferry trip's `reg` when something resolves it; everything
+    else is text somebody typed, and that text is all this has to go on. So: create the
+    hull (with an IMO if the admin knows one, otherwise its trainlog_id alone), give it
+    its first registration under the name as logged, and re-point the trips at the hull's
+    key — the same rewrite migration 0056 did, and what makes a later rename reach every
+    trip at once instead of orphaning them.
+
+    The trips are chosen BEFORE the row exists, while they still resolve to nothing. Two
+    hulls may end up sharing a name, and vessel_resolve settles that by uid; picking the
+    trips afterwards would quietly hand them to whichever hull won.
+    """
+    reg = (request.form.get("reg") or "").strip()
+    name = (request.form.get("name") or "").strip() or reg
+    country_code = (request.form.get("country_code") or "").strip() or None
+
+    if not reg:
+        return jsonify({"success": False, "error": "No reg given"}), 400
+
+    try:
+        imo = _clean_vessel_number(request.form.get("imo"), 7, "IMO")
+        mmsi = _clean_vessel_number(request.form.get("mmsi"), 9, "MMSI")
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+    with pg_session() as pg:
+        if imo:
+            clash = pg.execute(
+                "SELECT uid FROM vessels WHERE imo = :imo", {"imo": imo}
+            ).fetchone()
+            if clash:
+                return jsonify(
+                    {"success": False, "error": f"IMO {imo} is already hull #{clash['uid']}"}
+                ), 409
+        if mmsi:
+            clash = pg.execute(
+                "SELECT vessel_id FROM vessel_registrations WHERE mmsi = :mmsi",
+                {"mmsi": mmsi},
+            ).fetchone()
+            if clash:
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": f"MMSI {mmsi} belongs to hull #{clash['vessel_id']}",
+                    }
+                ), 409
+
+        trip_ids = [
+            row[0]
+            for row in pg.execute(
+                """
+                SELECT trip_id FROM trips
+                WHERE trip_type = 'ferry'
+                  AND reg IS NOT NULL AND btrim(reg) <> ''
+                  AND vessel_normalize(reg) = vessel_normalize(:reg)
+                  AND vessel_resolve(reg) IS NULL
+                """,
+                {"reg": reg},
+            ).fetchall()
+        ]
+
+        hull = pg.execute(
+            "INSERT INTO vessels (imo) VALUES (:imo) RETURNING uid, trainlog_id",
+            {"imo": imo},
+        ).fetchone()
+
+        registration_id = pg.execute(
+            """
+            INSERT INTO vessel_registrations (vessel_id, name, mmsi, country_code)
+            VALUES (:vessel_id, :name, :mmsi, :country_code)
+            RETURNING uid
+            """,
+            {
+                "vessel_id": hull["uid"],
+                "name": name,
+                "mmsi": mmsi,
+                "country_code": country_code,
+            },
+        ).scalar()
+
+        if trip_ids:
+            pg.execute(
+                "UPDATE trips SET reg = :key WHERE trip_id = ANY(:ids)",
+                {"key": imo or hull["trainlog_id"], "ids": trip_ids},
+            )
+
+        # The photo of the Wikidata item the admin picked, if they picked one. Fetched
+        # here rather than left for a second click, because the identification has just
+        # been made and this is the picture of the ship that was identified — with an
+        # author and a licence, which the image search cannot give.
+        photo = None
+        image_url = (request.form.get("commons_image") or "").strip()
+        if image_url:
+            try:
+                photo = fetch_commons_picture(pg, registration_id, image_url)
+            except Exception:
+                # The hull is registered either way; a photo that failed to download is
+                # one button press away in the Periods view.
+                logger.exception("Commons photo import failed for new hull %s", hull["uid"])
+
+    return jsonify(
+        {
+            "success": True,
+            "vessel_id": hull["uid"],
+            "registration_id": registration_id,
+            "trainlog_id": hull["trainlog_id"],
+            "name": name,
+            "trips": len(trip_ids),
+            "photo": bool(photo),
+        }
+    )
+
+
+@app.route("/admin/ships/commons_search")
+@admin_required
+def ship_commons_search():
+    """
+    Candidate photos from Wikimedia Commons for a free-text query.
+
+    The lookup for a ship known only by name: /registrations/fetch_photo goes through
+    Wikidata, which matches on numbers alone, and a hull with neither an IMO nor an MMSI
+    gets nothing from it. Search results cannot be trusted to be the right ship, so they
+    are returned to be looked at and picked from — never stored here.
+    """
+    try:
+        results = search_commons_images(request.args.get("q"))
+    except Exception as exc:
+        logger.exception("Commons search failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+    return jsonify({"success": True, "results": results})
+
+
+@app.route("/admin/ships/registrations/commons_photo", methods=["POST"])
+@admin_required
+def use_commons_search_photo():
+    """Store one chosen Commons file against one registration, with its attribution."""
+    registration_id = request.form.get("registration_id")
+    title = (request.form.get("title") or "").strip()
+    if not (registration_id and title):
+        return jsonify({"success": False, "error": "Nothing chosen"}), 400
+
+    try:
+        with pg_session() as pg:
+            stored = fetch_commons_picture(pg, int(registration_id), title)
+    except Exception as exc:
+        logger.exception("Commons photo import failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+
+    if not stored:
+        # fetch_commons_picture refuses a file whose licence it cannot read, which is
+        # the case worth naming: nothing is wrong with the network.
+        return jsonify(
+            {"success": False, "error": "Could not read that file's licence — not stored"}
+        ), 400
+
+    return jsonify({"success": True, "image": f"/static/images/ship_pictures/{stored}"})
 
 
 def _photo_credit_fields():

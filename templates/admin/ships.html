@@ -15,6 +15,33 @@
 
     /* .ship-thumb (the hover photo preview) is shared with the trip forms: style2.css. */
 
+    /* Column widths, fixed rather than measured. DataTables' own measurement gave the
+       operator column everything the widest header and logo could want and parked the
+       leftover space there, while the ship's name — the one column with real text in it
+       — wrapped beside it; shrinking every other column to its content then moved the
+       whole gap in front of the operator instead. Percentages that add up to 100 put a
+       share of the slack in each column, so no single gap opens up. Paired with
+       autoWidth:false, or DataTables writes inline widths over these. */
+    #shipTable { table-layout: fixed; width: 100%; }
+    #shipTable th:nth-child(1), #shipTable td:nth-child(1) { width: 9%; }   /* IMO */
+    #shipTable th:nth-child(2), #shipTable td:nth-child(2) { width: 11%; }  /* Trainlog ID */
+    #shipTable th:nth-child(3), #shipTable td:nth-child(3) { width: 27%; }  /* Currently */
+    #shipTable th:nth-child(4), #shipTable td:nth-child(4) { width: 17%; }  /* Operator */
+    #shipTable th:nth-child(5), #shipTable td:nth-child(5) { width: 15%; }  /* Trips */
+    #shipTable th:nth-child(6), #shipTable td:nth-child(6) { width: 9%; }   /* Periods */
+    #shipTable th:nth-child(7), #shipTable td:nth-child(7) { width: 12%; }  /* Actions */
+    /* Under a fixed layout a cell no longer widens for its content, so the ones holding
+       a number or a pair of buttons say so rather than wrapping. */
+    #shipTable td:nth-child(1), #shipTable td:nth-child(2),
+    #shipTable td:nth-child(5), #shipTable td:nth-child(6),
+    #shipTable td:nth-child(7) { white-space: nowrap; }
+
+    /* The trip count and "· n users" are two columns pretending to be one cell: each is
+       given a fixed box, so digits sit under digits all the way down instead of drifting
+       with the width of the number beside them. */
+    #shipTable .trip-count { display: inline-block; min-width: 2.5em; text-align: right; }
+    #shipTable .trip-users { display: inline-block; min-width: 6em; text-align: left; }
+
     /* The photo cell in the Periods table: thumbnail on the left, its attribution beside
        it, so the credit reads as belonging to the picture rather than floating under the
        row. Capped, or a long CC author name pushes the actions off the table. */
@@ -27,15 +54,28 @@
 </style>
 
 <div class="container">
-    <h1 class="mt-3">Ships</h1>
-    <p class="text-muted">
-        One row per <strong>hull</strong>, identified by its IMO. A hull carries a sequence of
-        registrations — an MMSI, a name and a flag, from a date — and a trip shows the one that
-        was in force on its own date. IMO 8601915 sailed as Amorella 🇫🇮 from 1988 and as
-        Mega&nbsp;Victoria 🇮🇹 from 2022; a crossing in 2008 reads Amorella.
-        <br>The columns below show each hull as it is <em>now</em>; use <em>Periods</em> to see
-        and edit its history.
-    </p>
+    {# The explanation is a paragraph long and is read once; behind the "i" it stops
+       pushing the table below the fold on every later visit. #}
+    <h1 class="mt-3">
+        Ships
+        <a class="btn btn-link p-0 align-baseline fs-6" data-bs-toggle="collapse" href="#shipsHelp"
+           role="button" aria-expanded="false" aria-controls="shipsHelp"
+           title="What this page is"><i class="fa-solid fa-circle-info"></i></a>
+    </h1>
+    <div class="collapse" id="shipsHelp">
+        <p class="text-muted">
+            One row per <strong>hull</strong>, identified by its IMO. A hull carries a sequence of
+            registrations — an MMSI, a name and a flag, from a date — and a trip shows the one that
+            was in force on its own date. IMO 8601915 sailed as Amorella 🇫🇮 from 1988 and as
+            Mega&nbsp;Victoria 🇮🇹 from 2022; a crossing in 2008 reads Amorella.
+            <br>The columns below show each hull as it is <em>now</em>; use <em>Periods</em> to see
+            and edit its history.
+            <br>Rows marked <span class="badge bg-warning text-dark">unregistered</span> are not
+            hulls at all: they are names people have logged that resolve to nothing. They sit in the
+            same table so that a name already held under another spelling is visible before a second
+            row is created for it.
+        </p>
+    </div>
     <div class="d-flex flex-wrap gap-2 align-items-center mb-2">
         <button type="button" class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#shipModal" onclick="clearForm()">Add Ship</button>
         <!-- Its own page: the backfill is a worklist to sit down with — a slow scan, then
@@ -44,6 +84,25 @@
         <a href="/admin/ships/backfill" class="btn btn-outline-secondary">
             <i class="fa-solid fa-wand-magic-sparkles"></i> Wikidata backfill
         </a>
+        {% if unusedCount %}
+            {# Hulls no trip resolves to. Nearly always wreckage — a typo'd number, a
+               duplicate, a row left behind by a trip since re-typed — so they go in one
+               press rather than one at a time. It says how many, and asks, because it also
+               reaches a ship added by hand that has not been sailed on yet. #}
+            <button type="button" class="btn btn-outline-danger" id="pruneBtn">
+                <i class="fa-regular fa-trash-can"></i> Delete {{ unusedCount }} with no trips
+            </button>
+        {% endif %}
+        {% if unregisteredCount %}
+            {# A filter rather than a link: the rows are in the table below, and what this
+               is for is working through them without the register in the way. #}
+            <div class="form-check form-switch ms-2 d-inline-flex align-items-center gap-2">
+                <input class="form-check-input mt-0" type="checkbox" id="onlyUnregistered">
+                <label class="form-check-label" for="onlyUnregistered">
+                    Only the {{ unregisteredCount }} unregistered
+                </label>
+            </div>
+        {% endif %}
     </div>
     <table id="shipTable">
         <thead>
@@ -61,76 +120,107 @@
             </tr>
         </thead>
         <tbody>
+            {# One row, one template — see admin/ship_row.html, which the ajax refresh
+               renders on its own. #}
             {% for ship in shipList %}
-                <tr>
-                    {# The numbers link out to vesselfinder — the same source the cached
-                       photos are credited to, so a doubtful row can be checked against
-                       the place the photo came from. #}
-                    <td>
-                        {% if ship.imo %}
-                            <a href="https://www.vesselfinder.com/vessels/details/{{ ship.imo }}"
-                               target="_blank" rel="noopener noreferrer">{{ ship.imo }}</a>
-                        {% else %}
-                            <span class="text-muted">—</span>
-                        {% endif %}
-                    </td>
-                    <td class="text-muted small">{{ ship.trainlog_id }}</td>
-                    {# The most recent registration, shown so a row is recognisable —
-                       flag, name and photo together, the way the ship is now. None of it
-                       is a property of the hull; it all lives under Periods. #}
-                    <td>
-                        {% if ship.local_image_path %}
-                            <span class="ship-thumb me-2">
-                                <img src="/static/images/ship_pictures/{{ ship.local_image_path }}"
-                                     width="64" height="40" loading="lazy" decoding="async" alt="">
-                                <img class="ship-thumb-full"
-                                     src="/static/images/ship_pictures/{{ ship.local_image_path }}"
-                                     loading="lazy" decoding="async" alt="">
-                            </span>
-                        {% endif %}
-                        {{ ship.flag }}
-                        {{ ship.name or '' }}
-                        {% if ship.former_names %}
-                            {# Former names, so a hull is recognisable — and findable —
-                               by a name it no longer carries. DataTables searches the
-                               row's text, so this is what makes "Amorella" match a ship
-                               now sailing as Mega Victoria. #}
-                            <div class="text-muted small">ex {{ ship.former_names | join(', ') }}</div>
-                        {% endif %}
-                    </td>
-                    {# Decoration: whoever runs her on most of the logged trips. Often the
-                       clearest identification of a small ferry, whose name is generic and
-                       whose hull has no IMO. Resolved through operator_aliases, so a
-                       spelling variant still finds the logo. #}
-                    <td>
-                        {% if ship.operator_logo %}
-                            <img src="/static/{{ ship.operator_logo }}" alt="{{ ship.operator_name }}"
-                                 height="20" loading="lazy" decoding="async"
-                                 style="max-width:90px;object-fit:contain;vertical-align:middle;">
-                        {% elif ship.operator %}
-                            <span class="text-muted small">{{ ship.operator }}</span>
-                        {% endif %}
-                    </td>
-                    <td>{{ ship.trips }}</td>
-                    <td>
-                        {# The count is the sort key; the button opens the history. A hull with
-                           more than one period has been renamed or re-flagged. #}
-                        <button class="btn btn-sm periods-btn {% if ship.registrations > 1 %}btn-info{% else %}btn-outline-secondary{% endif %}"
-                                data-vessel-id="{{ ship.uid }}"
-                                data-label="{{ ship.name or ship.imo or ship.trainlog_id }}">
-                            <i class="fa-regular fa-clock"></i> {{ ship.registrations }}
-                        </button>
-                    </td>
-                    <td>
-                        <button class="btn btn-warning btn-sm edit-ship-btn" data-bs-toggle="modal" data-bs-target="#shipModal"
-                            data-vessel-id="{{ ship.uid }}" data-imo="{{ ship.imo or '' }}"
-                            data-name="{{ ship.name or '' }}" data-trainlog-id="{{ ship.trainlog_id }}"><i class="fa-regular fa-pen-to-square"></i></button>
-                        <button class="btn btn-danger btn-sm delete-ship-btn" data-vessel-id="{{ ship.uid }}"><i class="fa-regular fa-trash-can"></i></button>
-                    </td>
-                </tr>
+                {% include "admin/ship_row.html" %}
             {% endfor %}
         </tbody>
     </table>
+</div>
+
+<!-- One logged name becomes a hull -->
+<div class="modal fade" id="adoptModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Register <span id="adoptTitle"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="adoptForm">
+                    <input type="hidden" id="adopt_reg" name="reg">
+                    {# The Commons file of whichever Wikidata item was picked. Carried on
+                       the form so that registering the ship and giving her the photo of
+                       the ship just identified are one act, rather than a second trip
+                       through the Periods view. #}
+                    <input type="hidden" id="adopt_image" name="commons_image">
+                    <p class="text-muted small" id="adoptSummary"></p>
+
+                    {# ── Wikidata, searched by name ──────────────────────────────────
+                       The way in for a ship logged as a bare name: the backfill matches
+                       on numbers and can do nothing here, and it is the numbers this
+                       fills in. What comes back is candidates — several real ships are
+                       called Nordlys — so nothing is written until one is clicked, and
+                       clicking one only fills the fields below, which stay editable. #}
+                    <div class="card mb-3">
+                        <div class="card-body py-2">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-8">
+                                    <label for="wikidataQuery" class="form-label small mb-0">
+                                        Look her up on Wikidata
+                                    </label>
+                                    <input type="text" class="form-control form-control-sm" id="wikidataQuery">
+                                </div>
+                                <div class="col-4">
+                                    <button type="button" class="btn btn-outline-primary btn-sm" id="wikidataSearchBtn">
+                                        <i class="fa-solid fa-magnifying-glass"></i> Search
+                                    </button>
+                                </div>
+                            </div>
+                            <div id="wikidataResults" class="mt-2"></div>
+                        </div>
+                    </div>
+
+                    <div class="row g-3">
+                        <div class="col-12">
+                            <label for="adopt_name" class="form-label">Name</label>
+                            <input type="text" class="form-control" id="adopt_name" name="name">
+                            <small class="form-text text-muted">
+                                What she is called. Tidy it here — the trips follow the hull
+                                from now on, so this is what they will all display.
+                            </small>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="adopt_imo" class="form-label">IMO</label>
+                            <input type="text" class="form-control" id="adopt_imo" name="imo"
+                                   inputmode="numeric" pattern="[0-9]{7}" placeholder="7 digits">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="adopt_mmsi" class="form-label">MMSI</label>
+                            <input type="text" class="form-control" id="adopt_mmsi" name="mmsi"
+                                   inputmode="numeric" pattern="[0-9]{9}" placeholder="9 digits">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="adopt_country" class="form-label">Flag</label>
+                            {# Same widget and the same reasons as the Periods form's — see
+                               the comments there, including why it is built right here. #}
+                            <select class="form-control selectpicker" id="adopt_country" name="country_code"
+                                    data-live-search="true" data-size="10" title="—"
+                                    data-container="body">
+                                {% for code, emoji in country_list.items() %}
+                                    <option value="{{ code }}" data-code="{{ code }}">{{ emoji }}</option>
+                                {% endfor %}
+                            </select>
+                            <script>
+                                updateCountryNames(document.getElementById('adopt_country'), true);
+                                $('#adopt_country').selectpicker();
+                            </script>
+                        </div>
+                        <div class="col-12">
+                            <small class="text-muted">
+                                Numbers are optional — a hull with none keeps its Trainlog ID.
+                                Giving one now is what lets Wikidata find her photo and her
+                                details later.
+                            </small>
+                        </div>
+                    </div>
+                    <div id="adoptError" class="text-danger mt-2" style="display:none;"></div>
+                    <button type="submit" class="btn btn-primary mt-3">Register and open periods</button>
+                </form>
+            </div>
+        </div>
+    </div>
 </div>
 
 <!-- Modal Form -->
@@ -310,9 +400,17 @@
 
 <!-- Initialize DataTable -->
 <script>
+    /* Kept, because everything below edits the table in place rather than reloading the
+       page: several hundred rows, most with a photo, re-fetched to show that one name
+       changed. */
+    var shipTable;
+
     $(document).ready(function() {
-        $('#shipTable').DataTable({
+        shipTable = $('#shipTable').DataTable({
             responsive: true,
+            // The column widths are the stylesheet's; measuring them here only produced
+            // inline widths that fought it. See the nth-child rules above.
+            autoWidth: false,
             // Busiest hulls first: those are the ones whose missing name or number is
             // actually showing up on somebody's trips. (Column 4 is Trips.)
             order: [[4, 'desc']],
@@ -335,8 +433,223 @@
             },
         });
 
+        /* The unregistered rows live in the same table, so this filters rather than
+           navigates. Registered as a DataTables search plugin — the rows it hides are
+           hidden from paging and the count as well, which is what makes "23 unregistered"
+           mean the same thing before and after the switch. */
+        $.fn.dataTable.ext.search.push(function(settings, data, dataIndex) {
+            if (settings.nTable.id !== 'shipTable') return true;
+            if (!$('#onlyUnregistered').is(':checked')) return true;
+            // Through the API rather than settings.aoData[…].nTr: the row cache is an
+            // internal that DataTables 2 reshaped, and row().node() is the supported way
+            // to reach the <tr> the class sits on.
+            var row = new $.fn.dataTable.Api(settings).row(dataIndex).node();
+            return $(row).hasClass('unregistered-row');
+        });
+
+        $('#onlyUnregistered').on('change', function() { shipTable.draw(); });
+
+        /* On every draw, not once at load. DataTables keeps only the current page's rows
+           in the document — the other eighty pages are detached nodes it swaps in — so a
+           single pass at load reaches page 1 and nothing else, and every later page fell
+           back to the browser's own title tooltip. Instantiating on draw catches paging,
+           sorting, searching and the ajax refresh alike; getOrCreateInstance means a row
+           that has been through here before is not built twice. */
+        shipTable.on('draw', function() {
+            initTooltips(shipTable.rows({ page: 'current' }).nodes());
+        });
+
+        // The first page is already drawn by the time the handler above is bound.
+        initTooltips('#shipTable');
+
+        /* Every hull no trip resolves to, in one press. Confirmed rather than automatic:
+           a ship added by hand and not yet sailed on looks exactly like the wreckage this
+           is for, and it is the admin who knows which they have just done. */
+        $('#pruneBtn').on('click', function() {
+            var $btn = $(this);
+            if (!confirm('Delete every hull with no trips? '
+                       + 'A ship you added by hand but have not logged a trip on goes too.')) return;
+            $btn.prop('disabled', true);
+            $.post('/admin/ships/prune')
+                // The server says which uids went, so the rows are taken out here. The
+                // button goes with them: there is nothing left for it to delete.
+                .done(function(res) {
+                    res.deleted.forEach(function(uid) { shipTable.row(shipRow(uid)).remove(); });
+                    shipTable.draw(false);
+                    $btn.remove();
+                })
+                .fail(function(xhr) {
+                    $btn.prop('disabled', false);
+                    alert((xhr.responseJSON && xhr.responseJSON.error) || 'Could not delete');
+                });
+        });
+
         // The country picker is named and built beside its own <select>, before
         // DOMContentLoaded — see the comment there.
+    });
+
+    /* ── Keeping the table itself up to date ──────────────────────────────────
+       Every edit here changes one row, and the row is rendered by the same partial the
+       table was built from (admin/ship_row.html), so fetching it back is exact. The
+       alternative was location.reload() after each save, which threw away the sort, the
+       search and the page you were on to redraw several hundred rows. */
+    function shipRow(vesselId) {
+        return $('#shipTable tbody tr[data-vessel-id="' + vesselId + '"]');
+    }
+
+    /* Bootstrap tooltips are opt-in: the markup only declares them, and each element has
+       to be instantiated. Run over a subtree rather than the document, because rows
+       arrive from the ajax refresh after the first pass. */
+    function initTooltips(root) {
+        $(root).find('[data-bs-toggle="tooltip"]').each(function() {
+            bootstrap.Tooltip.getOrCreateInstance(this);
+        });
+    }
+
+    /* Before a row leaves the table. A tooltip lives in an element of its own appended to
+       <body>, so one showing when its row is removed would otherwise stay on screen with
+       nothing under it. */
+    function disposeTooltips(root) {
+        $(root).find('[data-bs-toggle="tooltip"]').each(function() {
+            var tip = bootstrap.Tooltip.getInstance(this);
+            if (tip) { tip.dispose(); }
+        });
+    }
+
+    /* Re-fetches one hull's row. `$old` is the row it replaces — the hull's own by
+       default, but after registering an unregistered name it is that name's row, which
+       is how the two become one. */
+    function refreshShipRow(vesselId, $old) {
+        return $.get('/admin/ships/' + vesselId + '/row').done(function(html) {
+            var $row = $($.parseHTML(html)).filter('tr');
+            if (!$row.length) return;
+            var $target = $old && $old.length ? $old : shipRow(vesselId);
+            if ($target.length) { disposeTooltips($target); shipTable.row($target).remove(); }
+            // draw(false): keeps the paging position, so a row edited on page 3 does not
+            // jump the table back to page 1.
+            shipTable.row.add($row[0]).draw(false);
+            initTooltips($row);
+        });
+    }
+
+    /* The two counters in the toolbar. They are the reason the reload was there at all —
+       a registered name is one fewer unregistered — so they are kept by hand. */
+    function countUnregistered(delta) {
+        var $label = $('label[for="onlyUnregistered"]');
+        var count = (parseInt($label.text().replace(/\D/g, ''), 10) || 0) + delta;
+        if (count > 0) { $label.text('Only the ' + count + ' unregistered'); return; }
+        // None left: the switch has nothing to filter to, and leaving it on would hide
+        // the whole table.
+        $('#onlyUnregistered').prop('checked', false).closest('.form-check').remove();
+        shipTable.draw(false);
+    }
+
+    /* ── Registering a name that is not in the register ───────────────────────── */
+    // The row the register form was opened from, so that on success the unregistered row
+    // can be replaced by the hull's own rather than both being left in the table.
+    var adoptRow = null;
+
+    $(document).on('click', '.adopt-btn', function() {
+        var reg = $(this).data('reg');
+        var operator = $(this).data('operator');
+        adoptRow = $(this).closest('tr');
+        $('#adopt_reg').val(reg);
+        $('#adopt_name').val(reg);
+        $('#adopt_imo').val('');
+        $('#adopt_mmsi').val('');
+        $('#adopt_image').val('');
+        $('#adopt_country').selectpicker('val', '');
+        $('#wikidataQuery').val(reg);
+        $('#wikidataResults').empty();
+        $('#adoptTitle').text(reg);
+        $('#adoptSummary').text($(this).data('trips') + ' trip(s) logged under this name'
+            + (operator ? ', mostly with ' + operator : '') + '.');
+        $('#adoptError').hide();
+        new bootstrap.Modal(document.getElementById('adoptModal')).show();
+    });
+
+    /* ── The Wikidata lookup behind the register form ─────────────────────────── */
+    $(document).on('click', '#wikidataSearchBtn', function() {
+        var $results = $('#wikidataResults');
+        $results.html('<span class="text-muted small">'
+            + '<i class="fa-solid fa-spinner fa-spin"></i> Searching Wikidata…</span>');
+        $.getJSON('/admin/ships/wikidata_search', { q: $('#wikidataQuery').val() })
+            .done(function(res) {
+                var esc = function(v) { return $('<div>').text(v == null ? '' : v).html(); };
+                /* The JSON below rides in a single-quoted attribute, and .text().html()
+                   escapes & < > and nothing else — so "Bras d'Or" would end the attribute
+                   on its own apostrophe. Same trap as the periods buttons' data-label. */
+                var escAttr = function(v) { return esc(v).replace(/'/g, '&#39;'); };
+                if (!res.results.length) {
+                    $results.html('<span class="text-muted small">Wikidata has no ship by that'
+                        + ' name. Fill the fields in by hand.</span>');
+                    return;
+                }
+                // Numbers and flag on the face of each candidate: that is what tells two
+                // ships of the same name apart, and what the row is being picked for.
+                $results.html('<div class="list-group list-group-flush">'
+                    + res.results.map(function(r) {
+                        var facts = [r.imo ? 'IMO ' + esc(r.imo) : null,
+                                     r.mmsi ? 'MMSI ' + esc(r.mmsi) : null,
+                                     r.country ? getFlagEmoji(r.country) : null,
+                                     r.operator ? esc(r.operator) : null].filter(Boolean);
+                        return '<a href="#" class="list-group-item list-group-item-action'
+                             + ' d-flex gap-2 align-items-center wikidata-pick"'
+                             + " data-item='" + escAttr(JSON.stringify(r)) + "'>"
+                             + (r.image ? '<img src="' + esc(r.image) + '?width=120" width="60"'
+                                          + ' height="40" style="object-fit:cover;" alt="">' : '')
+                             + '<span><strong>' + esc(r.name || r.qid) + '</strong>'
+                             + (r.description ? ' <span class="text-muted small">'
+                                                + esc(r.description) + '</span>' : '')
+                             + '<br><span class="small text-muted">' + facts.join(' · ')
+                             + '</span></span></a>';
+                    }).join('') + '</div>');
+            })
+            .fail(function(xhr) {
+                $results.html('<span class="text-danger small">'
+                    + ((xhr.responseJSON && xhr.responseJSON.error) || 'Search failed') + '</span>');
+            });
+    });
+
+    /* Picking fills the form and stops there. Nothing is written until Register is
+       pressed, so a wrong pick costs a second click and not a wrong hull — and the name
+       people actually logged is kept where Wikidata's differs only in styling ("MV"). */
+    $(document).on('click', '.wikidata-pick', function(e) {
+        e.preventDefault();
+        var item = $(this).data('item');
+        if (item.name) { $('#adopt_name').val(item.name); }
+        if (item.imo) { $('#adopt_imo').val(item.imo); }
+        if (item.mmsi) { $('#adopt_mmsi').val(item.mmsi); }
+        if (item.country) { $('#adopt_country').selectpicker('val', item.country); }
+        // Her photo on Commons, downloaded with its author and licence when the form is
+        // submitted. Wikidata's P18 is the ship's own picture, so it needs no confirming.
+        $('#adopt_image').val(item.image || '');
+        $('.wikidata-pick').removeClass('active');
+        $(this).addClass('active');
+    });
+
+    /* Straight into the new ship's periods on success: registering her is half the job —
+       the flag, the dates and the photo are the other half, and they all live there.
+       periodsChanged is set so that closing that modal reloads the page, which is what
+       takes the row out of the list below and puts it in the register above. */
+    $(document).on('submit', '#adoptForm', function(e) {
+        e.preventDefault();
+        $('#adoptError').hide();
+        $.post('/admin/ships/adopt', $(this).serialize())
+            .done(function(res) {
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('adoptModal')).hide();
+                // The name's row becomes the hull's, in place. Then straight into the
+                // periods, where the flag, the dates and the photo are.
+                refreshShipRow(res.vessel_id, adoptRow);
+                countUnregistered(-1);
+                adoptRow = null;
+                openPeriods(res.vessel_id, res.name);
+            })
+            .fail(function(xhr) {
+                $('#adoptError')
+                    .text((xhr.responseJSON && xhr.responseJSON.error) || 'Could not register')
+                    .show();
+            });
     });
 
     /* Bound by delegation and outside $(document).ready on purpose. These were inside
@@ -377,11 +690,14 @@
                 data: formData,
                 processData: false,
                 contentType: false,
+                // The row it changed, fetched back — or added, for a hull created here,
+                // which has no row yet and so replaces nothing.
                 success: function(response) {
-                    location.reload();
+                    bootstrap.Modal.getOrCreateInstance(document.getElementById('shipModal')).hide();
+                    refreshShipRow(response.vessel_id);
                 },
                 // A duplicate IMO/MMSI or a malformed one comes back as a message
-                // rather than a reload — the admin has to change something first.
+                // rather than a save — the admin has to change something first.
                 error: function(xhr) {
                     var message = (xhr.responseJSON && xhr.responseJSON.error) || 'Could not save';
                     $('#shipFormError').text(message).show();
@@ -483,6 +799,14 @@
                         '<button class="btn btn-outline-secondary period-fetch-btn" data-uid="' + r.uid + '"'
                         + ' title="Look a photo up online">'
                         + '<i class="fa-solid fa-camera"></i></button>')
+                     // Commons by NAME, which the button above cannot do: it goes through
+                     // Wikidata, which matches on numbers, so a ship with neither an IMO
+                     // nor an MMSI gets nothing from it. Offered on every period, with or
+                     // without a photo — a licensed picture is worth having in place of a
+                     // copyrighted one.
+                     + '<button class="btn btn-outline-secondary period-commons-btn" data-uid="' + r.uid + '"'
+                     + ' title="Search Wikimedia Commons by name">'
+                     + '<i class="fa-solid fa-images"></i></button>'
                      + '<button class="btn btn-warning period-edit-btn" data-uid="' + r.uid + '"'
                      + ' title="Edit this period"><i class="fa-regular fa-pen-to-square"></i></button>'
                      + '<button class="btn btn-danger period-delete-btn" data-uid="' + r.uid + '"'
@@ -617,6 +941,80 @@
         });
     });
 
+    /* ── Wikimedia Commons, searched by name ──────────────────────────────────
+       Opens as a row under the period, like the credit editor and for the same reason.
+       The results are candidates and nothing more: a name matches several real ships
+       (there is more than one Gotland), so the picking is a human's and the author and
+       licence are shown against each one, since that is what decides whether the photo
+       may be shown at all. */
+    $(document).on('click', '.period-commons-btn', function() {
+        var uid = $(this).data('uid');
+        var r = periodsById[uid] || {};
+        var $row = $(this).closest('tr');
+        if ($row.next().hasClass('commons-picker')) { $row.next().remove(); return; }
+        $('.commons-picker').remove();
+        var esc = function(v) { return $('<div>').text(v == null ? '' : v).html(); };
+        $row.after('<tr class="commons-picker"><td colspan="7">'
+            + '<form class="row g-2 align-items-end commons-form" data-uid="' + uid + '">'
+            + '<div class="col-md-8"><label class="form-label small mb-0">Search Commons</label>'
+            + '<input type="text" class="form-control form-control-sm" name="q" value="'
+            + esc(((r.name || '') + ' ship').trim()) + '"></div>'
+            + '<div class="col-md-4"><button type="submit" class="btn btn-primary btn-sm">Search</button>'
+            + ' <button type="button" class="btn btn-link btn-sm commons-cancel">Close</button></div>'
+            + '</form><div class="commons-results mt-2"></div></td></tr>');
+        $row.next().find('.commons-form').trigger('submit');
+    });
+
+    $(document).on('click', '.commons-cancel', function() { $(this).closest('.commons-picker').remove(); });
+
+    $(document).on('submit', '.commons-form', function(e) {
+        e.preventDefault();
+        var uid = $(this).data('uid');
+        var $results = $(this).closest('td').find('.commons-results');
+        $results.html('<span class="text-muted small"><i class="fa-solid fa-spinner fa-spin"></i> Searching…</span>');
+        $.getJSON('/admin/ships/commons_search', { q: $(this).find('[name=q]').val() })
+            .done(function(res) {
+                var esc = function(v) { return $('<div>').text(v == null ? '' : v).html(); };
+                if (!res.results.length) {
+                    $results.html('<span class="text-muted small">Nothing on Commons for that.</span>');
+                    return;
+                }
+                // A picture is chosen by looking at it, so the thumbnails are the control;
+                // the credit under each is what says whether it can be used.
+                $results.html('<div class="d-flex flex-wrap gap-2">' + res.results.map(function(c) {
+                    return '<div class="text-center" style="width:150px;">'
+                         + '<a href="#" class="commons-pick" data-uid="' + uid + '"'
+                         + ' data-title="' + esc(c.title) + '">'
+                         + '<img src="' + esc(c.thumb) + '" style="max-width:100%;height:90px;'
+                         + 'object-fit:cover;" loading="lazy" alt=""></a>'
+                         + '<div class="small text-muted" style="line-height:1.15;">'
+                         + esc(c.author || 'no author') + '<br>' + esc(c.license || 'no licence')
+                         + (c.page ? ' <a href="' + esc(c.page) + '" target="_blank"'
+                                     + ' rel="noopener noreferrer">file</a>' : '')
+                         + '</div></div>';
+                }).join('') + '</div>');
+            })
+            .fail(function(xhr) {
+                $results.html('<span class="text-danger small">'
+                    + ((xhr.responseJSON && xhr.responseJSON.error) || 'Search failed') + '</span>');
+            });
+    });
+
+    $(document).on('click', '.commons-pick', function(e) {
+        e.preventDefault();
+        var $link = $(this);
+        $link.find('img').css('opacity', .4);
+        $('#periodFormError').hide();
+        $.post('/admin/ships/registrations/commons_photo',
+               { registration_id: $link.data('uid'), title: $link.data('title') })
+            .done(function() { periodsChanged = true; loadPeriods(); })
+            .fail(function(xhr) {
+                $link.find('img').css('opacity', 1);
+                $('#periodFormError')
+                    .text((xhr.responseJSON && xhr.responseJSON.error) || 'Could not store').show();
+            });
+    });
+
     $(document).on('click', '.period-fetch-btn', function() {
         var $btn = $(this).prop('disabled', true);
         $btn.html('<i class="fa-solid fa-spinner fa-spin"></i>');
@@ -679,12 +1077,14 @@
             .fail(function() { alert('Could not delete'); });
     }
 
-    // The table behind the modal shows each hull's current identity and period count,
-    // both of which an edit here can change — so reload once, on close, rather than
-    // after every save.
+    // The row behind the modal shows this hull's current identity, photo and period
+    // count, all of which an edit here can change — so it is fetched back once, on
+    // close, rather than after every save.
     var periodsChanged = false;
     $(document).on('hidden.bs.modal', '#periodsModal', function() {
-        if (periodsChanged) location.reload();
+        if (!periodsChanged) return;
+        periodsChanged = false;
+        refreshShipRow(periodsVesselId);
     });
 
     $(document).on('click', '.edit-ship-btn', function() {
@@ -711,8 +1111,11 @@
                 type: 'POST',
                 url: '/admin/ships/delete',
                 data: { vessel_id: vessel_id },
+                // Out of the table directly. Note the trips it held are now unresolved
+                // again, and will be back as an unregistered row on the next load —
+                // which is what deleting a hull means.
                 success: function(response) {
-                    location.reload();
+                    shipTable.row(shipRow(vessel_id)).remove().draw(false);
                 },
                 error: function(error) {
                     console.log('Error:', error);
