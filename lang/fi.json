@@ -1258,6 +1258,7 @@
     "statsAircraft": "Lentokoneet",
     "statsTrainsets": "Junayksiköt",
     "statsDelay": "Viivästys",
+    "statsDelayAccumulated": "Viivästys (kertynyt)",
     "statsChartSettings": "Kaaviot",
     "statsChartSettingsTitle": "Näytettävät kaaviot",
     "statsChartSettingsHelp": "Valitse, mitkä kaaviot näkyvät tilastosivulla. Kaaviot, joissa ei ole tietoja, piilotetaan automaattisesti.",
