@@ -13,6 +13,7 @@ SELECT
     trip_duration,
     carbon,
     arrival_delay,
+    departure_delay,
     is_past AS "past",
     is_planned_future AS "plannedFuture"
 FROM time_categories

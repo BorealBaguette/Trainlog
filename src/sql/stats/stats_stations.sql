@@ -9,7 +9,8 @@
         trip_length,
         trip_duration,
         carbon,
-        arrival_delay
+        arrival_delay,
+        departure_delay
     FROM time_categories
     UNION ALL
     SELECT 
@@ -19,7 +20,8 @@
         trip_length,
         trip_duration,
         carbon,
-        arrival_delay
+        arrival_delay,
+        departure_delay
     FROM time_categories
 )
 SELECT 
@@ -34,7 +36,9 @@ SELECT
     SUM(carbon * is_past) AS "pastCO2",
     SUM(carbon * is_planned_future) AS "plannedFutureCO2",
     SUM(COALESCE(arrival_delay, 0) * is_past) AS "pastDelay",
-    SUM(COALESCE(arrival_delay, 0) * is_planned_future) AS "plannedFutureDelay"
+    SUM(COALESCE(arrival_delay, 0) * is_planned_future) AS "plannedFutureDelay",
+    SUM((COALESCE(arrival_delay, 0) - COALESCE(departure_delay, 0)) * is_past) AS "pastDelayAccumulated",
+    SUM((COALESCE(arrival_delay, 0) - COALESCE(departure_delay, 0)) * is_planned_future) AS "plannedFutureDelayAccumulated"
 FROM stations
 GROUP BY station
 ORDER BY count DESC
