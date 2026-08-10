@@ -77,32 +77,47 @@
             </li>
           </ul>
         </li>
+        {#- The trip types, grouped the way the menu divides them. One list, so the
+            label and the alpha-only map shortcut beside it cannot drift apart. -#}
+        {% set new_trip_menu = [
+          [('train', 'fa-solid fa-train', train),
+           ('tram', 'fa-solid fa-train-tram', tram),
+           ('metro', 'fa-solid fa-train-subway', metro),
+           ('funicular', 'fa-solid fa-mountain', funicular),
+           ('rail', 'fa-solid fa-dumbbell', rail)],
+          [('air', 'fa-solid fa-plane-up', air),
+           ('bus', 'fa-solid fa-bus', bus),
+           ('ferry', 'fa-solid fa-ship', ferry),
+           ('helicopter', 'fa-solid fa-helicopter', helicopter),
+           ('aerialway', 'fa-solid fa-cable-car', aerialway)],
+          [('walk', 'fa-solid fa-person-hiking', walk),
+           ('cycle', 'fa-solid fa-bicycle', cycle),
+           ('ski', 'fa-solid fa-person-skiing', ski),
+           ('scooter', 'bi bi-scooter', scooter),
+           ('car', 'fa-solid fa-car-side', car)],
+          [('accommodation', 'fa-solid fa-bed', accommodation),
+           ('poi', 'fa-solid fa-map-location-dot', poi),
+           ('restaurant', 'fa-solid fa-utensils', restaurant)]
+        ] %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
             <i class="bi bi-plus-circle"></i> {{new}}
           </a>
-          <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='train') }}"><i class="fa-solid fa-train"></i> {{ train }}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='tram') }}"><i class="fa-solid fa-train-tram"></i> {{ tram }}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='metro') }}"><i class="fa-solid fa-train-subway"></i> {{ metro }}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='funicular') }}"><i class="fa-solid fa-mountain"></i> {{ funicular }}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='rail') }}"><i class="fa-solid fa-dumbbell"></i> {{ rail }}</a>   
-            <hr class="dropdown-divider">
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type='air') }}"><i class="fa-solid fa-plane-up"></i>{{air}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="bus") }}"><i class="fa-solid fa-bus"></i>{{bus}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="ferry") }}"><i class="fa-solid fa-ship"></i> {{ferry}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="helicopter") }}"><i class="fa-solid fa-helicopter"></i> {{helicopter}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="aerialway") }}"><i class="fa-solid fa-cable-car"></i> {{aerialway}}</a>
-            <hr class="dropdown-divider">
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="walk") }}"><i class="fa-solid fa-person-hiking"></i> {{walk}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="cycle") }}"><i class="fa-solid fa-bicycle"></i> {{cycle}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="ski") }}"><i class="fa-solid fa-person-skiing"></i> {{ski}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="scooter") }}"><i class="bi bi-scooter"></i> {{scooter}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="car") }}"><i class="fa-solid fa-car-side"></i> {{car}}</a>
-            <hr class="dropdown-divider">
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="accommodation") }}"><i class="fa-solid fa-bed"></i> {{accommodation}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="poi") }}"><i class="fa-solid fa-map-location-dot"></i> {{poi}}</a>
-            <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type="restaurant") }}"><i class="fa-solid fa-utensils"></i> {{restaurant}}</a>
+          <div class="dropdown-menu new-trip-menu" aria-labelledby="navbarDropdownMenuLink">
+            {%- for group in new_trip_menu %}
+              {%- if not loop.first %}<hr class="dropdown-divider">{% endif %}
+              {%- for trip_type, icon, label in group %}
+            <div class="new-trip-row">
+              <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type=trip_type) }}"><i class="{{ icon }}"></i> {{ label }}</a>
+              {#- Alpha only: the same trip on the map-first form. A shortcut on the row
+                  rather than a second menu — the navbar has no room for two of these. -#}
+              {%- if is_alpha %}
+              <a class="dropdown-item new-trip-compose" title="{{ new }} α" aria-label="{{ new }} α"
+                 href="{{ url_for('compose', username=username, vehicle_type=trip_type) }}"><i class="bi bi-pin-map"></i><span class="new-trip-alpha">α</span></a>
+              {%- endif %}
+            </div>
+              {%- endfor %}
+            {%- endfor %}
           </div>
         </li>
         <li class="nav-item dropdown">
@@ -295,6 +310,25 @@
     max-height: 320px;
     overflow-y: auto;
 }
+
+/* Trip-type rows: the name fills the row, the alpha-only map shortcut sits at its end.
+   Both are .dropdown-item so each keeps Bootstrap's own padding and hover. */
+.new-trip-row { display: flex; align-items: stretch; }
+.new-trip-row > .dropdown-item:first-child { flex: 1 1 auto; }
+.new-trip-row > .new-trip-compose {
+  flex: 0 0 auto; width: auto; padding-left: .6rem; padding-right: .9rem;
+  color: #6c757d; border-left: 1px solid #f0f2f5;
+  /* .dropdown-item's own 0.5rem gap is for an icon and a label; here the α belongs
+     tight to the pin. */
+  gap: .1rem;
+}
+.new-trip-alpha { font-size: .75em; line-height: 1; align-self: flex-start; margin-top: .15em; }
+.new-trip-row > .new-trip-compose:hover { color: #0d6efd; }
+/* Selected, the item takes Bootstrap's blue background — and the hover rule above
+   outranks Bootstrap's own :active colour, so the pin has to be turned white here or
+   it goes blue on blue. */
+.new-trip-row > .new-trip-compose:active,
+.new-trip-row > .new-trip-compose.active { color: #fff; }
 
 .gift-wrap {
   display: inline-block;
