@@ -1187,6 +1187,7 @@
     "statsVessels": "Vessels",
     "statsAircraft": "Aircraft",
     "statsDelay": "Delay",
+    "statsDelayAccumulated": "Delay (accumulated)",
     "statsChartSettings": "Charts",
     "statsChartSettingsTitle": "Visible charts",
     "statsChartSettingsHelp": "Choose which charts to show on the statistics page. Charts with no data are hidden automatically.",
