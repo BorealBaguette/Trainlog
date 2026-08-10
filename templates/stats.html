@@ -81,11 +81,11 @@
     </div>
 </div>
 
-<div id="fullscreenContainer" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.85); z-index: 10000;">
+<div id="fullscreenContainer" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; z-index: 10000; overscroll-behavior: contain; touch-action: none;">
     <button id="closeFullscreenButton" class="btn btn-danger position-absolute top-0 end-0 m-2" style="z-index: 10001;">
         <i class="fa-solid fa-xmark"></i>
     </button>
-    <div id="fullscreenChart" style="width: 100%; height: 100%; background: rgba(255, 255, 255, 0.75);"></div>
+    <div id="fullscreenChart" style="width: 100%; height: 100%; background: #fff;"></div>
 </div>
 
 <div style="height: 100px;"></div>
@@ -376,6 +376,10 @@
     var chartsInstances = {};
     var currentChart = null;
     var expandedMode = false;
+    // Wheel-to-scroll on the fullscreen overlay, and the page's own overflow to
+    // put back when it closes. See attachWheelScroll().
+    var fullscreenWheelHandler = null;
+    var bodyOverflowBeforeFullscreen = '';
 
     var operatorImages = {{logosList | safe}};
     var staticLink = "{{ url_for('resize_image', max_width=240, target_height=40, image_path='')}}";
@@ -1338,7 +1342,14 @@
     // ============================================
     // CHART STYLING
     // ============================================
+    // One canvas per colour, not one per bar. This is called from inside the
+    // per-item map in createSeries, so an uncached version built a canvas for
+    // every row of every series on every render — thousands of them per frame
+    // once a fullscreen chart was being scrolled.
+    var patternCache = {};
     function createPattern(color) {
+        if (patternCache[color]) return patternCache[color];
+
         var canvas = document.createElement('canvas');
         canvas.width = 4;
         canvas.height = 4;
@@ -1350,11 +1361,12 @@
         ctx.lineTo(0, 4);
         ctx.stroke();
         
-        return {
+        patternCache[color] = {
             type: 'pattern',
             image: canvas,
             repeat: 'repeat'
         };
+        return patternCache[color];
     }
 
     function getColor(type) {
@@ -1577,10 +1589,26 @@
         }
     }
 
-    function computeLabelPlacement(chart, data, labelFormatter, axisBreak) {
-        var yAxis = chart.getOption().yAxis || [];
-        var categories = (yAxis[0] && yAxis[0].data) || [];
+    // Which rows are on screen, from the window the caller keeps up to date on
+    // the instance. Padded, because the exact edge only matters for rows that
+    // are drawn and a couple of spare ones cost nothing.
+    //
+    // Deliberately not read from getOption(): that deep-clones the entire
+    // option, series data and all, which on a several-thousand-row chart is
+    // more expensive than everything else here put together.
+    function visibleRowRange(chart, count) {
+        var zoomWindow = chart.__zoomWindow;
+        if (!zoomWindow) return { from: 0, to: count - 1 };
+        return {
+            from: Math.max(0, zoomWindow.start - 5),
+            to: Math.min(count - 1, zoomWindow.end + 5)
+        };
+    }
+
+    function computeLabelPlacement(chart, data, labelFormatter, axisBreak, categories) {
+        categories = categories || [];
         var rightEdge = plotAreaRight(chart, 20);
+        var visible = visibleRowRange(chart, data.length);
 
         // A break makes the plot look far roomier than it reads: the axis runs
         // on past the cut, so labels were being placed "outside" into space that
@@ -1604,6 +1632,11 @@
         }
 
         return data.map(function (item, i) {
+            // Off-screen rows are not drawn, so where their label would sit is
+            // a question nobody asks. Skipping them keeps the work per scroll
+            // step proportional to the window, not to the whole ranking.
+            if (i < visible.from || i > visible.to) return { mode: 'outside' };
+
             // The cut bar keeps its name at the start. Anywhere else it anchors
             // to the bar's end, which now lies beyond the tear — in combined
             // mode that dropped the label right on top of the cut, detached
@@ -1634,10 +1667,17 @@
     // instance so a resize can redo the decision.
     function applyInlineLabels(chart, data, color, labelFormatter, barMaxWidth, axisBreak) {
         if (!labelFormatter) return;
+        // Read the categories once, here, rather than on every relayout — see
+        // the note in visibleRowRange about what getOption() costs. They only
+        // change when the chart is rebuilt, which comes back through this
+        // function anyway.
+        var yAxis = chart.getOption().yAxis || [];
+        var categories = (yAxis[0] && yAxis[0].data) || [];
         chart.relayoutLabels = function () {
             chart.setOption({
                 series: createSeries(data, color, labelFormatter,
-                    computeLabelPlacement(chart, data, labelFormatter, axisBreak), barMaxWidth)
+                    computeLabelPlacement(chart, data, labelFormatter, axisBreak, categories),
+                    barMaxWidth)
             });
         };
         chart.relayoutLabels();
@@ -2574,6 +2614,9 @@
     var AXIS_NAME_FIT_RATIO = 0.8;
     var INLINE_GUTTER_PX = 10;
     var FULLSCREEN_GUTTER_PX = 300;
+    // How many rows a fullscreen ranked chart shows at once. Fixed, and scrolled
+    // through — see the dataZoom in expandChart().
+    var FULLSCREEN_WINDOW_ROWS = 21;
 
     // What the category axis carries, and how much room to keep for it.
     //
@@ -2802,6 +2845,10 @@
         expandedMode = true;
         const fullscreenContainer = document.getElementById('fullscreenContainer');
         const fullscreenChart = document.getElementById('fullscreenChart');
+        // The overlay is fixed, not a scroll container, so without this the
+        // page carries on scrolling underneath it.
+        bodyOverflowBeforeFullscreen = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
         fullscreenContainer.style.display = 'block';
         fullscreenChart.innerHTML = '';
 
@@ -2812,9 +2859,9 @@
         const axisBreak = computeAxisBreak(rows.map(itemTotal));
         const valueAxis = valueAxisConfig(calculateMaxValue(rows), axisBreak);
         // Fullscreen has the whole window, so far more names fit the gutter; and
-        // a dataZoom slider parked on the right that a label must not run under.
+        // a dataZoom scrollbar parked on the right that a label must not run under.
         const plan = categoryAxisPlan(spec, rows, categories, FULLSCREEN_GUTTER_PX);
-        const labelBudgetPx = labelBudget(fullscreenChart, plan.gutter, axisBreak, calculateMaxValue(rows)) - 60;
+        const labelBudgetPx = labelBudget(fullscreenChart, plan.gutter, axisBreak, calculateMaxValue(rows)) - 30;
         const barMaxWidth = barThicknessCap(fullscreenChart, spec.vertical);
         const labelFormatter = spec.inlineLabel && plan.mode !== 'names'
             ? (params => fitLabel(spec.inlineLabel(params.name), labelBudgetPx))
@@ -2834,7 +2881,7 @@
             // containLabel still grows the gutter to fit real axis-label content
             // (country names, operator logos) — this just removes the default
             // ~10% padding that was reserved on top of that.
-            grid: { containLabel: true, left: '10px', width: '80%', height: '85%', bottom: '10%', top: '10%' },
+            grid: { containLabel: true, left: '10px', right: '40px', height: '85%', bottom: '10%', top: '10%' },
             series: createSeries(rows, color, labelFormatter, undefined, barMaxWidth)
         };
 
@@ -2853,35 +2900,176 @@
                 data: categories
             };
             option.xAxis = valueAxis;
-            // Ranked charts can be thousands of rows long; scroll through them
-            // twenty at a time.
-            option.dataZoom = [{
-                type: 'slider',
-                yAxisIndex: 0,
-                top: '70px',
-                right: '20px',
-                startValue: 0,
-                endValue: 20
-            }];
+            // Ranked charts can be thousands of rows long. Only ever draw a
+            // window of them — drawing the lot is what used to choke the
+            // browser once axis labels carry images.
+            //
+            // The window is a fixed size and cannot be resized: the old slider
+            // handles let you stretch it over hundreds of rows, which was
+            // fiddly with a mouse, near-impossible with a thumb, and stuttered
+            // badly while every logo in the new range loaded. Scrolling (wheel,
+            // trackpad or touch drag) moves the window instead, and the slim
+            // slider on the right is left in as a scrollbar — position and
+            // drag-to-jump, no resize handles.
+            if (rows.length > FULLSCREEN_WINDOW_ROWS) {
+                const endValue = FULLSCREEN_WINDOW_ROWS - 1;
+                option.dataZoom = [
+                    {
+                        type: 'inside',
+                        yAxisIndex: 0,
+                        startValue: 0,
+                        endValue: endValue,
+                        zoomLock: true,
+                        // The wheel is checked against zoom first and only
+                        // falls through to move if zooming is off — and with
+                        // zoomLock the zoom is a no-op, so leaving the default
+                        // on means the wheel does nothing at all.
+                        zoomOnMouseWheel: false,
+                        moveOnMouseWheel: true,
+                        moveOnMouseMove: true,
+                        preventDefaultMouseMove: true,
+                        // Coalesce a fast scroll into a few re-renders rather
+                        // than one per wheel tick.
+                        throttle: 100
+                    },
+                    {
+                        type: 'slider',
+                        yAxisIndex: 0,
+                        startValue: 0,
+                        endValue: endValue,
+                        zoomLock: true,
+                        brushSelect: false,
+                        showDetail: false,
+                        showDataShadow: false,
+                        handleSize: 0,
+                        width: 12,
+                        right: '10px',
+                        top: '70px',
+                        throttle: 100
+                    }
+                ];
+            }
         }
 
         chartInstance.setOption(option);
+        // Before the first label pass, so it only sizes up the rows on screen.
+        chartInstance.__zoomWindow = {
+            start: 0,
+            end: Math.min(FULLSCREEN_WINDOW_ROWS, rows.length) - 1
+        };
         applyInlineLabels(chartInstance, rows, color, labelFormatter, barMaxWidth, axisBreak);
-        // Scrolling the slider rescales the value axis, so the fit decision has
-        // to be made again for the rows now on screen.
-        var relayoutting = false;
-        chartInstance.on('dataZoom', function () {
-            if (relayoutting || !chartInstance.relayoutLabels) return;
-            relayoutting = true;
-            chartInstance.relayoutLabels();
-            relayoutting = false;
+        // Scrolling rescales the value axis, so the fit decision has to be made
+        // again for the rows now on screen — but at most once a frame, however
+        // many zoom events a fast scroll or a slider drag produces.
+        var relayoutPending = false;
+        chartInstance.on('dataZoom', function (params) {
+            syncZoomWindow(chartInstance, rows.length,
+                (params && params.batch && params.batch[0]) || params);
+            if (relayoutPending || !chartInstance.relayoutLabels) return;
+            relayoutPending = true;
+            requestAnimationFrame(function () {
+                relayoutPending = false;
+                if (!chartInstance.isDisposed()) chartInstance.relayoutLabels();
+            });
         });
+        attachWheelScroll(chartInstance, rows.length, !spec.vertical);
         currentChart = chartInstance;
+    }
+
+    // ECharts' own wheel handling only fires while the pointer is inside the
+    // grid rect, which in a fullscreen ranked chart leaves the whole label
+    // gutter and the margins dead — and a wheel it doesn't handle keeps its
+    // default, so the page behind the overlay scrolls instead. Drive the pan
+    // from the container: every wheel over the overlay is ours, wherever the
+    // pointer is, and none of them reach the document.
+    function attachWheelScroll(chartInstance, rowCount, scrollable) {
+        const container = document.getElementById('fullscreenContainer');
+        if (fullscreenWheelHandler) {
+            container.removeEventListener('wheel', fullscreenWheelHandler);
+            fullscreenWheelHandler = null;
+        }
+        if (!scrollable || rowCount <= FULLSCREEN_WINDOW_ROWS) return;
+
+        const maxStart = rowCount - FULLSCREEN_WINDOW_ROWS;
+        let pending = false;
+        // Rows asked for but not yet moved, fraction included. Devices with a
+        // high-resolution wheel send a burst of small deltas per notch, so
+        // rounding each event on its own — with a floor of one row, as this
+        // did — makes the speed depend on how many events the hardware happens
+        // to emit rather than on how far you actually scrolled. Summing first
+        // and converting once keeps a notch worth the same everywhere, and
+        // carrying the remainder means a slow trackpad drag still creeps along
+        // instead of being rounded away to nothing.
+        let rowsOwed = 0;
+
+        fullscreenWheelHandler = function (event) {
+            event.preventDefault();
+            rowsOwed += wheelRows(event);
+            if (pending) return;
+            pending = true;
+            // A wheel can fire far faster than the chart redraws: settle up
+            // once a frame.
+            requestAnimationFrame(function () {
+                pending = false;
+                if (chartInstance.isDisposed()) return;
+
+                const step = Math.trunc(rowsOwed);
+                if (!step) return;
+                rowsOwed -= step;
+
+                // __zoomWindow is the shared truth about where the window is,
+                // so a slider drag and the wheel can't disagree.
+                const from = (chartInstance.__zoomWindow || { start: 0 }).start;
+                const next = Math.min(maxStart, Math.max(0, from + step));
+                if (next === from) return;
+                chartInstance.__zoomWindow = { start: next, end: next + FULLSCREEN_WINDOW_ROWS - 1 };
+                chartInstance.dispatchAction({
+                    type: 'dataZoom',
+                    startValue: next,
+                    endValue: next + FULLSCREEN_WINDOW_ROWS - 1
+                });
+            });
+        };
+        container.addEventListener('wheel', fullscreenWheelHandler, { passive: false });
+    }
+
+    // One wheel event in rows, fractions kept. The three deltaModes report in
+    // different units and browsers disagree about which they use, so normalise
+    // before doing any arithmetic on them.
+    //
+    // WHEEL_PX_PER_ROW is the knob for scroll speed: a classic mouse notch is
+    // ~100px, so 40 puts it at two and a half rows. Higher is slower.
+    var WHEEL_PX_PER_ROW = 40;
+    function wheelRows(event) {
+        if (event.deltaMode === 1) return event.deltaY;                          // lines
+        if (event.deltaMode === 2) return event.deltaY * FULLSCREEN_WINDOW_ROWS; // pages
+        return event.deltaY / WHEEL_PX_PER_ROW;                                  // pixels
+    }
+
+    // Keep __zoomWindow in step with a zoom the chart made itself (a slider
+    // drag, a touch pan). The payload carries indices for a value-based zoom
+    // and percentages otherwise.
+    function syncZoomWindow(chart, count, payload) {
+        if (!payload) return;
+        let start = payload.startValue;
+        let end = payload.endValue;
+        if (typeof start !== 'number' && typeof payload.start === 'number') {
+            start = Math.floor(payload.start / 100 * (count - 1));
+            end = Math.ceil(payload.end / 100 * (count - 1));
+        }
+        if (typeof start !== 'number' || typeof end !== 'number') return;
+        chart.__zoomWindow = { start: start, end: end };
     }
 
     document.getElementById('closeFullscreenButton').addEventListener('click', function() {
         expandedMode = false;
-        document.getElementById('fullscreenContainer').style.display = 'none';
+        const container = document.getElementById('fullscreenContainer');
+        container.style.display = 'none';
+        if (fullscreenWheelHandler) {
+            container.removeEventListener('wheel', fullscreenWheelHandler);
+            fullscreenWheelHandler = null;
+        }
+        document.body.style.overflow = bodyOverflowBeforeFullscreen;
         if (currentChart) {
             currentChart.dispose();
             currentChart = null;
