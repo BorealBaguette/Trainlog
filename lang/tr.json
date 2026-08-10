@@ -718,6 +718,8 @@
     "feature_requests_comment_view_link": "Konuşmayı görüntüle",
     "waypoint": "Yol noktası",
     "via": "Via",
+    "nearbyStops": "Yakındaki duraklar",
+    "nameThisPlace": "Bu yere ad ver",
     "direction": "Yön",
     "coordinates": "Koordinatlar",
     "location": "Konum",

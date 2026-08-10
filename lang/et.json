@@ -718,6 +718,8 @@
     "feature_requests_comment_view_link": "Vaata vestlust",
     "waypoint": "Vahepunkt",
     "via": "Via",
+    "nearbyStops": "Lähedal asuvad peatused",
+    "nameThisPlace": "Anna sellele kohale nimi",
     "direction": "Suund",
     "coordinates": "Koordinaadid",
     "location": "Asukoht",

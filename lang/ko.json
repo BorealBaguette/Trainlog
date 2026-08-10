@@ -718,6 +718,8 @@
     "feature_requests_comment_view_link": "대화 보기",
     "waypoint": "웨이포인트",
     "via": "경유",
+    "nearbyStops": "주변 정류장",
+    "nameThisPlace": "이 장소 이름 지정",
     "direction": "방향",
     "coordinates": "좌표",
     "location": "위치",

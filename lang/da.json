@@ -721,6 +721,8 @@
     "feature_requests_comment_view_link": "Se samtalen",
     "waypoint": "Vejpunkt",
     "via": "Via",
+    "nearbyStops": "Stoppesteder i nærheden",
+    "nameThisPlace": "Navngiv dette sted",
     "direction": "Retning",
     "coordinates": "Koordinater",
     "location": "Placering",
