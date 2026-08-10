@@ -745,7 +745,14 @@ let sidebarOpen = false;
 let currentTrips = null;          // sorted trips for the current view (highlight lookup)
 let markerNumbersByIndex = [];    // per-trip {originNumber, destNumber} for itinerary badges
 let highlightedTripUid = null;
-const isCollection = {{ 'true' if collection_voyage == 'collection' else 'false' }};
+const LOCATION_AID_LAYER_IDS = [
+    'numbered-markers',
+    'numbered-markers-highlight',
+    'station-connections-line',
+    'station-connection-dots',
+];
+let locationAidsVisible = {{ 'false' if collection_voyage == 'collection' else 'true' }};
+let startEndLocationMarkers = [];
 
 // Compute the same transfer-point numbering the map's numbered markers use, so the
 // itinerary can show matching badges. Mirrors the numbering logic in placePolylines.
@@ -765,6 +772,65 @@ function computeMarkerNumbers(trips) {
 
 function itineraryMarkerBadge(number) {
     return $('<span>').addClass('itinerary-marker-badge').text(number);
+}
+
+function setLocationAidsVisible(visible) {
+    locationAidsVisible = visible;
+    LOCATION_AID_LAYER_IDS.forEach(id => {
+        if (map && map.getLayer(id)) {
+            map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+        }
+    });
+    $('.itinerary-marker-badge').toggle(visible);
+    startEndLocationMarkers.forEach(marker => {
+        marker.getElement().style.display = visible ? '' : 'none';
+    });
+    if (map && map._locationAidsToggleBtn) {
+        map._locationAidsToggleBtn.style.opacity = visible ? '1' : '0.45';
+    }
+}
+
+function addLocationAidsToggleControl() {
+    const container = map && map.getContainer();
+    if (!container) return null;
+    if (map._locationAidsToggleBtn) {
+        setLocationAidsVisible(locationAidsVisible);
+        return map._locationAidsToggleBtn;
+    }
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.title = 'Toggle location markers';
+    btn.innerHTML = '<i class="fa-solid fa-location-dot"></i>';
+    btn.style.cssText =
+        'position:absolute;z-index:399;background:#fff;border:none;border-radius:8px;' +
+        'box-shadow:0 1px 5px rgba(0,0,0,.3);font-size:14px;color:#333;' +
+        'cursor:pointer;padding:0;';
+    container.appendChild(btn);
+
+    const legend = document.querySelector('.legend-control');
+    function place() {
+        if (legend) {
+            const lr = legend.getBoundingClientRect();
+            const cr = container.getBoundingClientRect();
+            btn.style.left = (lr.left - cr.left) + 'px';
+            btn.style.bottom = (cr.bottom - lr.top + lr.height + 16) + 'px';
+            btn.style.width = lr.width + 'px';
+            btn.style.height = lr.height + 'px';
+        } else {
+            btn.style.left = '20px';
+            btn.style.bottom = '114px';
+            btn.style.width = '42px';
+            btn.style.height = '38px';
+        }
+    }
+    place();
+    window.addEventListener('resize', place);
+
+    btn.onclick = () => setLocationAidsVisible(!locationAidsVisible);
+    map._locationAidsToggleBtn = btn;
+    setLocationAidsVisible(locationAidsVisible);
+    return btn;
 }
 
 // Date formatting options
@@ -1514,10 +1580,10 @@ function buildItinerary(trips, prices) {
         }
         var durationDisplay = metaParts.join('<span class="legMetaSep">·</span>');
 
-        // Badge numbers matching the map's numbered markers (hidden in collection mode)
-        var originBadge = (!isCollection && markerNumbersByIndex[index] && markerNumbersByIndex[index].originNumber != null)
+        // Badge numbers matching the map's numbered markers.
+        var originBadge = (markerNumbersByIndex[index] && markerNumbersByIndex[index].originNumber != null)
             ? itineraryMarkerBadge(markerNumbersByIndex[index].originNumber) : null;
-        var destBadge = (!isCollection && markerNumbersByIndex[index] && markerNumbersByIndex[index].destNumber != null)
+        var destBadge = (markerNumbersByIndex[index] && markerNumbersByIndex[index].destNumber != null)
             ? itineraryMarkerBadge(markerNumbersByIndex[index].destNumber) : null;
 
         // Append to itinerary
@@ -1916,11 +1982,10 @@ function createNumberedIcon(number) {
 
 // Update the placePolylines function numbered marker section:
 
-{% if collection_voyage != 'collection' %}
 // Station-change connections: when a trip's destination is not the same station
 // as the next trip's origin, draw a straight black dotted line between the two
 // points (with a dot at each end) to represent the connection — mirroring the old
-// Leaflet `selfConnectionPolyline`. Skipped in collection mode (tags).
+// Leaflet `selfConnectionPolyline`.
 const connectionFeatures = [];
 const connectionDotFeatures = [];
 trips.forEach((trip, index) => {
@@ -2100,25 +2165,27 @@ if (numberedMarkers.length > 0) {
         map.getCanvas().style.cursor = '';
     });
 }
-    // Add start marker (green) - first trip's origin
+    // Add start/end location markers for the full view.
     if (trips.length > 0) {
         const firstTrip = trips[0];
         const lastTrip = trips[trips.length - 1];
-        
+        startEndLocationMarkers.forEach(marker => marker.remove());
+        startEndLocationMarkers = [];
+
         if (firstTrip.trip.origin_station === lastTrip.trip.destination_station) {
-            // Round trip - same start and end station
             const startCoords = [firstTrip.path[0][1], firstTrip.path[0][0]];
-            createCustomMarker(startCoords, 'red-green', `${firstTrip.trip.origin_station} - ${lastTrip.trip.destination_station}`);
+            startEndLocationMarkers.push(
+                createCustomMarker(startCoords, 'red-green', `${firstTrip.trip.origin_station} - ${lastTrip.trip.destination_station}`)
+            );
         } else {
-            // Different start and end stations - use separate markers
             const startCoords = [firstTrip.path[0][1], firstTrip.path[0][0]];
             const endCoords = [lastTrip.path[lastTrip.path.length - 1][1], lastTrip.path[lastTrip.path.length - 1][0]];
-            
-            createCustomMarker(startCoords, 'green', firstTrip.trip.origin_station);
-            createCustomMarker(endCoords, 'red', lastTrip.trip.destination_station);
+
+            startEndLocationMarkers.push(createCustomMarker(startCoords, 'green', firstTrip.trip.origin_station));
+            startEndLocationMarkers.push(createCustomMarker(endCoords, 'red', lastTrip.trip.destination_station));
         }
+        addLocationAidsToggleControl();
     }
-{% endif %}
     // Handle current trips with position markers
     const currentTripFeatures = buildCurrentTripFeatures(trips);
 
