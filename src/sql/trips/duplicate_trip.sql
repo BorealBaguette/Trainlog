@@ -27,7 +27,9 @@ INSERT INTO trips (
     ticket_id,
     purchase_date,
     visibility,
-    route_source
+    route_source,
+    power_type,
+    co2_override
 )
 SELECT
     user_id,
@@ -58,7 +60,9 @@ SELECT
     ticket_id,
     purchase_date,
     visibility,
-    route_source
+    route_source,
+    power_type,
+    co2_override
 FROM trips
 WHERE trip_id = :trip_id
 RETURNING trip_id

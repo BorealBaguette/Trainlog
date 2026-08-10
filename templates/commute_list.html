@@ -1,0 +1,393 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include "bootstrap/navigation.html" %}
+
+<div class="container mt-4">
+  <div class="row">
+    <div>
+      <h2 class="mb-3 text-center">{{ manage_commutes }}</h2>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+          <div class="alert alert-{{category}}" role="alert">
+            {{ message }}
+          </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% if not commute_routes %}
+      <p class="text-muted text-center">{{ commute_no_commutes }}</p>
+      {% else %}
+      <table id="commutesTable">
+        <thead>
+          <tr>
+            <th>{{ commute_name }}</th>
+            <th>{{ trips }}</th>
+            <th>{{ commute_last_logged }}</th>
+            <th>{{ tripDuration }}</th>
+            <th>{{ tripLength }}</th>
+            <th>{{ actions }}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for commute in commute_routes %}
+          <tr>
+            <td>{{ commute.name }}</td>
+            <td>{{ commute.trip_count or 0 }}</td>
+            <td>{{ commute.latest_trip_end.strftime('%Y-%m-%d') if commute.latest_trip_end else '-' }}</td>
+            <td class="total-trip-duration" data-sort="{{ commute.total_trip_duration or 0 }}">
+              {{ commute.total_trip_duration or 0 }}
+            </td>
+            <td class="total-trip-length" data-sort="{{ commute.total_trip_length or 0 }}">
+              {{ commute.total_trip_length or 0 }}
+            </td>
+            <td>
+              <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#logOccurrenceModal" data-commute-id="{{ commute.uid }}" data-commute-name="{{ commute.name }}" title="{{ commute_log_occurrence }}"><i class="fa-regular fa-calendar-plus"></i></button>
+              <button class="btn btn-sm btn-danger" data-bs-toggle="modal" data-bs-target="#deleteCommuteModal" data-commute-id="{{ commute.uid }}" title="{{ delete }}"><i class="fa-regular fa-trash-can"></i></button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+
+      <div class="mt-4 text-center text-muted small">
+        {{ commute_select_trips_hint }}
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Log Occurrence Modal -->
+<div class="modal fade" id="logOccurrenceModal" tabindex="-1" aria-labelledby="logOccurrenceModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="logOccurrenceModalLabel">{{ commute_log_occurrence }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="logOccurrenceForm" autocomplete="off">
+          <div class="form-group mb-3">
+            <label for="occurrenceDate">{{ commute_occurrence_date }}</label>
+            <input type="date" class="form-control" id="occurrenceDate" required>
+          </div>
+          <div id="logOccurrenceError" class="alert alert-danger py-2 d-none" role="alert"></div>
+          <div id="logOccurrenceLegs">
+            <!-- populated dynamically from the commute's template -->
+          </div>
+          <button type="submit" class="btn btn-primary w-100">{{ submit }}</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteCommuteModal" tabindex="-1" aria-labelledby="deleteCommuteModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="deleteCommuteModalLabel">{{ delete }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <p>{{ commute_confirm_delete }}</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{ cancel }}</button>
+        <button type="button" id="confirmDeleteCommuteBtn" class="btn btn-danger">{{ delete }}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  $(document).ready(function () {
+    // Format duration/length before DataTables initializes, so its
+    // responsive "hidden column" popup (used on narrow screens) captures
+    // the formatted text instead of the raw seconds/metres.
+    document.querySelectorAll('.total-trip-duration').forEach(function (cell) {
+      var rawSeconds = parseInt(cell.textContent.trim(), 10) || 0;
+      cell.textContent = secondsToDhm(rawSeconds);
+    });
+    document.querySelectorAll('.total-trip-length').forEach(function (cell) {
+      var rawm = parseInt(cell.textContent.trim(), 10) || 0;
+      cell.textContent = mToKm(rawm) + ' km';
+    });
+
+    $('#commutesTable').DataTable({
+      order: [],
+      responsive: true,
+      lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]],
+      language: {
+        info: "{{dtInfo}}",
+        paginate: {
+          next: "{{dtNext}}",
+          previous: "{{dtPrevious}}",
+        },
+        emptyTable: "{{dtEmptyTable}}",
+        lengthMenu: "{{dtLengthMenu}}",
+        search: "{{dtSearch}}"
+      },
+    });
+
+    var activeCommuteId = null;
+
+    $('#logOccurrenceModal').on('show.bs.modal', function (event) {
+      var button = $(event.relatedTarget);
+      activeCommuteId = button.data('commute-id');
+      $('#logOccurrenceModalLabel').text(("{{ commute_log_occurrence }}") + ' - ' + button.data('commute-name'));
+
+      var today = new Date();
+      $('#occurrenceDate').val(today.toISOString().slice(0, 10));
+      $('#logOccurrenceError').addClass('d-none').text('');
+
+      var $legs = $('#logOccurrenceLegs').empty();
+      $legs.append('<p class="text-muted small">{{ loading }}</p>');
+
+      $.getJSON("{{ url_for('commutes.get_commute_template_route', username=username, commute_uid=0) }}".replace('/0/', '/' + activeCommuteId + '/'))
+        .done(function (legs) {
+          $legs.empty();
+          legs.forEach(function (leg) {
+            var checkboxId = 'legInclude' + leg.sequence;
+            var $row = $(
+              '<div class="border rounded p-2 mb-2 commute-leg-row" data-sequence="' + leg.sequence + '">' +
+              '<div class="form-check mb-1">' +
+              '<input class="form-check-input leg-include" type="checkbox" checked id="' + checkboxId + '">' +
+              '<label class="form-check-label small" for="' + checkboxId + '"></label>' +
+              '</div>' +
+              '<div class="leg-delay-fields">' +
+              '<div class="row g-2">' +
+              '<div class="col-6"><label class="form-label small">{{ tripStartTime }} <span class="badge bg-secondary leg-start-day d-none"></span></label>' +
+              '<input type="time" class="form-control form-control-sm leg-start-time" value="' + leg.scheduledStart + '"></div>' +
+              '<div class="col-6"><label class="form-label small">{{ tripEndTime }} <span class="badge bg-secondary leg-end-day d-none"></span></label>' +
+              '<input type="time" class="form-control form-control-sm leg-end-time" value="' + leg.scheduledEnd + '"></div>' +
+              '</div>' +
+              '<div class="row g-2 mt-1">' +
+              '<div class="col-6"><label class="form-label small">{{ departureDelay }}</label>' +
+              '<input type="number" step="any" class="form-control form-control-sm leg-dep-delay" placeholder="0"></div>' +
+              '<div class="col-6"><label class="form-label small">{{ arrivalDelay }}</label>' +
+              '<input type="number" step="any" class="form-control form-control-sm leg-arr-delay" placeholder="0"></div>' +
+              '</div></div></div>'
+            );
+            // Station names are user-entered. Set as text (never HTML) so a
+            // stored value that survives the server-side sanitizer (e.g. an
+            // unclosed tag) can't execute here.
+            $row.find('.form-check-label').text(leg.originStation + ' → ' + leg.destinationStation);
+            $legs.append($row);
+          });
+          refreshLegDayBadges();
+        })
+        .fail(function (xhr) {
+          var message = (xhr.responseJSON && xhr.responseJSON.error) || 'Error loading commute legs';
+          $legs.empty();
+          showLegValidationError(message);
+        });
+    });
+
+    $(document).on('change', '.leg-include', function () {
+      var $row = $(this).closest('.commute-leg-row');
+      $row.find('.leg-delay-fields').toggleClass('d-none', !this.checked);
+      $row.toggleClass('opacity-50', !this.checked);
+    });
+
+    // Clear the invalid state on a field as soon as the user edits it, so
+    // fixing one bad value doesn't leave a stale red border behind.
+    $(document).on('input', '.leg-start-time, .leg-end-time, .leg-dep-delay, .leg-arr-delay', function () {
+      $(this).removeClass('is-invalid');
+    });
+
+    // The day-offset rollover (see resolveDayOffsets() below) applies
+    // silently -- a mistyped time can push a leg to the following day with
+    // no error, since that's indistinguishable from a genuinely later,
+    // different service. Surfacing the computed offset next to each field
+    // as it's edited means a typo is visibly wrong immediately, instead of
+    // only failing (or worse, silently succeeding a day off) on submit.
+    $(document).on('input', '.leg-start-time, .leg-end-time', function () {
+      refreshLegDayBadges();
+    });
+
+    function refreshLegDayBadges() {
+      var legRows = [];
+      $('#logOccurrenceLegs .commute-leg-row').each(function () {
+        var $start = $(this).find('.leg-start-time');
+        var $end = $(this).find('.leg-end-time');
+        legRows.push({
+          startMinutes: timeToMinutes($start.val()),
+          endMinutes: timeToMinutes($end.val()),
+          $startBadge: $(this).find('.leg-start-day'),
+          $endBadge: $(this).find('.leg-end-day')
+        });
+      });
+      resolveDayOffsets(legRows);
+      legRows.forEach(function (leg) {
+        leg.$startBadge.toggleClass('d-none', !leg.dayOffset).text('+' + leg.dayOffset + 'd');
+        leg.$endBadge.toggleClass('d-none', !leg.endDayOffset).text('+' + leg.endDayOffset + 'd');
+      });
+    }
+
+    function timeToMinutes(value) {
+      if (!value) return null;
+      var parts = value.split(':');
+      return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
+    }
+
+    function clearLegValidation() {
+      $('#logOccurrenceError').addClass('d-none').text('');
+      $('#logOccurrenceLegs .is-invalid').removeClass('is-invalid');
+    }
+
+    function showLegValidationError(message, $badInputs) {
+      $('#logOccurrenceError').removeClass('d-none').text(message);
+      ($badInputs || []).forEach(function ($input) { $input.addClass('is-invalid'); });
+      document.getElementById('logOccurrenceError').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    // Mirrors _resolve_day_offsets() server-side (src/commutes/log_occurrence.py):
+    // annotates each leg with dayOffset/endDayOffset -- how many days after
+    // the occurrence date this leg's start/end fall on -- derived from the
+    // EFFECTIVE times in the form (which may override the template), so a
+    // genuinely overnight leg isn't flagged just because its end time-of-day
+    // is earlier than its start time-of-day.
+    function resolveDayOffsets(legRows) {
+      var dayOffset = 0;
+      var prevEndMinutes = null;
+      for (var i = 0; i < legRows.length; i++) {
+        var leg = legRows[i];
+        if (leg.startMinutes === null || leg.endMinutes === null) continue;
+        if (prevEndMinutes !== null && leg.startMinutes < prevEndMinutes) {
+          dayOffset += 1;
+        }
+        leg.dayOffset = dayOffset;
+        if (leg.endMinutes < leg.startMinutes) {
+          dayOffset += 1;
+        }
+        leg.endDayOffset = dayOffset;
+        prevEndMinutes = leg.endMinutes;
+      }
+    }
+
+    // Checks the included legs' actual (day offset + time + delay)
+    // departure/arrival stay in non-decreasing order -- a leg can't depart
+    // before the previous one arrives, and a 0-minute connection is fine but
+    // a negative one (departing before arriving) isn't. Same check applied
+    // within a single leg (arrival before its own departure). Expressing
+    // everything in minutes-since-anchor-midnight (dayOffset * 1440 + ...)
+    // means a delay that pushes a leg past midnight is handled by the
+    // arithmetic, not a special case. Returns {message, $badInputs} for the
+    // first problem found, or null.
+    function findLegTimeError(legRows) {
+      resolveDayOffsets(legRows);
+
+      var prev = null;
+      for (var i = 0; i < legRows.length; i++) {
+        var leg = legRows[i];
+        if (leg.startMinutes === null || leg.endMinutes === null) {
+          return {
+            message: leg.label + ': ' + {{ commute_leg_time_missing | tojson }},
+            $badInputs: [leg.$start, leg.$end]
+          };
+        }
+        var actualDeparture = leg.dayOffset * 1440 + leg.startMinutes + (leg.departureDelay || 0);
+        var actualArrival = leg.endDayOffset * 1440 + leg.endMinutes + (leg.arrivalDelay || 0);
+        if (actualArrival < actualDeparture) {
+          return {
+            message: leg.label + ': ' + {{ commute_leg_arrival_before_departure | tojson }},
+            $badInputs: [leg.$end, leg.$arrDelay]
+          };
+        }
+        if (prev !== null && actualDeparture < prev.actualArrival) {
+          return {
+            message: leg.label + ': ' + {{ commute_leg_departs_before_previous_arrives | tojson }},
+            $badInputs: [leg.$start, leg.$depDelay, prev.$end, prev.$arrDelay]
+          };
+        }
+        prev = { actualArrival: actualArrival, $end: leg.$end, $arrDelay: leg.$arrDelay };
+      }
+      return null;
+    }
+
+    $('#logOccurrenceForm').on('submit', function (e) {
+      e.preventDefault();
+      clearLegValidation();
+
+      var legs = [];
+      var legRows = [];
+      $('#logOccurrenceLegs .commute-leg-row').each(function () {
+        if (!$(this).find('.leg-include').is(':checked')) return;
+        var $start = $(this).find('.leg-start-time');
+        var $end = $(this).find('.leg-end-time');
+        var $depDelay = $(this).find('.leg-dep-delay');
+        var $arrDelay = $(this).find('.leg-arr-delay');
+        var startTime = $start.val() || null;
+        var endTime = $end.val() || null;
+        var departureDelay = $depDelay.val() === '' ? null : parseFloat($depDelay.val());
+        var arrivalDelay = $arrDelay.val() === '' ? null : parseFloat($arrDelay.val());
+
+        legs.push({
+          sequence: parseInt($(this).data('sequence'), 10),
+          startTime: startTime,
+          endTime: endTime,
+          departureDelay: departureDelay,
+          arrivalDelay: arrivalDelay
+        });
+        legRows.push({
+          label: $(this).find('.form-check-label').text(),
+          startMinutes: timeToMinutes(startTime),
+          endMinutes: timeToMinutes(endTime),
+          departureDelay: departureDelay,
+          arrivalDelay: arrivalDelay,
+          $start: $start, $end: $end, $depDelay: $depDelay, $arrDelay: $arrDelay
+        });
+      });
+
+      if (legs.length === 0) {
+        showLegValidationError({{ commute_select_at_least_one_leg | tojson }});
+        return;
+      }
+
+      var timeError = findLegTimeError(legRows);
+      if (timeError) {
+        showLegValidationError(timeError.message, timeError.$badInputs);
+        return;
+      }
+
+      $.ajax({
+        url: "{{ url_for('commutes.log_occurrence_route', username=username, commute_uid=0) }}".replace('/0/', '/' + activeCommuteId + '/'),
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ date: $('#occurrenceDate').val(), legs: legs }),
+        success: function () {
+          location.reload();
+        },
+        error: function (xhr) {
+          var message = (xhr.responseJSON && xhr.responseJSON.error) || 'Error logging occurrence';
+          showLegValidationError(message);
+        }
+      });
+    });
+
+    var deleteCommuteId = null;
+    $('#deleteCommuteModal').on('show.bs.modal', function (event) {
+      deleteCommuteId = $(event.relatedTarget).data('commute-id');
+    });
+    $('#confirmDeleteCommuteBtn').on('click', function () {
+      $.ajax({
+        url: "{{ url_for('commutes.delete_commute_route', username=username, commute_uid=0) }}".replace('/0/', '/' + deleteCommuteId + '/'),
+        method: 'POST',
+        success: function () {
+          location.reload();
+        },
+        error: function (xhr) {
+          alert((xhr.responseJSON && xhr.responseJSON.error) || 'Error deleting commute');
+        }
+      });
+    });
+  });
+</script>
+
+{% endblock %}

@@ -949,6 +949,7 @@
             <li class="dropdown-item" onclick="exportGeojson();"><i class="fa-solid fa-draw-polygon"></i>  {{exportGeojson}}</li>
             {% if not isPublic %}
             <li class="dropdown-item" onclick="mergeTrips();"><i class="fa-solid fa-code-merge"></i>  {{mergeTrips}}</li>
+            <li class="dropdown-item" onclick="openSaveAsCommuteModal();"><i class="fas fa-route"></i>  {{commute_save_as_commute}}</li>
             <li class="dropdown-item" onclick="$('#changeVisibilityModal').modal('show');"><i class="fa-solid fa-eye"></i>  {{bulk_change_visibility}}</li>
             <li class="dropdown-item" onclick="openMassEdit();"><i class="fa-solid fa-pen-to-square"></i>  {{massEdit}}</li>
             <hr class="dropdown-divider">
@@ -1036,6 +1037,42 @@
         <button type="button" id="changeVisibilitySubmit" class="btn btn-primary" style="height: 38px" onclick="bulkChangeVisibility($('#visibilitySelect').val())">
             <span id="changeVisibilitySubmitLabel">{{submit}}</span>
             <span id="changeVisibilitySpinner" class="spinner-border spinner-border-sm" role="status" style="display:none"></span>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="saveAsCommuteModal" tabindex="-1" role="dialog" aria-labelledby="saveAsCommuteModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="saveAsCommuteModalLabel">{{commute_save_as_commute}}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group mb-3">
+          <div class="btn-group w-100" role="group">
+            <input type="radio" class="btn-check" name="saveAsCommuteMode" id="saveAsCommuteModeNew" value="new" checked>
+            <label class="btn btn-outline-primary" for="saveAsCommuteModeNew">{{commute_new_commute}}</label>
+            <input type="radio" class="btn-check" name="saveAsCommuteMode" id="saveAsCommuteModeExisting" value="existing">
+            <label class="btn btn-outline-primary" for="saveAsCommuteModeExisting">{{commute_add_to_existing}}</label>
+          </div>
+        </div>
+        <div class="form-group mb-3" id="saveAsCommuteNameGroup">
+          <label for="saveAsCommuteName" class="form-label">{{commute_new_commute_name_label}}</label>
+          <input type="text" class="form-control" id="saveAsCommuteName">
+        </div>
+        <div class="form-group mb-3 d-none" id="saveAsCommuteExistingGroup">
+          <label for="saveAsCommuteExistingSelect" class="form-label">{{commute_add_to_existing}}</label>
+          <select class="form-select" id="saveAsCommuteExistingSelect"></select>
+        </div>
+        <div class="alert alert-danger d-none mb-0" id="saveAsCommuteError" role="alert"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="saveAsCommuteSubmit" class="btn btn-primary" style="height: 38px" onclick="submitSaveAsCommute();">
+            <span id="saveAsCommuteSubmitLabel">{{submit}}</span>
+            <span id="saveAsCommuteSpinner" class="spinner-border spinner-border-sm" role="status" style="display:none"></span>
         </button>
       </div>
     </div>
@@ -3553,6 +3590,91 @@ function bulkChangeVisibility(visibility){
             document.getElementById('changeVisibilitySpinner').style.display = 'none';
         }, 500)
     })
+}
+
+function openSaveAsCommuteModal(){
+    if (checkedTrips.length < 1) {
+        alert(`{{commute_select_trips_hint}}`);
+        return;
+    }
+    $('#saveAsCommuteName').val('');
+    $('#saveAsCommuteModeNew').prop('checked', true).trigger('change');
+    hideSaveAsCommuteError();
+
+    $.getJSON(`{{ url_for('commutes.list_commutes_for_append', username=username) }}`, function (commutes) {
+        var $select = $('#saveAsCommuteExistingSelect').empty();
+        commutes.forEach(function (c) {
+            $select.append(
+                $('<option>').val(c.uid).text(c.name + ' (' + c.originStation + ' → ' + c.destinationStation + ')')
+            );
+        });
+    });
+
+    $('#saveAsCommuteModal').modal('show');
+}
+
+$(document).on('change', 'input[name="saveAsCommuteMode"]', function () {
+    var mode = $('input[name="saveAsCommuteMode"]:checked').val();
+    $('#saveAsCommuteNameGroup').toggleClass('d-none', mode !== 'new');
+    $('#saveAsCommuteExistingGroup').toggleClass('d-none', mode !== 'existing');
+    hideSaveAsCommuteError();
+});
+
+function showSaveAsCommuteError(message){
+    $('#saveAsCommuteError').text(message).removeClass('d-none');
+}
+
+function hideSaveAsCommuteError(){
+    $('#saveAsCommuteError').addClass('d-none').text('');
+}
+
+function submitSaveAsCommute(){
+    var mode = $('input[name="saveAsCommuteMode"]:checked').val();
+    var url, body;
+
+    hideSaveAsCommuteError();
+
+    if (mode === 'new') {
+        var name = $('#saveAsCommuteName').val().trim();
+        if (!name) {
+            showSaveAsCommuteError(`{{commute_name_required}}`);
+            return;
+        }
+        url = `{{ url_for('commutes.create_commute_route', username=username) }}`;
+        body = { name: name, tripIds: checkedTrips };
+    } else {
+        var commuteUid = $('#saveAsCommuteExistingSelect').val();
+        if (!commuteUid) {
+            showSaveAsCommuteError(`{{commute_select_existing_required}}`);
+            return;
+        }
+        url = `{{ url_for('commutes.append_commute_legs', username=username, commute_uid=0) }}`.replace('/0/', '/' + commuteUid + '/');
+        body = { tripIds: checkedTrips };
+    }
+
+    document.getElementById('saveAsCommuteSubmit').setAttribute('disabled', 'disabled');
+    document.getElementById('saveAsCommuteSubmitLabel').style.display = 'none';
+    document.getElementById('saveAsCommuteSpinner').style.display = '';
+
+    fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.json().then(data => { throw new Error(data.error); });
+        }
+        window.location.href = `{{ url_for('commutes.commute_list', username=username) }}`;
+    })
+    .catch(error => {
+        showSaveAsCommuteError(error.message || 'Error saving commute');
+    })
+    .finally(() => {
+        document.getElementById('saveAsCommuteSubmit').removeAttribute('disabled');
+        document.getElementById('saveAsCommuteSubmitLabel').style.display = '';
+        document.getElementById('saveAsCommuteSpinner').style.display = 'none';
+    });
 }
 
 var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-toggle="tooltip"]'))

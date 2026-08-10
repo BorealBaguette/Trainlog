@@ -173,6 +173,7 @@ from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src import visualisations as viz_module
 from src.api.trips import trips_blueprint
+from src.api.commutes import commutes_blueprint
 from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
 from src.consts import DbNames, TripTypes
 from src.global_map import (
@@ -304,6 +305,7 @@ app.register_blueprint(trainset_blueprint)
 app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
 app.register_blueprint(trips_blueprint)
+app.register_blueprint(commutes_blueprint)
 app.register_blueprint(live_tracks_blueprint)
 
 app.config["CACHE_TYPE"] = "SimpleCache"

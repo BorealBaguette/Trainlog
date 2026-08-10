@@ -176,6 +176,12 @@
             <i class="bi bi-tags"></i>{{tagInvitesIcon | safe}} {{manage_tags}}
           </a>
           <div class="dropdown-divider"></div>
+          <!-- Commutes Section -->
+          <h6 class="dropdown-header">{{commutes}}</h6>
+          <a class="dropdown-item" href="{{ url_for('commutes.commute_list', username=username) }}">
+            <i class="fas fa-route"></i> {{manage_commutes}}
+          </a>
+          <div class="dropdown-divider"></div>
           <!-- GPX Section -->
           <h6 class="dropdown-header">GPX</h6>
           <a class="dropdown-item" href="{{ url_for('upload_gpx', username=username) }}">
