@@ -73,7 +73,9 @@
         SUM(carbon * is_past) AS "pastCO2",
         SUM(carbon * is_planned_future) AS "plannedFutureCO2",
         SUM(COALESCE(arrival_delay, 0) * is_past) AS "pastDelay",
-        SUM(COALESCE(arrival_delay, 0) * is_planned_future) AS "plannedFutureDelay"
+        SUM(COALESCE(arrival_delay, 0) * is_planned_future) AS "plannedFutureDelay",
+        SUM((COALESCE(arrival_delay, 0) - COALESCE(departure_delay, 0)) * is_past) AS "pastDelayAccumulated",
+        SUM((COALESCE(arrival_delay, 0) - COALESCE(departure_delay, 0)) * is_planned_future) AS "plannedFutureDelayAccumulated"
     FROM line_operators
     GROUP BY line, grouping_id, unresolved_name
 )
@@ -101,7 +103,8 @@ SELECT
     t."pastKm", t."plannedFutureKm",
     t."pastDuration", t."plannedFutureDuration",
     t."pastCO2", t."plannedFutureCO2",
-    t."pastDelay", t."plannedFutureDelay"
+    t."pastDelay", t."plannedFutureDelay",
+    t."pastDelayAccumulated", t."plannedFutureDelayAccumulated"
 FROM line_totals t
 LEFT JOIN display_member d ON d.grouping_id = t.grouping_id
 LEFT JOIN operators o ON o.operator_id = d.operator_id
