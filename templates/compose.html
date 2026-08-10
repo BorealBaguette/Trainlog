@@ -2,13 +2,23 @@
 {% block content %}
 {% include "bootstrap/leafletLayout.html" %}
 
+{% if vehicle_type == 'ferry' %}
+<script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
+{% endif %}
+
 {% include "bootstrap/navigation.html" %}
 
 <style>
-  /* ── Layout ── */
+  /* ── Layout ──
+     The navbar is in normal flow and its height is not a constant (it depends on the
+     brand image, the font and the plan banner above the form), so subtracting a guess
+     from 100vh left the page a few pixels too tall and gave the whole window a
+     scrollbar. --compose-top is measured at runtime; the fallback only matters for the
+     first paint. Scrolling belongs to the panel alone — the map is dragged, not
+     scrolled — so the page itself is pinned. */
   #sidebar { display: none !important; }
   .compose-wrap {
-    display: flex; height: calc(100vh - 56px); overflow: hidden;
+    display: flex; height: calc(100vh - var(--compose-top, 56px)); overflow: hidden;
   }
   .compose-panel {
     width: 380px; flex: 0 0 380px; overflow-y: auto;
@@ -16,11 +26,21 @@
     display: flex; flex-direction: column;
   }
   .compose-map {
-    flex: 1 1 auto; position: relative;
+    flex: 1 1 auto; position: relative; overflow: hidden;
   }
   #map {
     width: 100%; height: 100%;
   }
+  @media (min-width: 701px) {
+    html, body { overflow: hidden; }
+  }
+  /* jQuery UI puts its menus at z-index 100 (.ui-front), which loses to Leaflet's panes
+     (400-1000) since neither the map nor the panel opens a stacking context of its own —
+     autocomplete lists were being painted underneath the map. 1020 clears Leaflet's
+     controls (1000) while staying under the navbar (1030), which an upward-opening
+     list would otherwise cover. */
+  .ui-front { z-index: 1020; }
+  .compose-panel { position: relative; z-index: 2; }
 
   /* ── Panel header ── */
   .cp-header {
@@ -74,9 +94,36 @@
   }
   .via-compose-remove:hover { color: #374151; }
 
-  /* Operator logo */
-  .cp-operator-row { display: flex; align-items: center; gap: .5rem; }
-  .cp-operator-row .operatorLogo { height: 24px; border-radius: 4px; flex-shrink: 0; }
+  /* Operator pills — the shared widget (style2.css) is styled for the flat trip form;
+     here it sits among Bootstrap controls, so match those like the modal variant does. */
+  .compose-panel .operatorPillsField {
+    background: #fafbfc; border: 1px solid #e2e6ea; border-radius: 8px;
+    min-height: 38px; padding: 4px 8px; font-size: .875rem;
+  }
+  .compose-panel .operatorPillsField:focus-within {
+    border-color: #86b7fe; box-shadow: 0 0 0 .2rem rgba(13,110,253,.12); background: #fff;
+  }
+
+  /* Collapsible details */
+  .cp-collapse-toggle {
+    display: flex; align-items: center; gap: .35rem; width: 100%;
+    border: 0; background: none; padding: 0; cursor: pointer;
+    font-size: .68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #9ca3af; margin-bottom: .55rem;
+  }
+  .cp-collapse-toggle .bi-chevron-right { transition: transform .15s; }
+  .cp-collapse-toggle[aria-expanded="true"] .bi-chevron-right { transform: rotate(90deg); }
+
+  /* Trainset builder */
+  .ts-btn {
+    padding: .35rem .75rem; border: 1px solid #e2e6ea; border-radius: 8px;
+    background: #fafbfc; cursor: pointer; font-size: .8rem; line-height: 1.4; color: #374151;
+  }
+  .ts-btn:hover { background: #f0f2f5; }
+  #ts-active-display .ts-active-inner {
+    display: flex; align-items: center; gap: 8px; padding: 6px 10px;
+    background: #f3f3f3; border-radius: 8px; font-size: .8rem;
+  }
 
   /* Precision toggle */
   .cp-precision { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .5rem; }
@@ -335,8 +382,9 @@
       </div>
       {% endif %}
 
-      <!-- Manual duration -->
-      <div class="cp-input-row mt-1">
+      <!-- Manual duration — only meaningful when no times are given, i.e. for a
+           date-only or unknown trip; with precise datetimes the duration follows. -->
+      <div class="cp-input-row mt-1" id="manDuration">
         <label>{{ tripDuration|default('Duration') }} <small class="text-muted">({{ optional|default('optional') }})</small></label>
         <div class="d-flex gap-2">
           <input type="number" min="0" max="200" step="1" id="manDurationHours" name="manDurationHours" class="form-control" placeholder="{{ hours|default('h') }}">
@@ -345,34 +393,65 @@
       </div>
     </div>
 
-    <!-- Details -->
+    <!-- Operator and line are what a trip is normally identified by, so they stay in
+         plain sight; everything else folds away behind the Details toggle. -->
     <div class="cp-section">
-      <div class="cp-section-title">{{ details|default('Details') }}</div>
-
       {% if vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
-      <!-- Operator -->
-      <div class="cp-input-row cp-operator-row">
-        <img class="operatorLogo" src="{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}">
-        <input type="text" name="operator" id="operator" class="form-control" placeholder="{{ operator|default('Operator') }}">
+      <!-- Operator — the submitted value stays free comma-separated text on the hidden
+           input; the pills are a view of it, built by operatorPillsInput(). -->
+      <div class="cp-input-row">
+        <label for="operatorSearch">{{ operator|default('Operator') }}</label>
+        <input type="hidden" name="operator" id="operator">
+        <div class="operatorPillsField" id="operatorPills">
+          <input type="text" id="operatorSearch" class="op-pill-placeholder"
+                 placeholder="{{ operator|default('Operator') }}" autocomplete="off">
+        </div>
       </div>
       <!-- Line -->
       <div class="cp-input-row">
         <label>{{ lineName|default('Line') }}</label>
         <input type="text" name="lineName" id="lineName" class="form-control" placeholder="{{ lineName|default('Line') }}">
       </div>
+      {% endif %}
+
+      <!-- Everything below is secondary: collapsed until asked for, as on the classic form. -->
+      <button type="button" class="cp-collapse-toggle collapsed" data-bs-toggle="collapse"
+              data-bs-target="#detailsGroup" aria-expanded="false" aria-controls="detailsGroup">
+        <i class="bi bi-chevron-right"></i>{{ details|default('Details') }}
+      </button>
+
+      <div class="collapse" id="detailsGroup">
+      {% if vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
       <!-- Material -->
       <div class="cp-input-row">
         <label>{{ material_type|default('Rolling stock') }}</label>
         <input type="text" name="material_type" id="material_type" class="form-control" placeholder="{{ material_type|default('Rolling stock') }}">
         <input type="hidden" name="material_type_advanced" id="material_type_advanced">
       </div>
+      {% if vehicle_type in ('train', 'metro', 'tram') %}
+      <div id="ts-active-display" class="cp-input-row" style="display:none;">
+        <div class="ts-active-inner">
+          <i class="fas fa-train" style="color:#666; flex-shrink:0"></i>
+          <span id="ts-active-label" style="flex:1"></span>
+          <button type="button" onclick="clearMaterialTypeJson()" title="{{ remove|default('Clear') }}"
+                  style="border:0; background:none; cursor:pointer; padding:0; color:#999; font-size:1.1rem; line-height:1; flex-shrink:0">&times;</button>
+        </div>
+      </div>
+      <div class="cp-input-row">
+        <button type="button" class="ts-btn" style="width:100%" onclick="openTsbModal()">
+          <i class="fas fa-train"></i> {{ tsbPickTrainset|default('Pick a trainset') }}
+        </button>
+      </div>
+      {% endif %}
       <!-- Reg / Seat -->
       <div class="row g-2">
         <div class="col-6 cp-input-row"><label>{{ reg|default('Reg') }}</label>
-          <input type="text" name="reg" id="reg" class="form-control" placeholder="{{ reg|default('Reg') }}"></div>
+          <input type="text" name="reg" id="reg" class="form-control" placeholder="{{ reg|default('Reg') }}" autocomplete="off"></div>
         <div class="col-6 cp-input-row"><label>{{ seat|default('Seat') }}</label>
           <input type="text" name="seat" id="seat" class="form-control" placeholder="{{ seat|default('Seat') }}"></div>
       </div>
+      <!-- Ferries store the ship's IMO/MMSI, so name the ship the number stands for. -->
+      <small id="regVesselName" class="form-text text-muted" style="display:none; margin-bottom:.5rem;"></small>
       {% endif %}
 
       <!-- Notes -->
@@ -391,7 +470,6 @@
         </select>
       </div>
 
-      {% if vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
       <!-- Power type -->
       {% if vehicle_type == 'train' %}
       <div class="cp-input-row">
@@ -405,19 +483,53 @@
           <label for="powerThermic"><i class="fas fa-fire"></i> {{ thermic|default('Diesel') }}</label>
         </div>
       </div>
+      {% elif vehicle_type in ('bus', 'car') %}
+      <div class="cp-input-row">
+        <label>{{ powerType|default('Power') }}</label>
+        <div class="power-type-group">
+          <input type="radio" name="powerType" id="powerThermic" value="thermic" checked>
+          <label for="powerThermic"><i class="fas fa-fire"></i> {{ thermic|default('Diesel') }}</label>
+          <input type="radio" name="powerType" id="powerElectric" value="electric">
+          <label for="powerElectric"><i class="fas fa-bolt"></i> {{ electric|default('Electric') }}</label>
+        </div>
+      </div>
+      {% elif vehicle_type in ('cycle', 'scooter') %}
+      <div class="cp-input-row">
+        <label>{{ powerType|default('Power') }}</label>
+        <div class="power-type-group">
+          <input type="radio" name="powerType" id="powerManual" value="manual" checked>
+          <label for="powerManual"><i class="fas fa-person-biking"></i> {{ manual|default('Manual') }}</label>
+          <input type="radio" name="powerType" id="powerElectric" value="electric">
+          <label for="powerElectric"><i class="fas fa-bolt"></i> {{ electric|default('Electric') }}</label>
+        </div>
+      </div>
+      {% elif vehicle_type == 'ferry' %}
+      <div class="cp-input-row">
+        <label>{{ propulsion|default('Propulsion') }}</label>
+        <div class="power-type-group">
+          <input type="radio" name="powerType" id="powerThermic" value="thermic" checked>
+          <label for="powerThermic"><i class="fas fa-fire"></i> {{ thermic|default('Diesel') }}</label>
+          <input type="radio" name="powerType" id="powerElectric" value="electric">
+          <label for="powerElectric"><i class="fas fa-bolt"></i> {{ electric|default('Electric') }}</label>
+        </div>
+      </div>
+      <div class="cp-input-row">
+        <label for="co2Override">{{ co2OverrideLabel|default('CO2 override') }}
+          <small class="text-muted">{{ co2OverrideHint|default('') }}</small></label>
+        <input type="number" class="form-control" id="co2Override" name="co2Override" min="0" step="0.1"
+               placeholder="{{ co2OverridePlaceholder|default('') }}">
+      </div>
       {% endif %}
-      {% endif %}
-    </div>
 
-    <!-- Price -->
-    <div class="cp-section">
-      <div class="cp-section-title">{{ priceLabel|default('Price') }}</div>
+      <!-- Price. What currency the ticket was in and when it was bought only mean
+           anything once there is an amount, so they stay out of the way until there is. -->
+      <div class="cp-section-title mt-3">{{ priceLabel|default('Price') }}</div>
       <div class="row g-2">
-        <div class="col-7 cp-input-row">
+        <div class="cp-input-row col-12" id="priceAmountCol">
           <label>{{ price|default('Amount') }}</label>
           <input type="number" step="any" name="price" id="price" class="form-control" placeholder="{{ price|default('Amount') }}">
         </div>
-        <div class="col-5 cp-input-row">
+        <div class="cp-input-row col-5" id="priceCurrencyCol" style="display:none;">
           <label>{{ currency|default('Currency') }}</label>
           <select name="currency" id="currency" class="form-select">
             {% for cur in currencyOptions %}
@@ -426,9 +538,10 @@
           </select>
         </div>
       </div>
-      <div class="cp-input-row" id="cp-purchase-date-row">
+      <div class="cp-input-row" id="cp-purchase-date-row" style="display:none;">
         <label>{{ purchasing_date|default('Purchase date') }}</label>
         <input type="date" name="purchasing_date" id="purchasing_date" class="form-control">
+      </div>
       </div>
     </div>
 
@@ -512,6 +625,20 @@ var freehandActive = false;
 // ── Map (createMap from map.js handles tile server selection) ──
 var map = createMap(null, [48, 8]);
 
+// The wrap fills whatever is left below the navbar (and the plan banner, when there is
+// one). Measuring beats subtracting a constant from 100vh: guess too small and the
+// window grows its own scrollbar, too large and the save bar is cut off.
+(function () {
+  var wrap = document.querySelector('.compose-wrap');
+  function sizeCompose() {
+    var top = wrap.getBoundingClientRect().top + (window.scrollY || 0);
+    document.documentElement.style.setProperty('--compose-top', Math.round(top) + 'px');
+    if (map && map.invalidateSize) map.invalidateSize();
+  }
+  sizeCompose();
+  window.addEventListener('resize', sizeCompose);
+})();
+
 // ── Inline freehand mode: a map toggle swaps the router for the hand-draw canvas
 //    on this same map, keeping all form fields. Only for routable ground types. ──
 {% if vehicle_type not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
@@ -577,13 +704,33 @@ var stationSearchURLs = {
 };
 var stationSearchUrl = stationSearchURLs[vehicle_type] || "/stationAutocomplete";
 
+// Built once getManAndOps returns. Anything setting the operator programmatically goes
+// through setOperatorValue() so the pills follow the hidden field — before the pills
+// exist, seeding the hidden field is enough, as they initialise from it.
+var operatorPills = null;
+function setOperatorValue(value) {
+  $('#operator').val(value);
+  if (operatorPills) operatorPills.set(value);
+}
+
 $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) }}', function(manAndOps) {
   Object.assign(globalStationDict, manAndOps.manualStations);
   Object.assign(visitedStations, manAndOps.visitedStations);
   Object.keys(manAndOps.manualStations).forEach(function(s) {
     manualStationsList.push({ label: s, value: s, manual: true });
   });
-  operatorAutocomplete($("#operator"), manAndOps, "{{ url_for('static', filename='') }}", "{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}", vehicle_type);
+  if (document.getElementById('operatorPills')) {
+    operatorPills = operatorPillsInput(
+      $("#operator"), $("#operatorSearch"), $("#operatorPills"), manAndOps,
+      "{{ url_for('static', filename='') }}", vehicle_type,
+      { plainToggle: true,
+        plainLabel: "{{ operatorPlainText|default('Edit as plain text') }}",
+        pillsLabel: "{{ operatorPillsMode|default('Back to operator list') }}" });
+    // Low in a panel that scrolls, the operator list would open into the save bar;
+    // upwards by default, flipping back down when there is no room above.
+    $('#operatorSearch').autocomplete('option', 'position',
+      { my: 'left bottom', at: 'left top', collision: 'flip' });
+  }
   {% if vehicle_type == 'air' %}
   // Airport-specific autocomplete
   $(".stationSearch").autocomplete({
@@ -688,9 +835,8 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
       try {
         var airlineRes = await $.get("/api/airlines", { icao: flight.operating_as });
         var airline = airlineRes[0];
-        $('#operator').val(airline ? airline.name : flight.operating_as);
-        if (airline && airline.logo_url) $('.operatorLogo').attr('src', airline.logo_url);
-      } catch(e) { $('#operator').val(flight.operating_as); }
+        setOperatorValue(airline ? airline.name : flight.operating_as);
+      } catch(e) { setOperatorValue(flight.operating_as); }
     }
     updateProgressBar(65);
     if (flight.datetime_takeoff_local && flight.datetime_landed_local) {
@@ -742,8 +888,8 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
         $('#lineName').val(pl.leg.flight); $('#material_type').val(pl.leg.type); $('#reg').val(pl.leg.reg);
         if (pl.leg.operating_as) {
           try { var ar = await $.get("/api/airlines", { icao: pl.leg.operating_as }); var al = ar[0];
-            $('#operator').val(al ? al.name : pl.leg.operating_as); if (al && al.logo_url) $('.operatorLogo').attr('src', al.logo_url);
-          } catch(e) { $('#operator').val(pl.leg.operating_as); }
+            setOperatorValue(al ? al.name : pl.leg.operating_as);
+          } catch(e) { setOperatorValue(pl.leg.operating_as); }
         }
         if (pl.depLocal && pl.arrLocal) {
           $('#newTripStartDate').val(pl.depLocal.toTimezonedISOString().split('T')[0]); $('#newTripStartTime').val(pl.depLocal.toTimeString().slice(0,5));
@@ -761,6 +907,12 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
   materialTypeAutocomplete($("#material_type"), manAndOps, vehicle_type);
   {% endif %}
 });
+
+{% if vehicle_type == 'ferry' %}
+// Suggestions match name, IMO or MMSI; what lands in the field is the ship's name, with
+// the hull key on a hidden sibling (see vessel_field.js) — composeSave reads that.
+initVesselField('#reg', '#regVesselName', "{{ url_for('vesselAutocomplete') }}");
+{% endif %}
 
 // ── Pin before routing starts ──
 function placeTempPin(entry, role) {
@@ -965,6 +1117,7 @@ function updateTimingPanel() {
   document.getElementById('timing-precise').style.display = v === 'preciseDates' ? '' : 'none';
   document.getElementById('timing-date').style.display = v === 'onlyDate' ? '' : 'none';
   document.getElementById('timing-unknown').style.display = v === 'unknown' ? '' : 'none';
+  document.getElementById('manDuration').style.display = (v === 'onlyDate' || v === 'unknown') ? '' : 'none';
   {% if plan_uuid %}
   document.getElementById('timing-relative').style.display = v === 'relative' ? '' : 'none';
   {% endif %}
@@ -989,8 +1142,74 @@ for (var _opt of document.getElementById('currency').options) {
   if (_opt.dataset.country) _opt.text = _opt.text + ' ' + getFlagEmoji(_opt.dataset.country);
 }
 
-// ── Tags ──
-setupTagAutocomplete('{{ url_for("get_all_tags", username=username) }}');
+// ── Price: currency and purchase date only once an amount is entered ──
+function updatePriceExtras() {
+  var has = document.getElementById('price').value.trim() !== '';
+  document.getElementById('priceCurrencyCol').style.display = has ? '' : 'none';
+  document.getElementById('cp-purchase-date-row').style.display = has ? '' : 'none';
+  // The amount takes the whole row on its own, and shares it with the currency.
+  document.getElementById('priceAmountCol').className = 'cp-input-row ' + (has ? 'col-7' : 'col-12');
+}
+document.getElementById('price').addEventListener('input', updatePriceExtras);
+updatePriceExtras();
+
+// ── Tags ── (createOpts lets an unknown term be created as a tag on the spot)
+setupTagAutocomplete('{{ url_for("get_all_tags", username=username) }}', null, {
+  url: '{{ url_for("quick_create_tag", username=username) }}',
+  label: {{ create_tag_option|default('Create tag "{name}"')|tojson }}
+});
+// Tags are the last field above the save bar, so the list would open into it or off the
+// panel entirely. Open upwards, flipping back down only if there is no room above.
+$('#tagSearchInput').autocomplete('option', 'position',
+  { my: 'left bottom', at: 'left top', collision: 'flip' });
+
+// ── Trainset builder ──
+{% if vehicle_type in ('train', 'metro', 'tram') %}
+// The builder writes into #material_type_advanced (a trainset name, {"trainsets":[…]},
+// or an inline array of units); this renders whichever shape it left behind.
+function formatTrainset(units) {
+  var result = [];
+  var i = 0;
+  while (i < units.length) {
+    var name = units[i].label || units[i].name || '?';
+    var count = 1;
+    while (i + count < units.length && (units[i + count].label || units[i + count].name || '?') === name) count++;
+    result.push(count > 1 ? count + '\xd7 ' + name : name);
+    i += count;
+  }
+  return result.join(' + ');
+}
+function updateMaterialTypeDisplay() {
+  var $display = $('#ts-active-display');
+  if (!$display.length) return;
+  var val = $('#material_type_advanced').val();
+  try {
+    var parsed = JSON.parse(val);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      $('#ts-active-label').text(formatTrainset(parsed));
+      $display.show();
+      return;
+    }
+    if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets) && parsed.trainsets.length > 0) {
+      $('#ts-active-label').text(parsed.trainsets.join(' + '));
+      $display.show();
+      return;
+    }
+  } catch (e) {}
+  if (val) {
+    $('#ts-active-label').text(val);
+    $display.show();
+  } else {
+    $display.hide();
+  }
+}
+function clearMaterialTypeJson() {
+  $('#material_type_advanced').val('');
+  updateMaterialTypeDisplay();
+}
+updateMaterialTypeDisplay();
+$(document).on('hidden.bs.modal', '#tsbModal', updateMaterialTypeDisplay);
+{% endif %}
 
 // ── Prefill from "Save & continue": origin = previous leg's destination,
 //    departure timing carried forward from the previous leg's arrival. ──
@@ -1075,7 +1294,10 @@ function composeSave(continueTrip) {
   newTrip.lineName = (document.getElementById('lineName') || {}).value || '';
   newTrip.material_type = (document.getElementById('material_type') || {}).value || '';
   newTrip.material_type_advanced = (document.getElementById('material_type_advanced') || {}).value || '';
-  newTrip.reg = (document.getElementById('reg') || {}).value || '';
+  // On ferries initVesselField moves name="reg" onto a hidden sibling holding the hull
+  // key, leaving the visible field showing the ship's name — store the key.
+  var regHidden = document.querySelector('input[type=hidden][name="reg"]');
+  newTrip.reg = regHidden ? regHidden.value : ((document.getElementById('reg') || {}).value || '');
   newTrip.seat = (document.getElementById('seat') || {}).value || '';
   newTrip.notes = document.getElementById('notes').value;
   newTrip.visibility = document.getElementById('visibility').value;
@@ -1083,6 +1305,7 @@ function composeSave(continueTrip) {
   newTrip.currency = document.getElementById('currency').value;
   newTrip.purchasing_date = document.getElementById('purchasing_date').value;
   newTrip.powerType = (document.querySelector('input[name="powerType"]:checked') || {}).value || 'auto';
+  newTrip.co2Override = (document.getElementById('co2Override') || {}).value || '';
   newTrip.tag_ids = Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(function(el) { return el.dataset.tagId; });
 
   var timingOk = (
