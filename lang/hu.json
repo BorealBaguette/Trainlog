@@ -718,6 +718,8 @@
     "feature_requests_comment_view_link": "Beszélgetés megtekintése",
     "waypoint": "Útpont",
     "via": "Via",
+    "nearbyStops": "Közeli megállók",
+    "nameThisPlace": "Hely elnevezése",
     "direction": "Irány",
     "coordinates": "Koordináták",
     "location": "Helyszín",

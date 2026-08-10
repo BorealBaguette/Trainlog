@@ -721,6 +721,8 @@
     "feature_requests_comment_view_link": "Visualizza la conversazione",
     "waypoint": "Punto di passaggio",
     "via": "Via",
+    "nearbyStops": "Fermate nelle vicinanze",
+    "nameThisPlace": "Dai un nome a questo luogo",
     "direction": "Direzione",
     "coordinates": "Coordinate",
     "location": "Posizione",

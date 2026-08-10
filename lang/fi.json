@@ -719,6 +719,8 @@
     "feature_requests_comment_view_link": "Näytä keskustelu",
     "waypoint": "Reittipiste",
     "via": "Kautta",
+    "nearbyStops": "Lähellä olevat pysäkit",
+    "nameThisPlace": "Nimeä tämä paikka",
     "direction": "Suunta",
     "coordinates": "Koordinaatit",
     "location": "Sijainti",

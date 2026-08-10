@@ -721,6 +721,8 @@
     "feature_requests_comment_view_link": "Visa konversationen",
     "waypoint": "Vägpunkt",
     "via": "Via",
+    "nearbyStops": "Hållplatser i närheten",
+    "nameThisPlace": "Ge platsen ett namn",
     "direction": "Riktning",
     "coordinates": "Koordinater",
     "location": "Plats",

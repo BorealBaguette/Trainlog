@@ -724,6 +724,8 @@
     "feature_requests_comment_view_link": "Переглянути розмову",
     "waypoint": "Точка маршруту",
     "via": "Через",
+    "nearbyStops": "Зупинки поблизу",
+    "nameThisPlace": "Назвати це місце",
     "direction": "Напрямок",
     "coordinates": "Координати",
     "location": "Місцезнаходження",

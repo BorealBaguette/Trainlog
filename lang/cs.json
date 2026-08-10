@@ -724,6 +724,8 @@
     "feature_requests_comment_view_link": "Zobrazit konverzaci",
     "waypoint": "Bod trasy",
     "via": "Via",
+    "nearbyStops": "Zastávky v okolí",
+    "nameThisPlace": "Pojmenovat toto místo",
     "direction": "Směr",
     "coordinates": "Souřadnice",
     "location": "Umístění",

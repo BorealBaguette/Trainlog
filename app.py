@@ -1395,6 +1395,19 @@ def get_new_trip_types(user_lang):
     }
 
 
+@app.route("/u/<username>/compose")
+@login_required
+def compose_default(username):
+    """Bare /compose — the form needs a type, and trains are what most people log.
+
+    Any query string (``?plan=``, the save-and-continue prefill) is carried over, and
+    the type switcher in the header changes it from there.
+    """
+    return redirect(
+        url_for("compose", username=username, vehicle_type="train", **request.args)
+    )
+
+
 @app.route("/u/<username>/compose/<vehicle_type>")
 @login_required
 def compose(username, vehicle_type):

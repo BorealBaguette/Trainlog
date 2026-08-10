@@ -721,6 +721,8 @@
     "feature_requests_comment_view_link": "Bekijk de conversatie",
     "waypoint": "Routepunt",
     "via": "Via",
+    "nearbyStops": "Haltes in de buurt",
+    "nameThisPlace": "Deze plek een naam geven",
     "direction": "Richting",
     "coordinates": "Coördinaten",
     "location": "Locatie",

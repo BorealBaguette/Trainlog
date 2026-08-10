@@ -724,6 +724,8 @@
     "feature_requests_comment_view_link": "Pogledaj razgovor",
     "waypoint": "Putna točka",
     "via": "Via",
+    "nearbyStops": "Stanice u blizini",
+    "nameThisPlace": "Imenuj ovo mjesto",
     "direction": "Smjer",
     "coordinates": "Koordinate",
     "location": "Lokacija",

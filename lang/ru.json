@@ -724,6 +724,8 @@
     "feature_requests_comment_view_link": "Просмотреть разговор",
     "waypoint": "Путевая точка",
     "via": "Через",
+    "nearbyStops": "Остановки поблизости",
+    "nameThisPlace": "Назвать это место",
     "direction": "Направление",
     "coordinates": "Координаты",
     "location": "Местоположение",

@@ -13,27 +13,51 @@
      The navbar is in normal flow and its height is not a constant (it depends on the
      brand image, the font and the plan banner above the form), so subtracting a guess
      from 100vh left the page a few pixels too tall and gave the whole window a
-     scrollbar. --compose-top is measured at runtime; the fallback only matters for the
-     first paint. Scrolling belongs to the panel alone — the map is dragged, not
-     scrolled — so the page itself is pinned. */
+     scrollbar. --compose-h is measured at runtime — from innerHeight, not 100vh, which
+     on mobile counts space the browser chrome is covering. The fallback only matters
+     for the first paint. Scrolling belongs to the panel alone — the map is dragged,
+     not scrolled — so the page itself is pinned. */
   #sidebar { display: none !important; }
+  html, body { overflow: hidden; }
   .compose-wrap {
-    display: flex; height: calc(100vh - var(--compose-top, 56px)); overflow: hidden;
+    display: flex; height: var(--compose-h, calc(100vh - 56px)); overflow: hidden;
   }
   .compose-panel {
-    width: 380px; flex: 0 0 380px; overflow-y: auto;
+    width: var(--compose-panel-w, 380px); flex: 0 0 var(--compose-panel-w, 380px);
+    overflow-y: auto;
     border-right: 1px solid #e9ecef; background: #fff;
     display: flex; flex-direction: column;
+  }
+  /* Splitter. A hairline is too small a target, so the grab area is wider than the line
+     it sits on and reaches into the map, which has pixels to spare. */
+  .compose-resizer {
+    flex: 0 0 6px; cursor: col-resize; background: transparent;
+    position: relative; z-index: 3;
+  }
+  .compose-resizer:hover, .compose-resizer.dragging { background: #dbe4f7; }
+  .compose-resizer:focus-visible { outline: 2px solid #4b78d6; outline-offset: -2px; }
+  /* A grip, because touch has no hover to reveal the seam with. */
+  .compose-resizer::before {
+    content: ''; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+    width: 2px; height: 28px; border-radius: 2px; background: #d1d5db;
   }
   .compose-map {
     flex: 1 1 auto; position: relative; overflow: hidden;
   }
+  /* While dragging, the pointer crosses the map: kill selection and let nothing else
+     claim the cursor. */
+  body.compose-resizing { user-select: none; cursor: col-resize; }
+  body.compose-resizing .compose-map { pointer-events: none; }
   #map {
     width: 100%; height: 100%;
   }
-  @media (min-width: 701px) {
-    html, body { overflow: hidden; }
-  }
+
+  /* Numbered waypoint markers sit too high here. leaflet-numbered-markers.css is
+     tuned for the plain layout the routing page uses; under bootstrap/layout.html the
+     reboot changes the box model the badge is positioned against and it rides up the
+     pin. Same stack, same shift, same correction as edit_copy.html. */
+  .leaflet-marker-icon .numberDecor { top: -37px; left: 3.5px; }
+  .leaflet-marker-icon .number { left: -5px; }
   /* jQuery UI puts its menus at z-index 100 (.ui-front), which loses to Leaflet's panes
      (400-1000) since neither the map nor the panel opens a stacking context of its own —
      autocomplete lists were being painted underneath the map. 1020 clears Leaflet's
@@ -65,11 +89,15 @@
   /* ── Inputs ── */
   .cp-input-row { margin-bottom: .5rem; }
   .cp-input-row label { font-size: .78rem; color: #6b7280; margin-bottom: .2rem; display: block; }
-  .cp-input-row .form-control, .cp-input-row .form-select {
+  /* One source of truth for field chrome — the via rows are built in JS and sit
+     outside .cp-input-row, so they are named here rather than restyled separately. */
+  .cp-input-row .form-control, .cp-input-row .form-select,
+  .via-compose-row .form-control {
     font-size: .875rem; border-radius: 8px; border-color: #e2e6ea;
     background: #fafbfc; transition: border-color .15s, box-shadow .15s;
   }
-  .cp-input-row .form-control:focus, .cp-input-row .form-select:focus {
+  .cp-input-row .form-control:focus, .cp-input-row .form-select:focus,
+  .via-compose-row .form-control:focus {
     border-color: #86b7fe; box-shadow: 0 0 0 .2rem rgba(13,110,253,.12);
     background: #fff;
   }
@@ -84,9 +112,18 @@
   .cp-station-dot.resolved { background: #22c55e; }
   .cp-station-wrap .form-control { padding-right: 1.8rem; }
 
-  /* Via rows */
-  .via-compose-row { position: relative; margin-bottom: .4rem; }
-  .via-compose-row .form-control { padding-right: 2rem; }
+  /* Via rows. A via is neither the origin nor the destination, and with three station
+     fields stacked they read as one list — the signpost marks which of them are the
+     stops along the way, and indenting the field keeps that reading at a glance. */
+  .via-compose-row {
+    position: relative; margin-bottom: .4rem;
+    display: flex; align-items: center; gap: .4rem;
+  }
+  .via-compose-icon {
+    flex: 0 0 auto; width: 1rem; text-align: center;
+    color: #9ca3af; font-size: .95rem; line-height: 1;
+  }
+  .via-compose-row .form-control { flex: 1 1 auto; min-width: 0; padding-right: 1.8rem; }
   .via-compose-remove {
     position: absolute; right: .35rem; top: 50%; transform: translateY(-50%);
     border: 0; background: none; cursor: pointer; color: #9ca3af; font-size: 1.1rem;
@@ -161,10 +198,62 @@
   /* Tag chips */
   .tag-blob { font-size: .75rem; padding: .15rem .55rem; border-radius: 999px; cursor: pointer; }
 
+  /* Inline checkbox + label. style2.css floats bare checkboxes, so each pair needs its
+     own inline-flex wrapper to stay together. */
+  .cp-check { display: flex; align-items: center; gap: .4rem; margin-bottom: .4rem; }
+  .cp-check .form-check-input { margin: 0; flex: 0 0 auto; }
+  .cp-check label { font-size: .78rem; color: #6b7280; margin: 0; cursor: pointer; }
+
+  /* ── Stop picker (right-click on the map) ── */
+  .stop-picker { font-size: .8rem; }
+  /* Leaflet's own close button is absolutely positioned in this corner, so the header
+     has to keep clear of it rather than run underneath. */
+  .stop-picker .sp-head {
+    display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem;
+    padding-right: 1.1rem; min-height: 1.4rem;
+    font-size: .68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #9ca3af;
+  }
+  .stop-picker .sp-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .stop-picker .sp-radius {
+    flex: 0 0 auto; width: auto; margin-left: auto;
+    font-size: .75rem; padding: .1rem 1.3rem .1rem .4rem; background-position: right .3rem center;
+  }
+  .stop-picker .sp-list { max-height: 260px; overflow-y: auto; }
+  .stop-picker .sp-row { padding: .35rem 0; border-top: 1px solid #f0f2f5; }
+  .stop-picker .sp-row:first-child { border-top: 0; }
+  .stop-picker .sp-row:hover { background: #f7f9fc; }
+  .stop-picker .sp-name { font-weight: 500; color: #1a202c; }
+  .stop-picker .sp-dist { color: #9ca3af; font-size: .72rem; margin-bottom: .2rem; }
+  .stop-picker .sp-actions { display: flex; gap: .25rem; }
+  .stop-picker .sp-btn {
+    flex: 1; border: 1px solid #e2e6ea; border-radius: 6px; background: #fafbfc;
+    color: #4b78d6; font-size: .72rem; padding: .15rem .3rem; cursor: pointer;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .stop-picker .sp-btn:hover:not(:disabled) { background: #e8eeff; border-color: #c7d6f5; }
+  .stop-picker .sp-btn:disabled { color: #c3c8d0; cursor: default; }
+  .stop-picker .sp-empty { color: #9ca3af; padding: .3rem 0; }
+  .stop-picker .sp-name-input { font-size: .8rem; border-radius: 6px; border-color: #e2e6ea; margin-bottom: .4rem; }
+  .stop-picker .sp-link {
+    display: block; width: 100%; margin-top: .4rem; padding: .25rem 0 0;
+    border: 0; border-top: 1px solid #f0f2f5; background: none;
+    color: #4b78d6; font-size: .75rem; text-align: left; cursor: pointer;
+  }
+  .stop-picker .sp-link:hover { text-decoration: underline; }
+
+  /* Stacked, the seam runs the other way: the splitter still works, it just trades
+     panel height for map height instead of width. */
   @media (max-width: 700px) {
-    .compose-wrap { flex-direction: column; height: auto; }
-    .compose-panel { width: 100%; border-right: 0; border-bottom: 1px solid #e9ecef; max-height: 65vh; }
-    .compose-map { height: 50vh; }
+    .compose-wrap { flex-direction: column; }
+    .compose-panel {
+      width: 100%; flex: 0 0 var(--compose-panel-h, 55%); max-height: none;
+      border-right: 0; border-bottom: 1px solid #e9ecef;
+    }
+    .compose-resizer { flex: 0 0 12px; width: 100%; cursor: row-resize; }
+    .compose-resizer::before { width: 36px; height: 4px; }
+    body.compose-resizing { cursor: row-resize; }
+    .compose-map { flex: 1 1 auto; }
   }
 </style>
 
@@ -330,19 +419,56 @@
       <!-- Precise dates -->
       <div id="timing-precise">
         <div class="cp-input-row">
-          <label>{{ newTripStart|default('Departure') }}</label>
+          <label>{{ newTripStart|default('Departure') }}<span class="delay-planned-suffix" style="display:none"> ({{ plannedFuture }})</span></label>
           <div class="d-flex gap-2">
             <input type="date" id="newTripStartDate" name="newTripStartDate" class="form-control">
             <input type="time" id="newTripStartTime" name="newTripStartTime" class="form-control">
           </div>
         </div>
         <div class="cp-input-row">
-          <label>{{ newTripEnd|default('Arrival') }}</label>
+          <label>{{ newTripEnd|default('Arrival') }}<span class="delay-planned-suffix" style="display:none"> ({{ plannedFuture }})</span></label>
           <div class="d-flex gap-2">
             <input type="date" id="newTripEndDate" name="newTripEndDate" class="form-control">
             <input type="time" id="newTripEndTime" name="newTripEndTime" class="form-control">
           </div>
         </div>
+
+        {# Delays are a fact about a trip that happened, so they only make sense against
+           precise datetimes — and a plan has none of either. #}
+        {% if not plan_uuid and vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
+        <div id="delayToggleWrapper" class="cp-check">
+          <input type="checkbox" id="delayToggle" class="form-check-input">
+          <label for="delayToggle">{{ delaysToggle }}</label>
+        </div>
+        <div id="delayModeSwitchWrapper" class="cp-check" style="display:none;">
+          <input type="checkbox" id="delayModeSwitch" class="form-check-input">
+          <label for="delayModeSwitch">{{ delayDateMode }}</label>
+        </div>
+
+        <div id="delayMinutesInputs" class="cp-input-row" style="display:none;">
+          <label>{{ delays }}</label>
+          <div class="d-flex gap-2">
+            <input type="number" step="any" id="departureDelayMinutes" name="departureDelayMinutes"
+                   class="form-control" placeholder="{{ departure }}" title="{{ departureDelay }}">
+            <input type="number" step="any" id="arrivalDelayMinutes" name="arrivalDelayMinutes"
+                   class="form-control" placeholder="{{ arrival }}" title="{{ arrivalDelay }}">
+          </div>
+        </div>
+        <div id="depActualGroup" class="cp-input-row" style="display:none;">
+          <label>{{ newTripStart|default('Departure') }} ({{ delayActual }})</label>
+          <div class="d-flex gap-2">
+            <input type="date" id="depActualDate" class="form-control">
+            <input type="time" id="depActualTime" class="form-control">
+          </div>
+        </div>
+        <div id="arrActualGroup" class="cp-input-row" style="display:none;">
+          <label>{{ newTripEnd|default('Arrival') }} ({{ delayActual }})</label>
+          <div class="d-flex gap-2">
+            <input type="date" id="arrActualDate" class="form-control">
+            <input type="time" id="arrActualTime" class="form-control">
+          </div>
+        </div>
+        {% endif %}
       </div>
 
       <!-- Date only -->
@@ -542,6 +668,14 @@
         <label>{{ purchasing_date|default('Purchase date') }}</label>
         <input type="date" name="purchasing_date" id="purchasing_date" class="form-control">
       </div>
+
+      {# A plan trip is costed through the plan's own budget, so it has no ticket. #}
+      {% if not plan_uuid %}
+      <div class="cp-input-row">
+        <label for="ticketSearchInput" id="ticketSearchInputLabel">{{ select_ticket|default('Ticket') }}</label>
+        <select id="ticketSearchInput" name="ticket_id" class="form-select"></select>
+      </div>
+      {% endif %}
       </div>
     </div>
 
@@ -572,6 +706,10 @@
       {% endif %}
     </div>
   </div>
+
+  <!-- ── Splitter ── -->
+  <div class="compose-resizer" id="composeResizer" role="separator" aria-orientation="vertical"
+       tabindex="0" aria-label="{{ resizePanel|default('Resize panel') }}"></div>
 
   <!-- ── Right panel: map ── -->
   <div class="compose-map">
@@ -616,6 +754,11 @@ var globalStationDict = {};
 var manualStationsList = [];
 var visitedStations = {};
 var originEntry = null, destEntry = null;
+// Points named by hand on the map rather than picked from the stop list. Only origin
+// and destination are kept: those are the two the server persists as manual stations
+// (a via is carried by its coordinates alone). Cleared as soon as a real stop replaces
+// them, so a stale toggle can never file a manual station under a new station's name.
+var manualPoints = { origin: null, dest: null };
 var routingStarted = false;
 var tempMarkers = {};
 // Freehand inline mode (declared unconditionally so composeSave can always read them).
@@ -627,16 +770,128 @@ var map = createMap(null, [48, 8]);
 
 // The wrap fills whatever is left below the navbar (and the plan banner, when there is
 // one). Measuring beats subtracting a constant from 100vh: guess too small and the
-// window grows its own scrollbar, too large and the save bar is cut off.
+// window grows its own scrollbar, too large and the save bar is cut off. innerHeight
+// rather than 100vh, because on mobile 100vh counts the strip the browser's own chrome
+// is sitting on.
 (function () {
   var wrap = document.querySelector('.compose-wrap');
   function sizeCompose() {
     var top = wrap.getBoundingClientRect().top + (window.scrollY || 0);
-    document.documentElement.style.setProperty('--compose-top', Math.round(top) + 'px');
+    var h = Math.max(200, Math.round(window.innerHeight - top));
+    document.documentElement.style.setProperty('--compose-h', h + 'px');
     if (map && map.invalidateSize) map.invalidateSize();
   }
   sizeCompose();
   window.addEventListener('resize', sizeCompose);
+  window.addEventListener('orientationchange', sizeCompose);
+})();
+
+// ── Splitter: drag the seam to trade panel space for map space. Side by side that is
+//    the panel's width, stacked it is its height; the axis is read off the wrap's own
+//    flex-direction rather than a duplicated breakpoint. Both are remembered — a
+//    lasting preference, not a per-trip choice — and kept apart, since a phone held
+//    both ways is still the same reading of "how much form do I want to see". ──
+(function () {
+  var wrap = document.querySelector('.compose-wrap');
+  var panel = document.querySelector('.compose-panel');
+  var resizer = document.getElementById('composeResizer');
+
+  var AXES = {
+    col: { key: 'composePanelWidth',  prop: '--compose-panel-w', min: 300, def: 380 },
+    row: { key: 'composePanelHeight', prop: '--compose-panel-h', min: 160, def: 0 }
+  };
+  // The size actually asked for, which the cap may currently be overriding — a window
+  // too small must not quietly rewrite the preference.
+  var preferred = { col: AXES.col.def, row: AXES.row.def };
+
+  function stacked() { return getComputedStyle(wrap).flexDirection === 'column'; }
+  function axis() { return stacked() ? AXES.row : AXES.col; }
+  function extent() { return stacked() ? wrap.clientHeight : wrap.clientWidth; }
+  function panelSize() {
+    var r = panel.getBoundingClientRect();
+    return stacked() ? r.height : r.width;
+  }
+
+  // Never let the panel squeeze the map into a sliver, whatever the window size.
+  function maxSize(a) { return Math.max(a.min, Math.round(extent() * 0.7)); }
+
+  function setSize(px, persist) {
+    var a = axis();
+    var name = stacked() ? 'row' : 'col';
+    if (persist) preferred[name] = px;
+    px = Math.round(Math.min(Math.max(px, a.min), maxSize(a)));
+    document.documentElement.style.setProperty(a.prop, px + 'px');
+    if (persist) { try { localStorage.setItem(a.key, px); } catch (e) { /* ignore */ } }
+    if (map && map.invalidateSize) map.invalidateSize(false);
+    return px;
+  }
+
+  // Restore both axes up front: the layout can flip under us on a rotate or a resize.
+  Object.keys(AXES).forEach(function (name) {
+    var a = AXES[name];
+    try {
+      var saved = parseInt(localStorage.getItem(a.key), 10);
+      if (saved > 0) {
+        preferred[name] = saved;
+        document.documentElement.style.setProperty(a.prop, saved + 'px');
+      }
+    } catch (e) { /* ignore */ }
+  });
+
+  function pointerPos(e) {
+    var p = e.touches ? e.touches[0] : e;
+    var box = wrap.getBoundingClientRect();
+    return stacked() ? p.clientY - box.top : p.clientX - box.left;
+  }
+
+  function onMove(e) {
+    setSize(pointerPos(e), false);
+    e.preventDefault();   // stop the touch from scrolling or panning instead
+  }
+  function onUp() {
+    document.removeEventListener('mousemove', onMove);
+    document.removeEventListener('touchmove', onMove);
+    document.removeEventListener('mouseup', onUp);
+    document.removeEventListener('touchend', onUp);
+    document.removeEventListener('touchcancel', onUp);
+    document.body.classList.remove('compose-resizing');
+    resizer.classList.remove('dragging');
+    setSize(panelSize(), true);
+  }
+  function onDown(e) {
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('touchmove', onMove, { passive: false });
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchend', onUp);
+    document.addEventListener('touchcancel', onUp);
+    document.body.classList.add('compose-resizing');
+    resizer.classList.add('dragging');
+    e.preventDefault();
+  }
+  resizer.addEventListener('mousedown', onDown);
+  resizer.addEventListener('touchstart', onDown, { passive: false });
+
+  // The separator is focusable, so it should answer the arrow keys too — whichever
+  // pair points along the current axis.
+  resizer.addEventListener('keydown', function (e) {
+    var step = e.shiftKey ? 50 : 10;
+    var back = stacked() ? 'ArrowUp' : 'ArrowLeft';
+    var fwd  = stacked() ? 'ArrowDown' : 'ArrowRight';
+    if (e.key === back) setSize(panelSize() - step, true);
+    else if (e.key === fwd) setSize(panelSize() + step, true);
+    else return;
+    e.preventDefault();
+  });
+
+  // A smaller window — or a rotation that flips the axis — can leave the preferred size
+  // over the cap; re-clamp against the preference, so the panel returns to its full
+  // size once there is room again.
+  function reclamp() {
+    var name = stacked() ? 'row' : 'col';
+    if (preferred[name]) setSize(preferred[name], false);
+  }
+  window.addEventListener('resize', reclamp);
+  window.addEventListener('orientationchange', reclamp);
 })();
 
 // ── Inline freehand mode: a map toggle swaps the router for the hand-draw canvas
@@ -671,6 +926,7 @@ function exitFreehand() {
   freehandActive = false;
   if (freehandEditor) { freehandEditor.destroy(); freehandEditor = null; }
   if (window.control) window.control.addTo(map); // re-adds + re-routes
+  bindPlanSync();   // the plan may have been rebuilt while we were drawing
 }
 var fhToggle = addFreehandToggle(map, {
   labelFreehand: "{{ freehandMode|default('Freehand') }}",
@@ -914,13 +1170,51 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
 initVesselField('#reg', '#regVesselName', "{{ url_for('vesselAutocomplete') }}");
 {% endif %}
 
+// ── Moving an endpoint ──
+//    A stop's own coordinates are rarely where you actually joined it — the far end of
+//    a platform, a stop the map has in the wrong place, a hand-named point dropped
+//    roughly. Dragging the peg keeps the name and moves the point; a hand-named place
+//    moves with it, so it is filed where it was finally put.
+function moveEntry(role, latlng) {
+  var entry = role === 'origin' ? originEntry : destEntry;
+  if (!entry) return;
+  // A fresh array rather than a mutation: the old one is shared with
+  // globalStationDict, where the stop should keep the coordinates it was found at.
+  var moved = [[latlng.lat, latlng.lng], entry[1]];
+  if (role === 'origin') originEntry = moved; else destEntry = moved;
+  {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
+  originEntry = destEntry = moved;   // one point, both ends
+  {% endif %}
+  if (manualPoints[role]) { manualPoints[role].lat = latlng.lat; manualPoints[role].lng = latlng.lng; }
+}
+
+// Once the router owns the markers it is the one that moves them, so read the ends
+// back off the plan whenever its waypoints settle.
+function syncEntriesFromPlan() {
+  if (!window.currentPlan) return;
+  var wps = window.currentPlan.getWaypoints();
+  if (!wps.length) return;
+  if (wps[0] && wps[0].latLng) moveEntry('origin', wps[0].latLng);
+  var last = wps[wps.length - 1];
+  if (last && last.latLng) moveEntry('dest', last.latLng);
+}
+function bindPlanSync() {
+  var plan = window.currentPlan;
+  if (!plan || plan._composeBound) return;
+  plan._composeBound = true;
+  plan.on('waypointschanged', syncEntriesFromPlan);
+}
+
 // ── Pin before routing starts ──
 function placeTempPin(entry, role) {
   var coords = entry[0];
   var latlng = L.latLng(coords[0], coords[1]);
   var icon = role === 'origin' ? markerIconStart : markerIconEnd;
   if (tempMarkers[role]) tempMarkers[role].setLatLng(latlng);
-  else tempMarkers[role] = L.marker(latlng, { icon: icon }).addTo(map);
+  else {
+    tempMarkers[role] = L.marker(latlng, { icon: icon, draggable: true }).addTo(map);
+    tempMarkers[role].on('dragend', function(e) { moveEntry(role, e.target.getLatLng()); });
+  }
   if (!originEntry || !destEntry) map.setView(latlng, Math.max(map.getZoom(), 10), { animate: true });
 }
 
@@ -1001,12 +1295,13 @@ function startRouting() {
   var origCoord = originEntry[0], destCoord = destEntry[0];
   airOrigMarker = L.marker(origCoord, { icon: markerIconStart, draggable: true }).addTo(map);
   airDestMarker = L.marker(destCoord, { icon: markerIconEnd, draggable: true }).addTo(map);
-  airOrigMarker.on('dragend', updateAirRoute);
-  airDestMarker.on('dragend', updateAirRoute);
+  airOrigMarker.on('dragend', function(e) { moveEntry('origin', e.target.getLatLng()); updateAirRoute(); });
+  airDestMarker.on('dragend', function(e) { moveEntry('dest', e.target.getLatLng()); updateAirRoute(); });
   updateAirRoute();
   {% else %}
   wplist = [originEntry[0]].concat(viaStations.filter(Boolean).map(function(v) { return v[0]; })).concat([destEntry[0]]);
   routing(map, false, vehicle_type);
+  bindPlanSync();
   {% endif %}
 }
 
@@ -1043,6 +1338,7 @@ $('#originStation').on('autocompleteselect', function(e, ui) {
     var entry = globalStationDict[self.value];
     if (!entry) return;
     document.getElementById('dot-origin').classList.remove('resolved');
+    manualPoints.origin = null;
     onStationSelected('origin', entry, 'dot-origin');
     {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
     destEntry = entry; // single-point types
@@ -1057,6 +1353,7 @@ $('#destinationStation').on('autocompleteselect', function(e, ui) {
     var entry = globalStationDict[self.value];
     if (!entry) return;
     document.getElementById('dot-dest').classList.remove('resolved');
+    manualPoints.dest = null;
     onStationSelected('dest', entry, 'dot-dest');
   }, 0);
 });
@@ -1064,39 +1361,51 @@ $('#destinationStation').on('autocompleteselect', function(e, ui) {
 
 // ── Form via stations ──
 {% if vehicle_type not in ('air', 'accommodation', 'poi', 'restaurant') %}
-var viaRows = [];
-document.getElementById('addViaBtn').addEventListener('click', function() {
-  var idx = viaRows.length;
-  viaStations.push(null);
-  viaRows.push(null);
+var viaRows = [];   // the row elements, index-aligned with viaStations
+
+// A via goes into the live route just before the destination.
+function insertViaWaypoint(entry) {
+  if (!routingStarted || !window.currentPlan) return;
+  var wps = window.currentPlan.getWaypoints();
+  wps.splice(wps.length - 1, 0, L.Routing.waypoint(L.latLng(entry[0][0], entry[0][1])));
+  window.currentPlan.setWaypoints(wps);
+}
+
+// entry/label are optional: passing them creates the row already filled in, which is
+// how the map's stop picker adds a via.
+function addViaRow(entry, label) {
   var row = document.createElement('div');
   row.className = 'via-compose-row';
-  row.innerHTML = '<input type="text" class="form-control stationSearch viaStation" placeholder="{{ via|default("Via") }}">' +
+  row.innerHTML = '<i class="bi bi-signpost-2 via-compose-icon" aria-hidden="true"></i>' +
+    '<input type="text" class="form-control stationSearch viaStation" placeholder="{{ via|default("Via") }}">' +
     '<button type="button" class="via-compose-remove">&times;</button>';
   document.getElementById('viaContainer').appendChild(row);
+  viaRows.push(row);
+  viaStations.push(entry || null);
+
+  // Rows can be removed in any order, so a row's index has to be read at the moment
+  // it is needed rather than captured when the row was built.
+  function idx() { return viaRows.indexOf(row); }
+
   var input = row.querySelector('input');
   stationSearchAutocomplete($(input), visitedStations, stationSearchUrl, "{{ manual|default('Manual') }}");
   $(input).on('autocompleteselect', function(e, ui) {
     var inp = this;
     setTimeout(function() {
       inp.value = ui.item.value;
-      var entry = globalStationDict[inp.value];
-      if (!entry) return;
-      viaStations[idx] = entry;
-      if (routingStarted && window.currentPlan) {
-        // Splice before the last waypoint (destination)
-        var wps = window.currentPlan.getWaypoints();
-        wps.splice(wps.length - 1, 0, L.Routing.waypoint(L.latLng(entry[0][0], entry[0][1])));
-        window.currentPlan.setWaypoints(wps);
-      }
+      var picked = globalStationDict[inp.value];
+      if (!picked) return;
+      viaStations[idx()] = picked;
+      insertViaWaypoint(picked);
     }, 0);
   });
   row.querySelector('.via-compose-remove').addEventListener('click', function() {
-    var entry = viaStations[idx];
-    viaStations.splice(idx, 1); viaRows.splice(idx, 1); row.remove();
-    if (routingStarted && window.currentPlan && entry) {
+    var i = idx();
+    var was = viaStations[i];
+    viaStations.splice(i, 1); viaRows.splice(i, 1); row.remove();
+    if (routingStarted && window.currentPlan && was) {
       // Remove the matching waypoint from the plan
-      var latlng = L.latLng(entry[0][0], entry[0][1]);
+      var latlng = L.latLng(was[0][0], was[0][1]);
       var wps = window.currentPlan.getWaypoints();
       var removeIdx = wps.findIndex(function(wp) {
         return wp.latLng && wp.latLng.distanceTo(latlng) < 100;
@@ -1106,6 +1415,329 @@ document.getElementById('addViaBtn').addEventListener('click', function() {
       }
     }
   });
+
+  if (entry) {
+    input.value = label || entry[1];
+    insertViaWaypoint(entry);
+  }
+  return row;
+}
+document.getElementById('addViaBtn').addEventListener('click', function() { addViaRow(null); });
+{% endif %}
+
+// ── Right-click the map to list the stops around that point ──
+//    /stationAutocomplete already speaks Photon's /reverse when handed lat+lon, and
+//    stationSearchUrl already carries this trip type's osm_tag filter, so the same
+//    endpoint that backs the text fields answers here — only the question changes,
+//    from "what is called this?" to "what is near here?". Airports come from a
+//    different source with no reverse lookup, hence not for air.
+{% if vehicle_type != 'air' %}
+var stopPickerRadii = [0.5, 1, 2, 5];   // km
+var stopPickerRadius = 1;
+var stopPickerPopup = null;
+var stopPickerXhr = null;
+var stopPickerCircle = null;
+var stopPickerCentre = null;
+
+// Draw the area actually being searched, so "nothing found" reads as "nothing within
+// this ring" rather than as a failure, and widening it is an obvious next move.
+function stopPickerShowArea(latlng) {
+  stopPickerHideArea();
+  stopPickerCircle = L.layerGroup([
+    L.circle(latlng, {
+      radius: stopPickerRadius * 1000, interactive: false,
+      color: '#4b78d6', weight: 1, dashArray: '4 4', fillColor: '#4b78d6', fillOpacity: .06
+    }),
+    L.circleMarker(latlng, {
+      radius: 3, interactive: false,
+      color: '#4b78d6', weight: 1, fillColor: '#4b78d6', fillOpacity: 1
+    })
+  ]).addTo(map);
+}
+function stopPickerHideArea() {
+  if (stopPickerCircle) { map.removeLayer(stopPickerCircle); stopPickerCircle = null; }
+}
+
+// How tall the circle is on screen right now — the popup is lifted by this much so it
+// opens clear of the ring instead of covering the very stops it is listing.
+function stopPickerOffset(latlng) {
+  var north = L.latLng(latlng.lat + stopPickerRadius / 111.32, latlng.lng);
+  var px = map.latLngToLayerPoint(latlng).y - map.latLngToLayerPoint(north).y;
+  // Zoomed right in, the ring can be taller than the window; never push the popup
+  // further than the map can pan back into view.
+  return Math.round(Math.max(14, Math.min(px + 12, map.getSize().y * 0.4)));
+}
+function stopPickerPlacePopup(latlng) {
+  if (!stopPickerPopup) return;
+  stopPickerPopup.options.offset = L.point(0, -stopPickerOffset(latlng));
+  stopPickerPopup.update();
+}
+
+function stopPickerFormatDistance(m) {
+  return m < 1000 ? Math.round(m) + ' m' : (m / 1000).toFixed(1) + ' km';
+}
+
+// Same shape the text-field autocomplete stores: entry is [[lat, lng], label], keyed
+// in globalStationDict by the label the field displays (homonym suffix included).
+function stopPickerEntry(feature) {
+  var props = feature.properties || {};
+  var c = feature.geometry.coordinates;   // Photon gives [lon, lat]
+  var label = getFlagEmoji(props.countrycode) + ' ' + props.name;
+  var displayLabel = label + (props.homonymy_order || '');
+  var entry = [[c[1], c[0]], label];
+  globalStationDict[displayLabel] = entry;
+  return { entry: entry, displayLabel: displayLabel, props: props };
+}
+
+// A place with no stop on the map — a trailhead, a friend's door, a lay-by — named by
+// hand. Same shape as any other entry, so nothing downstream has to know the
+// difference; the server is told to remember it as a manual station on save, exactly
+// as the classic form's manual-origin toggle does.
+function stopPickerManualEntry(latlng, name) {
+  var entry = [[latlng.lat, latlng.lng], name];
+  globalStationDict[name] = entry;
+  // Offer it in this session's autocompletes too, like the ones loaded at startup.
+  if (typeof manualStationsList !== 'undefined' &&
+      !manualStationsList.some(function(s) { return s.value === name; })) {
+    manualStationsList.push({ label: name, value: name, manual: true });
+  }
+  return { entry: entry, displayLabel: name, manual: true };
+}
+
+function stopPickerUse(role, found) {
+  if (role === 'via') {
+    if (typeof addViaRow === 'function') addViaRow(found.entry, found.displayLabel);
+  } else {
+    var input = document.getElementById(role === 'origin' ? 'originStation' : 'destinationStation');
+    if (input) input.value = found.displayLabel;
+    manualPoints[role] = found.manual ? { lat: found.entry[0][0], lng: found.entry[0][1] } : null;
+    onStationSelected(role, found.entry, role === 'origin' ? 'dot-origin' : 'dot-dest');
+    {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
+    destEntry = found.entry;   // single-point types reuse the origin
+    {% endif %}
+  }
+  map.closePopup(stopPickerPopup);
+}
+
+// The naming form, shown in place of the results list.
+function stopPickerRenderManual(container, latlng) {
+  container.innerHTML = '';
+
+  var head = document.createElement('div');
+  head.className = 'sp-head';
+  var title = document.createElement('span');
+  title.className = 'sp-title';
+  title.textContent = {{ nameThisPlace|tojson }};
+  head.appendChild(title);
+  container.appendChild(head);
+
+  var input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'form-control form-control-sm sp-name-input';
+  input.placeholder = {{ nameThisPlace|tojson }};
+  input.autocomplete = 'off';
+  container.appendChild(input);
+
+  var actions = document.createElement('div');
+  actions.className = 'sp-actions';
+  stopPickerActions().forEach(function(action) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'sp-btn';
+    btn.textContent = action.label;
+    btn.title = action.title;
+    btn.disabled = true;
+    btn.addEventListener('click', function() {
+      stopPickerUse(action.role, stopPickerManualEntry(latlng, input.value.trim()));
+    });
+    actions.appendChild(btn);
+  });
+  container.appendChild(actions);
+
+  // A stop with no name is not a stop, so nothing can be picked until there is one.
+  function syncEnabled() {
+    var ok = input.value.trim() !== '';
+    actions.querySelectorAll('.sp-btn').forEach(function(b) { b.disabled = !ok; });
+  }
+  input.addEventListener('input', syncEnabled);
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && input.value.trim()) {
+      e.preventDefault();
+      stopPickerUse(stopPickerActions()[0].role, stopPickerManualEntry(latlng, input.value.trim()));
+    }
+  });
+
+  var back = document.createElement('button');
+  back.type = 'button';
+  back.className = 'sp-link';
+  back.textContent = '{{ cancel }}';
+  back.addEventListener('click', function() { stopPickerSearch(latlng, container); });
+  container.appendChild(back);
+
+  input.focus();
+}
+
+// Which fields a found stop can be dropped into, shortest sensible labels — three
+// buttons have to fit a popup, so the full field names go in the tooltip.
+function stopPickerActions() {
+  return [
+    {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
+    // One point is the whole trip for these types.
+    { role: 'origin', label: '{{ departure|default("Departure") }}', title: '{{ originTerminal }}' }
+    {% else %}
+    { role: 'origin', label: '{{ departure|default("Departure") }}', title: '{{ originTerminal }}' },
+    { role: 'via', label: '{{ via|default("Via") }}', title: '{{ via|default("Via") }}' },
+    { role: 'dest', label: '{{ arrival|default("Arrival") }}', title: '{{ destinationTerminal }}' }
+    {% endif %}
+  ];
+}
+
+function stopPickerRender(container, latlng, features) {
+  container.innerHTML = '';
+
+  var head = document.createElement('div');
+  head.className = 'sp-head';
+  var title = document.createElement('span');
+  title.className = 'sp-title';
+  title.textContent = {{ nearbyStops|tojson }};
+  head.appendChild(title);
+  var radiusSelect = document.createElement('select');
+  radiusSelect.className = 'form-select form-select-sm sp-radius';
+  stopPickerRadii.forEach(function(km) {
+    var o = document.createElement('option');
+    o.value = km;
+    o.textContent = km < 1 ? (km * 1000) + ' m' : km + ' km';
+    if (km === stopPickerRadius) o.selected = true;
+    radiusSelect.appendChild(o);
+  });
+  radiusSelect.addEventListener('change', function() {
+    stopPickerRadius = parseFloat(this.value);
+    stopPickerShowArea(latlng);
+    stopPickerPlacePopup(latlng);
+    stopPickerSearch(latlng, container);
+  });
+  head.appendChild(radiusSelect);
+  container.appendChild(head);
+
+  // Whether or not anything was found, the point itself can always be used by name.
+  function appendNameThisPlace() {
+    var link = document.createElement('button');
+    link.type = 'button';
+    link.className = 'sp-link';
+    link.innerHTML = '<i class="bi bi-plus"></i> ';
+    link.appendChild(document.createTextNode({{ nameThisPlace|tojson }}));
+    link.addEventListener('click', function() { stopPickerRenderManual(container, latlng); });
+    container.appendChild(link);
+  }
+
+  if (!features.length) {
+    var empty = document.createElement('div');
+    empty.className = 'sp-empty';
+    empty.textContent = '{{ tsbNoResults|default("No results") }}';
+    container.appendChild(empty);
+    appendNameThisPlace();
+    return;
+  }
+
+  var list = document.createElement('div');
+  list.className = 'sp-list';
+  features.forEach(function(feature) {
+    var found = stopPickerEntry(feature);
+    var row = document.createElement('div');
+    row.className = 'sp-row';
+
+    var name = document.createElement('div');
+    name.className = 'sp-name';
+    name.textContent = found.displayLabel;
+    row.appendChild(name);
+
+    var dist = document.createElement('div');
+    dist.className = 'sp-dist';
+    dist.textContent = stopPickerFormatDistance(
+      map.distance(latlng, L.latLng(found.entry[0][0], found.entry[0][1])));
+    row.appendChild(dist);
+
+    var actions = document.createElement('div');
+    actions.className = 'sp-actions';
+    stopPickerActions().forEach(function(action) {
+      var btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'sp-btn';
+      btn.textContent = action.label;
+      btn.title = action.title;
+      btn.addEventListener('click', function() { stopPickerUse(action.role, found); });
+      actions.appendChild(btn);
+    });
+    row.appendChild(actions);
+
+    // Hovering a result points it out on the map, so the right one is pickable
+    // without reading every name.
+    row.addEventListener('mouseenter', function() { stopPickerHighlight(found.entry); });
+    row.addEventListener('mouseleave', stopPickerUnhighlight);
+    list.appendChild(row);
+  });
+  container.appendChild(list);
+  appendNameThisPlace();
+}
+
+var stopPickerMarker = null;
+function stopPickerHighlight(entry) {
+  stopPickerUnhighlight();
+  stopPickerMarker = L.circleMarker(L.latLng(entry[0][0], entry[0][1]), {
+    radius: 9, color: '#4b78d6', weight: 3, fillColor: '#4b78d6', fillOpacity: .25
+  }).addTo(map);
+}
+function stopPickerUnhighlight() {
+  if (stopPickerMarker) { map.removeLayer(stopPickerMarker); stopPickerMarker = null; }
+}
+
+function stopPickerSearch(latlng, container) {
+  container.innerHTML = '<div class="sp-empty">{{ loading|default("Loading…") }}</div>';
+  if (stopPickerXhr) stopPickerXhr.abort();
+  var url = new URL(stationSearchUrl, window.location.origin);
+  url.searchParams.set('lat', latlng.lat.toFixed(6));
+  url.searchParams.set('lon', latlng.lng.toFixed(6));
+  url.searchParams.set('radius', stopPickerRadius);
+  url.searchParams.set('limit', '20');
+  url.searchParams.set('distance_sort', 'true');
+  stopPickerXhr = $.ajax({
+    url: url.pathname + url.search, dataType: 'json',
+    success: function(data) {
+      stopPickerRender(container, latlng, (data && data.features) || []);
+    },
+    error: function(xhr, status) {
+      if (status === 'abort') return;
+      container.innerHTML = '<div class="sp-empty">{{ tsSearchError|default("Search error") }}</div>';
+    }
+  });
+}
+
+map.on('contextmenu', function(e) {
+  if (typeof freehandActive !== 'undefined' && freehandActive) return;  // drawing, not picking
+  var container = document.createElement('div');
+  container.className = 'stop-picker';
+  stopPickerCentre = e.latlng;
+  stopPickerShowArea(e.latlng);
+  stopPickerPopup = L.popup({
+    minWidth: 260, maxWidth: 320, autoPan: true, closeButton: true,
+    offset: L.point(0, -stopPickerOffset(e.latlng))
+  })
+    .setLatLng(e.latlng)
+    .setContent(container)
+    .openOn(map);
+  stopPickerSearch(e.latlng, container);
+});
+// The ring's height in pixels changes with the zoom, and the popup rides on it.
+map.on('zoomend', function() {
+  if (stopPickerPopup && stopPickerCentre) stopPickerPlacePopup(stopPickerCentre);
+});
+map.on('popupclose', function(e) {
+  if (e.popup === stopPickerPopup) {
+    stopPickerUnhighlight();
+    stopPickerHideArea();
+    stopPickerPopup = null;
+    stopPickerCentre = null;
+  }
 });
 {% endif %}
 
@@ -1124,6 +1756,113 @@ function updateTimingPanel() {
 }
 document.querySelectorAll('input[name="precision"]').forEach(function(r) { r.addEventListener('change', updateTimingPanel); });
 updateTimingPanel();
+
+// ── Delays ──
+//    Same model as the classic form: the delay in seconds is the single source of
+//    truth, and the two input modes (minutes, or the actual datetime) are just views
+//    of it. Which view you prefer is a lasting choice, so it rides on a cookie.
+{% if not plan_uuid and vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
+(function() {
+  var depDelaySec = null, arrDelaySec = null;   // null = not set
+  $('#delayModeSwitch').prop('checked', Cookies.get('delayDateMode') === 'true');
+
+  function fillActual(plannedDateId, plannedTimeId, actualDateId, actualTimeId, seconds) {
+    if (seconds === null) return;
+    var pd = document.getElementById(plannedDateId).value;
+    var pt = document.getElementById(plannedTimeId).value;
+    if (!pd || !pt) return;
+    var actual = new Date(new Date(pd + 'T' + pt).getTime() + seconds * 1000);
+    document.getElementById(actualDateId).value = actual.toTimezonedISOString().slice(0, 10);
+    document.getElementById(actualTimeId).value = actual.toTimeString().slice(0, 5);
+  }
+
+  function fillMinutes(minutesInputId, seconds) {
+    document.getElementById(minutesInputId).value = seconds !== null ? seconds / 60 : '';
+  }
+
+  function setDatetimeMode(on) {
+    if (on) {
+      $('#delayMinutesInputs').hide();
+      $('#depActualGroup, #arrActualGroup').show();
+      $('.delay-planned-suffix').show();
+      fillActual('newTripStartDate', 'newTripStartTime', 'depActualDate', 'depActualTime', depDelaySec);
+      fillActual('newTripEndDate', 'newTripEndTime', 'arrActualDate', 'arrActualTime', arrDelaySec);
+    } else {
+      $('#delayMinutesInputs').show();
+      $('#depActualGroup, #arrActualGroup').hide();
+      $('.delay-planned-suffix').hide();
+      fillMinutes('departureDelayMinutes', depDelaySec);
+      fillMinutes('arrivalDelayMinutes', arrDelaySec);
+    }
+  }
+
+  $('#delayToggle').on('change', function() {
+    if ($(this).is(':checked')) {
+      $('#delayModeSwitchWrapper').css('display', 'flex');
+      setDatetimeMode($('#delayModeSwitch').is(':checked'));
+    } else {
+      // Values are kept, only hidden — composeSave is what drops them.
+      $('#delayModeSwitchWrapper, #delayMinutesInputs, #depActualGroup, #arrActualGroup').hide();
+      $('.delay-planned-suffix').hide();
+    }
+  });
+
+  $('#delayModeSwitch').on('change', function() {
+    var dateMode = $(this).is(':checked');
+    Cookies.set('delayDateMode', dateMode, { expires: 365 });
+    if ($('#delayToggle').is(':checked')) setDatetimeMode(dateMode);
+  });
+
+  $('#departureDelayMinutes').on('input', function() {
+    var v = parseFloat(this.value);
+    depDelaySec = isNaN(v) ? null : v * 60;
+  });
+  $('#arrivalDelayMinutes').on('input', function() {
+    var v = parseFloat(this.value);
+    arrDelaySec = isNaN(v) ? null : v * 60;
+  });
+
+  function updateFromActual(plannedDateId, plannedTimeId, actualDateId, actualTimeId, minutesInputId, isArr) {
+    var pd = document.getElementById(plannedDateId).value;
+    var pt = document.getElementById(plannedTimeId).value;
+    var ad = document.getElementById(actualDateId).value;
+    var at = document.getElementById(actualTimeId).value;
+    var sec = (pd && pt && ad && at) ? (new Date(ad + 'T' + at) - new Date(pd + 'T' + pt)) / 1000 : null;
+    if (isArr) arrDelaySec = sec; else depDelaySec = sec;
+    document.getElementById(minutesInputId).value = sec !== null ? sec / 60 : '';
+  }
+
+  ['depActualDate', 'depActualTime', 'newTripStartDate', 'newTripStartTime'].forEach(function(id) {
+    document.getElementById(id).addEventListener('change', function() {
+      if ($('#depActualGroup').is(':visible'))
+        updateFromActual('newTripStartDate', 'newTripStartTime', 'depActualDate', 'depActualTime', 'departureDelayMinutes', false);
+    });
+  });
+  ['arrActualDate', 'arrActualTime', 'newTripEndDate', 'newTripEndTime'].forEach(function(id) {
+    document.getElementById(id).addEventListener('change', function() {
+      if ($('#arrActualGroup').is(':visible'))
+        updateFromActual('newTripEndDate', 'newTripEndTime', 'arrActualDate', 'arrActualTime', 'arrivalDelayMinutes', true);
+    });
+  });
+
+  // A delay is a fact about precise datetimes; any other precision has none.
+  window.composeDelaysOn = function() {
+    return $('#delayToggle').is(':checked') &&
+           (document.querySelector('input[name="precision"]:checked') || {}).value === 'preciseDates';
+  };
+  function updateDelayAvailability() {
+    var isPrecise = $('#prec-precise').is(':checked');
+    $('#delayToggleWrapper').css('display', isPrecise ? 'flex' : 'none');
+    if (!isPrecise && $('#delayToggle').is(':checked')) {
+      $('#delayToggle').prop('checked', false);
+      $('#delayModeSwitchWrapper, #delayMinutesInputs, #depActualGroup, #arrActualGroup').hide();
+      $('.delay-planned-suffix').hide();
+    }
+  }
+  updateDelayAvailability();
+  $('input[name="precision"]').on('change', updateDelayAvailability);
+})();
+{% endif %}
 
 // ── Default dates ──
 (function() {
@@ -1152,6 +1891,11 @@ function updatePriceExtras() {
 }
 document.getElementById('price').addEventListener('input', updatePriceExtras);
 updatePriceExtras();
+
+// ── Tickets ──
+{% if not plan_uuid %}
+fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{ none_t|default('None') }}");
+{% endif %}
 
 // ── Tags ── (createOpts lets an unknown term be created as a tag on the spot)
 setupTagAutocomplete('{{ url_for("get_all_tags", username=username) }}', null, {
@@ -1270,6 +2014,26 @@ function composeSave(continueTrip) {
   newTrip.viaStations = viaStations.filter(Boolean);
   newTrip.type = vehicle_type;
 
+  // saveTrip stores a manual station for whichever end carries a *ManualToggle key —
+  // presence is the whole test server-side, so an end that is no longer manual must
+  // have its keys removed, not merely blanked.
+  ['origin', 'destination'].forEach(function(side) {
+    var point = manualPoints[side === 'origin' ? 'origin' : 'dest'];
+    if (point) {
+      newTrip[side + 'ManualToggle'] = true;
+      newTrip[side + 'ManualLat'] = point.lat;
+      newTrip[side + 'ManualLng'] = point.lng;
+    } else {
+      delete newTrip[side + 'ManualToggle'];
+      delete newTrip[side + 'ManualLat'];
+      delete newTrip[side + 'ManualLng'];
+    }
+  });
+  {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
+  // The one point is both ends; only file it once.
+  delete newTrip.destinationManualToggle;
+  {% endif %}
+
   // Timing
   newTrip.precision = prec;
   newTrip.newTripStartDate = document.getElementById('newTripStartDate').value;
@@ -1287,6 +2051,11 @@ function composeSave(continueTrip) {
   {% endif %}
   newTrip.manDurationHours = document.getElementById('manDurationHours').value;
   newTrip.manDurationMinutes = document.getElementById('manDurationMinutes').value;
+  // Delays are only submitted when the trip actually claims one; processFormDates turns
+  // these minutes into the departure_delay/arrival_delay seconds the server stores.
+  var delaysOn = typeof composeDelaysOn === 'function' && composeDelaysOn();
+  newTrip.departureDelayMinutes = delaysOn ? (document.getElementById('departureDelayMinutes') || {}).value || '' : '';
+  newTrip.arrivalDelayMinutes = delaysOn ? (document.getElementById('arrivalDelayMinutes') || {}).value || '' : '';
   processFormDates(newTrip); // mutates newTrip in place (also returns it, but we use the global)
 
   // Details
@@ -1304,6 +2073,7 @@ function composeSave(continueTrip) {
   newTrip.price = document.getElementById('price').value;
   newTrip.currency = document.getElementById('currency').value;
   newTrip.purchasing_date = document.getElementById('purchasing_date').value;
+  newTrip.ticket_id = (document.getElementById('ticketSearchInput') || {}).value || '';
   newTrip.powerType = (document.querySelector('input[name="powerType"]:checked') || {}).value || 'auto';
   newTrip.co2Override = (document.getElementById('co2Override') || {}).value || '';
   newTrip.tag_ids = Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(function(el) { return el.dataset.tagId; });
