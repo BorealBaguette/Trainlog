@@ -1187,7 +1187,7 @@
     "statsVessels": "船舶",
     "statsAircraft": "航空器",
     "statsTrainsets": "编组",
-    "statsDelay": "延误",
+    "statsDelay": "延误（到达时）",
     "statsDelayAccumulated": "延误（累计）",
     "statsChartSettings": "图表",
     "statsChartSettingsTitle": "显示的图表",

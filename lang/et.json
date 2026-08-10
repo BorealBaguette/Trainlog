@@ -1187,7 +1187,7 @@
     "statsVessels": "Laevad",
     "statsAircraft": "Lennukid",
     "statsTrainsets": "Rongikoosseisud",
-    "statsDelay": "Hilinemine",
+    "statsDelay": "Hilinemine (saabumisel)",
     "statsDelayAccumulated": "Hilinemine (kogunenud)",
     "statsChartSettings": "Graafikud",
     "statsChartSettingsTitle": "Nähtavad graafikud",

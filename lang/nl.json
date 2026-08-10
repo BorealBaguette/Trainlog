@@ -1190,7 +1190,7 @@
     "statsVessels": "Schepen",
     "statsAircraft": "Vliegtuigen",
     "statsTrainsets": "Treinstellen",
-    "statsDelay": "Vertraging",
+    "statsDelay": "Vertraging (bij aankomst)",
     "statsDelayAccumulated": "Vertraging (cumulatief)",
     "statsChartSettings": "Grafieken",
     "statsChartSettingsTitle": "Zichtbare grafieken",

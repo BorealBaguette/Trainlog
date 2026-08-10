@@ -1188,7 +1188,7 @@
     "statsVessels": "Alukset",
     "statsAircraft": "Lentokoneet",
     "statsTrainsets": "Junayksiköt",
-    "statsDelay": "Viivästys",
+    "statsDelay": "Viivästys (saapuessa)",
     "statsDelayAccumulated": "Viivästys (kertynyt)",
     "statsChartSettings": "Kaaviot",
     "statsChartSettingsTitle": "Näytettävät kaaviot",

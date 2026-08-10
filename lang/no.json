@@ -1190,7 +1190,7 @@
     "statsVessels": "Fartøy",
     "statsAircraft": "Fly",
     "statsTrainsets": "Togsett",
-    "statsDelay": "Forsinkelse",
+    "statsDelay": "Forsinkelse (ved ankomst)",
     "statsDelayAccumulated": "Forsinkelse (akkumulert)",
     "statsChartSettings": "Diagrammer",
     "statsChartSettingsTitle": "Synlige diagrammer",

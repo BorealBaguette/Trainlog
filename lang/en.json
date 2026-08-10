@@ -1186,7 +1186,7 @@
     "statsVehicles": "Vehicles",
     "statsVessels": "Vessels",
     "statsAircraft": "Aircraft",
-    "statsDelay": "Delay",
+    "statsDelay": "Delay (on arrival)",
     "statsDelayAccumulated": "Delay (accumulated)",
     "statsChartSettings": "Charts",
     "statsChartSettingsTitle": "Visible charts",

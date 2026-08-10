@@ -1190,7 +1190,7 @@
     "statsVessels": "Buques",
     "statsAircraft": "Aeronaves",
     "statsTrainsets": "Composiciones",
-    "statsDelay": "Retraso",
+    "statsDelay": "Retraso (al llegar)",
     "statsDelayAccumulated": "Retraso (acumulado)",
     "statsChartSettings": "Gráficos",
     "statsChartSettingsTitle": "Gráficos visibles",

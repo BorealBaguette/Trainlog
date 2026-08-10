@@ -1190,7 +1190,7 @@
     "statsVessels": "Schiffe",
     "statsAircraft": "Flugzeuge",
     "statsTrainsets": "Zuggarnituren",
-    "statsDelay": "Verspätung",
+    "statsDelay": "Verspätung (bei Ankunft)",
     "statsDelayAccumulated": "Verspätung (kumuliert)",
     "statsChartSettings": "Diagramme",
     "statsChartSettingsTitle": "Angezeigte Diagramme",

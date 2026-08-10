@@ -1187,7 +1187,7 @@
     "statsVessels": "선박",
     "statsAircraft": "항공기",
     "statsTrainsets": "편성",
-    "statsDelay": "지연",
+    "statsDelay": "지연(도착 시)",
     "statsDelayAccumulated": "지연(누적)",
     "statsChartSettings": "차트",
     "statsChartSettingsTitle": "표시할 차트",

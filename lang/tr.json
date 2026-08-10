@@ -1187,7 +1187,7 @@
     "statsVessels": "Gemiler",
     "statsAircraft": "Uçaklar",
     "statsTrainsets": "Tren setleri",
-    "statsDelay": "Gecikme",
+    "statsDelay": "Gecikme (varışta)",
     "statsDelayAccumulated": "Gecikme (birikimli)",
     "statsChartSettings": "Grafikler",
     "statsChartSettingsTitle": "Görünen grafikler",

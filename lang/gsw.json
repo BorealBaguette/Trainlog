@@ -1188,7 +1188,7 @@
     "statsVessels": "Schiff",
     "statsAircraft": "Flugzüg",
     "statsTrainsets": "Zugskompositione",
-    "statsDelay": "Verspötig",
+    "statsDelay": "Verspötig (bi Aakunft)",
     "statsDelayAccumulated": "Verspötig (kumuliert)",
     "statsChartSettings": "Diagramm",
     "statsChartSettingsTitle": "Aazeigti Diagramm",

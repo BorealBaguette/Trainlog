@@ -1193,7 +1193,7 @@
     "statsVessels": "Судна",
     "statsAircraft": "Літаки",
     "statsTrainsets": "Состави",
-    "statsDelay": "Затримка",
+    "statsDelay": "Затримка (після прибуття)",
     "statsDelayAccumulated": "Затримка (накопичена)",
     "statsChartSettings": "Діаграми",
     "statsChartSettingsTitle": "Показані діаграми",

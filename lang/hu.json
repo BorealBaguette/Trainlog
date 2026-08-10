@@ -1187,7 +1187,7 @@
     "statsVessels": "Hajók",
     "statsAircraft": "Repülőgépek",
     "statsTrainsets": "Szerelvények",
-    "statsDelay": "Késés",
+    "statsDelay": "Késés (érkezéskor)",
     "statsDelayAccumulated": "Késés (összesítve)",
     "statsChartSettings": "Diagramok",
     "statsChartSettingsTitle": "Látható diagramok",

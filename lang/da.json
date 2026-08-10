@@ -1190,7 +1190,7 @@
     "statsVessels": "Skibe",
     "statsAircraft": "Fly",
     "statsTrainsets": "Togsæt",
-    "statsDelay": "Forsinkelse",
+    "statsDelay": "Forsinkelse (ved ankomst)",
     "statsDelayAccumulated": "Forsinkelse (akkumuleret)",
     "statsChartSettings": "Diagrammer",
     "statsChartSettingsTitle": "Viste diagrammer",

@@ -1187,7 +1187,7 @@
     "statsVessels": "船舶",
     "statsAircraft": "機体",
     "statsTrainsets": "編成",
-    "statsDelay": "遅延",
+    "statsDelay": "遅延（到着時）",
     "statsDelayAccumulated": "遅延（累積）",
     "statsChartSettings": "グラフ",
     "statsChartSettingsTitle": "表示するグラフ",

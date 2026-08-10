@@ -1193,7 +1193,7 @@
     "statsVessels": "Суда",
     "statsAircraft": "Самолёты",
     "statsTrainsets": "Составы",
-    "statsDelay": "Задержка",
+    "statsDelay": "Задержка (по прибытии)",
     "statsDelayAccumulated": "Задержка (накопленная)",
     "statsChartSettings": "Диаграммы",
     "statsChartSettingsTitle": "Отображаемые диаграммы",

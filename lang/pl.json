@@ -1193,7 +1193,7 @@
     "statsVessels": "Statki",
     "statsAircraft": "Samoloty",
     "statsTrainsets": "Składy",
-    "statsDelay": "Opóźnienie",
+    "statsDelay": "Opóźnienie (przy przyjeździe)",
     "statsDelayAccumulated": "Opóźnienie (łącznie)",
     "statsChartSettings": "Wykresy",
     "statsChartSettingsTitle": "Widoczne wykresy",

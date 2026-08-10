@@ -1193,7 +1193,7 @@
     "statsVessels": "Brodovi",
     "statsAircraft": "Zrakoplovi",
     "statsTrainsets": "Garniture",
-    "statsDelay": "Kašnjenje",
+    "statsDelay": "Kašnjenje (pri dolasku)",
     "statsDelayAccumulated": "Kašnjenje (akumulirano)",
     "statsChartSettings": "Grafikoni",
     "statsChartSettingsTitle": "Prikazani grafikoni",
