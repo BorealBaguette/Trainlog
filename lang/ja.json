@@ -1188,6 +1188,7 @@
     "statsAircraft": "機体",
     "statsTrainsets": "編成",
     "statsDelay": "遅延",
+    "statsDelayAccumulated": "遅延（累積）",
     "statsChartSettings": "グラフ",
     "statsChartSettingsTitle": "表示するグラフ",
     "statsChartSettingsHelp": "統計ページに表示するグラフを選択します。データのないグラフは自動的に非表示になります。",

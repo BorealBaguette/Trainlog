@@ -1188,6 +1188,7 @@
     "statsAircraft": "Uçaklar",
     "statsTrainsets": "Tren setleri",
     "statsDelay": "Gecikme",
+    "statsDelayAccumulated": "Gecikme (birikimli)",
     "statsChartSettings": "Grafikler",
     "statsChartSettingsTitle": "Görünen grafikler",
     "statsChartSettingsHelp": "İstatistik sayfasında hangi grafiklerin görüneceğini seçin. Verisi olmayan grafikler otomatik olarak gizlenir.",

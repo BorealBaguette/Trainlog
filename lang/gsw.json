@@ -1189,6 +1189,7 @@
     "statsAircraft": "Flugzüg",
     "statsTrainsets": "Zugskompositione",
     "statsDelay": "Verspötig",
+    "statsDelayAccumulated": "Verspötig (kumuliert)",
     "statsChartSettings": "Diagramm",
     "statsChartSettingsTitle": "Aazeigti Diagramm",
     "statsChartSettingsHelp": "Wähl us, weli Diagramm uf de Statistikssite erschiine. Diagramm ohni Date wärded automatisch usblendet.",

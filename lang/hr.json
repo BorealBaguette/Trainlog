@@ -1194,6 +1194,7 @@
     "statsAircraft": "Zrakoplovi",
     "statsTrainsets": "Garniture",
     "statsDelay": "Kašnjenje",
+    "statsDelayAccumulated": "Kašnjenje (akumulirano)",
     "statsChartSettings": "Grafikoni",
     "statsChartSettingsTitle": "Prikazani grafikoni",
     "statsChartSettingsHelp": "Odaberite koji se grafikoni prikazuju na stranici statistike. Grafikoni bez podataka automatski se skrivaju.",

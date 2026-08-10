@@ -1194,6 +1194,7 @@
     "statsAircraft": "Самолёты",
     "statsTrainsets": "Составы",
     "statsDelay": "Задержка",
+    "statsDelayAccumulated": "Задержка (накопленная)",
     "statsChartSettings": "Диаграммы",
     "statsChartSettingsTitle": "Отображаемые диаграммы",
     "statsChartSettingsHelp": "Выберите, какие диаграммы показывать на странице статистики. Диаграммы без данных скрываются автоматически.",

@@ -1188,6 +1188,7 @@
     "statsAircraft": "Lennukid",
     "statsTrainsets": "Rongikoosseisud",
     "statsDelay": "Hilinemine",
+    "statsDelayAccumulated": "Hilinemine (kogunenud)",
     "statsChartSettings": "Graafikud",
     "statsChartSettingsTitle": "Nähtavad graafikud",
     "statsChartSettingsHelp": "Vali, millised graafikud statistikalehel kuvatakse. Andmeteta graafikud peidetakse automaatselt.",

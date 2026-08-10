@@ -1191,6 +1191,7 @@
     "statsAircraft": "Flugzeuge",
     "statsTrainsets": "Zuggarnituren",
     "statsDelay": "Verspätung",
+    "statsDelayAccumulated": "Verspätung (kumuliert)",
     "statsChartSettings": "Diagramme",
     "statsChartSettingsTitle": "Angezeigte Diagramme",
     "statsChartSettingsHelp": "Wählen Sie aus, welche Diagramme auf der Statistikseite erscheinen. Diagramme ohne Daten werden automatisch ausgeblendet.",

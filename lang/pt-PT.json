@@ -1191,6 +1191,7 @@
     "statsAircraft": "Aviões",
     "statsTrainsets": "Composições",
     "statsDelay": "Atraso",
+    "statsDelayAccumulated": "Atraso (acumulado)",
     "statsChartSettings": "Gráficos",
     "statsChartSettingsTitle": "Gráficos visíveis",
     "statsChartSettingsHelp": "Escolha que gráficos aparecem na página de estatísticas. Os gráficos sem dados são ocultados automaticamente.",

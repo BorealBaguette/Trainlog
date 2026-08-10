@@ -1191,6 +1191,7 @@
     "statsAircraft": "Fly",
     "statsTrainsets": "Togsett",
     "statsDelay": "Forsinkelse",
+    "statsDelayAccumulated": "Forsinkelse (akkumulert)",
     "statsChartSettings": "Diagrammer",
     "statsChartSettingsTitle": "Synlige diagrammer",
     "statsChartSettingsHelp": "Velg hvilke diagrammer som skal vises på statistikksiden. Diagrammer uten data skjules automatisk.",

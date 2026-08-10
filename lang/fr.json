@@ -1187,6 +1187,7 @@
     "statsVessels": "Navires",
     "statsAircraft": "Aéronefs",
     "statsDelay": "Retard",
+    "statsDelayAccumulated": "Retard (cumulé)",
     "statsChartSettings": "Graphiques",
     "statsChartSettingsTitle": "Graphiques affichés",
     "statsChartSettingsHelp": "Choisissez les graphiques à afficher sur la page des statistiques. Les graphiques sans données sont masqués automatiquement.",

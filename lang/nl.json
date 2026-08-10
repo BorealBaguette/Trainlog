@@ -1191,6 +1191,7 @@
     "statsAircraft": "Vliegtuigen",
     "statsTrainsets": "Treinstellen",
     "statsDelay": "Vertraging",
+    "statsDelayAccumulated": "Vertraging (cumulatief)",
     "statsChartSettings": "Grafieken",
     "statsChartSettingsTitle": "Zichtbare grafieken",
     "statsChartSettingsHelp": "Kies welke grafieken op de statistiekpagina verschijnen. Grafieken zonder gegevens worden automatisch verborgen.",

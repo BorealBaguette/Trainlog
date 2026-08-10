@@ -1194,6 +1194,7 @@
     "statsAircraft": "Letadla",
     "statsTrainsets": "Soupravy",
     "statsDelay": "Zpoždění",
+    "statsDelayAccumulated": "Zpoždění (souhrnně)",
     "statsChartSettings": "Grafy",
     "statsChartSettingsTitle": "Zobrazené grafy",
     "statsChartSettingsHelp": "Vyberte, které grafy se mají na stránce statistik zobrazovat. Grafy bez dat se skryjí automaticky.",
