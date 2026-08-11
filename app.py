@@ -8535,7 +8535,11 @@ SORT_FIELD_EXPRS = {
     "origin_station":        "LOWER(CASE WHEN ascii(origin_station) BETWEEN 127462 AND 127487 THEN substring(origin_station FROM 4) ELSE origin_station END)",
     "destination_station":   "LOWER(CASE WHEN ascii(destination_station) BETWEEN 127462 AND 127487 THEN substring(destination_station FROM 4) ELSE destination_station END)",
     "type":                  "LOWER(type)",
-    "operator":              "LOWER(operator)",
+    # Sort on the operator as displayed (resolved through the aliases), falling back
+    # to the raw text when it names no known operator — otherwise a trip logged 'cff'
+    # shows as SBB but sorts under C. Empty text is folded to NULL so operatorless
+    # trips group with the NULLs at one end instead of straddling both.
+    "operator":              "LOWER(NULLIF(COALESCE(operator_name, operator), ''))",
     "line_name":             "LOWER(line_name)",
     "price":                 "price",
 }
@@ -8882,9 +8886,19 @@ def get_trips_api_internal(username, is_public=False):
             f"   + COALESCE(price_to_eur({ticket_share_sql}, {ticket_currency_sql}, {ticket_date_sql}), 0) "
             f"END"
         )
-        data_query = base_data_query + f" ORDER BY {price_expr} {sort_direction} NULLS LAST LIMIT :limit OFFSET :offset"
+        data_query = base_data_query + (
+            f" ORDER BY {price_expr} {sort_direction} NULLS LAST,"
+            f" uid {sort_direction} LIMIT :limit OFFSET :offset"
+        )
     else:
-        data_query = base_data_query + f" ORDER BY {sort_column_name} {sort_direction} {nulls} LIMIT :limit OFFSET :offset"
+        # uid breaks ties so paging stays stable: sorts like operator or type have
+        # large groups of equal (often NULL) values, and without it PG is free to
+        # return them in a different order for each page's query, which makes rows
+        # repeat across pages and others vanish.
+        data_query = base_data_query + (
+            f" ORDER BY {sort_column_name} {sort_direction} {nulls},"
+            f" uid {sort_direction} LIMIT :limit OFFSET :offset"
+        )
 
     search_params["user_id"] = get_user_id(username)
 
