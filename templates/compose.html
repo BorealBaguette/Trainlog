@@ -79,6 +79,65 @@
   .cp-icon img { height: 20px; }
   .cp-title { font-weight: 700; font-size: 1rem; color: #1a202c; }
 
+  /* ── Route summary ──
+     The routing sidebar is hidden on this page, so the distance, the duration and the
+     fact that a route was found at all have nowhere else to be said. It sits under the
+     header and sticks there, because on a phone it doubles as the map's control strip:
+     whatever the form is scrolled to, collapsing or expanding the map is one tap away.
+     --cp-header-h is measured at runtime; the header's height depends on its font and
+     on whether the FR24 button is in it. */
+  .cp-summary {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .45rem 1.1rem; border-bottom: 1px solid #f0f2f5;
+    background: #fbfcfe; font-size: .78rem; color: #6b7280;
+    position: sticky; top: var(--cp-header-h, 56px); z-index: 9;
+  }
+  .cp-summary-text {
+    flex: 1 1 auto; min-width: 0;
+    display: flex; align-items: baseline; gap: .35rem; flex-wrap: wrap;
+  }
+  .cp-summary-route {
+    font-weight: 600; color: #1a202c;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+  }
+  .cp-summary-meta { color: #4b78d6; font-weight: 500; }
+  .cp-summary[data-state="error"] { background: #fff5f5; color: #b3261e; }
+  .cp-summary[data-state="error"] .cp-summary-route { color: #b3261e; }
+  /* The spinner is a one-off here: the routing sidebar's own is styled for a panel this
+     page does not show. */
+  .cp-summary-spin {
+    flex: 0 0 auto; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid #dbe4f7; border-top-color: #4b78d6;
+    animation: cp-spin .7s linear infinite;
+  }
+  @keyframes cp-spin { to { transform: rotate(360deg); } }
+  /* Map controls live in the summary bar, but only where the map has to share the
+     screen — side by side it is always visible and never in the way. */
+  .cp-summary-actions { display: none; flex: 0 0 auto; gap: .3rem; }
+  .cp-summary-btn {
+    width: 34px; height: 30px; padding: 0; line-height: 1;
+    border: 1px solid #e2e6ea; border-radius: 8px; background: #fff;
+    color: #4b78d6; font-size: .9rem; cursor: pointer;
+  }
+  .cp-summary-btn:active { background: #e8eeff; }
+
+  /* ── Full-screen map ──
+     The panel is covered rather than hidden: display:none on it would tear down the
+     jQuery UI widgets' measurements and drop the keyboard mid-edit. */
+  body.compose-map-full .compose-map {
+    position: fixed; inset: 0; height: 100%; z-index: 1040;
+  }
+  body.compose-map-full { overflow: hidden; }
+  /* Inside .compose-map, so the same absolute placement works in both modes and the bar
+     rides along when the map goes full-screen. */
+  #mapDoneBar {
+    display: none; position: absolute; left: 0; right: 0; bottom: 0; z-index: 1001;
+    padding: .6rem .9rem calc(.6rem + env(safe-area-inset-bottom, 0px));
+    background: rgba(255,255,255,.94); border-top: 1px solid #e9ecef;
+  }
+  body.compose-map-full #mapDoneBar { display: block; }
+  #mapDoneBar .btn { width: 100%; border-radius: 10px; font-size: .9rem; }
+
   /* ── Section titles ── */
   .cp-section { padding: .8rem 1.1rem; border-bottom: 1px solid #f0f2f5; }
   .cp-section-title {
@@ -183,6 +242,17 @@
     display: flex; gap: .5rem;
   }
   .cp-save-bar .btn { border-radius: 10px; font-size: .875rem; }
+  /* Saving is a round trip to the server followed by a full page load, and on a phone
+     connection that is seconds of nothing. A disabled button alone reads as a broken
+     one, so it says what it is doing. currentColor, because the same spinner has to
+     show on the filled Save and the outlined Save & continue. */
+  .cp-btn-spin {
+    display: inline-block; width: .8em; height: .8em; margin-right: .45em;
+    vertical-align: -.05em; border-radius: 50%;
+    border: 2px solid currentColor; border-top-color: transparent;
+    animation: cp-spin .7s linear infinite;
+  }
+  .cp-save-bar .btn:disabled { opacity: .75; }
 
   /* Power type */
   .power-type-group { display: flex; border: 1px solid #e2e6ea; border-radius: 8px; overflow: hidden; }
@@ -242,18 +312,50 @@
   }
   .stop-picker .sp-link:hover { text-decoration: underline; }
 
-  /* Stacked, the seam runs the other way: the splitter still works, it just trades
-     panel height for map height instead of width. */
+  /* ── Stacked (phones) ──
+     Two panes splitting a phone screen leaves neither usable: four form fields above a
+     letterbox map. The map is a confirmation surface almost all of the time — the route
+     is computed from the two names that were typed, not drawn by hand — so the form gets
+     the screen and the map gets a card above it, with the summary bar reading out what
+     the card is too small to show. The card can be dragged, collapsed away, or thrown
+     full-screen for the things that do need a map: long-press stop picking, freehand,
+     dragging waypoints.
+
+     The map moves above the form with `order`, not by moving in the DOM: the same
+     element keeps the same Leaflet instance. The seam still works, it just trades map
+     height for form height now, so it reads from the top edge either way. Scrolling
+     stays the panel's alone, which keeps the sticky header and save bar honest. */
   @media (max-width: 700px) {
     .compose-wrap { flex-direction: column; }
+    .compose-map     { order: -2; flex: 0 0 var(--compose-map-h, 32vh); }
+    .compose-resizer { order: -1; flex: 0 0 14px; width: 100%; cursor: row-resize; }
     .compose-panel {
-      width: 100%; flex: 0 0 var(--compose-panel-h, 55%); max-height: none;
-      border-right: 0; border-bottom: 1px solid #e9ecef;
+      order: 0; width: 100%; flex: 1 1 auto; max-height: none;
+      border-right: 0; border-top: 1px solid #e9ecef;
     }
-    .compose-resizer { flex: 0 0 12px; width: 100%; cursor: row-resize; }
     .compose-resizer::before { width: 36px; height: 4px; }
     body.compose-resizing { cursor: row-resize; }
-    .compose-map { flex: 1 1 auto; }
+
+    /* Every field counts on a short screen. The header is back link, type switcher and
+       title — nothing worth holding onto, so it scrolls away and the summary bar takes
+       over the sticky slot. */
+    .cp-section { padding: .7rem .9rem; }
+    .cp-header  { padding: .7rem .9rem .5rem; position: static; }
+    .cp-summary { top: 0; padding: .45rem .9rem; }
+    .cp-save-bar { padding: .7rem .9rem calc(.7rem + env(safe-area-inset-bottom, 0px)); }
+    .cp-summary-actions { display: flex; }
+
+    body.compose-map-collapsed .compose-map { flex-basis: 0; height: 0; }
+    body.compose-map-collapsed .compose-resizer { display: none; }
+
+    /* A 30px row is a coin toss on a touch screen, and picking the right station is the
+       one thing this form cannot recover from getting wrong. */
+    .ui-autocomplete { max-height: 45vh; overflow-y: auto; overflow-x: hidden; }
+    .ui-autocomplete .ui-menu-item .ui-menu-item-wrapper {
+      min-height: 44px; display: flex; align-items: center; font-size: 1rem;
+    }
+    /* The stop picker opens against the card, not the full window. */
+    .stop-picker .sp-list { max-height: 40vh; }
   }
 </style>
 
@@ -365,6 +467,23 @@
         FR24{% if fr24_calls != 'premium' %} <small>({{ fr24_calls }}/5)</small>{% endif %}
       </span>
       {% endif %}
+    </div>
+
+    <!-- Route summary + (on phones) the map's controls -->
+    <div class="cp-summary" id="routeSummary" data-state="idle" aria-live="polite">
+      <div class="cp-summary-text" id="routeSummaryText">
+        <span class="cp-summary-route">{{ routePickEnds|default('Pick a start and an end') }}</span>
+      </div>
+      <div class="cp-summary-actions">
+        <button type="button" class="cp-summary-btn" id="mapCollapseBtn"
+                title="{{ collapseMap|default('Hide map') }}" aria-label="{{ collapseMap|default('Hide map') }}">
+          <i class="bi bi-chevron-up"></i>
+        </button>
+        <button type="button" class="cp-summary-btn" id="mapFullBtn"
+                title="{{ expandMap|default('Expand map') }}" aria-label="{{ expandMap|default('Expand map') }}">
+          <i class="bi bi-arrows-fullscreen"></i>
+        </button>
+      </div>
     </div>
 
     <!-- Origin / Destination / Via -->
@@ -715,6 +834,11 @@
   <div class="compose-map">
     <div id="map" style="width:100%;height:100%;"></div>
     <div id="sidebar"><div id="sidebar-content"></div></div>
+    <div id="mapDoneBar">
+      <button type="button" class="btn btn-primary" id="mapDoneBtn">
+        <i class="bi bi-check-lg me-1"></i>{{ mapDone|default('Done') }}
+      </button>
+    </div>
   </div>
 </div>
 
@@ -732,8 +856,12 @@ var routerurl = `${window.location.origin}/forwardRouting/${vehicle_type}/route/
 var wplist, origLabel = '', destLabel = '';
 var viaStations = [];
 var spinnerContent = '<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>';
-var errorContent = '<h4>{{ routingError|default("Routing error") }}</h4><p><button onclick="location.reload()">{{ retry|default("Retry") }}</button></p>';
-var saveErrorContent = '<h4>{{ saveError|default("Save error") }}</h4><p><button onclick="location.reload()">{{ retry|default("Retry") }}</button></p>';
+// Interpolated through tojson, not straight into the quotes: a translation with an
+// apostrophe in it would otherwise close the string literal and take the page with it.
+var errorContent = '<h4>' + {{ (routingError|default("Routing error"))|tojson }} +
+  '</h4><p><button onclick="location.reload()">' + {{ (retry|default("Retry"))|tojson }} + '</button></p>';
+var saveErrorContent = '<h4>' + {{ (saveError|default("Save error"))|tojson }} +
+  '</h4><p><button onclick="location.reload()">' + {{ (retry|default("Retry"))|tojson }} + '</button></p>';
 var texts = {
   routeTitle:             "{{ routeTitle|default('{origLabel} → {destLabel}') }}",
   fineTuneNote:           "{{ fineTuneNote|default('Drag waypoints to fine-tune the route.') }}",
@@ -761,6 +889,13 @@ var originEntry = null, destEntry = null;
 var manualPoints = { origin: null, dest: null };
 var routingStarted = false;
 var tempMarkers = {};
+// The router is asked to fit the route itself, but its 'smart' fit never triggers here:
+// this build of leaflet-routing-machine treats "any one waypoint on screen" as visible
+// enough (upstream bails as soon as one is off screen), and the origin is always on
+// screen because placeTempPin just zoomed to it. So the fit is done here instead — but
+// only when the route changed because a field or the stop picker changed it. A waypoint
+// dragged on the map must not yank the view out from under the hand doing the dragging.
+var pendingRouteFit = false;
 // Freehand inline mode (declared unconditionally so composeSave can always read them).
 var freehandEditor = null;
 var freehandActive = false;
@@ -772,33 +907,58 @@ var map = createMap(null, [48, 8]);
 // one). Measuring beats subtracting a constant from 100vh: guess too small and the
 // window grows its own scrollbar, too large and the save bar is cut off. innerHeight
 // rather than 100vh, because on mobile 100vh counts the strip the browser's own chrome
-// is sitting on.
+// is sitting on. innerHeight is also not shrunk by the on-screen keyboard on iOS, which
+// used to push the save bar out of reach mid-edit; visualViewport is, so it wins where it
+// exists. The summary bar sticks below the header, whose height depends on its font and
+// on whether the FR24 button is in it, so that too is measured rather than assumed.
 (function () {
   var wrap = document.querySelector('.compose-wrap');
+  var header = document.querySelector('.cp-header');
+  var vv = window.visualViewport;
+  var queued = false;
+
   function sizeCompose() {
+    queued = false;
     var top = wrap.getBoundingClientRect().top + (window.scrollY || 0);
-    var h = Math.max(200, Math.round(window.innerHeight - top));
+    var vh = vv ? vv.height : window.innerHeight;
+    var h = Math.max(200, Math.round(vh - top));
     document.documentElement.style.setProperty('--compose-h', h + 'px');
+    if (header) {
+      document.documentElement.style.setProperty(
+        '--cp-header-h', Math.round(header.getBoundingClientRect().height) + 'px');
+    }
     if (map && map.invalidateSize) map.invalidateSize();
   }
+  // The keyboard animating in fires resize per frame; one measurement per frame is enough.
+  function scheduleSize() {
+    if (queued) return;
+    queued = true;
+    requestAnimationFrame(sizeCompose);
+  }
+
   sizeCompose();
-  window.addEventListener('resize', sizeCompose);
-  window.addEventListener('orientationchange', sizeCompose);
+  window.addEventListener('resize', scheduleSize);
+  window.addEventListener('orientationchange', scheduleSize);
+  if (vv) vv.addEventListener('resize', scheduleSize);
+  window.addEventListener('load', sizeCompose);   // webfonts can change the header height
 })();
 
 // ── Splitter: drag the seam to trade panel space for map space. Side by side that is
-//    the panel's width, stacked it is its height; the axis is read off the wrap's own
-//    flex-direction rather than a duplicated breakpoint. Both are remembered — a
-//    lasting preference, not a per-trip choice — and kept apart, since a phone held
-//    both ways is still the same reading of "how much form do I want to see". ──
+//    the panel's width; stacked the map is on top, so it is the map's height. Either way
+//    the pane being sized is the one against the wrap's leading edge, which is what the
+//    drag measures — the axis is read off the wrap's own flex-direction rather than a
+//    duplicated breakpoint. Both are remembered — a lasting preference, not a per-trip
+//    choice — and kept apart, since a phone held both ways is still the same reading of
+//    "how much form do I want to see". ──
 (function () {
   var wrap = document.querySelector('.compose-wrap');
   var panel = document.querySelector('.compose-panel');
+  var mapPane = document.querySelector('.compose-map');
   var resizer = document.getElementById('composeResizer');
 
   var AXES = {
-    col: { key: 'composePanelWidth',  prop: '--compose-panel-w', min: 300, def: 380 },
-    row: { key: 'composePanelHeight', prop: '--compose-panel-h', min: 160, def: 0 }
+    col: { key: 'composePanelWidth', prop: '--compose-panel-w', min: 300, def: 380 },
+    row: { key: 'composeMapHeight',  prop: '--compose-map-h',   min: 120, def: 0 }
   };
   // The size actually asked for, which the cap may currently be overriding — a window
   // too small must not quietly rewrite the preference.
@@ -807,9 +967,11 @@ var map = createMap(null, [48, 8]);
   function stacked() { return getComputedStyle(wrap).flexDirection === 'column'; }
   function axis() { return stacked() ? AXES.row : AXES.col; }
   function extent() { return stacked() ? wrap.clientHeight : wrap.clientWidth; }
+  // The pane the seam sizes: the map when it is stacked above the form, the panel when
+  // they sit side by side.
   function panelSize() {
-    var r = panel.getBoundingClientRect();
-    return stacked() ? r.height : r.width;
+    return stacked() ? mapPane.getBoundingClientRect().height
+                     : panel.getBoundingClientRect().width;
   }
 
   // Never let the panel squeeze the map into a sliver, whatever the window size.
@@ -894,6 +1056,165 @@ var map = createMap(null, [48, 8]);
   window.addEventListener('orientationchange', reclamp);
 })();
 
+// ── Map card states (phones) ──
+//    Collapsed: the map card gives its height back to the form, for the stretches of the
+//    form that have nothing to do with geography. Full-screen: the map covers the panel
+//    for the things that need room — long-press stop picking, freehand, dragging
+//    waypoints. Both are body classes over the same element, so nothing is torn down and
+//    no state can be lost; Leaflet only has to be told its box changed.
+(function () {
+  var body = document.body;
+  var collapseBtn = document.getElementById('mapCollapseBtn');
+  var fullBtn = document.getElementById('mapFullBtn');
+  var doneBtn = document.getElementById('mapDoneBtn');
+  var COLLAPSE_KEY = 'composeMapCollapsed';
+
+  // invalidateSize has to run after the browser has applied the new box, not in the same
+  // frame as the class change.
+  function relayout() {
+    requestAnimationFrame(function () {
+      if (map && map.invalidateSize) map.invalidateSize();
+    });
+  }
+
+  function setCollapsed(on) {
+    body.classList.toggle('compose-map-collapsed', on);
+    collapseBtn.innerHTML = on ? '<i class="bi bi-chevron-down"></i>'
+                               : '<i class="bi bi-chevron-up"></i>';
+    var label = on ? {{ (showMap|default('Show map'))|tojson }} : {{ (collapseMap|default('Hide map'))|tojson }};
+    collapseBtn.title = label;
+    collapseBtn.setAttribute('aria-label', label);
+    try { localStorage.setItem(COLLAPSE_KEY, on ? '1' : '0'); } catch (e) { /* ignore */ }
+    relayout();
+  }
+
+  // Expanding out of the collapsed state as well: a full-screen map that closes back to
+  // nothing would look like it had lost the route.
+  function setFull(on) {
+    if (on && body.classList.contains('compose-map-collapsed')) setCollapsed(false);
+    body.classList.toggle('compose-map-full', on);
+    relayout();
+  }
+  window.composeSetMapFull = setFull;
+  window.composeMapIsFull = function () { return body.classList.contains('compose-map-full'); };
+
+  collapseBtn.addEventListener('click', function () {
+    setCollapsed(!body.classList.contains('compose-map-collapsed'));
+  });
+  fullBtn.addEventListener('click', function () { setFull(true); });
+  doneBtn.addEventListener('click', function () { setFull(false); });
+  // Back out of full-screen before leaving the page, which is what Escape means here.
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && window.composeMapIsFull()) { setFull(false); e.stopPropagation(); }
+  });
+
+  try {
+    if (localStorage.getItem(COLLAPSE_KEY) === '1') setCollapsed(true);
+  } catch (e) { /* ignore */ }
+
+  // Full-screen only exists because the map has to share a small screen. Rotate into a
+  // width wide enough for the side-by-side layout and it has nothing left to solve — and
+  // a fixed map over a two-pane page would be a trap. (Collapsed needs no such handling:
+  // its rules live in the media query and simply stop applying.)
+  var narrow = window.matchMedia('(max-width: 700px)');
+  var onNarrowChange = function (e) { if (!e.matches) setFull(false); };
+  if (narrow.addEventListener) narrow.addEventListener('change', onNarrowChange);
+  else if (narrow.addListener) narrow.addListener(onNarrowChange);   // Safari < 14
+})();
+
+// ── Route summary ──
+//    This page hides the routing sidebar, so without this the only sign that a route was
+//    found was the green dot next to the station names — and the only sign that none was
+//    found was an alert at save time. Stated here, the map card becomes optional: the
+//    common trip is two typed names and a distance to sanity-check.
+function routeSummaryLabel(entry) {
+  return (entry && entry[1]) ? String(entry[1]) : '';
+}
+
+// Through tojson rather than straight into the quotes: several languages put an
+// apostrophe in a sentence this short, and inside a JS string literal that ends the
+// literal and the page with it.
+var routeSummaryTexts = {
+  idle:    {{ (routePickEnds|default('Pick a start and an end'))|tojson }},
+  routing: {{ (routeComputing|default('Routing…'))|tojson }},
+  error:   {{ (routeNoResult|default('No route found'))|tojson }}
+};
+
+function renderRouteSummary(state) {
+  var bar = document.getElementById('routeSummary');
+  var text = document.getElementById('routeSummaryText');
+  if (!bar || !text) return;
+
+  var orig = routeSummaryLabel(originEntry);
+  var dest = routeSummaryLabel(destEntry);
+  var single = {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}true{% else %}false{% endif %};
+  var route = single ? orig
+            : (orig && dest ? (orig + ' → ' + dest) : (orig || dest));
+
+  // No state given: keep whatever the routing events last established. A single-point
+  // type never routes, so picking its place is already the finished state.
+  if (!state) {
+    if (bar.dataset.state !== 'idle') state = bar.dataset.state;
+    else state = single ? 'ok' : 'routing';
+  }
+  if (!route) state = 'idle';
+
+  var html = '';
+  if (state === 'idle') {
+    html = '<span class="cp-summary-route">' + escapeHtmlSummary(routeSummaryTexts.idle) + '</span>';
+  } else if (state === 'error') {
+    html = '<span class="cp-summary-route">' + escapeHtmlSummary(route) + '</span>' +
+           '<span>' + escapeHtmlSummary(routeSummaryTexts.error) + '</span>';
+  } else {
+    html = '<span class="cp-summary-route">' + escapeHtmlSummary(route) + '</span>';
+    if (state === 'routing') {
+      html = '<span class="cp-summary-spin"></span>' + html +
+             '<span>' + escapeHtmlSummary(routeSummaryTexts.routing) + '</span>';
+    } else if (newTrip.trip_length) {
+      var meta = texts.distanceTime
+        .replace('{km}', mToKm(newTrip.trip_length))
+        .replace('{time}', secondsToDhm(newTrip.estimated_trip_duration || 0, "{{ langId|default('en') }}"));
+      html += '<span class="cp-summary-meta">' + meta + '</span>';
+    }
+  }
+  bar.dataset.state = state;
+  text.innerHTML = html;
+}
+
+// Station names are user data (a manually named place is whatever was typed), and they go
+// in as markup here.
+function escapeHtmlSummary(s) {
+  return String(s).replace(/[&<>"']/g, function (c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+// Frame the whole trip. Deferred a frame so it lands after any invalidateSize queued for
+// this one — the on-screen keyboard closing as a station is picked resizes the map, and a
+// fit measured against the old box lands at the wrong zoom.
+function fitRouteBounds() {
+  var pts = (typeof currentRoute !== 'undefined' && currentRoute ? currentRoute : [])
+    .filter(function (p) { return p && isFinite(p.lat) && isFinite(p.lng); })
+    .map(function (p) { return L.latLng(p.lat, p.lng); });
+  if (pts.length < 2) return;
+  var bounds = L.latLngBounds(pts);
+  requestAnimationFrame(function () { map.fitBounds(bounds, { padding: [30, 30] }); });
+}
+
+// routeselected fires repeatedly while a route is refined, so the whole bar is rebuilt
+// from state each time rather than appended to. routing.js's own handler runs first and
+// has already written currentRoute by the time this one does.
+function bindRouteSummary(control) {
+  if (!control || control._composeSummaryBound) return;
+  control._composeSummaryBound = true;
+  control.on('routingstart', function () { renderRouteSummary('routing'); });
+  control.on('routeselected', function () {
+    renderRouteSummary('ok');
+    if (pendingRouteFit && !freehandActive) { pendingRouteFit = false; fitRouteBounds(); }
+  });
+  control.on('routingerror', function () { pendingRouteFit = false; renderRouteSummary('error'); });
+}
+
 // ── Inline freehand mode: a map toggle swaps the router for the hand-draw canvas
 //    on this same map, keeping all form fields. Only for routable ground types. ──
 {% if vehicle_type not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
@@ -904,10 +1225,15 @@ function composeFreehandSeed() {
 function enterFreehand() {
   if (freehandActive) return;
   if (!originEntry || !destEntry) {
-    alert('{{ pleaseSetDest|default("Please set an origin and destination.") }}');
+    alert({{ (pleaseSetOriginDest|default("Please set an origin and a destination."))|tojson }});
     return;
   }
   freehandActive = true;
+  // Drawing a line by hand in a card the height of four form fields is not drawing.
+  if (window.composeSetMapFull && window.matchMedia('(max-width: 700px)').matches) {
+    window.composeSetMapFull(true);
+    map.invalidateSize();
+  }
   if (window.control) map.removeControl(window.control);
   var seed = composeFreehandSeed();
   freehandEditor = createFreehandEditor(map, {
@@ -918,6 +1244,9 @@ function enterFreehand() {
       routeDetails = null;
       newTrip.trip_length = distance;
       newTrip.estimated_trip_duration = (distance / 30) * 3.6; // rough; freehand has no network
+      // The router is off the map while drawing, so its events cannot keep the summary up
+      // to date — the drawing itself is the update.
+      renderRouteSummary('ok');
     }
   });
 }
@@ -1277,6 +1606,8 @@ function updateAirRoute() {
     newTrip.estimated_trip_duration = (newTrip.trip_length / 235) + 1800;
   }
   map.fitBounds(airPolyline.getBounds(), { padding: [40, 40] });
+  // No router here, so no route events either: the geodesic sets the distance itself.
+  renderRouteSummary('ok');
 }
 {% endif %}
 
@@ -1300,14 +1631,20 @@ function startRouting() {
   updateAirRoute();
   {% else %}
   wplist = [originEntry[0]].concat(viaStations.filter(Boolean).map(function(v) { return v[0]; })).concat([destEntry[0]]);
+  renderRouteSummary('routing');
   routing(map, false, vehicle_type);
   bindPlanSync();
+  // routing() sets window.control before it returns, so the summary can subscribe to the
+  // same route events the hidden sidebar would have used.
+  bindRouteSummary(window.control);
   {% endif %}
 }
 
 function onStationSelected(role, entry, dotId) {
   document.getElementById(dotId).classList.add('resolved');
   if (role === 'origin') originEntry = entry; else destEntry = entry;
+  pendingRouteFit = true;              // an end was named, so reframe once the route lands
+  setTimeout(renderRouteSummary, 0);   // after startRouting has had its say
   if (!routingStarted) {
     placeTempPin(entry, role);
     if (originEntry && destEntry) startRouting();
@@ -1359,6 +1696,27 @@ $('#destinationStation').on('autocompleteselect', function(e, ui) {
 });
 {% endif %}
 
+// ── Focus follows the map ──
+//    With the map reduced to a card there is rarely room for the whole route, so the end
+//    being edited is the one worth showing. Panning only, never zooming: the zoom is the
+//    user's, and a field regaining focus is not a reason to overrule it.
+$(document).on('focusin', '.stationSearch', function () {
+  // A fit already on its way frames the whole trip, which is strictly more than this
+  // would show — don't race it to the same map.
+  if (freehandActive || pendingRouteFit) return;
+  if (document.body.classList.contains('compose-map-collapsed')) return;
+  var entry = null;
+  if (this.id === 'originStation') entry = originEntry;
+  else if (this.id === 'destinationStation') entry = destEntry;
+  else if (typeof viaRows !== 'undefined') {
+    var row = this.closest('.via-compose-row');
+    var i = row ? viaRows.indexOf(row) : -1;
+    if (i > -1) entry = viaStations[i];
+  }
+  if (!entry) return;
+  map.panTo(L.latLng(entry[0][0], entry[0][1]), { animate: true });
+});
+
 // ── Form via stations ──
 {% if vehicle_type not in ('air', 'accommodation', 'poi', 'restaurant') %}
 var viaRows = [];   // the row elements, index-aligned with viaStations
@@ -1366,6 +1724,7 @@ var viaRows = [];   // the row elements, index-aligned with viaStations
 // A via goes into the live route just before the destination.
 function insertViaWaypoint(entry) {
   if (!routingStarted || !window.currentPlan) return;
+  pendingRouteFit = true;   // a via can push the trip well outside the current frame
   var wps = window.currentPlan.getWaypoints();
   wps.splice(wps.length - 1, 0, L.Routing.waypoint(L.latLng(entry[0][0], entry[0][1])));
   window.currentPlan.setWaypoints(wps);
@@ -1515,6 +1874,10 @@ function stopPickerUse(role, found) {
     {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
     destEntry = found.entry;   // single-point types reuse the origin
     {% endif %}
+    // An endpoint picked from a full-screen map is the end of the errand with the map;
+    // hand the form back so the filled-in field is visible. A via is not — more of them
+    // usually follow — so that one stays on the map.
+    if (window.composeMapIsFull && window.composeMapIsFull()) window.composeSetMapFull(false);
   }
   map.closePopup(stopPickerPopup);
 }
@@ -1714,6 +2077,14 @@ function stopPickerSearch(latlng, container) {
 
 map.on('contextmenu', function(e) {
   if (typeof freehandActive !== 'undefined' && freehandActive) return;  // drawing, not picking
+  // A long press asks to pick from the map, and a list of nearby stops with three buttons
+  // each does not fit in the card — so take the screen for it. Sized synchronously,
+  // because the popup's placement and autoPan are computed against the map's box below.
+  if (window.composeSetMapFull && !window.composeMapIsFull() &&
+      window.matchMedia('(max-width: 700px)').matches) {
+    window.composeSetMapFull(true);
+    map.invalidateSize();
+  }
   var container = document.createElement('div');
   container.className = 'stop-picker';
   stopPickerCentre = e.latlng;
@@ -2001,10 +2372,37 @@ $(document).on('hidden.bs.modal', '#tsbModal', updateMaterialTypeDisplay);
 // ── Save (also exposed as saveTrip() so routing.js sidebar button works) ──
 function saveTrip(continueTrip) { composeSave(!!continueTrip); }
 
+// A save is a POST followed by a full page load, which on a phone connection is a few
+// seconds of nothing at all. Disabling the buttons stops the double-submit but reads as a
+// dead form, so the one that was pressed says what it is doing and keeps spinning until
+// the next page takes over. The idle markup is stashed on the element, because the two
+// buttons have different labels and only the error paths ever put it back.
+function composeSaveBusy(on, continueTrip) {
+  var buttons = [document.getElementById('btnSave'), document.getElementById('btnSaveContinue')];
+  buttons.forEach(function (b) {
+    if (!b) return;
+    b.disabled = on;
+    if (on) {
+      if (b.dataset.idleHtml === undefined) b.dataset.idleHtml = b.innerHTML;
+    } else if (b.dataset.idleHtml !== undefined) {
+      b.innerHTML = b.dataset.idleHtml;
+      delete b.dataset.idleHtml;
+    }
+  });
+  var pressed = document.getElementById(continueTrip ? 'btnSaveContinue' : 'btnSave');
+  if (on && pressed) {
+    pressed.innerHTML = '<span class="cp-btn-spin" aria-hidden="true"></span>' +
+      {{ (saving|default('Saving…'))|tojson }};
+  }
+  // The summary bar is the page's other status line; keep the two saying the same thing.
+  var bar = document.getElementById('routeSummary');
+  if (bar) bar.setAttribute('aria-busy', on ? 'true' : 'false');
+}
+
 function composeSave(continueTrip) {
-  if (!originEntry) { alert('{{ pleaseSetOrigin|default("Please set an origin.") }}'); return; }
+  if (!originEntry) { alert({{ (pleaseSetOrigin|default("Please set an origin."))|tojson }}); return; }
   {% if vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
-  if (!destEntry) { alert('{{ pleaseSetDest|default("Please set a destination.") }}'); return; }
+  if (!destEntry) { alert({{ (pleaseSetDest|default("Please set a destination."))|tojson }}); return; }
   {% endif %}
 
   var prec = (document.querySelector('input[name="precision"]:checked') || {}).value || 'preciseDates';
@@ -2084,10 +2482,9 @@ function composeSave(continueTrip) {
     (prec === 'unknown' && newTrip.unknownType) ||
     (prec === 'relative' && newTrip.planStartDay && newTrip.planEndDay)
   );
-  if (!timingOk) { alert('{{ pleaseFillTiming|default("Please fill in the timing fields.") }}'); return; }
+  if (!timingOk) { alert({{ (pleaseFillTiming|default("Please fill in the timing fields."))|tojson }}); return; }
 
-  document.getElementById('btnSave').disabled = true;
-  document.getElementById('btnSaveContinue').disabled = true;
+  composeSaveBusy(true, continueTrip);
 
   function onSaveSuccess() {
     if (continueTrip) {
@@ -2121,9 +2518,8 @@ function composeSave(continueTrip) {
     }
   }
   function onSaveError() {
-    alert('{{ saveError|default("Save failed.") }}');
-    document.getElementById('btnSave').disabled = false;
-    document.getElementById('btnSaveContinue').disabled = false;
+    composeSaveBusy(false);
+    alert({{ (saveError|default("Save failed."))|tojson }});
   }
 
   {% if vehicle_type == 'air' %}
@@ -2156,9 +2552,8 @@ function composeSave(continueTrip) {
   });
   {% else %}
   if (!currentRoute || currentRoute.length < 2) {
-    alert('{{ pleaseWaitRoute|default("Please wait for the route to load.") }}');
-    document.getElementById('btnSave').disabled = false;
-    document.getElementById('btnSaveContinue').disabled = false;
+    composeSaveBusy(false);
+    alert({{ (pleaseWaitRoute|default("Please wait for the route to load."))|tojson }});
     return;
   }
   newTrip.details = routeDetails;
