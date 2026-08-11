@@ -271,6 +271,8 @@
   /* Inline checkbox + label. style2.css floats bare checkboxes, so each pair needs its
      own inline-flex wrapper to stay together. */
   .cp-check { display: flex; align-items: center; gap: .4rem; margin-bottom: .4rem; }
+  /* Two related toggles read as one choice, so they sit on a single line. */
+  .cp-check-row { display: flex; flex-wrap: wrap; align-items: center; gap: .2rem 1.2rem; }
   .cp-check .form-check-input { margin: 0; flex: 0 0 auto; }
   .cp-check label { font-size: .78rem; color: #6b7280; margin: 0; cursor: pointer; }
 
@@ -555,13 +557,15 @@
         {# Delays are a fact about a trip that happened, so they only make sense against
            precise datetimes — and a plan has none of either. #}
         {% if not plan_uuid and vehicle_type not in ('accommodation', 'poi', 'restaurant') %}
-        <div id="delayToggleWrapper" class="cp-check">
-          <input type="checkbox" id="delayToggle" class="form-check-input">
-          <label for="delayToggle">{{ delaysToggle }}</label>
-        </div>
-        <div id="delayModeSwitchWrapper" class="cp-check" style="display:none;">
-          <input type="checkbox" id="delayModeSwitch" class="form-check-input">
-          <label for="delayModeSwitch">{{ delayDateMode }}</label>
+        <div class="cp-check-row">
+          <div id="delayToggleWrapper" class="cp-check">
+            <input type="checkbox" id="delayToggle" class="form-check-input">
+            <label for="delayToggle">{{ delaysToggle }}</label>
+          </div>
+          <div id="delayModeSwitchWrapper" class="cp-check" style="display:none;">
+            <input type="checkbox" id="delayModeSwitch" class="form-check-input">
+            <label for="delayModeSwitch">{{ delayDateMode }}</label>
+          </div>
         </div>
 
         <div id="delayMinutesInputs" class="cp-input-row" style="display:none;">
@@ -795,14 +799,14 @@
         <select id="ticketSearchInput" name="ticket_id" class="form-select"></select>
       </div>
       {% endif %}
-      </div>
-    </div>
 
-    <!-- Tags -->
-    <div class="cp-section">
-      <div class="cp-section-title">{{ tags|default('Tags') }}</div>
-      <input type="text" id="tagSearchInput" placeholder="{{ select_tag|default('Add a tag…') }}" class="form-control form-control-sm mb-2" autocomplete="off">
-      <div id="tagList" class="d-flex flex-wrap gap-1"></div>
+      <!-- Tags -->
+      <div class="cp-input-row">
+        <label for="tagSearchInput">{{ tags|default('Tags') }}</label>
+        <input type="text" id="tagSearchInput" placeholder="{{ select_tag|default('Add a tag…') }}" class="form-control" autocomplete="off">
+        <div id="tagList" class="d-flex flex-wrap gap-1 mt-1"></div>
+      </div>
+      </div>
     </div>
 
     <!-- Save bar -->
