@@ -33,6 +33,71 @@
   unicode-range: U+1F1E6-1F1FF; /* Flags */
 }
 
+/* ── Site-wide flag rendering ──────────────────────────────────────────────
+   Windows has no country-flag glyphs at all (Chrome/Edge draw "FR", "NO"…),
+   so every font stack must fall back to the bundled Twemoji flags. `body` is
+   FlagEmojis-first (see below), but that only covers elements that *inherit*
+   their font: anything declaring its own family (Arial, Century Gothic,
+   'IBM Plex Mono', …) drops back to the system font and loses the flags.
+
+   Rather than a universal selector — which would clobber inherited typography
+   and icon fonts — we re-declare each concrete family name used on the site as
+   a web font pointing at Twemoji, restricted by unicode-range to the regional
+   indicator pair. A @font-face shadows the same-named system font, so those
+   elements keep their real font for every other character and only borrow
+   Twemoji for flags. Generic keywords (sans-serif, monospace, ui-monospace)
+   cannot be redefined this way; use FlagEmojis explicitly ahead of them. */
+@font-face {
+  font-family: Arial;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: Helvetica;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: 'Segoe UI';
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: Roboto;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: 'Century Gothic';
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: 'Bebas Neue';
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: Montserrat;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: Consolas;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: Menlo;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+
 .flagPNG {
   height:20px;
   max-width: 35px;

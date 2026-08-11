@@ -296,6 +296,12 @@ document.addEventListener("DOMContentLoaded", function () {
   const ctx = canvas.getContext('2d');
   const nowMs = Date.now();
 
+  // Canvas text doesn't inherit the page font, and Windows has no flag glyphs
+  // at all — plain 'serif' renders "FR"/"NO" letters in Chrome/Edge. Draw with
+  // the bundled Twemoji faces instead (FlagEmojis is flag-only, Twemoji is the
+  // full set), keeping serif as the last resort.
+  const FLAG_FONT = 'FlagEmojis, Twemoji, serif';
+
   // Hatch pattern: diagonal white stripes for future portions
   function makeHatch() {
     const sz = 7;
@@ -426,7 +432,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     ctx.textAlign    = 'center';
     ctx.textBaseline = 'middle';
-    ctx.font         = '22px serif';
+    ctx.font         = `22px ${FLAG_FONT}`;
 
     for (const b of wide) {
       // Clamp center to stay inside ribbon
@@ -443,7 +449,7 @@ document.addEventListener("DOMContentLoaded", function () {
       ctx.fillStyle = '#fff';
       ctx.fill(roundRectPath(cx - pW / 2, cy - pH / 2, pW, pH, pR));
       ctx.restore();
-      ctx.font      = '20px serif';
+      ctx.font      = `20px ${FLAG_FONT}`;
       ctx.fillText(b.flag, cx, cy);
     }
 
@@ -501,7 +507,7 @@ document.addEventListener("DOMContentLoaded", function () {
       ctx.stroke();
 
       // Flag emoji inside circle
-      ctx.font         = `${LABEL_R * 1.25}px serif`;
+      ctx.font         = `${LABEL_R * 1.25}px ${FLAG_FONT}`;
       ctx.textAlign    = 'center';
       ctx.textBaseline = 'middle';
       ctx.fillText(lb.flag, lb.labelX, LY);
@@ -765,6 +771,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
   window.addEventListener('resize', resize);
   resize();
+
+  // A canvas alone never triggers a webfont download, so the first paint can
+  // land before Twemoji is ready — ask for it explicitly and repaint.
+  if (document.fonts && document.fonts.load) {
+    Promise.all([
+      document.fonts.load('20px FlagEmojis', '\u{1F1EB}\u{1F1F7}'),
+      document.fonts.load('20px Twemoji',    '\u{1F1EB}\u{1F1F7}'),
+    ]).then(render).catch(() => {});
+  }
 });
 </script>
 
