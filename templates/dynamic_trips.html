@@ -1386,6 +1386,11 @@ function toggleTypeFilter() {
 function toggleIncludeFuture() {
     const switchState = document.getElementById('includeFutureSwitch').checked;
     setCookie('includeFutureSwitch', switchState, 7);
+    // Switching it on inserts a whole block of upcoming trips above the listing, so
+    // the page being shown is no longer the page it was: reload() would reset to
+    // offset 0, which is now the furthest-off plan. Anchor on now instead, exactly as
+    // a fresh load does. Switching it off just goes back to the top of the past.
+    _anchorNow = switchState && canAnchorNow();
     tableObject.ajax.reload();
 }
 
@@ -2301,10 +2306,13 @@ var table = $('#tripRows');
     }
     /* Set for the one draw the anchor produced, so it can be kept out of the URL. */
     var _anchoredDraw = false;
-    var _anchorNow = isPast
+    /* "Above/below now" only means something in the order that runs on time. */
+    window.canAnchorNow = function() {
+        return isPast && customSort.field === 'temporal' && customSort.dir === 'desc';
+    };
+    var _anchorNow = canAnchorNow()
         && !_urlParams.get('page')
-        && getCookie('includeFutureSwitch') === 'true'
-        && customSort.field === 'temporal' && customSort.dir === 'desc';
+        && getCookie('includeFutureSwitch') === 'true';
     var tableObject = $('#dataTable').DataTable({
     processing: true,
     serverSide: true,
