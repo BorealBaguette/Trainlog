@@ -75,6 +75,14 @@
     /* Dated future trips shown on the past page via the "show upcoming" toggle */
     tr.upcoming-trip > td { opacity: 0.65; }
 
+    /* Where that same listing crosses the present: the class goes on the first past
+       row below an upcoming one. A hairline and nothing else — the timeline either
+       side of it is continuous, so this is a seam to notice, not a section break.
+       In card layout the cards carry their own borders and this rule is overridden
+       (see the `> td { border: 0 }` card rule below); the line is drawn in the gap
+       above the card instead. */
+    #dataTable tbody tr.now-boundary > td { border-top: 1px dashed #aab4c0; }
+
     /* Expand arrow for the details row. Responsive draws this itself only for
        `details.type: 'inline'`, where the control is whichever column happens to be
        first on screen; this table names the type column as the control instead (see
@@ -165,6 +173,19 @@
             border-radius: 10px;
             background: #fff;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+        }
+
+        /* The now-boundary as a card: the cards are already separated, so the seam is
+           a wider gap with the same hairline drawn across it. Absolute against the
+           card, which is positioned above for the sake of its own gutter items. */
+        .trip-card-host > #dataTable > tbody > tr.now-boundary { margin-top: 22px; }
+        .trip-card-host > #dataTable > tbody > tr.now-boundary::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: -12px;
+            border-top: 1px dashed #aab4c0;
         }
 
         /* An open detail row is part of the card above it, not a card of its own. */
@@ -1444,6 +1465,24 @@ function hideCardHeader() {
     $(tableObject.table().header()).find('tr').hide();
 }
 
+/* A hairline above the first past trip on a page that also holds upcoming ones, so
+   the point the list crosses the present is visible rather than inferred from the
+   dates. Nothing is inserted into the table — the line is drawn by the stylesheet off
+   this class — so no row here is anything DataTables did not put there itself. */
+function markNowBoundary() {
+    $('#dataTable tbody tr').removeClass('now-boundary');
+    if (!isPast) return;
+    var rows = tableObject.rows({ page: 'current' });
+    var data = rows.data();
+    var nodes = rows.nodes();
+    for (var i = 1; i < data.length; i++) {
+        if (data[i - 1].plannedFuture == 1 && data[i].plannedFuture != 1) {
+            $(nodes[i]).addClass('now-boundary');
+            break;
+        }
+    }
+}
+
 function columnIndexesWithClass(wanted) {
     // Read off the column definitions rather than the header: DataTables applies
     // columns.className to the body cells only, so the <th> does not carry it.
@@ -2251,10 +2290,21 @@ var table = $('#tripRows');
         ];
     }
     var customSort = { field: 'temporal', dir: isPast ? 'desc' : 'asc', label: '{{tripStartTime}}' };
+    /* With "show upcoming" on, the descending timeline reads [far future … now …
+       oldest past], so its first page is the most distant plan. Ask the backend to
+       centre the first load on now instead — but only that load, and only when the
+       URL did not name a page, since an explicit ?page= is the user's own choice.
+       Any later draw (paging, sorting, searching) leaves the offset alone. */
     if (_urlSortParam) {
         var _sp = _urlSortParam.split(':');
         if (_sp.length === 2) { customSort.field = _sp[0]; customSort.dir = _sp[1]; customSort.label = _sp[0]; }
     }
+    /* Set for the one draw the anchor produced, so it can be kept out of the URL. */
+    var _anchoredDraw = false;
+    var _anchorNow = isPast
+        && !_urlParams.get('page')
+        && getCookie('includeFutureSwitch') === 'true'
+        && customSort.field === 'temporal' && customSort.dir === 'desc';
     var tableObject = $('#dataTable').DataTable({
     processing: true,
     serverSide: true,
@@ -2276,7 +2326,8 @@ var table = $('#tripRows');
         "data": function(d) {
             d.filterTypes = (getCookie('filterTypeSwitch') === 'true') ? 0 : 1;
             d.includeFuture = (isPast && getCookie('includeFutureSwitch') === 'true') ? 1 : 0;
-            
+            if (_anchorNow) d.anchorNow = 1;
+
             // Parse smart search
             const searchValue = d.search.value || '';
             const { columnFilters, globalSearch, globalNot } = parseSmartSearch(searchValue);
@@ -2419,10 +2470,22 @@ var table = $('#tripRows');
             }
         }
     }
+}).on('xhr.dt', function(e, settings, json) {
+    // The anchored draw asked for offset 0 and was answered with the rows around now
+    // instead. `xhr` fires before the table is drawn, so writing the offset the server
+    // actually used here is enough for the pager and the "showing x to y" line to
+    // describe the rows about to appear. One-shot: the flag is cleared either way, so
+    // everything after this — paging, sorting, searching — pages from where it says.
+    if (json && typeof json.start === 'number') {
+        settings._iDisplayStart = json.start;
+        _anchoredDraw = true;
+    }
+    _anchorNow = false;
 }).on('responsive-display', function(e, datatable, row, showHide, update) {
     resetObjects();
 }).on('draw', function() {
     hideCardHeader();
+    markNowBoundary();
     tableObject.rows().every(function(rowIdx, tableLoop, rowLoop) {
         var row = this.node();
         var data = this.data();
@@ -2449,7 +2512,14 @@ var table = $('#tripRows');
         url.searchParams.delete('sort');
     }
     var _pi = tableObject.page.info();
-    if (_pi.page > 0) {
+    if (_anchoredDraw) {
+        // The anchored offset is not a page the user asked for, and it is not one
+        // either: it lands mid-grid, so ?page= could not reproduce it anyway. Leaving
+        // it out of the URL is also what lets a reload anchor again rather than
+        // freeze on whatever page number now happened to fall in today.
+        url.searchParams.delete('page');
+        _anchoredDraw = false;
+    } else if (_pi.page > 0) {
         url.searchParams.set('page', _pi.page + 1);
     } else {
         url.searchParams.delete('page');

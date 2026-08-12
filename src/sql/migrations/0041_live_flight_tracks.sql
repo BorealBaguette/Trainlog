@@ -28,9 +28,10 @@ CREATE TABLE IF NOT EXISTS live_flight_tracks (
     -- pending    : row created, flight not resolved yet
     -- live       : resolved, track being refreshed
     -- landed     : final track promoted into `paths` (row about to be deleted)
-    -- unresolved : FR24 has no such flight (wrong number, private charter, non-FR24
-    --              airline, or no flight number at all). Stops us retrying every 5
-    --              minutes for the whole duration of the trip.
+    -- unresolved : FR24 has no such flight *yet* — either it is not airborne (the normal
+    --              state at scheduled departure) or the number is unusable (wrong number,
+    --              private charter, non-FR24 airline, none at all). Observability only:
+    --              these are retried on the same interval as every other trip.
     status      TEXT NOT NULL DEFAULT 'pending',
     -- Mirrors trips.last_modified at resolution time. If the user corrects the flight
     -- number mid-flight the values diverge and the row is re-resolved.

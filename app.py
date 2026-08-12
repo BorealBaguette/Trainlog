@@ -8544,6 +8544,13 @@ SORT_FIELD_EXPRS = {
     "price":                 "price",
 }
 
+# The instant a trip is ordered on under the default "temporal" sort. Also the
+# expression the now-anchor counts against, so the boundary it finds is exactly the
+# point the ordering puts it at.
+TEMPORAL_SORT_EXPR = (
+    "(utc_filtered_start_datetime + COALESCE(departure_delay, 0) * interval '1 second')"
+)
+
 def get_trips_api_internal(username, is_public=False):
     # Retrieve parameters from DataTables request
     start = request.form.get("start", type=int, default=0)
@@ -8579,6 +8586,20 @@ def get_trips_api_internal(username, is_public=False):
     if custom_sort_field and custom_sort_field in SORT_FIELD_EXPRS:
         sort_column_name = SORT_FIELD_EXPRS[custom_sort_field]
         sort_direction = request.form.get("sort_dir", sort_direction)
+
+    # Now-anchor: with upcoming trips folded in, the descending timeline runs
+    # [far future … now … oldest past], so its first page is the most distant plan —
+    # useless as a landing page. When the client asks for it (first draw only, no
+    # explicit ?page=), the offset is moved so that "now" sits mid-page instead.
+    # Only for the temporal descending order, where "above/below now" means anything.
+    anchor_now = (
+        request.form.get("anchorNow", type=int, default=0) == 1
+        and include_planned == 1
+        and sort_column_name == "temporal"
+        and sort_direction == "desc"
+        # "All rows" has no page to centre.
+        and length is not None
+    )
 
     # Negative global terms (smart-search "!term"): trips that match NONE of these
     # in any field. Sent by the frontend as a JSON list.
@@ -8823,7 +8844,13 @@ def get_trips_api_internal(username, is_public=False):
 
     # Build the queries
     cte = get_dynamic_user_trips_query(base_type_filter=base_type is not None)
-    base_count_query = cte + "SELECT COUNT(*) FROM FilteredTrips"
+    # The anchor rides along with the count that is run anyway: how many of the
+    # matching rows sit above now, which — the order being descending on the same
+    # expression — is the rank of the first past row.
+    count_columns = "COUNT(*)"
+    if anchor_now:
+        count_columns += f", COUNT(*) FILTER (WHERE {TEMPORAL_SORT_EXPR} > NOW())"
+    base_count_query = cte + f"SELECT {count_columns} FROM FilteredTrips"
     base_data_query = cte + "SELECT * FROM FilteredTrips"
     
     # Add type filtering if needed
@@ -8867,7 +8894,7 @@ def get_trips_api_internal(username, is_public=False):
     if sort_column_name == "temporal":
         data_query = base_data_query + (
             f" ORDER BY (utc_filtered_start_datetime IS NULL AND is_project) {sort_direction},"
-            f" (utc_filtered_start_datetime + COALESCE(departure_delay, 0) * interval '1 second') {sort_direction} {nulls},"
+            f" {TEMPORAL_SORT_EXPR} {sort_direction} {nulls},"
             f" uid {sort_direction} LIMIT :limit OFFSET :offset"
         )
     elif sort_column_name == "end_datetime":
@@ -8904,7 +8931,16 @@ def get_trips_api_internal(username, is_public=False):
 
     with pg_session() as pg:
         # Fetch filtered count
-        records_filtered = pg.execute(count_query, search_params).scalar()
+        count_row = pg.execute(count_query, search_params).fetchone()
+        records_filtered = count_row[0]
+
+        # Centre the requested page on now: half a page of upcoming trips above the
+        # boundary, the rest of the page below it. The offset stops being a multiple
+        # of the page length, which DataTables displays happily; the next page click
+        # snaps back to its own grid.
+        if anchor_now:
+            now_offset = count_row[1]
+            start = max(0, now_offset - length // 2)
 
         # Fetch the actual page data
         search_params.update({
@@ -8987,14 +9023,17 @@ def get_trips_api_internal(username, is_public=False):
             )
 
     # Return the JSON for DataTables
-    return jsonify(
-        {
-            "draw": draw,
-            "recordsTotal": records_filtered,
-            "recordsFiltered": records_filtered,
-            "data": trip_list,
-        }
-    )
+    response = {
+        "draw": draw,
+        "recordsTotal": records_filtered,
+        "recordsFiltered": records_filtered,
+        "data": trip_list,
+    }
+    # Tell the client where the anchored page actually starts, so its paginator and
+    # "showing x to y" agree with the rows it was handed.
+    if anchor_now:
+        response["start"] = start
+    return jsonify(response)
 
 
 @app.route("/u/<username>/get_trips_api", methods=["POST"])
