@@ -195,11 +195,6 @@ def attach_vessel_photos(pg, vehicles):
             vehicle["country"] = country
 
 
-# How many trainset rows get their wagons resolved. The chart draws ten and the
-# fullscreen view scrolls twenty at a time, so this is a few screens' depth; the
-# tail keeps its numbers and simply has no picture.
-TRAINSET_IMAGE_ROWS = 40
-
 # Only the fields the strip needs to draw. The wagons table carries a lot more
 # (era, notes, licence) and none of it belongs in a chart payload.
 _WAGON_DISPLAY_FIELDS = ("image", "image_type", "image_ext", "px_per_meter", "label")
@@ -271,8 +266,12 @@ def attach_trainset_units(pg, rows, username):
 
     # 1) every named trainset in one go, preferring the user's own set over the
     #    admin one of the same name (same precedence as _units_by_name).
-    resolved = rows[:TRAINSET_IMAGE_ROWS]
-    wanted = {name for row in resolved for name in parsed[row["trainset"]][0]}
+    #
+    #    Every row, not a top slice. The fullscreen chart scrolls the whole
+    #    ranking, and resolving only the first few screens' worth meant the
+    #    artwork stopped part-way down it while the bars carried on. Doing the
+    #    lot costs the same two queries — only the lists they take get longer.
+    wanted = {name for row in rows for name in parsed[row["trainset"]][0]}
     by_name = {}
     if wanted:
         for name, units_json in pg.execute(
@@ -306,10 +305,7 @@ def attach_trainset_units(pg, rows, username):
 
     # 2) every wagon those units point at, also in one go.
     wagon_names = {
-        u["name"]
-        for row in resolved
-        for u in units_of(row["trainset"])
-        if u.get("name")
+        u["name"] for row in rows for u in units_of(row["trainset"]) if u.get("name")
     }
     wagons = {}
     if wagon_names:
@@ -324,34 +320,30 @@ def attach_trainset_units(pg, rows, username):
             )
         }
 
-    resolved_ids = {id(row) for row in resolved}
     for row in rows:
         names, inline = parsed[row["trainset"]]
 
         units = []
-        if id(row) in resolved_ids:
-            for unit in units_of(row["trainset"]):
-                wagon = wagons.get(unit.get("name")) or {}
-                slim = {
-                    k: wagon[k]
-                    for k in _WAGON_DISPLAY_FIELDS
-                    if wagon.get(k) is not None
-                }
-                slim["_side"] = unit.get("_side", "L")
-                # Kept even with no artwork, so the strip can stand a
-                # placeholder in its place: an outline in the right position
-                # still tells you how many cars the set has, which is more than
-                # an empty box does. `_phType` picks which outline.
-                if unit.get("_phType"):
-                    slim["_phType"] = unit["_phType"]
-                units.append(slim)
-            if units:
-                row["units"] = units
+        for unit in units_of(row["trainset"]):
+            wagon = wagons.get(unit.get("name")) or {}
+            slim = {
+                k: wagon[k] for k in _WAGON_DISPLAY_FIELDS if wagon.get(k) is not None
+            }
+            slim["_side"] = unit.get("_side", "L")
+            # Kept even with no artwork, so the strip can stand a
+            # placeholder in its place: an outline in the right position
+            # still tells you how many cars the set has, which is more than
+            # an empty box does. `_phType` picks which outline.
+            if unit.get("_phType"):
+                slim["_phType"] = unit["_phType"]
+            units.append(slim)
+        if units:
+            row["units"] = units
 
         # Named sets show their name; ad-hoc ones are named from their units.
         # Resolved wagons give the nicest labels, but the inline JSON already
-        # carries one per unit, so even an unresolved row past the cut-off gets
-        # a readable name — never the stored JSON.
+        # carries one per unit, so a row that resolves to nothing still gets a
+        # readable name — never the stored JSON.
         row["label"] = (
             " + ".join(dict.fromkeys(u["label"] for u in units if u.get("label")))
             if units and not names

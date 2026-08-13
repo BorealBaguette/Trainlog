@@ -1395,6 +1395,19 @@ def get_new_trip_types(user_lang):
     }
 
 
+@app.route("/u/<username>/compose")
+@login_required
+def compose_default(username):
+    """Bare /compose — the form needs a type, and trains are what most people log.
+
+    Any query string (``?plan=``, the save-and-continue prefill) is carried over, and
+    the type switcher in the header changes it from there.
+    """
+    return redirect(
+        url_for("compose", username=username, vehicle_type="train", **request.args)
+    )
+
+
 @app.route("/u/<username>/compose/<vehicle_type>")
 @login_required
 def compose(username, vehicle_type):
@@ -8522,10 +8535,21 @@ SORT_FIELD_EXPRS = {
     "origin_station":        "LOWER(CASE WHEN ascii(origin_station) BETWEEN 127462 AND 127487 THEN substring(origin_station FROM 4) ELSE origin_station END)",
     "destination_station":   "LOWER(CASE WHEN ascii(destination_station) BETWEEN 127462 AND 127487 THEN substring(destination_station FROM 4) ELSE destination_station END)",
     "type":                  "LOWER(type)",
-    "operator":              "LOWER(operator)",
+    # Sort on the operator as displayed (resolved through the aliases), falling back
+    # to the raw text when it names no known operator — otherwise a trip logged 'cff'
+    # shows as SBB but sorts under C. Empty text is folded to NULL so operatorless
+    # trips group with the NULLs at one end instead of straddling both.
+    "operator":              "LOWER(NULLIF(COALESCE(operator_name, operator), ''))",
     "line_name":             "LOWER(line_name)",
     "price":                 "price",
 }
+
+# The instant a trip is ordered on under the default "temporal" sort. Also the
+# expression the now-anchor counts against, so the boundary it finds is exactly the
+# point the ordering puts it at.
+TEMPORAL_SORT_EXPR = (
+    "(utc_filtered_start_datetime + COALESCE(departure_delay, 0) * interval '1 second')"
+)
 
 def get_trips_api_internal(username, is_public=False):
     # Retrieve parameters from DataTables request
@@ -8562,6 +8586,20 @@ def get_trips_api_internal(username, is_public=False):
     if custom_sort_field and custom_sort_field in SORT_FIELD_EXPRS:
         sort_column_name = SORT_FIELD_EXPRS[custom_sort_field]
         sort_direction = request.form.get("sort_dir", sort_direction)
+
+    # Now-anchor: with upcoming trips folded in, the descending timeline runs
+    # [far future … now … oldest past], so its first page is the most distant plan —
+    # useless as a landing page. When the client asks for it (first draw only, no
+    # explicit ?page=), the offset is moved so that "now" sits mid-page instead.
+    # Only for the temporal descending order, where "above/below now" means anything.
+    anchor_now = (
+        request.form.get("anchorNow", type=int, default=0) == 1
+        and include_planned == 1
+        and sort_column_name == "temporal"
+        and sort_direction == "desc"
+        # "All rows" has no page to centre.
+        and length is not None
+    )
 
     # Negative global terms (smart-search "!term"): trips that match NONE of these
     # in any field. Sent by the frontend as a JSON list.
@@ -8806,7 +8844,13 @@ def get_trips_api_internal(username, is_public=False):
 
     # Build the queries
     cte = get_dynamic_user_trips_query(base_type_filter=base_type is not None)
-    base_count_query = cte + "SELECT COUNT(*) FROM FilteredTrips"
+    # The anchor rides along with the count that is run anyway: how many of the
+    # matching rows sit above now, which — the order being descending on the same
+    # expression — is the rank of the first past row.
+    count_columns = "COUNT(*)"
+    if anchor_now:
+        count_columns += f", COUNT(*) FILTER (WHERE {TEMPORAL_SORT_EXPR} > NOW())"
+    base_count_query = cte + f"SELECT {count_columns} FROM FilteredTrips"
     base_data_query = cte + "SELECT * FROM FilteredTrips"
     
     # Add type filtering if needed
@@ -8850,7 +8894,7 @@ def get_trips_api_internal(username, is_public=False):
     if sort_column_name == "temporal":
         data_query = base_data_query + (
             f" ORDER BY (utc_filtered_start_datetime IS NULL AND is_project) {sort_direction},"
-            f" (utc_filtered_start_datetime + COALESCE(departure_delay, 0) * interval '1 second') {sort_direction} {nulls},"
+            f" {TEMPORAL_SORT_EXPR} {sort_direction} {nulls},"
             f" uid {sort_direction} LIMIT :limit OFFSET :offset"
         )
     elif sort_column_name == "end_datetime":
@@ -8869,15 +8913,34 @@ def get_trips_api_internal(username, is_public=False):
             f"   + COALESCE(price_to_eur({ticket_share_sql}, {ticket_currency_sql}, {ticket_date_sql}), 0) "
             f"END"
         )
-        data_query = base_data_query + f" ORDER BY {price_expr} {sort_direction} NULLS LAST LIMIT :limit OFFSET :offset"
+        data_query = base_data_query + (
+            f" ORDER BY {price_expr} {sort_direction} NULLS LAST,"
+            f" uid {sort_direction} LIMIT :limit OFFSET :offset"
+        )
     else:
-        data_query = base_data_query + f" ORDER BY {sort_column_name} {sort_direction} {nulls} LIMIT :limit OFFSET :offset"
+        # uid breaks ties so paging stays stable: sorts like operator or type have
+        # large groups of equal (often NULL) values, and without it PG is free to
+        # return them in a different order for each page's query, which makes rows
+        # repeat across pages and others vanish.
+        data_query = base_data_query + (
+            f" ORDER BY {sort_column_name} {sort_direction} {nulls},"
+            f" uid {sort_direction} LIMIT :limit OFFSET :offset"
+        )
 
     search_params["user_id"] = get_user_id(username)
 
     with pg_session() as pg:
         # Fetch filtered count
-        records_filtered = pg.execute(count_query, search_params).scalar()
+        count_row = pg.execute(count_query, search_params).fetchone()
+        records_filtered = count_row[0]
+
+        # Centre the requested page on now: half a page of upcoming trips above the
+        # boundary, the rest of the page below it. The offset stops being a multiple
+        # of the page length, which DataTables displays happily; the next page click
+        # snaps back to its own grid.
+        if anchor_now:
+            now_offset = count_row[1]
+            start = max(0, now_offset - length // 2)
 
         # Fetch the actual page data
         search_params.update({
@@ -8960,14 +9023,17 @@ def get_trips_api_internal(username, is_public=False):
             )
 
     # Return the JSON for DataTables
-    return jsonify(
-        {
-            "draw": draw,
-            "recordsTotal": records_filtered,
-            "recordsFiltered": records_filtered,
-            "data": trip_list,
-        }
-    )
+    response = {
+        "draw": draw,
+        "recordsTotal": records_filtered,
+        "recordsFiltered": records_filtered,
+        "data": trip_list,
+    }
+    # Tell the client where the anchored page actually starts, so its paginator and
+    # "showing x to y" agree with the rows it was handed.
+    if anchor_now:
+        response["start"] = start
+    return jsonify(response)
 
 
 @app.route("/u/<username>/get_trips_api", methods=["POST"])
