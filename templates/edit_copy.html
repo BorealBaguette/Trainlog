@@ -4,6 +4,9 @@
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lib/leaflet.geometryutil.js') }}"></script>
 <script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
+{% if tripType == 'ferry' %}
+<script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
+{% endif %}
 
 {% include "bootstrap/navigation.html"%}
 
@@ -353,13 +356,15 @@
             </div>
             {% endif %}
             <label for="reg">{{reg}}</label>
-            <input type="text" name="reg" id="reg" placeholder="{{reg}}" value="{{tripReg}}">
+            <input type="text" name="reg" id="reg" placeholder="{{reg}}" value="{{tripReg}}" autocomplete="off">
+            <!-- Ferries store the ship's IMO/MMSI, so name the ship the number stands for. -->
+            <small id="regVesselName" class="form-text text-muted" style="display:none;"></small>
             <label for="seat">{{seat}}</label>
             <input type="text" name="seat" id="seat" placeholder="{{seat}}" value="{{tripSeat}}">
             <label for="notes">{{notes}}</label>
             <input type="text" name="notes" id="notes" placeholder="{{notes}}" value="{{tripNotes}}">
 
-            <label>{{tags|default('Tags')}}</label>
+            <label for="tagSearchInput">{{tags|default('Tags')}}</label>
             <input type="text" id="tagSearchInput" placeholder="{{select_tag|default('Add a tag…')}}" class="form-control form-control-sm" autocomplete="off" style="margin-bottom:.4rem;">
             <div id="tagList" class="d-flex flex-wrap gap-1"></div>
 
@@ -1921,6 +1926,12 @@
                 }));
             }
         });
+    }
+
+    if (tripType == 'ferry') {
+        // Suggestions match name, IMO or MMSI; what lands in the field is the number
+        // (see vessel_field.js), with the ship named on the hint line under it.
+        initVesselField('#reg', '#regVesselName', "{{ url_for('vesselAutocomplete') }}");
     }
 
     const currencySelect = document.getElementById('currency');

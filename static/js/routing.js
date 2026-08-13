@@ -61,6 +61,36 @@ var ferrySplitEnabled = false;
 var markergroup = new L.featureGroup(markerIconStart, markerIconEnd);
 
 var routeDetails = null;
+
+// Which upstream router answered the last bus routing request (HTTP status set by
+// forward_routing_core in src/routing.py). 234/235 mean the road (car) router was
+// used as a fallback, so the route may follow roads buses aren't allowed on.
+var busRouterCode = null;
+var BUS_ROUTER_CODES = {
+  231: { key: "busRouterDedicated", warn: false },
+  233: { key: "busRouterDedicated", warn: false },
+  234: { key: "busRouterFallback",  warn: true  },
+  235: { key: "busRouterFallbackError", warn: true },
+};
+
+// Small info/warning icon shown next to the distance telling which bus router answered.
+function busRouterHint() {
+  var info = BUS_ROUTER_CODES[busRouterCode];
+  if (!info || !texts[info.key]) return '';
+  var icon = info.warn ? 'fa-triangle-exclamation' : 'fa-circle-info';
+  return `<details class="route-hint${info.warn ? ' route-hint-warn' : ''}">`
+       + `<summary><i class="fa-solid ${icon}"></i></summary>`
+       + `<div class="route-bubble">${texts[info.key]}</div></details>`;
+}
+
+// The hint bubbles are <details>, which stay open until re-clicked — close them on any
+// click outside so they behave like a popover.
+document.addEventListener('click', function (e) {
+  document.querySelectorAll('#sidebar .route-hint[open]').forEach(function (d) {
+    if (!d.contains(e.target)) d.removeAttribute('open');
+  });
+});
+
 (function() {
   var originalOpen = XMLHttpRequest.prototype.open;
   var originalSend = XMLHttpRequest.prototype.send;
@@ -75,9 +105,14 @@ var routeDetails = null;
     var originalOnReadyStateChange = this.onreadystatechange;
 
     this.onreadystatechange = function() {
-      if (self.readyState === 4 && self.status === 200) {
-        // Check if this is an OSRM routing request
-        if (self._requestUrl && self._requestUrl.includes('/route/')) {
+      if (self.readyState === 4 && self._requestUrl && self._requestUrl.includes('/route/')) {
+        // /forwardRouting/bus picks between several upstream routers and reports which
+        // one answered through the (2xx) status code — see BUS_ROUTER_CODES below.
+        if (self._requestUrl.includes('/forwardRouting/bus/')) {
+          busRouterCode = self.status;
+        }
+        if (self.status === 200) {
+          // Check if this is an OSRM routing request
           try {
             var response = JSON.parse(self.responseText);
             if (response.routes && response.routes[0] && response.routes[0].details) {
@@ -672,9 +707,10 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
 
   L.Control.MyControl = L.Control.extend({
     onAdd: function(map) {
-      var el = L.DomUtil.create('div', 'leaflet-bar');
+      var el = L.DomUtil.create('div', 'reopen-panel-control');
       if (showSidebar){
-        el.innerHTML += '<button class="button" onclick="sidebar.show()">⬅️</button>';
+        el.innerHTML += '<button type="button" class="btn btn-primary btn-sm reopen-panel-btn" onclick="sidebar.show()">'
+                      + '<i class="fa-solid fa-arrow-left"></i></button>';
       }
 
       return el;
@@ -921,7 +957,9 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
           </div>
         `;
         // Tuck the "adjust the markers" hint behind a small info icon (rendered inline with distance).
-        hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div>${texts.fineTuneNote}</div></details>`;
+        hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${texts.fineTuneNote}</div></details>`;
+      } else if (type === "bus") {
+        hintHtml = busRouterHint();
       }
       
       // Add note about freehand segments if any exist
@@ -965,7 +1003,9 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       var time = secondsToDhm(durationS, "en");
       
       var formattedData = `${texts.distanceTime.replace("{km}", km).replace("{time}", time)}`;
-      content += `<div class="route-meta"><span class="route-dist">${formattedData}</span>${hintHtml}</div>`;
+      // The hint badge sits on the distance chip's top-right corner, so it has to live
+      // inside the (relatively positioned) wrapper rather than beside the chip.
+      content += `<div class="route-meta"><span class="route-dist-wrap"><span class="route-dist">${formattedData}</span>${hintHtml}</span></div>`;
 
       flutterBridge.routeInfo(formattedData, distanceM, durationS);
       flutterBridge.loading(false);
@@ -1050,45 +1090,21 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
 }
 window.switchRouter = switchRouter;
 
-// Remember whether the user last used "Save" or "Save & continue" so we can promote
-// that action to the big primary button next time (the other drops under the caret).
-function getSubmitDefault() {
-  var m = document.cookie.match(/(?:^|;\s*)routingSubmitDefault=([^;]+)/);
-  return m && decodeURIComponent(m[1]) === 'continue' ? 'continue' : 'save';
-}
-function setSubmitDefault(mode) {
-  var expires = new Date(Date.now() + 365 * 864e5).toUTCString();
-  document.cookie = 'routingSubmitDefault=' + mode + '; expires=' + expires + '; path=/';
-}
-// Persist the choice, then run the page's saveTrip(). onclick target for both buttons.
-window.saveTripPref = function(continueTrip) {
-  setSubmitDefault(continueTrip ? 'continue' : 'save');
-  saveTrip(continueTrip);
-};
-
-// Build the submit control for the sidebar: a plain "Valider" button, or — when a
-// "save & continue" action applies — a split button whose caret (a CSS-only <details>)
-// reveals the alternative option. The last-used action is shown as the primary button
-// (remembered in a cookie). Shared by routing.js, routing.html and air_routing.html.
-function submitBtn(id, cls, label, continueTrip) {
-  return '<button id="' + id + '"' + (cls ? ' class="' + cls + '"' : '') +
-    ' type="button" onclick="saveTripPref(' + (continueTrip ? 'true' : 'false') + ')">' + label + '</button>';
+// Build the submit control for the sidebar: "Valider" on its own, plus — when a
+// "save & continue" action applies — a second, visually distinct button below it.
+// Shared by routing.js, routing.html and air_routing.html.
+function submitBtn(id, cls, icon, label, continueTrip) {
+  return '<button id="' + id + '" class="' + cls + '" type="button" onclick="saveTrip(' +
+    (continueTrip ? 'true' : 'false') + ')"><i class="fa-solid ' + icon + '"></i>' +
+    '<span>' + label + '</span></button>';
 }
 function buildSubmitControl(opts) {
-  var save = submitBtn('saveTrip', 'submit-main', opts.saveLabel, false);
+  var save = submitBtn('saveTrip', 'submit-main', 'fa-check', opts.saveLabel, false);
   if (!opts.showContinue) {
     return '<div class="submit-control">' + save + '</div>';
   }
-  var continueFirst = getSubmitDefault() === 'continue';
-  // Primary (big) button is the last-used action; the other goes under the caret.
-  var primary = continueFirst
-    ? submitBtn('saveTripContinue', 'submit-main', opts.continueLabel, true)
-    : save;
-  var secondary = continueFirst
-    ? submitBtn('saveTrip', '', opts.saveLabel, false)
-    : submitBtn('saveTripContinue', '', opts.continueLabel, true);
-  return '<div class="submit-control"><div class="submit-split">' + primary +
-    '<details class="submit-more"><summary><i class="fa-solid fa-chevron-down"></i></summary>' +
-    '<div class="submit-menu">' + secondary + '</div></details></div></div>';
+  return '<div class="submit-control">' + save +
+    submitBtn('saveTripContinue', 'submit-continue', 'fa-circle-plus', opts.continueLabel, true) +
+    '</div>';
 }
 window.buildSubmitControl = buildSubmitControl;

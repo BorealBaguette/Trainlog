@@ -34,6 +34,12 @@
         background: rgba(0,0,0,0.05);
     }
 
+    #selectPageCheckbox {
+        vertical-align: middle;
+        margin-right: 4px;
+        cursor: pointer;
+    }
+
     /* Common styling */
     th[data-sort-field]::before,
     th[data-sort-field]::after {
@@ -68,6 +74,816 @@
 
     /* Dated future trips shown on the past page via the "show upcoming" toggle */
     tr.upcoming-trip > td { opacity: 0.65; }
+
+    /* Where that same listing crosses the present: the class goes on the first past
+       row below an upcoming one. A hairline and nothing else — the timeline either
+       side of it is continuous, so this is a seam to notice, not a section break.
+       In card layout the cards carry their own borders and this rule is overridden
+       (see the `> td { border: 0 }` card rule below); the line is drawn in the gap
+       above the card instead. */
+    #dataTable tbody tr.now-boundary > td { border-top: 1px dashed #aab4c0; }
+
+    /* Expand arrow for the details row. Responsive draws this itself only for
+       `details.type: 'inline'`, where the control is whichever column happens to be
+       first on screen; this table names the type column as the control instead (see
+       the DataTables config), so the arrow is drawn here, on that column, in the same
+       shape Responsive uses. The existing `td.noHidden::before` rule hides it on rows
+       with nothing to expand. */
+    #dataTable tbody td.col-type { cursor: pointer; }
+    #dataTable tbody td.col-type::before {
+        content: "";
+        display: inline-block;
+        box-sizing: border-box;
+        margin-right: 0.5em;
+        border-top: 5px solid transparent;
+        border-left: 10px solid rgba(0, 0, 0, 0.5);
+        border-bottom: 5px solid transparent;
+        border-right: 0;
+    }
+    #dataTable tbody tr.dtr-expanded > td.col-type::before {
+        border-top: 10px solid rgba(0, 0, 0, 0.5);
+        border-left: 5px solid transparent;
+        border-bottom: 0;
+        border-right: 5px solid transparent;
+    }
+
+    /* --- Mobile card layout ---
+       On a phone one table row cannot hold two station names, so both ended up
+       ellipsed to uselessness. Below 768px each row is re-laid out as a card: the
+       origin, the destination and a meta line (date, distance, times, duration) each
+       get their own line and wrap in full, with the type logo in a left gutter and the
+       actions kebab in the right one. Everything else stays in the detail
+       row, which processHiddenData now fills from the complement of the card fields.
+
+       All of this is scoped through `.trip-card-host > #dataTable`: Responsive clones
+       the whole table — id included — into an off-screen 1px div to measure how wide
+       each column would naturally be, and if these rules reached that copy every
+       column would measure as a full-width block and Responsive would conclude that
+       nothing needs hiding. The child combinator excludes it, since the clone sits one
+       div deeper than the real table. */
+    @media screen and (max-width: 767px) {
+        /* The side padding keeps the cards off the edge of the viewport, which .trips
+           sits flush against below 600px. */
+        /* DataTables closes a footerless table with a dark rule — put on the
+           .dt-scroll-body wrapper (which is the very div the trip-card-host class
+           lands on) by `div.dt-container.dt-empty-footer .dt-scroll-body`, and on
+           the table itself in the unscrolled layout. Either way it would draw a
+           stray line between the last card and the pager. */
+        .trip-card-host { border-bottom: none !important; }
+        .trip-card-host > #dataTable {
+            /* 10px is the shared side gutter: the toolbar above takes the same, so
+               the search row, the options panel and the cards all line up on it. */
+            padding: 12px 10px 0;
+            border-collapse: separate;
+            border-bottom: none !important;
+        }
+
+        /* Column titles say nothing next to labelled card lines, and they no longer
+           line up with anything. Neither this rule nor a `> thead > tr` one took on
+           their own in testing, so hideCardHeader() also hides the header row DataTables
+           itself reports, on every draw; whichever of the two lands, the other is inert.
+           Written as a descendant of the direct-child table so it stays clear of the
+           off-screen copy Responsive measures column widths in (see below). */
+        .trip-card-host > #dataTable thead { display: none !important; }
+
+        .trip-card-host > #dataTable,
+        .trip-card-host > #dataTable > tbody { display: block; width: auto; }
+
+        /* The card is a wrapping flex row rather than a block, so that the meta line's
+           values can be reordered: the arrival is the column right after the departure
+           in the table, but on the card the duration goes between them, and `order` is
+           the only way to say so without touching the table's own column order. */
+        .trip-card-host > #dataTable > tbody > tr {
+            display: flex;
+            flex-wrap: wrap;
+            width: auto;
+            position: relative;
+            margin-bottom: 10px;
+            /* The right padding clears the operator column, which the actions pill shares
+               (see the col-operator rule further down). The minimum height is what keeps
+               those two apart: the logo centres above the pill's band, so a short card —
+               two lines, or an open one whose meta line has gone — would otherwise let
+               them collide. */
+            padding: 10px 80px 10px 44px;
+            min-height: 82px;
+            /* A hairline lighter than the old #dee2e6 plus a whisper of shadow: the
+               border alone read as a wireframe, the shadow alone smudged on low-DPI
+               screens; together each card sits just proud of the page. */
+            border: 1px solid #e3e7eb;
+            border-radius: 10px;
+            background: #fff;
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+        }
+
+        /* The now-boundary as a card: the cards are already separated, so the seam is
+           a wider gap with the same hairline drawn across it. Absolute against the
+           card, which is positioned above for the sake of its own gutter items. */
+        .trip-card-host > #dataTable > tbody > tr.now-boundary { margin-top: 22px; }
+        .trip-card-host > #dataTable > tbody > tr.now-boundary::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: -12px;
+            border-top: 1px dashed #aab4c0;
+        }
+
+        /* An open detail row is part of the card above it, not a card of its own. */
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded {
+            margin-bottom: 0;
+            border-bottom-left-radius: 0;
+            border-bottom-right-radius: 0;
+            /* The card's shadow would fall across the seam onto its own detail row. */
+            box-shadow: none;
+        }
+        .trip-card-host > #dataTable > tbody > tr.child {
+            padding: 0 10px 6px 10px;
+            /* The card's minimum height is there to keep the two gutter items apart; the
+               detail row has no gutter, so it would only be padded out for nothing. */
+            min-height: 0;
+            border-top: 0;
+            border-top-left-radius: 0;
+            border-top-right-radius: 0;
+            /* The open pair casts one shadow, from its true bottom edge. */
+            box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+        }
+
+        .trip-card-host > #dataTable > tbody > tr > td {
+            display: none;
+            max-width: none;
+            white-space: normal;
+            overflow: visible;
+            text-overflow: clip;
+            padding: 0;
+            border: 0;
+            box-shadow: none !important;
+        }
+
+        /* DataTables paints the selection as an inset box-shadow on each cell plus
+           white text, which on a card would tint the text lines but not the padding
+           around them, and bleach the ones it does not cover. The card takes the
+           colour instead and the text keeps its own; the white plate behind logos is
+           dropped too, since it exists for the solid-blue selection this replaces. */
+        .trip-card-host > #dataTable > tbody > tr.selected {
+            background-color: #e7f0fb;
+            border-color: #0d6efd;
+            box-shadow: inset 0 0 0 1px #0d6efd;
+        }
+        .trip-card-host > #dataTable > tbody > tr.selected > * { color: inherit; }
+        .trip-card-host > #dataTable > tbody > tr.selected td img {
+            background: none;
+            padding: 0;
+        }
+
+        /* Responsive hides a column with an inline `display: none`, so showing a card
+           field back takes !important. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin,
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest,
+        .trip-card-host > #dataTable > tbody > tr > td.child,
+        .trip-card-host > #dataTable > tbody > tr > td.dt-empty {
+            display: block !important;
+            flex: 0 0 100%;
+            /* A flex item does not shrink below its content by default, so a long
+               station name would push the card wider than the viewport. */
+            min-width: 0;
+        }
+
+        .trip-card-host > #dataTable > tbody > tr > td.col-date,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length,
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration,
+        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime { display: block !important; }
+
+        /* Card line order, independent of where the columns sit in the table. The two
+           times stay side by side, which is what lets one arrow sit between them and serve
+           both, so the pair reads as one value — and the duration follows them, since it
+           is the span from one to the other and says nothing on its own. Broken in two
+           (tr.meta-2x2, below) the pair drops to the second line whole, arrow and all,
+           with the duration still behind it. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin { order: 1; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest { order: 2; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-date { order: 3; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-length { order: 4; }
+        /* 5 is the line break the two-line layout inserts here (tr.meta-2x2, below). */
+        .trip-card-host > #dataTable > tbody > tr > td.col-time { order: 6; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime { order: 7; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration { order: 8; }
+
+        .trip-card-host > #dataTable > tbody > tr > td.col-type,
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions {
+            display: block !important;
+            position: absolute;
+        }
+
+        /* The two lines are identical — they are the same kind of thing, and
+           top-to-bottom already reads as origin-then-destination, so neither an arrow
+           nor a weight difference is needed to tell them apart. */
+        /* Bold, but a slate grey rather than the body's near-black: black bold was too
+           much contrast against the meta line, and a middle weight is not an option —
+           the page is set in Arial, which ships regular and bold only, so 500 rounds
+           straight back down to 400. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin,
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest {
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: #4b5563;
+            line-height: 1.35;
+            padding: 1px 0;
+        }
+
+        /* A station name that does not fit wraps under its own first letter, not back
+           under the flag. A hanging indent cannot do this — the flag is a glyph of
+           unknown width, so any fixed indent is wrong by however much it misses — so
+           the name gets its own column: the flag stays put and the name, an anonymous
+           flex item, wraps inside the space that is left. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin .stationName,
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest .stationName {
+            display: flex;
+            align-items: baseline;
+            gap: 4px;
+            /* Anonymous items cannot be styled, so a name whose longest word overruns
+               the column has to be allowed to break from here, where it inherits. */
+            overflow-wrap: break-word;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin .flag,
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest .flag { flex: 0 0 auto; }
+
+        /* Meta line: date, distance, the two times as one value, then the duration, on
+           one line where the card has room for one. The values simply follow one another at
+           their own widths — the operator, the one item that made the line's width
+           unpredictable from card to card, has its own place in the right gutter.
+
+           Every slot opens with an icon of its own — calendar, route, hourglass, clock —
+           rather than closing with a separator, so each mark reads as belonging to the
+           value after it and the spacing is the same everywhere: one gap between slots,
+           then icon, then a hair before the value. Every icon occupies the same 1em box,
+           so the values read at an even rhythm however long each one is. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-date,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length,
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration,
+        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime {
+            flex: 0 0 auto;
+            min-width: 0;
+            margin-top: 3px;
+            color: #6c757d;
+            font-size: 0.8rem;
+            box-sizing: border-box;
+            /* The one gap between slots. All the other spacing on the line is fixed, so
+               this is the only number that sets how far apart the values read. */
+            padding-right: 0.85em;
+        }
+        /* Except between the two times, which are one slot: the departure closes up to
+           the arrow so that `08:16 → 08:40` reads as a single value with the arrow inside
+           it, rather than as two slots that happen to be adjacent. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-time { padding-right: 0.35em; }
+
+        /* The icons are Font Awesome's own glyphs, addressed by codepoint rather than by
+           putting an <i> in the cell: the cells are column values shared with the desktop
+           table, and only the card wants a mark in front of them. Solid (900) is the one
+           free weight that has all five.
+
+           Font Awesome centres its glyphs on the em box, which sits lower than the text
+           they label — aligned on the baseline the icons hang below the digits. Aligning
+           the box on `middle` instead puts the glyph's centre on the text's. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-date:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-time:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime:not(:empty)::before {
+            display: inline-block;
+            width: 1em;
+            margin-right: 0.3em;
+            text-align: center;
+            vertical-align: middle;
+            /* `middle` puts the glyph's centre on the text's x-height centre, which is a
+               shade below where the eye wants a mark that labels a line of digits: the
+               digits have no descenders, so their optical centre sits higher than the
+               font's. A pixel back up. */
+            position: relative;
+            top: -1px;
+            color: #adb5bd;
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            font-size: 0.78em;
+            line-height: 1;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-date:not(:empty)::before { content: "\f133"; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before { content: "\f4d7"; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration:not(:empty)::before { content: "\f252"; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-time:not(:empty)::before { content: "\f017"; }
+        /* The arrow is the arrival's mark, and it is the whole of what separates the two
+           times: one glyph doing the work of a separator and a label at once, in either
+           layout, since the pair never breaks apart. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime:not(:empty)::before { content: "\f061"; }
+
+        /* A meta line that cannot fit breaks in two — date and distance, then the times
+           and the duration — instead of wrap's three-and-an-orphan. The class is set per
+           row by updateMetaWrap(), which measures the natural one-line layout.
+
+           The break is a flex item of zero height and full width, generated on the row
+           itself and ordered between the distance and the departure: everything before it
+           fills the first line, everything after starts the second. Nothing is aligned
+           into columns across the two lines, and that is the point — a column has to be
+           as wide as the widest thing in it, so the moment the departure shared one with
+           the distance above it, a long distance pushed the arrow away from its time and
+           the pair stopped reading as one value. Each line is packed from the left
+           instead, and the times keep their own spacing whatever else is on the card. */
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2::before {
+            content: "";
+            flex: 0 0 100%;
+            height: 0;
+            order: 5;
+        }
+        /* An open card has no meta line left to break. */
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2.dtr-expanded::before { content: none; }
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-endtime,
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-duration {
+            margin-top: 2px;
+        }
+
+        /* An open card drops the meta line: everything on it is repeated, labelled and
+           full size, in the detail row just below (see META_COLUMN_CLASSES), so leaving
+           it up would say the same things twice at two different levels. The station
+           names stay, and the detail row moves up to meet them. The operator is not part
+           of this — it lives in the gutter, not on the line, and stays put. */
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-date,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-length,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-duration,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-endtime { display: none !important; }
+
+        /* renderDuration wraps its value in a div, which would take the whole line. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration .duration { display: inline; }
+
+        /* The operator's reserved column on the right. No strip behind it: shading both
+           edges made the card read as three boxes, and put the operator's wordmark and
+           the kebab in one grey slab where neither looked at home. The left gutter keeps
+           its fill because it is a control; the right side is content on the card
+           itself — the logo floats on white, centred in the space above the actions
+           pill's band, level with the station names it belongs with. The column is the
+           same width whether or not the trip has an operator, so nothing shifts. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator {
+            display: flex !important;
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 76px;
+            align-items: center;
+            justify-content: center;
+            padding: 0 8px 40px;
+        }
+        /* The operator cell carries logos sized for a full-height table row, and the
+           multi-operator grid sizes its own box and items inline, so both the box and
+           what is in it have to be brought down to the gutter's width. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorLogo {
+            max-height: 28px;
+            max-width: 60px;
+            margin-right: 0;
+        }
+        /* renderOperatorGrid lays its items out for a table cell — wide and one row deep,
+           since a row cannot grow taller but has 100px to spend across. The gutter is the
+           opposite shape, so the grid is turned on its side here: two operators stack
+           instead of sitting side by side, and every logo gets the gutter's full width
+           rather than half of it. Three and four still need the second column, and keep
+           the 2x2 they already had, just taller.
+
+           :has counts the items, since the count only exists in the markup. Where it is
+           not supported the inline layout stands — two side by side, as before — which is
+           cramped but correct, so there is nothing to fall back to. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid {
+            height: 42px !important;
+            margin-right: 0;
+            align-items: center;
+            justify-items: center;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGridLogo {
+            max-height: 19px !important;
+            max-width: 28px !important;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGridText {
+            font-size: 0.5rem !important;
+            line-height: 19px !important;
+            max-width: 28px !important;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid:has(> :nth-child(2):last-child) {
+            grid-template-columns: auto !important;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid:has(> :nth-child(2):last-child) .operatorGridLogo {
+            max-height: 20px !important;
+            max-width: 60px !important;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorGrid:has(> :nth-child(2):last-child) .operatorGridText {
+            font-size: 0.6rem !important;
+            line-height: 20px !important;
+            max-width: 60px !important;
+        }
+
+        /* The left gutter is the card's one control — it is the details column (see
+           responsive.details in the config) — so it is shaded like a button and
+           stretched over the card's full height to be a target worth aiming at. The
+           type logo sits above the expand arrow; everything outside the gutter selects
+           the row instead. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-type {
+            display: flex !important;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 36px;
+            /* The same split as the right column: the type icon centres in the space
+               above a reserved band, and the arrow sits in the band (see the ::before
+               rule below), level with the actions pill across the card. */
+            padding-bottom: 35px;
+            background: #f8f9fa;
+            border-right: 1px solid #eef1f4;
+            border-radius: 9px 0 0 9px;
+        }
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-type { border-bottom-left-radius: 0; }
+        .trip-card-host > #dataTable > tbody > tr.selected > td.col-type {
+            background: #dbe7fa;
+            border-right-color: #c3d8f5;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-type .operatorLogo {
+            max-height: 24px;
+            max-width: 24px;
+            margin-right: 0;
+        }
+        /* The arrow takes the gutter's foot, level with the actions pill across the card.
+           Taken out of the flow rather than ordered after the logo, so the logo centres
+           on the space above it and not on the pair; its inline-row right margin is
+           meaningless here. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-type::before {
+            position: absolute;
+            left: 50%;
+            bottom: 15px;
+            margin-right: 0;
+            transform: translateX(-50%) scale(1.3);
+        }
+        /* The actions control, under the operator. Bare dots always looked orphaned down
+           here and a square plate looked like a second gutter; a small pill finally
+           reads as what it is — a button — and matches the toolbar's control language.
+           It sits level with the arrow at the foot of the left gutter. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions {
+            display: flex !important;
+            right: 0;
+            bottom: 8px;
+            width: 76px;
+            justify-content: center;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions .modalButton {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 48px;
+            height: 28px;
+            padding: 0;
+            /* .btn-link underlines its content, and a FontAwesome glyph is text as far as
+               that is concerned. */
+            text-decoration: none;
+            color: #8a93a2;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 999px;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions .modalButton:active {
+            background: #e9edf1;
+            color: #495057;
+        }
+        .trip-card-host > #dataTable > tbody > tr.selected > td.col-actions .modalButton {
+            background: #eff5fd;
+            border-color: #c3d8f5;
+        }
+        /* Horizontal dots. A column of three under a wordmark echoed the tall left gutter;
+           lying down they fill the pill. Rotated rather than swapped for fa-ellipsis,
+           because renderButton draws this same icon at every width and only the card
+           wants it turned — the glyph is symmetric, so the two are identical. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-actions .actionKebab {
+            transform: rotate(90deg);
+            font-size: 0.85em;
+        }
+
+        /* The select-page control, once the script has moved the header checkbox down
+           into the toolbar — dressed as a toggle button, because a naked checkbox read
+           as a stray form field between the toolbar's pill controls. The checkbox itself
+           stays in the DOM (every handler and updateSelectPageCheckbox key off it) but
+           is hidden; the label carries a checkmark and takes the fill when checked, via
+           the .checked class updateSelectPageCheckbox maintains. Clicking the label
+           toggles the checkbox natively — it is the control's label. */
+        .mobile-select-page {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            height: 32px;
+            padding: 0 12px;
+            margin: 0;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background: #fff;
+            white-space: nowrap;
+            cursor: pointer;
+            user-select: none;
+        }
+        .mobile-select-page input {
+            position: absolute;
+            width: 0;
+            height: 0;
+            margin: 0;
+            opacity: 0;
+            pointer-events: none;
+        }
+        .mobile-select-page::before {
+            content: "\f00c";
+            font-family: "Font Awesome 6 Free", "Font Awesome 5 Free", FontAwesome;
+            font-weight: 900;
+            font-size: 0.7rem;
+            color: #ced4da;
+        }
+        .mobile-select-page.checked {
+            background: #207cca;
+            border-color: #207cca;
+            color: #fff;
+        }
+        .mobile-select-page.checked::before { color: #fff; }
+
+        /* --- Toolbar ---
+           The controls bar keeps its wrapping-row layout from the dom string, but the
+           search is pulled to a full-width first row of its own (order + 100% basis):
+           it is the control people actually reach for, and inline it shared a wrapped
+           line with whatever switch happened to land beside it. The label is dropped
+           for a placeholder (set by applyCardChrome) so the input gets the words'
+           width too. */
+        .trips-cards .dt-controls { row-gap: 8px; padding: 0 10px; }
+        .trips-cards .dt-controls .dt-search {
+            flex: 1 1 100%;
+            order: -1;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            margin-bottom: 0;
+            text-align: left;
+        }
+        .trips-cards .dt-controls .dt-search label { display: none; }
+        /* The input arrives wrapped in an inline-flex span together with the help icon
+           (see the search-help-icon setup); the wrapper has to pass the stretch through.
+           !important because the span's display is set inline. */
+        .trips-cards .dt-controls .dt-search > span {
+            flex: 1 1 auto;
+            min-width: 0;
+            display: flex !important;
+            align-items: center;
+        }
+        .trips-cards .dt-controls .dt-search input {
+            flex: 1 1 auto;
+            min-width: 0;
+            height: 40px;
+            padding: 0 14px;
+            /* 16px is the threshold below which iOS zooms the page on focus. */
+            font-size: 16px;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            background: #fff;
+        }
+        .trips-cards .dt-controls .dt-search input:focus {
+            outline: none;
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 3px rgba(13, 110, 253, 0.15);
+        }
+        /* The help icon rides inside the search row; padding makes it a tappable
+           target rather than a 16px glyph. */
+        .trips-cards .dt-controls .search-help-icon {
+            padding: 10px 8px;
+            font-size: 1.1rem;
+            color: #6c757d;
+        }
+        /* The second row's controls — length menu, sort, switches, select-page — are
+           secondary to the search above them, so they share one quiet size. */
+        .trips-cards .dt-controls,
+        .trips-cards .dt-controls .form-check-label,
+        .trips-cards .dt-controls label {
+            font-size: 0.85rem;
+            color: #495057;
+        }
+        .trips-cards .dt-controls .dt-length select,
+        .trips-cards .dt-controls .dt-sort-btn {
+            height: 32px;
+            font-size: 0.85rem;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            background-color: #fff;
+        }
+        .trips-cards .dt-controls .form-check { margin-bottom: 0; min-height: 0; }
+
+        /* The search row now carries a gear button ahead of the input; the row
+           itself takes over the "full-width first line" job the .dt-search rule
+           above used to do alone, and hands the input a plain auto-basis so it
+           just fills what's left beside the gear. */
+        .trips-cards .dt-search-row {
+            order: -1;
+            flex: 1 1 100%;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .trips-cards .dt-search-row .dt-search {
+            flex: 1 1 auto;
+            order: 0;
+        }
+        /* Page-select, length, sort and the two switches, hidden until the gear is
+           tapped. (The desktop half of this pair — which dissolves both wrappers
+           again — is the min-width block further down; everything here is already
+           inside the max-width:767px query.)
+
+           Wrapping these centred put two controls on one line and one on the next at
+           whatever widths happened to fall out, which read as debris. As a panel they
+           get one column instead: a labelled row each, left-aligned on a common edge,
+           in the reading order below (the DOM order is an accident of how each control
+           got appended, so `order` sets it explicitly). */
+        .trips-cards .dt-controls-secondary {
+            display: none;
+            flex: 1 1 100%;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 12px;
+            margin-top: 2px;
+            padding: 14px;
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+        }
+        .trips-cards .dt-controls-secondary.show { display: flex; }
+        .trips-cards .dt-controls-secondary > * { margin: 0; }
+        /* Sort and length are "label + control" pairs; keeping them inline-flex with a
+           small gap holds the control against its words rather than stretching the two
+           to the panel's width. */
+        .trips-cards .dt-controls-secondary > .dt-sort-control { order: 1; }
+        .trips-cards .dt-controls-secondary > .dt-length { order: 2; }
+        /* Both the wrapper and any inner label get the row treatment: DataTables puts
+           the select beside a label in .dt-length, and whether the label wraps it or
+           sits next to it differs by build. */
+        .trips-cards .dt-controls-secondary > .dt-sort-control,
+        .trips-cards .dt-controls-secondary > .dt-length,
+        .trips-cards .dt-controls-secondary > .dt-length label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            margin: 0;
+        }
+        /* The switches carry Bootstrap's padding-left + floated input, which leaves the
+           control and its words on separate lines once the row is this narrow. */
+        .trips-cards .dt-controls-secondary > .form-check {
+            order: 3;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            min-height: 0;
+            padding-left: 0;
+        }
+        .trips-cards .dt-controls-secondary > .form-check .form-check-input {
+            flex: 0 0 auto;
+            float: none;
+            margin: 0;
+        }
+        /* Select-page is the one action among the settings, so it sits last and takes
+           the panel's full width the way a button would; the extra top margin is the
+           only separation it needs, the filled shape already sets it apart. */
+        .trips-cards .dt-controls-secondary > .mobile-select-page {
+            order: 4;
+            justify-content: center;
+            height: 38px;
+            margin-top: 4px;
+        }
+        /* The toolbar's blanket label colour outweighs .mobile-select-page.checked on
+           specificity, which left the checked pill dark-on-blue; this outweighs it back. */
+        .trips-cards .dt-controls-secondary > .mobile-select-page.checked { color: #fff; }
+        .trips-cards .dt-options-toggle {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            flex: 0 0 auto;
+            width: 40px;
+            height: 40px;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            background: #fff;
+            color: #495057;
+            font-size: 1rem;
+        }
+        .trips-cards .dt-options-toggle.open {
+            background: #eff5fd;
+            border-color: #c3d8f5;
+            color: #207cca;
+        }
+
+        /* --- Pagination ---
+           Numbers only (the prev/next hiding is in style2.css); each number becomes a
+           finger-sized tile and the current page takes the brand blue the desktop
+           header row uses. The info line drops below the pager, in caption grey — it
+           reports, the pager acts, and the actionable row reads better first. */
+        .trips-cards .dt-controls-bottom { flex-direction: column; row-gap: 4px; }
+        .trips-cards .dt-controls-bottom .dt-paging { order: -1; }
+        .trips-cards .dt-controls-bottom .dt-paging nav {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .trips-cards .dt-controls-bottom .dt-paging .dt-paging-button {
+            min-width: 38px;
+            height: 38px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0 6px;
+            margin: 0 2px;
+            border: 1px solid transparent;
+            border-radius: 10px;
+            font-size: 0.9rem;
+            color: #374151 !important;
+        }
+        .trips-cards .dt-controls-bottom .dt-paging .dt-paging-button.current,
+        .trips-cards .dt-controls-bottom .dt-paging .dt-paging-button.current:hover {
+            background: #207cca !important;
+            border-color: #207cca;
+            color: #fff !important;
+        }
+        .trips-cards .dt-controls-bottom .dt-paging .page-jump-input {
+            width: 56px !important;
+            height: 38px;
+            margin-left: 8px !important;
+            border-radius: 10px;
+            text-align: center;
+            font-size: 16px;
+        }
+        .trips-cards .dt-controls-bottom .dt-info {
+            padding: 0;
+            font-size: 0.8rem;
+            color: #6c757d;
+            text-align: center;
+        }
+
+        /* --- Detail row typography ---
+           processHiddenData renders each label as <strong>Label:</strong>. On the card
+           the values are the content; the labels step back into small caption capitals
+           so the eye lands on the right column. */
+        .trip-card-host > #dataTable td.child table tr td:first-child strong {
+            font-size: 0.72rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            color: #8a93a2;
+        }
+        .trip-card-host > #dataTable td.child table tr td { font-size: 0.9rem; }
+
+        /* --- Empty state ---
+           The empty-table row inherits the card shell — gutter paddings and a minimum
+           height sized for two gutter items it does not have. :has() strips that; where
+           it is unsupported the message just sits off-centre in a tall card. */
+        .trip-card-host > #dataTable > tbody > tr:has(> td.dt-empty) {
+            padding: 0;
+            min-height: 0;
+        }
+        .trip-card-host > #dataTable > tbody > tr > td.dt-empty {
+            padding: 28px 16px;
+            text-align: center;
+            color: #6c757d;
+        }
+
+        /* --- Touch feedback ---
+           The expand gutter acknowledges the finger (the actions pill has its own
+           :active above); rows already flash their selection colour through the
+           select handler. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-type:active { background: #e9edf1; }
+    }
+
+    /* The gear and its collapsible group are a phone affordance only, but the two
+       wrappers they need are built into the DOM at every width (moving controls in
+       and out of them on resize would strand the handlers bound to them). Above the
+       card breakpoint the wrappers dissolve with display:contents, so the length
+       menu, sort button and switches become direct flex children of .dt-controls
+       again and lay out exactly as they did before — and the gear itself goes away.
+       The DOM order the JS builds is chosen so this reproduces the original order. */
+    @media screen and (min-width: 768px) {
+        .trips-cards .dt-search-row,
+        .trips-cards .dt-controls-secondary { display: contents; }
+        .trips-cards .dt-options-toggle { display: none; }
+    }
+
+    /* The selection bar is fixed to the viewport bottom below 600px (style2.css); a
+       top hairline and shadow separate it from the cards scrolling under it, and the
+       safe-area inset keeps it off iPhone home indicators. */
+    @media screen and (max-width: 600px) {
+        .multiLink {
+            border-top: 1px solid #e9ecef;
+            box-shadow: 0 -4px 16px rgba(15, 23, 42, 0.08);
+            padding-top: 8px;
+            padding-bottom: calc(5px + env(safe-area-inset-bottom));
+        }
+    }
 
 </style>
 
@@ -167,8 +983,11 @@
     <table id="dataTable" class="display responsive" style="width:100%">
         <thead>
             <tr>
-                <th data-orderable="false" data-priority="100001" data-sort-field="type">Type</th>
-                <th data-orderable="false" class="all" data-sort-field="origin_station">{{originStation}}</th>
+                {# `all`, not the lowest priority it used to carry: this column is the
+                   details control (responsive.details.target: 0), so it has to stay on
+                   screen at every width — it is also the card's expand gutter. #}
+                <th data-orderable="false" class="all" data-sort-field="type">Type</th>
+                <th data-orderable="false" class="all" data-sort-field="origin_station"><input type="checkbox" id="selectPageCheckbox" title="{{ selectPage }}"> {{originStation}}</th>
                 <th data-orderable="false" class="all" data-sort-field="destination_station">{{destinationStation}}</th>
                 <th data-orderable="false" class="all" data-sort-field="temporal">{{tripStartDate}}</th>
                 <th data-orderable="false" data-sort-field="start_time">{{tripStartTime}}</th>
@@ -289,6 +1108,28 @@
         <button type="button" class="btn btn-primary" id="submitBtn">{{ submit }}</button>
         </div>
     </div>
+    </div>
+</div>
+
+<div class="modal fade" id="customRowsModal" tabindex="-1" aria-hidden="true" style="padding-top: 56px">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="fas fa-list-ol me-2"></i>{{rowsCustom}}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form id="customRowsForm">
+                <div class="modal-body">
+                    <label class="form-label" for="customRowsInput">{{trips}}</label>
+                    <input type="number" class="form-control" id="customRowsInput" min="1" max="500" step="1" required>
+                    <div class="form-text">1–500</div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">{{cancel}}</button>
+                    <button type="submit" class="btn btn-primary">{{save}}</button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 
@@ -545,6 +1386,11 @@ function toggleTypeFilter() {
 function toggleIncludeFuture() {
     const switchState = document.getElementById('includeFutureSwitch').checked;
     setCookie('includeFutureSwitch', switchState, 7);
+    // Switching it on inserts a whole block of upcoming trips above the listing, so
+    // the page being shown is no longer the page it was: reload() would reset to
+    // offset 0, which is now the furthest-off plan. Anchor on now instead, exactly as
+    // a fresh load does. Switching it off just goes back to the top of the past.
+    _anchorNow = switchState && canAnchorNow();
     tableObject.ajax.reload();
 }
 
@@ -588,7 +1434,83 @@ function isEllipsisActive(el){
   }
 }
 
+// Columns the mobile card shows in full (see the card rules in the stylesheet above).
+// Everything else belongs in the detail row, whatever Responsive itself decided to
+// hide — on a wide phone it keeps more columns than the card has room for, and those
+// would otherwise be reachable from neither place.
+var CARD_COLUMN_CLASSES = ['col-type', 'col-origin', 'col-dest', 'col-date', 'col-length', 'col-duration', 'col-time', 'col-endtime', 'col-operator', 'col-actions'];
+
+// The meta line — the compact `date, distance, departure → arrival, duration` strip
+// under the station names, which breaks in two when it does not fit (see updateMetaWrap).
+// It is a summary of fields the detail row labels properly, so an open card hides it (see
+// the .dtr-expanded rule in the stylesheet) and these columns come down into the detail row
+// instead, where they line up with everything else rather than being repeated in two
+// places at two levels. The operator is deliberately not one of them: it has its own column
+// in the card's right gutter and stays legible there, open or shut, so sending it down as
+// well would be the repetition this avoids.
+var META_COLUMN_CLASSES = ['col-date', 'col-length', 'col-duration', 'col-time', 'col-endtime'];
+
+function isCardLayout() {
+    return window.matchMedia('(max-width: 767px)').matches;
+}
+
+// Cells that select their row on click. The default excludes the first cell, the last
+// one and the origin (which carries the expand control); on a card the control has
+// moved to the type gutter, so every text line of the card selects instead.
+var CARD_SELECT_SELECTOR = 'td.col-origin, td.col-dest, td.col-date, td.col-length, td.col-duration, td.col-time, td.col-endtime, td.col-operator';
+var DEFAULT_SELECT_SELECTOR = 'td:not(:nth-child(2)):not(:last-child):not(:first-child)';
+
+// The stylesheet's rule for this did not take in testing, so the header row is also
+// hidden here, off the node DataTables reports as its header rather than a selector of
+// our own, and on every draw in case anything rebuilds it. The row is hidden, not the
+// thead: Responsive measures column widths in an off-screen copy it builds from cloned
+// header cells, and an inline style on the thead would be cloned along with it.
+function hideCardHeader() {
+    if (!isCardLayout()) return;
+    $(tableObject.table().header()).find('tr').hide();
+}
+
+/* A hairline above the first past trip on a page that also holds upcoming ones, so
+   the point the list crosses the present is visible rather than inferred from the
+   dates. Nothing is inserted into the table — the line is drawn by the stylesheet off
+   this class — so no row here is anything DataTables did not put there itself. */
+function markNowBoundary() {
+    $('#dataTable tbody tr').removeClass('now-boundary');
+    if (!isPast) return;
+    var rows = tableObject.rows({ page: 'current' });
+    var data = rows.data();
+    var nodes = rows.nodes();
+    for (var i = 1; i < data.length; i++) {
+        if (data[i - 1].plannedFuture == 1 && data[i].plannedFuture != 1) {
+            $(nodes[i]).addClass('now-boundary');
+            break;
+        }
+    }
+}
+
+function columnIndexesWithClass(wanted) {
+    // Read off the column definitions rather than the header: DataTables applies
+    // columns.className to the body cells only, so the <th> does not carry it.
+    var indexes = [];
+    tableObject.settings()[0].aoColumns.forEach(function(col, i) {
+        var classes = (col.sClass || '').split(/\s+/);
+        if (classes.some(function(c) { return wanted.indexOf(c) !== -1; })) {
+            indexes.push(i);
+        }
+    });
+    return indexes;
+}
+
+function cardColumnIndexes() {
+    return columnIndexesWithClass(CARD_COLUMN_CLASSES);
+}
+
 function processHiddenData(rowIdx, columns){
+    var cardMode = isCardLayout();
+    var cardCols = cardMode ? cardColumnIndexes() : [];
+    // Card fields that are on the card but still belong down here: the meta line hides
+    // itself while the card is open, so its values only exist in the detail row.
+    var metaCols = cardMode ? columnIndexesWithClass(META_COLUMN_CLASSES) : [];
     var isAir = ["air", "helicopter"].includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
     var isFerry = $(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText == "ferry";
     var isTrain = TRAIN_TYPES.includes($(tableObject.cell(rowIdx, 0).node())[0].firstChild.innerText);
@@ -694,21 +1616,32 @@ function processHiddenData(rowIdx, columns){
             var reg = col.data;
             var country = ""
             
-            var url = `{{url_for('getVesselPhoto')}}?vesselName=${reg}`
+            // The trip's date, so a crossing from before a rename keeps the name and
+            // flag the ship carried then. The sentinels (1 / -1) are "no date"; the
+            // lookup then answers with the current identity, which is all there is.
+            var tripData = tableObject.row(rowIdx).data() || {};
+            var tripAt = (typeof tripData.start_datetime === 'string') ? tripData.start_datetime : '';
+            var url = `{{url_for('getVesselPhoto')}}?vesselName=${encodeURIComponent(reg)}`
+                    + (tripAt ? `&at=${encodeURIComponent(tripAt)}` : '')
             $.get( url, function( data ) {
-                if(data.length > 0){
-                    country = data[2];
-                    var thumbnail = data[0];
-                    var attr = ''; 
+                // { image, link, country, name } — or null when nothing is found.
+                if(data && data.image){
+                    country = data.country || "";
+                    var thumbnail = data.image;
                     var image = new Image();
                     image.src = thumbnail;
                     $('#preload').append(image);                    
-                    var link = data[1];
-                    
-                    if (link && link.length > 0) {
-                        attr = `©Vesselfinder.com`;
-                    }
+                    var link = data.link;
+                    // Credit as the row says: a Commons photo names its author and
+                    // licence (that is the condition of showing it), an upload needs
+                    // nothing, vesselfinder gets its own line.
+                    var attr = data.attribution || '';
 
+                    // The lookup may know the ship's name where the row did not — a
+                    // trip logged by IMO or MMSI still reads as the ship.
+                    if (data.name) {
+                        $(`#vehiclePhoto${rowIdx}`).text(data.name);
+                    }
                     $(`#vehiclePhoto${rowIdx}`).attr("data-img", thumbnail);
                     $(`#vehiclePhoto${rowIdx}`).popover({
                         html: true,
@@ -716,7 +1649,11 @@ function processHiddenData(rowIdx, columns){
                         "data-container":"body",
                         placement: 'top',
                         content: function(){
-                            return `<div class="vehiclePhotoContainer"><img width=600px src="${thumbnail}"/>${link ? `<a href="${link}" class="vehiclePhotoAttr">${attr}</a>` : ''}</div>`;
+                            var credit = attr
+                                ? (link ? `<a href="${link}" class="vehiclePhotoAttr">${attr}</a>`
+                                        : `<span class="vehiclePhotoAttr">${attr}</span>`)
+                                : '';
+                            return `<div class="vehiclePhotoContainer"><img width=600px src="${thumbnail}"/>${credit}</div>`;
                         }
                     });
                     if (country != ""){
@@ -768,8 +1705,14 @@ function processHiddenData(rowIdx, columns){
                 // on desktop nothing is hidden by responsive, so the extras would be
                 // invisible with no way to reach them. Force the column into the
                 // detail row instead — same mechanism the delay columns use.
-                if (operatorsOverflow(operatorRow)) col.hidden = true;
+                if (operatorsOverflow(operatorRow)) { col.hidden = true; col._forceDetail = true; }
             }
+            // The card's gutter shows the operator as a logo and nothing else, so an open
+            // card also names it in the detail row, where it gets a label and — for a
+            // multi-operator trip — renderOperatorList's one-per-line form. Unlike the
+            // meta line, the gutter is not hidden while the card is open: it is card
+            // furniture alongside the type logo, and blanking it would leave a hole.
+            if (cardMode) { col.hidden = true; col._forceDetail = true; }
         }
         if (col.title == "{{material_type}}" && isTrain) {
             var rowData = tableObject.row(rowIdx).data();
@@ -804,9 +1747,13 @@ function processHiddenData(rowIdx, columns){
                 col.data = formatted;
             }
         }
+        // Delayed trips get the planned-vs-actual breakdown down here. Departure and
+        // duration are on the card too, but only as the compact badge form, so they
+        // are forced into the detail row rather than left out of it as a card field.
         if (col.title == "{{tripStartTime}}" || col.title == "{{tripEndTime}}" || col.title == "{{tripDuration}}" || col.title == "{{tripSpeed}}") {
             var rowData = tableObject.row(rowIdx).data();
             if (col.title == "{{tripStartTime}}" && rowData.departure_delay) {
+                col._forceDetail = true;
                 const cls = rowData.departure_delay > 0 ? 'delay-late' : 'delay-early';
                 const actual = addSecsToDisplayTime(rowData.start_time, rowData.departure_delay);
                 col.data = `<span class="planned-value">${rowData.start_time}</span> <span class="${cls}">${actual}</span>`;
@@ -828,6 +1775,7 @@ function processHiddenData(rowIdx, columns){
                     const cls = delaySecs > 0 ? 'delay-late' : 'delay-early';
                     col.data = `<div class="duration ${rowData.trip_duration[0]}"><span class="planned-value">${scheduledStr}</span> <span class="${cls}">${actualStr}</span></div>`;
                     col.hidden = true;
+                    col._forceDetail = true;
                 }
             }
             if (col.title == "{{tripSpeed}}" && rowData.trip_length > 0) {
@@ -844,7 +1792,10 @@ function processHiddenData(rowIdx, columns){
         }
         if (col.title != ""){
             var thAttrTitle = $($('#dataTable thead th').get(col.columnIndex)).attr('title');
-            var label = thAttrTitle || col.title;
+            // col.title is the header's full innerHTML (e.g. carries the select-page
+            // checkbox on the origin_station column) - strip it down to plain text
+            // so the checkbox doesn't get cloned into every row's detail label.
+            var label = thAttrTitle || $('<div>').html(col.title).text().trim();
             // For icon-only columns, pair each icon with its tooltip text, one line per item
             var displayData = col.data;
             if (thAttrTitle) {
@@ -863,9 +1814,11 @@ function processHiddenData(rowIdx, columns){
                 }
                 if (pairs.length) displayData = pairs.join('<br>');
             }
-            var show = stationCols.indexOf(col.columnIndex) !== -1
-                ? stationsBelow
-                : (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node()));
+            var show = cardMode
+                ? (cardCols.indexOf(col.columnIndex) === -1 || metaCols.indexOf(col.columnIndex) !== -1 || col._forceDetail)
+                : stationCols.indexOf(col.columnIndex) !== -1
+                    ? stationsBelow
+                    : (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node()));
             return show && col.data != ""?
             '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'">'+
                 '<td><strong>'+label+':</strong>'+'</td> '+
@@ -873,7 +1826,7 @@ function processHiddenData(rowIdx, columns){
             '</tr>' :
             '';
         }
-        else if (col.hidden) {
+        else if (cardMode ? cardCols.indexOf(col.columnIndex) === -1 : col.hidden) {
             var id = $(col.data).attr("data-tripId");
             return `
                 <tr data-dt-row="${col.rowIndex}" data-dt-column="${col.columnIndex}">
@@ -1015,9 +1968,8 @@ function renderSpeed(data, type, row) {
         else{
             const scheduledDur = row.trip_duration[1];
             const speed = Math.round((row.trip_length / scheduledDur) * 3.6);
-            const hasDelay = row.departure_delay || row.arrival_delay;
-            if (hasDelay) {
-                const actualDur = scheduledDur + (row.arrival_delay || 0) - (row.departure_delay || 0);
+            const actualDur = scheduledDur + (row.arrival_delay || 0) - (row.departure_delay || 0);
+            if (actualDur !== scheduledDur) {
                 const actualSpeed = Math.round((row.trip_length / actualDur) * 3.6);
                 const diff = actualSpeed - speed;
                 const sign = diff > 0 ? '+' : '';
@@ -1167,6 +2119,16 @@ function renderPlainText(data, type, row) {
     return data;
 }
 
+/* A ferry's `reg` holds whatever identified the ship to the user — its name, its IMO
+   or its MMSI. It always reads as the name: `vessel_name` is resolved server-side from
+   all three (migration 0054) and is absent only for a vessel we hold no record of,
+   which keeps showing what was typed. Sorting and filtering still work on the stored
+   value, so `type !== 'display'` is left alone. */
+function renderReg(data, type, row) {
+    if (type === 'display') return sanitize((row && row.vessel_name) || data || '');
+    return data;
+}
+
 function renderMaterialType(data, type, row){
     if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
         var adv = row.material_type_advanced || '';
@@ -1249,25 +2211,113 @@ var table = $('#tripRows');
     }
 
     var _urlParams = new URLSearchParams(window.location.search);
-    var scroll = _urlParams.get('scroll') === 'true';
     var initialSearch = _urlParams.get('search') || '';
     var isPast = {{ (not projects)|lower }};
     var _urlSortParam = _urlParams.get('sort');
     var _initialPage = parseInt(_urlParams.get('page') || '1', 10);
-    var _initialRows = parseInt(_urlParams.get('rows') || '10', 10);
-    var _validRows = [10, 50, 100, -1].includes(_initialRows) ? _initialRows : 10;
+    /* --- Auto page length ---
+       "As many trips as fit without a scrollbar." The count cannot be derived exactly
+       before the rows exist — a card's height depends on how its station names wrap and
+       on whether its operator logos stack — so this measures the real thing after each
+       draw and caches the two numbers it needs (median row height, and the chrome above
+       plus below the rows). The count itself is NOT cached: recomputing it from the
+       current innerHeight means a window resized between visits is honoured on the next
+       load. The first ever visit uses the fallbacks below and is right within a row.
+
+       Card and table layouts have their own entry: their row heights differ by more
+       than a factor of two, and the breakpoint can be crossed between visits. */
+    // First-visit-only estimates; every later visit uses the measured cookie.
+    var AUTO_FIT_FALLBACK = { card: { row: 100, chrome: 230 }, table: { row: 54, chrome: 260 } };
+    // Covers sub-pixel row heights and whatever sits outside the measured container
+    // (page padding, a footer): cheaper to come up a few px short than to earn a
+    // scrollbar for the sake of one more row.
+    var AUTO_FIT_BUFFER = 8;
+    var AUTO_ROWS_MIN = 3, AUTO_ROWS_MAX = 100;
+    var _autoFitTimer = null;
+
+    function autoFitCookieName() { return isCardLayout() ? 'autoFitCard' : 'autoFitTable'; }
+
+    function autoRowCount() {
+        var fallback = AUTO_FIT_FALLBACK[isCardLayout() ? 'card' : 'table'];
+        var stored = (getCookie(autoFitCookieName()) || '').split(':');
+        var rowH = parseFloat(stored[0]) || fallback.row;
+        var chromeH = parseFloat(stored[1]);
+        if (!(chromeH >= 0)) chromeH = fallback.chrome;
+        var fits = Math.floor((window.innerHeight - chromeH - AUTO_FIT_BUFFER) / rowH);
+        return Math.max(AUTO_ROWS_MIN, Math.min(AUTO_ROWS_MAX, fits));
+    }
+
+    /* Where the page length comes from, in order: an explicit ?rows= (so a shared or
+       bookmarked link keeps meaning what it said), then whatever this browser last
+       chose, then auto.
+
+       The remembered choice is a cookie rather than a user setting on purpose: a phone
+       and a desktop want different lengths, and the same account uses both. ROWS_COOKIE
+       holds either a count or the string 'auto' — 'auto' has to be storable distinctly,
+       because "no preference yet" and "explicitly chose auto" both mean auto today but
+       only the first should follow a change of default later. parseInt('auto') is NaN,
+       which fails the range test below and lands on auto either way. */
+    var ROWS_COOKIE = 'tripsRows';
+    var _initialRows = parseInt(_urlParams.get('rows') || getCookie(ROWS_COOKIE) || '', 10);
+    var _rowsValid = _initialRows === -1 || (_initialRows >= 1 && _initialRows <= 500);
+    var _autoRowsActive = !_rowsValid;
+    var _autoRows = autoRowCount();
+    var _validRows = _autoRowsActive ? _autoRows : (_rowsValid ? _initialRows : _autoRows);
+
+    /* The length menu. 10 is gone — auto replaced it as the default, and it was only
+       ever there as that default. The custom entry's value is a sentinel intercepted
+       before DataTables can apply it (see the capture-phase listener further down).
+
+       Auto stays first because the "is auto selected" test is by index: when the
+       computed count happens to equal one of the fixed options the two entries are
+       indistinguishable by value, and a <select> resolves a duplicate value to the
+       earliest matching option — which is the one we want it to mean. */
+    var ROWS_CUSTOM = -2;
+    var ROWS_FIXED = [50, 100];
+
+    /* The numeric options, in numeric order. A pinned count that is not already one of
+       the fixed options earns an entry of its own — without one the select has nothing
+       to show for the length actually in force — and it has to be sorted into place
+       rather than appended, or it lands after "all" and reads as debris. */
+    function _rowOptionValues(pinned) {
+        var values = ROWS_FIXED.slice();
+        if (pinned > 0 && pinned !== _autoRows && values.indexOf(pinned) === -1) {
+            values.push(pinned);
+        }
+        return values.sort(function(a, b) { return a - b; });
+    }
+
+    function _buildLengthMenu() {
+        var numeric = _rowOptionValues(_autoRowsActive ? 0 : _validRows);
+        return [
+            [_autoRows].concat(numeric, [-1, ROWS_CUSTOM]),
+            ['{{rowsAuto}} (' + _autoRows + ')'].concat(numeric, ["{{dtAll}}", '{{rowsCustom}}'])
+        ];
+    }
     var customSort = { field: 'temporal', dir: isPast ? 'desc' : 'asc', label: '{{tripStartTime}}' };
+    /* With "show upcoming" on, the descending timeline reads [far future … now …
+       oldest past], so its first page is the most distant plan. Ask the backend to
+       centre the first load on now instead — but only that load, and only when the
+       URL did not name a page, since an explicit ?page= is the user's own choice.
+       Any later draw (paging, sorting, searching) leaves the offset alone. */
     if (_urlSortParam) {
         var _sp = _urlSortParam.split(':');
         if (_sp.length === 2) { customSort.field = _sp[0]; customSort.dir = _sp[1]; customSort.label = _sp[0]; }
     }
+    /* Set for the one draw the anchor produced, so it can be kept out of the URL. */
+    var _anchoredDraw = false;
+    /* "Above/below now" only means something in the order that runs on time. */
+    window.canAnchorNow = function() {
+        return isPast && customSort.field === 'temporal' && customSort.dir === 'desc';
+    };
+    var _anchorNow = canAnchorNow()
+        && !_urlParams.get('page')
+        && getCookie('includeFutureSwitch') === 'true';
     var tableObject = $('#dataTable').DataTable({
     processing: true,
     serverSide: true,
     pageJump:true,
     searchDelay: 1000,
-    scrollY: scroll == true ? $(window).height() - 300 : null,
-    scroller: scroll,
     dom: '<"dt-controls d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mb-2"lf>rt<"dt-controls-bottom d-flex flex-wrap justify-content-center justify-content-md-between align-items-center gap-2 mt-2"ip>',
     columnDefs: [{ orderable: false, targets: '_all' }],
     // Every column is orderable:false and sorting runs through the "Trier" dropdown
@@ -1284,7 +2334,8 @@ var table = $('#tripRows');
         "data": function(d) {
             d.filterTypes = (getCookie('filterTypeSwitch') === 'true') ? 0 : 1;
             d.includeFuture = (isPast && getCookie('includeFutureSwitch') === 'true') ? 1 : 0;
-            
+            if (_anchorNow) d.anchorNow = 1;
+
             // Parse smart search
             const searchValue = d.search.value || '';
             const { columnFilters, globalSearch, globalNot } = parseSmartSearch(searchValue);
@@ -1314,22 +2365,27 @@ var table = $('#tripRows');
             }
         }
     },
+    // The col-* classes are the hooks the mobile card layout lays out on (see the
+    // stylesheet at the top of this file) and the set CARD_COLUMN_CLASSES reads to
+    // decide what belongs on the card rather than in the detail row. They are set
+    // here rather than on the <th> so they survive whichever columns the isPublic
+    // branches below add or drop.
     columns: [
-        { data: 'type', render: renderType },
-        { data: 'origin_station', render: renderStation },
-        { data: 'destination_station', render: renderStation },
-        { data: 'start_date', className: 'tripDate' },
-        { data: 'start_time', render: renderStartTime },
-        { data: 'end_time', render: renderEndTime },
-        { data: 'trip_duration', render: renderDuration },
-        { data: 'trip_length', render: renderLength },
+        { data: 'type', render: renderType, className: 'col-type' },
+        { data: 'origin_station', render: renderStation, className: 'col-origin' },
+        { data: 'destination_station', render: renderStation, className: 'col-dest' },
+        { data: 'start_date', className: 'tripDate col-date' },
+        { data: 'start_time', render: renderStartTime, className: 'col-time' },
+        { data: 'end_time', render: renderEndTime, className: 'col-endtime' },
+        { data: 'trip_duration', render: renderDuration, className: 'col-duration' },
+        { data: 'trip_length', render: renderLength, className: 'col-length' },
         {
             data: null,
             render: renderSpeed,
             defaultContent: "N/A",
             orderable: false
         },
-        { data: 'operator', render: renderOperators },
+        { data: 'operator', render: renderOperators, className: 'col-operator' },
         {data: 'line_name', render: renderLineName},
         { data: 'countries', render: renderFlags },
         {
@@ -1351,13 +2407,14 @@ var table = $('#tripRows');
             render: renderMaterialType,
             defaultContent: "",
         },
-        { data: 'reg', render: renderPlainText },
+        { data: 'reg', render: renderReg },
         { data: 'seat', render: renderPlainText },
         { data: 'notes', render: renderPlainText },
         { data: 'tags' },
         {
             data: null,
-            render: renderButton
+            render: renderButton,
+            className: 'col-actions'
         },
     ],
     rowId: 'id',
@@ -1387,13 +2444,13 @@ var table = $('#tripRows');
         }
     },
     order: [],
-    lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "{{dtAll}}"]],
+    lengthMenu: _buildLengthMenu(),
     pageLength: _validRows,
     displayStart: Math.max(0, _initialPage - 1) * (_validRows > 0 ? _validRows : 0),
     paging: true,
     select: {
         style: 'multi+shift',
-        selector: 'td:not(:nth-child(2)):not(:last-child):not(:first-child)'
+        selector: isCardLayout() ? CARD_SELECT_SELECTOR : DEFAULT_SELECT_SELECTOR
     },
     initComplete: function(){
         addPageJumpInput();
@@ -1404,15 +2461,39 @@ var table = $('#tripRows');
     pagingType: $(window).width() < 768 ? "numbers" : "simple_numbers",
     responsive: {
         details: {
+            // The control is the type column rather than Responsive's default
+            // "first visible column, inline": that put the expand target on the origin
+            // cell, which on a phone card means tapping a station name opens the
+            // details while tapping the line right below it selects the row. As a
+            // column it is the type logo — the left gutter of the card, and the same
+            // place the arrow already sat on desktop. The type column is NOT given the
+            // dtr-control class: Responsive treats a class-designated control column
+            // as its own and hides it whenever nothing needs expanding, and this one
+            // carries data. The arrow is drawn by this page's stylesheet instead.
+            type: 'column',
+            target: 0,
             renderer: function(api, rowIdx, columns) {
                 var data = processHiddenData(rowIdx, columns);
                 return data ? $('<table/>').append(data) : false;
             }
         }
     }
+}).on('xhr.dt', function(e, settings, json) {
+    // The anchored draw asked for offset 0 and was answered with the rows around now
+    // instead. `xhr` fires before the table is drawn, so writing the offset the server
+    // actually used here is enough for the pager and the "showing x to y" line to
+    // describe the rows about to appear. One-shot: the flag is cleared either way, so
+    // everything after this — paging, sorting, searching — pages from where it says.
+    if (json && typeof json.start === 'number') {
+        settings._iDisplayStart = json.start;
+        _anchoredDraw = true;
+    }
+    _anchorNow = false;
 }).on('responsive-display', function(e, datatable, row, showHide, update) {
     resetObjects();
 }).on('draw', function() {
+    hideCardHeader();
+    markNowBoundary();
     tableObject.rows().every(function(rowIdx, tableLoop, rowLoop) {
         var row = this.node();
         var data = this.data();
@@ -1423,6 +2504,7 @@ var table = $('#tripRows');
     resetObjects();
     updateSelectionMessage();
     addPageJumpInput();
+    updateSelectPageCheckbox();
 
     // Sync table state to URL
     var searchVal = tableObject.search();
@@ -1438,18 +2520,31 @@ var table = $('#tripRows');
         url.searchParams.delete('sort');
     }
     var _pi = tableObject.page.info();
-    if (_pi.page > 0) {
+    if (_anchoredDraw) {
+        // The anchored offset is not a page the user asked for, and it is not one
+        // either: it lands mid-grid, so ?page= could not reproduce it anyway. Leaving
+        // it out of the URL is also what lets a reload anchor again rather than
+        // freeze on whatever page number now happened to fall in today.
+        url.searchParams.delete('page');
+        _anchoredDraw = false;
+    } else if (_pi.page > 0) {
         url.searchParams.set('page', _pi.page + 1);
     } else {
         url.searchParams.delete('page');
     }
+    // Auto is the default, so it is the absence of ?rows= rather than any value —
+    // writing the computed count would freeze it and defeat the point on the next load.
     var _len = tableObject.page.len();
-    if (_len !== 10) {
-        url.searchParams.set('rows', _len);
-    } else {
+    if (_autoRowsActive) {
         url.searchParams.delete('rows');
+    } else {
+        url.searchParams.set('rows', _len);
     }
     history.replaceState({}, '', url);
+    // Deferred because the operator logos are still loading as draw fires, and an
+    // unloaded logo measures short. Also debounces the burst of draws on init.
+    clearTimeout(_autoFitTimer);
+    _autoFitTimer = setTimeout(recordAutoFitMetrics, 400);
 }).on('select', function(e, dt, type, indexes) {
     var selectedRows = tableObject.rows(indexes).data().toArray();
     selectedRows.forEach(function(row) {
@@ -1460,6 +2555,7 @@ var table = $('#tripRows');
     });
     showMultilink();
     updateSelectionMessage();
+    updateSelectPageCheckbox();
 }).on('deselect', function(e, dt, type, indexes) {
     var deselectedRows = tableObject.rows(indexes).data().toArray();
     deselectedRows.forEach(function(row) {
@@ -1473,7 +2569,207 @@ var table = $('#tripRows');
         hideMultilink();
     }
     updateSelectionMessage();
+    updateSelectPageCheckbox();
 });
+
+// Any use of the length menu is the user overriding auto — including re-picking the
+// auto entry, which is a no-op for the count but pins it, so the reading is by index
+// rather than by comparing the value against _autoRows.
+tableObject.on('length.dt', function() {
+    var sel = lengthSelect();
+    _autoRowsActive = Boolean(sel) && sel.selectedIndex === 0;
+    // Remembered per browser, so this device opens on the same length next time. The
+    // custom-value path routes through here too — it sets the length via the API, which
+    // fires this — so there is nothing to persist separately.
+    setCookie(ROWS_COOKIE, _autoRowsActive ? 'auto' : String(tableObject.page.len()), 365);
+});
+
+function lengthSelect() {
+    return $(tableObject.table().container()).find('div.dt-length select').get(0);
+}
+
+/* Two bits of tidying for the length select.
+
+   A native <select> is always as wide as its widest option, so the box sat permanently
+   sized for "Personnalisé…" whatever was actually picked. And the auto entry needs its
+   full "Auto (13)" label in the open list, where it has to be distinguishable from the
+   plain counts, but reads as clutter in a closed box — there, the number alone says the
+   same thing.
+
+   So the auto option carries the short label while the list is closed and the full one
+   while it is open, and the box is re-measured to whatever is actually showing. Both
+   key off options[0] being the auto entry, which is what the "is auto selected" test
+   already relies on. */
+var _lengthRuler = null;
+
+function setLengthAutoExpanded(expanded) {
+    var sel = lengthSelect();
+    if (!sel || !sel.options.length) return;
+    sel.options[0].text = expanded ? '{{rowsAuto}} (' + _autoRows + ')' : String(_autoRows);
+}
+
+function fitLengthSelect() {
+    var sel = lengthSelect();
+    if (!sel) return;
+    var opt = sel.options[sel.selectedIndex];
+    if (!opt) return;
+    if (!_lengthRuler) {
+        _lengthRuler = document.createElement('span');
+        _lengthRuler.setAttribute('aria-hidden', 'true');
+        _lengthRuler.style.cssText = 'position:absolute;top:-9999px;left:-9999px;white-space:pre;';
+        document.body.appendChild(_lengthRuler);
+    }
+    var cs = window.getComputedStyle(sel);
+    ['fontSize', 'fontFamily', 'fontWeight', 'fontStyle', 'letterSpacing'].forEach(function(prop) {
+        _lengthRuler.style[prop] = cs[prop];
+    });
+    _lengthRuler.textContent = opt.text;
+    /* The text, plus the padding and borders the theme draws, plus room for the arrow
+       the browser paints inside the box. That last one is not measurable from script
+       and differs by platform, so it is an allowance — erring wide, since a couple of
+       spare pixels only look generous where too few would clip the arrow. */
+    var chrome = parseFloat(cs.paddingLeft) + parseFloat(cs.paddingRight)
+               + parseFloat(cs.borderLeftWidth) + parseFloat(cs.borderRightWidth) + 26;
+    sel.style.width = Math.ceil(_lengthRuler.offsetWidth + chrome) + 'px';
+}
+
+// Closed state: short auto label, box sized to it.
+function refreshLengthSelect() {
+    setLengthAutoExpanded(false);
+    fitLengthSelect();
+}
+
+(function() {
+    // Delegated, so it survives the select being rebuilt by the custom-value path.
+    // The label is swapped on mousedown, before the browser paints the option list.
+    $(tableObject.table().container())
+        .on('mousedown focus', 'div.dt-length select', function() { setLengthAutoExpanded(true); })
+        .on('blur change', 'div.dt-length select', refreshLengthSelect);
+    refreshLengthSelect();
+})();
+
+
+{
+    var customRowsModal = new bootstrap.Modal(document.getElementById('customRowsModal'));
+
+    /* The custom entry is a menu action, not a length, so its sentinel must never
+       reach DataTables — which would take -2 for a page length and ask the server for
+       it. A capture-phase listener on the container runs before the listeners bound to
+       the select itself, so stopping propagation here is enough to keep it away. */
+    tableObject.table().container().addEventListener('change', function(e) {
+        var sel = lengthSelect();
+        if (!sel || e.target !== sel || parseInt(sel.value, 10) !== ROWS_CUSTOM) return;
+        e.stopPropagation();
+        // Leave the select showing the length still in force, not the sentinel, in
+        // case the modal is dismissed.
+        var current = tableObject.page.len();
+        $(sel).val(String(current));
+        $('#customRowsInput').val(current > 0 ? current : '');
+        customRowsModal.show();
+    }, true);
+
+    $('#customRowsModal').on('shown.bs.modal', function() {
+        $('#customRowsInput').trigger('focus').trigger('select');
+    });
+
+    $('#customRowsForm').on('submit', function(e) {
+        e.preventDefault();
+        var n = parseInt($('#customRowsInput').val(), 10);
+        if (!(n >= 1 && n <= 500)) return;
+
+        // Rebuilt rather than spliced, so the new count sorts into place and any count
+        // pinned earlier drops out — only one custom value is ever in play.
+        var sel = lengthSelect();
+        if (sel) {
+            var numeric = _rowOptionValues(n);
+            var $sel = $(sel).empty();
+            $sel.append($('<option>').val(_autoRows).text('{{rowsAuto}} (' + _autoRows + ')'));
+            numeric.forEach(function(v) { $sel.append($('<option>').val(v).text(v)); });
+            $sel.append($('<option>').val(-1).text("{{dtAll}}"));
+            $sel.append($('<option>').val(ROWS_CUSTOM).text('{{rowsCustom}}'));
+            $sel.val(String(n));
+            refreshLengthSelect();
+        }
+        _autoRowsActive = false;
+        customRowsModal.hide();
+        tableObject.page.len(n).draw();
+    });
+}
+
+/* Measures what the last draw actually produced and caches it for the next load: the
+   median row height (rows differ — a card with a wrapped station name is taller) and
+   the chrome, which is everything above the first row plus everything below the last.
+   Deriving chrome by subtraction like this counts the navbar, toolbar, pager and info
+   line without naming any of them, so it stays correct as those change. */
+/* The distance from an element's bottom edge to the end of the page's content, walked
+   structurally: at each level, whatever follows the node in flow, plus the padding,
+   border and margin its parent closes with.
+
+   Measured this way rather than subtracted from a document height because BOTH of those
+   heights are viewport-clamped here — documentElement.scrollHeight reports at least the
+   viewport, and `html, body { height: 100% }` in style2.css does the same to the body
+   box. Subtracting from either makes leftover whitespace look like chrome, so chrome
+   grows as the row count falls, which shrinks the count again next load and walks the
+   table down a row per visit. Nothing below depends on how many rows were drawn.
+
+   What this catches that a container-relative measurement missed: `.trips` carries a
+   70px bottom margin, 5em below 600px, to clear the fixed selection bar — a full row's
+   worth of trailing whitespace sitting outside the DataTables container. */
+function spaceBelow(el) {
+    var total = 0;
+    var node = el;
+    while (node && node !== document.body && node.parentElement) {
+        for (var sib = node.nextElementSibling; sib; sib = sib.nextElementSibling) {
+            var scs = window.getComputedStyle(sib);
+            // Out-of-flow boxes take up no space — the selection bar that margin is
+            // reserved for is itself fixed, so counting it would double up.
+            if (scs.display === 'none' || scs.position === 'fixed' || scs.position === 'absolute') continue;
+            total += $(sib).outerHeight(true);
+        }
+        var pcs = window.getComputedStyle(node.parentElement);
+        total += (parseFloat(pcs.paddingBottom) || 0)
+               + (parseFloat(pcs.borderBottomWidth) || 0)
+               + (parseFloat(pcs.marginBottom) || 0);
+        node = node.parentElement;
+    }
+    return total;
+}
+
+function recordAutoFitMetrics() {
+    // An open detail row sits between the rows as a sibling and would be read as
+    // trailing space, and its parent row is taller than the median it feeds.
+    if ($('#dataTable > tbody > tr.child').length) return;
+    // The gear panel stands the toolbar up taller while it is open; measuring then
+    // would cache a chrome height the closed toolbar never actually has.
+    if ($('.dt-controls-secondary.show').length) return;
+    // Likewise the clearance .bottom-space adds in flow while the selection bar is up:
+    // real space, but only while trips are checked, so not part of the resting chrome.
+    if ($('.bottom-space').length) return;
+    var rows = $('#dataTable > tbody > tr').not('.child, .dtr-expanded').filter(function() {
+        return !$(this).find('> td.dt-empty').length;
+    });
+    // Two rows is the floor for a median worth trusting; a part-filled last page is
+    // fine, but a single row is as likely to be the outlier as the norm.
+    if (rows.length < 2) return;
+
+    var heights = rows.map(function() { return $(this).outerHeight(true); }).get()
+                      .filter(function(h) { return h > 0; })
+                      .sort(function(a, b) { return a - b; });
+    if (heights.length < 2) return;
+    // Kept fractional: rounding here while the chrome below is derived from the true
+    // height leaves the count a hair short of a whole row, and floor() then drops one
+    // row on every single load.
+    var rowH = heights[Math.floor(heights.length / 2)];
+
+    // Document coordinates, so this is independent of how far the page is scrolled.
+    var first = rows.first(), last = rows.last();
+    var above = first.offset().top;
+
+    var below = spaceBelow(last.get(0));
+    if (!(rowH > 0) || above < 0 || below < 0) return;
+
+    setCookie(autoFitCookieName(), rowH.toFixed(2) + ':' + Math.round(above + below), 30);
+}
 
 // Update ?next= on the href just before navigation so it reflects the current URL (including filters/sort/page)
 $(document).on('mousedown', '.editButton, .copyButton', function() {
@@ -1481,8 +2777,68 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
     $(this).attr('href', base + '?next=' + encodeURIComponent(window.location.href));
 });
 
+// Mobile card layout. The class goes on the table's parent, not the table, so the
+// rules can be written as `.trip-card-host > #dataTable` and miss the measuring copy
+// Responsive clones (id and classes included) one level deeper — see the stylesheet.
+{
+    $('#dataTable').parent().addClass('trip-card-host');
+    $(tableObject.table().container()).addClass('trips-cards');
+
+    // Card mode drops the header row — its titles line up with nothing once the rows
+    // are cards — so the select-page checkbox it carries moves up into the controls
+    // bar. The checkbox is moved rather than duplicated: its handlers are delegated
+    // off document and updateSelectPageCheckbox looks it up by id, so both keep
+    // working wherever it sits.
+    (function() {
+        var mq = window.matchMedia('(max-width: 767px)');
+        function applyCardChrome(isMobile) {
+            hideCardHeader();
+            if (!isMobile) $(tableObject.table().header()).find('tr').show();
+
+            // The card toolbar hides the search's label and lets the input take the
+            // row, so the label's text moves inside as a placeholder (sans the
+            // trailing colon the language string carries).
+            var $search = $(tableObject.table().container()).find('.dt-search');
+            var $searchInput = $search.find('input');
+            if (isMobile) {
+                $searchInput.attr('placeholder', $search.find('label').text().replace(/\s*:\s*$/, ''));
+            } else {
+                $searchInput.removeAttr('placeholder');
+            }
+
+            var $cb = $('#selectPageCheckbox');
+            if (!$cb.length) return;
+            var $moved = $cb.closest('.mobile-select-page');
+            if (isMobile === Boolean($moved.length)) return;
+            if (isMobile) {
+                // Lands in the collapsible options group when it exists (it's built
+                // once, after this runs for the first time); falls back to the
+                // toolbar itself on that first run.
+                var $controls = $(tableObject.table().container()).find('.dt-controls');
+                var $optionsGroup = $controls.find('.dt-controls-secondary');
+                $('<label class="mobile-select-page"></label>')
+                    .append($cb)
+                    .append(document.createTextNode('{{ selectPage }}'))
+                    .prependTo($optionsGroup.length ? $optionsGroup : $controls);
+            } else {
+                $('#dataTable thead th[data-sort-field="origin_station"]').prepend($cb);
+                $moved.remove();
+            }
+        }
+        applyCardChrome(mq.matches);
+        mq.addEventListener('change', function(e) {
+            applyCardChrome(e.matches);
+            tableObject.select.selector(e.matches ? CARD_SELECT_SELECTOR : DEFAULT_SELECT_SELECTOR);
+            // Detail rows are built from the complement of the card fields, so what
+            // belongs in them changes with the layout.
+            tableObject.responsive.recalc();
+            resetObjects();
+        });
+    })();
+}
+
 (function() {
-    var $btn = $('<label>{{sortTitle}} : <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
+    var $btn = $('<label class="dt-sort-control">{{sortLabel}} <button id="sortTriggerBtn" class="dt-sort-btn" type="button" data-bs-toggle="modal" data-bs-target="#sortModal"></button></label>');
     $(tableObject.table().container()).find('.dt-controls .dt-search').before($btn);
     updateSortButton();
 })();
@@ -1502,6 +2858,30 @@ $(document).on('mousedown', '.editButton, .copyButton', function() {
     </div>`);
     $(tableObject.table().container()).find('.dt-controls .dt-search').before($futureSwitch);
 {% endif %}
+
+{
+    // A gear icon joins the search input on its own row; below 768px (see the CSS)
+    // it is the trigger that reveals everything else — page-select, length, sort,
+    // the two switches. Above that width both wrappers are display:contents and the
+    // gear is hidden, so the toolbar renders as it always did. That equivalence is
+    // why the group is *prepended*: flattened, [group, searchRow] reproduces the
+    // original child order (length, sort, switches, search), whereas appending it
+    // would put the search first.
+    var $controls = $(tableObject.table().container()).find('.dt-controls');
+    var $search = $controls.find('.dt-search');
+    var $optionsToggle = $(`<button type="button" class="dt-options-toggle" title="{{ listOptions }}"><i class="fas fa-gear"></i></button>`);
+    var $searchRow = $('<div class="dt-search-row"></div>');
+    $search.before($searchRow);
+    $searchRow.append($optionsToggle, $search);
+
+    var $optionsGroup = $('<div class="dt-controls-secondary"></div>');
+    $controls.children().not('.dt-search-row').appendTo($optionsGroup);
+    $controls.prepend($optionsGroup);
+    $optionsToggle.on('click', function() {
+        $(this).toggleClass('open');
+        $optionsGroup.toggleClass('show');
+    });
+}
 
 // Sort modal
 const sortGroups = [
@@ -1597,7 +2977,22 @@ function updateHeaderIndicators() {
 }
 
 // Header click → custom sort
-$(document).on('click', 'th[data-sort-field]', function() {
+$(document).on('click', '#selectPageCheckbox', function(e) {
+    e.stopPropagation();
+});
+
+$(document).on('change', '#selectPageCheckbox', function() {
+    if (this.checked) {
+        tableObject.rows({ page: 'current' }).select();
+    } else {
+        tableObject.rows({ page: 'current' }).deselect();
+    }
+});
+
+$(document).on('click', 'th[data-sort-field]', function(e) {
+    if ($(e.target).is('#selectPageCheckbox')) {
+        return;
+    }
     const field = $(this).data('sort-field');
     if (customSort.field === field) {
         customSort.dir = customSort.dir === 'asc' ? 'desc' : 'asc';
@@ -1636,11 +3031,21 @@ function showMultilink() {
 function hideMultilink() {
     $('.multiLink').css('display', 'none');
     $('.bottom-space').remove();
-} 
+}
+
+function updateSelectPageCheckbox() {
+    var pageRows = tableObject.rows({ page: 'current' });
+    var selectedOnPage = tableObject.rows({ page: 'current', selected: true });
+    var allSelected = pageRows.count() > 0 && selectedOnPage.count() === pageRows.count();
+    var $cb = $('#selectPageCheckbox').prop('checked', allSelected);
+    // The mobile toolbar shows this checkbox as a toggle button; the fill state lives
+    // on the label, which CSS cannot reach from the input without :has().
+    $cb.closest('.mobile-select-page').toggleClass('checked', allSelected);
+}
 
 
 function updateSelectionMessage() {
-    if (new URLSearchParams(window.location.search).get('scroll') != 'true') {
+    {
         var message = checkedTrips.length === 0
             ? ""
             : pluralize(dtRowsSelected, checkedTrips.length);
@@ -1660,6 +3065,33 @@ function updateSelectionMessage() {
 }
 
 resetObjects();
+
+// The meta line breaks in two (tr.meta-2x2 in the stylesheet) only when it does not
+// fit on one, so a card with room keeps the single line. Wrap is
+// detected on the natural one-line layout — class off, then compare the meta cells'
+// offsets within the card — so the class always reflects the current content and
+// width, and the measurement never sees the layout it decides on. Cells hidden with
+// the meta line (open cards) have no offsetParent and drop out, leaving those rows
+// untouched.
+function updateMetaWrap() {
+    var $rows = $('#dataTable > tbody > tr').not('.child');
+    if (!isCardLayout()) { $rows.removeClass('meta-2x2'); return; }
+    $rows.each(function() {
+        var $tr = $(this).removeClass('meta-2x2');
+        var tops = [];
+        $tr.children('td.col-date, td.col-length, td.col-duration, td.col-time, td.col-endtime').each(function() {
+            if (this.offsetParent) tops.push(this.offsetTop);
+        });
+        if (tops.length > 1 && Math.max.apply(null, tops) - Math.min.apply(null, tops) > 4) {
+            $tr.addClass('meta-2x2');
+        }
+    });
+}
+var _metaWrapRaf;
+$(window).on('resize', function() {
+    cancelAnimationFrame(_metaWrapRaf);
+    _metaWrapRaf = requestAnimationFrame(updateMetaWrap);
+});
 
 function resetObjects(){
     // Reenable tooltips in hidden fields
@@ -1688,7 +3120,10 @@ $('.deleteButton').off('click').on('click', function() {
         ));
         $(this.node()).children().each(
             function(index, element){
-                if ($(element).hasClass("dtr-control"))
+                // The type cell is the details control (responsive.details.target: 0),
+                // so it is the one that carries the expand arrow and the noHidden
+                // state — Responsive no longer marks a cell with dtr-control.
+                if ($(element).hasClass("col-type"))
                 {
                   controlElement = $(element)
                 }
@@ -1711,6 +3146,8 @@ $('.deleteButton').off('click').on('click', function() {
             controlElement.toggleClass("noHidden", !hasHidden);
         }
     });
+
+    updateMetaWrap();
 }
 
 // True only when viewing your own trips (you may change their visibility).
@@ -2125,7 +3562,9 @@ function submitMassEdit() {
         if (failed) {
             alert(failed.error || 'Error');
         } else {
-            tableObject.ajax.reload();
+            // false keeps the current page — a mass edit never changes the row
+            // count, so resetting paging would just throw the user back to page 1.
+            tableObject.ajax.reload(null, false);
             $('#massEditModal').modal('hide');
             deselectAll();
         }
@@ -2411,7 +3850,7 @@ $('#submitBtn').on('click', function() {
             var searchContainer = $('.dt-search');
             if (searchContainer.length && !searchContainer.find('.search-help-icon').length) {
                 var $input = searchContainer.find('input');
-                var $wrapper = $('<span style="display:inline-flex;align-items:center;gap:1px;"></span>');
+                var $wrapper = $('<span style="display:inline-flex;align-items:center;gap:3px;"></span>');
                 $input.after($wrapper);
                 $wrapper.append($input);
                 var helpIcon = $('<i class="fas fa-info-circle search-help-icon" data-bs-toggle="modal" data-bs-target="#smartSearchHelpModal" style="cursor:pointer;"></i>');

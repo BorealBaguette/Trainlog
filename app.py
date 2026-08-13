@@ -72,6 +72,7 @@ appPath = os.path.realpath(__file__).rsplit("/", 1)[0]
 os.chdir(appPath)
 
 # set up logging before local modules are imported
+os.makedirs("logs", exist_ok=True)  # logging.conf's bmcFileHandler writes here
 logging.config.fileConfig("logging.conf", disable_existing_loggers=False)
 logger = logging.getLogger(__name__)
 
@@ -84,7 +85,16 @@ from py.coverage import (
     has_coverage_file,
 )
 from src.currency import get_available_currencies, get_exchange_rate
-from src.g_search import get_vessel_picture
+from scripts.backfill_vessels import apply_plan as backfill_apply_plan
+from scripts.backfill_vessels import build_plan as backfill_build_plan
+from src.g_search import (
+    fetch_commons_picture,
+    fetch_picture_for_registration,
+    find_vessel_ids,
+    get_vessel_picture,
+    search_commons_images,
+)
+from src.wikidata import search_ships as wikidata_search_ships
 from py.image_generator import generate_image
 from src.sql.leaderboards import get_leaderboard_countries_query
 from src.sql.percents import upsert_percent_query
@@ -146,9 +156,13 @@ from py.utils import (
 )
 from src.api.admin import admin_blueprint, operators_api_blueprint, wagons_admin_blueprint
 from src.api.feature_requests import feature_requests_blueprint
+from src.api.vagonweb import vagonweb_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
 from src.api.finance import finance_blueprint
+from src.api.bmc import bmc_blueprint, reconcile_pending_events
+from src.api.discord_oauth import discord_oauth_blueprint
+from src.discord_bot import sync_discord_tier
 from src.api.carbon import carbon_blueprint
 from src.api.wrapped import wrapped_blueprint, DISTANCE_COMPARISONS, DURATION_COMPARISONS
 from src.api.stats import stats_blueprint, fetch_stats, get_distinct_stat_years
@@ -275,8 +289,11 @@ app.register_blueprint(admin_blueprint, url_prefix="/admin")
 
 app.register_blueprint(operators_api_blueprint, url_prefix="/api/admin/operators")
 app.register_blueprint(wagons_admin_blueprint, url_prefix="/api/admin/wagons")
+app.register_blueprint(vagonweb_blueprint, url_prefix="/api/admin/vagonweb")
 app.register_blueprint(feature_requests_blueprint)
 app.register_blueprint(finance_blueprint)
+app.register_blueprint(bmc_blueprint)
+app.register_blueprint(discord_oauth_blueprint)
 app.register_blueprint(news_blueprint)
 app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
@@ -1376,6 +1393,19 @@ def get_new_trip_types(user_lang):
         for t in group
         if t != "other"
     }
+
+
+@app.route("/u/<username>/compose")
+@login_required
+def compose_default(username):
+    """Bare /compose — the form needs a type, and trains are what most people log.
+
+    Any query string (``?plan=``, the save-and-continue prefill) is carried over, and
+    the type switcher in the header changes it from there.
+    """
+    return redirect(
+        url_for("compose", username=username, vehicle_type="train", **request.args)
+    )
 
 
 @app.route("/u/<username>/compose/<vehicle_type>")
@@ -5184,11 +5214,34 @@ def get_admin_stats_api(tripType, year=None):
     stats = fetch_stats(None, tripType, year)
     return jsonify(stats)
 
+# The stats page has three dimensions and they are equally important, so all
+# three sit in the path, always in the same order: year, trip type, metric. The
+# year that means "every year" is the literal segment "all" rather than a missing
+# one — an omitted segment is what made the shorter forms ambiguous, since
+# /stats/2024/train and /stats/train/km are both two segments and Flask cannot
+# tell which is which.
+#
+# The shorter forms stay registered: they are what existing links and bookmarks
+# use. They resolve to the same page, and the client rewrites the address to the
+# full form once it has loaded.
+STATS_METRICS = ("trips", "km", "duration", "carbon", "delay")
+
+
+def stats_path_args(year, metric):
+    """Normalise the year and metric segments of a stats URL."""
+    return (
+        None if year in (None, "all") else year,
+        metric if metric in STATS_METRICS else "trips",
+    )
+
+
+@app.route("/public/<username>/stats/<year>/<tripType>/<metric>")
 @app.route("/public/<username>/stats/<year>/<tripType>")
 @app.route("/public/<username>/stats/<tripType>")
 @app.route("/public/<username>/stats")
 @public_required
-def public_stats(username, tripType=None, year=None):
+def public_stats(username, tripType=None, year=None, metric=None):
+    year, metric = stats_path_args(year, metric)
     if tripType in ('poi', 'accommodation', 'restaurant', 'walk', 'cycle', 'car'):
         abort(401)
     with pg_session() as pg:
@@ -5206,12 +5259,24 @@ def public_stats(username, tripType=None, year=None):
 
     if tripType is None:
         return redirect(
-            url_for("public_stats", username=username, tripType="train", year=year)
+            url_for(
+                "public_stats",
+                username=username,
+                tripType="train",
+                year=year or "all",
+                metric=metric,
+            )
         )
     distinctStatYears = get_distinct_stat_years(username, tripType)
     if year is not None and year not in distinctStatYears:
         return redirect(
-            url_for("public_stats", username=username, tripType=tripType, year=None)
+            url_for(
+                "public_stats",
+                username=username,
+                tripType=tripType,
+                year="all",
+                metric=metric,
+            )
         )
 
     return render_template(
@@ -5222,6 +5287,7 @@ def public_stats(username, tripType=None, year=None):
         title=lang[session["userinfo"]["lang"]]["stats"],
         username=username,
         statYear=year,
+        statMetric=metric,
         logosList=listOperatorsLogos(),
         tripType=tripType,
         publicDistinctTypes=types,
@@ -5231,11 +5297,13 @@ def public_stats(username, tripType=None, year=None):
     )
 
 
+@app.route("/admin/stats/<year>/<tripType>/<metric>")
 @app.route("/admin/stats/<tripType>")
 @app.route("/admin/stats/<year>/<tripType>")
 @app.route("/admin/stats")
 @owner_required
-def admin_stats(tripType=None, year=None):
+def admin_stats(tripType=None, year=None, metric=None):
+    year, metric = stats_path_args(year, metric)
     with pg_session() as pg:
         rows = pg.execute(
             "SELECT DISTINCT trip_type FROM trips WHERE trip_type NOT IN ('poi', 'accommodation', 'restaurant')"
@@ -5245,17 +5313,24 @@ def admin_stats(tripType=None, year=None):
     }
 
     if tripType is None:
-        return redirect(url_for("admin_stats", tripType="train", year=year))
+        return redirect(
+            url_for(
+                "admin_stats", tripType="train", year=year or "all", metric=metric
+            )
+        )
 
     distinctStatYears = get_distinct_stat_years(None, tripType)  # Pass None for admin
     if year is not None and year not in distinctStatYears:
-        return redirect(url_for("admin_stats", tripType=tripType, year=None))
+        return redirect(
+            url_for("admin_stats", tripType=tripType, year="all", metric=metric)
+        )
 
     return render_template(
         "stats.html",
         nav="bootstrap/navigation.html",
         username=getUser(),
         statYear=year,
+        statMetric=metric,
         logosList=listOperatorsLogos(),
         tripType=tripType,
         admin=True,
@@ -5265,19 +5340,33 @@ def admin_stats(tripType=None, year=None):
     )
 
 
+@app.route("/u/<username>/stats/<year>/<tripType>/<metric>")
 @app.route("/u/<username>/stats/<year>/<tripType>")
 @app.route("/u/<username>/stats/<tripType>")
 @app.route("/u/<username>/stats")
 @login_required
-def stats(username, tripType=None, year=None):
+def stats(username, tripType=None, year=None, metric=None):
+    year, metric = stats_path_args(year, metric)
     if tripType is None:
         return redirect(
-            url_for("stats", username=username, tripType="train", year=year)
+            url_for(
+                "stats",
+                username=username,
+                tripType="train",
+                year=year or "all",
+                metric=metric,
+            )
         )
     distinctStatYears = get_distinct_stat_years(username, tripType)
     if year is not None and year not in distinctStatYears:
         return redirect(
-            url_for("stats", username=username, tripType=tripType, year=None)
+            url_for(
+                "stats",
+                username=username,
+                tripType=tripType,
+                year="all",
+                metric=metric,
+            )
         )
 
     return render_template(
@@ -5288,6 +5377,7 @@ def stats(username, tripType=None, year=None):
         title=lang[session["userinfo"]["lang"]]["stats"],
         username=username,
         statYear=year,
+        statMetric=metric,
         logosList=listOperatorsLogos(),
         tripType=tripType,
         distinctStatYears=distinctStatYears,
@@ -7210,6 +7300,259 @@ def operator_autocomplete_meta(operator_type):
     return hints, canonical
 
 
+# ── /admin user table ──────────────────────────────────────────────────────
+# The table is server-side processed, so *every* page/sort/search re-enters
+# getAdminUsersData. Assembling the snapshot means loading every User row plus a
+# full trips aggregate, which is far too slow to redo per keystroke — so the
+# assembled rows are cached for a short TTL and invalidated explicitly by the
+# mutations reachable from that page (role toggle, rename, delete).
+_ADMIN_USERS_CACHE_TTL = 60  # seconds
+_admin_users_cache = {"built_at": None, "rows": None}
+
+ADMIN_PREMIUM_TIER_LABELS = {
+    "trainlogger": "Trainlogger",
+    "first_class": "1st Class Logger",
+    "rail_baron": "Rail Baron",
+}
+
+ADMIN_SHARE_LABELS = {0: "Private", 1: "Link shared", 2: "Public"}
+
+# The Premium column sorts by what the membership is worth, not by the label's
+# spelling: none < manual grant < the BMC tiers in ascending price order.
+ADMIN_PREMIUM_RANKS = {
+    None: 0,
+    "manual": 1,
+    "trainlogger": 2,
+    "first_class": 3,
+    "rail_baron": 4,
+}
+
+# Language names are rendered client-side (getLangTooltip), so the server needs
+# its own copy to make "german", "swedish"… searchable alongside the raw code.
+ADMIN_LANG_NAMES = {
+    "en": "English", "zh": "Chinese", "nl": "Dutch", "de": "German",
+    "fr": "French", "fi": "Finnish", "es": "Spanish", "it": "Italian",
+    "no": "Norwegian", "sv": "Swedish", "cs": "Czech", "pl": "Polish",
+    "tr": "Turkish", "hu": "Hungarian", "da": "Danish", "hr": "Croatian",
+    "et": "Estonian", "ja": "Japanese", "ru": "Russian", "uk": "Ukrainian",
+    "sv-FI": "Finland Swedish", "gsw": "Swiss German", "ko": "Korean",
+    "pt-BR": "Brazilian Portuguese", "pt-PT": "Portuguese",
+}
+
+
+def invalidate_admin_users_cache():
+    """Drop the cached /admin snapshot so the next request rebuilds it."""
+    _admin_users_cache["built_at"] = None
+    _admin_users_cache["rows"] = None
+
+
+def _admin_search_haystack(user):
+    """Every piece of info the admin table shows for this user, as one lowercase
+    blob. Search terms are matched against it at word boundaries (see
+    _filter_admin_users), so "act" finds "active" but "active" doesn't find
+    "inactive". Never add a token that *contains* another meaningful term
+    (e.g. "nopremium"), or negation and plain search both misfire."""
+    parts = [
+        user["username"],
+        user.get("email") or "",
+        user.get("lang") or "",
+        ADMIN_LANG_NAMES.get(user.get("lang"), ""),
+        str(user["uid"]),
+        "active" if user["active"] else "inactive",
+        ADMIN_SHARE_LABELS.get(user.get("share_level"), "unknown"),
+        str(user["trips"]),
+        str(round((user["length"] or 0) / 1000)),
+    ]
+
+    if user.get("discord_id"):
+        parts += ["discord", user.get("discord_username") or "", str(user["discord_id"])]
+    for role, label in (
+        ("admin", "admin"),
+        ("alpha", "alpha"),
+        ("translator", "translator"),
+        ("feature_admin", "feature_admin featureadmin"),
+        ("leaderboard", "leaderboard"),
+    ):
+        if user.get(role):
+            parts.append(label)
+
+    if user.get("premium"):
+        parts.append("premium")
+        if user.get("bmc_supporter_id"):
+            parts += [
+                "automated bmc supporter",
+                str(user["bmc_supporter_id"]),
+                user.get("premium_tier") or "",
+                ADMIN_PREMIUM_TIER_LABELS.get(user.get("premium_tier"), ""),
+            ]
+        else:
+            parts.append("manual")
+    if user.get("premium_cancel_at"):
+        parts.append("cancelled canceled cancels cancellation")
+        parts.append(user["premium_cancel_at"][:10])
+    if user.get("premium_stale"):
+        parts.append("stale expired overdue")
+
+    # Dates are still datetimes here (the row is serialised after this runs), so
+    # "2026-07" matches a last login or a signup month.
+    for key in ("last_login", "creation_date"):
+        value = user.get(key)
+        if value:
+            parts.append(
+                value.strftime("%Y-%m-%d") if hasattr(value, "strftime") else str(value)[:10]
+            )
+
+    return " ".join(p for p in parts if p).lower()
+
+
+def _build_admin_user_rows():
+    """One full snapshot of the /admin table: every user enriched with their trip
+    totals, activity flag and search blob. Everything the endpoints need is
+    derived here so the per-request path is filter + sort + slice only."""
+    now = datetime.now()
+    active_cutoff = now - timedelta(days=90)
+    # premium_cancel_at comes back naive from SQLite (tzinfo isn't preserved on
+    # the round trip) even though it was written as a UTC value — compare
+    # against a naive-but-UTC "now" to match, or this raises TypeError.
+    utc_now_naive = datetime.now(UTC).replace(tzinfo=None)
+
+    rows = []
+    by_uid = {}
+    for user in User.query.all():
+        row = user.toDict()
+        # Owner-only view: not exposed via toDict() elsewhere. premium_tier +
+        # bmc_supporter_id together tell manual (/toggle_role) grants apart from
+        # BMC-automated ones — a manual grant never gets a supporter_id pinned.
+        row["premium_tier"] = user.premium_tier
+        row["bmc_supporter_id"] = user.bmc_supporter_id
+        row["premium_cancel_at"] = (
+            user.premium_cancel_at.isoformat() if user.premium_cancel_at else None
+        )
+        row["premium_stale"] = bool(
+            user.premium_cancel_at and user.premium_cancel_at <= utc_now_naive
+        )
+        row["trips"] = 0
+        row["length"] = 0
+        rows.append(row)
+        # trips.user_id is User.uid — resolving it per row via get_username()
+        # was one SQLite query per user with trips.
+        by_uid[user.uid] = row
+
+    with pg_session() as pg:
+        trip_rows = pg.execute(
+            "SELECT user_id, count(*) AS trips, sum(trip_length) AS length,"
+            " max(last_modified) AS last_modified FROM trips GROUP BY user_id"
+        ).fetchall()
+    for trip_row in trip_rows:
+        row = by_uid.get(trip_row["user_id"])
+        if row is None:
+            continue
+        row["trips"] = trip_row["trips"]
+        row["length"] = trip_row["length"] or 0
+        if row["last_login"] is None:
+            row["last_login"] = trip_row["last_modified"]
+
+    for row in rows:
+        row["active"] = bool(
+            row["trips"] > 0
+            and row["last_login"]
+            and row["last_login"] > active_cutoff
+            and row["username"] not in ("demo", "test")
+        )
+        row["active_today"] = bool(
+            row["last_login"] and row["last_login"] > now - timedelta(days=1)
+        )
+        days_since_creation = (now - row["creation_date"]).days or 1
+        row["trips_per_day"] = round(row["trips"] / days_since_creation, 2)
+        # Sortable stand-ins for the two rendered-only columns, so ordering by
+        # them means something (Premium sorts manual/tier, Status by activity).
+        row["premium_label"] = (
+            ""
+            if not row["premium"]
+            else (
+                "Manual"
+                if not row["bmc_supporter_id"]
+                else ADMIN_PREMIUM_TIER_LABELS.get(
+                    row["premium_tier"], row["premium_tier"] or "unknown tier"
+                )
+            )
+        )
+        # An unknown/new tier sorts above the ones we know, so it can't hide at
+        # the bottom of the list unnoticed.
+        row["premium_rank"] = (
+            0
+            if not row["premium"]
+            else ADMIN_PREMIUM_RANKS.get(
+                "manual" if not row["bmc_supporter_id"] else row["premium_tier"],
+                len(ADMIN_PREMIUM_RANKS),
+            )
+        )
+        row["share_label"] = ADMIN_SHARE_LABELS.get(row["share_level"], "Unknown")
+        row["_search"] = _admin_search_haystack(row)
+        # Serialised last, so everything above works with real datetimes.
+        if row["last_login"]:
+            row["last_login"] = row["last_login"].isoformat()
+        if row["creation_date"]:
+            row["creation_date"] = row["creation_date"].isoformat()
+
+    return rows
+
+
+def get_admin_user_rows():
+    cached = _admin_users_cache
+    if (
+        cached["rows"] is not None
+        and cached["built_at"] is not None
+        and (datetime.now() - cached["built_at"]).total_seconds() < _ADMIN_USERS_CACHE_TTL
+    ):
+        return cached["rows"]
+    rows = _build_admin_user_rows()
+    cached["rows"] = rows
+    cached["built_at"] = datetime.now()
+    return rows
+
+
+def _filter_admin_users(rows, search_value):
+    """Space-separated terms, ANDed; a leading "-" negates a term. Terms match at
+    word boundaries against the row's search blob, so they behave as prefixes
+    ("prem" → premium) without bleeding across words ("active" ≠ "inactive")."""
+    terms = [t for t in search_value.lower().split() if t and t != "-"]
+    if not terms:
+        return rows
+
+    positives, negatives = [], []
+    for term in terms:
+        target = negatives if term.startswith("-") else positives
+        target.append(re.compile(r"\b" + re.escape(term.lstrip("-"))))
+
+    return [
+        row
+        for row in rows
+        if all(p.search(row["_search"]) for p in positives)
+        and not any(n.search(row["_search"]) for n in negatives)
+    ]
+
+
+# Columns the table is allowed to order by, keyed on the DataTables `data` name
+# the client sends for the ordered column (so adding/moving a column can't
+# silently sort by the wrong field, as a positional map did).
+ADMIN_SORT_FIELDS = {
+    "username": ("username", ""),
+    "email": ("email", ""),
+    "lang": ("lang", ""),
+    "active": ("active", False),
+    "share_label": ("share_label", ""),
+    "trips": ("trips", 0),
+    "length": ("length", 0),
+    "trips_per_day": ("trips_per_day", 0),
+    "last_login": ("last_login", ""),
+    "creation_date": ("creation_date", ""),
+    # The Premium column is sent as `premium_label` by the client but ordered on
+    # the tier rank behind it (see ADMIN_PREMIUM_RANKS).
+    "premium_label": ("premium_rank", 0),
+}
+
+
 @app.route("/getAdminUsersData", methods=["POST"])
 @owner_required
 def getAdminUsersData():
@@ -7217,130 +7560,56 @@ def getAdminUsersData():
     Server-side processing endpoint for DataTables.
     Returns paginated user data based on DataTables parameters.
     """
-    # Get DataTables parameters
     draw = int(request.form.get("draw", 1))
     start = int(request.form.get("start", 0))
     length = int(request.form.get("length", 10))
     search_value = request.form.get("search[value]", "")
     show_inactive = request.form.get("showInactive", "false") == "true"
 
-    # Get sorting parameters
-    order_column = int(request.form.get("order[0][column]", 1))
+    order_column = request.form.get("order[0][column]")
     order_dir = request.form.get("order[0][dir]", "asc")
+    sort_field = (
+        request.form.get(f"columns[{order_column}][data]", "")
+        if order_column is not None
+        else ""
+    )
 
-    # Column mapping for sorting
-    column_map = {
-        1: "username",
-        2: "lang",
-        3: "active",
-        4: "share_level",
-        5: "trips",
-        6: "length",
-        7: "trips_per_day",
-        8: "last_login",
-        9: "email",
-        10: "creation_date",
-    }
+    all_rows = get_admin_user_rows()
+    users_list = (
+        all_rows if show_inactive else [row for row in all_rows if row["active"]]
+    )
+    records_total = len(users_list)
 
-    # Fetch all users (this could be optimized further with database-level pagination)
-    all_users = {user.username: user.toDict() for user in User.query.all()}
+    users_list = _filter_admin_users(users_list, search_value)
 
-    # Initialize trips and length for all users
-    for user in all_users.values():
-        user["trips"] = 0
-        user["length"] = 0
+    if sort_field in ADMIN_SORT_FIELDS:
+        key, default = ADMIN_SORT_FIELDS[sort_field]
+        users_list = sorted(
+            users_list,
+            key=lambda row: (
+                (row.get(key) or default).lower()
+                if isinstance(default, str)
+                else (row.get(key) if row.get(key) is not None else default)
+            ),
+            reverse=order_dir == "desc",
+        )
 
-    # Fetch users with trips from PostgreSQL
-    with pg_session() as pg:
-        admin_stats_rows = pg.execute(
-            "SELECT user_id, count(*) AS trips, sum(trip_length) AS length,"
-            " max(last_modified) AS last_modified FROM trips GROUP BY user_id"
-        ).fetchall()
-    for user_data in admin_stats_rows:
-        username = get_username(user_data["user_id"])
-        if username in all_users:
-            user = all_users[username]
-            user["trips"] = user_data["trips"]
-            user["length"] = user_data["length"]
-
-            if user["last_login"] is None:
-                user["last_login"] = user_data["last_modified"]
-
-    # Process users
-    users_list = []
-    for user in all_users.values():
-        # Determine if user is active
-        if (
-            user["trips"] > 0
-            and user["last_login"]
-            and user["last_login"] > datetime.now() - timedelta(days=90)
-            and user["username"] not in ["demo", "test"]
-        ):
-            user["active"] = True
-        else:
-            user["active"] = False
-
-        # Filter by active status
-        if not show_inactive and not user["active"]:
-            continue
-
-        # Calculate trips per day
-        days_since_creation = (datetime.now() - user["creation_date"]).days or 1
-        user["trips_per_day"] = round(user["trips"] / days_since_creation, 2)
-
-        # Convert datetime objects to ISO format strings for JSON serialization
-        if user.get("last_login"):
-            user["last_login"] = user["last_login"].isoformat()
-        if user.get("creation_date"):
-            user["creation_date"] = user["creation_date"].isoformat()
-
-        # Add to list
-        users_list.append(user)
-
-    # Apply search filter
-    if search_value:
-        search_lower = search_value.lower()
-        users_list = [
-            user
-            for user in users_list
-            if search_lower in user["username"].lower()
-            or search_lower in user.get("email", "").lower()
-            or search_lower in user.get("lang", "").lower()
-        ]
-
-    # Sort users
-    if order_column in column_map:
-        sort_key = column_map[order_column]
-        reverse = order_dir == "desc"
-
-        # Special handling for different data types
-        if sort_key in ["trips", "length", "trips_per_day"]:
-            users_list.sort(key=lambda x: x.get(sort_key, 0), reverse=reverse)
-        elif sort_key in ["last_login", "creation_date"]:
-            users_list.sort(
-                key=lambda x: x.get(sort_key) or datetime.min, reverse=reverse
-            )
-        elif sort_key == "active":
-            users_list.sort(key=lambda x: x.get(sort_key, False), reverse=reverse)
-        else:
-            users_list.sort(key=lambda x: x.get(sort_key, "").lower(), reverse=reverse)
-
-    # Get total count before pagination
     total_filtered = len(users_list)
 
-    # Apply pagination
     if length != -1:  # -1 means show all
         users_list = users_list[start : start + length]
 
-    # Prepare response
-    response = {
-        "draw": draw,
-        "recordsTotal": len(all_users),
-        "recordsFiltered": total_filtered,
-        "data": users_list,
-    }
-
-    return jsonify(response)
+    return jsonify(
+        {
+            "draw": draw,
+            "recordsTotal": records_total,
+            "recordsFiltered": total_filtered,
+            # The search blob is a server-side index, not display data.
+            "data": [
+                {k: v for k, v in row.items() if k != "_search"} for row in users_list
+            ],
+        }
+    )
 
 
 @app.route("/getAdminStats", methods=["GET"])
@@ -7350,7 +7619,8 @@ def getAdminStats():
     Returns aggregated statistics without user data.
     This is called once on page load to populate the summary stats.
     """
-    # Initialize counters and dictionaries
+    rows = get_admin_user_rows()
+
     active_users = 0
     active_today = 0
     total_trips = 0
@@ -7358,75 +7628,28 @@ def getAdminStats():
     total_langs = {}
     active_langs = {}
 
-    # Fetch all users from the auth database
-    all_users = {user.username: user.toDict() for user in User.query.all()}
-    total_users = len(all_users)
-
-    # Initialize trips and length for all users
-    for user in all_users.values():
-        user["trips"] = 0
-        user["length"] = 0
-
-    # Fetch users with trips from PostgreSQL
-    with pg_session() as pg:
-        admin_stats_rows = pg.execute(
-            "SELECT user_id, count(*) AS trips, sum(trip_length) AS length,"
-            " max(last_modified) AS last_modified FROM trips GROUP BY user_id"
-        ).fetchall()
-    for user_data in admin_stats_rows:
-        username = get_username(user_data["user_id"])
-        if username in all_users:
-            user = all_users[username]
-            user["trips"] = user_data["trips"]
-            user["length"] = user_data["length"]
-
-            if user["last_login"] is None:
-                user["last_login"] = user_data["last_modified"]
-
-                # Check if user was active today
-                if user["last_login"] > datetime.now() - timedelta(days=1):
-                    active_today += 1
-
-    # Calculate statistics
-    for user in all_users.values():
-        # Update total language count
-        if user["lang"] in total_langs:
-            total_langs[user["lang"]] += 1
-        else:
-            total_langs[user["lang"]] = 1
-
-        # Check if the user is active
-        if (
-            user["trips"] > 0
-            and user["last_login"]
-            and user["last_login"] > datetime.now() - timedelta(days=90)
-            and user["username"] not in ["demo", "test"]
-        ):
+    for user in rows:
+        total_langs[user["lang"]] = total_langs.get(user["lang"], 0) + 1
+        if user["active"]:
             active_users += 1
-
-            # Update active language count
-            if user["lang"] in active_langs:
-                active_langs[user["lang"]] += 1
-            else:
-                active_langs[user["lang"]] = 1
-
-        # Update totals
+            active_langs[user["lang"]] = active_langs.get(user["lang"], 0) + 1
+        if user["trips"] and user["active_today"]:
+            active_today += 1
         total_trips += user["trips"]
         total_km += user["length"]
 
-    # Prepare response data
-    response_data = {
-        "stats": {
-            "total_users": total_users,
-            "active_users": active_users,
-            "active_today": active_today,
-            "total_trips": total_trips,
-            "total_km": total_km,
-            "langs": {"total": total_langs, "active": active_langs},
+    return jsonify(
+        {
+            "stats": {
+                "total_users": len(rows),
+                "active_users": active_users,
+                "active_today": active_today,
+                "total_trips": total_trips,
+                "total_km": total_km,
+                "langs": {"total": total_langs, "active": active_langs},
+            }
         }
-    }
-
-    return jsonify(response_data)
+    )
 
 
 @app.route("/getLeaderboardUsers/<type>", methods=["GET"])
@@ -7502,6 +7725,7 @@ def delete_user(uid):
             )
         authDb.session.delete(user)
         authDb.session.commit()
+        invalidate_admin_users_cache()
     except Exception as e:
         print(e)
 
@@ -7554,6 +7778,7 @@ def rename_user(uid):
         print(e)
         return jsonify(success=False, error=str(e)), 500
 
+    invalidate_admin_users_cache()
     return jsonify(success=True)
 
 
@@ -8310,10 +8535,21 @@ SORT_FIELD_EXPRS = {
     "origin_station":        "LOWER(CASE WHEN ascii(origin_station) BETWEEN 127462 AND 127487 THEN substring(origin_station FROM 4) ELSE origin_station END)",
     "destination_station":   "LOWER(CASE WHEN ascii(destination_station) BETWEEN 127462 AND 127487 THEN substring(destination_station FROM 4) ELSE destination_station END)",
     "type":                  "LOWER(type)",
-    "operator":              "LOWER(operator)",
+    # Sort on the operator as displayed (resolved through the aliases), falling back
+    # to the raw text when it names no known operator — otherwise a trip logged 'cff'
+    # shows as SBB but sorts under C. Empty text is folded to NULL so operatorless
+    # trips group with the NULLs at one end instead of straddling both.
+    "operator":              "LOWER(NULLIF(COALESCE(operator_name, operator), ''))",
     "line_name":             "LOWER(line_name)",
     "price":                 "price",
 }
+
+# The instant a trip is ordered on under the default "temporal" sort. Also the
+# expression the now-anchor counts against, so the boundary it finds is exactly the
+# point the ordering puts it at.
+TEMPORAL_SORT_EXPR = (
+    "(utc_filtered_start_datetime + COALESCE(departure_delay, 0) * interval '1 second')"
+)
 
 def get_trips_api_internal(username, is_public=False):
     # Retrieve parameters from DataTables request
@@ -8350,6 +8586,20 @@ def get_trips_api_internal(username, is_public=False):
     if custom_sort_field and custom_sort_field in SORT_FIELD_EXPRS:
         sort_column_name = SORT_FIELD_EXPRS[custom_sort_field]
         sort_direction = request.form.get("sort_dir", sort_direction)
+
+    # Now-anchor: with upcoming trips folded in, the descending timeline runs
+    # [far future … now … oldest past], so its first page is the most distant plan —
+    # useless as a landing page. When the client asks for it (first draw only, no
+    # explicit ?page=), the offset is moved so that "now" sits mid-page instead.
+    # Only for the temporal descending order, where "above/below now" means anything.
+    anchor_now = (
+        request.form.get("anchorNow", type=int, default=0) == 1
+        and include_planned == 1
+        and sort_column_name == "temporal"
+        and sort_direction == "desc"
+        # "All rows" has no page to centre.
+        and length is not None
+    )
 
     # Negative global terms (smart-search "!term"): trips that match NONE of these
     # in any field. Sent by the frontend as a JSON list.
@@ -8512,7 +8762,7 @@ def get_trips_api_internal(username, is_public=False):
     # elide the airliners join (count query) and avoids the tickets join entirely.
     # Columns are referenced at the FilteredTrips level; ticket name and tags are
     # correlated EXISTS subqueries (the CTE no longer joins tickets).
-    def _global_search_predicate(param, operator_ids=None):
+    def _global_search_predicate(param, operator_ids=None, vessel_ids=None):
         like = (
             "remove_diacritics(LOWER({col})) LIKE remove_diacritics(LOWER(:" + param + "))"
         )
@@ -8549,6 +8799,14 @@ def get_trips_api_internal(username, is_public=False):
                 "EXISTS (SELECT 1 FROM trip_operators tvg"
                 f" WHERE tvg.trip_id = FilteredTrips.uid AND tvg.operator_id = ANY(:{param}_operator_ids))"
             )
+        # Same idea for ships, which answer to a name, an IMO and an MMSI alike: a
+        # trip logged as '9773064' displays as Megastar, so searching either has to
+        # find it. Scoped to ferries — the lookup is per row, and only there is `reg`
+        # a ship — and only added when the term actually names a known vessel.
+        if vessel_ids:
+            terms.append(
+                f"(type = 'ferry' AND vessel_resolve(reg) = ANY(:{param}_vessel_ids))"
+            )
         return "(" + " OR ".join(terms) + ")"
 
     if search_value:
@@ -8556,8 +8814,12 @@ def get_trips_api_internal(username, is_public=False):
         global_operator_ids = find_operator_ids(search_value)
         if global_operator_ids:
             search_params["search_operator_ids"] = global_operator_ids
+        with pg_session() as pg:
+            global_vessel_ids = find_vessel_ids(pg, search_value)
+        if global_vessel_ids:
+            search_params["search_vessel_ids"] = global_vessel_ids
         additional_conditions.append(
-            _global_search_predicate("search", global_operator_ids)
+            _global_search_predicate("search", global_operator_ids, global_vessel_ids)
         )
 
     # Negative global terms ("!term"): keep only trips where NO field matches the
@@ -8570,13 +8832,25 @@ def get_trips_api_internal(username, is_public=False):
         neg_operator_ids = find_operator_ids(neg_term)
         if neg_operator_ids:
             search_params[f"{neg_param}_operator_ids"] = neg_operator_ids
+        with pg_session() as pg:
+            neg_vessel_ids = find_vessel_ids(pg, neg_term)
+        if neg_vessel_ids:
+            search_params[f"{neg_param}_vessel_ids"] = neg_vessel_ids
         additional_conditions.append(
-            f"NOT COALESCE({_global_search_predicate(neg_param, neg_operator_ids)}, FALSE)"
+            "NOT COALESCE("
+            f"{_global_search_predicate(neg_param, neg_operator_ids, neg_vessel_ids)}"
+            ", FALSE)"
         )
 
     # Build the queries
     cte = get_dynamic_user_trips_query(base_type_filter=base_type is not None)
-    base_count_query = cte + "SELECT COUNT(*) FROM FilteredTrips"
+    # The anchor rides along with the count that is run anyway: how many of the
+    # matching rows sit above now, which — the order being descending on the same
+    # expression — is the rank of the first past row.
+    count_columns = "COUNT(*)"
+    if anchor_now:
+        count_columns += f", COUNT(*) FILTER (WHERE {TEMPORAL_SORT_EXPR} > NOW())"
+    base_count_query = cte + f"SELECT {count_columns} FROM FilteredTrips"
     base_data_query = cte + "SELECT * FROM FilteredTrips"
     
     # Add type filtering if needed
@@ -8620,7 +8894,7 @@ def get_trips_api_internal(username, is_public=False):
     if sort_column_name == "temporal":
         data_query = base_data_query + (
             f" ORDER BY (utc_filtered_start_datetime IS NULL AND is_project) {sort_direction},"
-            f" (utc_filtered_start_datetime + COALESCE(departure_delay, 0) * interval '1 second') {sort_direction} {nulls},"
+            f" {TEMPORAL_SORT_EXPR} {sort_direction} {nulls},"
             f" uid {sort_direction} LIMIT :limit OFFSET :offset"
         )
     elif sort_column_name == "end_datetime":
@@ -8639,15 +8913,34 @@ def get_trips_api_internal(username, is_public=False):
             f"   + COALESCE(price_to_eur({ticket_share_sql}, {ticket_currency_sql}, {ticket_date_sql}), 0) "
             f"END"
         )
-        data_query = base_data_query + f" ORDER BY {price_expr} {sort_direction} NULLS LAST LIMIT :limit OFFSET :offset"
+        data_query = base_data_query + (
+            f" ORDER BY {price_expr} {sort_direction} NULLS LAST,"
+            f" uid {sort_direction} LIMIT :limit OFFSET :offset"
+        )
     else:
-        data_query = base_data_query + f" ORDER BY {sort_column_name} {sort_direction} {nulls} LIMIT :limit OFFSET :offset"
+        # uid breaks ties so paging stays stable: sorts like operator or type have
+        # large groups of equal (often NULL) values, and without it PG is free to
+        # return them in a different order for each page's query, which makes rows
+        # repeat across pages and others vanish.
+        data_query = base_data_query + (
+            f" ORDER BY {sort_column_name} {sort_direction} {nulls},"
+            f" uid {sort_direction} LIMIT :limit OFFSET :offset"
+        )
 
     search_params["user_id"] = get_user_id(username)
 
     with pg_session() as pg:
         # Fetch filtered count
-        records_filtered = pg.execute(count_query, search_params).scalar()
+        count_row = pg.execute(count_query, search_params).fetchone()
+        records_filtered = count_row[0]
+
+        # Centre the requested page on now: half a page of upcoming trips above the
+        # boundary, the rest of the page below it. The offset stops being a multiple
+        # of the page length, which DataTables displays happily; the next page click
+        # snaps back to its own grid.
+        if anchor_now:
+            now_offset = count_row[1]
+            start = max(0, now_offset - length // 2)
 
         # Fetch the actual page data
         search_params.update({
@@ -8680,6 +8973,36 @@ def get_trips_api_internal(username, is_public=False):
         else:
             trip["is_geodesic"] = None
 
+    # Ships are shown by the name they carried on the trip's own date — `reg` holds the
+    # hull, the name comes from the registration in force then (migration 0056).
+    # Resolved here, for the page's ferry rows only, rather than as a column on the CTE:
+    # the CTE is evaluated over every trip that passes the filters, and this is needed
+    # for the twenty-odd actually being drawn. Keyed by trip rather than by reg, since
+    # two crossings of one ship years apart can legitimately answer differently.
+    ferry_uids = [
+        int(trip["uid"])
+        for trip in trip_dicts
+        if trip["type"] == "ferry" and (trip.get("reg") or "").strip()
+    ]
+    if ferry_uids:
+        with pg_session() as pg:
+            names = {
+                row["trip_id"]: row["name"]
+                for row in pg.execute(
+                    "SELECT trip_id, NULLIF(btrim(r.name), '') AS name"
+                    " FROM trips"
+                    " LEFT JOIN vessel_registrations r"
+                    "   ON r.uid = vessel_identity("
+                    "        vessel_resolve(trips.reg),"
+                    "        COALESCE(trips.utc_start_datetime, trips.start_datetime))"
+                    " WHERE trip_id = ANY(:ids)",
+                    {"ids": ferry_uids},
+                ).fetchall()
+            }
+        for trip in trip_dicts:
+            if trip["type"] == "ferry":
+                trip["vessel_name"] = names.get(trip["uid"])
+
     # If public, remove price information
     if is_public:
         for trip in trip_dicts:
@@ -8700,14 +9023,17 @@ def get_trips_api_internal(username, is_public=False):
             )
 
     # Return the JSON for DataTables
-    return jsonify(
-        {
-            "draw": draw,
-            "recordsTotal": records_filtered,
-            "recordsFiltered": records_filtered,
-            "data": trip_list,
-        }
-    )
+    response = {
+        "draw": draw,
+        "recordsTotal": records_filtered,
+        "recordsFiltered": records_filtered,
+        "data": trip_list,
+    }
+    # Tell the client where the anchored page actually starts, so its paginator and
+    # "showing x to y" agree with the rows it was handed.
+    if anchor_now:
+        response["start"] = start
+    return jsonify(response)
 
 
 @app.route("/u/<username>/get_trips_api", methods=["POST"])
@@ -8773,7 +9099,27 @@ def toggle_role(uid, role, action):
     # Set the role to True for 'make' or False for 'remove'
     setattr(user, role, action == "make")
 
+    if role == "premium":
+        # Manual grants are intentionally never assigned a tier and never touch
+        # Discord — tier assignment and role sync are BMC-webhook-only concepts,
+        # so a manual grant stays "Manual" until/unless a real webhook confirms
+        # an actual tier for this user (see apply_membership_status).
+        user.premium_tier = None
+        # A manual action (either direction) supersedes any pending BMC
+        # cancellation flag — the owner reviewing it here is the resolution.
+        user.premium_cancel_at = None
+
     authDb.session.commit()
+    invalidate_admin_users_cache()
+
+    if role == "premium" and action == "remove":
+        # Asymmetric on purpose: a manual grant doesn't touch Discord (no
+        # confirmed tier to base a role on), but an explicit manual revoke
+        # should still strip whatever tier role they currently hold — leaving
+        # it in place would mean Trainlog says "not premium" while Discord
+        # still shows a paid tier.
+        sync_discord_tier(user, None)
+
     return jsonify(success=True)
 
 
@@ -8821,15 +9167,8 @@ def user_settings(username):
     flight_3d_checked = "checked" if user.flight_3d else ""
     live_tracking_checked = "checked" if user.live_tracking else ""
 
-    # Temporary: preview the redesigned settings page with ?v2=1 (owner only).
-    template = (
-        "user_settings_v2.html"
-        if request.args.get("v2") and session.get("userinfo", {}).get("is_owner")
-        else "user_settings.html"
-    )
-
     return render_template(
-        template,
+        "user_settings.html",
         currencyOptions=get_available_currencies(),
         title=lang[session["userinfo"]["lang"]]["user_settings"],
         username=username,
@@ -8845,6 +9184,9 @@ def user_settings(username):
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
         user_globe=user.globe,
+        discord_id=user.discord_id,
+        user_email=user.email,
+        pending_email=user.pending_email,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -8941,6 +9283,63 @@ def regenerate_mcp_token(username):
     user.mcp_token = secrets.token_urlsafe(32)
     authDb.session.commit()
     return redirect(url_for("api_settings", username=username))
+
+
+@app.route("/u/<username>/change_email", methods=["POST"])
+@login_required
+def request_email_change(username):
+    """Request a change of the account's login email. A confirmation link is
+    emailed to the new address rather than trusting it immediately, so a user
+    can't take over an inbox they don't control. Confirming also re-matches
+    any Buy Me a Coffee membership webhook that arrived for that email before
+    it was linked to this account (see reconcile_pending_events)."""
+    user = User.query.filter_by(username=username).first()
+    email = request.form.get("email", "").strip().lower()
+    if not email:
+        flash("Please enter an email address", "error")
+        return redirect(url_for("user_settings", username=username))
+    if email == user.email:
+        flash("That is already your email", "error")
+        return redirect(url_for("user_settings", username=username))
+    if User.query.filter_by(email=email).first():
+        flash("That email is already in use", "error")
+        return redirect(url_for("user_settings", username=username))
+
+    token = secrets.token_hex(32)
+    user.pending_email = email
+    user.email_verify_token = token
+    authDb.session.commit()
+
+    link = url_for("confirm_email_change", token=token, _external=True)
+    sendEmail(
+        email,
+        "Confirm your new email - Trainlog",
+        f'Click to confirm this is your new Trainlog email: <a href="{link}">{link}</a>',
+    )
+    flash("Check your inbox to confirm your new email", "success")
+    return redirect(url_for("user_settings", username=username))
+
+
+@app.route("/confirm_email/<token>", methods=["GET"])
+def confirm_email_change(token):
+    user = User.query.filter_by(email_verify_token=token).first()
+    if not user:
+        flash("Invalid or expired confirmation link", "error")
+        return redirect(url_for("login"))
+
+    if User.query.filter_by(email=user.pending_email).first():
+        flash("That email is already in use", "error")
+        return redirect(url_for("login"))
+
+    user.email = user.pending_email
+    user.pending_email = None
+    user.email_verify_token = None
+    authDb.session.commit()
+
+    reconcile_pending_events(user)
+
+    flash("Email updated", "success")
+    return redirect(url_for("user_settings", username=user.username))
 
 
 @app.route("/u/<username>/settings_app", methods=["GET", "POST"])
@@ -9067,6 +9466,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         edit_copy_type = "edit"
     elif "copy" in request.path:
         edit_copy_type = "copy"
+        
+    from_app = request.args.get('fromApp') == 'true'
 
     trip = get_trip_pg(tripId)
     with pg_session() as pg:
@@ -9139,47 +9540,54 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     else:
         tripDepartureDelay = int(trip["departure_delay"] / 60) if trip["departure_delay"] is not None else ""
         tripArrivalDelay = int(trip["arrival_delay"] / 60) if trip["arrival_delay"] is not None else ""
-    return render_template(
-        "edit_copy.html",
-        title=lang[session["userinfo"]["lang"]][edit_copy_type],
-        start_datetime=trip["start_datetime"],
-        end_datetime=trip["end_datetime"],
-        currencyOptions=get_available_currencies(),
-        unknownType=unknownType,
-        precision=precision,
-        tripId=tripId,
-        origin=origin,
-        destination=destination,
-        trip=trip,
-        fr24_calls=fr24_usage(username),
-        edit_copy_type=edit_copy_type,
-        country_list=get_all_countries(),
-        username=username,
-        tripOperator=tripOperator or "",
-        tripHours=tripHours or "",
-        tripMinutes=tripMinutes or "",
-        tripLineName=tripLineName or "",
-        tripVisibility=tripVisibility or "",
-        tripMaterialType=tripMaterialType or "",
-        tripMaterialTypeAdvanced=tripMaterialTypeAdvanced or "",
-        tripSeat=tripSeat or "",
-        tripReg=tripReg or "",
-        tripPrice=tripPrice if tripPrice is not None else "",
-        tripCurrency=tripCurrency or "",
-        tripPurchasingDate=tripPurchasingDate or "",
-        tripType=tripType,
-        tripTicketId=tripTicketId or "",
-        wplist=wplist,
-        route_source=trip.get("route_source") or "router",
-        tripNotes=tripNotes or "",
-        colorblind=colorblind,
-        tripDepartureDelay=tripDepartureDelay,
-        tripArrivalDelay=tripArrivalDelay,
-        tripPowerType=trip.get("power_type"),
-        tripCo2Override=trip.get("co2_override"),
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-    )
+        
+    context = {
+        "title": lang[session["userinfo"]["lang"]][edit_copy_type],
+        "start_datetime": trip["start_datetime"],
+        "end_datetime": trip["end_datetime"],
+        "currencyOptions": get_available_currencies(),
+        "unknownType": unknownType,
+        "precision": precision,
+        "tripId": tripId,
+        "origin": origin,
+        "destination": destination,
+        "trip": trip,
+        "fr24_calls": fr24_usage(username),
+        "edit_copy_type": edit_copy_type,
+        "country_list": get_all_countries(),
+        "username": username,
+        "tripOperator": tripOperator or "",
+        "tripHours": tripHours or "",
+        "tripMinutes": tripMinutes or "",
+        "tripLineName": tripLineName or "",
+        "tripVisibility": tripVisibility or "",
+        "tripMaterialType": tripMaterialType or "",
+        "tripMaterialTypeAdvanced": tripMaterialTypeAdvanced or "",
+        "tripSeat": tripSeat or "",
+        "tripReg": tripReg or "",
+        "tripPrice": tripPrice if tripPrice is not None else "",
+        "tripCurrency": tripCurrency or "",
+        "tripPurchasingDate": tripPurchasingDate or "",
+        "tripType": tripType,
+        "tripTicketId": tripTicketId or "",
+        "wplist": wplist,
+        "route_source": trip.get("route_source") or "router",
+        "tripNotes": tripNotes or "",
+        "colorblind": colorblind,
+        "tripDepartureDelay": tripDepartureDelay,
+        "tripArrivalDelay": tripArrivalDelay,
+        "tripPowerType": trip.get("power_type"),
+        "tripCo2Override": trip.get("co2_override"),
+    }
+
+    if from_app:
+        return jsonify(context), 200
+    
+    # Only for the website
+    context.update(lang[session["userinfo"]["lang"]])
+    context.update(session["userinfo"])
+
+    return render_template("edit_copy.html", **context)
 
 
 @app.route("/u/<username>/export")
@@ -9799,80 +10207,285 @@ def adminManual():
     )
 
 
+def _clean_vessel_number(value, digits, label):
+    """A submitted IMO or MMSI, or None when the field was left empty.
+
+    Raises ValueError with a message for the admin when it is neither — the DB has the
+    same check, but a constraint violation reaches the browser as a 500.
+    """
+    value = (value or "").strip()
+    if not value:
+        return None
+    if not (value.isdigit() and len(value) == digits):
+        raise ValueError(f"{label} must be exactly {digits} digits")
+    return value
+
+
+# The register itself, as one query (see _register_rows).
+SHIP_REGISTER_SQL = """
+            -- How many logged trips each hull actually accounts for. Resolved
+            -- through vessel_resolve, so trips logged under an old name count
+            -- towards the same hull; the register is sorted by it, which puts the
+            -- ships worth curating at the top.
+            WITH trip_counts AS (
+                SELECT vessel_resolve(reg) AS vessel_id,
+                       COUNT(*) AS trips,
+                       -- How many people, not just how many crossings: forty trips by
+                       -- one commuter and forty by forty travellers are different
+                       -- ships to be curating.
+                       COUNT(DISTINCT user_id) AS users,
+                       -- Who mostly runs her. Decoration, but a useful one: the
+                       -- operator is often what identifies a small ferry, where the
+                       -- name is generic and the hull has no IMO. mode() ignores
+                       -- NULLs and NULLIF keeps blanks from winning; the first name
+                       -- only, since a ferry is rarely a multi-operator trip.
+                       MODE() WITHIN GROUP (
+                           ORDER BY NULLIF(btrim(split_part(operator, ',', 1)), '')
+                       ) AS operator
+                FROM trips
+                WHERE trip_type = 'ferry' AND reg IS NOT NULL AND btrim(reg) <> ''
+                GROUP BY 1
+            )
+            SELECT v.uid, v.imo, v.trainlog_id,
+                   -- The hull as it is NOW. Not columns of the hull — it has none of
+                   -- these — but the most recent registration's, so a row can be
+                   -- recognised at a glance. The history is under Periods.
+                   r.name, r.country_code,
+                   -- Every other name it has carried. Shown as "ex …" and, because
+                   -- DataTables searches the text of a row, that is also what makes
+                   -- a hull findable by a name it no longer goes by.
+                   ARRAY(
+                       SELECT a.name FROM vessel_registrations a
+                       WHERE a.vessel_id = v.uid
+                         AND a.name IS NOT NULL
+                         AND a.uid IS DISTINCT FROM r.uid
+                       ORDER BY a.effective_date DESC NULLS LAST, a.uid DESC
+                   ) AS former_names,
+                   p.local_image_path,
+                   COALESCE(c.trips, 0) AS trips,
+                   COALESCE(c.users, 0) AS users,
+                   c.operator,
+                   o.short_name AS operator_name,
+                   o.logo_url AS operator_logo,
+                   (SELECT COUNT(*) FROM vessel_registrations a WHERE a.vessel_id = v.uid)
+                       AS registrations
+            FROM vessels v
+            LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+            LEFT JOIN trip_counts c ON c.vessel_id = v.uid
+            -- That operator name resolved through operator_aliases, exactly as a
+            -- trip resolves its own (see get_trip.sql), so a ferry logged as SNCM
+            -- picks up the logo held under Corsica Linea. The current logo: this is
+            -- a register of ships, not a history of liveries.
+            LEFT JOIN LATERAL (
+                SELECT op.short_name,
+                       (SELECT l.logo_url FROM operator_logos l
+                        WHERE l.operator_id = op.operator_id
+                        ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
+                        LIMIT 1) AS logo_url
+                FROM operator_aliases a
+                JOIN operators op ON op.operator_id = a.operator_id
+                WHERE a.normalized = operator_normalize(c.operator)
+                ORDER BY (a.operator_type = 'operator') DESC, a.operator_id
+                LIMIT 1
+            ) o ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT local_image_path
+                FROM ship_pictures
+                WHERE registration_id = r.uid AND local_image_path IS NOT NULL
+                ORDER BY fetch_date DESC NULLS LAST, uid DESC
+                LIMIT 1
+            ) p ON TRUE
+            -- One row or all of them: the same query serves the page and the single-row
+            -- refresh the table does over ajax after an edit, so a row that comes back can
+            -- never disagree with the one it replaces. CAST, because a bind parameter that
+            -- is only ever compared to NULL has no type psycopg2 can infer.
+            WHERE (CAST(:vessel_id AS INTEGER) IS NULL OR v.uid = CAST(:vessel_id AS INTEGER))
+            ORDER BY COALESCE(c.trips, 0) DESC, r.name NULLS LAST, v.uid
+            
+"""
+
+
+def _register_rows(pg, vessel_id=None):
+    """The register's rows — all of them, or the one hull asked for."""
+    return [
+        # The flag is rendered here rather than in the template: get_flag_emoji is a
+        # plain helper, not a Jinja global, and every other page that shows a flag
+        # server-side does the same.
+        dict(
+            row._mapping,
+            flag=get_flag_emoji(row["country_code"]) if row["country_code"] else "",
+            unregistered=False,
+        )
+        for row in pg.execute(
+            SHIP_REGISTER_SQL, {"vessel_id": vessel_id}
+        ).fetchall()
+    ]
+
+
 @app.route("/admin/ships", methods=["GET", "POST"])
 @admin_required
 def ships():
+    """
+    The vessel register, one row per HULL.
+
+    A hull is permanent and carries only its numbers: the IMO, or the synthetic
+    trainlog_id where it has none. Its MMSI, flag and photo all belong to a registration —
+    the hull under one identity, from a date — and are edited through the Periods view,
+    because a ship that has been renamed has no single one of any of them.
+
+    The current name is the exception: this form edits it directly, because a hull with no
+    IMO would otherwise open a form with nothing in it at all.
+    """
     if request.method == "POST":
-        original_vessel_name = request.form.get("original_vessel_name")
-        vessel_name = request.form.get("vessel_name")
-        country_code = request.form.get("country_code")
-        file = request.files.get("ship_picture")
+        vessel_id = (request.form.get("vessel_id") or "").strip()
+        name = (request.form.get("name") or "").strip() or None
 
-        local_image_path = None
+        try:
+            imo = _clean_vessel_number(request.form.get("imo"), 7, "IMO")
+        except ValueError as exc:
+            return jsonify({"success": False, "error": str(exc)}), 400
 
-        # If a new image is uploaded, save it
-        if file:
-            filename = f"{country_code}_{vessel_name}.jpg".replace(" ", "_").replace(
-                "/", ""
-            )
-            filepath = os.path.join("static/images/ship_pictures", filename)
-            file.save(filepath)
-            local_image_path = filename
+        if not (imo or name):
+            return jsonify(
+                {"success": False, "error": "Give at least a name or an IMO"}
+            ), 400
 
         with pg_session() as pg:
-            if original_vessel_name:  # If original_vessel_name is set, it's an update
-                # Update ship data
-                if local_image_path:  # If a new image was uploaded, update it
-                    pg.execute(
-                        """
-                        UPDATE ship_pictures
-                        SET vessel_name = :vessel_name, country_code = :country_code, local_image_path = :local_image_path
-                        WHERE vessel_name = :original_vessel_name
-                        """,
-                        {
-                            "vessel_name": vessel_name,
-                            "country_code": country_code,
-                            "local_image_path": local_image_path,
-                            "original_vessel_name": original_vessel_name,
-                        },
-                    )
-                else:  # If no new image, just update text fields
-                    pg.execute(
-                        """
-                        UPDATE ship_pictures
-                        SET vessel_name = :vessel_name, country_code = :country_code
-                        WHERE vessel_name = :original_vessel_name
-                        """,
-                        {
-                            "vessel_name": vessel_name,
-                            "country_code": country_code,
-                            "original_vessel_name": original_vessel_name,
-                        },
-                    )
-            else:  # Otherwise, it's an insert
-                pg.execute(
+            # An IMO identifies one hull, so it cannot sit on two. A hull with no IMO is
+            # perfectly legal — it is identified by its trainlog_id instead.
+            if imo:
+                clash = pg.execute(
                     """
-                    INSERT INTO ship_pictures (vessel_name, country_code, local_image_path)
-                    VALUES (:vessel_name, :country_code, :local_image_path)
+                    SELECT v.uid, r.name FROM vessels v
+                    LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+                    WHERE v.imo = :imo
+                      AND v.uid <> COALESCE(CAST(NULLIF(:vessel_id, '') AS INTEGER), -1)
+                    LIMIT 1
                     """,
-                    {
-                        "vessel_name": vessel_name,
-                        "country_code": country_code,
-                        "local_image_path": local_image_path,
-                    },
-                )
+                    {"imo": imo, "vessel_id": vessel_id},
+                ).fetchone()
+                if clash:
+                    return jsonify(
+                        {
+                            "success": False,
+                            "error": f"IMO {imo} is already hull #{clash['uid']}"
+                            f" ({clash['name'] or 'unnamed'})",
+                        }
+                    ), 409
 
-        return jsonify({"success": True})
+            if vessel_id:
+                uid = int(vessel_id)
+                pg.execute(
+                    "UPDATE vessels SET imo = :imo, updated_on = CURRENT_TIMESTAMP"
+                    " WHERE uid = :uid",
+                    {"imo": imo, "uid": uid},
+                )
+            else:
+                uid = pg.execute(
+                    "INSERT INTO vessels (imo) VALUES (:imo) RETURNING uid", {"imo": imo}
+                ).scalar()
+
+            # The name belongs to a registration. This form edits the current one — for
+            # almost every ship the only one — so that a hull with no IMO is not an empty
+            # form with nothing to identify it by. A hull that has no registration yet
+            # (known only by its number) gets its first.
+            if name:
+                registration_id = pg.execute(
+                    "SELECT vessel_identity(:uid, NULL)", {"uid": uid}
+                ).scalar()
+                if registration_id:
+                    pg.execute(
+                        "UPDATE vessel_registrations SET name = :name,"
+                        " updated_on = CURRENT_TIMESTAMP WHERE uid = :uid",
+                        {"name": name, "uid": registration_id},
+                    )
+                else:
+                    pg.execute(
+                        "INSERT INTO vessel_registrations (vessel_id, name)"
+                        " VALUES (:vessel_id, :name)",
+                        {"vessel_id": uid, "name": name},
+                    )
+
+        # The uid, so the caller can fetch back the row it has just changed (or created)
+        # instead of reloading the page.
+        return jsonify({"success": True, "vessel_id": uid})
 
     with pg_session() as pg:
-        shipList = [
-            dict(row._mapping)
-            for row in pg.execute("SELECT * FROM ship_pictures").fetchall()
+        shipList = _register_rows(pg)
+
+        # What people have logged that the register does not know: a ferry trip whose
+        # reg resolves to no hull at all. Almost always a name typed by hand. These join
+        # the register in ONE table — an unregistered ship is a ship, it just has no row
+        # yet, and keeping it in a list of its own meant scrolling between two tables to
+        # see whether a name was already held under another spelling.
+        unlinked = [
+            dict(row._mapping, unregistered=True)
+            for row in pg.execute(
+                """
+                -- Grouped by the NORMALISED name, so "MS Pont-Aven", "Pont Aven" and
+                -- "pont-aven" are one ship and one decision, exactly as vessel_resolve
+                -- would treat them once the row exists. The spelling offered back is the
+                -- commonest one; the others are shown so a mis-grouping is visible.
+                WITH unlinked AS (
+                    SELECT vessel_normalize(reg) AS name_key,
+                           MODE() WITHIN GROUP (ORDER BY btrim(reg)) AS reg,
+                           COUNT(*) AS trips,
+                           COUNT(DISTINCT user_id) AS users,
+                           ARRAY_AGG(DISTINCT btrim(reg)) AS spellings,
+                           -- Who runs her, as in the register above: on a ship with
+                           -- nothing but a generic name, the operator is what says which
+                           -- ship it is.
+                           MODE() WITHIN GROUP (
+                               ORDER BY NULLIF(btrim(split_part(operator, ',', 1)), '')
+                           ) AS operator
+                    FROM trips
+                    WHERE trip_type = 'ferry'
+                      AND reg IS NOT NULL AND btrim(reg) <> ''
+                      -- Punctuation only normalises to nothing, and a registration must
+                      -- have a name or an MMSI — there is nothing here to create.
+                      AND vessel_normalize(reg) IS NOT NULL
+                      AND vessel_resolve(reg) IS NULL
+                    GROUP BY 1
+                )
+                SELECT u.*, o.short_name AS operator_name, o.logo_url AS operator_logo
+                FROM unlinked u
+                LEFT JOIN LATERAL (
+                    SELECT op.short_name,
+                           (SELECT l.logo_url FROM operator_logos l
+                            WHERE l.operator_id = op.operator_id
+                            ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
+                            LIMIT 1) AS logo_url
+                    FROM operator_aliases a
+                    JOIN operators op ON op.operator_id = a.operator_id
+                    WHERE a.normalized = operator_normalize(u.operator)
+                    ORDER BY (a.operator_type = 'operator') DESC, a.operator_id
+                    LIMIT 1
+                ) o ON TRUE
+                ORDER BY u.trips DESC, u.reg
+                """
+            ).fetchall()
         ]
+
+    # One list, one table. The unregistered rows carry the register's own keys — the
+    # logged text stands in for the name, and everything a hull has and they have not is
+    # simply absent — so the template renders both from the same loop and DataTables
+    # sorts and searches across the two.
+    shipList = shipList + [
+        dict(row, name=row["reg"], registrations=0, uid=None, imo=None,
+             trainlog_id=None, flag="", former_names=[], local_image_path=None)
+        for row in unlinked
+    ]
+    shipList.sort(key=lambda s: (-(s["trips"] or 0), (s["name"] or "").lower()))
 
     return render_template(
         "admin/ships.html",
         shipList=shipList,
+        # The one-click cleanup below acts on exactly these, and the button says how many.
+        unusedCount=sum(1 for s in shipList if not s["unregistered"] and not s["trips"]),
+        unregisteredCount=sum(1 for s in shipList if s["unregistered"]),
+        # For the flag picker in the Periods form, same list every other country select
+        # on the site is built from.
+        country_list=get_all_countries(),
         username=getUser(),
         nav="bootstrap/navigation.html",
         **lang[session["userinfo"]["lang"]],
@@ -9880,18 +10493,1181 @@ def ships():
     )
 
 
+@app.route("/admin/ships/backfill", methods=["GET", "POST"])
+@admin_required
+def backfill_ships():
+    """
+    Fill the register's gaps from Wikidata, on demand.
+
+    GET is the page: a worklist of what Wikidata could add, in three piles — fields it
+    can fill in on a number match, photos it can license properly, and names only a human
+    can resolve. It is a page rather than an overlay because working through it is a
+    session, not a glance.
+
+    POST is its two calls. With no plan it builds one (the slow half — several SPARQL
+    round trips, tens of seconds) and writes nothing; carrying a plan back writes exactly
+    it, with no network at all. So what gets written is what was on screen rather than
+    whatever a second query happens to return, and the page can hand back a subset when
+    the admin unticks a row.
+
+    Safe to re-run: only NULLs are ever filled, so a name or number curated here always
+    survives. Every item is re-checked against the register at write time, since a plan
+    can be minutes old.
+    """
+    if request.method == "GET":
+        return render_template(
+            "admin/ships_backfill.html",
+            username=getUser(),
+            nav="bootstrap/navigation.html",
+            **lang[session["userinfo"]["lang"]],
+            **session["userinfo"],
+        )
+
+    raw_plan = request.form.get("plan")
+
+    try:
+        if raw_plan:
+            written = backfill_apply_plan(json.loads(raw_plan))
+            result = {**written, "suggestions": [], "photos": [], "applied": True}
+        else:
+            result = {
+                **backfill_build_plan(report_names=True),
+                "skipped": [],
+                "applied": False,
+            }
+    except (ValueError, TypeError) as exc:
+        return jsonify({"success": False, "error": f"Malformed plan: {exc}"}), 400
+    except Exception as exc:
+        logger.exception("Vessel backfill failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+
+    return jsonify({"success": True, **result})
+
+
 @app.route("/admin/ships/delete", methods=["POST"])
 @admin_required
 def delete_ship():
-    vessel_name = request.form.get("vessel_name")
+    vessel_id = request.form.get("vessel_id")
 
     with pg_session() as pg:
+        # Cached photos go with it (ON DELETE CASCADE); the files stay on disk, as
+        # they always have.
         pg.execute(
-            "DELETE FROM ship_pictures WHERE vessel_name = :vessel_name",
-            {"vessel_name": vessel_name},
+            "DELETE FROM vessels WHERE uid = :uid",
+            {"uid": int(vessel_id)},
         )
 
     return jsonify({"success": True})
+
+
+@app.route("/admin/ships/<int:vessel_id>/row")
+@admin_required
+def ship_row(vessel_id):
+    """
+    One hull's row of the register, as the HTML the table holds.
+
+    What the page fetches after an edit instead of reloading itself: the register is a
+    table of several hundred rows, most of them with a photo, and re-fetching all of it
+    to show that one name changed is the reload this replaces. Rendered from the same
+    partial the table is built from, so the row that comes back cannot drift from the
+    one it replaces.
+    """
+    with pg_session() as pg:
+        rows = _register_rows(pg, vessel_id)
+
+    if not rows:
+        return "", 404
+    return render_template("admin/ship_row.html", ship=rows[0])
+
+
+@app.route("/admin/ships/lookup")
+@admin_required
+def ship_lookup():
+    """
+    Hulls matching a few typed characters, for picking one to merge into.
+
+    Deliberately not the register query: this is a chooser, so it wants a name, a number
+    and a photo for twenty rows, not trip counts and operator logos for eight hundred.
+    Searches every name a hull has carried, since the row being merged away is often the
+    one holding the spelling being searched for.
+    """
+    query = (request.args.get("q") or "").strip()
+    exclude = request.args.get("exclude") or 0
+    if not query:
+        return jsonify({"success": True, "results": []})
+
+    with pg_session() as pg:
+        rows = pg.execute(
+            """
+            SELECT v.uid, v.imo, v.trainlog_id, r.name, p.local_image_path
+            FROM vessels v
+            LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+            LEFT JOIN LATERAL (
+                SELECT local_image_path
+                FROM ship_pictures
+                WHERE registration_id = r.uid AND local_image_path IS NOT NULL
+                ORDER BY fetch_date DESC NULLS LAST, uid DESC
+                LIMIT 1
+            ) p ON TRUE
+            WHERE v.uid <> CAST(:exclude AS INTEGER)
+              AND (v.imo LIKE :like
+                   OR v.trainlog_id ILIKE :like
+                   OR EXISTS (SELECT 1 FROM vessel_registrations a
+                              WHERE a.vessel_id = v.uid AND a.name ILIKE :like))
+            ORDER BY r.name NULLS LAST, v.uid
+            LIMIT 20
+            """,
+            {"like": f"%{query}%", "exclude": exclude},
+        ).fetchall()
+
+    return jsonify(
+        {
+            "success": True,
+            "results": [
+                {
+                    "uid": row["uid"],
+                    "imo": row["imo"],
+                    "trainlog_id": row["trainlog_id"],
+                    "name": row["name"],
+                    "image": (
+                        f"/static/images/ship_pictures/{row['local_image_path']}"
+                        if row["local_image_path"]
+                        else None
+                    ),
+                }
+                for row in rows
+            ],
+        }
+    )
+
+
+@app.route("/admin/ships/merge", methods=["POST"])
+@admin_required
+def merge_ships():
+    """
+    Fold one hull into another: the trips move, and the hull merged away is deleted.
+
+    The same ship reaches the register more than once — logged as "John Paul II", as
+    "St John Paul Ii" and as "MV Saint John Paul II", each spelling resolving to nothing
+    and each registered in its turn. They are one hull with three rows, and the only way
+    back is to say which row is the ship.
+
+    What moves is the trips, and a photo where the survivor has none. What does NOT move
+    is the loser's registrations: they are dated periods of a hull, and grafting an
+    undated one onto another hull makes it the newest — which would rename the survivor
+    to the misspelling being merged away. They go with the row (ON DELETE CASCADE).
+    """
+    source_id = (request.form.get("source_id") or "").strip()
+    target_id = (request.form.get("target_id") or "").strip()
+    if not (source_id and target_id):
+        return jsonify({"success": False, "error": "Two hulls are needed"}), 400
+    if source_id == target_id:
+        return jsonify({"success": False, "error": "That is the same hull"}), 400
+
+    with pg_session() as pg:
+        hulls = {
+            row["uid"]: row
+            for row in pg.execute(
+                """
+                SELECT v.uid, v.imo, v.trainlog_id,
+                       vessel_identity(v.uid, NULL) AS registration_id
+                FROM vessels v WHERE v.uid IN (:source, :target)
+                """,
+                {"source": int(source_id), "target": int(target_id)},
+            ).fetchall()
+        }
+        source = hulls.get(int(source_id))
+        target = hulls.get(int(target_id))
+        if not (source and target):
+            return jsonify({"success": False, "error": "No such hull"}), 400
+
+        # Resolved to ids first: after the UPDATE these trips resolve to the target, and
+        # after the DELETE the source is gone — neither can be used to find them again.
+        trip_ids = [
+            row[0]
+            for row in pg.execute(
+                """
+                SELECT trip_id FROM trips
+                WHERE trip_type = 'ferry'
+                  AND reg IS NOT NULL AND btrim(reg) <> ''
+                  AND vessel_resolve(reg) = :source
+                """,
+                {"source": source["uid"]},
+            ).fetchall()
+        ]
+        if trip_ids:
+            pg.execute(
+                "UPDATE trips SET reg = :key WHERE trip_id = ANY(:ids)",
+                {"key": target["imo"] or target["trainlog_id"], "ids": trip_ids},
+            )
+
+        # A photo is worth keeping: it is the same ship, and the row being merged away
+        # may be the one somebody found a picture for. Only where the survivor has none,
+        # so a curated photo is never displaced by an older one.
+        if source["registration_id"] and target["registration_id"]:
+            pg.execute(
+                """
+                UPDATE ship_pictures SET registration_id = :target
+                WHERE registration_id = :source
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ship_pictures q
+                      WHERE q.registration_id = :target AND q.local_image_path IS NOT NULL
+                  )
+                """,
+                {"source": source["registration_id"], "target": target["registration_id"]},
+            )
+
+        # Registrations and any photo left on them go with it (ON DELETE CASCADE); the
+        # image files stay on disk, as they do for a plain delete.
+        pg.execute("DELETE FROM vessels WHERE uid = :uid", {"uid": source["uid"]})
+
+    return jsonify({"success": True, "vessel_id": target["uid"], "trips": len(trip_ids)})
+
+
+@app.route("/admin/ships/prune", methods=["POST"])
+@admin_required
+def prune_ships():
+    """
+    Drop every hull no trip resolves to.
+
+    A hull earns its row by being sailed on. One with no trip at all is nearly always a
+    mistake — a typo'd IMO, a duplicate created before the name resolved, a row from a
+    trip since deleted or re-typed — and it costs the register nothing to be rid of it,
+    because registering the ship again is the same three fields.
+
+    Photos go with it (ON DELETE CASCADE on ship_pictures); the files stay on disk, as
+    they do for a single delete. Note this reaches a hull an admin added by hand and has
+    not logged a trip on yet, which is the one case where it is not a mistake — hence a
+    button that says how many, and not something that runs on its own.
+    """
+    with pg_session() as pg:
+        deleted = pg.execute(
+            """
+            -- The used set is resolved ONCE, over the ferry trips, rather than per hull:
+            -- vessel_resolve is four index lookups a call, and asking it per vessel per
+            -- trip is the shape that took the periods endpoint to a minute (0056).
+            WITH used AS (
+                SELECT DISTINCT vessel_resolve(reg) AS uid
+                FROM trips
+                WHERE trip_type = 'ferry' AND reg IS NOT NULL AND btrim(reg) <> ''
+            )
+            DELETE FROM vessels
+            WHERE uid NOT IN (SELECT uid FROM used WHERE uid IS NOT NULL)
+            RETURNING uid
+            """
+        ).fetchall()
+
+    # The uids, not just the count: the page takes those rows out of the table itself
+    # rather than reloading to find them gone.
+    return jsonify({"success": True, "deleted": [row[0] for row in deleted]})
+
+
+@app.route("/admin/ships/wikidata_search")
+@admin_required
+def ship_wikidata_search():
+    """
+    Ships on Wikidata matching a name, with their numbers and their photo.
+
+    The counterpart to the backfill, which goes the other way: it matches a hull we hold
+    by its IMO or MMSI, and can do nothing for a ship logged as a bare name. This finds
+    the item by name so the numbers can be filled in from it — and once there is a
+    number, everything else in the register works.
+
+    Candidates only, as with the Commons search: several real ships share a name, and
+    Wikidata cannot tell which one somebody sailed on.
+    """
+    try:
+        results = wikidata_search_ships(request.args.get("q"))
+    except Exception as exc:
+        logger.exception("Wikidata ship search failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+    return jsonify({"success": True, "results": results})
+
+
+def _unresolved_trips(pg, reg):
+    """
+    The ferry trips logged under this text that still resolve to no hull.
+
+    Read BEFORE anything is written, in both the register and the merge paths: once a row
+    exists that resolves the name, "trips that resolve to nothing" no longer describes
+    them, and a name two hulls share would be settled by vessel_resolve's own tie-break
+    (lowest uid) rather than by the admin who is looking at it.
+    """
+    return [
+        row[0]
+        for row in pg.execute(
+            """
+            SELECT trip_id FROM trips
+            WHERE trip_type = 'ferry'
+              AND reg IS NOT NULL AND btrim(reg) <> ''
+              AND vessel_normalize(reg) = vessel_normalize(:reg)
+              AND vessel_resolve(reg) IS NULL
+            """,
+            {"reg": reg},
+        ).fetchall()
+    ]
+
+
+@app.route("/admin/ships/adopt", methods=["POST"])
+@admin_required
+def adopt_ship():
+    """
+    Turn a name people have been logging into a hull of its own.
+
+    The register only knows a ferry trip's `reg` when something resolves it; everything
+    else is text somebody typed, and that text is all this has to go on. So: create the
+    hull (with an IMO if the admin knows one, otherwise its trainlog_id alone), give it
+    its first registration under the name as logged, and re-point the trips at the hull's
+    key — the same rewrite migration 0056 did, and what makes a later rename reach every
+    trip at once instead of orphaning them.
+
+    The trips are chosen BEFORE the row exists, while they still resolve to nothing. Two
+    hulls may end up sharing a name, and vessel_resolve settles that by uid; picking the
+    trips afterwards would quietly hand them to whichever hull won.
+
+    `merge_into` registers nothing and moves the trips onto a hull already held. That is
+    the answer when the number given belongs to one — "IMO 9107796, Polarlys" logged as
+    text, against a Polarlys the register has had all along. The clash is reported with
+    the hull it clashed with, so the page can offer the merge in place of the refusal:
+    the two are the same ship, and a second row for her is exactly what should not be
+    created.
+    """
+    reg = (request.form.get("reg") or "").strip()
+    name = (request.form.get("name") or "").strip() or reg
+    country_code = (request.form.get("country_code") or "").strip() or None
+    merge_into = (request.form.get("merge_into") or "").strip()
+
+    if not reg:
+        return jsonify({"success": False, "error": "No reg given"}), 400
+
+    try:
+        imo = _clean_vessel_number(request.form.get("imo"), 7, "IMO")
+        mmsi = _clean_vessel_number(request.form.get("mmsi"), 9, "MMSI")
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+    with pg_session() as pg:
+        # Merging: the hull exists and is not touched. Its name, numbers and periods are
+        # what is already known about the ship, and they outrank a form filled in from
+        # the text of a trip — all that is missing is the trips.
+        if merge_into:
+            hull = pg.execute(
+                """
+                SELECT v.uid, v.imo, v.trainlog_id, r.name
+                FROM vessels v
+                LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+                WHERE v.uid = :uid
+                """,
+                {"uid": int(merge_into)},
+            ).fetchone()
+            if not hull:
+                return jsonify({"success": False, "error": "No such hull"}), 400
+
+            trip_ids = _unresolved_trips(pg, reg)
+            if trip_ids:
+                pg.execute(
+                    "UPDATE trips SET reg = :key WHERE trip_id = ANY(:ids)",
+                    {"key": hull["imo"] or hull["trainlog_id"], "ids": trip_ids},
+                )
+            return jsonify(
+                {
+                    "success": True,
+                    "merged": True,
+                    "vessel_id": hull["uid"],
+                    "name": hull["name"] or reg,
+                    "trips": len(trip_ids),
+                }
+            )
+
+        if imo:
+            clash = pg.execute(
+                """
+                SELECT v.uid, r.name
+                FROM vessels v
+                LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+                WHERE v.imo = :imo
+                """,
+                {"imo": imo},
+            ).fetchone()
+            if clash:
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": f"IMO {imo} is already hull #{clash['uid']}"
+                        f" ({clash['name'] or 'unnamed'})",
+                        # What makes the merge offerable rather than just refused.
+                        "vessel_id": clash["uid"],
+                        "label": clash["name"] or imo,
+                    }
+                ), 409
+        if mmsi:
+            clash = pg.execute(
+                """
+                SELECT r.vessel_id, c.name
+                FROM vessel_registrations r
+                LEFT JOIN vessel_registrations c
+                       ON c.uid = vessel_identity(r.vessel_id, NULL)
+                WHERE r.mmsi = :mmsi
+                """,
+                {"mmsi": mmsi},
+            ).fetchone()
+            if clash:
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": f"MMSI {mmsi} belongs to hull #{clash['vessel_id']}"
+                        f" ({clash['name'] or 'unnamed'})",
+                        "vessel_id": clash["vessel_id"],
+                        "label": clash["name"] or mmsi,
+                    }
+                ), 409
+
+        trip_ids = _unresolved_trips(pg, reg)
+
+        hull = pg.execute(
+            "INSERT INTO vessels (imo) VALUES (:imo) RETURNING uid, trainlog_id",
+            {"imo": imo},
+        ).fetchone()
+
+        registration_id = pg.execute(
+            """
+            INSERT INTO vessel_registrations (vessel_id, name, mmsi, country_code)
+            VALUES (:vessel_id, :name, :mmsi, :country_code)
+            RETURNING uid
+            """,
+            {
+                "vessel_id": hull["uid"],
+                "name": name,
+                "mmsi": mmsi,
+                "country_code": country_code,
+            },
+        ).scalar()
+
+        if trip_ids:
+            pg.execute(
+                "UPDATE trips SET reg = :key WHERE trip_id = ANY(:ids)",
+                {"key": imo or hull["trainlog_id"], "ids": trip_ids},
+            )
+
+        # The photo of the Wikidata item the admin picked, if they picked one. Fetched
+        # here rather than left for a second click, because the identification has just
+        # been made and this is the picture of the ship that was identified — with an
+        # author and a licence, which the image search cannot give.
+        photo = None
+        image_url = (request.form.get("commons_image") or "").strip()
+        if image_url:
+            try:
+                photo = fetch_commons_picture(pg, registration_id, image_url)
+            except Exception:
+                # The hull is registered either way; a photo that failed to download is
+                # one button press away in the Periods view.
+                logger.exception("Commons photo import failed for new hull %s", hull["uid"])
+
+    return jsonify(
+        {
+            "success": True,
+            "vessel_id": hull["uid"],
+            "registration_id": registration_id,
+            "trainlog_id": hull["trainlog_id"],
+            "name": name,
+            "trips": len(trip_ids),
+            "photo": bool(photo),
+        }
+    )
+
+
+@app.route("/admin/ships/commons_search")
+@admin_required
+def ship_commons_search():
+    """
+    Candidate photos from Wikimedia Commons for a free-text query.
+
+    The lookup for a ship known only by name: /registrations/fetch_photo goes through
+    Wikidata, which matches on numbers alone, and a hull with neither an IMO nor an MMSI
+    gets nothing from it. Search results cannot be trusted to be the right ship, so they
+    are returned to be looked at and picked from — never stored here.
+    """
+    try:
+        results = search_commons_images(request.args.get("q"))
+    except Exception as exc:
+        logger.exception("Commons search failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+    return jsonify({"success": True, "results": results})
+
+
+@app.route("/admin/ships/registrations/commons_photo", methods=["POST"])
+@admin_required
+def use_commons_search_photo():
+    """Store one chosen Commons file against one registration, with its attribution."""
+    registration_id = request.form.get("registration_id")
+    title = (request.form.get("title") or "").strip()
+    if not (registration_id and title):
+        return jsonify({"success": False, "error": "Nothing chosen"}), 400
+
+    try:
+        with pg_session() as pg:
+            stored = fetch_commons_picture(pg, int(registration_id), title)
+    except Exception as exc:
+        logger.exception("Commons photo import failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+
+    if not stored:
+        # fetch_commons_picture refuses a file whose licence it cannot read, which is
+        # the case worth naming: nothing is wrong with the network.
+        return jsonify(
+            {"success": False, "error": "Could not read that file's licence — not stored"}
+        ), 400
+
+    return jsonify({"success": True, "image": f"/static/images/ship_pictures/{stored}"})
+
+
+def _photo_credit_fields():
+    """The author and licence submitted alongside a photo, as bind params.
+
+    Both are optional and both are free text: a licence is whatever the file says it is
+    ("CC BY-SA 4.0", "Public domain"), and there is no list to constrain it to.
+    """
+    return {
+        "author": (request.form.get("photo_author") or "").strip() or None,
+        "license": (request.form.get("photo_license") or "").strip() or None,
+    }
+
+
+@app.route("/admin/ships/<int:vessel_id>/registrations")
+@admin_required
+def ship_registrations(vessel_id):
+    """
+    The identities one hull has carried, newest first.
+
+    A ship is a hull plus a sequence of registrations — each an MMSI, a name and a flag,
+    from a date (migration 0056). IMO 8601915 is the shape of it: Amorella under the
+    Finnish flag from 1988, Mega Victoria under the Italian one from 2022. A crossing in
+    2008 has to read Amorella, and does, because the name is resolved at the trip's date.
+    """
+    with pg_session() as pg:
+        rows = pg.execute(
+            """
+            -- Each of this hull's trips assigned to the period its date falls in, once
+            -- for the whole answer. As a correlated subquery per period it re-resolved
+            -- every ferry trip once per row, which is how this endpoint came to take a
+            -- minute (see the resolver's note in migration 0056).
+            WITH hull_trips AS (
+                SELECT vessel_identity(
+                           :vessel_id,
+                           COALESCE(t.utc_start_datetime, t.start_datetime)
+                       ) AS registration_id
+                FROM trips t
+                WHERE t.trip_type = 'ferry'
+                  AND t.reg IS NOT NULL AND btrim(t.reg) <> ''
+                  AND vessel_resolve(t.reg) = :vessel_id
+            ),
+            period_trips AS (
+                SELECT registration_id, COUNT(*) AS trips
+                FROM hull_trips GROUP BY registration_id
+            )
+            SELECT r.uid, r.mmsi, r.name, r.country_code, r.effective_date,
+                   p.local_image_path,
+                   -- Where the photo came from and under what licence (migration 0057).
+                   -- Shown, not just stored: a CC BY-SA file must be credited to be shown
+                   -- at all, so an admin has to be able to see that the credit is there
+                   -- and to put it right when it is not.
+                   p.uid AS picture_id, p.source, p.author, p.license, p.referrer_url,
+                   (r.uid = vessel_identity(r.vessel_id, NULL)) AS is_current,
+                   COALESCE(pt.trips, 0) AS trips
+            FROM vessel_registrations r
+            LEFT JOIN period_trips pt ON pt.registration_id = r.uid
+            LEFT JOIN LATERAL (
+                SELECT uid, local_image_path, source, author, license, referrer_url
+                FROM ship_pictures
+                WHERE registration_id = r.uid AND local_image_path IS NOT NULL
+                ORDER BY fetch_date DESC NULLS LAST, uid DESC
+                LIMIT 1
+            ) p ON TRUE
+            WHERE r.vessel_id = :vessel_id
+            ORDER BY r.effective_date DESC NULLS LAST, r.uid DESC
+            """,
+            {"vessel_id": vessel_id},
+        ).fetchall()
+
+    return jsonify(
+        [
+            {
+                "uid": row["uid"],
+                "mmsi": row["mmsi"],
+                "name": row["name"],
+                "country": row["country_code"],
+                # Date only: a registration takes effect on a day, not at a time.
+                "effective_date": (
+                    row["effective_date"].strftime("%Y-%m-%d")
+                    if row["effective_date"]
+                    else None
+                ),
+                "image": (
+                    f"/static/images/ship_pictures/{row['local_image_path']}"
+                    if row["local_image_path"]
+                    else None
+                ),
+                "picture_id": row["picture_id"],
+                "source": row["source"],
+                "author": row["author"],
+                "license": row["license"],
+                "referrer_url": row["referrer_url"],
+                "is_current": bool(row["is_current"]),
+                "trips": row["trips"],
+            }
+            for row in rows
+        ]
+    )
+
+
+@app.route("/admin/ships/registrations", methods=["POST"])
+@admin_required
+def save_ship_registration():
+    """
+    Add or edit one registration of a hull.
+
+    An MMSI is deliberately allowed to repeat across the periods of one hull — a ship
+    renamed under the same flag keeps its number (migration 0056). It is refused when it
+    belongs to a DIFFERENT hull, which is a typo rather than a history.
+    """
+    vessel_id = (request.form.get("vessel_id") or "").strip()
+    registration_id = (request.form.get("registration_id") or "").strip()
+    name = (request.form.get("name") or "").strip() or None
+    country_code = (request.form.get("country_code") or "").strip() or None
+    effective_date = (request.form.get("effective_date") or "").strip() or None
+    file = request.files.get("ship_picture")
+
+    try:
+        mmsi = _clean_vessel_number(request.form.get("mmsi"), 9, "MMSI")
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+    if not (name or mmsi):
+        return jsonify(
+            {"success": False, "error": "Give at least a name or an MMSI"}
+        ), 400
+
+    with pg_session() as pg:
+        if registration_id and not vessel_id:
+            vessel_id = pg.execute(
+                "SELECT vessel_id FROM vessel_registrations WHERE uid = :uid",
+                {"uid": int(registration_id)},
+            ).scalar()
+        if not vessel_id:
+            return jsonify({"success": False, "error": "Unknown vessel"}), 400
+        vessel_id = int(vessel_id)
+
+        if mmsi:
+            clash = pg.execute(
+                """
+                SELECT v.imo, v.trainlog_id, r.name
+                FROM vessel_registrations r
+                JOIN vessels v ON v.uid = r.vessel_id
+                WHERE r.mmsi = :mmsi AND r.vessel_id <> :vessel_id
+                LIMIT 1
+                """,
+                {"mmsi": mmsi, "vessel_id": vessel_id},
+            ).fetchone()
+            if clash:
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": f"MMSI {mmsi} belongs to another hull"
+                        f" ({clash['imo'] or clash['trainlog_id']}"
+                        f" — {clash['name'] or 'unnamed'})",
+                    }
+                ), 409
+
+        params = {
+            "vessel_id": vessel_id,
+            "mmsi": mmsi,
+            "name": name,
+            "country_code": country_code,
+            "effective_date": effective_date,
+        }
+        if registration_id:
+            pg.execute(
+                """
+                UPDATE vessel_registrations
+                SET mmsi = :mmsi, name = :name, country_code = :country_code,
+                    effective_date = CAST(:effective_date AS timestamp),
+                    updated_on = CURRENT_TIMESTAMP
+                WHERE uid = :uid
+                """,
+                {**params, "uid": int(registration_id)},
+            )
+            uid = int(registration_id)
+        else:
+            uid = pg.execute(
+                """
+                INSERT INTO vessel_registrations
+                    (vessel_id, mmsi, name, country_code, effective_date)
+                VALUES (:vessel_id, :mmsi, :name, :country_code,
+                        CAST(:effective_date AS timestamp))
+                RETURNING uid
+                """,
+                params,
+            ).scalar()
+
+        # A photo shows one name on one hull, so it belongs to the period being edited
+        # rather than to the ship in general.
+        if file and file.filename:
+            label = name or mmsi or str(uid)
+            filename = (
+                f"{country_code or 'XX'}_{label}_{uid}.jpg".replace(" ", "_")
+                .replace("/", "")
+            )
+            file.save(os.path.join("static/images/ship_pictures", filename))
+            pg.execute(
+                """
+                INSERT INTO ship_pictures
+                    (registration_id, vessel_name, country_code, local_image_path,
+                     source, author, license)
+                VALUES (:registration_id, :vessel_name, :country_code, :local_image_path,
+                        'upload', :author, :license)
+                """,
+                {
+                    "registration_id": uid,
+                    "vessel_name": name,
+                    "country_code": country_code,
+                    "local_image_path": filename,
+                    # An upload is also how somebody else's photo gets in. Given an
+                    # author, the display credits it; left empty it is treated as the
+                    # admin's own and needs none.
+                    **_photo_credit_fields(),
+                },
+            )
+
+    return jsonify({"success": True, "uid": uid})
+
+
+@app.route("/admin/ships/backfill/photo", methods=["POST"])
+@admin_required
+def use_commons_photo():
+    """
+    Replace one registration's photo with the freely-licensed one from Wikimedia Commons.
+
+    Offered rather than applied, because it is a visible change and the Commons file may
+    be older or show the ship in another livery. What it buys is a licence: the search
+    photos are copyrighted stills credited to whoever hosted them, where a Commons file
+    carries an author and a licence that permits the use.
+
+    The old row is left in place — it simply stops being the newest, which is the one
+    every reader picks.
+    """
+    registration_id = request.form.get("registration_id")
+    image_url = (request.form.get("image") or "").strip() or None
+    if not registration_id or not image_url:
+        return jsonify({"success": False, "error": "Nothing to fetch"}), 400
+
+    try:
+        with pg_session() as pg:
+            stored = fetch_commons_picture(pg, int(registration_id), image_url)
+    except Exception as exc:
+        logger.exception("Commons photo import failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+
+    if not stored:
+        return jsonify(
+            {"success": False, "error": "No usable licence on that file"}
+        ), 422
+
+    return jsonify(
+        {"success": True, "image": f"/static/images/ship_pictures/{stored}"}
+    )
+
+
+@app.route("/admin/ships/backfill/confirm", methods=["POST"])
+@admin_required
+def confirm_backfill_suggestion():
+    """
+    Accept one name-match suggestion from the backfill preview.
+
+    The backfill never writes these itself: a ship's name is not unique, so matching one
+    against Wikidata's label finds the right hull most of the time and the wrong one the
+    rest. Confirming is therefore a human act — but a human act should be one click, not
+    a form to retype, which is what this is.
+
+    A candidate with no IMO and no MMSI is still assignable — plenty of small ferries
+    have neither, and the register can hold a ship known only by name and flag. It gets a
+    trainlog_id like any other hull.
+
+    Creates the hull and its first registration, and then REWRITES the trips: every
+    ferry trip whose reg named this ship now holds the hull key instead — the IMO, or the
+    synthetic trainlog_id where there is none. That is the same rewrite migration 0056
+    ran for the ships it already knew, and it is the point of the exercise: those trips
+    stop depending on a spelling and start resolving to a hull.
+
+    The numbers are refused if they belong to something else already, since that is the
+    case where the match was wrong.
+    """
+    name = (request.form.get("name") or "").strip() or None
+    # The candidate's country of registry, when Wikidata knows it. It is the flag the
+    # created registration starts with; an admin can correct it under Periods.
+    country_code = (request.form.get("country_code") or "").strip() or None
+    # And its photo on Wikimedia Commons, if it has one — fetched with its author and
+    # licence, since that is the condition of showing it at all.
+    image_url = (request.form.get("image") or "").strip() or None
+    try:
+        imo = _clean_vessel_number(request.form.get("imo"), 7, "IMO")
+        mmsi = _clean_vessel_number(request.form.get("mmsi"), 9, "MMSI")
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+    if not name:
+        return jsonify({"success": False, "error": "No name given"}), 400
+
+    with pg_session() as pg:
+        # If the name already resolves, the register has moved on since the preview.
+        if pg.execute("SELECT vessel_resolve(:name)", {"name": name}).scalar():
+            return jsonify(
+                {"success": False, "error": f"{name} already names a ship"}
+            ), 409
+
+        if imo and pg.execute(
+            "SELECT 1 FROM vessels WHERE imo = :imo", {"imo": imo}
+        ).fetchone():
+            return jsonify(
+                {"success": False, "error": f"IMO {imo} is already another hull"}
+            ), 409
+        if mmsi and pg.execute(
+            "SELECT 1 FROM vessel_registrations WHERE mmsi = :mmsi", {"mmsi": mmsi}
+        ).fetchone():
+            return jsonify(
+                {"success": False, "error": f"MMSI {mmsi} is already another ship"}
+            ), 409
+
+        # The Wikidata item the admin picked. Worth keeping: with several namesakes the
+        # choice is a judgement, and this is the only record of which one was made.
+        wikidata = (request.form.get("wikidata") or "").strip() or None
+        vessel_id = pg.execute(
+            "INSERT INTO vessels (imo, notes) VALUES (:imo, :notes) RETURNING uid",
+            {"imo": imo, "notes": f"wikidata:{wikidata}" if wikidata else None},
+        ).scalar()
+        registration_id = pg.execute(
+            "INSERT INTO vessel_registrations (vessel_id, name, mmsi, country_code)"
+            " VALUES (:vessel_id, :name, :mmsi, :country_code) RETURNING uid",
+            {
+                "vessel_id": vessel_id,
+                "name": name,
+                "mmsi": mmsi,
+                "country_code": country_code,
+            },
+        ).scalar()
+        if image_url:
+            try:
+                fetch_commons_picture(pg, registration_id, image_url)
+            except Exception:
+                # A ship created without its photo is still a ship created; the picture
+                # can be fetched or uploaded from the Periods view afterwards.
+                logger.exception("Commons photo import failed for %s", image_url)
+
+        # The trips that named it can now point at the hull, exactly as the migration
+        # did for the ships it already knew.
+        trips = pg.execute(
+            """
+            UPDATE trips SET reg = COALESCE(v.imo, v.trainlog_id)
+            FROM vessels v
+            WHERE v.uid = :vessel_id
+              AND trips.trip_type = 'ferry'
+              AND trips.reg IS NOT NULL AND btrim(trips.reg) <> ''
+              AND vessel_resolve(trips.reg) = v.uid
+              AND btrim(trips.reg) <> COALESCE(v.imo, v.trainlog_id)
+            """,
+            {"vessel_id": vessel_id},
+        ).rowcount
+
+    return jsonify({"success": True, "vessel_id": vessel_id, "trips": trips})
+
+
+@app.route("/admin/ships/registrations/upload_photo", methods=["POST"])
+@admin_required
+def upload_ship_registration_photo():
+    """
+    Attach a photo to one registration, straight from the row.
+
+    The period form can do this too, but only as part of an edit; wanting to add a
+    picture and nothing else is the common case and should not require filling a form
+    in. Everything else about the registration is left alone.
+    """
+    registration_id = request.form.get("registration_id")
+    file = request.files.get("ship_picture")
+
+    if not registration_id or not (file and file.filename):
+        return jsonify({"success": False, "error": "No photo given"}), 400
+
+    with pg_session() as pg:
+        registration = pg.execute(
+            "SELECT uid, name, mmsi, country_code FROM vessel_registrations WHERE uid = :uid",
+            {"uid": int(registration_id)},
+        ).fetchone()
+        if not registration:
+            return jsonify({"success": False, "error": "Unknown registration"}), 404
+
+        label = registration["name"] or registration["mmsi"] or str(registration["uid"])
+        filename = (
+            f"{registration['country_code'] or 'XX'}_{label}_{registration['uid']}.jpg"
+            .replace(" ", "_")
+            .replace("/", "")
+        )
+        file.save(os.path.join("static/images/ship_pictures", filename))
+        pg.execute(
+            """
+            INSERT INTO ship_pictures
+                (registration_id, vessel_name, country_code, local_image_path,
+                 source, author, license)
+            VALUES (:registration_id, :vessel_name, :country_code, :local_image_path,
+                    'upload', :author, :license)
+            """,
+            {
+                "registration_id": registration["uid"],
+                "vessel_name": registration["name"],
+                "country_code": registration["country_code"],
+                "local_image_path": filename,
+                **_photo_credit_fields(),
+            },
+        )
+
+    return jsonify(
+        {"success": True, "image": f"/static/images/ship_pictures/{filename}"}
+    )
+
+
+@app.route("/admin/ships/registrations/photo_credit", methods=["POST"])
+@admin_required
+def edit_ship_photo_credit():
+    """
+    Correct the provenance of a photo already on file.
+
+    The credit under a picture is drawn from its row (migration 0057), so a wrong or
+    missing one can only be fixed here. It matters beyond tidiness: a CC BY-SA file shown
+    without its author and licence is a licence breach, and an upload wrongly marked as a
+    search result is credited to Vesselfinder for a photo Vesselfinder never took.
+    """
+    picture_id = request.form.get("picture_id")
+    source = (request.form.get("source") or "").strip() or None
+    if not picture_id:
+        return jsonify({"success": False, "error": "No photo given"}), 400
+    if source not in (None, "upload", "wikimedia", "vesselfinder"):
+        return jsonify({"success": False, "error": f"Unknown source {source}"}), 400
+
+    with pg_session() as pg:
+        updated = pg.execute(
+            """
+            UPDATE ship_pictures
+            SET source = :source, author = :author, license = :license
+            WHERE uid = :uid
+            """,
+            {"uid": int(picture_id), "source": source, **_photo_credit_fields()},
+        ).rowcount
+
+    if not updated:
+        return jsonify({"success": False, "error": "Unknown photo"}), 404
+    return jsonify({"success": True})
+
+
+@app.route("/admin/ships/registrations/fetch_photo", methods=["POST"])
+@admin_required
+def fetch_ship_registration_photo():
+    """
+    Look a photo up for one registration, on demand.
+
+    Same Google Images search /getVesselPhoto runs on a cache miss, but aimed at a
+    period: it searches that period's own name and files what it finds against it, so a
+    picture of the ship under its former name is stored against the former name. Behind a
+    button because it is a paid external search, and only offered where there is no photo.
+    """
+    registration_id = request.form.get("registration_id")
+    if not registration_id:
+        return jsonify({"success": False, "error": "No registration given"}), 400
+
+    try:
+        with pg_session() as pg:
+            photo = fetch_picture_for_registration(pg, int(registration_id))
+    except Exception as exc:
+        logger.exception("Vessel photo lookup failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+
+    if not photo:
+        return jsonify({"success": True, "image": None, "error": "Nothing found"})
+
+    return jsonify({"success": True, **photo})
+
+
+@app.route("/admin/ships/registrations/delete", methods=["POST"])
+@admin_required
+def delete_ship_registration():
+    """
+    Drop one registration. The hull stays, along with any other periods it has.
+
+    Trips are unaffected — they hold the hull key, not this row — but the ones whose date
+    fell in this period will now resolve to whichever period covers them instead.
+    """
+    registration_id = request.form.get("registration_id")
+
+    with pg_session() as pg:
+        pg.execute(
+            "DELETE FROM vessel_registrations WHERE uid = :uid",
+            {"uid": int(registration_id)},
+        )
+
+    return jsonify({"success": True})
+
+
+def _parse_at(value):
+    """
+    The moment to resolve a vessel at, or None for "now".
+
+    Callers hand this straight from a trip, and a trip's date is not always a date: the
+    legacy shape carries 1 (project) and -1 (unknown) as sentinels, and a form field can
+    be half-typed. Anything that is not a real timestamp means "no date to go on", which
+    is exactly what None already means here — a 500 would be the wrong answer to a trip
+    that simply has no date.
+    """
+    value = (value or "").strip()
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M", "%Y-%m-%d"):
+        try:
+            return datetime.strptime(value, fmt)
+        except ValueError:
+            continue
+    return None
+
+
+def _vessel_normalize(pg, text_value):
+    """A written name folded to its comparison key — prefix, case and punctuation
+    dropped. The DB function is the single definition of that folding (migration 0055),
+    so the query side asks it rather than reimplementing it in Python."""
+    return pg.execute(
+        "SELECT COALESCE(vessel_normalize(:value), '')", {"value": text_value}
+    ).scalar()
+
+
+# Undecorated, like /api/airportAutocomplete and /getAirliners: the vessel register is
+# reference data, not anybody's trips. (login_required could not be used here anyway —
+# it resolves the caller from a `username` view argument this route has no reason for.)
+@app.route("/vesselAutocomplete")
+def vesselAutocomplete():
+    """
+    Vessel suggestions for the ferry `reg` field, matched on name, IMO or MMSI alike.
+
+    `value` is what a trip stores: the hull key — the IMO, or the synthetic trainlog_id
+    for a ship that has none. Never a name and never an MMSI, both of which change hands
+    when a ship is sold; the hull does not. The name shown for a trip is resolved back
+    out of that key at the trip's own date (migration 0056).
+    """
+    query = (request.args.get("query") or "").strip()
+    # The trip's date, when the form has one: the suggestion then names the ship as it
+    # was then, which is what the trip will display.
+    at = _parse_at(request.args.get("at"))
+    if len(query) < 2:
+        return jsonify([])
+
+    with pg_session() as pg:
+        rows = pg.execute(
+            """
+            SELECT * FROM (
+                -- One row per hull, matched against EVERY name it has carried: a ship
+                -- searched for as Amorella must be findable even though it now sails as
+                -- Mega Victoria. DISTINCT ON collapses a hull that matched on several of
+                -- its periods, keeping the closest match.
+                SELECT DISTINCT ON (v.uid)
+                       v.uid,
+                       COALESCE(v.imo, v.trainlog_id) AS hull_key,
+                       v.imo,
+                       r.mmsi,
+                       r.name AS matched_name,
+                       r.name_key AS matched_key,
+                       cur.name AS current_name,
+                       -- The identity in force at :at — the trip's own date, when the
+                       -- form knows it. That is the name and flag the trip will show, so
+                       -- it is what the suggestion has to offer.
+                       COALESCE(per.name, cur.name) AS name,
+                       COALESCE(per.country_code, cur.country_code) AS country_code,
+                       p.local_image_path,
+                       (v.uid = vessel_resolve(:query)) AS is_exact
+                FROM vessels v
+                JOIN vessel_registrations r ON r.vessel_id = v.uid
+                -- What the ship is called now, and what it was called at :at.
+                LEFT JOIN vessel_registrations cur ON cur.uid = vessel_identity(v.uid, NULL)
+                LEFT JOIN vessel_registrations per
+                       ON per.uid = vessel_identity(v.uid, CAST(:at AS timestamp))
+                -- A photo of the matched period for preference, so the picture answers
+                -- the name that was typed; any of the hull's rather than none.
+                LEFT JOIN LATERAL (
+                    SELECT sp.local_image_path
+                    FROM ship_pictures sp
+                    JOIN vessel_registrations a ON a.uid = sp.registration_id
+                    WHERE a.vessel_id = v.uid AND sp.local_image_path IS NOT NULL
+                    -- The period being offered first, then the one that matched the
+                    -- text, then any: a picture of the right ship beats none.
+                    ORDER BY (a.uid = COALESCE(per.uid, cur.uid)) DESC,
+                             (a.uid = r.uid) DESC,
+                             sp.fetch_date DESC NULLS LAST, sp.uid DESC
+                    LIMIT 1
+                ) p ON TRUE
+                WHERE r.name ILIKE :contains
+                   -- Matched on the folded key as well, so the ship-type prefix and the
+                   -- punctuation stop mattering: 'MS Fjordtroll', 'M/S Fjordtroll' and
+                   -- 'Fjordtroll' are one search (vessel_normalize, migration 0055).
+                   OR (:normalized <> '' AND r.name_key LIKE '%' || :normalized || '%')
+                   OR v.imo LIKE :starts
+                   OR r.mmsi LIKE :starts
+                   -- Whatever the text resolves to EXACTLY, which is how a reg already
+                   -- stored on a trip names its ship. It matters for the synthetic
+                   -- trainlog_id: a ship with no IMO has one in every trip that logged
+                   -- it, and without this the edit form could not name the ship it was
+                   -- showing. Note this matches only on a complete key — typing 'TL00'
+                   -- resolves to nothing — so the id is still never *suggested*, which
+                   -- is what would invite people to type it.
+                   OR v.uid = vessel_resolve(:query)
+                ORDER BY v.uid,
+                         (r.name_key LIKE :normalized || '%') DESC NULLS LAST,
+                         (r.uid = cur.uid) DESC,
+                         r.uid
+            ) q
+            ORDER BY (q.matched_key LIKE :normalized || '%') DESC NULLS LAST,
+                     q.matched_name NULLS LAST, q.uid
+            LIMIT 15
+            """,
+            {
+                "contains": f"%{query}%",
+                "starts": f"{query}%",
+                # Folded here rather than in SQL so the empty result (a query of pure
+                # punctuation) can be guarded above instead of matching everything.
+                "normalized": _vessel_normalize(pg, query),
+                "query": query,
+                "at": at,
+            },
+        ).fetchall()
+
+    return jsonify(
+        [
+            {
+                # What a trip stores: the hull key, so the trip survives the ship being
+                # renamed or re-flagged (migration 0056).
+                "value": row["hull_key"],
+                # The name for the trip's date, the one that matched the text, and the
+                # one the ship goes by now. They differ once a ship has been renamed, and
+                # the field says so rather than silently answering a search for Amorella
+                # with "Mega Victoria".
+                "name": row["name"],
+                "matched_name": row["matched_name"],
+                "current_name": row["current_name"],
+                "imo": row["imo"],
+                "mmsi": row["mmsi"],
+                "country": row["country_code"],
+                "image": (
+                    f"/static/images/ship_pictures/{row['local_image_path']}"
+                    if row["local_image_path"]
+                    else None
+                ),
+                "exact": bool(row["is_exact"]),
+            }
+            for row in rows
+        ]
+    )
 
 
 @app.route("/getAirliners")
@@ -10383,9 +12159,17 @@ def getPublicStats():
 
 @app.route("/getVesselPhoto")
 def getVesselPhoto():
+    """
+    A ship's photo and identity, as of `at` — the date of the trip asking.
+
+    Without `at` the answer is the ship as it is now, which is right for the live map and
+    wrong for a trip in the past: a 2017 crossing must read the name and flag the ship
+    carried in 2017 (migration 0056).
+    """
     vesselName = request.args.get("vesselName")
+    at = _parse_at(request.args.get("at"))
     with pg_session() as pg:
-        result = get_vessel_picture(vesselName, pg)
+        result = get_vessel_picture(vesselName, pg, at)
     return jsonify(result)
 
 
@@ -10989,8 +12773,29 @@ def getTagInvitesNumber():
         return '<i class="incoming-request-number bi bi-plus-circle-fill"></i>'
 
 
+def getStalePremiumCount():
+    """Owner-only: count of premium users whose BMC cancellation was flagged
+    (see flag_pending_cancellation) and whose paid-through period has already
+    passed — i.e. overdue for a manual /toggle_role revoke."""
+    if not session.get("userinfo", {}).get("is_owner"):
+        return ""
+    # Same naive-vs-aware caveat as row["premium_stale"] in getAdminUsersData —
+    # premium_cancel_at round-trips through SQLite as naive-but-UTC-valued.
+    count = User.query.filter(
+        User.premium_cancel_at.isnot(None),
+        User.premium_cancel_at <= datetime.now(UTC).replace(tzinfo=None),
+    ).count()
+    if count == 0:
+        return ""
+    elif count < 10:
+        return f'<i class="incoming-request-number bi bi-{count}-circle-fill"></i>'
+    else:
+        return '<i class="incoming-request-number bi bi-plus-circle-fill"></i>'
+
+
 app.jinja_env.globals.update(getFriendsRequestsNumber=getFriendsRequestsNumber)
 app.jinja_env.globals.update(getTagInvitesNumber=getTagInvitesNumber)
+app.jinja_env.globals.update(getStalePremiumCount=getStalePremiumCount)
 
 
 @app.route("/admin/refreshCurrency", methods=["GET"])
@@ -11674,21 +13479,20 @@ def get_current_trips_data(public_only=True):
     with pg_session() as pg:
         rows = pg.execute("""
             SELECT trips.*, airliners.manufacturer, airliners.model,
-                   sp.country_code AS vessel_country
+                   v.country_code AS vessel_country, v.vessel_name
             FROM trips
             -- Air trips store the ICAO type code in material_type; airliners carries
             -- the readable manufacturer/model shown in the popup.
             LEFT JOIN airliners ON trips.material_type = airliners.iata
-            -- A ship's flag state only lives in ship_pictures, so surface it here or
-            -- the flag could not appear until the photo had been fetched. vessel_name
-            -- is not unique, hence the lateral pick (duplicates agree on country).
+            -- A ship's flag and name live in the register, so surface them here or the
+            -- flag could not appear until the photo had been fetched. These trips are
+            -- in progress, so the identity in force is the current one (migration 0056).
             LEFT JOIN LATERAL (
-                SELECT country_code
-                FROM ship_pictures
-                WHERE vessel_name = trips.reg
-                ORDER BY fetch_date DESC NULLS LAST, uid DESC
-                LIMIT 1
-            ) sp ON TRUE
+                SELECT r.country_code, NULLIF(btrim(r.name), '') AS vessel_name
+                FROM vessel_registrations r
+                WHERE trips.trip_type = 'ferry'
+                  AND r.uid = vessel_identity(vessel_resolve(trips.reg), NULL)
+            ) v ON TRUE
             WHERE (utc_start_datetime + COALESCE(departure_delay, 0) * interval '1 second') <= NOW()
               AND (utc_end_datetime + COALESCE(arrival_delay, 0) * interval '1 second') >= NOW()
               AND (visibility = 'public' OR (visibility IS NULL AND trip_type NOT IN ('poi', 'accommodation', 'restaurant', 'walk', 'cycle', 'car')))
@@ -12063,6 +13867,65 @@ def ensure_auth_db_columns():
             sqlalchemy.text(
                 "ALTER TABLE user ADD COLUMN live_tracking BOOLEAN NOT NULL DEFAULT 0"
             )
+        )
+        authDb.session.commit()
+    if "discord_id" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN discord_id VARCHAR(30)")
+        )
+        authDb.session.commit()
+    if "discord_username" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN discord_username VARCHAR(50)")
+        )
+        authDb.session.commit()
+    if "pending_email" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN pending_email VARCHAR(100)")
+        )
+        authDb.session.commit()
+    if "email_verify_token" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN email_verify_token VARCHAR(100)")
+        )
+        authDb.session.commit()
+    if "premium_tier" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN premium_tier VARCHAR(20)")
+        )
+        authDb.session.commit()
+    if "bmc_supporter_id" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN bmc_supporter_id VARCHAR(30)")
+        )
+        authDb.session.commit()
+    if "premium_cancel_at" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE user ADD COLUMN premium_cancel_at DATETIME")
+        )
+        authDb.session.commit()
+
+    # Same idempotent-ALTER treatment for pending_bmc_event: create_all() created
+    # the table before `tier` existed on the model, so it needs a manual ALTER too.
+    existing_pending_bmc_event = {
+        row[1]
+        for row in authDb.session.execute(
+            sqlalchemy.text("PRAGMA table_info(pending_bmc_event)")
+        )
+    }
+    if existing_pending_bmc_event and "tier" not in existing_pending_bmc_event:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE pending_bmc_event ADD COLUMN tier VARCHAR(20)")
+        )
+        authDb.session.commit()
+    if existing_pending_bmc_event and "claim_token" not in existing_pending_bmc_event:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE pending_bmc_event ADD COLUMN claim_token VARCHAR(64)")
+        )
+        authDb.session.commit()
+    if existing_pending_bmc_event and "supporter_id" not in existing_pending_bmc_event:
+        authDb.session.execute(
+            sqlalchemy.text("ALTER TABLE pending_bmc_event ADD COLUMN supporter_id VARCHAR(30)")
         )
         authDb.session.commit()
 

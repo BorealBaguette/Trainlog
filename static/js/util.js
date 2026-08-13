@@ -612,6 +612,11 @@ function updateCountryNames(selectElement, formatFlagEmoji = false) {
   const options = selectElement.options;
   for (let i = 0; i < options.length; i++) {
       const code = options[i].getAttribute('data-code');
+      // A select may carry a placeholder option with no country at all. Intl's
+      // DisplayNames.of() throws a RangeError on anything that is not a region code, and
+      // an uncaught throw here kills the rest of the caller's ready block — which is how
+      // an empty first option once left a whole form unbound and submitting natively.
+      if (!code) continue;
       const countryName = regionNames.of(code); // Get the country name from Intl.DisplayNames
       options[i].textContent = (formatFlagEmoji ? getFlagEmoji(options[i].value) : options[i].value) + '\xa0\xa0' + countryName; // Update option text
   }
@@ -1442,6 +1447,7 @@ function setupTagAutocomplete(url, tripId, createOpts) {
       }
       const selectedTag = tags.find(t => t.name === ui.item.value);
       if (selectedTag) $('#tagList').append(makeTagChip(selectedTag));
+      $(this).val('');
       return false;
     }
   });
@@ -1723,3 +1729,27 @@ function pluralize(forms, n) {
   return form.replace('{n}', n);
 }
 window.pluralize = pluralize;
+
+/* A bootstrap-select search box inside a modal.
+ *
+ * Bootstrap's modal enforces its own focus: it listens for focusin on the document and
+ * pulls focus straight back to the dialog whenever something outside it is focused. A
+ * selectpicker with data-container="body" draws its menu — and its live-search input —
+ * as a child of <body>, which is outside the dialog by that test, so clicking the search
+ * box focused it and lost it in the same tick and nothing could be typed.
+ *
+ * data-container="body" is not optional for those pickers: inside a scrollable modal the
+ * menu is otherwise clipped by the modal's own overflow. So the focus grab is what has
+ * to give. This handler runs before Bootstrap's — it is bound at load, Bootstrap binds
+ * its own each time a modal is shown — and stops the event reaching it for anything
+ * belonging to a dropdown.
+ *
+ * Global, because the same pairing appears on the ship register, the wagon admin, the
+ * ticket form and the map filters.
+ */
+document.addEventListener('focusin', function (event) {
+  var target = event.target;
+  if (target && target.closest && target.closest('.bootstrap-select, .bs-searchbox, .dropdown-menu')) {
+    event.stopImmediatePropagation();
+  }
+});

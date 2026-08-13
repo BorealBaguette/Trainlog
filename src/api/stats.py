@@ -1,41 +1,384 @@
 import json
 import logging
+import re
 
-from flask import (
-    Blueprint,
-    session,
-)
+from flask import Blueprint
 
 from src.pg import pg_session
 from src.sql import stats as stats_sql
-from src.utils import get_user_id, lang
+from src.utils import get_user_id
 
 logger = logging.getLogger(__name__)
 
 stats_blueprint = Blueprint("stats", __name__)
 
-METRIC_NAMES = ["Trips", "Km", "Duration", "CO2"]
+# Every metric a chart can be plotted against. Each stats query emits
+# past{Metric} and plannedFuture{Metric} for all of these, so adding one here
+# means adding two columns per query and nothing else.
+METRIC_NAMES = ["Trips", "Km", "Duration", "CO2", "Delay"]
 
-# Auto-generate the column keys for each metric
-DEFAULT_METRICS = {
-    m: (f"past{m}", f"plannedFuture{m}", f"future{m}") for m in METRIC_NAMES
+# Column keys each metric occupies in a result row.
+DEFAULT_METRICS = {m: (f"past{m}", f"plannedFuture{m}") for m in METRIC_NAMES}
+
+# Category datasets: dimension name -> (query, identifier column). Every one of
+# these groups trips by a single dimension and returns the same metric columns,
+# so they all go through the same fetcher.
+CATEGORY_DATASETS = {
+    "operators": (stats_sql.stats_operator, "operator"),
+    "material": (stats_sql.stats_material, "material"),
+    "routes": (stats_sql.stats_routes, "route"),
+    "stations": (stats_sql.stats_stations, "station"),
+    "lines": (stats_sql.stats_lines, "line"),
+    "vehicles": (stats_sql.stats_vehicles, "vehicle"),
+    "trainsets": (stats_sql.stats_trainsets, "trainset"),
 }
 
-METRIC_TO_DB_COLUMN = {
-    "Km": "trip_length",
+# Datasets `fetch_stats` produces when the caller doesn't ask for a subset.
+ALL_DATASETS = tuple(CATEGORY_DATASETS) + ("countries", "years", "months")
+
+# Where a metric's whole-trip total lives on a trip row, for metrics that get
+# spread across the countries a trip crossed. Trips and Km are special-cased.
+COUNTRY_SPLIT_COLUMNS = {
     "Duration": "trip_duration",
     "CO2": "carbon",
+    "Delay": "arrival_delay",
 }
 
 
-def _safe_get(d, key, default=0):
-    retval = d.get(key, default) if isinstance(d, dict) else default
-    if retval is None:
-        return default
-    return retval
+def _rows_to_dicts(result):
+    return [dict(row._mapping) for row in result]
+
+
+# Decoration the charts hang off a row: the operator a line runs under, the code
+# behind an airframe silhouette, a cached vessel photo, a country to flag.
+_DECORATION_COLUMNS = frozenset(
+    {"operator", "image_code", "image", "country", "units", "label"}
+)
+
+# What survives into the response. Everything else a query happens to select
+# (the total* columns it sorts by, operator_id, long_name) is dropped — nothing
+# reads them, and they ride along on every one of the thousands of rows a heavy
+# user returns. The row limits are what actually shrank the payload; this just
+# stops it growing back.
+_METRIC_COLUMNS = (
+    frozenset(key for keys in DEFAULT_METRICS.values() for key in keys)
+    | _DECORATION_COLUMNS
+    | {"count"}
+)
+
+
+def get_stats_category(pg, query_func, id_column, user_id, trip_type, year=None):
+    """
+    Fetch one category dataset (operators, material, lines, …).
+
+    Every category query already returns the full metric set, so there is nothing
+    to compute here: rows go out as they come back, minus the ones whose
+    identifier is empty (a trip with no operator shouldn't become a blank bar).
+    """
+    result = pg.execute(
+        query_func(), {"user_id": user_id, "tripType": trip_type, "year": year}
+    ).fetchall()
+
+    keep = _METRIC_COLUMNS | {id_column}
+    return [
+        {
+            key: value
+            for key, value in row.items()
+            # Decoration that came back empty is dropped rather than sent as a
+            # null: a ferry has no aircraft type, and 1000 rows of
+            # "image_code": null is pure payload.
+            if key in keep and (value is not None or key not in _DECORATION_COLUMNS)
+        }
+        for row in _rows_to_dicts(result)
+        if row.get(id_column)
+    ]
+
+
+# Stations are stored as "🇫🇷 Charles de Gaulle International Airport (CDG)":
+# a flag, a name, and — on airports — the code in trailing parentheses.
+_STATION_CODE_RE = re.compile(r"\(([^()]+)\)\s*$")
+
+
+def _station_codes(stats):
+    """Every trailing parenthesised code in the station and route datasets."""
+    codes = set()
+
+    for row in stats.get("stations") or []:
+        match = _STATION_CODE_RE.search(row.get("station") or "")
+        if match:
+            codes.add(match.group(1))
+
+    for row in stats.get("routes") or []:
+        try:
+            endpoints = json.loads(row.get("route") or "[]")
+        except ValueError:
+            continue
+        for endpoint in endpoints:
+            match = _STATION_CODE_RE.search(endpoint or "")
+            if match:
+                codes.add(match.group(1))
+
+    return codes
+
+
+def get_airport_cities(pg, stats):
+    """
+    IATA code -> city, for the airports this payload mentions.
+
+    The charts have room for a word, and the stored name doesn't hold one worth
+    showing: cutting it at the first word gives "Charles (CDG)", "John (JFK)",
+    "Logan (BOS)". The city is a column on `airports`, so look it up — one
+    query over the codes actually charted, not a table the browser downloads.
+    """
+    codes = sorted(_station_codes(stats))
+    if not codes:
+        return {}
+
+    result = pg.execute(stats_sql.airport_cities(), {"codes": codes}).fetchall()
+    return {row[0]: row[1] for row in result}
+
+
+def attach_vessel_photos(pg, vehicles):
+    """
+    Give each ferry row its cached vessel photo and ensign, if there are any.
+
+    Reads the database directly and only. The /getVesselPhoto endpoint must not
+    be used here: on a cache miss it runs a Google Images search and downloads
+    the result, so pointing a chart at it would fire a search per bar per page
+    load. A vessel with no cached photo simply gets none.
+
+    Rows arrive keyed by vessel_display_name(reg, NULL) — the hull's CURRENT name
+    where it is known, and the folded `reg` where it is not — so the lookup is
+    built the same way round: one entry per hull under its current name, plus every
+    key a bar might still be showing instead (its IMO, its synthetic id, and the
+    MMSI of any registration) for the ships no name has been recorded for.
+    """
+    cached = {}
+    for row in pg.execute(
+        """
+        SELECT v.imo, v.trainlog_id, cur.name, cur.country_code,
+               p.local_image_path,
+               ARRAY(SELECT a.mmsi FROM vessel_registrations a
+                     WHERE a.vessel_id = v.uid AND a.mmsi IS NOT NULL) AS mmsis
+        FROM vessels v
+        -- The hull as it is now: that is what the chart is labelled with.
+        LEFT JOIN vessel_registrations cur ON cur.uid = vessel_identity(v.uid, NULL)
+        -- Its newest photo, from any registration — a bar showing one ship is better
+        -- served by an older picture of it than by none.
+        LEFT JOIN LATERAL (
+            SELECT sp.local_image_path
+            FROM ship_pictures sp
+            JOIN vessel_registrations a ON a.uid = sp.registration_id
+            WHERE a.vessel_id = v.uid AND sp.local_image_path IS NOT NULL
+            ORDER BY (a.uid = cur.uid) DESC, sp.fetch_date DESC NULLS LAST, sp.uid DESC
+            LIMIT 1
+        ) p ON TRUE
+        """
+    ).fetchall():
+        entry = (row["local_image_path"], row["country_code"])
+        name = (row["name"] or "").strip()
+        for key in [name.upper(), row["imo"], row["trainlog_id"], *(row["mmsis"] or [])]:
+            if key:
+                cached.setdefault(key, entry)
+
+    for vehicle in vehicles:
+        path, country = cached.get(vehicle["vehicle"].strip().upper(), (None, None))
+        if path:
+            vehicle["image"] = f"/static/images/ship_pictures/{path}"
+        if country:
+            vehicle["country"] = country
+
+
+# Only the fields the strip needs to draw. The wagons table carries a lot more
+# (era, notes, licence) and none of it belongs in a chart payload.
+_WAGON_DISPLAY_FIELDS = ("image", "image_type", "image_ext", "px_per_meter", "label")
+
+
+def _trainset_refs(value):
+    """
+    Read one material_type_advanced value.
+
+    Returns (names, inline_units): a saved trainset is referenced by name (or
+    several, for a composite), while an ad-hoc consist is stored inline as a
+    list of units. A value that is JSON but neither shape yields nothing — it
+    must not be mistaken for a trainset called "{...}".
+    """
+    if not value or not value.strip():
+        return [], []
+
+    stripped = value.strip()
+    if not stripped.startswith(("[", "{")):
+        # Not JSON at all: the plain name of a saved trainset.
+        return [stripped], []
+
+    try:
+        parsed = json.loads(stripped)
+    except (json.JSONDecodeError, TypeError):
+        return [], []
+
+    if isinstance(parsed, list):
+        return [], [u for u in parsed if isinstance(u, dict) and u.get("name")]
+    if isinstance(parsed, dict) and isinstance(parsed.get("trainsets"), list):
+        return [str(n) for n in parsed["trainsets"] if n], []
+    return [], []
+
+
+def _trainset_label(names, inline):
+    """
+    Name a consist without touching the database.
+
+    Saved sets are named directly; an ad-hoc one borrows its units' labels,
+    which are stored inline alongside the wagon names ("MF 01" rather than
+    "MF01_VB_M"). Repeats collapse, so a rake of six identical cars reads as one
+    name and not as the same word six times.
+    """
+    if names:
+        return " + ".join(dict.fromkeys(names))
+
+    labels = [unit.get("label") or unit.get("name") for unit in inline]
+    return " + ".join(dict.fromkeys(label for label in labels if label)) or None
+
+
+def attach_trainset_units(pg, rows, username):
+    """
+    Resolve each trainset row to the wagons it is made of, and merge rows that
+    end up naming the same train.
+
+    Deliberately batched. The obvious route — public_trainset_info per row — runs
+    one query per row plus one per wagon inside it (_enrich_units), which is
+    hundreds of round trips for a chart. This resolves every row in two queries
+    total, whatever the row count.
+
+    Returns the rows to chart, which is not the list passed in: several stored
+    values can describe the same consist (a saved set and an ad-hoc copy of it),
+    and two bars with the same name on one axis is not a chart.
+    """
+    if not rows:
+        return rows
+
+    parsed = {row["trainset"]: _trainset_refs(row["trainset"]) for row in rows}
+
+    # 1) every named trainset in one go, preferring the user's own set over the
+    #    admin one of the same name (same precedence as _units_by_name).
+    #
+    #    Every row, not a top slice. The fullscreen chart scrolls the whole
+    #    ranking, and resolving only the first few screens' worth meant the
+    #    artwork stopped part-way down it while the bars carried on. Doing the
+    #    lot costs the same two queries — only the lists they take get longer.
+    wanted = {name for row in rows for name in parsed[row["trainset"]][0]}
+    by_name = {}
+    if wanted:
+        for name, units_json in pg.execute(
+            """
+            SELECT DISTINCT ON (name) name, units_json
+            FROM trainsets
+            WHERE name = ANY(:names)
+              -- The all-users view (:username IS NULL) is owner-only and
+              -- aggregates everybody, so it resolves against every trainset.
+              -- Restricting it to the 177 public ones left the other 2289
+              -- unresolvable, and a name that resolves to nothing has no car
+              -- count to draw even a placeholder from.
+              AND (:username IS NULL OR is_admin OR username = :username)
+            ORDER BY name,
+                     -- the viewer's own set wins, then the public one, then
+                     -- whichever is oldest, so the pick is stable
+                     (username = :username AND NOT is_admin) DESC,
+                     is_admin DESC,
+                     id
+            """,
+            {"names": list(wanted), "username": username},
+        ).fetchall():
+            try:
+                by_name[name] = json.loads(units_json or "[]")
+            except (json.JSONDecodeError, TypeError):
+                by_name[name] = []
+
+    def units_of(value):
+        names, inline = parsed[value]
+        return inline if inline else [u for n in names for u in by_name.get(n, [])]
+
+    # 2) every wagon those units point at, also in one go.
+    wagon_names = {
+        u["name"] for row in rows for u in units_of(row["trainset"]) if u.get("name")
+    }
+    wagons = {}
+    if wagon_names:
+        wagons = {
+            wagon["name"]: wagon
+            for wagon in _rows_to_dicts(
+                pg.execute(
+                    "SELECT name, label, image, image_type, image_ext, px_per_meter"
+                    " FROM wagons WHERE name = ANY(:names)",
+                    {"names": list(wagon_names)},
+                )
+            )
+        }
+
+    for row in rows:
+        names, inline = parsed[row["trainset"]]
+
+        units = []
+        for unit in units_of(row["trainset"]):
+            wagon = wagons.get(unit.get("name")) or {}
+            slim = {
+                k: wagon[k] for k in _WAGON_DISPLAY_FIELDS if wagon.get(k) is not None
+            }
+            slim["_side"] = unit.get("_side", "L")
+            # Kept even with no artwork, so the strip can stand a
+            # placeholder in its place: an outline in the right position
+            # still tells you how many cars the set has, which is more than
+            # an empty box does. `_phType` picks which outline.
+            if unit.get("_phType"):
+                slim["_phType"] = unit["_phType"]
+            units.append(slim)
+        if units:
+            row["units"] = units
+
+        # Named sets show their name; ad-hoc ones are named from their units.
+        # Resolved wagons give the nicest labels, but the inline JSON already
+        # carries one per unit, so a row that resolves to nothing still gets a
+        # readable name — never the stored JSON.
+        row["label"] = (
+            " + ".join(dict.fromkeys(u["label"] for u in units if u.get("label")))
+            if units and not names
+            else None
+        ) or _trainset_label(names, inline)
+
+    return _merge_by_label(rows)
+
+
+def _merge_by_label(rows):
+    """Fold rows sharing a label into one, summing every metric."""
+    merged = {}
+    for row in rows:
+        key = row.get("label") or row["trainset"]
+        target = merged.get(key)
+        if target is None:
+            merged[key] = dict(row)
+            continue
+        for past_key, planned_key in DEFAULT_METRICS.values():
+            target[past_key] = (target.get(past_key) or 0) + (row.get(past_key) or 0)
+            target[planned_key] = (target.get(planned_key) or 0) + (row.get(planned_key) or 0)
+        # Keep the artwork of whichever copy had some.
+        if "units" not in target and "units" in row:
+            target["units"] = row["units"]
+
+    return sorted(
+        merged.values(),
+        key=lambda r: (r.get("pastTrips") or 0) + (r.get("plannedFutureTrips") or 0),
+        reverse=True,
+    )
 
 
 def get_stats_countries(pg, user_id, trip_type, year=None):
+    """
+    Split each trip across the countries it crossed.
+
+    `trips.countries` maps a country code to the distance covered in it (either a
+    number, or an object of sub-distances to add up). A trip counts once towards
+    every country it touched, contributes its real distance in each, and has its
+    other metrics divided between them in proportion to that distance.
+    """
     result = pg.execute(
         stats_sql.stats_countries(),
         {"user_id": user_id, "tripType": trip_type, "year": year},
@@ -44,372 +387,125 @@ def get_stats_countries(pg, user_id, trip_type, year=None):
     countries = {}
 
     for row in result:
-        row_dict = dict(row._mapping)
+        trip = dict(row._mapping)
 
         try:
-            # The JSON object mapping country codes to distances.
-            country_distances = json.loads(row_dict["countries"])
+            country_distances = json.loads(trip["countries"])
         except (json.JSONDecodeError, TypeError):
             continue
 
-        # Total distance from the main trip record, used for proportions.
-        total_trip_km = _safe_get(row_dict, "trip_length", 0)
-        is_past = _safe_get(row_dict, "past", 0) != 0
-        is_planned_future = _safe_get(row_dict, "plannedFuture", 0) != 0
-
-        if not is_past and not is_planned_future:
+        # Which bucket this trip's values land in. Project trips are already
+        # excluded by the query, so a trip is one or the other.
+        if trip.get("past"):
+            bucket = 0
+        elif trip.get("plannedFuture"):
+            bucket = 1
+        else:
             continue
 
-        for country_code, country_km_data in country_distances.items():
-            # Initialize the dictionary for a country if it's the first time we see it.
-            # It will create keys like 'pastTrips', 'plannedFutureTrips', 'pastKm', etc.
-            countries.setdefault(
-                country_code,
-                {col: 0 for m in METRIC_NAMES for col in DEFAULT_METRICS[m]},
-            )
+        trip_length = trip.get("trip_length") or 0
 
-            # Handle cases where distance can be a simple number or a dict of values.
+        for country_code, distance in country_distances.items():
+            stats = countries.setdefault(
+                country_code, _zero_row(country=country_code)
+            )
             country_km = (
-                sum(country_km_data.values())
-                if isinstance(country_km_data, dict)
-                else country_km_data
-            )
+                sum(distance.values()) if isinstance(distance, dict) else distance
+            ) or 0
+            share = country_km / trip_length if trip_length > 0 else 0
 
-            # --- Metric-agnostic value calculation ---
-            for metric in METRIC_NAMES:
-                past_key, planned_future_key, _ = DEFAULT_METRICS[metric]
-                value_to_add = 0
-
+            for metric, keys in DEFAULT_METRICS.items():
                 if metric == "Trips":
-                    # Trips are counted as 1 for each country in the trip.
-                    value_to_add = 1
+                    value = 1
                 elif metric == "Km":
-                    # Km is the specific distance traveled in that country.
-                    value_to_add = country_km
+                    value = country_km
                 else:
-                    # Proportional split for all other metrics (e.g., Duration).
-                    db_column = METRIC_TO_DB_COLUMN.get(metric)
-                    if not db_column:
-                        continue
+                    total = trip.get(COUNTRY_SPLIT_COLUMNS[metric]) or 0
+                    value = total * share
+                stats[keys[bucket]] += value
 
-                    total_metric_value = _safe_get(row_dict, db_column, 0)
-                    if total_trip_km > 0:
-                        proportion = country_km / total_trip_km
-                        value_to_add = total_metric_value * proportion
-
-                # Assign the calculated value to the correct time bucket (past or plannedFuture).
-                if is_past:
-                    countries[country_code][past_key] += value_to_add
-                elif is_planned_future:
-                    countries[country_code][planned_future_key] += value_to_add
-
-    # Calculate total trips for sorting purposes. This is done after all rows are processed.
-    for country_code, stats in countries.items():
-        stats["totalTrips"] = stats.get("pastTrips", 0) + stats.get(
-            "plannedFutureTrips", 0
-        )
-
-    # Sort countries by the calculated total trips, descending.
-    sorted_countries = dict(
-        sorted(
-            countries.items(),
-            key=lambda item: item[1].get("totalTrips", 0),
-            reverse=True,
-        )
+    return sorted(
+        countries.values(),
+        key=lambda c: c["pastTrips"] + c["plannedFutureTrips"],
+        reverse=True,
     )
 
-    # Convert to the required list format, ensuring backward compatibility of the output.
-    countries_list = []
-    for country, stats in sorted_countries.items():
-        country_data = {"country": country}
-        for metric in METRIC_NAMES:
-            past_key, planned_future_key, _ = DEFAULT_METRICS[metric]
-            country_data[past_key] = _safe_get(stats, past_key)
-            country_data[planned_future_key] = _safe_get(stats, planned_future_key)
-        countries_list.append(country_data)
 
-    return countries_list
+def _zero_row(**identifiers):
+    """A row with every metric at zero, used to fill gaps in the time series."""
+    row = dict(identifiers)
+    for past_key, planned_key in DEFAULT_METRICS.values():
+        row[past_key] = 0
+        row[planned_key] = 0
+    return row
 
 
-def get_stats_years(
-    pg, user_id, lang, trip_type, year=None, metrics_map=DEFAULT_METRICS
-):
-    """Process year statistics with gap filling; supports dynamic metrics (Trips, Km, Duration, …)."""
-    years = []
-    years_temp = {}
-
-    result = pg.execute(
-        stats_sql.stats_year(),
-        {"user_id": user_id, "tripType": trip_type, "year": year},
-    ).fetchall()
-
-    if not result:
-        return ""
-
-    result_list = [dict(row._mapping) for row in result]
-
-    # separate "future" pseudo-year if present
-    future = next((y for y in result_list if y.get("year") == "future"), None)
-    result_list = [y for y in result_list if y.get("year") != "future"]
-
-    if not result_list:
-        if future:
-            # Build future-only row from whatever metrics exist
-            entry = {"year": lang.get("future", "Future")}
-            # fill 0s for counts first
-            entry["pastTrips"] = 0
-            entry["plannedFutureTrips"] = 0
-            entry["futureTrips"] = int(
-                _safe_get(future, "futureTrips", _safe_get(future, "futuretrips", 0))
-            )
-            # include any metrics the SQL provided
-            for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
-                # counts already covered above
-                if metric_name == "Trips":
-                    continue
-                entry[past_key] = int(_safe_get(future, past_key, 0))
-                entry[planned_key] = int(_safe_get(future, planned_key, 0))
-                entry[future_key] = int(_safe_get(future, future_key, 0))
-            return [entry]
-        return ""
-
-    # Build temp storage for all years and all metrics
-    for year_row in result_list:
-        y = int(year_row["year"])
-        years_temp[y] = {}
-        # Always include Trips
-        years_temp[y]["pastTrips"] = int(_safe_get(year_row, "pastTrips", 0))
-        years_temp[y]["plannedFutureTrips"] = int(
-            _safe_get(year_row, "plannedFutureTrips", 0)
-        )
-        years_temp[y]["futureTrips"] = int(_safe_get(year_row, "futureTrips", 0))
-        # Include any present metrics (Km, Duration, …)
-        for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
-            if metric_name == "Trips":
-                continue
-            years_temp[y][past_key] = int(_safe_get(year_row, past_key, 0))
-            years_temp[y][planned_key] = int(_safe_get(year_row, planned_key, 0))
-            years_temp[y][future_key] = int(_safe_get(year_row, future_key, 0))
-
-    # Fill gaps from first..last year
-    first_year = int(result_list[0]["year"])
-    last_year = int(result_list[-1]["year"])
-
-    for year_num in range(first_year, last_year + 1):
-        if year_num in years_temp:
-            entry = {"year": year_num}
-            entry["pastTrips"] = years_temp[year_num]["pastTrips"]
-            entry["plannedFutureTrips"] = years_temp[year_num]["plannedFutureTrips"]
-            entry["futureTrips"] = years_temp[year_num]["futureTrips"]
-            # include all metrics that exist in this year row (keys present)
-            for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
-                if metric_name == "Trips":
-                    continue
-                entry[past_key] = years_temp[year_num].get(past_key, 0)
-                entry[planned_key] = years_temp[year_num].get(planned_key, 0)
-                entry[future_key] = years_temp[year_num].get(future_key, 0)
-            years.append(entry)
-        else:
-            # fully zeroed row
-            entry = {
-                "year": year_num,
-                "pastTrips": 0,
-                "plannedFutureTrips": 0,
-                "futureTrips": 0,
-            }
-            for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
-                if metric_name == "Trips":
-                    continue
-                entry[past_key] = 0
-                entry[planned_key] = 0
-                entry[future_key] = 0
-            years.append(entry)
-
-    # Append "future" bucket if exists
-    if future:
-        entry = {
-            "year": lang.get("future", "Future"),
-            "pastTrips": 0,
-            "plannedFutureTrips": 0,
-        }
-        entry["futureTrips"] = int(
-            _safe_get(future, "futureTrips", _safe_get(future, "futuretrips", 0))
-        )
-        for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
-            if metric_name == "Trips":
-                continue
-            entry[past_key] = int(_safe_get(future, past_key, 0))
-            entry[planned_key] = int(_safe_get(future, planned_key, 0))
-            entry[future_key] = int(_safe_get(future, future_key, 0))
-        years.append(entry)
-
-    return years
-
-
-def get_stats_months(pg, user_id, lang, trip_type, year, metrics_map=DEFAULT_METRICS):
-    """Process month statistics for a given year with gap filling; supports dynamic metrics."""
-    months = []
-    months_temp = {}
-
-    result = pg.execute(
-        stats_sql.stats_months(),
-        {"user_id": user_id, "tripType": trip_type, "year": year},
-    ).fetchall()
-
-    if not result:
-        return ""
-
-    result_list = [dict(row._mapping) for row in result]
-
-    if year is not None:
-        result_list = [row for row in result_list if str(row.get("year")) == str(year)]
-
-    if not result_list:
-        return ""
-
-    year_value = int(year) if year is not None else None
-
-    # Build temp storage for all months and all metrics
-    for month_row in result_list:
-        month_num = int(month_row["month"])
-
-        months_temp[month_num] = {}
-        months_temp[month_num]["pastTrips"] = int(_safe_get(month_row, "pastTrips", 0))
-        months_temp[month_num]["plannedFutureTrips"] = int(
-            _safe_get(month_row, "plannedFutureTrips", 0)
-        )
-        months_temp[month_num]["futureTrips"] = int(
-            _safe_get(month_row, "futureTrips", 0)
-        )
-        for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
-            if metric_name == "Trips":
-                continue
-            months_temp[month_num][past_key] = int(_safe_get(month_row, past_key, 0))
-            months_temp[month_num][planned_key] = int(
-                _safe_get(month_row, planned_key, 0)
-            )
-            months_temp[month_num][future_key] = int(
-                _safe_get(month_row, future_key, 0)
-            )
-
-    # Fill gaps for all 12 months
-    for month_num in range(1, 13):
-        if month_num in months_temp:
-            entry = {"year": year_value, "month": month_num}
-            entry["pastTrips"] = months_temp[month_num]["pastTrips"]
-            entry["plannedFutureTrips"] = months_temp[month_num]["plannedFutureTrips"]
-            entry["futureTrips"] = months_temp[month_num]["futureTrips"]
-            for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
-                if metric_name == "Trips":
-                    continue
-                entry[past_key] = months_temp[month_num].get(past_key, 0)
-                entry[planned_key] = months_temp[month_num].get(planned_key, 0)
-                entry[future_key] = months_temp[month_num].get(future_key, 0)
-            months.append(entry)
-        else:
-            entry = {
-                "year": year_value,
-                "month": month_num,
-                "pastTrips": 0,
-                "plannedFutureTrips": 0,
-                "futureTrips": 0,
-            }
-            for metric_name, (past_key, planned_key, future_key) in metrics_map.items():
-                if metric_name == "Trips":
-                    continue
-                entry[past_key] = 0
-                entry[planned_key] = 0
-                entry[future_key] = 0
-            months.append(entry)
-
-    return months
-
-
-def get_stats_general(pg, query_func, user_id, stat_name, trip_type, year=None):
+def _time_series(pg, query_func, user_id, trip_type, year, key, span):
     """
-    Generic stats fetcher for operators, material, routes, stations
-    Now returns both Trips and Km data in unified format
+    Build a gap-filled time series.
+
+    `key` is the row field holding the bucket ("year" or "month") and `span`
+    turns the buckets that exist into the full range that should be plotted, so
+    a year with no trips still gets a zero bar instead of being skipped.
     """
     result = pg.execute(
         query_func(), {"user_id": user_id, "tripType": trip_type, "year": year}
     ).fetchall()
 
-    stats = []
-    for row in result:
-        row_dict = dict(row._mapping)
-        if row_dict.get(stat_name):
-            stats.append(row_dict)
-    return stats
+    if not result:
+        return []
+
+    by_bucket = {}
+    for row in _rows_to_dicts(result):
+        bucket = int(row[key])
+        entry = {key: bucket}
+        for past_key, planned_key in DEFAULT_METRICS.values():
+            entry[past_key] = row.get(past_key) or 0
+            entry[planned_key] = row.get(planned_key) or 0
+        by_bucket[bucket] = entry
+
+    return [by_bucket.get(bucket, _zero_row(**{key: bucket})) for bucket in span(by_bucket)]
 
 
-def _collect_metric_fields(row_dict):
+def get_stats_years(pg, user_id, trip_type, year=None):
+    """Trips per year, with empty years in between filled in."""
+    return _time_series(
+        pg,
+        stats_sql.stats_year,
+        user_id,
+        trip_type,
+        year,
+        key="year",
+        # min/max rather than the first and last row: the query has no ORDER BY,
+        # so row order is whatever plan Postgres picks.
+        span=lambda buckets: range(min(buckets), max(buckets) + 1),
+    )
+
+
+def get_stats_months(pg, user_id, trip_type, year):
+    """Trips per month of a single year — always all twelve months."""
+    months = _time_series(
+        pg,
+        stats_sql.stats_months,
+        user_id,
+        trip_type,
+        year,
+        key="month",
+        span=lambda buckets: range(1, 13),
+    )
+    year_value = int(year) if year is not None else None
+    for month in months:
+        month["year"] = year_value
+    return months
+
+
+def fetch_stats(username, trip_type, year=None, datasets=ALL_DATASETS):
     """
-    For a given SQL row (dict), return a flat dict containing
-    past{Metric}, plannedFuture{Metric}, future{Metric} for every metric in DEFAULT_METRICS.
-    Missing columns are defaulted to 0 so the payload is metric-agnostic.
-    """
-    payload = {}
-    for m, (past_col, planned_col, future_col) in DEFAULT_METRICS.items():
-        payload[f"past{m}"] = row_dict.get(past_col, 0)
-        payload[f"plannedFuture{m}"] = row_dict.get(planned_col, 0)
-        payload[f"future{m}"] = row_dict.get(future_col, 0)
-    return payload
+    Fetch statistics for one trip type.
 
-
-def get_stats_routes(pg, user_id, trip_type, year=None):
-    """
-    Process route statistics, metric-agnostic.
-    Returns one object per route with generic metric fields:
-    - past{Metric}, plannedFuture{Metric}, future{Metric} for each metric in DEFAULT_METRICS.
-    Also includes "route" and "count" if available.
-    """
-    result = pg.execute(
-        stats_sql.stats_routes(),
-        {"user_id": user_id, "tripType": trip_type, "year": year},
-    ).fetchall()
-
-    routes = []
-    for row in result:
-        row_dict = dict(row._mapping)
-        item = {
-            "route": row_dict["route"],
-            "count": row_dict.get("count", 0),
-        }
-        item.update(_collect_metric_fields(row_dict))
-        routes.append(item)
-
-    return routes
-
-
-def get_stats_stations(pg, user_id, trip_type, year=None):
-    """
-    Process station statistics, metric-agnostic.
-    Returns one object per station with generic metric fields:
-    - past{Metric}, plannedFuture{Metric}, future{Metric} for each metric in DEFAULT_METRICS.
-    Also includes "station" and "count" if available.
-    """
-    result = pg.execute(
-        stats_sql.stats_stations(),
-        {"user_id": user_id, "tripType": trip_type, "year": year},
-    ).fetchall()
-
-    stations = []
-    for row in result:
-        row_dict = dict(row._mapping)
-        item = {
-            "station": row_dict["station"],
-            "count": row_dict.get("count", 0),
-        }
-        item.update(_collect_metric_fields(row_dict))
-        stations.append(item)
-
-    return stations
-
-
-def fetch_stats(username, trip_type, year=None):
-    """
-    Fetch all statistics (both trips and km) in a single call
-    If username is None, fetch stats for all users (admin mode)
+    If username is None, fetch stats for all users (admin mode). `datasets`
+    limits the work to the dimensions the caller actually plots — every extra
+    dataset is another full pass over the user's trips.
     """
     stats = {}
 
@@ -422,71 +518,66 @@ def fetch_stats(username, trip_type, year=None):
             stats_sql.type_available(), {"user_id": user_id}
         ).fetchall()
 
-        type_exists = any(row[0] == trip_type for row in available_types)
-
-        if not type_exists:
+        if not any(row[0] == trip_type for row in available_types):
             return stats
 
-        user_lang = session.get("userinfo", {}).get("lang", "en")
-        lang_dict = lang.get(user_lang, {})
+        for name in datasets:
+            if name in CATEGORY_DATASETS:
+                query_func, id_column = CATEGORY_DATASETS[name]
+                # The vehicles dimension is registrations everywhere except at sea,
+                # where it is ships and one ship answers to three different written
+                # identifiers — see stats_vessels.
+                if name == "vehicles" and trip_type == "ferry":
+                    query_func = stats_sql.stats_vessels
+                stats[name] = get_stats_category(
+                    pg=pg,
+                    query_func=query_func,
+                    id_column=id_column,
+                    user_id=user_id,
+                    trip_type=trip_type,
+                    year=year,
+                )
 
-        # Fetch all stats with combined queries
-        stats["operators"] = get_stats_general(
-            pg=pg,
-            query_func=stats_sql.stats_operator,
-            user_id=user_id,
-            stat_name="operator",
-            trip_type=trip_type,
-            year=year,
-        )
+        # A vessel's photo and ensign only exist server-side, in `vessels` and
+        # its photo cache. Aircraft need nothing here: the browser derives
+        # the flag from the tail number and fetches the photo itself.
+        if trip_type == "ferry" and stats.get("vehicles"):
+            attach_vessel_photos(pg, stats["vehicles"])
 
-        stats["material"] = get_stats_general(
-            pg=pg,
-            query_func=stats_sql.stats_material,
-            user_id=user_id,
-            stat_name="material",
-            trip_type=trip_type,
-            year=year,
-        )
+        # Runs for the all-users view too, where username is None. Naming needs
+        # no database at all, and the wagon lookup degrades correctly on its
+        # own: `username = NULL` never matches, so an aggregate over everybody
+        # resolves against public trainsets only and cannot leak one person's
+        # private consist into it. Skipping this outright left every row of the
+        # admin chart nameless.
+        # Only air rows carry an airport code. Everywhere else a trailing
+        # parenthetical is part of the station name ("Paris (Gare de Lyon)"),
+        # so there is nothing to look up.
+        if trip_type in ("air", "helicopter"):
+            cities = get_airport_cities(pg, stats)
+            if cities:
+                stats["airportCities"] = cities
 
-        stats["countries"] = get_stats_countries(
-            pg=pg,
-            user_id=user_id,
-            trip_type=trip_type,
-            year=year,
-        )
-
-        stats["years"] = get_stats_years(
-            pg=pg,
-            user_id=user_id,
-            lang=lang_dict,
-            trip_type=trip_type,
-            year=year,
-        )
-
-        if year:
-            stats["months"] = get_stats_months(
-                pg=pg,
-                user_id=user_id,
-                lang=lang_dict,
-                trip_type=trip_type,
-                year=year,
+        if stats.get("trainsets"):
+            stats["trainsets"] = attach_trainset_units(
+                pg, stats["trainsets"], username
             )
 
-        # Updated to use new functions
-        stats["routes"] = get_stats_routes(
-            pg=pg,
-            user_id=user_id,
-            trip_type=trip_type,
-            year=year,
-        )
+        if "countries" in datasets:
+            stats["countries"] = get_stats_countries(
+                pg=pg, user_id=user_id, trip_type=trip_type, year=year
+            )
 
-        stats["stations"] = get_stats_stations(
-            pg=pg,
-            user_id=user_id,
-            trip_type=trip_type,
-            year=year,
-        )
+        if "years" in datasets:
+            stats["years"] = get_stats_years(
+                pg=pg, user_id=user_id, trip_type=trip_type, year=year
+            )
+
+        # Months only mean something once a year has been picked.
+        if "months" in datasets and year:
+            stats["months"] = get_stats_months(
+                pg=pg, user_id=user_id, trip_type=trip_type, year=year
+            )
 
     return stats
 

@@ -33,6 +33,71 @@
   unicode-range: U+1F1E6-1F1FF; /* Flags */
 }
 
+/* ── Site-wide flag rendering ──────────────────────────────────────────────
+   Windows has no country-flag glyphs at all (Chrome/Edge draw "FR", "NO"…),
+   so every font stack must fall back to the bundled Twemoji flags. `body` is
+   FlagEmojis-first (see below), but that only covers elements that *inherit*
+   their font: anything declaring its own family (Arial, Century Gothic,
+   'IBM Plex Mono', …) drops back to the system font and loses the flags.
+
+   Rather than a universal selector — which would clobber inherited typography
+   and icon fonts — we re-declare each concrete family name used on the site as
+   a web font pointing at Twemoji, restricted by unicode-range to the regional
+   indicator pair. A @font-face shadows the same-named system font, so those
+   elements keep their real font for every other character and only borrow
+   Twemoji for flags. Generic keywords (sans-serif, monospace, ui-monospace)
+   cannot be redefined this way; use FlagEmojis explicitly ahead of them. */
+@font-face {
+  font-family: Arial;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: Helvetica;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: 'Segoe UI';
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: Roboto;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: 'Century Gothic';
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: 'Bebas Neue';
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: Montserrat;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: Consolas;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+@font-face {
+  font-family: Menlo;
+  src: url(fonts/Twemoji.Mozilla.ttf);
+  unicode-range: U+1F1E6-1F1FF;
+}
+
 .flagPNG {
   height:20px;
   max-width: 35px;
@@ -86,7 +151,12 @@
 }
 
 .navbar {
-  z-index: 2000;
+  /* Bootstrap's fixed-chrome level. This has to stay under the modal layer
+     (backdrop 1050, modal 1055): at 2000 the navbar painted over the top of every
+     modal on the site — edit_copy's map modal carries an inline z-index:5000 to
+     work around exactly that. Still clears page content and Leaflet, whose panes
+     and controls top out at 1000. */
+  z-index: 1030;
   box-shadow: 0px 1px 5px grey;
 }
 .navbar-nav>li>.dropdown-menu { 
@@ -225,7 +295,12 @@ td.noHidden{
 }
 
 .trips{
-  margin-bottom: 70px;
+  /* No standing bottom reservation. The selection bar is fixed and only exists while
+     trips are checked, and showMultilink() appends .bottom-space to clear it exactly
+     then — so a permanent margin here reserved the same room a second time, and cost
+     ~70px of dead whitespace on every visit: enough to raise a scrollbar on a page
+     whose content otherwise fit, and to cost the auto-fit page length a row or two.
+     The clearance it used to contribute moved into .bottom-space below. */
   padding: 25px;
 }
 
@@ -323,21 +398,25 @@ td .operatorList .operatorListName{
    display:none;
    z-index: 100;
    text-align:center;
- }
-
-.bottom-space{
-  height: 30px;
 }
 
- button.multiTrip{
+.bottom-space{
+  /* Appended to the body while the selection bar is shown, to clear it. Carries the
+     full clearance now (was 30px here plus a standing 70px margin on .trips). */
+  height: 100px;
+}
+
+button.multiTrip{
   width:66%;
- }
- button.multiCancel{
+}
+
+button.multiCancel{
   width:50px;
- }
- button.multiDropdown{
+}
+
+button.multiDropdown{
   width:50px;
- }
+}
  
  .button{
      border-radius: 10px;
@@ -502,7 +581,6 @@ td.child table tr:not(:last-child) td{
 
   .trips{
     padding: 0px;
-    margin-bottom:5em;
   }
 
   .multiLink{
@@ -515,7 +593,8 @@ td.child table tr:not(:last-child) td{
   }
 
   .bottom-space{
-    height: 15px;
+    /* As above: was 15px plus a standing 5em margin on .trips. */
+    height: 95px;
   }
 }
 
@@ -1843,4 +1922,44 @@ html, body {
   .modal-dialog {
     min-height: calc(100% - 3.5rem);
   }
+}
+
+/* Hover preview for a cached ship photo — the admin register and the ferry
+   registration field on the trip forms. A thumbnail in the flow, with the full picture
+   as a sibling that only becomes visible on hover, so the row stays one line high and
+   nothing reflows.
+
+   Positioned FIXED, and placed by ship_thumb.js. It was absolute, which meant any
+   scroll container between the thumbnail and the page clipped it: a table-responsive
+   wrapper, a scrollable modal body, DataTables' own wrapper — the preview was cut off
+   at the edge of the box it lived in, which is most of the places it is used. A fixed
+   element is laid out against the viewport and no ancestor's overflow can crop it.
+   Bootstrap sets transform:none on a shown modal dialog, so this holds inside one too. */
+.ship-thumb {
+  position: relative;
+  display: inline-block;
+  vertical-align: middle;
+}
+.ship-thumb > img:first-child {
+  object-fit: cover;
+  border-radius: 3px;
+  cursor: zoom-in;
+}
+.ship-thumb .ship-thumb-full {
+  display: none;
+  position: fixed;
+  z-index: 1080;          /* above DataTables' header, below Bootstrap modals */
+  max-width: 420px;
+  max-height: 60vh;
+  width: auto;
+  height: auto;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+  border-radius: 4px;
+  background: #fff;
+  pointer-events: none;   /* never stands between the cursor and what is under it */
+}
+/* The fallback when the script has not run: fixed with no offsets lands the picture at
+   its own place in the flow, beside the thumbnail — misaligned, but visible. */
+.ship-thumb:hover .ship-thumb-full {
+  display: block;
 }

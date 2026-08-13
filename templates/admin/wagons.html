@@ -7,6 +7,65 @@
     height: 38px; max-width: 90px; object-fit: contain;
     cursor: zoom-in;
   }
+  /* style2.css floats bare checkboxes — keep each one glued to its own label */
+  .form-check-inline-wrap { display: inline-flex; align-items: center; gap: .4rem; }
+  .form-check-inline-wrap .form-check-input { float: none; margin: 0; }
+
+  /* Attribution / notes icon strip */
+  .meta-icons { display: inline-flex; align-items: center; gap: .45rem; font-size: .95rem; }
+  .meta-icons .meta-none { color: var(--bs-gray-400); font-size: .8rem; font-style: italic; }
+  .meta-ico { color: var(--bs-gray-600); cursor: help; }
+  .meta-ico.lic-trainlog { color: #0d6efd; }
+  .meta-ico.lic-cc       { color: #198754; }
+  .meta-ico.lic-other    { color: #6c757d; }
+  .meta-ico.author       { color: #6f42c1; }
+  .notes-toggle { color: #fd7e14; cursor: pointer; background: none; border: 0; padding: 0; line-height: 1; }
+  .notes-toggle:hover, .notes-toggle:focus { filter: brightness(.85); outline: none; }
+  /* Notes stay collapsed until the icon is clicked, then open here */
+  .notes-popover { --bs-popover-max-width: 340px; }
+  .notes-popover .popover-header { font-size: .8rem; text-transform: uppercase;
+                                   letter-spacing: .03em; color: #d9480f; background: #fff8f0; }
+  .notes-popover .popover-body { white-space: pre-wrap; font-size: .85rem;
+                                 max-height: 260px; overflow-y: auto; }
+  .country-flags { font-size: 1.05rem; letter-spacing: .1rem; cursor: help; }
+  .uses-badge { cursor: help; font-variant-numeric: tabular-nums; }
+  .country-more  { font-size: .75rem; color: var(--bs-gray-600); letter-spacing: normal; }
+
+  /* style2.css puts .navbar at z-index 2000, well above Bootstrap's modal (1055)
+     and backdrop (1050), so a modal renders *underneath* the nav bar. Lift the
+     modal layer over it here rather than lowering the nav globally, which other
+     pages may rely on. */
+  .modal-backdrop { z-index: 2050; }
+  .modal          { z-index: 2060; }
+  .tooltip, .popover { z-index: 2070; }
+
+  /* Preview images are full-width vehicle strips — clamp them to the modal body
+     rather than the viewport, or a long multi-car strip runs off the dialog. */
+  #imgPreview img { max-width: 100%; max-height: 280px; height: auto; object-fit: contain; }
+  #imgPreview .side-view { min-width: 0; flex: 1 1 100%; }
+
+  /* Cut editor: the strip is shown at natural size so cut positions stay pixel-exact */
+  #cutScroll, #cutScrollR {
+               overflow-x: auto; border: 1px solid var(--bs-border-color); border-radius: 6px;
+               background: repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50%/12px 12px; }
+  #cutInner  { position: relative; cursor: crosshair; }
+  #cutInnerR { position: relative; }
+  #cutInner img, #cutInnerR img { display: block; image-rendering: pixelated; }
+  #cutInnerR .cut-line { cursor: default; }
+  #cutInnerR .cut-line .grip { display: none; }
+  .cut-line { position: absolute; top: 0; bottom: 0; width: 1px; background: #dc3545;
+              box-shadow: 0 0 0 1px rgba(220,53,69,.35); cursor: ew-resize; }
+  .cut-line .grip { position: absolute; top: -2px; left: -7px; width: 15px; height: 15px;
+                    border-radius: 50%; background: #dc3545; color: #fff; font-size: 10px;
+                    line-height: 15px; text-align: center; cursor: ew-resize; user-select: none; }
+  .seg-table input { font-size: .85rem; }
+  /* Car key drawn over each segment of the strip, so you can see what's what */
+  .car-tag { position: absolute; top: 2px; transform: translateX(-50%);
+             font-size: 10px; line-height: 1.3; font-family: monospace;
+             color: #b02a37; background: rgba(255,255,255,.82); border-radius: 3px;
+             padding: 0 3px; white-space: nowrap; pointer-events: none;
+             max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  #cutInner, #cutInnerR { padding-top: 16px; }
 </style>
 
 <div class="container-fluid px-4">
@@ -16,6 +75,9 @@
       <i class="fas fa-plus me-1"></i>Add Wagon
     </button>
     <a class="btn btn-outline-secondary"  href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i> {{tsBuilderTitle}}</a>
+    {% if is_owner %}
+    <a class="btn btn-outline-secondary" href="{{ url_for('admin.vagonweb_admin') }}"><i class="fa-solid fa-file-import"></i> VagonWeb import</a>
+    {% endif %}
   </div>
   <table id="wagonsTable" class="table table-striped table-bordered" style="width:100%">
     <thead>
@@ -25,8 +87,11 @@
         <th data-priority="4">Category</th>
         <th data-priority="5">Subcategory</th>
         <th data-priority="6">Era</th>
+        <th data-priority="5">Countries</th>
+        <th data-priority="3">Uses</th>
         <th data-priority="2">Type</th>
         <th data-priority="2" data-orderable="false">Image</th>
+        <th data-priority="3" data-orderable="false">Info</th>
         <th data-priority="1" data-orderable="false">Actions</th>
       </tr>
     </thead>
@@ -100,7 +165,25 @@
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">License</label>
-              <input type="text" class="form-control" name="license" placeholder="e.g. CC BY-NC-SA 3.0">
+              <input type="text" class="form-control" name="license" id="addLicense" placeholder="e.g. CC BY-NC-SA 3.0">
+              <div class="form-check-inline-wrap mt-1">
+                <input class="form-check-input" type="checkbox" id="addLicenseTrainlog">
+                <label class="form-check-label small" for="addLicenseTrainlog">Licensed to Trainlog</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="row g-2 mb-2">
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Countries</label>
+              <select class="form-control selectpicker" id="addCountries" multiple
+                      data-live-search="true" data-selected-text-format="count > 6"
+                      data-none-selected-text="Not specified" title="Where this vehicle usually runs">
+                {% for code, emoji in country_list.items() %}
+                <option value="{{ code }}">{{ emoji }} {{ code }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Where this vehicle normally operates.</div>
             </div>
           </div>
 
@@ -108,6 +191,44 @@
           <div class="mb-3 p-3 border rounded bg-light">
             <label class="form-label fw-semibold small text-uppercase text-muted">Image upload</label>
             <div id="addUploadSection"></div>
+          </div>
+
+          <!-- Cut editor: one drawing can hold a whole multi-car unit, so it can be
+               split here into one wagon per car before anything is saved. -->
+          <div class="mb-3 d-none" id="cutSection">
+            <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+              <span class="fw-semibold">Split into cars</span>
+              <button type="button" class="btn btn-sm btn-outline-primary" id="autoCutBtn">
+                <i class="fas fa-wand-magic-sparkles me-1"></i>Auto-detect
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="clearCutBtn">Clear</button>
+              <span class="text-muted small">
+                Click the strip to add a cut, drag a marker to move it, click its dot to remove it.
+              </span>
+            </div>
+            <div id="cutScroll" class="mb-1">
+              <div id="cutInner"><img id="cutImg" alt=""></div>
+            </div>
+            <!-- The other side, with the same cuts echoed where each car lands there -->
+            <div class="small text-muted mb-1 d-none" id="cutRLabel"></div>
+            <div id="cutScrollR" class="mb-2 d-none">
+              <div id="cutInnerR"><img id="cutImgR" alt=""></div>
+            </div>
+            <div id="cutStatus" class="small text-muted mb-2"></div>
+            <!-- One row per car; every other field is shared with the form above -->
+            <div class="table-responsive d-none" id="segWrap">
+              <table class="table table-sm align-middle seg-table">
+                <thead>
+                  <tr>
+                    <th style="width:4rem">Car</th>
+                    <th style="width:6rem">Width</th>
+                    <th>Name (key)</th>
+                    <th>Label</th>
+                  </tr>
+                </thead>
+                <tbody id="segBody"></tbody>
+              </table>
+            </div>
           </div>
 
           <div>
@@ -164,10 +285,6 @@
               </select>
             </div>
             <div class="col-md-2">
-              <label class="form-label fw-semibold">Line type</label>
-              <input type="text" class="form-control" name="line_type" placeholder="e.g. 2">
-            </div>
-            <div class="col-md-2">
               <label class="form-label fw-semibold">Gauge (mm)</label>
               <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
             </div>
@@ -185,7 +302,24 @@
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">License</label>
-              <input type="text" class="form-control" name="license" placeholder="e.g. CC BY-NC-SA 3.0">
+              <input type="text" class="form-control" name="license" id="editLicense" placeholder="e.g. CC BY-NC-SA 3.0">
+              <div class="form-check-inline-wrap mt-1">
+                <input class="form-check-input" type="checkbox" id="editLicenseTrainlog">
+                <label class="form-check-label small" for="editLicenseTrainlog">Licensed to Trainlog</label>
+              </div>
+            </div>
+          </div>
+          <div class="row g-2 mb-2">
+            <div class="col-md-12">
+              <label class="form-label fw-semibold">Countries</label>
+              <select class="form-control selectpicker" id="editCountries" multiple
+                      data-live-search="true" data-selected-text-format="count > 6"
+                      data-none-selected-text="Not specified" title="Where this vehicle usually runs">
+                {% for code, emoji in country_list.items() %}
+                <option value="{{ code }}">{{ emoji }} {{ code }}</option>
+                {% endfor %}
+              </select>
+              <div class="form-text">Where this vehicle normally operates.</div>
             </div>
           </div>
           <div class="row g-2 mb-2">
@@ -243,6 +377,75 @@ function esc(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
+/* ── compact metadata renderers ─────────────────────────────────────
+   Author, licence, countries and notes don't fit as columns, so each is an icon
+   whose tooltip carries the value. Notes are the exception: they can be long, so
+   the icon expands a child row instead of overflowing a tooltip. */
+
+const TIP = 'data-bs-toggle="tooltip" data-bs-placement="top"';
+
+/* Same shortening the public attribution uses: a Trainlog or wiki user-page URL
+   becomes the username, anything else is shown as typed. */
+function authorName(a) {
+  const m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/)
+         || a.match(/^https?:\/\/[^/]+\/wiki\/User:(.+)$/i);
+  return m ? m[1] : a;
+}
+
+function renderCountries(csv) {
+  const codes = (csv || '').split(',').map(c => c.trim()).filter(Boolean);
+  if (!codes.length) return '<span class="meta-none">—</span>';
+  const names = codes.map(c => { try { return regionNames.of(c); } catch (e) { return c; } });
+  const shown = codes.slice(0, 4).map(getFlagEmoji).join('');
+  const more  = codes.length > 4 ? `<span class="country-more">+${codes.length - 4}</span>` : '';
+  return `<span class="country-flags" ${TIP} title="${esc(names.join(', '))}">${shown}${more}</span>`;
+}
+
+/* Trips using this wagon. Zero is common (most of the catalogue is never picked),
+   so it's muted rather than a loud "0". */
+function renderUses(n) {
+  const v = Number(n) || 0;
+  if (!v) return '<span class="meta-none">0</span>';
+  const tone = v >= 100 ? 'bg-success' : v >= 10 ? 'bg-primary' : 'bg-secondary';
+  return `<span class="badge ${tone} uses-badge" ${TIP}
+                title="${v} trip${v === 1 ? '' : 's'} use this wagon">${v}</span>`;
+}
+
+function renderMeta(row) {
+  const bits = [];
+
+  if (row.author) {
+    bits.push(`<i class="fa-solid fa-user-pen meta-ico author" ${TIP}
+                  title="${esc(authorName(row.author))}"></i>`);
+  }
+
+  const lic = row.license || '';
+  if (lic === window.TRAINLOG_LICENSE) {
+    // Licensed directly to Trainlog — its own mark, not a public licence name
+    bits.push(`<i class="fa-solid fa-shield-halved meta-ico lic-trainlog" ${TIP}
+                  title="Licensed to Trainlog"></i>`);
+  } else if (lic) {
+    const cc  = /^cc[\s-]/i.test(lic) || /creative\s*commons/i.test(lic);
+    const ico = cc ? 'fa-brands fa-creative-commons' : 'fa-solid fa-file-contract';
+    bits.push(`<i class="${ico} meta-ico lic-${cc ? 'cc' : 'other'}" ${TIP} title="${esc(lic)}"></i>`);
+  }
+
+  if (row.notes) {
+    // Notes are free text and can run long, so they open on click rather than hover.
+    // A popover keeps this self-contained: DataTables Responsive already owns
+    // row.child(), so a manual child row would fight it once columns collapse.
+    bits.push(`<button type="button" class="notes-toggle" data-bs-toggle="popover"
+                       data-bs-trigger="focus" data-bs-placement="left"
+                       data-bs-custom-class="notes-popover" data-bs-title="Notes"
+                       data-bs-content="${esc(row.notes)}"
+                       aria-label="Show notes"><i class="fa-solid fa-note-sticky"></i></button>`);
+  }
+
+  return bits.length
+    ? `<span class="meta-icons">${bits.join('')}</span>`
+    : '<span class="meta-none">—</span>';
+}
+
 /* ── DataTable ──────────────────────────────────────────────────── */
 const table = $('#wagonsTable').DataTable({
   serverSide: true, processing: true, responsive: true,
@@ -261,6 +464,9 @@ const table = $('#wagonsTable').DataTable({
     { data: 'category',    orderable: true,  render: (d) => esc(d) },
     { data: 'subcategory', orderable: true,  render: (d) => esc(d) },
     { data: 'era',         orderable: true,  render: (d) => esc(d) },
+    { data: 'countries',   orderable: true,  render: (d, t) => t === 'display' ? renderCountries(d) : (d || '') },
+    { data: 'uses',        orderable: true,  className: 'text-center',
+      render: (d, t) => t === 'display' ? renderUses(d) : (d || 0) },
     { data: 'image_type',  orderable: false, render: (d) => `<span class="badge bg-secondary text-white">${esc(d)}</span>` },
     {
       data: 'image', orderable: false,
@@ -274,6 +480,10 @@ const table = $('#wagonsTable').DataTable({
       }
     },
     {
+      data: null, orderable: false, className: 'text-nowrap',
+      render(d, t, row) { return t === 'display' ? renderMeta(row) : ''; }
+    },
+    {
       data: null, orderable: false,
       render(d, t, row) {
         if (t !== 'display') return '';
@@ -282,7 +492,7 @@ const table = $('#wagonsTable').DataTable({
       }
     }
   ],
-  order: [[1, 'asc']], pageLength: 25, lengthMenu: [[25,50,100],[25,50,100]],
+  order: [[6, 'desc']], pageLength: 25, lengthMenu: [[25,50,100],[25,50,100]],
   language: { processing: '<i class="fas fa-spinner fa-spin"></i> Loading…' },
 });
 
@@ -291,6 +501,19 @@ const _cache = {};
 table.on('xhr', () => {
   const json = table.ajax.json();
   if (json && json.data) json.data.forEach(r => { _cache[r.name] = r; });
+});
+
+/* ── tooltips & note popovers ───────────────────────────────────────
+   Re-created on every draw: server-side paging replaces the row DOM each time,
+   so stale instances would leak and stop firing. */
+let _overlays = [];
+table.on('draw', () => {
+  _overlays.forEach(o => o.dispose());
+  const scope = document.getElementById('wagonsTable');
+  _overlays = [
+    ...[...scope.querySelectorAll('[data-bs-toggle="tooltip"]')].map(el => new bootstrap.Tooltip(el)),
+    ...[...scope.querySelectorAll('[data-bs-toggle="popover"]')].map(el => new bootstrap.Popover(el)),
+  ];
 });
 
 /* ── event delegation ───────────────────────────────────────────── */
@@ -324,8 +547,257 @@ function renderAddUpload(itype) {
 
 document.getElementById('addImageType').addEventListener('change', function () {
   renderAddUpload(this.value);
+  loadCutStrips();
 });
 renderAddUpload('sides');
+
+/* ── Cut editor ───────────────────────────────────────────────────────
+   A single drawing often holds a whole multi-car unit. The admin can cut it here
+   into one wagon per car: the picture is sliced server-side at these positions and
+   each car is saved as its own catalogue entry, sharing every other field on the
+   form. Same geometry as the VagonWeb importer, minus the AI. */
+let cuts    = [];      // x positions in image pixels, ascending
+let cutMain = null;    // { file, url, width } — the strip the cuts are placed on
+let cutSide = null;    // the opposite view, if one was picked too ({ url })
+let cutMirrorR = false; // an R view that follows an L one runs in reverse order
+
+function cutFiles() {
+  /* The picked file(s), primary first. For 'sides' the L view defines car order;
+     with only an R view that one is cut as it is drawn. */
+  const byName = n => {
+    const el = document.querySelector(`#addUploadSection input[name="${n}"]`);
+    return el && el.files[0] ? el.files[0] : null;
+  };
+  if (document.getElementById('addImageType').value === 'sides') {
+    const l = byName('file_l'), r = byName('file_r');
+    return l ? { main: l, side: r, mirror: !!r } : { main: r, side: null, mirror: false };
+  }
+  return { main: byName('file'), side: null, mirror: false };
+}
+
+function resetCutEditor() {
+  cuts = [];
+  document.getElementById('segBody').innerHTML = '';
+  document.getElementById('segWrap').classList.add('d-none');
+  document.getElementById('cutStatus').textContent = '';
+}
+
+/* Show whatever is currently picked at natural size, ready to be cut */
+function loadCutStrips() {
+  const picked = cutFiles();
+  const section = document.getElementById('cutSection');
+  resetCutEditor();
+  if (cutMain) URL.revokeObjectURL(cutMain.url);
+  if (cutSide) URL.revokeObjectURL(cutSide.url);
+  cutMain = cutSide = null;
+  cutMirrorR = picked.mirror;
+
+  if (!picked.main) { section.classList.add('d-none'); return; }
+  section.classList.remove('d-none');
+
+  const url = URL.createObjectURL(picked.main);
+  const img = document.getElementById('cutImg');
+  img.onload = () => {
+    cutMain = { file: picked.main, url, width: img.naturalWidth };
+    document.getElementById('cutInner').style.width = cutMain.width + 'px';
+    img.width = cutMain.width; img.height = img.naturalHeight;
+    renderCuts();
+  };
+  img.src = url;
+
+  const hasSide = !!picked.side;
+  document.getElementById('cutScrollR').classList.toggle('d-none', !hasSide);
+  document.getElementById('cutRLabel').classList.toggle('d-none', !hasSide);
+  if (hasSide) {
+    const urlR = URL.createObjectURL(picked.side);
+    const imgR = document.getElementById('cutImgR');
+    imgR.onload = () => {
+      cutSide = { url: urlR, width: imgR.naturalWidth };
+      document.getElementById('cutInnerR').style.width = cutSide.width + 'px';
+      imgR.width = cutSide.width; imgR.height = imgR.naturalHeight;
+      renderCuts();
+    };
+    imgR.src = urlR;
+    document.getElementById('cutRLabel').textContent =
+      'R view — same cuts, mirrored; check they still land on the joints';
+  }
+}
+
+document.getElementById('addUploadSection').addEventListener('change', loadCutStrips);
+
+function renderCuts() {
+  if (!cutMain) return;
+  const inner = document.getElementById('cutInner');
+  inner.querySelectorAll('.cut-line').forEach(el => el.remove());
+  cuts.sort((a, b) => a - b);
+  cuts.forEach((x, i) => {
+    const line = document.createElement('div');
+    line.className = 'cut-line';
+    line.style.left = x + 'px';
+    line.innerHTML = '<span class="grip">&times;</span>';
+    line.querySelector('.grip').addEventListener('click', e => {
+      e.stopPropagation();
+      cuts.splice(i, 1);
+      renderCuts(); renderSegments();
+    });
+    line.addEventListener('mousedown', e => startCutDrag(e, i));
+    inner.appendChild(line);
+  });
+  renderCutsR();
+  renderCarTags();
+
+  // Both views are cut at the same x positions, so mismatched widths can't work
+  if (cutSide && cutSide.width !== cutMain.width) {
+    document.getElementById('cutStatus').innerHTML =
+      '<span class="text-danger">The two views have different widths — they cannot be ' +
+      'cut at the same positions.</span>';
+  }
+}
+
+/* Read-only echo of the cuts on the other view. Car i occupies the mirrored
+   x-range there, because that side shows the same set from the other end. */
+function renderCutsR() {
+  const inner = document.getElementById('cutInnerR');
+  inner.querySelectorAll('.cut-line').forEach(el => el.remove());
+  if (!cutSide) return;
+  cuts.forEach(x => {
+    const line = document.createElement('div');
+    line.className = 'cut-line';
+    line.style.left = (cutMirrorR ? cutSide.width - x : x) + 'px';
+    inner.appendChild(line);
+  });
+}
+
+/* Label each segment with its Name (key) on both strips */
+function renderCarTags() {
+  if (!cutMain) return;
+  const bounds = [0, ...cuts, cutMain.width];
+  const names  = [...document.querySelectorAll('#segBody input[data-field="name"]')]
+                   .map(i => i.value);
+
+  [['cutInner', false], ['cutInnerR', true]].forEach(([id, isSide]) => {
+    const inner = document.getElementById(id);
+    inner.querySelectorAll('.car-tag').forEach(el => el.remove());
+    if (isSide && !cutSide) return;
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const mid = (bounds[i] + bounds[i + 1]) / 2;
+      const tag = document.createElement('div');
+      tag.className = 'car-tag';
+      tag.style.left = (isSide && cutMirrorR ? cutSide.width - mid : mid) + 'px';
+      tag.style.maxWidth = (bounds[i + 1] - bounds[i] - 4) + 'px';
+      tag.textContent = names[i] || `car ${i + 1}`;
+      tag.title = tag.textContent;
+      inner.appendChild(tag);
+    }
+  });
+}
+
+function startCutDrag(e, i) {
+  e.preventDefault(); e.stopPropagation();
+  const inner = document.getElementById('cutInner');
+  const move = ev => {
+    const x = Math.round(ev.clientX - inner.getBoundingClientRect().left);
+    cuts[i] = Math.max(1, Math.min(cutMain.width - 1, x));
+    renderCuts(); renderSegments();
+  };
+  const up = () => {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+  };
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+}
+
+/* Rebuild the per-car rows, keeping anything already typed in place by index */
+function renderSegments() {
+  const body = document.getElementById('segBody');
+  const wrap = document.getElementById('segWrap');
+  if (!cutMain || !cuts.length) {          // uncut: the form's own name/label apply
+    body.innerHTML = '';
+    wrap.classList.add('d-none');
+    renderCarTags();
+    return;
+  }
+  wrap.classList.remove('d-none');
+
+  // Only hand-edited values survive a cut change; the rest are re-derived so the
+  // "_c1, _c2…" naming follows the cuts around.
+  const typed = [...body.querySelectorAll('tr')].map(tr => {
+    const v = {};
+    tr.querySelectorAll('input').forEach(inp => {
+      if (inp.dataset.dirty) v[inp.dataset.field] = inp.value;
+    });
+    return v;
+  });
+
+  const bounds   = [0, ...cuts, cutMain.width];
+  const baseName = slugify(_addName.value || _addLabel.value) || 'wagon';
+  const baseLbl  = _addLabel.value.trim() || baseName;
+
+  body.innerHTML = bounds.slice(0, -1).map((_, i) => {
+    const prev = typed[i] || {};
+    const defaults = { name: `${baseName}_c${i + 1}`, label: `${baseLbl} — car ${i + 1}` };
+    const cell = (field, extra = '') => {
+      const dirty = prev[field] !== undefined;
+      const value = dirty ? prev[field] : defaults[field];
+      return `<td><input class="form-control form-control-sm ${extra}" data-field="${field}"
+                         ${dirty ? 'data-dirty="1"' : ''} value="${esc(value)}"></td>`;
+    };
+    return `
+      <tr>
+        <td class="text-muted">${i + 1}</td>
+        <td class="text-muted small">${bounds[i + 1] - bounds[i]} px</td>
+        ${cell('name', 'font-monospace')}
+        ${cell('label')}
+      </tr>`;
+  }).join('');
+
+  body.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      inp.dataset.dirty = '1';
+      if (inp.dataset.field === 'name') renderCarTags();
+    });
+  });
+  renderCarTags();
+}
+
+document.getElementById('cutInner').addEventListener('click', e => {
+  if (!cutMain || e.target.closest('.cut-line')) return;
+  const x = Math.round(e.clientX - e.currentTarget.getBoundingClientRect().left);
+  if (x <= 0 || x >= cutMain.width) return;
+  cuts.push(x);
+  renderCuts(); renderSegments();
+});
+
+document.getElementById('autoCutBtn').addEventListener('click', function () {
+  if (!cutMain) return;
+  const status = document.getElementById('cutStatus');
+  const fd = new FormData();
+  fd.append('file', cutMain.file);
+  this.disabled = true;
+  status.textContent = 'Looking for joints…';
+  fetch(`${API}/suggest-cuts`, { method: 'POST', body: fd })
+    .then(res => res.json().then(j => {
+      if (!res.ok) throw new Error(j.error || res.status);
+      return j;
+    }))
+    .then(j => {
+      cuts = j.cuts || [];
+      document.getElementById('segBody').innerHTML = '';   // regenerate defaults
+      renderCuts(); renderSegments();
+      status.textContent = cuts.length
+        ? `${cuts.length + 1} cars detected — check the cut positions.`
+        : 'No joints found; this looks like a single vehicle.';
+    })
+    .catch(err => { status.textContent = `Error: ${err.message || err}`; })
+    .finally(() => { this.disabled = false; });
+});
+
+document.getElementById('clearCutBtn').addEventListener('click', () => {
+  cuts = [];
+  document.getElementById('segBody').innerHTML = '';
+  renderCuts(); renderSegments();
+});
 
 /* Name (key) mirrors the label — sanitised like _sanitize_name() server-side —
    until the admin types their own, after which it is left alone. */
@@ -347,12 +819,78 @@ document.getElementById('addModal').addEventListener('show.bs.modal', function (
   document.getElementById('addForm').reset();
   _nameTouched = false;
   renderAddUpload('sides');
+  loadCutStrips();          // no file picked yet: hides the cut editor and clears it
 });
+
+/* ── "Licensed to Trainlog" toggle ──────────────────────────────────
+   Ticking the box greys the licence text input; the TRAINLOG_LICENSE sentinel is
+   substituted at submit time (a disabled input is omitted from FormData, so the
+   value is never read off the DOM). Display surfaces swap the sentinel for the
+   translated phrase. */
+function bindLicenseToggle(inputId, checkId) {
+  const input = document.getElementById(inputId);
+  const check = document.getElementById(checkId);
+
+  /* Paint the input to match the checkbox. `keep` is what the text box should hold
+     while the box is unticked — on a user toggle that is whatever they had typed,
+     on a load it is the stored licence. */
+  const paint = keep => {
+    input.disabled    = check.checked;
+    input.value       = check.checked ? '' : keep;
+    input.placeholder = check.checked ? 'Licensed to Trainlog' : 'e.g. CC BY-NC-SA 3.0';
+    input.dataset.prev = check.checked ? (input.dataset.prev || '') : keep;
+  };
+
+  check.addEventListener('change', () => {
+    // Ticking stashes what was typed so unticking can put it back
+    if (check.checked) input.dataset.prev = input.value;
+    paint(input.dataset.prev || '');
+  });
+
+  return {
+    /* Load an existing stored value into the pair */
+    set(value) {
+      const v = value || '';
+      check.checked = v === window.TRAINLOG_LICENSE;
+      input.dataset.prev = '';
+      paint(check.checked ? '' : v);
+    },
+    /* Value to submit */
+    get() { return check.checked ? window.TRAINLOG_LICENSE : input.value.trim(); },
+  };
+}
+const addLicense  = bindLicenseToggle('addLicense',  'addLicenseTrainlog');
+const editLicense = bindLicenseToggle('editLicense', 'editLicenseTrainlog');
+
+/* ── Country multi-select ───────────────────────────────────────────
+   Stored as a comma-separated ISO alpha-2 string, matching tickets.active_countries. */
+function countriesGet(id) {
+  return ($(`#${id}`).val() || []).join(',');
+}
+function countriesSet(id, csv) {
+  $(`#${id}`).selectpicker('val', (csv || '').split(',').filter(Boolean));
+}
 
 function submitAdd() {
   const f = document.getElementById('addForm');
   if (!f.checkValidity()) { f.reportValidity(); return; }
-  fetch(API, { method: 'POST', body: new FormData(f) })
+  const body = new FormData(f);
+  body.set('license', addLicense.get());
+  ($('#addCountries').val() || []).forEach(c => body.append('countries[]', c));
+
+  // A cut strip is saved as one wagon per car instead of one wagon per form
+  if (cuts.length) {
+    const units = [...document.querySelectorAll('#segBody tr')].map(tr => {
+      const u = {};
+      tr.querySelectorAll('input').forEach(inp => { u[inp.dataset.field] = inp.value.trim(); });
+      return u;
+    });
+    if (units.some(u => !u.name)) { toast('Each car needs a name', 'warning'); return; }
+    body.set('cuts',  JSON.stringify(cuts));
+    body.set('units', JSON.stringify(units));
+  }
+
+  fetch(API, { method: 'POST', body })
     .then(res => {
       if (!res.ok) return res.json().then(j => { throw new Error(j.error || res.status); });
       return res.json();
@@ -360,7 +898,9 @@ function submitAdd() {
     .then(j => {
       $('#addModal').modal('hide');
       table.ajax.reload();
-      toast(`Wagon "${j.label}" added (${j.name})`);
+      toast(j.created && j.created.length > 1
+        ? `${j.created.length} wagons added (${j.created.join(', ')})`
+        : `Wagon "${j.label}" added (${j.name})`);
     })
     .catch(err => toast(`Error: ${err}`, 'danger'));
 }
@@ -371,7 +911,7 @@ document.getElementById('addForm').addEventListener('keydown', e => {
 
 /* ── edit modal ─────────────────────────────────────────────────── */
 let _editWagon = null;
-const _editFields = ['label','category','subcategory','era','image_type','line_type',
+const _editFields = ['label','category','subcategory','era','image_type',
                      'gauge','px_per_meter','author','license','source','notes'];
 
 function openEditModal(wname) {
@@ -385,6 +925,8 @@ function openEditModal(wname) {
     if (!el) return;
     el.value = r[field] != null ? r[field] : '';
   });
+  editLicense.set(r.license);
+  countriesSet('editCountries', r.countries);
   $('#editModal').modal('show');
 }
 
@@ -396,6 +938,8 @@ function submitEdit() {
     const el = f.elements[field];
     if (el) data[field] = el.value;
   });
+  data.license = editLicense.get();
+  data.countries = countriesGet('editCountries');
   fetch(`${API}/${encodeURIComponent(_editWagon.name)}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -426,16 +970,16 @@ function openImgModal(wname) {
   const onErr   = `this.replaceWith(Object.assign(document.createElement('span'),{className:'text-muted small fst-italic',textContent:'(not found on disk)'}))`;
   if (r.image_type === 'sides' && r.image) {
     preview.innerHTML = `
-      <div class="d-flex justify-content-center gap-4 flex-wrap">
-        <div><div class="small text-muted mb-1">L view</div>
-          <img src="${WAGONS_URL}/${r.image}_L.${r.image_ext || 'gif'}" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
-        <div><div class="small text-muted mb-1">R view</div>
-          <img src="${WAGONS_URL}/${r.image}_R.${r.image_ext || 'gif'}" style="max-height:200px;max-width:45vw" onerror="${onErr}"></div>
+      <div class="d-flex justify-content-center gap-3 flex-wrap">
+        <div class="side-view"><div class="small text-muted mb-1">L view</div>
+          <img src="${WAGONS_URL}/${r.image}_L.${r.image_ext || 'gif'}" style="max-height:200px" onerror="${onErr}"></div>
+        <div class="side-view"><div class="small text-muted mb-1">R view</div>
+          <img src="${WAGONS_URL}/${r.image}_R.${r.image_ext || 'gif'}" style="max-height:200px" onerror="${onErr}"></div>
       </div>`;
   } else {
     const src = imgSrc(r.image, r.image_type, r.image_ext);
     preview.innerHTML = src
-      ? `<img src="${src}" style="max-height:280px;max-width:80vw" onerror="${onErr}">`
+      ? `<img src="${src}" onerror="${onErr}">`
       : `<span class="text-muted fst-italic">No image set</span>`;
   }
 

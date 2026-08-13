@@ -953,7 +953,7 @@ function enablePhotoToggle($head, $media, fetchPhoto) {
         $media.append($photo);
         $photo.find('img')
             .on('load', refitTripCard)
-            // ship_pictures rows can outlive their file on disk (the whole local
+            // Cached photo rows can outlive their file on disk (the whole local
             // cache is absent in dev) — drop the frame rather than show a broken icon.
             .on('error', function() {
                 $photo.remove(); $photo = null; showingPhoto = false;
@@ -1006,16 +1006,29 @@ function renderPublicAirframe($container, info, reg) {
     enablePhotoToggle($head, $media, function() { return fetchAircraftPhoto(reg); });
 }
 
-function renderPublicVessel($container, reg, country) {
+/* A ship is logged by name, IMO or MMSI and always shown by name (migration 0054).
+   `name` is the resolved one from the trip's vessel join, absent for a vessel we hold
+   no record of — the raw reg then stands in, and is replaced if the photo lookup
+   turns out to know the ship after all. */
+function renderPublicVessel($container, reg, country, name, at) {
     var $head = vehiclePanel($container, null);
     var $media = $('<div class="publicVehicleMedia"></div>').appendTo($container);
-    var showFlag = appendReg($head, reg);
-    // Flag up front from the ship_pictures join. Vessels not yet in that cache have
-    // no country until something fetches them, so fall back to the photo response.
+    var showFlag = appendReg($head, name || reg);
+    // Flag up front from the vessel join. Vessels not yet on record have no country
+    // until something fetches them, so fall back to the photo response.
     showFlag(country);
     enablePhotoToggle($head, $media, function() {
-        var promise = fetchVesselPhoto(VESSEL_PHOTO_URL, reg);
-        if (!country) promise.then(function(photo) { if (photo) showFlag(photo.country); });
+        var promise = fetchVesselPhoto(VESSEL_PHOTO_URL, reg, at);
+        if (!country || !name) {
+            promise.then(function(photo) {
+                if (!photo) return;
+                if (!country) showFlag(photo.country);
+                if (!name && photo.name) {
+                    $head.find('.publicVehicleRegText').text(photo.name);
+                    refitTripCard();
+                }
+            });
+        }
         return promise;
     });
 }
@@ -1391,7 +1404,12 @@ function buildItinerary(trips, prices) {
             renderPublicAirframe(tsContainer, airInfo, tripReg);
         } else if (trip.trip.type === 'ferry' && tripReg) {
             tsContainer = $('<div>').addClass('publicVehicle');
-            renderPublicVessel(tsContainer, tripReg, trip.trip.vessel_country);
+            // The trip's own date, so the lookup answers with the ship as it was then.
+            // Undated trips carry the legacy 1 / -1 sentinels as numbers, not strings —
+            // those mean "no date", and the lookup then answers with the current identity.
+            var vesselAt = (typeof trip.trip.start_datetime === 'string') ? trip.trip.start_datetime : '';
+            renderPublicVessel(tsContainer, tripReg, trip.trip.vessel_country,
+                               trip.trip.vessel_name, vesselAt);
         }
 
         let endTimeDisplay, startTimeDisplay;

@@ -16,9 +16,12 @@ SELECT
     airliners.manufacturer,
     airliners.model,
     -- Ferry flag state. Aircraft derive their country from the registration prefix
-    -- client-side, but a ship's only lives in ship_pictures, so surface it here —
+    -- client-side, but a ship's only lives in `vessels`, so surface it here —
     -- otherwise the flag could not appear until the photo had been fetched.
-    sp.country_code AS vessel_country,
+    v.country_code AS vessel_country,
+    -- The ship's name as it was on this trip's date (migration 0056). NULL for a
+    -- vessel we hold no record of, and the display then falls back to `reg` as written.
+    v.vessel_name,
     CASE
         WHEN NOW() > base.utc_filtered_end_datetime
              OR (base.utc_filtered_start_datetime IS NULL AND NOT base.is_project)
@@ -57,16 +60,22 @@ SELECT
     END AS logo_url
 FROM base
 LEFT JOIN airliners ON base.material_type = airliners.iata
--- vessel_name is not unique (559 rows / 536 names), so a plain join would return
--- duplicate rows for one trip. Duplicates agree on country_code, so any one row will
--- do — pick the newest deterministically. Matched exactly, like get_vessel_picture.
+-- The ship `reg` names, AS IT WAS ON THIS TRIP'S DATE: `reg` holds the hull, and the
+-- name and flag come from whichever registration was in force then (migration 0056).
+-- A crossing keeps the name the ship carried that day even after it is sold and
+-- renamed; an undated trip takes the current identity.
+--
+-- Ferries only: an aircraft registration is not a ship and must not be looked up as
+-- one, and the lookup would otherwise run for every trip of every type.
 LEFT JOIN LATERAL (
-    SELECT country_code
-    FROM ship_pictures
-    WHERE vessel_name = base.reg
-    ORDER BY fetch_date DESC NULLS LAST, uid DESC
-    LIMIT 1
-) sp ON TRUE
+    SELECT r.country_code, NULLIF(btrim(r.name), '') AS vessel_name
+    FROM vessel_registrations r
+    WHERE base.trip_type = 'ferry'
+      AND r.uid = vessel_identity(
+              vessel_resolve(base.reg),
+              base.utc_filtered_start_datetime
+          )
+) v ON TRUE
 -- The trip's first operator, resolved through operator_aliases. Replaces an exact
 -- match of operators.short_name against the whole `operator` text, which needed an
 -- ORDER BY ... LIMIT 1 guard because short_name was not unique and which missed any

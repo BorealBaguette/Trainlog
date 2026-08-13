@@ -1,0 +1,717 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+{% include nav %}
+
+<style>
+  .vw-card { border: 1px solid var(--bs-border-color); border-radius: 8px; padding: .75rem; }
+  .vw-card.done { opacity: .5; }
+  .vw-strip { max-width: 100%; height: auto; image-rendering: pixelated;
+              background: repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50%/12px 12px; }
+  /* Cut editor: the strip is shown at natural size so cut positions stay pixel-exact */
+  #cutScroll, #cutScrollR {
+               overflow-x: auto; border: 1px solid var(--bs-border-color); border-radius: 6px;
+               background: repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50%/12px 12px; }
+  #cutInner  { position: relative; cursor: crosshair; }
+  #cutInnerR { position: relative; }
+  #cutInner img, #cutInnerR img { display: block; image-rendering: pixelated; }
+  #cutInnerR .cut-line { cursor: default; }
+  #cutInnerR .cut-line .grip { display: none; }
+  .cut-line { position: absolute; top: 0; bottom: 0; width: 1px; background: #dc3545;
+              box-shadow: 0 0 0 1px rgba(220,53,69,.35); cursor: ew-resize; }
+  .cut-line .grip { position: absolute; top: -2px; left: -7px; width: 15px; height: 15px;
+                    border-radius: 50%; background: #dc3545; color: #fff; font-size: 10px;
+                    line-height: 15px; text-align: center; cursor: ew-resize; user-select: none; }
+  .seg-table input { font-size: .85rem; }
+  /* Car key drawn over each segment of the strip, so you can see what's what */
+  .car-tag { position: absolute; top: 2px; transform: translateX(-50%);
+             font-size: 10px; line-height: 1.3; font-family: monospace;
+             color: #b02a37; background: rgba(255,255,255,.82); border-radius: 3px;
+             padding: 0 3px; white-space: nowrap; pointer-events: none;
+             max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  #cutInner, #cutInnerR { padding-top: 16px; }
+  /* style2.css floats bare checkboxes — keep each one glued to its own label */
+  .form-check-inline-wrap { display: inline-flex; align-items: center; gap: .4rem; }
+  .form-check-inline-wrap .form-check-input { float: none; margin: 0; }
+
+  /* style2.css puts .navbar at z-index 2000, well above Bootstrap's modal (1055)
+     and backdrop (1050), so a modal renders *underneath* the nav bar. Lift the
+     modal layer over it here rather than lowering the nav globally, which other
+     pages may rely on. */
+  .modal-backdrop { z-index: 2050; }
+  .modal          { z-index: 2060; }
+  .tooltip, .popover { z-index: 2070; }
+</style>
+
+<div class="container-fluid px-4">
+  <h1 class="mt-3">VagonWeb import</h1>
+  <p class="text-muted">
+    Owner only. Nothing is written to the catalogue until you import a wagon explicitly,
+    and every import records its own author and licence — only import drawings you have
+    permission for.
+  </p>
+
+  <div class="input-group mb-3" style="max-width: 900px">
+    <input type="url" class="form-control" id="urlInput"
+           placeholder="https://www.vagonweb.cz/razeni/vlak.php?…">
+    <button class="btn btn-primary" id="fetchBtn"><i class="fas fa-download me-1"></i>Fetch</button>
+  </div>
+
+  <div id="status" class="mb-3"></div>
+  <h5 id="trainTitle" class="d-none"></h5>
+  <div id="compPanel" class="d-none card mb-3">
+    <div class="card-body py-3">
+      <div class="d-flex flex-wrap align-items-end gap-2">
+        <div>
+          <label class="form-label fw-semibold mb-1" for="compName">Save this train as a trainset</label>
+          <div class="small text-muted mb-2" id="compSummary"></div>
+          <select id="compSelect" class="form-select form-select-sm d-none mb-2" style="max-width:420px"></select>
+        </div>
+      </div>
+      <div class="input-group input-group-sm mt-1" style="max-width:560px">
+        <input type="text" class="form-control" id="compName" placeholder="Trainset name">
+        <button class="btn btn-outline-primary" id="compSaveBtn">
+          <i class="fa-solid fa-screwdriver-wrench me-1"></i>Save as my trainset
+        </button>
+      </div>
+      <div class="form-text">
+        Saved to your own sets only — never public. Vehicles you haven't imported yet
+        are kept in the formation as placeholders and become the real wagon by
+        themselves once you import them under the offered name.
+      </div>
+      <div id="compStatus" class="small mt-2"></div>
+    </div>
+  </div>
+
+  <div id="results" class="row g-3"></div>
+</div>
+
+
+<!-- ══════════════════════════════════ Import Modal -->
+<div class="modal fade" id="importModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-file-import me-2"></i>Import — <span id="imTitle"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+
+        <!-- VagonWeb's description is Czech and its type codes are terse; the AI
+             turns them into English prose and catalogue-standard field values. -->
+        <div class="mb-3">
+          <div class="d-flex align-items-center gap-2 mb-2">
+            <button class="btn btn-sm btn-outline-primary" id="aiFillBtn">
+              <i class="fas fa-wand-magic-sparkles me-1"></i>Auto-fill with AI
+            </button>
+            <span class="small text-muted" id="aiFillStatus">
+              Fills label, category, subcategory, notes, gauge, era and countries. Always check them.
+            </span>
+          </div>
+          <textarea class="form-control form-control-sm" id="aiHint" rows="2"
+                    placeholder="Optional: paste anything the AI should know — a tech sheet, the name of each car in order, build years, a correction. Treated as authoritative."></textarea>
+        </div>
+
+        <!-- Attribution (shared by every car of this strip) -->
+        <div class="row g-2 mb-3">
+          <div class="col-md-5">
+            <label class="form-label fw-semibold">Author <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="imAuthor" placeholder="e.g. Jan Novák">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label fw-semibold">License <span class="text-danger">*</span></label>
+            <input type="text" class="form-control" id="imLicense" placeholder="e.g. CC BY-NC-SA 3.0">
+            <div class="form-check-inline-wrap mt-1">
+              <input class="form-check-input" type="checkbox" id="imLicenseTrainlog">
+              <label class="form-check-label small" for="imLicenseTrainlog">Licensed to Trainlog</label>
+            </div>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Source</label>
+            <input type="text" class="form-control" id="imSource" value="VagonWeb">
+          </div>
+        </div>
+        <div class="row g-2 mb-3">
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Era</label>
+            <input type="text" class="form-control" id="imEra" placeholder="e.g. 6">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Gauge (mm)</label>
+            <input type="number" class="form-control" id="imGauge" placeholder="e.g. 1435">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Scale (px/m)</label>
+            <input type="number" step="any" min="0" class="form-control" id="imPpm" placeholder="auto">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label fw-semibold">Countries</label>
+            <select class="form-control selectpicker" id="imCountries" multiple
+                    data-live-search="true" data-selected-text-format="count > 4"
+                    data-none-selected-text="Not specified" title="Where this vehicle usually runs">
+              {% for code, emoji in country_list.items() %}
+              <option value="{{ code }}">{{ emoji }} {{ code }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+
+        <!-- Cut editor -->
+        <div class="d-flex align-items-center gap-2 mb-2">
+          <span class="fw-semibold">Split into cars</span>
+          <button class="btn btn-sm btn-outline-primary" id="autoCutBtn">
+            <i class="fas fa-wand-magic-sparkles me-1"></i>Auto-detect
+          </button>
+          <button class="btn btn-sm btn-outline-secondary" id="clearCutBtn">Clear</button>
+          <span class="text-muted small ms-2">
+            Click the strip to add a cut, drag a marker to move it, click the marker's dot to remove it.
+          </span>
+        </div>
+        <div id="cutScroll" class="mb-1">
+          <div id="cutInner"><img id="cutImg" alt=""></div>
+        </div>
+        <!-- The R view the import will actually write, with the same cuts applied -->
+        <div class="small text-muted mb-1" id="cutRLabel"></div>
+        <div id="cutScrollR" class="mb-3">
+          <div id="cutInnerR"><img id="cutImgR" alt=""></div>
+        </div>
+
+        <div id="variantPicker" class="d-none mb-2 small"></div>
+
+        <!-- One row per code x car -->
+        <div class="table-responsive">
+          <table class="table table-sm align-middle seg-table">
+            <thead>
+              <tr>
+                <th style="width:5rem">Code</th>
+                <th style="width:4rem">Car</th>
+                <th style="width:6rem">Width</th>
+                <th>Name (key)</th>
+                <th>Label</th>
+                <th>Category</th>
+                <th>Subcategory</th>
+                <th>Notes</th>
+              </tr>
+            </thead>
+            <tbody id="segBody"></tbody>
+          </table>
+        </div>
+
+        <div id="imError" class="alert alert-danger d-none py-2"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary" id="importBtn">Import</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script defer src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
+<script defer>
+const API        = '/api/admin/vagonweb';
+const WAGONS_URL = '{{ url_for("static", filename="images/wagons") }}';
+
+/* Licence field: ticking the box greys the text input and submits the
+   TRAINLOG_LICENSE sentinel, which every display surface renders as the
+   translated "Licensed to Trainlog". */
+const licInput = document.getElementById('imLicense');
+const licCheck = document.getElementById('imLicenseTrainlog');
+
+function syncLicenseField() {
+  const on = licCheck.checked;
+  licInput.disabled = on;
+  if (on) {
+    licInput.dataset.prev  = licInput.value;
+    licInput.value         = '';
+    licInput.placeholder   = 'Licensed to Trainlog';
+  } else {
+    licInput.value       = licInput.dataset.prev || '';
+    licInput.placeholder = 'e.g. CC BY-NC-SA 3.0';
+  }
+}
+licCheck.addEventListener('change', syncLicenseField);
+
+const esc = s => (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;')
+                          .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/* ── Fetch & list ───────────────────────────────────────────────── */
+let wagons = [];
+let compositions = [];
+
+async function fetchPage() {
+  const url = document.getElementById('urlInput').value.trim();
+  if (!url) return;
+  const status = document.getElementById('status');
+  status.innerHTML = '<span class="text-muted"><i class="fas fa-spinner fa-spin me-1"></i>Fetching…</span>';
+  document.getElementById('results').innerHTML = '';
+
+  const res  = await fetch(`${API}/preview`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    status.innerHTML = `<div class="alert alert-danger py-2">${esc(data.error)}</div>`;
+    return;
+  }
+
+  wagons = data.wagons;
+  compositions = data.compositions || [];
+  renderCompPanel(data.train_title);
+  status.innerHTML = `<span class="text-muted">${wagons.length} distinct wagon(s) found.</span>`;
+  const t = document.getElementById('trainTitle');
+  t.textContent = data.train_title;
+  t.classList.remove('d-none');
+  renderResults();
+}
+
+function renderResults() {
+  document.getElementById('results').innerHTML = wagons.map((w, i) => `
+    <div class="col-12">
+      <div class="vw-card ${w.already_imported ? 'done' : ''}">
+        <div class="d-flex justify-content-between align-items-start mb-2 flex-wrap gap-2">
+          <div>
+            <strong>${esc(w.label)}</strong>
+            <span class="font-monospace small text-muted ms-2">${esc(w.vw_base)}</span>
+            ${w.already_imported
+              ? '<span class="badge bg-secondary ms-2">already in catalogue</span>'
+              : ((w.imported_codes || []).length
+                 ? `<span class="badge bg-info text-dark ms-2" title="Already imported: ${esc((w.imported_codes||[]).join(', '))}">${w.imported_codes.length} of ${(w.variants||[]).length} codes imported</span>`
+                 : '')}
+            ${(w.variants || []).length > 1
+              ? `<span class="badge bg-warning text-dark ms-2" title="VagonWeb draws these type codes with this same file, so they import as one wagon">also drawn as ${esc(w.variants.slice(1).join(', '))}</span>`
+              : ''}
+            ${w.suggested_cuts.length ? `<span class="badge bg-info text-dark ms-2">${w.suggested_cuts.length + 1} cars detected</span>` : ''}
+          </div>
+          <button class="btn btn-sm btn-primary" onclick="openImport(${i})">
+            <i class="fas fa-file-import me-1"></i>Import…
+          </button>
+        </div>
+        <div class="small text-muted">${w.two_sided_source ? 'L view (-a)' : 'Single view'}</div>
+        <img class="vw-strip" src="${WAGONS_URL}/${esc(w.stage_url_l)}" alt="">
+        ${w.two_sided_source ? `
+          <div class="small text-muted mt-2">R view (-b)</div>
+          <img class="vw-strip" src="${WAGONS_URL}/${esc(w.stage_url_r)}" alt="">` : ''}
+        <div class="small text-muted mt-1">
+          ${w.width}×${w.height} px · ${esc(w.image_type)}
+          ${w.route ? ' · ' + esc(w.route) : ''}
+        </div>
+      </div>
+    </div>`).join('');
+}
+
+/* ── Save the whole train as a personal trainset ─────────────────────
+   The catalogue list above is deduplicated; a trainset needs the running order
+   with its repeats, which the server returns separately. */
+function currentComposition() {
+  const sel = document.getElementById('compSelect');
+  return compositions[sel.value ? Number(sel.value) : 0];
+}
+
+function renderCompPanel(trainTitle) {
+  const panel = document.getElementById('compPanel');
+  if (!compositions.length) { panel.classList.add('d-none'); return; }
+  panel.classList.remove('d-none');
+
+  const sel = document.getElementById('compSelect');
+  sel.classList.toggle('d-none', compositions.length < 2);
+  sel.innerHTML = compositions.map((c, i) =>
+    `<option value="${i}">${esc(c.title)} — ${c.cells.length} vehicles</option>`).join('');
+  sel.onchange = () => describeComposition(trainTitle);
+
+  document.getElementById('compName').value = trainTitle || '';
+  document.getElementById('compStatus').innerHTML = '';
+  describeComposition(trainTitle);
+}
+
+function describeComposition() {
+  const comp = currentComposition();
+  document.getElementById('compSummary').textContent =
+    comp.cells.map(c => c.code || '?').join(' · ');
+}
+
+document.getElementById('compSaveBtn').addEventListener('click', async function () {
+  const status = document.getElementById('compStatus');
+  const comp   = currentComposition();
+  const name   = document.getElementById('compName').value.trim();
+  if (!name) { status.innerHTML = '<span class="text-danger">Give it a name first.</span>'; return; }
+
+  this.disabled = true;
+  status.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Saving…';
+  let data;
+  try {
+    const res = await fetch(`${API}/trainset`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, cells: comp.cells }),
+    });
+    data = await res.json();
+    if (!res.ok) {
+      throw new Error(esc(data.error || res.status));
+    }
+  } catch (err) {
+    this.disabled = false;
+    status.innerHTML = `<span class="text-danger">${err.message}</span>`;
+    return;
+  }
+  this.disabled = false;
+  const n = (data.missing || []).length;
+  const miss = n
+    ? ` <span class="text-warning">${n} placeholder(s) for wagons not imported yet: ${esc(data.missing.join(', '))}.</span>` : '';
+  status.innerHTML =
+    `<span class="text-success">Saved “${esc(data.name)}” with ${data.units} unit(s).</span>${miss}`;
+});
+
+/* ── Cut editor ─────────────────────────────────────────────────── */
+let current = null;   // the wagon being imported
+let cuts    = [];     // x positions, ascending
+
+function renderCuts() {
+  const inner = document.getElementById('cutInner');
+  inner.querySelectorAll('.cut-line').forEach(el => el.remove());
+  cuts.sort((a, b) => a - b);
+  cuts.forEach((x, i) => {
+    const line = document.createElement('div');
+    line.className = 'cut-line';
+    line.style.left = x + 'px';
+    line.innerHTML = '<span class="grip">&times;</span>';
+    line.querySelector('.grip').addEventListener('click', e => {
+      e.stopPropagation();
+      cuts.splice(i, 1);
+      renderCuts(); renderSegments();
+    });
+    line.addEventListener('mousedown', e => startDrag(e, i));
+    inner.appendChild(line);
+  });
+  renderCutsR();
+  renderCarTags();
+}
+
+/* Label each segment with its Name (key) on both strips. Positions come from the
+   cuts; the R strip is the same unit seen from the other side, so its segments run
+   in mirrored order. */
+function renderCarTags() {
+  const bounds = [0, ...cuts, current.width];
+  const names  = [...document.querySelectorAll('#segBody input[data-field="name"]')]
+                   .map(i => i.value);
+
+  [['cutInner', false], ['cutInnerR', true]].forEach(([id, mirrored]) => {
+    const inner = document.getElementById(id);
+    inner.querySelectorAll('.car-tag').forEach(el => el.remove());
+    if (id === 'cutInnerR' && !current.two_sided_source) return;
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const mid   = (bounds[i] + bounds[i + 1]) / 2;
+      const tag   = document.createElement('div');
+      tag.className = 'car-tag';
+      tag.style.left = (mirrored ? current.width - mid : mid) + 'px';
+      tag.style.maxWidth = (bounds[i + 1] - bounds[i] - 4) + 'px';
+      tag.textContent = names[i] || `car ${i + 1}`;
+      tag.title = tag.textContent;
+      inner.appendChild(tag);
+    }
+  });
+}
+
+/* Read-only echo of the cuts on the R view. Car i occupies the mirrored x-range
+   there, whether the R strip came from VagonWeb or is a CSS-flipped L. */
+function renderCutsR() {
+  const inner = document.getElementById('cutInnerR');
+  inner.querySelectorAll('.cut-line').forEach(el => el.remove());
+  if (!current.two_sided_source) return;
+  cuts.forEach(x => {
+    const line = document.createElement('div');
+    line.className = 'cut-line';
+    line.style.left = (current.width - x) + 'px';
+    inner.appendChild(line);
+  });
+}
+
+function startDrag(e, i) {
+  e.preventDefault(); e.stopPropagation();
+  const inner = document.getElementById('cutInner');
+  const move = ev => {
+    const x = Math.round(ev.clientX - inner.getBoundingClientRect().left);
+    cuts[i] = Math.max(1, Math.min(current.width - 1, x));
+    renderCuts(); renderSegments();
+  };
+  const up = () => {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+  };
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+}
+
+/* Rebuild the per-car rows, keeping anything already typed in place by index */
+function activeVariants() {
+  // The type codes to import. Several codes can share one VagonWeb drawing; each
+  // becomes its own wagon with its own copy of the picture.
+  const boxes = [...document.querySelectorAll('#variantPicker input[type=checkbox]')];
+  if (!boxes.length) return [{ code: '', name: current.default_name }];
+  return boxes.filter(b => b.checked).map(b => ({ code: b.value, name: b.dataset.name }));
+}
+
+function renderVariantPicker() {
+  const wrap = document.getElementById('variantPicker');
+  const defs = current.variant_defaults || [];
+  // Codes already in the catalogue start unticked so a re-import is deliberate
+  const done = current.imported_codes || [];
+  if (defs.length < 2) { wrap.innerHTML = ''; wrap.classList.add('d-none'); return; }
+  wrap.classList.remove('d-none');
+  wrap.innerHTML =
+    '<span class="fw-semibold me-1">Type codes on this drawing:</span>' +
+    defs.map((d, i) => `
+      <span class="form-check-inline-wrap me-3">
+        <input class="form-check-input" type="checkbox" id="var_${i}"
+               value="${esc(d.code)}" data-name="${esc(d.name)}"
+               ${done.includes(d.code) ? '' : 'checked'}>
+        <label class="form-check-label${done.includes(d.code) ? ' text-muted' : ''}"
+               for="var_${i}">${esc(d.code)}${done.includes(d.code) ? ' ✓' : ''}</label>
+      </span>`).join('') +
+    `<span class="text-muted small">Each ticked code is saved as its own wagon, with its own copy of the image.${
+      done.length ? ` Already imported: ${esc(done.join(', '))}.` : ''}</span>`;
+  wrap.querySelectorAll('input').forEach(cb => cb.addEventListener('change', () => {
+    document.getElementById('segBody').innerHTML = '';   // regenerate defaults
+    renderSegments();
+  }));
+}
+
+function renderSegments() {
+  const body = document.getElementById('segBody');
+  // Only hand-edited fields survive a cut/variant change; the rest are re-derived so
+  // the "_c1, _c2…" naming appears as soon as the strip is actually split.
+  const typed = [...body.querySelectorAll('tr')].map(tr => {
+    const v = {};
+    tr.querySelectorAll('input').forEach(inp => {
+      if (inp.dataset.dirty) v[inp.dataset.field] = inp.value;
+    });
+    return v;
+  });
+
+  const bounds   = [0, ...cuts, current.width];
+  const cars     = bounds.length - 1;
+  const split    = cars > 1;
+  const variants = activeVariants();
+  const multi    = variants.length > 1;
+  const rows     = [];
+
+  variants.forEach((variant, v) => {
+    for (let i = 0; i < cars; i++) {
+      const idx    = v * cars + i;
+      const suffix = split ? `_c${i + 1}` : '';
+      const prev   = typed[idx] || {};
+      // The label follows the code, so a B3-2 does not end up reading "B3-4"
+      const base   = multi ? `${current.operator || ''} ${variant.code}`.trim() : current.label;
+      const defaults = {
+        name:        variant.name + suffix,
+        label:       split ? `${base} — car ${i + 1}` : base,
+        category:    multi ? variant.code : (current.category || ''),
+        subcategory: current.subcategory || '',
+        notes:       current.notes || '',
+      };
+      const cell = (field, extra = '') => {
+        const dirty = prev[field] !== undefined;
+        const value = dirty ? prev[field] : defaults[field];
+        return `<td><input class="form-control form-control-sm ${extra}" data-field="${field}"
+                           ${dirty ? 'data-dirty="1"' : ''} value="${esc(value)}"></td>`;
+      };
+      rows.push(`
+        <tr${multi && i === 0 && v > 0 ? ' class="border-top border-2"' : ''}>
+          <td class="text-muted small">${multi ? esc(variant.code) : ''}</td>
+          <td class="text-muted">${i + 1}</td>
+          <td class="text-muted small">${bounds[i + 1] - bounds[i]} px</td>
+          ${cell('name', 'font-monospace')}
+          ${cell('label')}
+          ${cell('category')}
+          ${cell('subcategory')}
+          ${cell('notes')}
+        </tr>`);
+    }
+  });
+
+  body.innerHTML = rows.join('');
+  body.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      inp.dataset.dirty = '1';
+      if (inp.dataset.field === 'name') renderCarTags();
+    });
+  });
+  renderCarTags();
+}
+function openImport(i) {
+  current = wagons[i];
+  cuts    = [];
+
+  document.getElementById('imTitle').textContent = current.label;
+  document.getElementById('imError').classList.add('d-none');
+  document.getElementById('segBody').innerHTML = '';
+  document.getElementById('aiFillStatus').textContent =
+    'Fills label, category, subcategory, notes, gauge, era and countries. Always check them.';
+  document.getElementById('aiHint').value = '';
+
+  const img = document.getElementById('cutImg');
+  img.src = `${WAGONS_URL}/${current.stage_url_l}`;
+  img.width  = current.width;
+  img.height = current.height;
+  document.getElementById('cutInner').style.width = current.width + 'px';
+
+  // The "-b" drawing, when VagonWeb has one. It shows the same unit from the other
+  // side, so the cuts are echoed at mirrored positions.
+  const hasR = !!current.two_sided_source;
+  document.getElementById('cutScrollR').classList.toggle('d-none', !hasR);
+  document.getElementById('cutRLabel').classList.toggle('d-none', !hasR);
+  if (hasR) {
+    const imgR = document.getElementById('cutImgR');
+    imgR.src    = `${WAGONS_URL}/${current.stage_url_r}`;
+    imgR.width  = current.width;
+    imgR.height = current.height;
+    document.getElementById('cutInnerR').style.width = current.width + 'px';
+    document.getElementById('cutRLabel').textContent =
+      'R view (-b) — same cuts, mirrored; check they still land on the joints';
+  }
+
+  renderVariantPicker();
+  renderCuts();
+  renderSegments();
+  new bootstrap.Modal(document.getElementById('importModal')).show();
+}
+
+document.getElementById('cutInner').addEventListener('click', e => {
+  if (!current || e.target.closest('.cut-line')) return;
+  const x = Math.round(e.clientX - e.currentTarget.getBoundingClientRect().left);
+  if (x <= 0 || x >= current.width) return;
+  cuts.push(x);
+  renderCuts(); renderSegments();
+});
+
+document.getElementById('autoCutBtn').addEventListener('click', () => {
+  cuts = [...current.suggested_cuts];
+  document.getElementById('segBody').innerHTML = '';   // regenerate defaults
+  renderCuts(); renderSegments();
+});
+
+document.getElementById('clearCutBtn').addEventListener('click', () => {
+  cuts = [];
+  document.getElementById('segBody').innerHTML = '';
+  renderCuts(); renderSegments();
+});
+
+/* ── AI auto-fill ───────────────────────────────────────────────── */
+document.getElementById('aiFillBtn').addEventListener('click', async function () {
+  const status = document.getElementById('aiFillStatus');
+  const rows   = [...document.querySelectorAll('#segBody tr')];
+  this.disabled = true;
+  status.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Asking the AI…';
+
+  let data;
+  try {
+    // One request for the whole strip: the model sees every car together, so it can
+    // tell a driving car from an intermediate instead of guessing car by car.
+    const res = await fetch(`${API}/suggest`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        key: current.key,
+        cuts,
+        // The grid is codes x cars, so the AI must answer for every row, not just car 1
+        variants: activeVariants().map(v => v.code),
+        // The keys let a hint like "BPb74 = N_Vy_BM74_c4" actually bind to a car
+        car_keys: rows.map(tr => (tr.querySelector('input[data-field="name"]') || {}).value || ''),
+        hint: document.getElementById('aiHint').value.trim(),
+      }),
+    });
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.status);
+  } catch (err) {
+    this.disabled = false;
+    status.innerHTML = `<span class="text-danger">${esc(String(err.message || err))}</span>`;
+    return;
+  }
+  this.disabled = false;
+
+  const shared = data.shared || {};
+  const setIf = (id, v) => { if (v !== null && v !== undefined && v !== '') document.getElementById(id).value = v; };
+  setIf('imEra',   shared.era);
+  setIf('imGauge', shared.gauge);
+  if (shared.countries && shared.countries.length) {
+    $('#imCountries').selectpicker('val', shared.countries);
+  }
+
+  // Per-car values, marked hand-edited so a later cut change does not discard them
+  const cars = data.cars || [];
+  rows.forEach((tr, i) => {
+    const car = cars[i] || {};
+    const put = (field, value) => {
+      if (value === null || value === undefined || value === '') return;
+      const inp = tr.querySelector(`input[data-field="${field}"]`);
+      if (!inp) return;
+      inp.value = value;
+      inp.dataset.dirty = '1';
+    };
+    put('label',       car.label);
+    put('category',    shared.category);
+    put('subcategory', car.subcategory);
+    put('notes',       car.notes);
+  });
+
+  const filled = [
+    shared.category && 'category', shared.era && 'era', shared.gauge && 'gauge',
+    (shared.countries || []).length && 'countries',
+    cars.some(c => c.label) && 'label',
+    cars.some(c => c.subcategory) && 'subcategory',
+    cars.some(c => c.notes) && 'notes',
+  ].filter(Boolean);
+  status.innerHTML = filled.length
+    ? `<span class="text-success">Filled: ${esc(filled.join(', '))}.</span> Check them before importing.`
+    : '<span class="text-warning">The AI could not determine any field.</span>';
+});
+
+/* ── Submit ─────────────────────────────────────────────────────── */
+document.getElementById('importBtn').addEventListener('click', async function () {
+  const err = document.getElementById('imError');
+  err.classList.add('d-none');
+
+  const units = [...document.querySelectorAll('#segBody tr')].map(tr => {
+    const u = {};
+    tr.querySelectorAll('input').forEach(inp => { u[inp.dataset.field] = inp.value.trim(); });
+    return u;
+  });
+
+  const payload = {
+    key:          current.key,
+    author:       document.getElementById('imAuthor').value.trim(),
+    license:      licCheck.checked ? window.TRAINLOG_LICENSE : licInput.value.trim(),
+    source:       document.getElementById('imSource').value.trim(),
+    era:          document.getElementById('imEra').value.trim(),
+    gauge:        document.getElementById('imGauge').value.trim(),
+    px_per_meter: document.getElementById('imPpm').value.trim(),
+    countries:    $('#imCountries').val() || [],
+    cuts, units,
+    variants: activeVariants().map(v => v.code),
+  };
+
+  this.disabled = true;
+  const res  = await fetch(`${API}/import`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await res.json();
+  this.disabled = false;
+
+  if (!res.ok) {
+    err.textContent = data.error || 'Import failed';
+    err.classList.remove('d-none');
+    return;
+  }
+
+  current.already_imported = true;
+  renderResults();
+  bootstrap.Modal.getInstance(document.getElementById('importModal')).hide();
+  document.getElementById('status').innerHTML =
+    `<div class="alert alert-success py-2">Imported: ${esc(data.imported.join(', '))}</div>`;
+});
+
+document.getElementById('fetchBtn').addEventListener('click', fetchPage);
+document.getElementById('urlInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') fetchPage();
+});
+</script>
+{% endblock %}

@@ -280,8 +280,8 @@
         "country": "France"
     },
     "F-O": {
-        "iso": "GF",
-        "country": "French Guiana"
+        "iso": "FR",
+        "country": "France"
     },
     "TR": {
         "iso": "GA",
@@ -511,10 +511,6 @@
         "iso": "MH",
         "country": "Marshall Islands"
     },
-    "F-OM": {
-        "iso": "MQ",
-        "country": "Martinique"
-    },
     "5T": {
         "iso": "MR",
         "country": "Mauritania"
@@ -650,10 +646,6 @@
     "A7": {
         "iso": "QA",
         "country": "Qatar"
-    },
-    "F-OD": {
-        "iso": "RE",
-        "country": "R\u00e9union Island"
     },
     "YR": {
         "iso": "RO",

@@ -46,7 +46,6 @@
     <!-- Jquery DataTables -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-dt@2.3.2/css/dataTables.dataTables.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-responsive-dt@3.0.5/css/responsive.dataTables.min.css">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-scroller-dt@2.4.3/css/scroller.dataTables.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/datatables.net-select-dt@3.0.1/css/select.dataTables.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-colorpicker@3.4.0/dist/css/bootstrap-colorpicker.css">
 
@@ -71,7 +70,6 @@
     <!-- Jquery DataTables -->
       <script src="https://cdn.jsdelivr.net/npm/datatables.net@2.3.2/js/dataTables.min.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/datatables.net-responsive@3.0.5/js/dataTables.responsive.min.js"></script>
-      <script src="https://cdn.jsdelivr.net/npm/datatables.net-scroller@2.4.3/js/dataTables.scroller.min.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/datatables.net-select@3.0.1/js/dataTables.select.min.js"></script>
       <script src="https://cdn.jsdelivr.net/npm/datatables.net-plugins@2.3.2/dataRender/ellipsis.js"></script>
 
@@ -84,6 +82,9 @@
       <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
     <!-- Custom --> 
       <script src="{{ static_autoversion(filename='js/util.js') }}"></script>
+      <!-- Places the ship photo hover preview. Global because .ship-thumb appears on the
+           admin register, the backfill page and the ferry field on the trip forms. -->
+      <script src="{{ static_autoversion(filename='js/ship_thumb.js') }}"></script>
     <!--JS cookie-->
       <script src="https://cdn.jsdelivr.net/npm/js-cookie"></script>
     <!-- Masonry -->

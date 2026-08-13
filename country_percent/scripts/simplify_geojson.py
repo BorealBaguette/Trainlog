@@ -185,6 +185,9 @@ def process(country_code):
     geometries = [shape(feature["geometry"]) for feature in data.get("features", [])]
     gdf = gpd.GeoDataFrame(data["features"], geometry=geometries, crs=input_crs)
 
+    # Drop unkown columns
+    gdf = gdf[["type", "properties", "geometry"]]
+
     # Handle different types of features
     gdf = explode_and_filter_geometries(gdf)
 
@@ -250,5 +253,5 @@ def process(country_code):
         json.dump(data, file)
         print(f"Simplified {path}")
 
-
-process(sys.argv[1])
+if __name__ == "__main__":
+    process(sys.argv[1])

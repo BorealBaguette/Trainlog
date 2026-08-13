@@ -27,10 +27,13 @@
  *   onLoad(img) fires after the image has decoded — hook container relayout here,
  *   since the height it adds is not known until then.
  *
- * fetchAircraftPhoto(reg) / fetchVesselPhoto(endpoint, reg)
- *   Resolve a registration to { thumb, link, attr, country } or null. Both are
- *   memoised per registration for the page's lifetime, so reopening a popup or
- *   re-toggling a leg costs nothing and a repeated vehicle is fetched once.
+ * fetchAircraftPhoto(reg) / fetchVesselPhoto(endpoint, reg, at)
+ *   Resolve a registration to { thumb, link, attr, country } or null; a vessel also
+ *   resolves a `name`, since a ship may be logged by name, IMO or MMSI and is always
+ *   shown by name — the one it carried at `at`, the trip's own date, so a crossing keeps
+ *   the ship as it was rather than as it is now. Both are memoised per registration for the page's lifetime, so
+ *   reopening a popup or re-toggling a leg costs nothing and a repeated vehicle is
+ *   fetched once.
  *
  *   Call these only in response to a user action (opening a popup / expanding a
  *   leg), never during a bulk render: aircraft photos hit the planespotters API,
@@ -116,21 +119,30 @@
     return photoCache[key];
   }
 
-  function fetchVesselPhoto(endpoint, reg) {
+  function fetchVesselPhoto(endpoint, reg, at) {
     if (!reg) return Promise.resolve(null);
-    var key = 'ship:' + reg;
+    // `at` is part of the key: one ship answers with different names on different dates
+    // once it has been renamed, so two trips on the same hull are two lookups.
+    var key = 'ship:' + reg + '@' + (at || '');
     if (!photoCache[key]) {
-      photoCache[key] = fetch(endpoint + '?vesselName=' + encodeURIComponent(reg))
+      photoCache[key] = fetch(endpoint + '?vesselName=' + encodeURIComponent(reg)
+                              + (at ? '&at=' + encodeURIComponent(at) : ''))
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (d) {
-          // The endpoint answers `null` (not []) when it finds nothing — guard the
-          // shape before indexing, which is what makes the trips table throw today.
-          if (!Array.isArray(d) || !d.length || !d[0]) return null;
+          // The endpoint answers `null` when it finds nothing — guard the shape
+          // before reading it, which is what makes the trips table throw today.
+          if (!d || !d.image) return null;
           return {
-            thumb: d[0],
-            link: d[1] || '',
-            attr: d[1] ? '©Vesselfinder.com' : '',
-            country: d[2] || ''
+            thumb: d.image,
+            link: d.link || '',
+            // The credit comes with the photo now that they arrive from more than one
+            // place: vesselfinder, Wikimedia Commons (whose licence requires naming the
+            // author) or an admin's own upload, which needs none.
+            attr: d.attribution || '',
+            country: d.country || '',
+            // The ship's name, whichever of name/IMO/MMSI was searched for. Empty
+            // when no name is on record; callers keep showing what was typed.
+            name: d.name || ''
           };
         })
         .catch(function () { return null; });
@@ -159,9 +171,14 @@
 
   function photoHTML(photo) {
     if (!photo || !photo.thumb) return '';
-    var credit = photo.link
-      ? '<a href="' + escAttr(photo.link) + '" target="_blank" rel="noopener" class="vehiclePhotoAttr">' + escAttr(photo.attr) + '</a>'
-      : '';
+    // A photo may need a credit without having a page to link to, and an admin's own
+    // upload needs none at all — so the credit hangs off the text, not the link.
+    var credit = '';
+    if (photo.attr) {
+      credit = photo.link
+        ? '<a href="' + escAttr(photo.link) + '" target="_blank" rel="noopener" class="vehiclePhotoAttr">' + escAttr(photo.attr) + '</a>'
+        : '<span class="vehiclePhotoAttr">' + escAttr(photo.attr) + '</span>';
+    }
     return '<div class="vehiclePhotoContainer"><img src="' + escAttr(photo.thumb) + '" alt="">' + credit + '</div>';
   }
 

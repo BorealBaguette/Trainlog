@@ -117,7 +117,7 @@ def search_wagons():
     params["q_starts"] = f"{q}%"
 
     sql = f"""
-        SELECT source, category, subcategory, label, era, updated_on, image, name, notes, line_type, image_type, image_ext, px_per_meter
+        SELECT source, category, subcategory, label, era, updated_on, image, name, notes, image_type, image_ext, px_per_meter
         FROM wagons
         WHERE {where_sql}
         ORDER BY

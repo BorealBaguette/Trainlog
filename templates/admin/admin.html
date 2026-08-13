@@ -18,6 +18,277 @@
     .noborder {
         border-bottom-width: 0px !important;
     }
+
+    #admin-container {
+        background: #fff;
+        border: 1px solid #e9ecef;
+        border-radius: 14px;
+        padding: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    #admin thead th {
+        background: #f8f9fa !important;
+        color: #212529 !important;
+        white-space: nowrap;
+    }
+
+    #admin.table-striped>tbody>tr:hover {
+        background-color: rgba(0, 123, 255, 0.05);
+    }
+
+    /* ── Top stat cards ────────────────────────────────────────────── */
+    .stat-cards {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.75rem;
+    }
+
+    .stat-card {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        background: #f8f9fa;
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 0.6rem 1rem;
+        min-width: 150px;
+    }
+
+    .stat-card i {
+        font-size: 1.15rem;
+        color: #4a90e2;
+        width: 1.3em;
+        text-align: center;
+    }
+
+    .stat-card .stat-value {
+        font-size: 1.05rem;
+        font-weight: 700;
+        line-height: 1.1;
+    }
+
+    .stat-card .stat-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #6c757d;
+    }
+
+    .action-panel {
+        display: flex;
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+        width: 230px;
+    }
+
+    .action-panel .status-line {
+        font-size: 0.78rem;
+        color: #6c757d;
+    }
+
+    /* ── Language chips ────────────────────────────────────────────── */
+    .lang-section-title {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #6c757d;
+        margin: 0.9rem 0 0.4rem;
+    }
+
+    .lang-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.4rem;
+    }
+
+    .lang-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        background: #f1f3f5;
+        border-radius: 999px;
+        padding: 0.2rem 0.65rem;
+        font-size: 0.82rem;
+    }
+
+    .lang-chip.unused {
+        opacity: 0.55;
+    }
+
+    /* ── Status column (active / share) ────────────────────────────── */
+    .status-icons {
+        display: inline-flex;
+        align-items: center;
+        font-size: 1rem;
+    }
+
+    .status-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.6em;
+    }
+
+    .status-icon.is-off {
+        color: #ced4da;
+    }
+
+    .status-icon.is-off i {
+        color: #ced4da;
+    }
+
+    .status-badges {
+        margin-left: 0.35rem;
+        padding-left: 0.5rem;
+        border-left: 1px solid #dee2e6;
+    }
+
+    /* ── Compact role toggle buttons ───────────────────────────────── */
+    .role-buttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .role-icon-btn {
+        position: relative;
+        width: 34px;
+        height: 34px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+    }
+
+    .role-icon-btn .role-icon-btn-badge {
+        position: absolute;
+        bottom: -4px;
+        right: -4px;
+        font-size: 0.55rem;
+        width: 14px;
+        height: 14px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: #fff;
+        color: #212529 !important;
+        border-radius: 50%;
+        box-shadow: 0 0 0 1px rgba(0,0,0,0.15);
+    }
+
+    .premium-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        white-space: nowrap;
+    }
+
+    .premium-badge.premium-auto {
+        background: rgba(46, 204, 113, 0.15);
+        color: #1e8449;
+    }
+
+    .premium-badge.premium-manual {
+        background: rgba(230, 126, 34, 0.15);
+        color: #af5a09;
+    }
+
+    .premium-badge.premium-cancel-pending {
+        background: rgba(241, 196, 15, 0.18);
+        color: #9a7d0a;
+    }
+
+    .premium-badge.premium-cancel-overdue {
+        background: rgba(231, 76, 60, 0.18);
+        color: #c0392b;
+    }
+
+    /* ── Filter bar / quick filters ────────────────────────────────── */
+    .filter-bar {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.75rem 1.25rem;
+    }
+
+    .quick-filters {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .quick-filter-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #6c757d;
+        margin-right: 0.15rem;
+    }
+
+    .quick-filter {
+        border: 1px solid #dee2e6;
+        background: #f8f9fa;
+        color: #495057;
+        border-radius: 999px;
+        padding: 0.15rem 0.7rem;
+        font-size: 0.8rem;
+        line-height: 1.5;
+    }
+
+    .quick-filter:hover {
+        background: #e9ecef;
+    }
+
+    .quick-filter.is-active {
+        background: #4a90e2;
+        border-color: #4a90e2;
+        color: #fff;
+    }
+
+    .quick-filter-clear {
+        color: #adb5bd;
+    }
+
+    .search-help {
+        font-size: 0.76rem;
+        color: #6c757d;
+        margin-bottom: 0.6rem;
+    }
+
+    .search-help code {
+        background: #f1f3f5;
+        border-radius: 4px;
+        padding: 0 0.25rem;
+        color: #495057;
+    }
+
+    .detail-block {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.5rem;
+        align-items: flex-start;
+        padding: 0.5rem 0.25rem;
+    }
+
+    .detail-block .detail-group {
+        min-width: 140px;
+    }
+
+    .detail-block .detail-group-label {
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        color: #6c757d;
+        margin-bottom: 0.3rem;
+    }
 </style>
 
 <div id="admin-container" class="container">
@@ -27,37 +298,64 @@
         </div>
         <p>Loading data, please wait...</p>
     </div>
-    <br>
     <div class="container">
-        <div class="row align-items-center justify-content-between">
+        <div class="row align-items-start justify-content-between">
             <div class="col">
                 <div id="totals"></div>
                 <div id="languages"></div>
             </div>
             <div class="col-auto">
-                <div class="d-flex flex-column align-items-stretch" style="gap: 0.5rem; width: 220px;">
-                    <button id="showLangModalBtn" class="btn btn-info">Language Stats</button>
+                <div class="action-panel">
+                    <button id="showLangModalBtn" class="btn btn-info">
+                        <i class="fa-solid fa-language me-1"></i> Language Stats
+                    </button>
                     <button id="loadDateBtn" class="btn btn-primary">
-                        Refresh Currency
+                        <i class="fa-solid fa-arrows-rotate me-1"></i> Refresh Currency
                         <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
                             style="display: none;"></span>
                     </button>
-                    <span id="last_date" class="text-muted small text-break">...</span>
+                    <span id="last_date" class="status-line text-break">...</span>
                     <button id="rebuildGlobalBtn" class="btn btn-primary">
-                        Rebuild Bestagons
+                        <i class="fa-solid fa-hexagon-nodes me-1"></i> Rebuild Bestagons
                         <span class="spinner-border spinner-border-sm ml-2" role="status" aria-hidden="true"
                             style="display: none;"></span>
                     </button>
-                    <span id="global_map_status" class="text-muted small text-break">...</span>
+                    <span id="global_map_status" class="status-line text-break">...</span>
                 </div>
             </div>
         </div>
     </div>
-    <div class="form-check">
-        <input class="form-check-input" type="checkbox" value="" id="showInactiveUsers">
-        <label class="form-check-label" for="showInactiveUsers">
-            Show Inactive Users
-        </label>
+
+    <div class="filter-bar mt-3 mb-2">
+        <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" value="" id="showInactiveUsers">
+            <label class="form-check-label" for="showInactiveUsers">
+                Show Inactive Users
+            </label>
+        </div>
+        <div class="quick-filters">
+            <span class="quick-filter-label">Quick filters</span>
+            <button type="button" class="quick-filter" data-query="premium"><i class="fa-solid fa-gem"></i> Premium</button>
+            <button type="button" class="quick-filter" data-query="premium manual"><i class="fa-solid fa-hand"></i> Manual</button>
+            <button type="button" class="quick-filter" data-query="cancelled"><i class="fa-solid fa-triangle-exclamation"></i> Cancelling</button>
+            <button type="button" class="quick-filter" data-query="expired"><i class="fa-solid fa-clock"></i> Expired</button>
+            <button type="button" class="quick-filter" data-query="admin"><i class="fa-solid fa-chess-rook"></i> Admin</button>
+            <button type="button" class="quick-filter" data-query="translator"><i class="fa-solid fa-language"></i> Translator</button>
+            <button type="button" class="quick-filter" data-query="alpha"><i class="fa-solid fa-flask"></i> Alpha</button>
+            <button type="button" class="quick-filter" data-query="discord"><i class="fa-brands fa-discord"></i> Discord</button>
+            <button type="button" class="quick-filter" data-query="public"><i class="fa-solid fa-globe"></i> Public</button>
+            <button type="button" class="quick-filter quick-filter-clear" data-query=""><i class="fa-solid fa-xmark"></i> Clear</button>
+        </div>
+    </div>
+
+    <div class="search-help">
+        Search matches <strong>everything in the table</strong>: username, email, uid, language
+        (code or name), active/inactive, private/link&nbsp;shared/public, discord (or a discord
+        handle), admin/alpha/translator/premium/feature_admin, premium&nbsp;tier
+        (manual, trainlogger, 1st&nbsp;class, rail&nbsp;baron, bmc supporter&nbsp;id),
+        cancelled/expired, trip count, km and dates (<code>2026-07</code>).
+        Several terms are ANDed (<code>premium manual</code>), and <code>-term</code> excludes
+        (<code>premium -manual</code>).
     </div>
 
     <table id="admin" class="table table-striped table-bordered display nowrap">
@@ -66,17 +364,17 @@
                 <th></th>
                 <th>Username</th>
                 <th>Lang</th>
-                <th>Active</th>
-                <th>Share</th>
+                <th title="Active / Sharing / Discord">Status</th>
                 <th>Trips</th>
-                <th>Length</th>
-                <th>Trips/Day</th>
+                <th>Km</th>
+                <th title="Trips per day">T/Day</th>
                 <th>Last Login</th>
-                <th>Email</th>
-                <th>Age</th>
-                <th>Actions</th>
-                <th class="none">Admin</th>
-                <th class="none">Delete</th>
+                <th>Premium</th>
+                <th class="none">Email</th>
+                <th class="none">Age</th>
+                <th class="none">Public Links</th>
+                <th class="none">Roles</th>
+                <th class="none">Manage</th>
             </tr>
         </thead>
         <tbody></tbody>
@@ -133,6 +431,12 @@
     var statsData = null;
     var showInactive = false;
 
+    function statusIcon(iconClass, isOn, color, tooltip) {
+        const style = isOn ? `color:${color};` : '';
+        const titleAttr = tooltip ? `data-toggle="tooltip" title="${tooltip}"` : '';
+        return `<span class="status-icon${isOn ? '' : ' is-off'}" ${titleAttr}><i class="${iconClass}" style="${style}"></i></span>`;
+    }
+
     function createRoleActionButton(user, role) {
         const isRoleActive = user[role];
         const action = isRoleActive ? 'remove' : 'make';
@@ -155,13 +459,14 @@
             feature_admin: 'Feature Admin'
         };
 
-        return `<button class="btn ${buttonClass} roleButton"
+        return `<button class="btn ${buttonClass} role-icon-btn roleButton"
                 data-uid="${user.uid}"
                 data-role="${role}"
-                data-action="${action}">
+                data-action="${action}"
+                data-toggle="tooltip"
+                title="${action === 'make' ? 'Make' : 'Remove'} ${roleLabels[role] || role}">
                 <i class="fa-solid ${roleIcons[role]}"></i>
-                <i class="fa-solid ${actionIcon}"></i>
-                ${action === 'make' ? 'Make' : 'Remove'} ${roleLabels[role] || role}
+                <i class="fa-solid ${actionIcon} role-icon-btn-badge"></i>
                 </button>`;
     }
 
@@ -177,79 +482,78 @@
             }
         },
         columns: [
-            { 
-                data: null, 
-                defaultContent: '', 
-                className: 'dtr-control', 
-                orderable: false 
+            {
+                data: null,
+                defaultContent: '',
+                className: 'dtr-control',
+                orderable: false
             },
-            { 
+            {
                 data: 'username',
                 render: function(data, type, row) {
-                    if (type === 'display') {
-                        let html = '';
-                        if (row.premium) html += '<span style="display:none;">premium</span><i class="fa-solid fa-gem" style="color: #00CED1;"></i> ';
-                        if (row.alpha) html += '<span style="display:none;">alpha</span><i class="fas fa-flask" style="color: #9B59B6;"></i> ';
-                        if (row.translator) html += '<span style="display:none;">translator</span><i class="fa-solid fa-language" style="color: #3498DB;"></i> ';
-                        if (row.feature_admin) html += '<span style="display:none;">feature_admin</span><i class="fa-solid fa-shield-halved" style="color: #2ECC71;"></i> ';
-                        if (row.username != "{{logged_in_user}}") {
-                            if (row.admin) html += '<span style="display:none;">admin</span><i class="fa-solid fa-chess-rook" style="color: #E74C3C;"></i> ';
-                        } else {
-                            html += '<i class="fa-solid fa-crown" style="color: #F39C12;"></i> ';
-                        }
-                        html += row.username;
-                        return html;
-                    }
-                    return data;
+                    return type === 'display' ? row.username : data;
                 }
             },
-            { 
+            {
                 data: 'lang',
                 render: function(data, type, row) {
                     return type === 'display' ? getLangTooltip(data) : data;
                 }
             },
-            { 
+            {
                 data: 'active',
                 render: function(data, type, row) {
                     if (type === 'display') {
-                        return data ? '<i class="fa fa-check" style="color:green;"></i>' : '<i class="fa fa-times" style="color:red;"></i>';
+                        const isYou = row.username == "{{logged_in_user}}";
+
+                        const shareInfo = {
+                            0: ['fa-solid fa-lock', false, '#3498db', 'Private'],
+                            1: ['fa-solid fa-link', true, '#3498db', 'Link shared'],
+                            2: ['fa-solid fa-globe', true, '#2ecc71', 'Public']
+                        }[row.share_level] || ['fa-solid fa-question', false, '#3498db', 'Unknown'];
+
+                        const statusIcons = [
+                            statusIcon('fa-solid fa-circle-check', !!data, '#2ecc71', data ? 'Active' : 'Inactive'),
+                            statusIcon(shareInfo[0], shareInfo[1], shareInfo[2], shareInfo[3]),
+                            statusIcon('fa-brands fa-discord', !!row.discord_id, '#5865F2',
+                                row.discord_id
+                                    ? `Discord linked: ${row.discord_username ? '@' + row.discord_username : '(id ' + row.discord_id + ')'}`
+                                    : 'Discord not linked')
+                        ].join('');
+
+                        const badgeIcons = [
+                            statusIcon('fa-solid fa-crown', isYou, '#F39C12', isYou ? 'You' : ''),
+                            statusIcon('fa-solid fa-chess-rook', !!row.admin && !isYou, '#E74C3C', row.admin ? 'Admin' : ''),
+                            statusIcon('fa-solid fa-shield-halved', !!row.feature_admin, '#2ECC71', row.feature_admin ? 'Feature Admin' : ''),
+                            statusIcon('fa-solid fa-gem', !!row.premium, '#00CED1', row.premium ? 'Premium' : ''),
+                            statusIcon('fa-solid fa-language', !!row.translator, '#3498DB', row.translator ? 'Translator' : ''),
+                            statusIcon('fa-solid fa-flask', !!row.alpha, '#9B59B6', row.alpha ? 'Alpha' : '')
+                        ].join('');
+
+                        return `<span class="status-icons">${statusIcons}</span><span class="status-icons status-badges">${badgeIcons}</span>`;
                     }
                     return data ? 1 : 0;
                 }
             },
-            { 
-                data: 'share_level',
-                render: function(data, type, row) {
-                    if (type === 'display') {
-                        switch(data) {
-                            case 0: return '<i class="fa-solid fa-lock"></i>';
-                            case 1: return '<i class="fa-solid fa-link"></i>';
-                            case 2: return '<i class="fa-solid fa-globe"></i>';
-                        }
-                    }
-                    return data;
-                }
-            },
             { data: 'trips' },
-            { 
+            {
                 data: 'length',
                 render: function(data, type, row) {
-                    return type === 'display' ? mToKm(data).toLocaleString() + " km" : data;
+                    return type === 'display' ? mToKm(data).toLocaleString() : data;
                 }
             },
             { data: 'trips_per_day' },
-            { 
+            {
                 data: 'last_login',
                 render: function(data, type, row) {
                     if (type === 'display') {
                         const date = data ? new Date(data) : new Date(row.creation_date);
                         const readableAge = getReadableAge(date.toISOString());
-                        const formattedDate = new Intl.DateTimeFormat('en-IE', { 
-                            dateStyle: 'medium', 
-                            timeStyle: 'short' 
+                        const formattedDate = new Intl.DateTimeFormat('en-IE', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short'
                         }).format(date);
-                        
+
                         return `<span data-toggle="tooltip" data-placement="top" title="${formattedDate}">
                                 ${readableAge} ago
                             </span>`;
@@ -257,18 +561,69 @@
                     return data || row.creation_date;
                 }
             },
-            { data: 'email' },
-            { 
+            {
+                // Sorts on the server-computed label ("", "Manual", tier name) —
+                // the badge below is display-only.
+                data: 'premium_label',
+                render: function(data, type, row) {
+                    if (type !== 'display') return data;
+                    if (!row.premium) return '<span class="text-muted">—</span>';
+
+                    const tierLabels = {
+                        trainlogger: 'Trainlogger',
+                        first_class: '1st Class Logger',
+                        rail_baron: 'Rail Baron'
+                    };
+                    const tierIcons = {
+                        trainlogger: 'fa-train',
+                        first_class: 'fa-medal',
+                        rail_baron: 'fa-chess-king'
+                    };
+
+                    // Cancelled on BMC but access is honored until period end (see
+                    // flag_pending_cancellation) — revoke manually via /toggle_role
+                    // once it's actually appropriate. Shown alongside the main badge.
+                    let cancelBadge = '';
+                    if (row.premium_cancel_at) {
+                        const cancelDate = new Date(row.premium_cancel_at);
+                        const overdue = cancelDate.getTime() < Date.now();
+                        cancelBadge = `<span class="premium-badge ${overdue ? 'premium-cancel-overdue' : 'premium-cancel-pending'}" data-toggle="tooltip"
+                                            title="Cancelled on BMC — access honored ${overdue ? '(was) ' : ''}through ${cancelDate.toLocaleDateString()}. Revoke manually when appropriate.">
+                                            <i class="fa-solid fa-triangle-exclamation"></i> ${overdue ? 'expired' : 'cancels'} ${cancelDate.toLocaleDateString()}
+                                        </span>`;
+                    }
+
+                    // Manual (no BMC supporter_id pinned) always just says "Manual" —
+                    // regardless of whether a tier happens to be set — since manual
+                    // grants are never tier-managed or Discord-synced. Only a real
+                    // BMC-confirmed match (bmc_supporter_id set) shows the tier itself.
+                    if (!row.bmc_supporter_id) {
+                        return `<span class="premium-badge premium-manual" data-toggle="tooltip" title="Manually granted — no BMC supporter_id pinned, not synced to Discord">
+                                    <i class="fa-solid fa-hand"></i> Manual
+                                </span> ${cancelBadge}`;
+                    }
+
+                    const tierLabel = tierLabels[row.premium_tier] || row.premium_tier || 'unknown tier';
+                    const tierIcon = tierIcons[row.premium_tier] || 'fa-gem';
+
+                    return `<span class="premium-badge premium-auto" data-toggle="tooltip" title="Automated via BMC — supporter_id ${row.bmc_supporter_id}">
+                                <i class="fa-solid ${tierIcon}"></i> ${tierLabel}
+                            </span> ${cancelBadge}`;
+                }
+            },
+            { data: 'email', className: 'none' },
+            {
                 data: 'creation_date',
+                className: 'none',
                 render: function(data, type, row) {
                     if (type === 'display') {
                         const date = new Date(data);
                         const readableAge = getReadableAge(date.toISOString());
-                        const formattedDate = new Intl.DateTimeFormat('en-IE', { 
-                            dateStyle: 'medium', 
-                            timeStyle: 'short' 
+                        const formattedDate = new Intl.DateTimeFormat('en-IE', {
+                            dateStyle: 'medium',
+                            timeStyle: 'short'
                         }).format(date);
-                        
+
                         return `<span data-toggle="tooltip" data-placement="top" title="${formattedDate}">
                                 ${readableAge}
                             </span>`;
@@ -276,20 +631,24 @@
                     return data;
                 }
             },
-            { 
+            {
                 data: null,
+                className: 'none',
                 searchable: false,
                 orderable: false,
                 render: function(data, type, row) {
                     return `
-                        <button class="btn btn-primary linkButton" data-url="${"{{ url_for('public', username='USERNAME') }}".replace('USERNAME', row.username)}">Public link</button>
-                        <button class="btn btn-secondary linkButton" data-url="${"{{ url_for('public_trips', username='USERNAME', time='trips') }}".replace('USERNAME', row.username)}">Trips</button>
-                        <button class="btn btn-info linkButton" data-url="${"{{ url_for('public_stats', username='USERNAME') }}".replace('USERNAME', row.username)}">Stats</button>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button class="btn btn-outline-primary linkButton" data-url="${"{{ url_for('public', username='USERNAME') }}".replace('USERNAME', row.username)}" data-toggle="tooltip" title="Public link"><i class="fa-solid fa-user"></i></button>
+                            <button class="btn btn-outline-secondary linkButton" data-url="${"{{ url_for('public_trips', username='USERNAME', time='trips') }}".replace('USERNAME', row.username)}" data-toggle="tooltip" title="Trips"><i class="fa-solid fa-route"></i></button>
+                            <button class="btn btn-outline-info linkButton" data-url="${"{{ url_for('public_stats', username='USERNAME') }}".replace('USERNAME', row.username)}" data-toggle="tooltip" title="Stats"><i class="fa-solid fa-chart-simple"></i></button>
+                        </div>
                     `;
                 }
             },
-            { 
+            {
                 data: null,
+                className: 'none',
                 searchable: false,
                 orderable: false,
                 render: function(data, type, row) {
@@ -298,33 +657,64 @@
                     const translatorBtn = createRoleActionButton(row, 'translator');
                     const premiumBtn = createRoleActionButton(row, 'premium');
                     const featureAdminBtn = createRoleActionButton(row, 'feature_admin');
-                    return `${adminBtn} ${alphaBtn} ${translatorBtn} ${premiumBtn} ${featureAdminBtn}`;
+                    return `<div class="role-buttons">${adminBtn}${alphaBtn}${translatorBtn}${premiumBtn}${featureAdminBtn}</div>`;
                 }
             },
             {
                 data: null,
+                className: 'none',
                 searchable: false,
                 orderable: false,
                 render: function(data, type, row) {
-                    return `<button class="btn btn-warning renameButton me-1" data-uid="${row.uid}" data-username="${row.username}">Rename</button><button class="btn btn-danger deleteButton" data-uid="${row.uid}" data-username="${row.username}">Delete</button>`;
+                    return `<div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-warning renameButton" data-uid="${row.uid}" data-username="${row.username}" data-toggle="tooltip" title="Rename"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-outline-danger deleteButton" data-uid="${row.uid}" data-username="${row.username}" data-toggle="tooltip" title="Delete"><i class="fa-solid fa-trash"></i></button>
+                            </div>`;
                 }
             }
         ],
-        columnDefs: [
-            {
-                targets: [3, 5, 6, 7], // Active, Trips, Length, Trips/Day columns
-                type: 'num'
-            },
-            {
-                targets: [8, 10], // Last Login and Age columns
-                type: 'date'
-            }
-        ],
-        lengthMenu: [[10, 50, 100, -1], [10, 50, 100, "All"]],
+        // Ordering/filtering happen server-side, so no client type detection is
+        // needed — skipping it saves a pass over every drawn cell.
+        orderClasses: false,
+        deferRender: true,
+        stateSave: true,
+        stateDuration: 60 * 60 * 24 * 7,
+        // Don't fire a request per keystroke — the table is 7k+ users wide.
+        searchDelay: 400,
+        order: [[4, 'desc']],
+        pageLength: 10,
+        lengthMenu: [[10, 25, 50, 100, 250, -1], [10, 25, 50, 100, 250, "All"]],
         responsive: {
             details: {
                 type: 'column',
-                target: 0
+                target: 0,
+                renderer: function(api, rowIdx, columns) {
+                    var groups = {
+                        'Contact': ['Email'],
+                        'Account': ['Age'],
+                        'Public Links': ['Public Links'],
+                        'Roles': ['Roles'],
+                        'Manage': ['Manage']
+                    };
+                    var byTitle = {};
+                    columns.forEach(function(col) {
+                        if (col.hidden) byTitle[col.title] = col.data;
+                    });
+                    if (!Object.keys(byTitle).length) return false;
+
+                    var html = '<div class="detail-block">';
+                    Object.keys(groups).forEach(function(group) {
+                        var items = groups[group].filter(function(t) { return byTitle[t] !== undefined && byTitle[t] !== ''; });
+                        if (!items.length) return;
+                        html += '<div class="detail-group"><div class="detail-group-label">' + group + '</div>';
+                        items.forEach(function(t) {
+                            html += '<div>' + byTitle[t] + '</div>';
+                        });
+                        html += '</div>';
+                    });
+                    html += '</div>';
+                    return html;
+                }
             }
         },
         language: {
@@ -345,31 +735,66 @@
             search: "{{dtSearch}}"
         },
         drawCallback: function() {
-            resetObjects();
-        },
-        initComplete: function() {
-            resetObjects();
+            // Row handlers are delegated and bound once (bindRowActions); only the
+            // freshly drawn tooltips need initialising.
+            initTooltips($('#admin tbody'));
         }
     });
+
+    bindRowActions();
 
     // Load stats separately
     $.get('{{url_for("getAdminStats")}}', function(response) {
         statsData = response.stats;
-        
-        var totalsString = `<b>Active users :</b> ${statsData.active_users} (${statsData.total_users} total)  -   <b>Total Trips :</b> ${statsData.total_trips.toLocaleString()}   -   <b>Total Km :</b> ${mToKm(statsData.total_km).toLocaleString() + " km"}`;
-        totalsString += `<br><b>Active today :</b> ${statsData.active_today}`;
-        $('#totals').append(totalsString);
-        
+
+        var totalsHtml = `
+            <div class="stat-cards mb-2">
+                <div class="stat-card">
+                    <i class="fa-solid fa-users"></i>
+                    <div>
+                        <div class="stat-value">${statsData.active_users.toLocaleString()} <span class="text-muted" style="font-weight:400; font-size:0.85rem;">/ ${statsData.total_users.toLocaleString()}</span></div>
+                        <div class="stat-label">Active Users</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <i class="fa-solid fa-train"></i>
+                    <div>
+                        <div class="stat-value">${statsData.total_trips.toLocaleString()}</div>
+                        <div class="stat-label">Total Trips</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <i class="fa-solid fa-route"></i>
+                    <div>
+                        <div class="stat-value">${mToKm(statsData.total_km).toLocaleString()} km</div>
+                        <div class="stat-label">Total Distance</div>
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <i class="fa-solid fa-bolt"></i>
+                    <div>
+                        <div class="stat-value">${statsData.active_today.toLocaleString()}</div>
+                        <div class="stat-label">Active Today</div>
+                    </div>
+                </div>
+            </div>
+        `;
+        $('#totals').html(totalsHtml);
+
         renderLanguages(statsData, !showInactive);
     });
 
-    function resetObjects() {
-        // Use event delegation for dynamically created buttons
-        $('#admin tbody').off('click', '.linkButton').on('click', '.linkButton', function() {
+    function initTooltips($scope) {
+        $scope.find('[data-toggle="tooltip"]').tooltip();
+    }
+
+    function bindRowActions() {
+        // Delegated once on tbody — the buttons themselves are redrawn constantly.
+        $('#admin tbody').on('click', '.linkButton', function() {
             location.href = $(this).data('url');
         });
 
-        $('#admin tbody').off('click', '.renameButton').on('click', '.renameButton', function() {
+        $('#admin tbody').on('click', '.renameButton', function() {
             const uid = $(this).data('uid');
             const username = $(this).data('username');
             $('#renameCurrentUsername').text(username);
@@ -379,17 +804,17 @@
             $('#renameModal').modal('show');
         });
 
-        $('#admin tbody').off('click', '.deleteButton').on('click', '.deleteButton', function() {
+        $('#admin tbody').on('click', '.deleteButton', function() {
             const uid = $(this).data('uid');
             const username = $(this).data('username');
             if (confirm(`Are you sure you want to delete ${username}?`)) {
                 $.post("{{ url_for('delete_user', uid=0) }}".replace(0, uid), function() {
-                    dataTable.ajax.reload();
+                    dataTable.ajax.reload(null, false);
                 });
             }
         });
 
-        $('#admin tbody').off('click', '.roleButton').on('click', '.roleButton', function() {
+        $('#admin tbody').on('click', '.roleButton', function() {
             const uid = $(this).data('uid');
             const role = $(this).data('role');
             const action = $(this).data('action');
@@ -404,12 +829,12 @@
                             .replace('action', action);
 
                 $.post(url, function() {
-                    dataTable.ajax.reload();
+                    dataTable.ajax.reload(null, false);
                 });
             }
         });
 
-        $('[data-toggle="tooltip"]').tooltip();
+        initTooltips($('#admin_wrapper'));
     }
 
     $('#renameConfirmBtn').on('click', function() {
@@ -426,7 +851,7 @@
             data: JSON.stringify({ new_username: newUsername }),
             success: function() {
                 $('#renameModal').modal('hide');
-                dataTable.ajax.reload();
+                dataTable.ajax.reload(null, false);
             },
             error: function(xhr) {
                 const msg = xhr.responseJSON && xhr.responseJSON.error ? xhr.responseJSON.error : 'Rename failed';
@@ -434,6 +859,32 @@
             }
         });
     });
+
+    // ── Quick filters ──────────────────────────────────────────────────────
+    // Each chip just drives the normal search box, so the server-side term
+    // matching stays the single source of truth for what a filter means.
+    function syncQuickFilters() {
+        // Read the box, not dataTable.search() — the latter lags by searchDelay.
+        var current = ($('#admin_filter input').val() || '').trim().toLowerCase();
+        $('.quick-filter').each(function() {
+            var q = $(this).data('query');
+            $(this).toggleClass('is-active', !!q && q === current);
+        });
+    }
+
+    $('.quick-filter').on('click', function() {
+        var q = String($(this).data('query') || '');
+        // Clicking an already-applied chip clears it.
+        var current = ($('#admin_filter input').val() || '').trim().toLowerCase();
+        var next = (q && q === current) ? '' : q;
+        $('#admin_filter input').val(next);
+        dataTable.search(next).draw();
+        syncQuickFilters();
+    });
+
+    $('#admin_filter input').attr('placeholder', 'name, email, role, tier, lang…');
+    $(document).on('keyup search', '#admin_filter input', syncQuickFilters);
+    dataTable.on('draw', syncQuickFilters);
 
     $('#showInactiveUsers').on('change', function() {
         showInactive = this.checked;
@@ -565,19 +1016,16 @@
         var unused = availableLangs.filter(key => !Object.keys(languages).includes(key));
 
         for (var [lang, count] of Object.entries(languages).sort((a, b) => b[1] - a[1])) {
-            displayStr.push(`<div class="col-sm-6 col-md-3 col-lg-2">${getLangTooltip(lang, true)}: ${count}</div>`);
+            displayStr.push(`<span class="lang-chip">${getLangTooltip(lang, true)} <strong>${count}</strong></span>`);
         }
         unused.forEach(function(item) {
-            displayUnused.push(`<div class="col-sm-6 col-md-3 col-lg-2">${getLangTooltip(item, true)}</div>`);
+            displayUnused.push(`<span class="lang-chip unused">${getLangTooltip(item, true)}</span>`);
         });
 
         $('#languages').html(`
-            <br>
-            <b>Languages :</b>
-            <div class="row mb-4">${displayStr.join("")}</div>
-            <b>Unused :</b>
-            <div class="row">${displayUnused.join("")}</div>
-            <br>
+            <div class="lang-section-title">Languages</div>
+            <div class="lang-chips">${displayStr.join("")}</div>
+            ${displayUnused.length ? `<div class="lang-section-title">Unused</div><div class="lang-chips">${displayUnused.join("")}</div>` : ''}
         `);
 
         var globalSpeakersData = {
@@ -609,7 +1057,7 @@
         };
 
         $('#langTable tbody').empty();
-        
+
         var langArray = Object.keys(stats.langs.total).map(function(key) {
             var lang = {
                 code: key,

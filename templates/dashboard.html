@@ -174,7 +174,35 @@
     flex-shrink: 0;
     font-size: 0.85rem;
     color: var(--primary-color);
+    transition: opacity .1s ease-in;
   }
+  .trip-icon-static {
+    position: absolute;
+    transition: opacity .1s ease-in;
+  }
+  .trip-icon-default {
+    position: absolute;
+    transition: opacity .1s ease-in;
+  }
+  .trip-icon-hover {
+    position: absolute;
+    transition: opacity .1s ease-in;
+  }
+  .trip-icon .trip-icon-default { opacity: 1; }
+  .trip-icon .trip-icon-hover { opacity: 0; }
+  .trip-icon:hover .trip-icon-default { opacity: 0; }
+  .trip-icon:hover .trip-icon-hover { opacity: 1; }
+  /* Once a trip has been copied the tick stays for the rest of the session, so
+     the row itself shows you've already taken it — that is the double-click
+     guard. It has to beat the :hover rules above, hence the extra specificity. */
+  .trip-icon-check { opacity: 0; }
+  .trip-icon.copied .trip-icon-icons,
+  .trip-icon.copied:hover .trip-icon-icons { opacity: 0; }
+  .trip-icon.copied .trip-icon-check,
+  .trip-icon.copied:hover .trip-icon-check { opacity: 1; }
+  .trip-icon.copied { cursor: default; color: var(--success-color); }
+  .trip-copy-btn { border: none; padding: 0; cursor: pointer; }
+  .trip-copy-btn:disabled { cursor: default; }
   .trip-route {
     font-weight: 500;
     font-size: 0.9rem;
@@ -259,6 +287,16 @@
   .mode-table .mode-name i { color: var(--primary-color); width: 14px; text-align: center; }
   .mode-table .mode-num { text-align: right; font-size: 0.82rem; font-weight: 600; color: #111827; white-space: nowrap; }
   .mode-table .mode-unit { font-size: 0.72rem; font-weight: 400; color: var(--text-muted); margin-left: 1px; }
+  .mode-table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  @media (max-width: 575px) {
+    .mode-table td, .mode-table thead th { padding-left: 0.5rem; padding-right: 0.5rem; }
+    .mode-table td { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+    .mode-table .mode-name,
+    .mode-table .mode-num { font-size: 0.78rem; }
+    /* header already says "Trajets" — drop the per-row repeat */
+    .mode-table .mode-unit-trips { display: none; }
+    .mode-table .mode-name { white-space: normal; }
+  }
   .change-up   { color: #059669; font-size: 0.75rem; margin-left: 0.3rem; }
   .change-down { color: #dc2626; font-size: 0.75rem; margin-left: 0.3rem; }
 
@@ -604,6 +642,19 @@
           <div class="skeleton skeleton-line medium"></div>
           <div class="skeleton skeleton-line short"></div>
           <div class="skeleton skeleton-line medium"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Confirmation for copying a friend's trip. One shared modal rather than one
+         per row: showCopyModal() parks the trip id in pendingCopyTripId. Mirrors the
+         ride-along modal on the shared trip page, and reuses its strings. -->
+    <div id="copyTripModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
+        <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+          <button onclick="hideCopyModal()" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;">{{ cancel }}</button>
+          <button id="copyTripConfirmBtn" onclick="confirmCopyTrip()" style="padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;">{{ submit }}</button>
         </div>
       </div>
     </div>
@@ -1238,16 +1289,16 @@ function renderModeStats(d, scope) {
   const trs = rows.map(r => `
     <tr>
       <td class="mode-name"><i class="${tripIcon(r.type)}"></i>${TYPE_LABELS[r.type] || r.type}</td>
-      <td class="mode-num">${fmt(r.trips)}<span class="mode-unit">{{ trips }}</span></td>
+      <td class="mode-num">${fmt(r.trips)}<span class="mode-unit mode-unit-trips">{{ trips }}</span></td>
       <td class="mode-num">${fmt(Math.round(r.km))}<span class="mode-unit">km</span></td>
       <td class="mode-num">${r.sec > 0 ? secondsToDhm(r.sec, "{{ langId }}") : "—"}</td>
     </tr>`).join("");
-  el.innerHTML = `<table class="table completion-table mode-table"><thead><tr>
+  el.innerHTML = `<div class="mode-table-wrap"><table class="table completion-table mode-table"><thead><tr>
     <th>{{ mode }}</th>
     <th style="text-align:right;">{{ trips }}</th>
     <th style="text-align:right;">km</th>
     <th style="text-align:right;">{{ hoursOnTrains }}</th>
-  </tr></thead><tbody>${trs}</tbody></table>`;
+  </tr></thead><tbody>${trs}</tbody></table></div>`;
 }
 
 function updateScopeLabels(scope, year) {
@@ -1423,6 +1474,58 @@ function fetchLeaderboard(year) {
 
 fetchLeaderboard(_hlYear);
 
+// ─── Copying Trips ───────────────────────────────────────────────────────────
+
+// The trip the confirmation modal is currently asking about.
+let pendingCopyTripId = null;
+
+function showCopyModal(id) {
+  pendingCopyTripId = id;
+  document.getElementById("copyTripModal").style.display = "flex";
+}
+
+function hideCopyModal() {
+  pendingCopyTripId = null;
+  document.getElementById("copyTripModal").style.display = "none";
+}
+
+function confirmCopyTrip() {
+  const id = pendingCopyTripId;
+  if (id === null) return;
+
+  const confirmBtn = document.getElementById("copyTripConfirmBtn");
+  const btn = document.getElementById(`btn-trip-${id}`);
+  confirmBtn.disabled = true;
+
+  fetch('{{ url_for("trips.bulk_copy_trips", username=username) }}', {
+    method: 'POST',
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ tripIds: id })
+  })
+    .then(r => {
+      if (!r.ok) throw new Error(r.status);
+
+      // The tick replaces the trip icon for good: the row stays marked for the
+      // rest of the session, so a second copy of the same trip is visibly a
+      // repeat rather than something the user does by accident.
+      // The row can be gone if the friends list re-rendered while the modal was
+      // open; the copy still succeeded, so don't fall into the error branch.
+      if (btn) {
+        btn.classList.add("copied");
+        btn.disabled = true;
+      }
+      hideCopyModal();
+    })
+    .catch(() => {
+      alert({{ copyTripFailed|tojson }});
+    })
+    .finally(() => {
+      confirmBtn.disabled = false;
+    });
+}
+
 // ─── Friends ─────────────────────────────────────────────────────────────────
 
 function usernameColor(name) {
@@ -1436,15 +1539,31 @@ function friendItem(t, right) {
   const icon = tripIcon(t.type);
   const tag = t.trip_id ? "a" : "div";
   const href = t.trip_id ? ` href="/public/trip/${t.trip_id}"` : "";
-  return `<${tag}${href} class="friend-item" style="text-decoration:none;color:inherit;">
-    <div class="trip-icon"><i class="${icon}"></i></div>
-    <div style="flex:1;min-width:0">
+
+  const btnTripId = t.trip_id ? `id="btn-trip-${t.trip_id}"` : "";
+  const btnOnClick = t.trip_id ? ` onClick="showCopyModal(${t.trip_id})"` : "";
+
+  return `<div class="friend-item" style="text-decoration:none;color:inherit">
+    <button
+      class="trip-icon trip-copy-btn"
+      ${btnTripId}
+      ${btnOnClick}
+      title="{{ rideAlong }}"
+      aria-label="{{ rideAlong }}"
+    >
+      <span class="trip-icon trip-icon-static trip-icon-icons">
+        <i class="trip-icon-default ${icon}"></i>
+        <i class="trip-icon-hover fa-solid fa-copy"></i>
+      </span>
+      <i class="trip-icon-static trip-icon-check fa-solid fa-check"></i>
+    </button>
+    <${tag}${href} style="text-decoration:none;color:inherit;flex:1;min-width:0">
       <div><span class="friend-username" style="background:${usernameColor(t.username).bg};color:${usernameColor(t.username).color};"><i class="fa-solid fa-user" style="font-size:0.6rem;margin-right:3px;opacity:0.8;"></i>${esc(t.username)}</span></div>
       <div class="trip-route">${esc(t.origin) || "?"} → ${esc(t.destination) || "?"}</div>
       <div class="trip-meta">${esc(t.operator)}${t.km ? " · " + fmt(t.km) + " km" : ""}</div>
-    </div>
+    </${tag}>
     ${right ? `<div class="trip-right">${right}</div>` : ""}
-  </${tag}>`;
+  </div>`;
 }
 
 function friendSection(label, labelStyle, items) {
