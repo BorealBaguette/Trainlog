@@ -5640,10 +5640,12 @@ def build_plan_trip_list(plan_uuid):
 
 
 def _render_plan_view(plan, username, controls):
+    """`username` is the viewer; `plan_author` below is the user who created the plan
+    (not the site owner, which `owner` means everywhere else in this module)."""
     user = User.query.filter_by(username=username).first() if username else None
-    owner_username = get_username(plan["user_id"])
+    author_username = get_username(plan["user_id"])
     data_url = (
-        url_for("get_plan_trips_json", username=owner_username, plan_uuid=plan["uuid"])
+        url_for("get_plan_trips_json", username=author_username, plan_uuid=plan["uuid"])
         if controls
         else url_for("public_plan_data", plan_uuid=plan["uuid"])
     )
@@ -5664,7 +5666,7 @@ def _render_plan_view(plan, username, controls):
         planControls=controls,
         relativeDates=True,
         plan=plan,
-        plan_owner=owner_username,
+        plan_author=author_username,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -6417,6 +6419,28 @@ def public_plan_data(plan_uuid):
     _plan_public_or_403(plan_uuid)
     tripList, priceDict = build_plan_trip_list(plan_uuid)
     return jsonify([tripList, priceDict])
+
+
+@app.route("/u/<username>/plans/copy/<plan_uuid>", methods=["POST"])
+@login_required
+def copy_plan_route(username, plan_uuid):
+    """Save a shared plan into `username`'s own plans. `username` is the user doing the
+    copying (enforced by login_required, so it is the logged-in user); the source plan
+    may have been created by a different user, and read access is checked exactly as
+    the public plan view checks it. The copy is an independent plan — later edits on
+    either side do not propagate."""
+    plan = _plan_public_or_403(plan_uuid)
+    user = User.query.filter_by(username=username).first()
+    suffix = lang[session["userinfo"]["lang"]]["copySuffix"]
+    new_uuid = duplicate_plan(
+        plan["uuid"],
+        user.uid,
+        name=f"{plan['name']} {suffix}",
+        require_same_user=False,
+    )
+    if new_uuid is None:
+        abort(404)
+    return redirect(url_for("plan_view", username=username, plan_uuid=new_uuid))
 
 
 @app.route("/u/<username>/scottySaveTrip", methods=["GET", "POST"])
