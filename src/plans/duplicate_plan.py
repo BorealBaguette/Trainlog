@@ -4,6 +4,12 @@ Used to fork an itinerary into a new draft ("wire different possibilities") with
 touching the original. The copy is a fresh plan (new uuid), unarchived, with every
 plan_trip (geometry included) and plan_cost cloned; each leg's cost_id is remapped to
 the corresponding new cost. Runs in one transaction.
+
+The copy always lands in `user_id`'s account. With `require_same_user=True` (the
+default) that is an in-account fork: the source plan must already belong to `user_id`.
+With `require_same_user=False` the source plan may have been created by a different
+user (saving a shared plan into your own plans); the caller is then responsible for
+checking that `user_id` is allowed to read it.
 """
 
 import logging
@@ -21,9 +27,10 @@ from src.sql.plans import (
 logger = logging.getLogger(__name__)
 
 # Columns copied verbatim from the source legs (everything except the identity/
-# plan_id/cost_id/timestamps, which are set explicitly below).
+# user_id/plan_id/cost_id/timestamps, which are set explicitly below — user_id is
+# rewritten so a copy of another user's plan belongs to the user copying it).
 _PLAN_TRIP_COPY_COLS = (
-    "user_id, sort_order, timing_mode, start_day, end_day, start_time, end_time, weekdays, "
+    "sort_order, timing_mode, start_day, end_day, start_time, end_time, weekdays, "
     "start_datetime, end_datetime, utc_start_datetime, utc_end_datetime, "
     "estimated_trip_duration, manual_trip_duration, origin_station, destination_station, "
     "trip_type, operator, line_name, material_type, material_type_advanced, reg, seat, "
@@ -32,15 +39,15 @@ _PLAN_TRIP_COPY_COLS = (
 )
 
 
-def duplicate_plan(plan_uuid, user_id, name=None, pg_session=None):
-    """Clone the plan owned by user_id. Returns the new plan's uuid, or None if the
-    plan does not exist or is not owned by user_id."""
+def duplicate_plan(plan_uuid, user_id, name=None, pg_session=None, require_same_user=True):
+    """Clone a plan into user_id's account. Returns the new plan's uuid, or None if the
+    plan does not exist (or, when require_same_user, was created by someone else)."""
     now = datetime.now()
     new_uuid = str(uuid.uuid4())
 
     with get_or_create_pg_session(pg_session) as pg:
         row = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
-        if row is None or row._mapping["user_id"] != user_id:
+        if row is None or (require_same_user and row._mapping["user_id"] != user_id):
             return None
         src = dict(row._mapping)
 
@@ -84,12 +91,13 @@ def duplicate_plan(plan_uuid, user_id, name=None, pg_session=None):
 
         pg.execute(
             f"""
-            INSERT INTO plan_trips ({_PLAN_TRIP_COPY_COLS}, plan_id, cost_id, created, last_modified)
-            SELECT {_PLAN_TRIP_COPY_COLS}, :new_plan_uid, {cost_expr}, :created, :last_modified
+            INSERT INTO plan_trips ({_PLAN_TRIP_COPY_COLS}, user_id, plan_id, cost_id, created, last_modified)
+            SELECT {_PLAN_TRIP_COPY_COLS}, :new_user_id, :new_plan_uid, {cost_expr}, :created, :last_modified
             FROM plan_trips
             WHERE plan_id = :old_plan_uid
             """,
             {
+                "new_user_id": user_id,
                 "new_plan_uid": new_plan_uid,
                 "old_plan_uid": src["uid"],
                 "created": now,

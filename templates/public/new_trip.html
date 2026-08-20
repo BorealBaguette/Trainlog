@@ -643,7 +643,7 @@
     <button class="control-button" onclick="copyURL()" title="{{copy}}"><i class="fas fa-clipboard"></i></button>
 </div>
 
-{% if planControls %}
+{% if plan %}
 <style>
   #plan-controls {
     position: fixed; top: 10px; left: 60px; z-index: 1001;
@@ -663,23 +663,25 @@
   #plan-controls select:hover { background: #ececec; }
   #plan-controls .plan-btn--primary { background: #3887be; border-color: #3887be; color: #fff; }
   #plan-controls .plan-btn--primary:hover { background: #2f76a6; }
+  #plan-controls .plan-by { color: #666; margin-right: 4px; }
   @media (max-width: 600px) { #plan-controls { left: 10px; right: 10px; top: 56px; } }
 </style>
+{% if planControls %}
 <div id="plan-controls">
     <span class="plan-title">{{ plan.name }}</span>
     <select id="plan-add-select" onchange="if(this.value){location.href=this.value}" aria-label="{{ singularTrip|default('Trip') }}">
         <option value="">+ {{ singularTrip|default('Trip') }}</option>
         {% for vt in ['train','bus','tram','metro','air','helicopter','ferry','car','walk','cycle','aerialway','funicular','rail','scooter','ski','accommodation','poi','restaurant'] %}
-        <option value="{{ url_for('new', username=plan_owner, vehicle_type=vt) }}?plan={{ plan.uuid }}">{{ vt }}</option>
+        <option value="{{ url_for('new', username=plan_author, vehicle_type=vt) }}?plan={{ plan.uuid }}">{{ vt }}</option>
         {% endfor %}
     </select>
     <button class="plan-btn plan-btn--primary" onclick="planValidate()">{{ submit|default('Validate') }}</button>
     <a class="plan-btn" href="{{ url_for('public_plan', plan_uuid=plan.uuid) }}" target="_blank">{{ shareTrip|default('Share') }}</a>
-    <form method="post" action="{{ url_for('archive_plan_route', username=plan_owner, plan_uuid=plan.uuid) }}">
+    <form method="post" action="{{ url_for('archive_plan_route', username=plan_author, plan_uuid=plan.uuid) }}">
         <input type="hidden" name="archived" value="{{ 'false' if plan.archived else 'true' }}"/>
         <button class="plan-btn" type="submit">{{ 'Unarchive' if plan.archived else 'Archive' }}</button>
     </form>
-    <form id="plan-validate-form" method="post" action="{{ url_for('validate_plan_route', username=plan_owner, plan_uuid=plan.uuid) }}" style="display:none;">
+    <form id="plan-validate-form" method="post" action="{{ url_for('validate_plan_route', username=plan_author, plan_uuid=plan.uuid) }}" style="display:none;">
         <input type="hidden" name="start_date" id="plan-validate-date"/>
     </form>
 </div>
@@ -691,6 +693,19 @@ function planValidate() {
     document.getElementById('plan-validate-form').submit();
 }
 </script>
+{% else %}
+{# Read-only share view. A logged-in visitor who did not create this plan can save an
+   independent copy into their own plans (and then log it as trips from there). #}
+<div id="plan-controls">
+    <span class="plan-title">{{ plan.name }}</span>
+    <span class="plan-by">{{ planBy.format(user=plan_author) }}</span>
+    {% if logged_in_user != 'public' and logged_in_user != plan_author %}
+    <form method="post" action="{{ url_for('copy_plan_route', username=logged_in_user, plan_uuid=plan.uuid) }}">
+        <button class="plan-btn plan-btn--primary" type="submit" title="{{ planSaveCopyHint }}">{{ planSaveCopy }}</button>
+    </form>
+    {% endif %}
+</div>
+{% endif %}
 {% endif %}
 
 <div id="sidebar-handle-ribbon"></div>
