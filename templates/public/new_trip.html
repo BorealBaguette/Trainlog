@@ -20,6 +20,9 @@
   gap: 8px;
   margin: 10px 0 2px;
 }
+/* A POST-only action (the plan copy) needs a form wrapper; keep the button itself the
+   flex item so it lines up with the plain <button>/<a> actions. */
+.tripActionButtons form { margin: 0; display: contents; }
 .tripActionBtn {
   display: inline-flex;
   align-items: center;
@@ -617,8 +620,17 @@
           {% if num_hidden_trips > 0 %}
             <div id="hiddenTripsInfo">(+{{ num_hidden_trips }} {% if num_hidden_trips == 1 %}{{ trip_view_hidden_trips_singular }}{% else %}{{ trip_view_hidden_trips_plural }}{% endif %})</div>
           {% endif %}
-          {% if show_ride_along or tag_uuid %}
+          {% if show_ride_along or tag_uuid or plan_copy_url %}
             <div class="tripActionButtons">
+              {# Same idea as Ride along, for a shared plan: save an independent copy
+                 into your own plans (the panel already shows the plan's name). #}
+              {% if plan_copy_url %}
+              <form method="post" action="{{ plan_copy_url }}">
+                <button type="submit" class="tripActionBtn rideAlongBtn" title="{{ planSaveCopyHint }}">
+                  <i class="fa-solid fa-copy"></i> {{ planSaveCopy }}
+                </button>
+              </form>
+              {% endif %}
               {% if show_ride_along %}
               <button id="rideAlong" onClick="showRideAlongModal()" class="tripActionBtn rideAlongBtn">
                 <i class="fa-solid fa-copy"></i> {{ rideAlong }}
@@ -643,7 +655,7 @@
     <button class="control-button" onclick="copyURL()" title="{{copy}}"><i class="fas fa-clipboard"></i></button>
 </div>
 
-{% if plan %}
+{% if planControls %}
 <style>
   #plan-controls {
     position: fixed; top: 10px; left: 60px; z-index: 1001;
@@ -663,10 +675,8 @@
   #plan-controls select:hover { background: #ececec; }
   #plan-controls .plan-btn--primary { background: #3887be; border-color: #3887be; color: #fff; }
   #plan-controls .plan-btn--primary:hover { background: #2f76a6; }
-  #plan-controls .plan-by { color: #666; margin-right: 4px; }
   @media (max-width: 600px) { #plan-controls { left: 10px; right: 10px; top: 56px; } }
 </style>
-{% if planControls %}
 <div id="plan-controls">
     <span class="plan-title">{{ plan.name }}</span>
     <select id="plan-add-select" onchange="if(this.value){location.href=this.value}" aria-label="{{ singularTrip|default('Trip') }}">
@@ -693,19 +703,6 @@ function planValidate() {
     document.getElementById('plan-validate-form').submit();
 }
 </script>
-{% else %}
-{# Read-only share view. A logged-in visitor who did not create this plan can save an
-   independent copy into their own plans (and then log it as trips from there). #}
-<div id="plan-controls">
-    <span class="plan-title">{{ plan.name }}</span>
-    <span class="plan-by">{{ planBy.format(user=plan_author) }}</span>
-    {% if logged_in_user != 'public' and logged_in_user != plan_author %}
-    <form method="post" action="{{ url_for('copy_plan_route', username=logged_in_user, plan_uuid=plan.uuid) }}">
-        <button class="plan-btn plan-btn--primary" type="submit" title="{{ planSaveCopyHint }}">{{ planSaveCopy }}</button>
-    </form>
-    {% endif %}
-</div>
-{% endif %}
 {% endif %}
 
 <div id="sidebar-handle-ribbon"></div>

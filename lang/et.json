@@ -1153,7 +1153,6 @@
     "confirmDeletePlan": "Kustuta see plaan ja kõik selle reisid?",
     "duplicate": "Dubleeri",
     "copySuffix": "(koopia)",
-    "planBy": "Plaani autor {user}",
     "planSaveCopy": "Salvesta koopia",
     "planSaveCopyHint": "Kopeerib selle plaani sinu enda plaanide hulka. Koopia on sõltumatu: hilisemaid muudatusi kummalgi poolel ei jagata.",
     "confirmDeletePlanTrip": "Kustuta see reis?",

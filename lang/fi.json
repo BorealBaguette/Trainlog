@@ -1154,7 +1154,6 @@
     "confirmDeletePlan": "Poistetaanko tämä suunnitelma ja kaikki sen matkat?",
     "duplicate": "Monista",
     "copySuffix": "(kopio)",
-    "planBy": "Suunnitelman tekijä {user}",
     "planSaveCopy": "Tallenna kopio",
     "planSaveCopyHint": "Kopioi tämän suunnitelman omiin suunnitelmiisi. Kopio on itsenäinen: myöhempiä muutoksia ei jaeta kumpaankaan suuntaan.",
     "confirmDeletePlanTrip": "Poistetaanko tämä matka?",

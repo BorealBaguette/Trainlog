@@ -1148,7 +1148,6 @@
     "confirmDeletePlan": "Supprimer ce plan et tous ses trajets ?",
     "duplicate": "Dupliquer",
     "copySuffix": "(copie)",
-    "planBy": "Plan de {user}",
     "planSaveCopy": "Enregistrer une copie",
     "planSaveCopyHint": "Copie ce plan dans vos propres plans. La copie est indépendante : les modifications ultérieures de part et d'autre ne sont pas partagées.",
     "confirmDeletePlanTrip": "Supprimer ce trajet ?",

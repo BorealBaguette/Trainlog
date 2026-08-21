@@ -1153,7 +1153,6 @@
     "confirmDeletePlan": "このプランとすべての旅程を削除しますか？",
     "duplicate": "複製",
     "copySuffix": "(コピー)",
-    "planBy": "{user} さんのプラン",
     "planSaveCopy": "コピーを保存",
     "planSaveCopyHint": "このプランを自分のプランにコピーします。コピーは独立しており、その後の変更はどちらにも反映されません。",
     "confirmDeletePlanTrip": "この旅程を削除しますか？",

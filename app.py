@@ -5649,6 +5649,15 @@ def _render_plan_view(plan, username, controls):
         if controls
         else url_for("public_plan_data", plan_uuid=plan["uuid"])
     )
+    # Side-panel "save a copy" action, mirroring Ride along on trips/tags: only on the
+    # read-only share view, and only for a logged-in viewer who is not the plan's author
+    # (they would just be forking their own plan, which the management view already does).
+    copy_url = (
+        url_for("copy_plan_route", username=username, plan_uuid=plan["uuid"])
+        # getUser() yields "public" for a visitor who is not logged in.
+        if not controls and username not in (None, "public") and username != author_username
+        else None
+    )
     return render_template(
         "public/new_trip.html",
         logosList=listOperatorsLogos(),
@@ -5667,6 +5676,7 @@ def _render_plan_view(plan, username, controls):
         relativeDates=True,
         plan=plan,
         plan_author=author_username,
+        plan_copy_url=copy_url,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

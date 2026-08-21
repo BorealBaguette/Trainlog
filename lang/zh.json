@@ -1153,7 +1153,6 @@
     "confirmDeletePlan": "删除此计划及其所有行程？",
     "duplicate": "复制",
     "copySuffix": "(副本)",
-    "planBy": "{user} 的计划",
     "planSaveCopy": "保存副本",
     "planSaveCopyHint": "将此计划复制到你自己的计划中。副本是独立的：之后任何一方的修改都不会同步。",
     "confirmDeletePlanTrip": "删除此行程？",

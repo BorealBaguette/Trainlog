@@ -1156,7 +1156,6 @@
     "confirmDeletePlan": "Ta bort denna plan och alla dess resor?",
     "duplicate": "Duplicera",
     "copySuffix": "(kopia)",
-    "planBy": "Plan av {user}",
     "planSaveCopy": "Spara en kopia",
     "planSaveCopyHint": "Kopierar den här planen till dina egna planer. Kopian är fristående: senare ändringar på någondera sidan delas inte.",
     "confirmDeletePlanTrip": "Ta bort denna resa?",
