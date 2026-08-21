@@ -603,7 +603,8 @@ function renderPublicTrainset($container, ts) {
     } else {
       wagon.append(_makePlaceholder(true, isFirst, isLast, u._phType));
     }
-    wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline">' + esc(u.label || '') + '</span>');
+    var lbl = esc(u.label || '');
+    wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline" title="' + lbl + '">' + lbl + '</span>');
     strip.append(wagon);
   });
   if (!strip.children().length) return;

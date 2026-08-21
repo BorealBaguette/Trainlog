@@ -188,7 +188,8 @@ function trainsetHTML(trip) {
     const img = u.image
       ? `<img src="${wagonImgSrc(u)}"${u.px_per_meter ? ` data-ppm="${u.px_per_meter}"` : ''} title="${esc(u.label || '')}" onerror="this.src='${ph}';this.className='wagon-placeholder-img';this.style.height='';this.onerror=null;">`
       : `<img class="wagon-placeholder-img" src="${ph}">`;
-    return `<div class="compo-wagon ts-unit">${img}<span class="compo-coach-no ts-nom ts-nom-inline">${esc(u.label || '')}</span></div>`;
+    const lbl = esc(u.label || '');
+    return `<div class="compo-wagon ts-unit">${img}<span class="compo-coach-no ts-nom ts-nom-inline" title="${lbl}">${lbl}</span></div>`;
   }).join('');
   const attr = _attributionText(ts.units);
   const label = ts.label ? `<div class="ts-inline-label">${esc(ts.label)}</div>` : '';
