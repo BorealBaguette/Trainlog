@@ -1156,6 +1156,8 @@
     "copySuffix": "(kopio)",
     "planSaveCopy": "Tallenna kopio",
     "planSaveCopyHint": "Kopioi tämän suunnitelman omiin suunnitelmiisi. Kopio on itsenäinen: myöhempiä muutoksia ei jaeta kumpaankaan suuntaan.",
+    "planCopyToUser": "Kopioi käyttäjälle…",
+    "planCopyToUserPrompt": "Minkä käyttäjän tilille tämä suunnitelma kopioidaan?",
     "confirmDeletePlanTrip": "Poistetaanko tämä matka?",
     "planSpanHint": "Ensimmäisestä lähdöstä viimeiseen saapumiseen",
     "planTravelTime": "Matka-aika",

@@ -1155,6 +1155,8 @@
     "copySuffix": "(사본)",
     "planSaveCopy": "사본 저장",
     "planSaveCopyHint": "이 플랜을 내 플랜으로 복사합니다. 사본은 독립적이며, 이후 변경 사항은 서로 공유되지 않습니다.",
+    "planCopyToUser": "사용자에게 복사…",
+    "planCopyToUserPrompt": "이 플랜을 어느 사용자 계정으로 복사할까요?",
     "confirmDeletePlanTrip": "이 여정을 삭제하시겠습니까?",
     "planSpanHint": "첫 출발부터 마지막 도착까지",
     "planTravelTime": "이동 시간",

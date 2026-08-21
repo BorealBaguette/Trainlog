@@ -144,6 +144,9 @@
 
     /* Trainset strip (MLG images) */
     .ts-strip { gap: 2px; }
+    /* Public views draw the cars smaller (normalizeStrip target ~20px), where a 2px
+       gap reads as a visible break in the rake — tighten it to 1px. */
+    .publicTrainset .ts-strip { gap: 1px; }
     .ts-unit img { max-height: 70px; image-rendering: pixelated; display: block; }
     .ts-nom { font-size: 0.6rem; color: #ccc; text-align: center; max-width: 90px;
               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0; }
@@ -236,6 +239,20 @@ window.tsbCompositeNames = window.tsbCompositeNames || function (val) {
     return null;
 };
 
+/* Join a list of coupled trainset names for display, collapsing runs of the same
+   name into "2\xd7 NAME" — two identical units coupled together read as one set
+   doubled, not as the name printed twice. Runs only, so A + B + A stays as written. */
+window.tsbJoinNames = window.tsbJoinNames || function (names) {
+    var out = [], i = 0;
+    while (i < names.length) {
+        var n = names[i], count = 1;
+        while (i + count < names.length && names[i + count] === n) count++;
+        out.push(count > 1 ? count + '\xd7 ' + n : n);
+        i += count;
+    }
+    return out.join(' + ');
+};
+
 /* Resolve a material_type_advanced value to enriched units (Promise-based).
    `owner` is the trip owner's username — required for logged-out visitors on
    public pages so the backend can scope visibility to that owner's own
@@ -246,7 +263,7 @@ function _resolveUnits(value, owner) {
     var composite = tsbCompositeNames(value);
     if (isInline || composite) {
         return $.getJSON('/api/trainsets/resolve', { value: value, owner: owner || '' }).then(function(units) {
-            return { units: units, name: composite ? composite.join(' + ') : null };
+            return { units: units, name: composite ? tsbJoinNames(composite) : null };
         });
     }
     return $.getJSON('/api/trainsets/by-name', { name: value, owner: owner || '' }).then(function(ts) {

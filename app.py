@@ -6453,6 +6453,35 @@ def copy_plan_route(username, plan_uuid):
     return redirect(url_for("plan_view", username=username, plan_uuid=new_uuid))
 
 
+@app.route("/u/<username>/plan/<plan_uuid>/copy_to_user", methods=["POST"])
+@owner_required
+def copy_plan_to_user_route(username, plan_uuid):
+    """Site-owner tool: copy any plan into any account. `username` is the plan's author
+    (whose management page the action was triggered from) and the recipient comes from
+    the `target` form field; regular users copy shared plans through copy_plan_route
+    instead. The copy keeps the original name — it lands in an account that has no other
+    copy of it — and is independent of the source plan."""
+    with pg_session() as pg:
+        row = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
+    if row is None:
+        abort(410)
+    plan = dict(row._mapping)
+    target_username = (request.form.get("target") or "").strip()
+    target = User.query.filter_by(username=target_username).first()
+    if target is None:
+        abort(404)
+    new_uuid = duplicate_plan(
+        plan["uuid"], target.uid, name=plan["name"], require_same_user=False
+    )
+    if new_uuid is None:
+        abort(404)
+    logger.info(
+        f"owner copied plan {plan_uuid} (by {username}) to {target_username} -> {new_uuid}"
+    )
+    # Land on the copy in the recipient's account, so the result is visible immediately.
+    return redirect(url_for("plan_view", username=target_username, plan_uuid=new_uuid))
+
+
 @app.route("/u/<username>/scottySaveTrip", methods=["GET", "POST"])
 def scottySaveTrip(username):
     if not (session.get(username) or session.get(owner)):

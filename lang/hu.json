@@ -1155,6 +1155,8 @@
     "copySuffix": "(másolat)",
     "planSaveCopy": "Másolat mentése",
     "planSaveCopyHint": "Átmásolja ezt a tervet a saját terveid közé. A másolat független: a későbbi módosítások egyik oldalon sem öröklődnek.",
+    "planCopyToUser": "Másolás felhasználóhoz…",
+    "planCopyToUserPrompt": "Melyik felhasználó fiókjába másoljuk ezt a tervet?",
     "confirmDeletePlanTrip": "Törli ezt az utazást?",
     "planSpanHint": "Az első indulástól az utolsó érkezésig",
     "planTravelTime": "Menetidő",

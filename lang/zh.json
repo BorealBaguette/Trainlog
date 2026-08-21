@@ -1155,6 +1155,8 @@
     "copySuffix": "(副本)",
     "planSaveCopy": "保存副本",
     "planSaveCopyHint": "将此计划复制到你自己的计划中。副本是独立的：之后任何一方的修改都不会同步。",
+    "planCopyToUser": "复制到用户…",
+    "planCopyToUserPrompt": "将此计划复制到哪个用户的账户？",
     "confirmDeletePlanTrip": "删除此行程？",
     "planSpanHint": "从第一次出发到最后一次到达",
     "planTravelTime": "旅行时间",

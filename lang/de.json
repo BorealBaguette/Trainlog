@@ -1138,6 +1138,8 @@
     "copySuffix": "(Kopie)",
     "planSaveCopy": "Kopie speichern",
     "planSaveCopyHint": "Kopiert diesen Plan in deine eigenen Pläne. Die Kopie ist unabhängig: spätere Änderungen auf beiden Seiten werden nicht geteilt.",
+    "planCopyToUser": "Zu Benutzer kopieren…",
+    "planCopyToUserPrompt": "In welches Benutzerkonto soll dieser Plan kopiert werden?",
     "confirmDeletePlanTrip": "Diese Reise löschen?",
     "planSpanHint": "Von der ersten Abfahrt bis zur letzten Ankunft",
     "planTravelTime": "Reisezeit",

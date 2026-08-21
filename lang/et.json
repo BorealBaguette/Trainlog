@@ -1155,6 +1155,8 @@
     "copySuffix": "(koopia)",
     "planSaveCopy": "Salvesta koopia",
     "planSaveCopyHint": "Kopeerib selle plaani sinu enda plaanide hulka. Koopia on sõltumatu: hilisemaid muudatusi kummalgi poolel ei jagata.",
+    "planCopyToUser": "Kopeeri kasutajale…",
+    "planCopyToUserPrompt": "Millise kasutaja kontole see plaan kopeerida?",
     "confirmDeletePlanTrip": "Kustuta see reis?",
     "planSpanHint": "Esimesest väljumisest viimase saabumiseni",
     "planTravelTime": "Reisiaeg",

@@ -1155,6 +1155,8 @@
     "copySuffix": "(kopya)",
     "planSaveCopy": "Bir kopya kaydet",
     "planSaveCopyHint": "Bu planı kendi planlarınıza kopyalar. Kopya bağımsızdır: sonraki değişiklikler iki tarafta da paylaşılmaz.",
+    "planCopyToUser": "Kullanıcıya kopyala…",
+    "planCopyToUserPrompt": "Bu plan hangi kullanıcının hesabına kopyalansın?",
     "confirmDeletePlanTrip": "Bu seyahat silinsin mi?",
     "planSpanHint": "İlk kalkıştan son varışa kadar",
     "planTravelTime": "Seyahat süresi",
