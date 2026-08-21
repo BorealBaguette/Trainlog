@@ -1161,6 +1161,8 @@
     "copySuffix": "(kopie)",
     "planSaveCopy": "Uložit kopii",
     "planSaveCopyHint": "Zkopíruje tento plán do vašich vlastních plánů. Kopie je nezávislá: pozdější změny na žádné ze stran se nesdílejí.",
+    "planCopyToUser": "Kopírovat uživateli…",
+    "planCopyToUserPrompt": "Do účtu kterého uživatele se má tento plán zkopírovat?",
     "confirmDeletePlanTrip": "Smazat tuto cestu?",
     "planSpanHint": "Od prvního odjezdu do posledního příjezdu",
     "planTravelTime": "Doba cestování",

@@ -1158,6 +1158,8 @@
     "copySuffix": "(kopia)",
     "planSaveCopy": "Spara en kopia",
     "planSaveCopyHint": "Kopierar den här planen till dina egna planer. Kopian är fristående: senare ändringar på någondera sidan delas inte.",
+    "planCopyToUser": "Kopiera till användare…",
+    "planCopyToUserPrompt": "Till vilken användares konto ska planen kopieras?",
     "confirmDeletePlanTrip": "Ta bort denna resa?",
     "planSpanHint": "Från första avgång till sista ankomst",
     "planTravelTime": "Restid",

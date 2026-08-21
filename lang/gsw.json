@@ -1156,6 +1156,8 @@
     "copySuffix": "(Kopie)",
     "planSaveCopy": "E Kopie spichere",
     "planSaveCopyHint": "Kopiert dä Plan i dini eigene Plän. D Kopie isch unabhängig: spöteri Änderige uf beidne Site werded nöd teilt.",
+    "planCopyToUser": "Zunere Benutzer kopiere…",
+    "planCopyToUserPrompt": "I welles Benutzerkonto söll dä Plan kopiert werde?",
     "confirmDeletePlanTrip": "Die Reis lösche?",
     "planSpanHint": "Vo de erste Abfahrt bis zur letschte Aachunft",
     "planTravelTime": "Reisze",
