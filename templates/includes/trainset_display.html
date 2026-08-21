@@ -28,6 +28,19 @@
     .trainset-inline-scroll .compo-strip { min-width: unset; }
     /* Wagon labels on light background */
     .ts-nom-inline { color: #444 !important; background: rgba(0,0,0,0.07) !important; }
+    /* A car's column must be exactly as wide as its image, so the images touch and
+       read as one train. The label sits in the same column, so a coach number wider
+       than the artwork (short car, or a small `target` height as in the public trip
+       sidebar) would otherwise set the column width and space the images apart.
+       width:0 keeps the label out of the column's intrinsic width; min-width:100%
+       then lays it out at the image's width, where it ellipsises (the full text
+       stays available as the title tooltip). */
+    .ts-nom-inline {
+        box-sizing: border-box;
+        width: 0;
+        min-width: 100%;
+        max-width: none;
+    }
     /* Inline trainset: strip then label as caption below */
     .ts-inline-wrapper { display: flex; flex-direction: column; align-items: flex-start; gap: 0; margin-top: 4px; }
     .ts-inline-header { display: flex; align-items: center; gap: 4px; }
@@ -295,7 +308,8 @@ function _renderTrainsetInline(rowId, units, labels) {
         } else {
             wagon.append(_makePlaceholder(true, isFirst, isLast, u._phType));
         }
-        wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline">' + esc(u.label || u.nom || '') + '</span>');
+        var _lbl = esc(u.label || u.nom || '');
+        wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline" title="' + _lbl + '">' + _lbl + '</span>');
         strip.append(wagon);
     });
     if (!strip.children().length) { $container.remove(); return; }
