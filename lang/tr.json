@@ -1153,7 +1153,6 @@
     "confirmDeletePlan": "Bu plan ve tüm seyahatleri silinsin mi?",
     "duplicate": "Çoğalt",
     "copySuffix": "(kopya)",
-    "planBy": "{user} tarafından oluşturulan plan",
     "planSaveCopy": "Bir kopya kaydet",
     "planSaveCopyHint": "Bu planı kendi planlarınıza kopyalar. Kopya bağımsızdır: sonraki değişiklikler iki tarafta da paylaşılmaz.",
     "confirmDeletePlanTrip": "Bu seyahat silinsin mi?",

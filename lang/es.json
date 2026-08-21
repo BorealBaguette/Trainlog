@@ -1136,7 +1136,6 @@
     "confirmDeletePlan": "¿Eliminar este plan y todos sus viajes?",
     "duplicate": "Duplicar",
     "copySuffix": "(copia)",
-    "planBy": "Plan de {user}",
     "planSaveCopy": "Guardar una copia",
     "planSaveCopyHint": "Copia este plan en tus propios planes. La copia es independiente: los cambios posteriores en cualquiera de los dos no se comparten.",
     "confirmDeletePlanTrip": "¿Eliminar este viaje?",

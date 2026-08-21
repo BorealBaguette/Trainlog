@@ -1148,7 +1148,6 @@
     "confirmDeletePlan": "Delete this plan and all its trips?",
     "duplicate": "Duplicate",
     "copySuffix": "(copy)",
-    "planBy": "Plan by {user}",
     "planSaveCopy": "Save a copy",
     "planSaveCopyHint": "Copies this plan into your own plans. The copy is independent: later changes on either side are not shared.",
     "confirmDeletePlanTrip": "Delete this trip?",

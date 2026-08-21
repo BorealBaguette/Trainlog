@@ -1159,7 +1159,6 @@
     "confirmDeletePlan": "Izbrisati ovaj plan i sva njegova putovanja?",
     "duplicate": "Dupliciraj",
     "copySuffix": "(kopija)",
-    "planBy": "Plan korisnika {user}",
     "planSaveCopy": "Spremi kopiju",
     "planSaveCopyHint": "Kopira ovaj plan u vaše vlastite planove. Kopija je neovisna: kasnije promjene ni na jednoj strani se ne dijele.",
     "confirmDeletePlanTrip": "Izbrisati ovo putovanje?",
