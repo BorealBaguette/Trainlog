@@ -29,6 +29,13 @@
                                  max-height: 260px; overflow-y: auto; }
   .country-flags { font-size: 1.05rem; letter-spacing: .1rem; cursor: help; }
   .uses-badge { cursor: help; font-variant-numeric: tabular-nums; }
+  .users-badge {
+    display: inline-flex; align-items: center; gap: .25rem;
+    font-size: .72rem; font-variant-numeric: tabular-nums; font-weight: 600;
+    color: var(--bs-gray-700); background: var(--bs-gray-200);
+    border-radius: 1rem; padding: .1rem .45rem; cursor: help;
+  }
+  .users-badge i { font-size: .68rem; color: var(--bs-gray-600); }
   .country-more  { font-size: .75rem; color: var(--bs-gray-600); letter-spacing: normal; }
 
   /* style2.css puts .navbar at z-index 2000, well above Bootstrap's modal (1055)
@@ -70,6 +77,10 @@
 
 <div class="container-fluid px-4">
   <h1 class="mt-3">Wagons</h1>
+  <div class="btn-group btn-group-sm mb-3" role="group">
+    <a href="{{ url_for('admin.wagons_admin') }}" class="btn btn-outline-secondary active">Wagons</a>
+    <a href="{{ url_for('admin.trainsets_admin') }}" class="btn btn-outline-secondary">Trainsets</a>
+  </div>
   <div class="mb-3 d-flex gap-2">
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
       <i class="fas fa-plus me-1"></i>Add Wagon
@@ -89,6 +100,7 @@
         <th data-priority="6">Era</th>
         <th data-priority="5">Countries</th>
         <th data-priority="3">Uses</th>
+        <th data-priority="4">Users</th>
         <th data-priority="2">Type</th>
         <th data-priority="2" data-orderable="false">Image</th>
         <th data-priority="3" data-orderable="false">Info</th>
@@ -411,6 +423,16 @@ function renderUses(n) {
                 title="${v} trip${v === 1 ? '' : 's'} use this wagon">${v}</span>`;
 }
 
+/* Distinct users behind those trips — its own sortable column so "used a lot by one
+   person" and "used a little by many" can each be found. */
+function renderUsers(u) {
+  const v = Number(u) || 0;
+  if (!v) return '<span class="meta-none">0</span>';
+  return `<span class="users-badge" ${TIP}
+                title="${v} distinct user${v === 1 ? '' : 's'}">
+                <i class="fa-solid fa-user"></i>${v}</span>`;
+}
+
 function renderMeta(row) {
   const bits = [];
 
@@ -454,8 +476,10 @@ const table = $('#wagonsTable').DataTable({
     data: d => ({
       draw: d.draw, start: d.start, length: d.length,
       'search[value]': d.search.value,
-      'order[0][column]': d.order[0].column,
-      'order[0][dir]':    d.order[0].dir,
+      // d.order can be empty (a click that lands on "no sort"), so fall back to the
+      // table's own initial order rather than let that crash the request.
+      'order[0][column]': (d.order[0] || {}).column ?? 6,
+      'order[0][dir]':    (d.order[0] || {}).dir    ?? 'desc',
     })
   },
   columns: [
@@ -467,6 +491,8 @@ const table = $('#wagonsTable').DataTable({
     { data: 'countries',   orderable: true,  render: (d, t) => t === 'display' ? renderCountries(d) : (d || '') },
     { data: 'uses',        orderable: true,  className: 'text-center',
       render: (d, t) => t === 'display' ? renderUses(d) : (d || 0) },
+    { data: 'users',       orderable: true,  className: 'text-center',
+      render: (d, t) => t === 'display' ? renderUsers(d) : (d || 0) },
     { data: 'image_type',  orderable: false, render: (d) => `<span class="badge bg-secondary text-white">${esc(d)}</span>` },
     {
       data: 'image', orderable: false,
