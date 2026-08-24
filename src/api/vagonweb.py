@@ -675,6 +675,65 @@ def import_one():
 _ERA_CODES = ["3a", "3b", "4a", "4b", "5a", "5b", "6", "6a", "6b"]
 
 
+WIKIPEDIA_API = "https://en.wikipedia.org/w/api.php"
+WIKIPEDIA_HEADERS = {"User-Agent": "TrainlogWagonImport/2.0 (+https://trainlog.me)"}
+
+
+def _wikipedia_snippet(query: str, timeout: float = 6.0) -> dict | None:
+    """
+    Best-effort Wikipedia lookup: the top full-text search hit's article text (lead
+    plus however much of the body fits), or None if nothing was found or the request
+    failed.
+
+    This is grounding text for the AI prompt, not a trusted fact by itself — the
+    model still has to judge whether the hit is actually about the right vehicle
+    (operator/country/type code should line up) before leaning on it. A bare VagonWeb
+    type code ("BM73A") rarely matches anything on its own; combining it with the
+    operator and the "family" segment of the scraped gallery path ("N/NSB/BM73" →
+    "BM73") is what actually finds the article.
+
+    Deliberately NOT `exintro`-only: the lead paragraph is usually just history/specs
+    in the aggregate, while the concrete per-car detail this is fetched for (which
+    literal car code has the buffet, the family area, the driving cab...) tends to sit
+    in the first body section right after it — e.g. NSB Class 73's "Specifications"
+    section names "BFR73" as the dining car. Cutting at ~exintro length throws that
+    away before the model ever sees it, so the cap here is generous instead.
+    """
+    query = query.strip()
+    if not query:
+        return None
+    try:
+        search = requests.get(
+            WIKIPEDIA_API,
+            params={"action": "query", "list": "search", "srsearch": query,
+                    "format": "json", "srlimit": 1},
+            timeout=timeout, headers=WIKIPEDIA_HEADERS,
+        )
+        hits = (search.json().get("query") or {}).get("search") or []
+        if not hits:
+            return None
+        title = hits[0]["title"]
+
+        extract_resp = requests.get(
+            WIKIPEDIA_API,
+            params={"action": "query", "prop": "extracts",
+                    "explaintext": 1, "titles": title, "format": "json"},
+            timeout=timeout, headers=WIKIPEDIA_HEADERS,
+        )
+        pages = (extract_resp.json().get("query") or {}).get("pages") or {}
+        page = next(iter(pages.values()), {})
+        text = (page.get("extract") or "").strip()
+        return {"title": title, "extract": text[:5000]} if text else None
+    except (requests.RequestException, ValueError, KeyError):
+        return None
+
+
+def _wikipedia_query_for(meta: dict, code: str) -> str:
+    """Best query for a staged wagon: operator + the gallery path's family segment."""
+    family = (meta.get("gallery") or "").rsplit("/", 1)[-1]
+    return " ".join(p for p in (meta.get("operator"), family or code) if p)
+
+
 def _catalogue_categories(limit: int = 25) -> list[str]:
     """
     The catalogue's most-used categories, offered to the model so it reuses an
@@ -699,13 +758,27 @@ def _catalogue_categories(limit: int = 25) -> list[str]:
 @owner_required
 def suggest_fields():
     """
+    Ask the AI to fill in the descriptive fields for one or more staged wagons.
+
+    A `keys` list (plural) is the "import all" batch case: every entry is its own
+    separately staged drawing rather than a car cut out of one shared strip, so it
+    gets its own suggester with its own prompt (`_suggest_fields_batch`). A single
+    `key` is the ordinary one-wagon case.
+    """
+    data = request.get_json(silent=True) or {}
+    if isinstance(data.get("keys"), list):
+        return _suggest_fields_batch(data)
+    return _suggest_fields_single(data)
+
+
+def _suggest_fields_single(data: dict):
+    """
     Ask the AI to fill in the descriptive fields for a staged wagon.
 
     VagonWeb's own description is in Czech and its type codes are terse, so the model
     is given that raw metadata and asked for English prose plus the catalogue's own
     vocabulary. Returns suggestions only — the owner reviews them before importing.
     """
-    data = request.get_json(silent=True) or {}
     meta = _staged_meta(data.get("key"))
     if not meta:
         return jsonify({"error": "unknown or expired staging key"}), 404
@@ -905,6 +978,216 @@ owner will fill it in. Never invent a builder, a works, or a date to sound compl
             "label": _text(c.get("label") or fallback.get("label")),
             "subcategory": subcategory,
             "notes": _text(c.get("notes") or fallback.get("notes")),
+        })
+
+    return jsonify({"shared": shared, "cars": out_cars})
+
+
+def _suggest_fields_batch(data: dict):
+    """
+    Ask the AI to fill in the descriptive fields for a whole "import all" batch in one
+    request, the same way `_suggest_fields_single` describes every car of one strip in
+    one request — except here each entry is its OWN staged drawing (a different
+    vehicle), not a physical car cut from a shared image, so each carries its own raw
+    VagonWeb metadata into the prompt instead of sharing one meta block.
+
+    Body: {keys: [key…], variants: [[code…]…], car_keys: [[name…]…], hint}
+    `variants`/`car_keys` are per-key lists (one outer entry per key, matching `keys`
+    positionally); an empty/absent code list means "just the drawing itself".
+    """
+    keys = data.get("keys") or []
+    if not isinstance(keys, list) or not keys:
+        return jsonify({"error": "keys required"}), 400
+    if not get_ai_api_key():
+        return jsonify({"error": "no AI API key configured"}), 503
+
+    metas = []
+    for k in keys:
+        meta = _staged_meta(k)
+        if not meta:
+            return jsonify({"error": f"unknown or expired staging key: {k}"}), 404
+        metas.append(meta)
+
+    raw_variants = data.get("variants") or []
+    raw_car_keys = data.get("car_keys") or []
+
+    # Flatten to one grid entry per (wagon, type code) — the same order the batch
+    # import table itself uses, so `cars[i]` in the response zips straight onto row i.
+    grid: list[tuple[dict, str, str]] = []
+    for i, meta in enumerate(metas):
+        codes = raw_variants[i] if i < len(raw_variants) and isinstance(raw_variants[i], list) else []
+        names = raw_car_keys[i] if i < len(raw_car_keys) and isinstance(raw_car_keys[i], list) else []
+        for j, code in enumerate(codes or [""]):
+            grid.append((meta, str(code or "").strip(), names[j] if j < len(names) else ""))
+
+    if not grid:
+        return jsonify({"error": "nothing to describe"}), 400
+
+    categories = _catalogue_categories()
+
+    # A real reference beats the model's own recollection: look each entry up on
+    # Wikipedia (operator + the gallery path's family segment is what actually finds
+    # it — see _wikipedia_query_for) and feed the intro extract in as grounding.
+    # Cached per query string since several codes on one drawing share the same wagon.
+    wiki_cache: dict[str, dict | None] = {}
+    entry_blocks = []
+    for n, (meta, code, name) in enumerate(grid):
+        query = _wikipedia_query_for(meta, code)
+        if query not in wiki_cache:
+            wiki_cache[query] = _wikipedia_snippet(query)
+        ref = wiki_cache[query]
+        ref_line = (
+            f'    wikipedia reference : "{ref["title"]}" — {ref["extract"]}'
+            if ref else
+            "    wikipedia reference : none found — rely only on your own certain knowledge, or answer null"
+        )
+        entry_blocks.append(
+            f"  entry {n + 1}" + (f" (key {name})" if name else "") + ":\n"
+            f"    country + operator : {meta.get('operator_country') or 'unknown'}   (Czech country name)\n"
+            f"    operator           : {meta.get('operator') or 'unknown'}\n"
+            f"    type code          : {code or meta.get('category') or 'unknown'}\n"
+            f"    photo gallery path : {meta.get('gallery') or 'none'}   (country / operator / family)\n"
+            f"    image path         : {meta.get('vw_base')}   (country / operator / type code)\n"
+            f"    amenities (cs)     : {meta.get('notes') or 'none'}\n"
+            f"    travel classes     : {', '.join(meta.get('classes') or []) or 'unknown'}\n"
+            f"    drawing            : {meta.get('width')}x{meta.get('height')} px\n"
+            f"{ref_line}"
+        )
+    entry_lines = "\n".join(entry_blocks)
+
+    hint = (data.get("hint") or "").strip()
+    hint_block = (
+        "\nThe cataloguer has supplied extra information. Treat it as authoritative and\n"
+        "prefer it over your own recollection wherever the two disagree:\n"
+        f"---\n{hint[:4000]}\n---\n"
+        if hint
+        else ""
+    )
+
+    train_title = metas[0].get("train_title") or "unknown"
+    source_url = metas[0].get("source_url") or "unknown"
+
+    prompt = f"""You are cataloguing a whole train formation for a railway trainset database.
+
+Below are {len(grid)} vehicles seen together on the same VagonWeb page, each with its own
+drawing. They are NOT physical cuts of one shared drawing — each is a separately
+imported vehicle, and different entries CAN be different vehicle types (e.g. a
+locomotive plus several coach types). Use the fact that they run together as context
+(same era, same country, often the same operator), but describe each entry on its own
+terms rather than assuming they all share a category.
+
+Seen on train: {train_title}
+Source page: {source_url}
+
+{entry_lines}
+{hint_block}
+The country line is authoritative — trust it over any resemblance the type code has to
+another country's naming scheme. The gallery path is the strongest identity hint: a path
+like "N/NSB/B3-Flamsbana" means a Norwegian NSB B3 coach used on the Flåm Railway.
+
+Each entry may carry a "wikipedia reference": the top hit from searching the operator
+and the drawing's family name. It is a SEARCH RESULT, not a confirmed match — check
+that its subject actually is this vehicle (operator, country, type code/era should be
+consistent) before trusting anything in it. If it's clearly about something else
+(wrong country, wrong kind of vehicle), ignore it. Where it does match, prefer its
+facts over your own memory and you may draw specifics (capacity, power, builder) from
+it — but do not add facts beyond what it or your own certain knowledge actually says.
+
+Work out which real vehicles these are. Identifying the exact model matters more than
+filling every field — a wrong guess is worse than an admitted "I don't know", because
+the owner will trust it unless it's obviously wrong.
+
+STRICT ANTI-GUESSING RULES — these apply to every field below:
+  - Do NOT invent specifics you are not sure of: no made-up seat counts, seat colours,
+    power output, weights, build years, capacities or per-car "roles" (driving trailer,
+    buffet car, power car...) unless the type code, amenities data, a matching
+    wikipedia reference, or your own certain knowledge of this exact vehicle actually
+    supports it. A generic but true sentence beats a specific but fabricated one.
+  - "category" is a powertrain/role claim (EMU vs DMU vs Coaches vs Electric
+    locomotive...) — get it right or leave it null. If you cannot tell whether a
+    multiple unit is electric or diesel, do NOT default to either; answer the vehicle
+    class generically instead (e.g. "Multiple unit") or use null.
+  - If you do not actually recognise this specific vehicle from the type code, gallery
+    path and operator/country given, say so with short, honest, generic text (or null)
+    rather than producing a confident-sounding but invented description.
+
+Return ONLY a JSON object, no markdown. "shared" holds only fields genuinely common to
+the WHOLE train; "cars" holds exactly {len(grid)} entry/entries in the same order as above:
+{{
+  "shared": {{
+    "gauge":     track gauge in mm as a number, common to the whole train. Default to the national standard for the country above. Only depart from it if you positively know this train runs on a narrow- or broad-gauge line — a scenic or mountain route is NOT evidence of narrow gauge,
+    "era":       "epoch code(s) from {",".join(_ERA_CODES)}, comma-separated for a range, e.g. '5b,6'",
+    "countries": ["ISO 3166-1 alpha-2 codes of the countries this train normally runs in, e.g. ['NO'] or ['CH','DE','AT']"]
+  }},
+  "cars": [
+    {{
+      "label":       "short display name for THIS entry. It must contain that entry's full type code exactly as given above — never shorten 'B7-5' to 'B7', and never drop a suffix that distinguishes it from a sibling code. No operator prefix, and do not repeat the code twice",
+      "category":    "broad family for THIS entry, e.g. 'EMU', 'DMU', 'Coaches', 'Electric locomotives', or null if you are not sure of the powertrain — vehicles in the same train can have different categories, so answer per entry and never copy a guess from a sibling entry",
+      "subcategory": "series, variant or role of this vehicle, or null. NEVER the operator or network name (not 'Vy', 'SBB', 'DB', 'SNCF'...) — that belongs in 'operator', which is not asked for here. Only name a specific role (driving trailer, buffet car...) if you are actually sure THIS car has it",
+      "notes":       "one or two English sentences on this vehicle. No Czech. No personal data. Mention a builder, build year, seating capacity or power figures ONLY if you are certain of them — a short honest note beats a detailed invented one."
+    }}
+  ]
+}}
+
+Categories already used in this catalogue — reuse one if it fits, otherwise coin a
+clear new one: {", ".join(categories) or "none yet"}
+
+"era" describes when the vehicle was/is in service: 3a/3b pre-1970, 4a/4b 1970s-80s,
+5a/5b 1985-2000, 6 modern.
+Use null for anything you genuinely cannot determine — null is a good answer, and the
+owner will fill it in. Never invent a builder, a works, or a date to sound complete."""
+
+    suggestion = call_ai_json(prompt, model="google/gemma-4-31B-it")
+    if isinstance(suggestion, list):
+        suggestion = {"cars": suggestion}
+    if not isinstance(suggestion, dict):
+        logger.warning("VagonWeb suggest (batch): unusable AI response %r", suggestion)
+        return jsonify({"error": "the AI did not return usable suggestions"}), 502
+
+    def _text(v):
+        return str(v).strip() or None if v is not None else None
+
+    raw_shared = suggestion.get("shared")
+    if not isinstance(raw_shared, dict):
+        raw_shared = {}
+
+    shared = {
+        "gauge": raw_shared.get("gauge"),
+        "era": raw_shared.get("era"),
+        "countries": raw_shared.get("countries"),
+    }
+    if shared["gauge"] is not None:
+        try:
+            shared["gauge"] = int(float(str(shared["gauge"]).replace("mm", "").strip()))
+        except (TypeError, ValueError):
+            shared["gauge"] = None
+    if shared["era"]:
+        kept = [p.strip() for p in str(shared["era"]).split(",") if p.strip() in _ERA_CODES]
+        shared["era"] = ",".join(kept) or None
+    valid = set(get_all_countries())
+    codes = shared["countries"]
+    if isinstance(codes, str):
+        codes = codes.split(",")
+    shared["countries"] = [
+        c for c in dict.fromkeys(str(x).strip().upper() for x in (codes or []))
+        if c in valid
+    ] or None
+
+    raw_cars = suggestion.get("cars")
+    if not isinstance(raw_cars, list):
+        raw_cars = []
+    out_cars = []
+    for i, (meta, _code, _name) in enumerate(grid):
+        c = raw_cars[i] if i < len(raw_cars) and isinstance(raw_cars[i], dict) else {}
+        operator_name = (meta.get("operator") or "").strip().casefold()
+        subcategory = _text(c.get("subcategory"))
+        if subcategory and subcategory.strip().casefold() == operator_name:
+            subcategory = None
+        out_cars.append({
+            "label": _text(c.get("label")),
+            "category": _text(c.get("category")),
+            "subcategory": subcategory,
+            "notes": _text(c.get("notes")),
         })
 
     return jsonify({"shared": shared, "cars": out_cars})

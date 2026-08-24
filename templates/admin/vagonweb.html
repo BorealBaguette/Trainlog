@@ -715,13 +715,15 @@ function openImportAll() {
     `all wagons — ${batchWagons.length} not yet in the catalogue`;
   document.getElementById('imError').classList.add('d-none');
   document.getElementById('segBody').innerHTML = '';
+  document.getElementById('aiFillStatus').textContent =
+    'One request covers the whole train. Fills label, category, subcategory, notes, gauge, era and countries. Always check them.';
+  document.getElementById('aiHint').value = '';
 
   document.getElementById('cutImg').classList.add('d-none');
   document.getElementById('cutImgR').classList.add('d-none');
   document.getElementById('batchStripL').classList.remove('d-none');
   document.getElementById('batchStripR').classList.remove('d-none');
   document.getElementById('cutControls').classList.add('d-none');
-  document.getElementById('aiSection').classList.add('d-none');
   document.getElementById('variantPicker').innerHTML = '';
   document.getElementById('variantPicker').classList.add('d-none');
   document.getElementById('cutSectionLabel').textContent =
@@ -737,7 +739,7 @@ function openImportAll() {
 document.getElementById('importAllBtn').addEventListener('click', openImportAll);
 
 /* ── AI auto-fill ───────────────────────────────────────────────── */
-document.getElementById('aiFillBtn').addEventListener('click', async function () {
+async function suggestSingle() {
   const status = document.getElementById('aiFillStatus');
   const rows   = [...document.querySelectorAll('#segBody tr')];
   this.disabled = true;
@@ -803,6 +805,88 @@ document.getElementById('aiFillBtn').addEventListener('click', async function ()
   status.innerHTML = filled.length
     ? `<span class="text-success">Filled: ${esc(filled.join(', '))}.</span> Check them before importing.`
     : '<span class="text-warning">The AI could not determine any field.</span>';
+}
+
+/* Batch counterpart: one combined request covering every wagon in the batch, mirroring
+   suggestSingle's "describe the whole strip together" approach — each wagon just
+   brings its own scraped metadata into the prompt instead of sharing one meta block,
+   since (unlike cars cut from one strip) they can be genuinely different vehicles. */
+async function suggestBatch() {
+  const status = document.getElementById('aiFillStatus');
+  this.disabled = true;
+  status.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Asking the AI about the whole train…';
+
+  const rowsByKey = new Map();
+  document.querySelectorAll('#segBody tr').forEach(tr => {
+    const k = tr.dataset.key;
+    if (!rowsByKey.has(k)) rowsByKey.set(k, []);
+    rowsByKey.get(k).push(tr);
+  });
+  const keys      = [...rowsByKey.keys()];
+  const variants  = keys.map(k => rowsByKey.get(k).map(tr => tr.dataset.code));
+  const car_keys  = keys.map(k => rowsByKey.get(k).map(
+    tr => (tr.querySelector('input[data-field="name"]') || {}).value || ''
+  ));
+  const flatRows  = keys.flatMap(k => rowsByKey.get(k));  // same order the server's grid uses
+
+  if (!flatRows.length) {
+    this.disabled = false;
+    status.innerHTML = '<span class="text-warning">Nothing to describe.</span>';
+    return;
+  }
+
+  let data;
+  try {
+    const res = await fetch(`${API}/suggest`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ keys, variants, car_keys, hint: document.getElementById('aiHint').value.trim() }),
+    });
+    data = await res.json();
+    if (!res.ok) throw new Error(data.error || res.status);
+  } catch (err) {
+    this.disabled = false;
+    status.innerHTML = `<span class="text-danger">${esc(String(err.message || err))}</span>`;
+    return;
+  }
+  this.disabled = false;
+
+  const shared = data.shared || {};
+  const setIf = (id, v) => { if (v !== null && v !== undefined && v !== '') document.getElementById(id).value = v; };
+  setIf('imEra',   shared.era);
+  setIf('imGauge', shared.gauge);
+  if (shared.countries && shared.countries.length) {
+    $('#imCountries').selectpicker('val', shared.countries);
+  }
+
+  const cars = data.cars || [];
+  flatRows.forEach((tr, i) => {
+    const car = cars[i] || {};
+    const put = (field, value) => {
+      if (value === null || value === undefined || value === '') return;
+      const inp = tr.querySelector(`input[data-field="${field}"]`);
+      if (!inp) return;
+      inp.value = value;
+    };
+    put('label',       car.label);
+    put('category',    car.category);
+    put('subcategory', car.subcategory);
+    put('notes',       car.notes);
+  });
+
+  const filled = [
+    shared.era && 'era', shared.gauge && 'gauge', (shared.countries || []).length && 'countries',
+    cars.some(c => c.label) && 'label',
+    cars.some(c => c.category) && 'category',
+    cars.some(c => c.subcategory) && 'subcategory',
+    cars.some(c => c.notes) && 'notes',
+  ].filter(Boolean);
+  status.innerHTML = filled.length
+    ? `<span class="text-success">Filled: ${esc(filled.join(', '))}.</span> Check them before importing.`
+    : '<span class="text-warning">The AI could not determine any field.</span>';
+}
+
+document.getElementById('aiFillBtn').addEventListener('click', function () {
+  return batchMode ? suggestBatch.call(this) : suggestSingle.call(this);
 });
 
 /* ── Submit ─────────────────────────────────────────────────────── */
