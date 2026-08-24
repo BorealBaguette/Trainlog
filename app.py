@@ -849,6 +849,7 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         last_modified=now,
         type=sanitize_param(trip_type),
         seat=sanitize_param(newTrip["seat"]),
+        seat_car=parse_seat_car(newTrip.get("seat_car")),
         material_type=sanitize_param(newTrip["material_type"]),
         material_type_advanced=sanitize_param(newTrip["material_type_advanced"]),
         reg=sanitize_param(newTrip["reg"]),
@@ -6711,6 +6712,7 @@ def get_trip(trip_id):
         last_modified=sanitize_param(trip["last_modified"]),
         type=sanitize_param(trip["type"]),
         seat=sanitize_param(trip["seat"]),
+        seat_car=trip.get("seat_car"),
         material_type=sanitize_param(trip["material_type"]),
         material_type_advanced=sanitize_param(trip.get("material_type_advanced")),
         reg=sanitize_param(trip["reg"]),
@@ -6730,6 +6732,12 @@ def get_trip(trip_id):
 
 def sanitize_param(param):
     return param if param != "" else None
+
+
+def parse_seat_car(param):
+    """Form value for the marked car (a stringified array index) -> int or None."""
+    param = sanitize_param(param)
+    return int(param) if param is not None else None
 
 
 def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False):
@@ -6823,6 +6831,7 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         last_modified=datetime.now(),
         type=original_trip.type,
         seat=sanitize_param(formData["seat"]),
+        seat_car=parse_seat_car(formData.get("seat_car")),
         material_type=sanitize_param(formData["material_type"]),
         material_type_advanced=sanitize_param(formData.get("material_type_advanced")),
         reg=sanitize_param(formData["reg"]),
@@ -9553,6 +9562,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     tripMaterialType = trip["material_type"]
     tripMaterialTypeAdvanced = trip["material_type_advanced"] if trip["material_type_advanced"] else ""
     tripSeat = trip["seat"]
+    tripSeatCar = trip["seat_car"]
     tripReg = trip["reg"]
     tripType = trip["type"]
     tripNotes = trip["notes"]
@@ -9627,6 +9637,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripMaterialType": tripMaterialType or "",
         "tripMaterialTypeAdvanced": tripMaterialTypeAdvanced or "",
         "tripSeat": tripSeat or "",
+        "tripSeatCar": tripSeatCar if tripSeatCar is not None else "",
         "tripReg": tripReg or "",
         "tripPrice": tripPrice if tripPrice is not None else "",
         "tripCurrency": tripCurrency or "",

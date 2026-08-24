@@ -1356,7 +1356,7 @@ function _advancedHasTrainset(adv) {
     }
 }
 
-function openCompositionModal(trainName, dateStr, materialType) {
+function openCompositionModal(trainName, dateStr, materialType, seatInfo) {
     $('#compositionModalTitle').text(trainName + (dateStr ? ` (${dateStr})` : ''));
     var $modalBody = $('#compositionModal .modal-body');
     $modalBody.html(`
@@ -1369,7 +1369,7 @@ function openCompositionModal(trainName, dateStr, materialType) {
 
     if (materialType) {
         _resolveUnits(materialType, '{{ username }}')
-            .done(function(r) { _renderTrainset($modalBody, r.units, r.name); })
+            .done(function(r) { _renderTrainset($modalBody, r.units, r.name, seatInfo); })
             .fail(function()  { $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>'); });
     } else {
         $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>');
@@ -1731,18 +1731,19 @@ function processHiddenData(rowIdx, columns){
                 }
                 if (isValid) {
                     formatted += `<div id="trainsetInline${rowIdx}"></div>`;
-                    (function(rowId, mat, personal) {
+                    (function(rowId, mat, personal, seatInfo) {
                         setTimeout(function() {
                             var labels = {};
                             if (personal) labels.personal = personal;
                             _resolveUnits(mat, '{{ username }}')
                                 .done(function(r) {
                                     if (r.name && r.name !== labels.personal) labels.saved = r.name;
-                                    _renderTrainsetInline(rowId, r.units, labels);
+                                    _renderTrainsetInline(rowId, r.units, labels, seatInfo);
                                 })
                                 .fail(function() { $('#trainsetInline' + rowId).remove(); });
                         }, 0);
-                    })(rowIdx, primary, rawMat !== primary ? rawMat : null);
+                    })(rowIdx, primary, rawMat !== primary ? rawMat : null,
+                       { car: rowData.seat_car, seat: rowData.seat });
                 }
                 col.data = formatted;
             }
@@ -1929,16 +1930,21 @@ function renderLineName(data, type, row) {
             var dateStr  = row.start_date || '';
             var safeName = (data || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
             var safeMat  = mat.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            var safeSeat = (row.seat || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            var seatCarLit = (row.seat_car === null || row.seat_car === undefined || row.seat_car === '')
+                ? 'null' : parseInt(row.seat_car, 10);
             // Icon only when the advanced field has a resolvable trainset (race-free);
             // fall back to the name cache only for a legacy plain material_type match.
             var btn = (adv ? _advancedHasTrainset(adv) : _isValidMaterial(mat)) ? `
                     <a href="javascript:void(0);"
-                       onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}')"
-                       class="text-decoration-none ms-2"
+                       onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}', {car: ${seatCarLit}, seat: '${safeSeat}'})"
+                       class="text-decoration-none me-2"
                        title="View Composition">
                        <i class="fas fa-train"></i>
                     </a>` : '';
-            if (data || btn) return `<span>${sanitize(data || '')}${btn}</span>`;
+            // Icon first: a long line name would otherwise push it past the column's
+            // visible width and hide it.
+            if (data || btn) return `<span>${btn}${sanitize(data || '')}</span>`;
         }
     }
     return data;

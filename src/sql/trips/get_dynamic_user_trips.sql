@@ -26,6 +26,7 @@ WITH base AS (
         material_type,
         material_type_advanced,
         seat,
+        seat_car,
         reg,
         waypoints,
         notes,
