@@ -7,6 +7,7 @@ from src.suspicious_activity import list_denied_logins, list_suspicious_activity
 from src.utils import admin_required, getUser, has_current_trip, lang, owner_required
 
 from .operators import operators_api_blueprint
+from .station_registry import station_registry_blueprint
 from .trainsets import trainsets_admin_blueprint
 from .wagons import wagons_admin_blueprint
 
@@ -113,4 +114,5 @@ __all__ = [
     "operators_api_blueprint",
     "trainsets_admin_blueprint",
     "wagons_admin_blueprint",
+    "station_registry_blueprint",
 ]

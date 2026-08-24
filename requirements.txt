@@ -37,6 +37,11 @@ pillow==12.3.0
 CairoSVG==2.8.2
 pycountry==24.6.1
 geojson==3.2.0
+# Romanises station names in Cyrillic, Greek, Armenian and Georgian (src/station_names.py).
+# Ships as an sdist only, so it is compiled at install time and needs libicu-dev and
+# pkg-config, which the Dockerfile installs. The import is optional: without it those scripts
+# fall back to their English name and the rest of the naming still works.
+PyICU==2.16.2
 gunicorn==23.0.0
 flexpolyline==0.1.0
 duckdb==1.3.2

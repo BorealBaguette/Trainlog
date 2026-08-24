@@ -23,6 +23,7 @@ import logging
 from py.utils import getCountriesFromPath, getDistance
 from src.carbon import calculate_carbon_footprint_for_trip
 from src.operators import sync_trip_operators
+from src.stations import sync_trip_labels
 from src.paths import coords_to_ewkt, geom_geojson_to_coords
 from src.pg import pg_session
 from src.sql.trips import insert_trip_query, update_trip_query
@@ -263,6 +264,10 @@ def split_trip(trip_id, split_index, mid_station, user_id):
         )
         _write_path(pg, trip_id, c1, a1, t1)
         sync_trip_operators(trip_id, pg_session_=pg)
+        # Same for the endpoints: make sure the station registry knows the
+        # spellings this trip uses. Keyed on the label, not the trip, so an
+# edit needs no bookkeeping here.
+        sync_trip_labels(trip_id, pg_session_=pg)
 
         # ── Leg 2: a new trip starting at the cut. Price/ticket stay on leg 1 only. ──
         leg2_id = pg.execute(
@@ -307,6 +312,10 @@ def split_trip(trip_id, split_index, mid_station, user_id):
         ).fetchone()[0]
         _write_path(pg, leg2_id, c2, a2, t2)
         sync_trip_operators(leg2_id, pg_session_=pg)
+        # Same for the endpoints: make sure the station registry knows the
+        # spellings this trip uses. Keyed on the label, not the trip, so an
+# edit needs no bookkeeping here.
+        sync_trip_labels(leg2_id, pg_session_=pg)
 
     logger.info(
         "Split trip %s at node %s -> leg1 %s + leg2 %s",

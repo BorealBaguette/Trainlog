@@ -35,9 +35,10 @@ from py.utils import getCountriesFromPath, getCountryFromCoordinates
 from src.ai import create_trip_from_parsed, enrich_parsed_trip
 from src.consts import TripTypes
 from src.paths import geom_geojson_to_coords
-from src.photon import photonRequest
+from src.photon import photonRequestLangs
 from src.pg import pg_session
 from src.sql.stations import get_airports_query
+from src.station_search import process_station_results
 from src.plans.create_from_parsed import create_plan_trip_from_parsed
 from src.plans.delete_plan import delete_plan as _delete_plan
 from src.plans.delete_plan import delete_plan_trip as _delete_plan_trip
@@ -742,24 +743,26 @@ def _search_stations(query: str, trip_type: str, limit: int) -> list[dict]:
             })
         return out
 
-    params = {"q": query, "lang": "en"}
+    params = {"q": query}
     tags = STATION_SEARCH_OSM_TAGS.get(trip_type)
     if tags:
         params["osm_tag"] = tags  # requests serialises a list as repeated params
-    resp = photonRequest("/api", params=params, timeout=3)
-    if resp is None:
+
+    # Exactly the pipeline the website's autocomplete runs, rather than a near-copy of part
+    # of it. This function used to ask for lang=en and prefix the city whenever it differed
+    # from the name at all, so the same station came back under a different label here than
+    # in the browser — and since a trip stores that label as text, a trip logged through MCP
+    # would not group with the same trip logged through the website.
+    responses = photonRequestLangs("/api", params, ("en", "default"), timeout=3)
+    if all(response is None for response in responses.values()):
         raise ValueError("Station search is temporarily unavailable.")
 
     out = []
-    for feature in resp.get("features", [])[:limit]:
+    for feature in process_station_results(responses)[:limit]:
         props = feature.get("properties", {})
         lon, lat = (feature.get("geometry", {}).get("coordinates") or [None, None])[:2]
-        name = props.get("name")
-        city = props.get("city")
-        if city and city != name:
-            name = f"{city} - {name}" if name else city
         out.append({
-            "name": name,
+            "name": f"{props.get('name')}{props.get('homonymy_order', '')}",
             "lat": lat,
             "lng": lon,
             "country": props.get("countrycode"),

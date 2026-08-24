@@ -1,6 +1,7 @@
 import logging
 
 from src.operators import sync_trip_operators
+from src.stations import sync_trip_labels
 from src.paths import Path, coords_to_ewkt
 from src.pg import get_or_create_pg_session
 from src.sql.trips import insert_trip_query
@@ -57,6 +58,10 @@ def create_trip(trip: Trip, pg_session=None):
         # Resolve the free-text operator into trip_operators, in the same session so
         # a trip is never visible without its operator links.
         sync_trip_operators(trip.trip_id, pg_session_=pg)
+        # Same for the endpoints: make sure the station registry knows the
+        # spellings this trip uses. Keyed on the label, not the trip, so an
+# edit needs no bookkeeping here.
+        sync_trip_labels(trip.trip_id, pg_session_=pg)
 
         # Write the route geometry to PostGIS in the same session.
         path = (
