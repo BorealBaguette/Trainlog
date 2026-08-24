@@ -153,6 +153,19 @@
 
     /* Placeholder for wagons not yet in the catalogue */
     .wagon-placeholder-img { height: 44px; width: auto; opacity: 0.5; display: block; flex-shrink: 0; }
+
+    /* Seat marker — flows above the marked car's image; the strip is bottom-aligned
+       (align-items: flex-end) so this only pushes that one car's column taller,
+       instead of needing absolute positioning that could clip against a container. */
+    .compo-seat-marker {
+        font-size: 0.65rem;
+        line-height: 1.2;
+        color: #198754;
+        font-weight: 700;
+        text-align: center;
+        white-space: nowrap;
+        margin-bottom: 2px;
+    }
 </style>
 
 {# ── JavaScript ───────────────────────────────────────────────────────────── #}
@@ -271,8 +284,16 @@ function _resolveUnits(value, owner) {
     });
 }
 
+/* A small marker flowed above the car matching seatInfo.car, showing seatInfo.seat.
+   seatInfo is optional ({car, seat}) — omit it wherever there's no trip context. */
+function _appendSeatMarker(wagon, i, seatInfo) {
+    if (!seatInfo || seatInfo.car !== i) return;
+    var label = seatInfo.seat ? esc(seatInfo.seat) + '<br>' : '';
+    wagon.prepend('<div class="compo-seat-marker">' + label + '&#9660;</div>');
+}
+
 /* Render into a modal body element */
-function _renderTrainset($modalBody, units, setName) {
+function _renderTrainset($modalBody, units, setName, seatInfo) {
     var strip = $('<div class="compo-strip ts-strip"></div>');
     var all = units || [];
     all.forEach(function(u, i) {
@@ -289,6 +310,7 @@ function _renderTrainset($modalBody, units, setName) {
             wagon.append(_makePlaceholder(false, isFirst, isLast, u._phType));
         }
         wagon.append('<span class="compo-coach-no ts-nom">' + esc(u.label || u.nom || '') + '</span>');
+        _appendSeatMarker(wagon, i, seatInfo);
         strip.append(wagon);
     });
     if (!strip.children().length) {
@@ -307,7 +329,7 @@ function _renderTrainset($modalBody, units, setName) {
 }
 
 /* Render into an inline container element (#trainsetInline<rowId>) */
-function _renderTrainsetInline(rowId, units, labels) {
+function _renderTrainsetInline(rowId, units, labels, seatInfo) {
     var $container = $('#trainsetInline' + rowId);
     if (!$container.length) return;
     var strip = $('<div class="compo-strip ts-strip"></div>');
@@ -327,6 +349,7 @@ function _renderTrainsetInline(rowId, units, labels) {
         }
         var _lbl = esc(u.label || u.nom || '');
         wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline" title="' + _lbl + '">' + _lbl + '</span>');
+        _appendSeatMarker(wagon, i, seatInfo);
         strip.append(wagon);
     });
     if (!strip.children().length) { $container.remove(); return; }
