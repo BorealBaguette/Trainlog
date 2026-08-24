@@ -241,22 +241,52 @@
             </button>
             <input type="hidden" id="tileserver" name="tileserver" form="settingsForm" value="{{ user_tileserver }}">
 
+            {# How stations are named. A display choice over data already stored, so it costs
+               nothing and changes no trip: two users see the same trip under different names
+               and both still count as the same station. #}
+            {# The three labels have to say *whose* language each one means. An earlier
+               wording called the middle option "Native", which reads as "my native language"
+               rather than "the station's own name" — the opposite of what it does. #}
+            <label class="settings2-label mt-3" for="station_display">{{ stationNamesLabel }}</label>
+            <div class="settings2-combo" data-combo="station_display">
+              <div class="input-group">
+                <label class="input-group-text" id="station_display-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="station_display-btn">
+                  <span id="station_display-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="station_display" name="station_display" form="settingsForm" value="{{ user_station_display }}">
+              <div class="settings2-combo-panel" id="station_display-panel">
+                <input type="text" class="form-control settings2-combo-search" id="station_display-search" autocomplete="off">
+                <div class="settings2-combo-list" id="station_display-list">
+                  <button type="button" class="settings2-combo-item" data-value="international" data-icon="fa-solid fa-earth-americas" data-label="{{ stationDisplayInternational }}" data-details="{{ stationDisplayInternationalDetails }}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="language" data-icon="fa-solid fa-language" data-label="{{ stationDisplayLanguage|replace('{station_lang}', station_lang_name) }}" data-details="{{ stationDisplayLanguageDetails }}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="native" data-icon="fa-solid fa-map-pin" data-label="{{ stationDisplayNative }}" data-details="{{ stationDisplayNativeDetails }}"></button>
+                </div>
+                <div class="settings2-combo-empty" id="station_display-empty" style="display:none;">No results</div>
+              </div>
+            </div>
+            <div class="settings2-hint" id="station-display-details"></div>
+            <div class="form-text">
+              {{ stationDisplayHelp }}
+            </div>
+
             {% if is_premium %}
             <div class="form-check form-switch mt-3">
               <input class="form-check-input" type="checkbox" id="orm-enabled" name="orm_enabled" form="settingsForm">
               <label class="form-check-label" for="orm-enabled">
-                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> Enable OpenRailwayMap overlay
+                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ ormEnableLabel }}
               </label>
             </div>
 
             <div id="orm-options" class="mt-2 p-3 bg-light rounded" style="display: none;">
-              <label class="settings2-label mt-0" for="orm-type">Railway Layer Type</label>
+              <label class="settings2-label mt-0" for="orm-type">{{ ormLayerTypeLabel }}</label>
               <select class="form-select" name="orm_type" id="orm-type" form="settingsForm">
-                <option value="standard">Standard</option>
-                <option value="maxspeed">Max Speed</option>
-                <option value="signals">Signals</option>
-                <option value="electrified">Electrified</option>
-                <option value="gauge">Track Gauge</option>
+                <option value="standard">{{ ormLayerStandard }}</option>
+                <option value="maxspeed">{{ ormLayerMaxspeed }}</option>
+                <option value="signals">{{ ormLayerSignals }}</option>
+                <option value="electrified">{{ ormLayerElectrified }}</option>
+                <option value="gauge">{{ ormLayerGauge }}</option>
               </select>
             </div>
 
@@ -601,6 +631,12 @@
       const details = item.dataset.details
         .replace("{public_link}", "{{ url_for('public', username=username, _external=True, _scheme='https') }}");
       document.getElementById('share-level-details').innerHTML = details;
+    }
+  });
+
+  initStaticCombo('station_display', {
+    onApply: (item) => {
+      document.getElementById('station-display-details').textContent = item.dataset.details;
     }
   });
 

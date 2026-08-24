@@ -101,7 +101,6 @@ from src.sql.percents import upsert_percent_query
 from src.sql.stations import (
     get_airports_query,
     get_manual_stations_query,
-    get_train_stations_query,
 )
 from src.sql.tags import get_tags_query
 from src.sql.tickets import get_ticket_query, get_tickets_query
@@ -157,6 +156,7 @@ from py.utils import (
 from src.api.admin import (
     admin_blueprint,
     operators_api_blueprint,
+    station_registry_blueprint,
     trainsets_admin_blueprint,
     wagons_admin_blueprint,
 )
@@ -179,7 +179,7 @@ from src.api.timeline import timeline_blueprint
 from src import visualisations as viz_module
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
-from src.consts import DbNames, TripTypes
+from src.consts import TRIP_TYPE_ICONS, DbNames, TripTypes
 from src.global_map import (
     available_bins,
     build_all_async,
@@ -268,7 +268,10 @@ from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
+from src.station_osm import start_station_enricher
 from src.photon import photonInstances, photonRequest, photonRequestSingle
+from src.station_search import PhotonUnavailable, search_stations
+from src.stations import DISPLAY_MODES, seed_stations_from_trip, strip_flag
 from src.routing import forward_routing_core
 from src.gpx_import import (
     GpxIngestError,
@@ -283,6 +286,9 @@ from src.error_reporter import report_error
 
 app = Flask(__name__)
 start_email_listener(app)
+# Fetches OSM tags for stations that entered the registry since the last pass. Same
+# daemon-thread pattern as the email listener; Trainlog runs no scheduler.
+start_station_enricher(app)
 
 app.config['DEBUG'] = True
 Compress(app)
@@ -295,6 +301,9 @@ app.register_blueprint(admin_blueprint, url_prefix="/admin")
 app.register_blueprint(operators_api_blueprint, url_prefix="/api/admin/operators")
 app.register_blueprint(wagons_admin_blueprint, url_prefix="/api/admin/wagons")
 app.register_blueprint(trainsets_admin_blueprint, url_prefix="/api/admin/trainsets")
+app.register_blueprint(
+    station_registry_blueprint, url_prefix="/admin/station-registry"
+)
 app.register_blueprint(vagonweb_blueprint, url_prefix="/api/admin/vagonweb")
 app.register_blueprint(feature_requests_blueprint)
 app.register_blueprint(finance_blueprint)
@@ -834,6 +843,10 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
             station_type=trip_type,
         )
 
+    # Register both endpoints in the station registry, so this station becomes known and
+    # curatable. Lazy seeding: nothing is fetched here, the row is queued for enrichment.
+    seed_stations_from_trip(newTrip, trip_type)
+
     user_id = User.query.filter_by(username=username).first().uid
 
     trip = Trip(
@@ -1297,25 +1310,8 @@ def inject_distinct_types():
     if hasattr(g, "distinct_types_ctx"):
         return {"distinctTypes": g.distinct_types_ctx}
 
-    # 4) Icon mapping
-    icon_map = {
-        "train": "fa-solid fa-train",
-        "tram": "fa-solid fa-train-tram",
-        "metro": "fa-solid fa-train-subway",
-        "air": "fa-solid fa-plane-up",
-        "bus": "fa-solid fa-bus",
-        "ferry": "fa-solid fa-ship",
-        "helicopter": "fa-solid fa-helicopter",
-        "aerialway": "fa-solid fa-cable-car",
-        "walk": "fa-solid fa-person-hiking",
-        "cycle": "fa-solid fa-bicycle",
-        "car": "fa-solid fa-car-side",
-        "scooter": "bi bi-scooter",
-        "funicular": "fa-solid fa-mountain",
-        "rail": "fa-solid fa-dumbbell",
-        "ski": "fa-solid fa-person-skiing",
-        "other": "fa-solid fa-circle-question",
-    }
+    # 4) Icon mapping — shared with the admin panels, see src/consts.py
+    icon_map = TRIP_TYPE_ICONS
 
     # 5) Query, but fail soft if DB is locked (or anything else goes wrong)
     try:
@@ -7109,21 +7105,6 @@ def airportAutocomplete(searchPattern):
     return jsonify(airports)
 
 
-@app.route("/trainStationAutocomplete")
-def trainStationAutocomplete():
-    searchPattern = request.args.get("q")
-    params = {
-        "searchPatternStart": searchPattern + "%",
-        "searchPatternAnywhere": "%" + searchPattern + "%",
-    }
-    with pg_session() as pg:
-        trainStations = [
-            dict(trainStation._mapping)
-            for trainStation in pg.execute(get_train_stations_query(), params).fetchall()
-        ]
-    return jsonify(trainStations)
-
-
 @app.route("/placeAutocomplete")
 def placeAutocomplete():
     nominatim_url = "https://nominatim.openstreetmap.org/search"
@@ -7194,72 +7175,21 @@ def placeAutocomplete():
 
 @app.route("/stationAutocomplete")
 def stationAutocomplete():
-    # Check if this is a reverse geocoding request
-    params = request.args.to_dict(flat=False)
-    is_reverse = params.get("lat") and params.get("lon")
-    endpoint = "/reverse" if is_reverse else "/api"
-
-    params.setdefault("lang", ["en"])
-
-    responseJson = photonRequest(endpoint, params=params, timeout=2)
-
-    if responseJson is None:
+    username = session.get("logged_in")
+    user = User.query.filter_by(username=username).first() if username else None
+    try:
+        features = search_stations(
+            request.args,
+            trip_type=request.args.get("trip_type", "train"),
+            user_id=get_user_id(username) if username else None,
+            # How this user wants stations named; see src/stations.display_name().
+            display=(
+                (user.station_display, user.lang) if user else ("international", None)
+            ),
+        )
+        return jsonify({"features": features})
+    except PhotonUnavailable:
         return "Photon Error", 500
-    
-    homonymy_filter = {}
-    for index, result in enumerate(responseJson["features"]):
-        props = result["properties"]
-        # Special country handling
-        special_countries = ["CN", "FI"]
-        if props.get("countrycode") in special_countries:
-            lon, lat = result["geometry"]["coordinates"]
-            manual_country = getCountryFromCoordinates(lat, lon)
-            props["countrycode"] = manual_country["countryCode"]
-        country_code = props.get("countrycode", "unknown")
-        # Add city name if not similar to name
-        city = props.get("city")
-        if city and stringSimmilarity(city.lower(), props["name"].lower()) < 50:
-            district = props.get("district")
-            locality = props.get("locality")
-            if (
-                (
-                    district
-                    and stringSimmilarity(district.lower(), props["name"].lower()) < 50
-                )
-                or (
-                    locality
-                    and stringSimmilarity(locality.lower(), props["name"].lower()) < 50
-                )
-                or (not district and not locality)
-            ):
-                props["name"] = f"{city} - {props['name']}"
-        # Homonymy by name and country
-        key = (props["name"], country_code)
-        if key in homonymy_filter:
-            homonymy_filter[key]["count"] += 1
-            homonymy_filter[key]["states"].append(props.get("state"))
-        else:
-            homonymy_filter[key] = {"count": 1, "states": [props.get("state")]}
-        responseJson["features"][index]["properties"] = props
-    # Resolve homonyms
-    for (name, country), details in homonymy_filter.items():
-        if details["count"] > 1:
-            unique_states = set(details["states"])
-            if len(unique_states) == details["count"] and None not in unique_states:
-                # Add state to name if states are unique
-                for result in responseJson["features"]:
-                    props = result["properties"]
-                    if props["name"] == name and props.get("countrycode") == country:
-                        props["name"] += f" ({props['state']})"
-            else:
-                # Use alphabetical order suffix
-                suffix = ord("a")
-                for result in responseJson["features"]:
-                    props = result["properties"]
-                    if props["name"] == name and props.get("countrycode") == country:
-                        props["homonymy_order"] = f" ({chr(suffix)})"
-                        suffix += 1
-    return jsonify(responseJson)
 
 @app.route("/u/<username>/getManAndOps/<station_type>", methods=["GET", "POST"])
 @login_required
@@ -9221,6 +9151,12 @@ def user_settings(username):
         params["user_currency"] = request.form["user_currency"]
         params["default_landing"] = request.form["default_landing"]
         params["tileserver"] = request.form["tileserver"]
+        # Whitelisted rather than taken as given: this reaches display_name(), and an
+        # unknown value would silently fall through to the international name forever.
+        station_display = request.form.get("station_display", "international")
+        params["station_display"] = (
+            station_display if station_display in DISPLAY_MODES else "international"
+        )
         params["globe"] = "globe" in request.form
         # Premium-only toggle: only honour it for premium users so a crafted POST
         # can't enable it without premium.
@@ -9242,6 +9178,15 @@ def user_settings(username):
     friend_search_checked = "checked" if user.friend_search else ""
     appear_on_global_checked = "checked" if user.appear_on_global else ""
     colorblind_checked = "checked" if user.colorblind else ""
+    user_station_display = user.station_display
+    # The user's own language, named in their own language, so the "in my own language"
+    # option says which language that actually is.
+    #
+    # The flag is stripped: the language-picker table stores names as "🇯🇵 日本語", and dropped
+    # into the middle of a sentence that flag lands between the option's own icon and the
+    # text, reading as a stray mark rather than as a flag. strip_flag() is the same helper
+    # that keeps flags out of station names.
+    station_lang_name = strip_flag(lang.get(user.lang, {}).get(user.lang, user.lang))
     flight_3d_checked = "checked" if user.flight_3d else ""
     live_tracking_checked = "checked" if user.live_tracking else ""
 
@@ -9261,6 +9206,8 @@ def user_settings(username):
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
+        user_station_display=user_station_display,
+        station_lang_name=station_lang_name,
         user_globe=user.globe,
         discord_id=user.discord_id,
         user_email=user.email,
@@ -11919,149 +11866,6 @@ def deleteUserManualStation(username, id):
     return redirect(url_for("userManualStations", username=username))
 
 
-@app.route("/editStation/<int:id>", methods=["GET", "POST"])
-@admin_required
-def editStation(id):
-    if request.method == "POST":
-        action = request.form.get("action")
-
-        if action == "delete":
-            # Delete the station
-            with pg_session() as pg:
-                pg.execute("DELETE FROM train_stations WHERE id = :id", {"id": id})
-            return redirect(url_for("stations"))
-        else:
-            # Update the station details
-            with pg_session() as pg:
-                pg.execute(
-                    """
-                    UPDATE train_stations
-                    SET name=:name, latin_name=:latin_name, city=:city, latin_city=:latin_city,
-                        country_code=:country_code, latitude=:latitude, longitude=:longitude,
-                        processed_name=:processed_name
-                    WHERE id=:id
-                """,
-                    {
-                        "name": request.form.get("name"),
-                        "latin_name": request.form.get("latin_name"),
-                        "city": request.form.get("city"),
-                        "latin_city": request.form.get("latin_city"),
-                        "country_code": request.form.get("country_code"),
-                        "latitude": request.form.get("latitude"),
-                        "longitude": request.form.get("longitude"),
-                        "processed_name": request.form.get("processed_name"),
-                        "id": id,
-                    },
-                )
-            return redirect(url_for("stations"))
-    else:
-        # Fetch the station details
-        with pg_session() as pg:
-            station = pg.execute(
-                "SELECT * FROM train_stations WHERE id = :id", {"id": id}
-            ).fetchone()
-        return render_template(
-            "admin/edit_station.html",
-            station=station,
-            username=getUser(),
-            nav="bootstrap/navigation.html",
-            isCurrent=has_current_trip(get_user_id()),
-            **lang[session["userinfo"]["lang"]],
-            **session["userinfo"],
-        )
-
-
-@app.route("/stations-data")
-@admin_required
-def stations_data():
-    draw = request.args.get("draw", default=1, type=int)
-    start = request.args.get("start", default=0, type=int)
-    length = request.args.get("length", default=10, type=int)
-    search_value = request.args.get("search[value]", default="", type=str)
-    order_column = request.args.get("order[0][column]", type=int)
-    order_dir = request.args.get("order[0][dir]", type=str)
-
-    columns = [
-        "name",
-        "latin_name",
-        "city",
-        "latin_city",
-        "country_code",
-        "latitude",
-        "longitude",
-        "processed_name",
-    ]
-
-    # Construct the ORDER BY clause
-    order_by_clause = ""
-    if order_column is not None and order_dir in ["asc", "desc"]:
-        order_by_clause = f"ORDER BY {columns[order_column]} {order_dir}"
-
-    # Construct the WHERE clause for search
-    where_clause = ""
-    params = {}
-    if search_value:
-        search_terms = [f"{col} LIKE :search" for col in columns]
-        where_clause = f"WHERE {' OR '.join(search_terms)}"
-        params["search"] = f"%{search_value}%"
-
-    # Count total records
-    with pg_session() as pg:
-        total_records = pg.execute("SELECT COUNT(id) FROM train_stations").scalar()
-
-        # Fetch filtered records
-        query = (
-            f"SELECT * FROM train_stations {where_clause} {order_by_clause} "
-            "LIMIT :limit OFFSET :offset"
-        )
-        stations = pg.execute(
-            query, {**params, "limit": length, "offset": start}
-        ).fetchall()
-
-        # Count filtered records
-        filtered_records = pg.execute(
-            f"SELECT COUNT(id) FROM train_stations {where_clause}", params
-        ).scalar()
-
-    data = []
-    for station in stations:
-        data.append(
-            {
-                "name": station["name"],
-                "latin_name": station["latin_name"],
-                "city": station["city"],
-                "latin_city": station["latin_city"],
-                "country_code": station["country_code"],
-                "latitude": station["latitude"],
-                "longitude": station["longitude"],
-                "processed_name": station["processed_name"],
-                "actions": f'<a href={url_for("editStation", id=station["id"])} class="btn btn-primary">Edit</a>',
-            }
-        )
-
-    response = {
-        "draw": draw,
-        "recordsTotal": total_records,
-        "recordsFiltered": filtered_records,
-        "data": data,
-    }
-
-    return jsonify(response)
-
-
-@app.route("/stations", methods=["GET"])
-@admin_required
-def stations():
-    return render_template(
-        "admin/stations.html",
-        username=getUser(),
-        nav="bootstrap/navigation.html",
-        isCurrent=has_current_trip(get_user_id()),
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-    )
-
-
 @app.route("/editManual/<int:id>", methods=["GET", "POST"])
 @owner_required
 def editManual(id):
@@ -13940,6 +13744,14 @@ def ensure_auth_db_columns():
     if "mcp_token" not in existing:
         authDb.session.execute(
             sqlalchemy.text("ALTER TABLE user ADD COLUMN mcp_token VARCHAR(100) DEFAULT ''")
+        )
+        authDb.session.commit()
+    if "station_display" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN station_display VARCHAR(20)"
+                " NOT NULL DEFAULT 'international'"
+            )
         )
         authDb.session.commit()
     if "live_tracking" not in existing:

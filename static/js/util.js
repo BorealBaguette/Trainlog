@@ -692,7 +692,13 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
         url: url,
         dataType: "json",
         data: {
-          q: request.term
+          q: request.term,
+          // Which pool of the station registry to search. A label only resolves against
+          // stations of its own trip type — the bus stop at Amsterdam Centraal is not the
+          // train station — so without this the endpoint falls back to "train" and a bus
+          // form would be offered, and would register, train stations.
+          // Pages set window.TRIPLOG_TRIP_TYPE; omitted when they have not.
+          trip_type: window.TRIPLOG_TRIP_TYPE || undefined
         },
         success: function (data) {
           var stationList = [];
@@ -700,9 +706,32 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
             flag = getFlagEmoji(item.properties.countrycode);
             label = `${flag} ${item.properties.name}`;
             disambiguation = item.properties.homonymy_order ? [item.properties.street, item.properties.locality, item.properties.district, item.properties.city].filter(e => (e)).join(", ") : null;
+            // A registry hit is offered under the spelling that was searched for, so someone
+            // typing Finnish is answered in Finnish rather than corrected to the Swedish
+            // name. Show the registry's own name beside it, so it stays clear which station
+            // this is — the two group together whichever one is picked.
+            if (item.properties.canonical_name && item.properties.canonical_name !== item.properties.name) {
+              disambiguation = item.properties.canonical_name + (disambiguation ? " · " + disambiguation : "");
+            }
             displayLabel = label + (item.properties.homonymy_order ? item.properties.homonymy_order : "");
             stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation });
-            globalStationDict[displayLabel] = [item.geometry.coordinates.reverse(), label];
+            // [coords, label, osmRef]. The third element is new: the OSM identity of the
+            // place, which every Photon result carries and which used to be dropped here —
+            // so the server only ever learned what a station was *called*, never which
+            // station it was. It is appended rather than inserted so that every existing
+            // reader of [0] and [1] is untouched; manual stations simply have no [2].
+            globalStationDict[displayLabel] = [
+              item.geometry.coordinates.reverse(),
+              label,
+              (item.properties.osm_id !== undefined && item.properties.osm_id !== null)
+                ? {
+                    osm_type: item.properties.osm_type,
+                    osm_id: item.properties.osm_id,
+                    station_id: item.properties.station_id || null,
+                    name_local: item.properties.name_local || null
+                  }
+                : null
+            ];
           });
           // Combine manual stations and fetched stations
           var combinedList = manStationList.concat(stationList);

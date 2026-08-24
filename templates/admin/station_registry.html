@@ -1,0 +1,1075 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+
+{#
+  The station registry admin.
+
+  Built around the unresolved queue rather than around a table of stations, because that is
+  where the work is and where the leverage is: the queue is ordered by how many trip endpoints
+  each label costs, so the top row is always the most valuable thing to fix. Registering one
+  well-used label resolves thousands of endpoints at once.
+
+  Nothing here edits a trip. `trips.origin_station` remains the free text the user typed; only
+  the resolution changes, and every action can be undone by another.
+#}
+
+<style>
+  .registry-stat { border: 1px solid #dee2e6; border-radius: .5rem; padding: .75rem 1rem; }
+  .registry-stat .value { font-size: 1.5rem; font-weight: 600; line-height: 1.1; }
+  .registry-stat .label { color: #6c757d; font-size: .8rem; }
+  .queue-row { cursor: pointer; }
+  .queue-row:hover { background: #f8f9fa; }
+  .queue-count { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .alias-badge { font-weight: 400; }
+  /* The matched spelling is the reason a result is in the list; it needs to be readable,
+     not decorative. */
+  .matched-alias { color: #6c757d; font-size: .85em; }
+  .result-flag { margin-right: .15rem; }
+  .source-links { margin-left: .4rem; }
+  .source-link {
+    font-size: .7em; text-transform: uppercase; letter-spacing: .02em;
+    color: #6c757d; text-decoration: none; border: 1px solid #dee2e6;
+    border-radius: .25rem; padding: 0 .25rem; margin-right: .2rem; white-space: nowrap;
+  }
+  .source-link:hover { color: #0d6efd; border-color: #0d6efd; }
+  /* Tabular figures so the distances line up down the list and can be compared by eye. */
+  .result-distance { font-size: .85em; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .resolve-where { line-height: 1.4; }
+  .result-heading { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em;
+                    color: #6c757d; font-weight: 600; margin: .75rem 0 .25rem; }
+  #resolveResults > .result-heading:first-child { margin-top: 0; }
+  .station-name-cell { max-width: 22rem; }
+  .spinner-inline { width: 1rem; height: 1rem; border-width: .15em; }
+  #resolveResults .list-group-item { cursor: pointer; }
+  .mono { font-variant-numeric: tabular-nums; }
+  /* The content is a handful of narrow numeric columns and one name; stretched across a wide
+     monitor the eye has to travel the full width to pair a count with its label. */
+  .registry-page { max-width: 1100px; }
+  .registry-table th { font-weight: 600; font-size: .8rem; }
+  .registry-table td, .registry-table th { padding-top: .35rem; padding-bottom: .35rem; }
+  .registry-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+  /* The body font is FlagEmojis-first, so the glyphs render without extra work; bumped a
+     little because a flag at body size next to a station name reads as noise. */
+  /* Inline before the name, matching the queue, where the flag is part of the stored label.
+     margin-right rather than a gap so it sits with the name as one unit. */
+  .station-flag { font-size: 1.15rem; line-height: 1; margin-right: .35rem; }
+  /* Busy state, done in CSS so the element's own markup is never rebuilt. Replacing
+     innerHTML with a spinner plus .text() collapsed the resolve list's flex rows and ran the
+     name into its badge ("Schiphol Airportnew"). */
+  .is-busy { pointer-events: none; opacity: .6; }
+  /* While one result is being registered, none of the others may be clicked: a second
+     registration of the same label attaches it to a second station and makes it ambiguous. */
+  .is-registering .list-group-item { pointer-events: none; opacity: .5; }
+
+  /* Tables: quieter chrome, so the eye lands on names and numbers rather than on rules. */
+  .registry-table { --bs-table-hover-bg: #f1f5f9; }
+  /* style2.css sets `th { background-color: #207cca !important; color: white }` globally, so
+     every table on the site has a blue header. Restyling only the colour here produced grey
+     on blue: the colour override won on specificity, the background could not, since the
+     site's rule is !important. Keep the site's header and only adjust what does not fight
+     it — consistency with the other admin tables is worth more than a lighter header. */
+  .registry-table thead th { letter-spacing: .02em; white-space: nowrap; }
+  .registry-table thead th.num { padding-right: .75rem; }
+  .registry-table tbody td { border-top: 1px solid #f1f3f5; vertical-align: middle; }
+  .registry-table tbody tr:last-child td { border-bottom: 1px solid #f1f3f5; }
+  .registry-table .fw-medium { font-weight: 500; }
+  /* The busiest rows are the ones worth doing; let the count carry that weight. */
+  .registry-table .queue-count { color: #212529; }
+  .registry-table tbody tr:hover .station-open { border-color: #0d6efd; color: #0d6efd; }
+
+  .mode-cell { display: inline-flex; align-items: center; gap: .4rem; color: #6c757d;
+               font-size: .85rem; white-space: nowrap; }
+  .mode-cell i { width: 1rem; text-align: center; color: #495057; }
+  /* The word is redundant once the icons are learned, and it costs the label column width
+     on a narrow screen — so it goes first when space is tight. */
+  @media (max-width: 720px) { .mode-name { display: none; } }
+
+  .table-caption { color: #6c757d; font-size: .8rem; }
+  /* The merge field takes a station id, so the id has to be readable somewhere. It is shown
+     in the list and in this modal's title rather than only as a data- attribute. */
+  .station-id { color: #adb5bd; font-size: .8rem; font-weight: 400;
+                font-variant-numeric: tabular-nums; }
+  .merge-matches { max-width: 26rem; }
+  .merge-matches .merge-match { display: block; width: 100%; text-align: left;
+      border: 1px solid #dee2e6; border-top: none; background: #fff; padding: .3rem .6rem;
+      font-size: .85rem; cursor: pointer; }
+  .merge-matches .merge-match:hover { background: #f1f5f9; }
+  .merge-matches .merge-match .mm-id { color: #adb5bd; font-variant-numeric: tabular-nums; }
+  .is-busy::after {
+    content: ""; display: inline-block; width: .9rem; height: .9rem; margin-left: .5rem;
+    vertical-align: -.1em; border: .15em solid currentColor; border-right-color: transparent;
+    border-radius: 50%; animation: spinner-border .75s linear infinite;
+  }
+</style>
+
+<div class="container-fluid registry-page mt-3 mb-5">
+
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+    <h3 class="mb-0"><i class="fa-solid fa-globe"></i> Station registry</h3>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-secondary btn-sm" id="enrichQueueBtn">
+        <i class="fa-solid fa-cloud-arrow-down"></i> Enrich queue
+      </button>
+    </div>
+  </div>
+
+  <div class="row g-2 mb-4" id="statsRow">
+    <div class="col-6 col-md-2"><div class="registry-stat"><div class="value" id="statStations">–</div><div class="label">stations</div></div></div>
+    <div class="col-6 col-md-2"><div class="registry-stat"><div class="value" id="statAliases">–</div><div class="label">aliases</div></div></div>
+    <div class="col-6 col-md-2"><div class="registry-stat"><div class="value" id="statResolved">–</div><div class="label">uses resolved</div></div></div>
+    <div class="col-6 col-md-2"><div class="registry-stat"><div class="value" id="statPct">–</div><div class="label">of all uses</div></div></div>
+    <div class="col-6 col-md-2"><div class="registry-stat"><div class="value" id="statUnresolved">–</div><div class="label">unresolved labels</div></div></div>
+    <div class="col-6 col-md-2"><div class="registry-stat"><div class="value" id="statQueue">–</div><div class="label">awaiting enrichment</div></div></div>
+  </div>
+
+  <ul class="nav nav-tabs mb-3" role="tablist">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabQueue" type="button">
+      Unresolved queue</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabStations" type="button">
+      Registered stations</button></li>
+  </ul>
+
+  <div class="tab-content">
+
+    {# ── The work queue ─────────────────────────────────────────────────────────────── #}
+    <div class="tab-pane fade show active" id="tabQueue">
+      <p class="text-muted small">
+        Labels on trips that resolve to no station, most costly first. Click one to find the
+        real place and attach it — every trip using that spelling resolves at once.
+      </p>
+      <div class="input-group input-group-sm mb-2" style="max-width:42rem">
+        <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+        <input type="text" class="form-control" id="queueSearch" placeholder="search unresolved labels…">
+        <select class="form-select flex-grow-0" style="width:13rem" id="queueMode"></select>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <div class="table-caption" id="queueCount"></div>
+        <div class="btn-group btn-group-sm" role="group">
+          <button class="btn btn-outline-secondary" id="queuePrev" disabled>&larr;</button>
+          <button class="btn btn-outline-secondary" id="queueNext" disabled>&rarr;</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle registry-table">
+          {# Mode and label lead: they are what an admin reads to decide, and the counts are
+             only there to justify the ordering. The mode doubles as the resolution pool, so
+             it decides which stations are even candidates — resolving "Amsterdam Centraal"
+             means something different for the tram stop than the train station. #}
+          <thead><tr>
+            <th style="width:5.5rem">Mode</th>
+            <th>Label</th>
+            <th class="num" style="width:5.5rem">Uses</th>
+            <th class="num" style="width:5rem">Users</th>
+          </tr></thead>
+          <tbody id="queueBody">
+            <tr><td colspan="4" class="text-muted">loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    {# ── Registered stations ────────────────────────────────────────────────────────── #}
+    <div class="tab-pane fade" id="tabStations">
+      <div class="input-group input-group-sm mb-2" style="max-width:42rem">
+        <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
+        <input type="text" class="form-control" id="stationSearch" placeholder="search any spelling…">
+        <select class="form-select flex-grow-0" style="width:13rem" id="stationsMode"></select>
+      </div>
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <div class="table-caption" id="stationsCount"></div>
+        <div class="btn-group btn-group-sm" role="group">
+          <button class="btn btn-outline-secondary" id="stationsPrev" disabled>&larr;</button>
+          <button class="btn btn-outline-secondary" id="stationsNext" disabled>&rarr;</button>
+        </div>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-hover align-middle registry-table">
+          {# Same ordering as the queue, so the two tables read alike. The mode is also the
+             resolution pool — Amsterdam Centraal's bus stop, tram stop, train station and
+             metro station are four separate places and four separate rows. See
+             station_type_bucket() in migration 0058. #}
+          <thead><tr>
+            <th style="width:4.5rem">ID</th>
+            <th style="width:5.5rem">Mode</th>
+            <th>Name</th>
+            <th class="num" style="width:5.5rem">Uses</th>
+            <th class="num" style="width:5rem">Aliases</th>
+            <th style="width:8rem">Identity</th>
+            <th style="width:4.5rem"></th>
+          </tr></thead>
+          <tbody id="stationsBody">
+            <tr><td colspan="6" class="text-muted">loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Resolve-a-label modal ────────────────────────────────────────────────────────────── #}
+<div class="modal fade" id="resolveModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Resolve <span id="resolveLabel" class="fw-normal"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small mb-2">
+          Used <span id="resolveCount"></span> times. Search for the real place; picking one
+          registers it and attaches this label to it.
+        </p>
+        {# Where the trips using this label actually begin or end. The label alone cannot tell
+           two stations of the same name apart — a search for "Roermond" returns two identical
+           rows — so each result is scored against this and the far ones are marked. #}
+        <div id="resolveWhere" class="resolve-where small mb-2"></div>
+        <div class="input-group input-group-sm mb-3">
+          <input type="text" class="form-control" id="resolveSearch" placeholder="search stations…">
+          {# Fixed, not chosen: the label belongs to one mode and can only resolve within it. #}
+          <span class="input-group-text" id="resolveType"
+                title="The mode this label is used in. A label only resolves against stations of its own mode, so this is fixed."></span>
+        </div>
+        {# Two ways of asking the same question. The text search answers "what is called this?",
+           which is what the label gives us; the reverse search answers "what is actually at the
+           place these trips end?", which needs no name at all and so cannot be misled by one. #}
+        <div id="resolveResults">
+          {# When both searches land on one object and nothing else is near it, there is no
+             choice left to make — so stop presenting one. The lists stay a click away. #}
+          <div id="agreedSection" hidden>
+            <div class="result-heading text-success">
+              <i class="fa-solid fa-circle-check"></i> Both searches agree
+            </div>
+            <div id="agreedResult" class="list-group result-list"></div>
+            <button type="button" class="btn btn-link btn-sm px-0" id="showAllCandidates">
+              show the other candidates
+            </button>
+          </div>
+          <div id="allCandidates">
+            <div class="result-heading">By name</div>
+            <div id="searchResults" class="list-group result-list"></div>
+            <div id="nearbySection" hidden>
+              <div class="result-heading">
+                At the trips' own location
+                <span class="text-muted fw-normal" id="nearbyRadius"></span>
+              </div>
+              <div id="nearbyResults" class="list-group result-list"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+{# ── Station detail modal ─────────────────────────────────────────────────────────────── #}
+<div class="modal fade" id="stationModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="stationTitle"></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body" id="stationBody"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const BASE = "{{ url_for('station_registry.station_registry') }}";
+const fmt = n => (n === null || n === undefined) ? "–" : Number(n).toLocaleString();
+const esc = s => $("<div>").text(s === null || s === undefined ? "" : s).html();
+
+// getFlagEmoji is global from static/js/util.js, which layout.html already loads. It throws
+// on anything that is not two letters, and country_code is NULL for a station registered
+// before enrichment reached it — so guard rather than let one bad row blank the table.
+// The navbar's own glyphs, handed over by the route so there is one definition (see
+// src/consts.TRIP_TYPE_ICONS) rather than a second copy drifting in here.
+const TRIP_ICONS = {{ trip_type_icons | tojson }};
+
+// Mode cell: icon plus name. The icon is what the eye scans for when skimming a long queue;
+// the word is what makes it unambiguous between, say, tram and metro.
+function modeCell(type){
+  const icon = TRIP_ICONS[type] || TRIP_ICONS["other"];
+  return `<span class="mode-cell" title="${esc(type)}"><i class="${icon}"></i>`
+       + `<span class="mode-name">${esc(type)}</span></span>`;
+}
+
+const flag = cc => {
+  if(!cc || cc.length !== 2 || !/^[a-zA-Z]{2}$/.test(cc)) return `<span class="text-muted">–</span>`;
+  try { return getFlagEmoji(cc); } catch(e) { return esc(cc); }
+};
+
+let currentLabel = null, currentMode = null;
+// The label's own position, from its trips' path endpoints, and the last search's features.
+// Kept apart because they arrive from two requests and either can land first.
+let currentLocation = null, lastFeatures = null, nearbyFeatures = null;
+
+// Bootstrap stores one instance per element, and `new bootstrap.Modal(el)` overwrites it
+// rather than reusing it — the displaced instance keeps its backdrop, which then has nothing
+// left to remove it. openStation() re-renders the modal after every save, add and enrich, so
+// each of those actions was stacking an orphaned overlay that survived the close.
+//
+// getOrCreateInstance reuses the existing one, and re-showing an already-open modal is a
+// no-op, so re-rendering in place stays free.
+function showModal(selector){
+  const el = document.querySelector(selector);
+  bootstrap.Modal.getOrCreateInstance(el).show();
+}
+
+function hideModal(selector){
+  const el = document.querySelector(selector);
+  const instance = bootstrap.Modal.getInstance(el);
+  if(instance) instance.hide();
+}
+
+function loadStats(){
+  return $.getJSON(BASE + "/stats", d => {
+    $("#statStations").text(fmt(d.stations));
+    $("#statAliases").text(fmt(d.aliases));
+    $("#statResolved").text(fmt(d.resolved));
+    $("#statPct").text(d.endpoints ? (100*d.resolved/d.endpoints).toFixed(1) + "%" : "–");
+    $("#statUnresolved").text(fmt(d.unresolved_labels));
+    $("#statQueue").text(fmt(d.awaiting_enrichment));
+  });
+}
+
+// Rows per page. Both tables are ordered by how much a row costs, so page one is the work
+// worth doing; the pages behind it exist so nothing is unreachable, not because anyone is
+// expected to walk 700 of them.
+const PAGE_SIZE = 200;
+let queueOffset = 0, stationsOffset = 0;
+
+function loadQueue(){
+  const q = encodeURIComponent($("#queueSearch").val() || "");
+  const m = encodeURIComponent($("#queueMode").val() || "");
+  return $.getJSON(`${BASE}/unresolved?limit=${PAGE_SIZE}&offset=${queueOffset}&q=${q}&mode=${m}`, d => {
+    const rows = d.labels.map(r => `
+      <tr class="queue-row" data-label="${esc(r.raw_name)}" data-count="${r.occurrences}"
+          data-type="${esc(r.station_type)}">
+        <td>${modeCell(r.station_type)}</td>
+        <td class="fw-medium">${esc(r.raw_name)}</td>
+        <td class="queue-count num">${fmt(r.occurrences)}</td>
+        <td class="text-muted mono num">${fmt(r.users)}</td>
+      </tr>`).join("");
+    $("#queueBody").html(rows || `<tr><td colspan="4" class="text-muted">nothing unresolved</td></tr>`);
+    showingCount("#queueCount", d.labels.length, d.total, queueOffset, "unresolved spelling");
+    pager("#queuePrev", "#queueNext", queueOffset, d.labels.length, d.total);
+  });
+}
+
+// One place that reloads everything, so an action never has to remember which panels its
+// change touched — resolving a label moves the queue, the station list and the totals at once.
+// Both tables return the busiest few hundred rows. Saying so — and saying how many there
+// are in total — is the difference between "these are the ones worth doing" and an admin
+// assuming a spelling is absent because it is not on this page. Search reaches the rest.
+function showingCount(selector, shown, total, offset, noun){
+  if(total === undefined || total === null){ $(selector).text(""); return; }
+  const plural = total === 1 ? noun : noun + "s";
+  if(shown === 0){ $(selector).text(`No ${plural}.`); return; }
+  if(shown >= total && offset === 0){ $(selector).text(`${fmt(total)} ${plural}.`); return; }
+  $(selector).text(
+    `${fmt(offset + 1)}–${fmt(offset + shown)} of ${fmt(total)} ${plural}, most used first.`);
+}
+
+// Next is disabled on the last page rather than left to fetch an empty one, so the buttons
+// say where the end is instead of only revealing it after a click.
+function pager(prevSel, nextSel, offset, shown, total){
+  $(prevSel).prop("disabled", offset <= 0);
+  $(nextSel).prop("disabled", offset + shown >= (total || 0));
+}
+
+// The filter is built from the data, and carries each mode's numbers. "bus (45,639)" next to
+// "train (35,852)" is the fastest way to see that bus is the largest slice of the queue by
+// row count while being a fifth of train by use — which is exactly the sort of thing the
+// list of modes alone would hide.
+function loadModes(){
+  return $.getJSON(BASE + "/modes", d => {
+    const queueOpts = [`<option value="">All modes</option>`].concat(
+      d.modes.filter(m => m.unresolved > 0).map(m =>
+        `<option value="${esc(m.station_type)}">${esc(m.station_type)} (${fmt(m.unresolved)})</option>`));
+    const stationOpts = [`<option value="">All modes</option>`].concat(
+      d.modes.filter(m => m.stations > 0).map(m =>
+        `<option value="${esc(m.station_type)}">${esc(m.station_type)} (${fmt(m.stations)})</option>`));
+    // Keep the current selection across a refresh, or changing anything would reset the view.
+    const q = $("#queueMode").val(), st = $("#stationsMode").val();
+    $("#queueMode").html(queueOpts.join("")).val(q || "");
+    $("#stationsMode").html(stationOpts.join("")).val(st || "");
+  });
+}
+
+function refreshAll(){ return $.when(loadStats(), loadModes(), loadQueue(), loadStations()); }
+
+let queueSearchTimer = null;
+$("#queueSearch").on("input", () => {
+  // A new search starts at the top; keeping the offset would land on a page that may not
+  // exist for the new filter and show nothing.
+  queueOffset = 0;
+  clearTimeout(queueSearchTimer); queueSearchTimer = setTimeout(loadQueue, 300);
+});
+
+$("#queueMode").on("change", () => { queueOffset = 0; loadQueue(); });
+$("#stationsMode").on("change", () => { stationsOffset = 0; loadStations(); });
+
+$("#queuePrev").on("click", () => { queueOffset = Math.max(0, queueOffset - PAGE_SIZE); loadQueue(); });
+$("#queueNext").on("click", () => { queueOffset += PAGE_SIZE; loadQueue(); });
+$("#stationsPrev").on("click", () => { stationsOffset = Math.max(0, stationsOffset - PAGE_SIZE); loadStations(); });
+$("#stationsNext").on("click", () => { stationsOffset += PAGE_SIZE; loadStations(); });
+
+function loadStations(){
+  const q = encodeURIComponent($("#stationSearch").val() || "");
+  const m = encodeURIComponent($("#stationsMode").val() || "");
+  return $.getJSON(`${BASE}/stations?limit=${PAGE_SIZE}&offset=${stationsOffset}&q=${q}&mode=${m}`, d => {
+    const rows = d.stations.map(s => {
+      // wikidata is the identity anchor; showing whether it is present tells the admin at a
+      // glance whether this row can be merged and deduplicated reliably.
+      const identity = s.wikidata
+        ? `<span class="badge bg-success">${esc(s.wikidata)}</span>`
+        : (s.uic_ref
+            ? `<span class="badge bg-info text-dark">UIC ${esc(s.uic_ref)}</span>`
+            : `<span class="badge bg-light text-dark border">none</span>`);
+      const superseded = s.superseded_by
+        ? ` <span class="badge bg-secondary">→ ${s.superseded_by}</span>` : "";
+      const curated = s.curated_name
+        ? ` <i class="fa-solid fa-pen text-primary" title="curated"></i>` : "";
+      return `<tr data-station="${s.station_id}" class="queue-row">
+        <td class="mono text-muted small">#${s.station_id}</td>
+        <td>${modeCell(s.station_type)}</td>
+        <td class="station-name-cell fw-medium">
+          <span class="station-flag" title="${esc(s.country_code || "")}">${flag(s.country_code)}</span>
+          ${esc(s.name)}${curated}${superseded}
+        </td>
+        <td class="queue-count num">${fmt(s.endpoints)}</td>
+        <td class="mono num">${fmt(s.aliases)}</td>
+        <td>${identity}</td>
+        <td class="text-end"><button class="btn btn-sm btn-outline-secondary station-open">open</button></td>
+      </tr>`;
+    }).join("");
+    $("#stationsBody").html(rows || `<tr><td colspan="7" class="text-muted">no stations</td></tr>`);
+    showingCount("#stationsCount", d.stations.length, d.total, stationsOffset, "station");
+    pager("#stationsPrev", "#stationsNext", stationsOffset, d.stations.length, d.total);
+  });
+}
+
+// ── Queue → resolve ──────────────────────────────────────────────────────────────────
+$(document).on("click", ".queue-row[data-label]", function(){
+  currentLabel = $(this).data("label");
+  currentMode = $(this).data("type");
+  $("#resolveLabel").text(currentLabel);
+  $("#resolveCount").text(fmt($(this).data("count")));
+  $("#resolveType").html(`${modeCell(currentMode)}`);
+  $("#searchResults").empty();
+  $("#nearbyResults").empty();
+  $("#nearbySection").prop("hidden", true);
+  // Drop the previous label's results, or the location request for this one can land first
+  // and paint them with distances measured from somewhere they have nothing to do with.
+  lastFeatures = nearbyFeatures = null;
+  $("#agreedSection").prop("hidden", true);
+  $("#allCandidates").prop("hidden", false);
+  $("#showAllCandidates").prop("hidden", false);
+  // The label itself is the obvious first search; the flag is stripped because it is not
+  // part of any station's name.
+  $("#resolveSearch").val(String(currentLabel).replace(/^[\u{1F1E6}-\u{1F1FF}]{2}\s*/u, ""));
+  showModal("#resolveModal");
+  loadLabelLocation();
+  runSearch();
+});
+
+// Where this label's trips actually are, from their path endpoints. Arrives independently of
+// the search, so both it and runSearch() call renderResults() and whichever lands second
+// draws the distances.
+function loadLabelLocation(){
+  currentLocation = null;
+  $("#resolveWhere").html(`<span class="text-muted">locating from trip paths…</span>`);
+  const forLabel = currentLabel;
+  $.getJSON(BASE + "/label-location", { label: currentLabel, mode: currentMode })
+    .done(d => {
+      // The admin may have closed this and opened another while the request was in flight.
+      if(forLabel !== currentLabel) return;
+      currentLocation = d.location;
+      renderWhere();
+      renderResults();
+      loadNearby();
+    })
+    .fail(() => {
+      if(forLabel !== currentLabel) return;
+      $("#resolveWhere").html(`<span class="text-muted">could not locate this label</span>`);
+    });
+}
+
+function renderWhere(){
+  const loc = currentLocation;
+  if(!loc){
+    // No path, so nothing to check against: say so rather than leave the line blank, or the
+    // absence of distances on the results below looks like a bug.
+    $("#resolveWhere").html(
+      `<span class="text-muted">no trip paths for this label — distances unavailable</span>`);
+    return;
+  }
+  // A wide spread means the spelling is used for more than one place, so the centre is not a
+  // real station and the distances below are measuring against a point nobody went to.
+  const wide = loc.spread_m !== null && loc.spread_m > SAME_PLACE_M;
+  const spread = loc.spread_m === null ? "" :
+    ` · spread ${dist(loc.spread_m)}${wide ? " — this label may name more than one place" : ""}`;
+  $("#resolveWhere").html(
+    `<span class="${wide ? "text-danger" : "text-muted"}">`
+    + `<i class="fa-solid fa-location-crosshairs"></i> trips end near `
+    + `<a href="https://www.openstreetmap.org/?mlat=${loc.lat}&mlon=${loc.lng}#map=14/${loc.lat}/${loc.lng}"`
+    + ` target="_blank" rel="noopener">${loc.lat.toFixed(4)}, ${loc.lng.toFixed(4)}</a>`
+    + ` · ${fmt(loc.points)} path endpoints${spread}</span>`);
+}
+
+// Metres to something readable. Below a kilometre the exact figure matters (is this the same
+// station or the bus stop outside it), above it does not.
+function dist(m){
+  if(m === null || m === undefined) return "";
+  if(m < 1000) return `${Math.round(m)} m`;
+  if(m < 10000) return `${(m/1000).toFixed(1)} km`;
+  return `${Math.round(m/1000).toLocaleString()} km`;
+}
+
+// Distances that mean something for a public transport stop, which is a small object: its
+// platforms, entrances and the building itself all sit within a couple of hundred metres, and
+// the next stop down the line is usually under two kilometres away. Anything past a kilometre
+// is a different stop, not a different view of this one — even when it carries the same name.
+const SAME_STATION_M = 250;   // the station and its own parts
+const SAME_PLACE_M   = 1000;  // still plausibly this stop; beyond it, it is another one
+function distanceVerdict(m){
+  if(m <= SAME_STATION_M) return { cls: "text-success", icon: "fa-circle-check" };
+  if(m <= SAME_PLACE_M)   return { cls: "text-warning", icon: "fa-circle-exclamation" };
+  return { cls: "text-danger", icon: "fa-triangle-exclamation" };
+}
+
+let searchTimer = null;
+$("#resolveSearch").on("input", () => {
+  clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 300);
+});
+
+function runSearch(){
+  const q = $("#resolveSearch").val();
+  if(!q || q.length < 2){ $("#searchResults").empty(); return; }
+  $("#searchResults").html(`<div class="text-muted p-2"><span class="spinner-border spinner-inline"></span> searching…</div>`);
+  // The trip form's own endpoint, so the admin sees exactly the candidates a user would.
+  $.getJSON("/stationAutocomplete", { q: q, limit: 10, trip_type: currentMode })
+    .done(d => { lastFeatures = d.features || []; renderResults(); renderAgreement(); })
+    .fail(() => { lastFeatures = null;
+                  $("#searchResults").html(`<div class="text-danger p-2">search unavailable</div>`); });
+}
+
+// Where a candidate came from, so it can be opened and checked rather than taken on trust.
+// OSM object when there is one; otherwise a pin on the coordinates, which is all a result
+// without an object has. Wikidata is shown alongside when the registry knows it.
+function sourceLinks(p, c){
+  const OSM_TYPES = { N: "node", W: "way", R: "relation" };
+  const out = [];
+  const osmType = OSM_TYPES[p.osm_type];
+  if(osmType && p.osm_id){
+    out.push(`<a href="https://www.openstreetmap.org/${osmType}/${encodeURIComponent(p.osm_id)}"
+                 target="_blank" rel="noopener" class="source-link"
+                 title="${esc(osmType)} ${esc(p.osm_id)} on OpenStreetMap">OSM</a>`);
+  } else if(c && c.length >= 2){
+    out.push(`<a href="https://www.openstreetmap.org/?mlat=${c[1]}&mlon=${c[0]}#map=17/${c[1]}/${c[0]}"
+                 target="_blank" rel="noopener" class="source-link"
+                 title="no OSM object on this result — showing its coordinates">map</a>`);
+  }
+  if(p.wikidata){
+    out.push(`<a href="https://www.wikidata.org/wiki/${encodeURIComponent(p.wikidata)}"
+                 target="_blank" rel="noopener" class="source-link"
+                 title="${esc(p.wikidata)} on Wikidata">${esc(p.wikidata)}</a>`);
+  }
+  return out.length ? `<span class="source-links">${out.join("")}</span>` : "";
+}
+
+function resultRow(f){
+  const p = f.properties, c = f.geometry.coordinates;
+  const alias = p.matched_alias && p.matched_alias !== p.name
+    ? ` <span class="matched-alias">matched “${esc(p.matched_alias)}”</span>` : "";
+  const badge = p.from_registry
+    ? `<span class="badge bg-primary">registry</span>`
+    : `<span class="badge bg-light text-dark border">new</span>`;
+
+  // The country, which is what separates two results with identical names more often than
+  // anything else, and was the missing half of the screenshot that prompted this.
+  const cc = p.countrycode
+    ? `<span class="result-flag" title="${esc(p.countrycode)}">${flag(p.countrycode)}</span> ` : "";
+
+  let far = "", metres = null;
+  if(currentLocation && c && c.length >= 2){
+    metres = getDistanceFromLocations(
+      { lat: currentLocation.lat, lng: currentLocation.lng }, { lat: c[1], lng: c[0] });
+    const v = distanceVerdict(metres);
+    far = `<span class="result-distance ${v.cls}" title="distance from where this label's trips begin or end">`
+        + `<i class="fa-solid ${v.icon}"></i> ${dist(metres)}</span>`;
+  }
+
+  // A div, not a button: the source links below are anchors, and an anchor inside a button
+  // is invalid HTML that browsers handle inconsistently. busy() works on any element.
+  return `<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+      role="button" tabindex="0"
+      data-distance="${metres === null ? "" : Math.round(metres)}"
+      data-payload='${esc(JSON.stringify({
+        name: p.name, name_local: p.name_local, country_code: p.countrycode,
+        osm_type: p.osm_type, osm_id: p.osm_id, lng: c[0], lat: c[1]
+      }))}'>
+      <span>${cc}${esc(p.name)}${alias}${sourceLinks(p, c)}</span>
+      <span class="d-flex align-items-center gap-2">${far}${badge}</span></div>`;
+}
+
+// Nearest first. Results with no coordinates sort last rather than to the front on a NaN.
+function byDistance(features){
+  if(!currentLocation) return features;
+  return features
+    .map(f => {
+      const c = f.geometry && f.geometry.coordinates;
+      return { f, d: (c && c.length >= 2)
+        ? getDistanceFromLocations({ lat: currentLocation.lat, lng: currentLocation.lng },
+                                   { lat: c[1], lng: c[0] })
+        : Infinity };
+    })
+    .sort((a, b) => a.d - b.d)
+    .map(x => x.f);
+}
+
+// What is actually at the label's own location, asked without using its name. Photon's
+// /reverse behind the same endpoint, so this inherits the mode's osm_tag filter and returns
+// stops rather than whatever polygon happens to cover the point.
+const NEARBY_RADIUS_KM = SAME_PLACE_M / 1000;
+function loadNearby(){
+  if(!currentLocation){ $("#nearbySection").prop("hidden", true); return; }
+  $("#nearbyRadius").text(`· within ${NEARBY_RADIUS_KM} km`);
+  $("#nearbySection").prop("hidden", false);
+  $("#nearbyResults").html(`<div class="text-muted p-2"><span class="spinner-border spinner-inline"></span> looking…</div>`);
+  const forLabel = currentLabel;
+  $.getJSON("/stationAutocomplete", {
+      lat: currentLocation.lat, lon: currentLocation.lng,
+      radius: NEARBY_RADIUS_KM, limit: 10, trip_type: currentMode })
+    .done(d => {
+      if(forLabel !== currentLabel) return;
+      nearbyFeatures = d.features || [];
+      const items = byDistance(nearbyFeatures).map(resultRow).join("");
+      $("#nearbyResults").html(items || `<div class="text-muted p-2">nothing mapped within ${NEARBY_RADIUS_KM} km</div>`);
+      renderAgreement();
+    })
+    .fail(() => {
+      if(forLabel !== currentLabel) return;
+      nearbyFeatures = null;
+      $("#nearbyResults").html(`<div class="text-danger p-2">reverse search unavailable</div>`);
+    });
+}
+
+// Close enough that no other object could plausibly be the same stop. Well inside
+// SAME_STATION_M, because this decides on the admin's behalf rather than advising them.
+const CONFIDENT_M = 50;
+const featureKey = f => `${f.properties.osm_type}/${f.properties.osm_id}`;
+
+// The one answer both searches found, if there is exactly one. Requires agreement on the same
+// OSM object *and* that nothing else sits within CONFIDENT_M — two objects that close are a
+// choice, and a choice has to be shown rather than made here.
+function agreedFeature(){
+  if(!currentLocation || !lastFeatures || !nearbyFeatures) return null;
+
+  const near = f => {
+    const c = f.geometry && f.geometry.coordinates;
+    if(!c || c.length < 2 || !f.properties.osm_id) return null;
+    return getDistanceFromLocations({ lat: currentLocation.lat, lng: currentLocation.lng },
+                                    { lat: c[1], lng: c[0] });
+  };
+
+  const close = new Map();
+  for(const f of lastFeatures.concat(nearbyFeatures)){
+    const d = near(f);
+    if(d !== null && d <= CONFIDENT_M) close.set(featureKey(f), f);
+  }
+  if(close.size !== 1) return null;
+
+  const [key, feature] = [...close.entries()][0];
+  const inBoth = lastFeatures.some(f => featureKey(f) === key)
+              && nearbyFeatures.some(f => featureKey(f) === key);
+  return inBoth ? feature : null;
+}
+
+function renderAgreement(){
+  const agreed = agreedFeature();
+  $("#agreedSection").prop("hidden", !agreed);
+  if(!agreed){ $("#allCandidates").prop("hidden", false); return; }
+  $("#agreedResult").html(resultRow(agreed));
+  $("#allCandidates").prop("hidden", true);
+}
+
+$(document).on("click", "#showAllCandidates", function(){
+  $("#allCandidates").prop("hidden", false);
+  $(this).prop("hidden", true);
+});
+
+function renderResults(){
+  if(lastFeatures === null) return;
+  const items = byDistance(lastFeatures).map(resultRow).join("");
+  $("#searchResults").html(items || `<div class="text-muted p-2">no matches</div>`);
+}
+
+
+// The row is no longer a <button>, so Enter and Space have to be wired up by hand.
+$(document).on("keydown", "#resolveResults .list-group-item", function(e){
+  if(e.key === "Enter" || e.key === " "){ e.preventDefault(); $(this).trigger("click"); }
+});
+
+$(document).on("click", "#resolveResults .list-group-item", function(e){
+  // Following a source link is checking a candidate, not choosing it.
+  if($(e.target).closest("a").length) return;
+  const payload = JSON.parse($(this).attr("data-payload"));
+  payload.raw_name = currentLabel;
+  payload.station_type = currentMode;
+
+  // Last stop before a wrong registration. Attaching a well-used label to the wrong station
+  // credits every trip using it to a place nobody went, and the two candidates that make this
+  // easy to do look identical in the list — same name, same badge. The distance is the only
+  // thing that distinguishes them, so a far one has to be said out loud rather than coloured.
+  const metres = $(this).data("distance");
+  if(metres !== "" && metres !== undefined && metres > SAME_PLACE_M){
+    if(!confirm(`“${payload.name}” is ${dist(metres)} from where this label's trips actually `
+              + `begin or end.\n\nThat usually means it is a different place with the same `
+              + `name. Register it anyway?`)) return;
+  }
+  // Lock the whole result list, not just this row.
+  //
+  // busy() guards the element it is given, which stops a double-click on one row but does
+  // nothing about a click on a *different* one — and a search for one station routinely
+  // offers several rows that are the same place. Registering twice creates two stations and
+  // attaches this label to both, which makes it ambiguous: it then resolves to neither and
+  // the spelling is worse off than before it was touched. Measured on
+  // "City of London - London Liverpool Street", two clicks left 2,100 endpoints unresolvable.
+  if($("#resolveResults").data("registering")) return;
+  $("#resolveResults").data("registering", true).addClass("is-registering");
+  const restore = busy(this);
+  const unlock = () => $("#resolveResults").data("registering", false)
+                                          .removeClass("is-registering");
+  if(!restore){ unlock(); return; }
+  $.ajax({ url: BASE + "/register", method: "POST", contentType: "application/json",
+           data: JSON.stringify(payload) })
+    .done(r => {
+      hideModal("#resolveModal");
+      if(r.success) toast(`Registered — ${fmt(r.trips_resynced)} trips re-resolved.`);
+      else toast(r.error || "failed", true);
+      refreshAll();
+    })
+    .fail(() => toast("registration failed", true))
+    .always(() => { restore(); unlock(); });
+});
+
+// ── Station detail ───────────────────────────────────────────────────────────────────
+$(document).on("click", "tr[data-station]", function(){
+  openStation($(this).data("station"));
+});
+
+function openStation(id){
+  $.getJSON(BASE + "/station/" + id, d => {
+    const s = d.station;
+    // The id is shown because the merge field below asks for one. It was previously
+    // nowhere on the page — not in the list, not here — so the only way to merge was to
+    // guess, or to read it out of the network tab.
+    $("#stationTitle").html(
+      `${esc(s.curated_name || s.name_intl)} <span class="station-id" title="station id">#${s.station_id}</span>`
+    );
+    const aliases = d.aliases.map(a => `
+      <li class="list-group-item d-flex justify-content-between align-items-center py-1">
+        <span>${esc(a.alias)}
+          <span class="badge bg-light text-dark border alias-badge">${esc(a.kind)}${a.lang ? ":" + esc(a.lang) : ""}</span>
+          ${a.endpoints ? `<span class="badge bg-secondary">${fmt(a.endpoints)} uses</span>` : ""}
+        </span>
+        ${["intl","local"].includes(a.kind) ? ""
+          : `<button class="btn btn-sm btn-outline-danger alias-del" data-alias="${a.alias_id}">×</button>`}
+      </li>`).join("");
+    const objects = d.osm_objects.map(o =>
+      `<a class="badge bg-light text-decoration-none text-muted me-1"
+          target="_blank" rel="noopener"
+          href="https://www.openstreetmap.org/${o.osm_type === 'N' ? 'node' : o.osm_type === 'W' ? 'way' : 'relation'}/${o.osm_id}"
+       >${o.osm_type}${o.osm_id}</a>`).join("") || `<span class="text-muted small">none mapped</span>`;
+
+    $("#stationBody").html(`
+      <div class="row g-3">
+        <div class="col-md-6">
+          <label class="form-label small text-muted mb-1">Curated name — overrides everything</label>
+          <div class="input-group input-group-sm">
+            <input class="form-control" id="curatedName" value="${esc(s.curated_name || "")}"
+                   placeholder="${esc(s.name_intl)}">
+            <button class="btn btn-outline-primary" id="saveCurated" data-station="${s.station_id}">save</button>
+          </div>
+          <div class="form-text">generated: ${esc(s.name_intl)}${s.name_local ? ` · local: ${esc(s.name_local)}` : ""}</div>
+        </div>
+        <div class="col-md-6">
+          <label class="form-label small text-muted mb-1">Identity</label>
+          <div>
+            ${s.wikidata ? `<a class="badge bg-success text-decoration-none"
+                 target="_blank" rel="noopener" href="https://www.wikidata.org/wiki/${esc(s.wikidata)}">${esc(s.wikidata)}</a>` : ""}
+            ${s.uic_ref ? `<span class="badge bg-info text-dark">UIC ${esc(s.uic_ref)}</span>` : ""}
+            ${!s.wikidata && !s.uic_ref ? `<span class="text-muted small">no stable identity — merging is by name only</span>` : ""}
+          </div>
+          <div class="mt-2"><label class="form-label small text-muted mb-1">OSM objects</label><div>${objects}</div></div>
+          <div class="form-text">${s.enriched_at ? "enriched " + esc(String(s.enriched_at).slice(0,16)) : "awaiting enrichment"}</div>
+        </div>
+      </div>
+      <hr>
+      {# The dot. OSM's node is frequently on the wrong tracks for this purpose, and these
+         coordinates anchor the geometry backfill, the duplicate radius and the sibling
+         lookup — so being able to move it is not cosmetic. #}
+      <div class="d-flex justify-content-between align-items-center mb-1">
+        <strong class="small">Position${s.curated_lat !== null ? ` <span class="badge bg-warning text-dark">moved</span>` : ""}</strong>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm btn-outline-secondary" id="resetPos" data-station="${s.station_id}"
+                  ${s.curated_lat === null ? "disabled" : ""}>reset to OSM</button>
+          <button class="btn btn-sm btn-outline-primary" id="savePos" data-station="${s.station_id}" disabled>save position</button>
+        </div>
+      </div>
+      <div class="form-text mb-1">Drag the marker to where the ${esc(s.station_type)} stop actually is. The OSM position is kept underneath.</div>
+      <div id="stationMap" style="height:260px;border:1px solid #dee2e6;border-radius:.375rem"></div>
+      <hr>
+      <div class="d-flex justify-content-between align-items-center mb-2">
+        <strong class="small">Spellings that resolve here</strong>
+        <div class="d-flex gap-1">
+          <button class="btn btn-sm btn-outline-secondary" id="enrichOne" data-station="${s.station_id}">
+            <i class="fa-solid fa-cloud-arrow-down"></i> re-enrich</button>
+        </div>
+      </div>
+      <ul class="list-group list-group-flush mb-2">${aliases}</ul>
+      <div class="input-group input-group-sm" style="max-width:34rem">
+        <input class="form-control" id="newAlias" placeholder="add a spelling…">
+        <input class="form-control flex-grow-0" style="width:7rem" id="newAliasLang"
+               placeholder="lang" maxlength="7"
+               title="Optional ISO code, e.g. uk, ja, pt-BR. With one, this becomes the station's name in that language and users reading it will see it — which is how a language OSM does not carry gets added. Without one, it is only an extra spelling to search by.">
+        <button class="btn btn-outline-primary" id="addAlias" data-station="${s.station_id}">add</button>
+      </div>
+      <div class="form-text">Give a language code to make this the station's name for users reading that language; leave blank for a search-only spelling.</div>
+      <hr>
+      <div class="d-flex justify-content-between align-items-start gap-3 mb-3">
+        <div>
+          <label class="form-label small text-muted mb-1 d-block">Delete this station</label>
+          <div class="form-text mt-0">
+            Its spellings go back to the unresolved queue and can be registered again. No trip
+            is changed. Use this for a mis-registration; use merge for a duplicate.
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline-danger flex-shrink-0" id="deleteStation"
+                data-station="${s.station_id}">Delete</button>
+      </div>
+      <label class="form-label small text-muted mb-1">Merge this station into another</label>
+      <div class="input-group input-group-sm" style="max-width:26rem">
+        <input class="form-control" id="mergeTarget"
+               placeholder="search by name, or type #id" autocomplete="off">
+        <button class="btn btn-outline-danger" id="mergeBtn" data-station="${s.station_id}">merge</button>
+      </div>
+      <div id="mergeMatches" class="merge-matches"></div>
+      <div class="form-text">Nothing is deleted: this row is marked superseded and its trips move.</div>
+    `);
+    showModal("#stationModal");
+    initStationMap(s);
+  });
+}
+
+// ── The position picker ──────────────────────────────────────────────────────────────
+let stationMap = null, stationMarker = null, osmMarker = null, pendingPos = null;
+
+function initStationMap(s){
+  const lat = s.effective_lat, lng = s.effective_lng;
+  if(lat === null || lng === null){
+    $("#stationMap").html(`<div class="text-muted small p-3">no coordinates for this station</div>`);
+    return;
+  }
+  pendingPos = null;
+  // Leaflet measures the container on creation, and inside a modal that is still animating
+  // it measures zero — so build it once the modal has finished opening.
+  const el = document.getElementById("stationModal");
+  const build = () => {
+    if(stationMap){ stationMap.remove(); stationMap = null; }
+    stationMap = L.map("stationMap").setView([lat, lng], 17);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+      { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(stationMap);
+
+    // Where OSM puts it, shown for reference and not draggable, so it stays obvious how far
+    // the correction moved things.
+    if(s.curated_lat !== null && s.lat !== null){
+      osmMarker = L.circleMarker([s.lat, s.lng],
+        { radius: 6, color: "#6c757d", fillOpacity: .4 })
+        .bindTooltip("OSM position").addTo(stationMap);
+    }
+    stationMarker = L.marker([lat, lng], { draggable: true }).addTo(stationMap);
+    stationMarker.on("dragend", () => {
+      const p = stationMarker.getLatLng();
+      pendingPos = { lat: p.lat, lng: p.lng };
+      $("#savePos").prop("disabled", false);
+    });
+    setTimeout(() => stationMap.invalidateSize(), 50);
+  };
+  if(el.classList.contains("show")) build();
+  else el.addEventListener("shown.bs.modal", build, { once: true });
+}
+
+$(document).on("click", "#savePos", function(){
+  if(!pendingPos) return;
+  const id = $(this).data("station"); const restore = busy(this); if(!restore) return;
+  post(BASE + "/station/" + id + "/position", pendingPos)
+    .done(r => {
+      toast(r.success ? "Position moved." : (r.error || "failed"), !r.success);
+      if(r.success) openStation(id);
+    })
+    .always(restore)
+    .fail(x => toast((x.responseJSON||{}).error || "failed", true));
+});
+
+$(document).on("click", "#resetPos", function(){
+  const id = $(this).data("station"); const restore = busy(this); if(!restore) return;
+  post(BASE + "/station/" + id + "/position", { clear: true })
+    .done(() => { toast("Reset to the OSM position."); openStation(id); })
+    .fail(() => toast("reset failed", true))
+    .always(restore);
+});
+
+// Free the map when the modal closes; leaving it attached to a detached node leaks it and
+// makes the next open measure the old container.
+document.getElementById("stationModal").addEventListener("hidden.bs.modal", () => {
+  if(stationMap){ stationMap.remove(); stationMap = null; }
+  pendingPos = null;
+});
+
+// Every action here reaches a third-party API or resolves thousands of rows, so a click can
+// take a noticeable moment. Without feedback that reads as a dead button and invites a second
+// click — which for "register" would mean two attempts at the same label.
+//
+// Returns a restore function; callers use it in .always() so the button comes back whether
+// the request succeeded or failed.
+function busy(el){
+  const $el = $(el);
+  if($el.data("busy")) return null;            // already running: ignore the second click
+  // Only a class: the element keeps its own children, so a flex row, a badge or an icon
+  // survives untouched and the spinner is drawn by ::after. pointer-events:none is what
+  // actually blocks the second click, so this works on non-button elements too.
+  $el.data("busy", true).prop("disabled", true).addClass("is-busy");
+  return () => $el.data("busy", false).prop("disabled", false).removeClass("is-busy");
+}
+
+function post(url, body){
+  return $.ajax({ url: url, method: "POST", contentType: "application/json",
+                  data: JSON.stringify(body || {}) });
+}
+
+$(document).on("click", "#saveCurated", function(){
+  const id = $(this).data("station"); const restore = busy(this); if(!restore) return;
+  post(BASE + "/station/" + id + "/curate", { curated_name: $("#curatedName").val() })
+    .done(r => { toast(`Saved — ${fmt(r.trips_resynced)} trips re-resolved.`); refreshAll(); openStation(id); })
+    .fail(() => toast("save failed", true))
+    .always(restore);
+});
+
+$(document).on("click", "#addAlias", function(){
+  const id = $(this).data("station"); const restore = busy(this); if(!restore) return;
+  post(BASE + "/station/" + id + "/alias",
+       { alias: $("#newAlias").val(), lang: $("#newAliasLang").val() })
+    .done(r => { toast(`Added — ${fmt(r.trips_resynced)} trips re-resolved.`); refreshAll(); openStation(id); })
+    .fail(x => toast((x.responseJSON||{}).error || "failed", true))
+    .always(restore);
+});
+
+$(document).on("click", ".alias-del", function(e){
+  e.stopPropagation();
+  const station = $("#addAlias").data("station"); const restore = busy(this); if(!restore) return;
+  $.ajax({ url: BASE + "/alias/" + $(this).data("alias"), method: "DELETE" })
+    .done(r => { toast(`Removed — ${fmt(r.trips_resynced)} trips re-resolved.`); refreshAll(); openStation(station); })
+    .fail(x => toast((x.responseJSON||{}).error || "failed", true))
+    .always(restore);
+});
+
+$(document).on("click", "#enrichOne", function(){
+  const id = $(this).data("station"); const restore = busy(this); if(!restore) return;
+  post(BASE + "/station/" + id + "/enrich")
+    .done(r => { toast(r.success ? `Enriched (${r.objects_mapped} OSM objects mapped).` : r.error, !r.success);
+                 refreshAll(); openStation(id); })
+    .fail(() => toast("enrichment failed", true))
+    .always(restore);
+});
+
+$(document).on("click", "#deleteStation", function(){
+  const id = $(this).data("station");
+  // Name the cost before asking. Deleting a well-used station un-resolves thousands of trips
+  // in one click, and the number is the only thing that distinguishes that from tidying up a
+  // mis-click.
+  const uses = $("#stationsBody tr[data-station='" + id + "'] .queue-count").text() || "0";
+  if(!confirm(`Delete this station?\n\n${uses} use(s) will go back to the unresolved queue. `
+            + `No trip is modified, and it can be registered again.`)) return;
+  const restore = busy(this); if(!restore) return;
+  $.ajax({ url: BASE + "/station/" + id, method: "DELETE" })
+    .done(r => {
+      if(r.success){
+        toast(`Deleted — ${fmt(r.labels_freed)} spelling(s) back in the queue.`);
+        hideModal("#stationModal");
+      } else { toast(r.error || "failed", true); }
+      refreshAll();
+    })
+    .fail(x => toast((x.responseJSON||{}).error || "delete failed", true))
+    .always(restore);
+});
+
+// Find the merge target by name, so an id never has to be remembered or guessed. Typing a
+// bare number or #number still works and skips the lookup.
+let mergeSearchTimer = null;
+$(document).on("input", "#mergeTarget", function(){
+  const raw = String($(this).val() || "").trim();
+  const source = parseInt($("#mergeBtn").data("station"), 10);
+  clearTimeout(mergeSearchTimer);
+  if(/^#?\d+$/.test(raw) || raw.length < 2){ $("#mergeMatches").empty(); return; }
+  mergeSearchTimer = setTimeout(() => {
+    $.getJSON(`${BASE}/stations?limit=6&q=${encodeURIComponent(raw)}`, d => {
+      $("#mergeMatches").html((d.stations || [])
+        .filter(s => s.station_id !== source && !s.superseded_by)
+        .map(s => `<button type="button" class="merge-match" data-id="${s.station_id}">
+             <span class="mm-id">#${s.station_id}</span> ${flag(s.country_code)} ${esc(s.name)}
+           </button>`).join(""));
+    });
+  }, 300);
+});
+
+$(document).on("click", ".merge-match", function(){
+  $("#mergeTarget").val("#" + $(this).data("id"));
+  $("#mergeMatches").empty();
+});
+
+$(document).on("click", "#mergeBtn", function(){
+  const source = $(this).data("station");
+  const target = parseInt(String($("#mergeTarget").val() || "").replace(/^#/, ""), 10);
+  if(!target) return toast("target id required", true);
+  if(!confirm(`Merge station ${source} into ${target}?`)) return;
+  const restore = busy(this); if(!restore) return;
+  post(BASE + "/merge", { source_id: source, target_id: target })
+    .done(r => {
+      toast(r.success ? `Merged — ${fmt(r.trips_resynced)} trips re-resolved.` : r.error, !r.success);
+      if(r.success){ hideModal("#stationModal"); }
+      refreshAll();
+    })
+    .fail(() => toast("merge failed", true))
+    .always(restore);
+});
+
+$("#enrichQueueBtn").on("click", function(){
+  const restore = busy(this); if(!restore) return;
+  post(BASE + "/enrich-queue", { batches: 3 })
+    .done(r => toast(r.success ? `Enriched ${fmt(r.enriched)} stations in ${r.batches} batch(es).` : r.error, !r.success))
+    .fail(() => toast("enrichment failed", true))
+    .always(() => { restore(); refreshAll(); });
+});
+
+let stationSearchTimer = null;
+$("#stationSearch").on("input", () => {
+  stationsOffset = 0;
+  clearTimeout(stationSearchTimer); stationSearchTimer = setTimeout(loadStations, 300);
+});
+
+function toast(msg, isError){
+  const el = $(`<div class="alert ${isError ? "alert-danger" : "alert-success"} position-fixed shadow"
+                 style="bottom:1rem;right:1rem;z-index:2000">${esc(msg)}</div>`);
+  $("body").append(el);
+  setTimeout(() => el.fadeOut(400, () => el.remove()), 3500);
+}
+
+refreshAll();
+</script>
+
+{% endblock %}

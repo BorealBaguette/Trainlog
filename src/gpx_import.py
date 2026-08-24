@@ -20,7 +20,9 @@ from werkzeug.datastructures import FileStorage
 from py.gps_cleaner import clean_gps_route
 from py.utils import get_flag_emoji, getDistance
 from src.pg import pg_session
-from src.photon import photonRequest
+from src.photon import photonRequestLangs
+from src.station_names import international_name
+from src.station_search import merge_language_passes
 from src.routing import forward_routing_core
 from src.utils import getLocalDatetime
 
@@ -38,16 +40,36 @@ class GpxIngestError(ValueError):
 
 
 def getAddressFromCoords(lat, lng):
-    """Reverse-geocode a coordinate to a "flag City - Suburb" label via Photon."""
-    response_json = photonRequest("/reverse", {"lon": lng, "lat": lat, "lang": "en"})
+    """Reverse-geocode a coordinate to a "flag City - Suburb" label via Photon.
 
-    if response_json is None or not response_json.get("features"):
+    The place names go through the same international-name rule as the station autocomplete,
+    so a track imported in Japan is labelled like a trip entered by hand there rather than in
+    English only.
+    """
+    responses = photonRequestLangs(
+        "/reverse", {"lon": lng, "lat": lat}, ("en", "default")
+    )
+    features = merge_language_passes(responses)
+    if not features:
         return ""
 
-    props = response_json["features"][0]["properties"]
-    country_code = props.get("countrycode", "").upper()
-    city = props.get("city") or props.get("county") or ""
-    suburb = props.get("suburb") or props.get("district") or ""
+    props = features[0].get("properties", {})
+    country_code = (props.get("countrycode") or "").upper()
+
+    def localised(*field_names):
+        """The international form of the first of these fields that is set."""
+        for field in field_names:
+            english = props.get(field)
+            if english:
+                # merge_language_passes only carries `name` and `city` across; for the other
+                # fields the local spelling is not available, and international_name falls
+                # back to the English one.
+                local = props.get("city_local") if field == "city" else None
+                return international_name(local, english, country_code=country_code)
+        return ""
+
+    city = localised("city", "county")
+    suburb = localised("suburb", "district")
 
     flag = get_flag_emoji(country_code)
     return f"{flag} {city}" + (f" - {suburb}" if suburb else "")

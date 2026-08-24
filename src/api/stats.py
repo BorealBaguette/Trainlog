@@ -67,16 +67,29 @@ _METRIC_COLUMNS = (
 )
 
 
-def get_stats_category(pg, query_func, id_column, user_id, trip_type, year=None):
+def get_stats_category(
+    pg, query_func, id_column, user_id, trip_type, year=None, station_naming=None
+):
     """
     Fetch one category dataset (operators, material, lines, …).
 
     Every category query already returns the full metric set, so there is nothing
     to compute here: rows go out as they come back, minus the ones whose
     identifier is empty (a trip with no operator shouldn't become a blank bar).
+
+    `station_naming` is the (mode, language) pair the stations and routes queries
+    name their groups with; the other dimensions ignore it.
     """
+    mode, user_lang = station_naming or ("international", None)
     result = pg.execute(
-        query_func(), {"user_id": user_id, "tripType": trip_type, "year": year}
+        query_func(),
+        {
+            "user_id": user_id,
+            "tripType": trip_type,
+            "year": year,
+            "station_display": mode,
+            "user_lang": user_lang,
+        },
     ).fetchall()
 
     keep = _METRIC_COLUMNS | {id_column}
@@ -92,6 +105,25 @@ def get_stats_category(pg, query_func, id_column, user_id, trip_type, year=None)
         for row in _rows_to_dicts(result)
         if row.get(id_column)
     ]
+
+
+def station_naming_for(username):
+    """The (display mode, language) this user's station names should be rendered with.
+
+    Falls back to the international name for the all-users admin view, which has no
+    single reader to have a preference, and for a username that no longer exists.
+    """
+    if not username:
+        return ("international", None)
+
+    from src.stations import DISPLAY_MODES
+    from src.users import User
+
+    user = User.query.filter_by(username=username).first()
+    if user is None:
+        return ("international", None)
+    mode = user.station_display if user.station_display in DISPLAY_MODES else "international"
+    return (mode, user.lang)
 
 
 # Stations are stored as "🇫🇷 Charles de Gaulle International Airport (CDG)":
@@ -512,6 +544,10 @@ def fetch_stats(username, trip_type, year=None, datasets=ALL_DATASETS):
     # Handle admin case - use None as user_id to get all users
     user_id = None if username is None else get_user_id(username)
 
+    # Read once, not per dataset: the stations and routes queries both need it and it is a
+    # lookup on the auth database, which the stats session knows nothing about.
+    station_naming = station_naming_for(username)
+
     with pg_session() as pg:
         # Check if trip type is available for user (or any user if admin)
         available_types = pg.execute(
@@ -536,6 +572,7 @@ def fetch_stats(username, trip_type, year=None, datasets=ALL_DATASETS):
                     user_id=user_id,
                     trip_type=trip_type,
                     year=year,
+                    station_naming=station_naming,
                 )
 
         # A vessel's photo and ensign only exist server-side, in `vessels` and

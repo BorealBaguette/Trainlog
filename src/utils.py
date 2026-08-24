@@ -43,6 +43,13 @@ def readLang():
     for lang_path in glob("lang/*.json"):
         with open(lang_path, "r", encoding="utf-8") as lang:
             languages[getNameFromPath(lang_path)] = json.loads(lang.read())
+    # Translators add keys as they go, so a language file can lag behind
+    # en.json. Fall back to English per-key here rather than requiring every
+    # lang file to carry an English placeholder for untranslated strings.
+    english = languages.get("en", {})
+    for code, strings in languages.items():
+        if code != "en":
+            languages[code] = {**english, **strings}
     return languages
 
 

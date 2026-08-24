@@ -35,7 +35,7 @@
                   <a class="dropdown-item" href="{{ url_for('bmc.pending') }}"><i class="fa-solid fa-mug-hot"></i>{{stalePremiumIcon | safe}} Pending BMC </a>
                   <a class="dropdown-item" href="{{ url_for('adminManual') }}"><i class="bi bi-sign-stop-lights"></i> Manual Stations</a>
                   {% endif %}
-                  <a class="dropdown-item" href="{{ url_for('stations') }}"><i class="fa-solid fa-globe"></i> Stations</a>
+                  <a class="dropdown-item" href="{{ url_for('station_registry.station_registry') }}"><i class="fa-solid fa-globe"></i> Station registry</a>
                   <a class="dropdown-item" href="{{ url_for('ships') }}"><i class="fa fa-ship"></i> Ships </a>
                   <a class="dropdown-item" href="{{ url_for('editCountriesList') }}"><i class="bi bi-flag"></i> Coverage edit</a>
                   <a class="dropdown-item" href="{{ url_for('show_operators') }}"><i class="bi bi-images"></i> Operators</a>

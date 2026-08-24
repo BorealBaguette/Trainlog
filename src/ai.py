@@ -14,7 +14,9 @@ from src.routing import forward_routing_core
 from src.utils import get_default_trip_visibility
 from src.paths import fetch_path
 from src.pg import pg_session
-from src.photon import photonRequest
+from src.photon import photonRequestLangs
+from src.station_search import process_station_results
+from src.stations import seed_stations_from_trip
 import re
 
 logger = logging.getLogger(__name__)
@@ -191,14 +193,19 @@ def geocode_station(query, trip_type="train", fallback_coords=None, city_fallbac
         queries_to_try.append(city_fallback)
     
     for q in queries_to_try:
-        params = [("q", q), ("limit", 1), ("lang", "en")]
-        for tag in osm_tags.get(trip_type, []):
-            params.append(("osm_tag", tag))
+        params = {"q": q, "limit": 1}
+        tags = osm_tags.get(trip_type, [])
+        if tags:
+            params["osm_tag"] = tags  # requests serialises a list as repeated params
 
-        data = photonRequest("/api", params, timeout=10)
+        # The same naming pipeline the website and the MCP tool use, so a trip imported from
+        # an email or a screenshot stores the identical label to one entered by hand — these
+        # three paths previously had three different city-prefix rules between them.
+        responses = photonRequestLangs("/api", params, ("en", "default"), timeout=10)
+        features = process_station_results(responses)
 
-        if data and data.get("features"):
-            feat = data["features"][0]
+        if features:
+            feat = features[0]
             props = feat["properties"]
             lng, lat = feat["geometry"]["coordinates"]
 
@@ -219,12 +226,28 @@ def geocode_station(query, trip_type="train", fallback_coords=None, city_fallbac
                 country = getCountryFromCoordinates(lat, lng)
                 country_code = country.get("countryCode", "")
 
-            name = props.get("name", query)
-            city = props.get("city")
-            if city and city.lower() not in name.lower():
-                name = f"{city} - {name}"
+            # Already the international name, city-prefixed where that disambiguates.
+            name = props.get("name") or query
 
-            return {"name": name, "lat": lat, "lng": lng, "country_code": country_code}
+            return {
+                "name": name,
+                "lat": lat,
+                "lng": lng,
+                "country_code": country_code,
+                # The OSM identity of the place, carried so the trip this becomes can be
+                # registered in the station registry like one entered through the web form.
+                # Dropping it here is what left AI- and MCP-created trips with a label and no
+                # station, and so absent from every aggregate that groups by station.
+                "osm_ref": (
+                    {
+                        "osm_type": props.get("osm_type"),
+                        "osm_id": props.get("osm_id"),
+                        "name_local": props.get("name_local"),
+                    }
+                    if props.get("osm_id") is not None
+                    else None
+                ),
+            }
     
     # Try past trips before AI fallback
     past_coords = get_coords_from_past_trips(query, trip_type)
@@ -414,7 +437,9 @@ def enrich_parsed_trip(parsed_trip):
         parsed_trip["_resolved_destination"] = f"{dest_flag} {dest_geo['name']}"
         parsed_trip["_origin_coords"] = {"lat": origin_geo["lat"], "lng": origin_geo["lng"]}
         parsed_trip["_dest_coords"] = {"lat": dest_geo["lat"], "lng": dest_geo["lng"]}
-        
+        parsed_trip["_origin_osm"] = origin_geo.get("osm_ref")
+        parsed_trip["_dest_osm"] = dest_geo.get("osm_ref")
+
         routed_path = route_path(parsed_trip["_origin_coords"], parsed_trip["_dest_coords"], trip_type)
         parsed_trip["_path"] = routed_path if routed_path else [parsed_trip["_origin_coords"], parsed_trip["_dest_coords"]]
     
@@ -500,6 +525,8 @@ def create_trip_from_parsed(user, parsed_trip, purchase_date=None, source="ai"):
             dest_station = f"{dest_flag} {dest_geo['name']}"
             origin_point = {"lat": origin_geo["lat"], "lng": origin_geo["lng"]}
             dest_point = {"lat": dest_geo["lat"], "lng": dest_geo["lng"]}
+            parsed_trip["_origin_osm"] = origin_geo.get("osm_ref")
+            parsed_trip["_dest_osm"] = dest_geo.get("osm_ref")
 
         if resolved_path:
             path = resolved_path
@@ -582,6 +609,29 @@ def create_trip_from_parsed(user, parsed_trip, purchase_date=None, source="ai"):
         material_type=material_type, material_type_advanced=None, reg=None, waypoints=None, notes=build_notes(parsed_trip, user.lang, source), visibility=get_default_trip_visibility(trip_type)
     )
     
+    # Register the endpoints in the station registry, exactly as the web form does.
+    #
+    # Reuses seed_stations_from_trip rather than repeating it, so a trip created from an
+    # email, a screenshot or an MCP call ends up in the registry on the same terms as one
+    # typed in by hand. Without this these trips resolved only if their label happened to
+    # match a station somebody else had already registered.
+    if origin_point and dest_point:
+        seed_stations_from_trip(
+            {
+                "originStation": [
+                    [origin_point["lat"], origin_point["lng"]],
+                    origin_station,
+                    parsed_trip.get("_origin_osm"),
+                ],
+                "destinationStation": [
+                    [dest_point["lat"], dest_point["lng"]],
+                    dest_station,
+                    parsed_trip.get("_dest_osm"),
+                ],
+            },
+            trip_type,
+        )
+
     create_trip(trip)
     logger.info(f"Created trip for {user.username}")
     return trip
