@@ -23,19 +23,21 @@ _EDITABLE_FIELDS = {"label", "category", "subcategory", "era", "source", "notes"
 _VALID_IMAGE_TYPES = {"plain", "sides", "sides_L", "sides_R"}
 _VALID_IMAGE_EXTS  = {"gif", "png"}
 _COL_MAP = {0: "name", 1: "label", 2: "category", 3: "subcategory",
-            4: "era", 5: "countries", 6: "uses", 7: "image_type", 8: "image"}
+            4: "era", 5: "countries", 6: "uses", 7: "users",
+            8: "image_type", 9: "image"}
 
 WAGONS_ROOT   = Path("static/images/wagons").resolve()
 CUSTOM_FOLDER = "images/custom"          # relative to WAGONS_ROOT, stored in DB
 
 
 _USAGE_TTL = 300          # seconds; the admin table re-queries on every page change
-_usage_cache: dict = {"at": 0.0, "counts": {}}
+_usage_cache: dict = {"at": 0.0, "counts": {}, "users": {}}
 
 
-def _wagon_usage() -> dict[str, int]:
+def _wagon_usage() -> tuple[dict[str, int], dict[str, int]]:
     """
-    Trips using each wagon, keyed by wagon name.
+    Trips using each wagon, keyed by wagon name, plus how many distinct users those
+    trips belong to.
 
     There is no foreign key to follow: trips.material_type_advanced holds either an
     inline JSON array of units, a composite {"trainsets": [names]}, or a bare trainset
@@ -46,9 +48,10 @@ def _wagon_usage() -> dict[str, int]:
     """
     now = time.time()
     if now - _usage_cache["at"] < _USAGE_TTL:
-        return _usage_cache["counts"]
+        return _usage_cache["counts"], _usage_cache["users"]
 
     counts: Counter = Counter()
+    user_sets: dict[str, set] = {}
     try:
         with pg_session() as pg:
             sets = {}
@@ -62,17 +65,20 @@ def _wagon_usage() -> dict[str, int]:
                 # than guessing which one a given trip meant.
                 sets.setdefault(r["name"], set()).update(names)
 
+            # Grouped by (composition, user) rather than just composition, so a
+            # composition's trip count and its distinct-user count can both be
+            # derived without re-scanning the trips table.
             rows = pg.execute(
                 """
-                SELECT material_type_advanced AS mta, COUNT(*) AS n
+                SELECT material_type_advanced AS mta, user_id, COUNT(*) AS n
                 FROM trips
                 WHERE material_type_advanced IS NOT NULL AND material_type_advanced <> ''
-                GROUP BY material_type_advanced
+                GROUP BY material_type_advanced, user_id
                 """
             ).fetchall()
 
         for row in rows:
-            value, n = (row["mta"] or "").strip(), row["n"]
+            value, user_id, n = (row["mta"] or "").strip(), row["user_id"], row["n"]
             names: set[str] = set()
             if value.startswith("["):
                 try:
@@ -91,12 +97,14 @@ def _wagon_usage() -> dict[str, int]:
 
             for wagon in names:
                 counts[wagon] += n
+                user_sets.setdefault(wagon, set()).add(user_id)
     except Exception as e:                        # never break the listing over a stat
         logger.warning("wagon usage count failed: %s", e)
-        return _usage_cache["counts"]
+        return _usage_cache["counts"], _usage_cache["users"]
 
-    _usage_cache.update(at=now, counts=dict(counts))
-    return _usage_cache["counts"]
+    users = {w: len(s) for w, s in user_sets.items()}
+    _usage_cache.update(at=now, counts=dict(counts), users=users)
+    return _usage_cache["counts"], _usage_cache["users"]
 
 
 def _sanitize_name(label: str) -> str:
@@ -157,7 +165,7 @@ def list_wagons():
     order_dir = "ASC" if request.args.get("order[0][dir]", "asc") == "asc" else "DESC"
 
     # Must run before the session below opens — pg_session() refuses to nest.
-    usage = _wagon_usage()
+    usage, usage_users = _wagon_usage()
 
     with pg_session() as pg:
         total = pg.execute("SELECT COUNT(*) FROM wagons").scalar()
@@ -188,21 +196,25 @@ def list_wagons():
             filtered = total
             qparams  = {"limit": length, "offset": start}
 
-        # Usage counts live in Python (see _wagon_usage), so they are fed back in as a
-        # pair of arrays and joined — that keeps sorting by popularity in SQL, which
-        # server-side paging requires.
+        # Usage counts live in Python (see _wagon_usage), so they are fed back in as
+        # parallel arrays and joined — that keeps sorting by popularity in SQL, which
+        # server-side paging requires. Users are keyed the same way, off the same
+        # wagon-name list, since every wagon with a trip count also has a user count.
         qparams["u_names"]  = list(usage.keys())
         qparams["u_counts"] = list(usage.values())
+        qparams["u_users"]  = [usage_users.get(n, 0) for n in usage]
 
         data = [dict(r) for r in pg.execute(
             f"""
             SELECT name, label, category, subcategory, era, image, notes,
                    source, image_type, image_ext, px_per_meter,
                    author, license, gauge, countries,
-                   COALESCE(u.ucount, 0) AS uses
+                   COALESCE(u.ucount, 0) AS uses,
+                   COALESCE(u.ausers, 0) AS users
             FROM wagons
-            LEFT JOIN unnest(CAST(:u_names AS text[]), CAST(:u_counts AS bigint[]))
-                   AS u(uname, ucount) ON u.uname = wagons.name
+            LEFT JOIN unnest(CAST(:u_names AS text[]), CAST(:u_counts AS bigint[]),
+                             CAST(:u_users AS bigint[]))
+                   AS u(uname, ucount, ausers) ON u.uname = wagons.name
             {where}
             ORDER BY {order_col} {order_dir} NULLS LAST
             LIMIT :limit OFFSET :offset

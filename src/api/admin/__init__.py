@@ -7,6 +7,7 @@ from src.suspicious_activity import list_denied_logins, list_suspicious_activity
 from src.utils import admin_required, getUser, has_current_trip, lang, owner_required
 
 from .operators import operators_api_blueprint
+from .trainsets import trainsets_admin_blueprint
 from .wagons import wagons_admin_blueprint
 
 logger = logging.getLogger(__name__)
@@ -80,6 +81,19 @@ def wagons_admin():
     )
 
 
+@admin_blueprint.route("/trainsets")
+@admin_required
+def trainsets_admin():
+    return render_template(
+        "admin/trainsets.html",
+        nav="bootstrap/navigation.html",
+        username=getUser(),
+        isCurrent=has_current_trip(),
+        **session["userinfo"],
+        **lang[session["userinfo"]["lang"]],
+    )
+
+
 @admin_blueprint.route("/vagonweb")
 @owner_required
 def vagonweb_admin():
@@ -97,5 +111,6 @@ def vagonweb_admin():
 __all__ = [
     "admin_blueprint",
     "operators_api_blueprint",
+    "trainsets_admin_blueprint",
     "wagons_admin_blueprint",
 ]

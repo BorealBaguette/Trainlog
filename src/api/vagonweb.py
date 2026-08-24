@@ -823,7 +823,7 @@ holds exactly {cars} entry/entries in left-to-right order:
   "cars": [
     {{
       "label":       "short display name for THIS entry. It must contain that entry's full type code exactly as given above — never shorten 'B7-5' to 'B7', and never drop a suffix that distinguishes it from a sibling code. No operator prefix, and do not repeat the code twice",
-      "subcategory": "series, variant or role of this car, or null. Not the operator name",
+      "subcategory": "series, variant or role of this car, or null. NEVER the operator or network name (not 'Vy', 'SBB', 'DB', 'SNCF'...) — that belongs in 'operator', which is not asked for here",
       "notes":       "one or two English sentences on this car. No Czech. No personal data. Mention a builder or a build year ONLY if you are certain of it — a short note that just describes the interior is far better than a detailed one that is wrong."
     }}
   ]
@@ -886,6 +886,10 @@ owner will fill it in. Never invent a builder, a works, or a date to sound compl
         if c in valid
     ] or None
 
+    # The prompt tells the model not to answer with the operator name, and it does
+    # so anyway often enough to be worth a hard filter rather than trusting it.
+    operator_name = (meta.get("operator") or "").strip().casefold()
+
     # One entry per car, padded/truncated so the UI can zip it against the rows
     raw_cars = suggestion.get("cars")
     if not isinstance(raw_cars, list):
@@ -894,9 +898,12 @@ owner will fill it in. Never invent a builder, a works, or a date to sound compl
     for i in range(cars):
         c = raw_cars[i] if i < len(raw_cars) and isinstance(raw_cars[i], dict) else {}
         fallback = raw_cars[-1] if raw_cars and isinstance(raw_cars[-1], dict) else {}
+        subcategory = _text(c.get("subcategory") or fallback.get("subcategory"))
+        if subcategory and operator_name and subcategory.strip().casefold() == operator_name:
+            subcategory = None
         out_cars.append({
             "label": _text(c.get("label") or fallback.get("label")),
-            "subcategory": _text(c.get("subcategory") or fallback.get("subcategory")),
+            "subcategory": subcategory,
             "notes": _text(c.get("notes") or fallback.get("notes")),
         })
 
