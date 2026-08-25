@@ -2587,7 +2587,14 @@ tableObject.on('length.dt', function() {
     // Remembered per browser, so this device opens on the same length next time. The
     // custom-value path routes through here too — it sets the length via the API, which
     // fires this — so there is nothing to persist separately.
-    setCookie(ROWS_COOKIE, _autoRowsActive ? 'auto' : String(tableObject.page.len()), 365);
+    //
+    // "All" (-1) is deliberately not persisted: picking it is a one-off "just this once"
+    // action, not a lasting preference. If it were remembered, a page that was small
+    // enough to load whole on day one silently keeps trying to load "all" forever,
+    // including after the trip count has grown large enough to choke on it.
+    var len = tableObject.page.len();
+    if (len === -1) return;
+    setCookie(ROWS_COOKIE, _autoRowsActive ? 'auto' : String(len), 365);
 });
 
 function lengthSelect() {
