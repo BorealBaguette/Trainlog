@@ -21,7 +21,7 @@ WITH pts AS (
     -- POINT is a trip with no route drawn; the point is both ends of it.
     SELECT CASE WHEN GeometryType(p.geom) = 'POINT' THEN p.geom
                 ELSE ST_StartPoint(ST_GeometryN(p.geom, 1)) END AS pt,
-           t.username
+           t.user_id
     FROM trips t
     JOIN paths p ON p.trip_id = t.trip_id
     WHERE station_normalize(t.origin_station) = station_normalize(:label)
@@ -29,20 +29,20 @@ WITH pts AS (
     UNION ALL
     SELECT CASE WHEN GeometryType(p.geom) = 'POINT' THEN p.geom
                 ELSE ST_EndPoint(ST_GeometryN(p.geom, ST_NumGeometries(p.geom))) END,
-           t.username
+           t.user_id
     FROM trips t
     JOIN paths p ON p.trip_id = t.trip_id
     WHERE station_normalize(t.destination_station) = station_normalize(:label)
       AND station_type_bucket(t.trip_type) = :station_type
 ),
 valid AS (
-    SELECT pt, username FROM pts WHERE pt IS NOT NULL AND NOT ST_IsEmpty(pt)
+    SELECT pt, user_id FROM pts WHERE pt IS NOT NULL AND NOT ST_IsEmpty(pt)
 ),
 centre AS (
     SELECT percentile_cont(0.5) WITHIN GROUP (ORDER BY ST_Y(pt)) AS lat,
            percentile_cont(0.5) WITHIN GROUP (ORDER BY ST_X(pt)) AS lng,
            count(*)                                              AS points,
-           count(DISTINCT username)                              AS users
+           count(DISTINCT user_id)                               AS users
     FROM valid
 )
 SELECT c.lat,
