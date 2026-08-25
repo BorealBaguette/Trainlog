@@ -94,6 +94,24 @@
       font-size: .85rem; cursor: pointer; }
   .merge-matches .merge-match:hover { background: #f1f5f9; }
   .merge-matches .merge-match .mm-id { color: #adb5bd; font-variant-numeric: tabular-nums; }
+  /* The console output, as a console: monospaced, scrolled to the newest line. */
+  .seed-log { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: .25rem;
+              padding: .5rem; height: 16rem; overflow-y: auto; white-space: pre-wrap;
+              font-size: .78rem; line-height: 1.35; margin: 0; }
+  .registry-toast {
+    position: fixed; bottom: 1.5rem; left: 50%; transform: translateX(-50%);
+    z-index: 2000; display: flex; align-items: center; gap: .6rem; cursor: pointer;
+    max-width: min(40rem, 92vw); padding: .7rem 1.1rem; border-radius: .5rem;
+    color: #fff; font-weight: 500; box-shadow: 0 .5rem 1.5rem rgba(0,0,0,.25);
+    animation: registry-toast-in .18s ease-out;
+  }
+  .registry-toast.is-ok { background: #198754; }
+  .registry-toast.is-error { background: #dc3545; }
+  .registry-toast.leaving { opacity: 0; transition: opacity .2s ease-in; }
+  @keyframes registry-toast-in {
+    from { opacity: 0; transform: translate(-50%, .75rem); }
+    to   { opacity: 1; transform: translate(-50%, 0); }
+  }
   .is-busy::after {
     content: ""; display: inline-block; width: .9rem; height: .9rem; margin-left: .5rem;
     vertical-align: -.1em; border: .15em solid currentColor; border-right-color: transparent;
@@ -109,6 +127,13 @@
       <button class="btn btn-outline-secondary btn-sm" id="enrichQueueBtn">
         <i class="fa-solid fa-cloud-arrow-down"></i> Enrich queue
       </button>
+      {% if is_owner %}
+      {# Owner-only: this registers stations unattended and spends the Photon that serves the
+         live autocomplete, which is a different kind of action from resolving one label. #}
+      <button class="btn btn-outline-primary btn-sm" id="seedBtn">
+        <i class="fa-solid fa-wand-magic-sparkles"></i> Seed from queue
+      </button>
+      {% endif %}
     </div>
   </div>
 
@@ -293,6 +318,74 @@
     </div>
   </div>
 </div>
+
+{% if is_owner %}
+{# ── Seeding modal ────────────────────────────────────────────────────────────────────────
+   A form in front of src/station_seed.py. It registers only where two independent searches
+   agree, and everything it decides is recorded on the label, so a run can be stopped at any
+   point and the next one carries on from there. #}
+<div class="modal fade" id="seedModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fa-solid fa-wand-magic-sparkles"></i> Seed from the queue</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <p class="text-muted small">
+          Works the unresolved queue from the top, searching each spelling the way the trip
+          form does and registering it only when a name search and a search at the trips' own
+          location land on the same place. Anything less certain is left here for a human.
+        </p>
+
+        <div class="row g-2 mb-3" id="seedForm">
+          <div class="col-6 col-md-3">
+            <label class="form-label small mb-1" for="seedLimit">Labels</label>
+            <input type="number" class="form-control form-control-sm" id="seedLimit"
+                   value="100" min="1" max="20000">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small mb-1" for="seedDelay">Delay (s)</label>
+            {# Photon also answers the live autocomplete; this is what keeps a long run from
+               competing with people typing. #}
+            <input type="number" class="form-control form-control-sm" id="seedDelay"
+                   value="0.5" min="0.1" max="10" step="0.1">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small mb-1" for="seedMinOcc">Min uses</label>
+            <input type="number" class="form-control form-control-sm" id="seedMinOcc"
+                   value="1" min="1">
+          </div>
+          <div class="col-6 col-md-3 d-flex align-items-end">
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="seedDryRun">
+              <label class="form-check-label small" for="seedDryRun">Dry run</label>
+            </div>
+          </div>
+        </div>
+
+        <div id="seedProgress" hidden>
+          <div class="d-flex justify-content-between align-items-baseline">
+            <div class="small" id="seedState"></div>
+            <div class="small text-muted" id="seedCounts"></div>
+          </div>
+          <div class="progress my-1" style="height:.5rem">
+            <div class="progress-bar" id="seedBar" style="width:0%"></div>
+          </div>
+          <pre class="seed-log small mb-0" id="seedLog"></pre>
+          <div class="alert alert-danger py-2 px-3 mt-2" id="seedError" hidden></div>
+        </div>
+      </div>
+      <div class="modal-footer py-2">
+        <span class="text-muted small me-auto" id="seedNote"></span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-outline-danger btn-sm" id="seedStop" hidden>Stop</button>
+        <button type="button" class="btn btn-primary btn-sm" id="seedStart">Start</button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endif %}
 
 <script>
 const BASE = "{{ url_for('station_registry.station_registry') }}";
@@ -1203,12 +1296,109 @@ $("#stationSearch").on("input", () => {
   clearTimeout(stationSearchTimer); stationSearchTimer = setTimeout(loadStations, 300);
 });
 
+// Bottom-centre and solid rather than a pale alert in the corner: an action here can fail
+// while the eye is on the modal, and the old one was easy to miss entirely. Errors say what
+// happened, so they stay up long enough to be read and are dismissible.
 function toast(msg, isError){
-  const el = $(`<div class="alert ${isError ? "alert-danger" : "alert-success"} position-fixed shadow"
-                 style="bottom:1rem;right:1rem;z-index:2000">${esc(msg)}</div>`);
+  const el = $(`<div class="registry-toast ${isError ? "is-error" : "is-ok"}">
+      <i class="fa-solid ${isError ? "fa-circle-exclamation" : "fa-circle-check"}"></i>
+      <span>${esc(msg)}</span>
+    </div>`);
   $("body").append(el);
-  setTimeout(() => el.fadeOut(400, () => el.remove()), 3500);
+  const dismiss = () => { el.addClass("leaving"); setTimeout(() => el.remove(), 200); };
+  el.on("click", dismiss);
+  setTimeout(dismiss, isError ? 8000 : 4000);
 }
+
+{% if is_owner %}
+// ── Seeding ──────────────────────────────────────────────────────────────────────────────
+//
+// The run lives in the server, not in this page: prod has four gunicorn workers and each poll
+// may reach a different one, so the progress is read back from station_seed_runs rather than
+// tracked here. Closing the modal or the tab therefore does not stop anything.
+let seedTimer = null, seedWasRunning = false;
+
+const SEED_STATE = {
+  running: { cls: "text-primary",   text: "running" },
+  done:    { cls: "text-success",   text: "finished" },
+  stopped: { cls: "text-secondary", text: "stopped" },
+  failed:  { cls: "text-danger",    text: "failed" },
+};
+
+function renderSeed(run){
+  if(!run){ $("#seedProgress").prop("hidden", true); return; }
+  const running = run.state === "running";
+  const state = SEED_STATE[run.state] || { cls: "text-muted", text: run.state };
+  const params = run.params || {};
+
+  $("#seedProgress").prop("hidden", false);
+  $("#seedState").html(`<span class="${state.cls}">${state.text}</span>`
+    + (params.dry_run ? ` <span class="badge bg-light text-dark border">dry run</span>` : ""));
+  $("#seedCounts").text(
+    `${fmt(run.attempted)}/${fmt(run.total)} checked · ${fmt(run.registered)} registered · `
+    + `${fmt(run.skipped)} left in the queue`
+    + (run.failed ? ` · ${fmt(run.failed)} failed` : ""));
+  $("#seedBar")
+    .toggleClass("progress-bar-striped progress-bar-animated", running)
+    .css("width", (run.total ? 100 * run.attempted / run.total : 0) + "%");
+
+  const log = $("#seedLog");
+  // Only follow the tail while the reader is already at it, so scrolling back to read a line
+  // is not undone by the next poll.
+  const atBottom = log[0].scrollHeight - log[0].scrollTop - log[0].clientHeight < 40;
+  log.text((run.log || []).join("\n"));
+  if(atBottom) log[0].scrollTop = log[0].scrollHeight;
+
+  $("#seedError").prop("hidden", !run.error).text(run.error || "");
+  $("#seedStart").prop("hidden", running)
+    .text(run.state === "running" ? "Start" : "Start another");
+  $("#seedStop").prop("hidden", !running).prop("disabled", !!run.stop_requested);
+  $("#seedForm :input").prop("disabled", running);
+  $("#seedNote").text(running && run.stop_requested
+    ? "stopping after the current label…"
+    : (run.endpoints_gained ? `${fmt(run.endpoints_gained)} trip endpoints resolved.` : ""));
+  // Filled in while a run is going, so the panel says so with the modal closed.
+  $("#seedBtn").toggleClass("btn-primary", running).toggleClass("btn-outline-primary", !running);
+}
+
+function pollSeed(){
+  clearTimeout(seedTimer);
+  return $.getJSON(BASE + "/seed", d => {
+    renderSeed(d.run);
+    const running = !!d.run && d.run.state === "running";
+    if(running){
+      seedTimer = setTimeout(pollSeed, 2000);
+    } else if(seedWasRunning){
+      // It has just finished, so the queue and the totals have moved under the page.
+      refreshAll();
+    }
+    seedWasRunning = running;
+  });
+}
+
+$("#seedBtn").on("click", () => { showModal("#seedModal"); pollSeed(); });
+
+$("#seedStart").on("click", function(){
+  const restore = busy(this); if(!restore) return;
+  post(BASE + "/seed/start", {
+    limit: parseInt($("#seedLimit").val(), 10) || 100,
+    delay: parseFloat($("#seedDelay").val()) || 0.5,
+    min_occurrences: parseInt($("#seedMinOcc").val(), 10) || 1,
+    dry_run: $("#seedDryRun").is(":checked"),
+  })
+    .done(r => { if(!r.success) toast(r.error, true); pollSeed(); })
+    .fail(x => { toast((x.responseJSON || {}).error || "could not start", true); pollSeed(); })
+    .always(restore);
+});
+
+$("#seedStop").on("click", function(){
+  const restore = busy(this); if(!restore) return;
+  post(BASE + "/seed/stop", {}).always(() => { restore(); pollSeed(); });
+});
+
+// A run started in another tab, or before this page was opened, still belongs to this panel.
+pollSeed();
+{% endif %}
 
 refreshAll();
 </script>

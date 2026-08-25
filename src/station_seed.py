@@ -1,5 +1,4 @@
-"""
-Register stations for the labels people already use, a few at a time.
+"""Register stations for the labels people already use, a few at a time.
 
 The registry seeds itself as people log trips, but that only ever reaches places logged
 *from now on*. Years of existing trips name stations nobody has picked since the registry
@@ -10,15 +9,17 @@ This walks that queue from the top, searches each spelling the same way the trip
 and registers the match when it is confident. Enrichment then picks the new stations up on
 its own.
 
+Started from the admin panel's Seed button, which runs seed_run() in a background thread and
+watches it through station_seed_runs.
+
 ── Pacing ────────────────────────────────────────────────────────────────────────────────
 Two very different services are involved and only one of them is yours:
 
   Photon    self-hosted, two or three queries per label — the name search, and a reverse
             lookup at the label's own location. Yours to saturate, but it also serves the
-            live autocomplete, so --delay keeps this from competing with real users.
-  Overpass  public, and the reason for care. Not touched here at all: this script only
-            creates rows with enriched_at NULL, and the background enricher drains them at
-            its own pace (60 per request, one request per pass).
+            live autocomplete, so the delay keeps this from competing with real users.
+  Overpass  public, and the reason for care. Not touched here at all: this only creates rows
+            with enriched_at NULL, and the background enricher drains them at its own pace.
 
 So "slowly" is really about Photon and about not resolving thousands of labels in one
 transaction. The default of 0.5s between labels is ~2 labels/second, which will not be
@@ -28,8 +29,8 @@ evening.
 ── Resuming ──────────────────────────────────────────────────────────────────────────────
 There is no progress file and none is needed: a label is done when it has been checked
 (station_labels.auto_checked_at), and a station is enriched when enriched_at is set. Both
-live in the database, so stopping this with Ctrl-C and starting it again tomorrow simply
-continues, and running it twice does no harm. Clearing auto_checked_at re-opens a label.
+live in the database, so stopping a run and starting another tomorrow simply continues, and
+running it twice does no harm. Clearing auto_checked_at re-opens a label.
 
 ── What it will not do ───────────────────────────────────────────────────────────────────
 Guess. A label is registered only when two independent searches — one on its text, one on
@@ -37,34 +38,22 @@ where its trips actually end — land on the same OSM object within 50m, with no
 close. Anything less certain is left for a human in the admin panel. Auto-registering a poor
 match would attribute trips to the wrong place and nothing would ever flag it — the whole
 point of the unresolved queue is that being unresolved is safe and being wrong is not.
-
-Usage:
-    python3 scripts/seed_stations.py --dry-run --limit 30     # see what it would do
-    python3 scripts/seed_stations.py --limit 200              # a first careful pass
-    python3 scripts/seed_stations.py --limit 5000 --delay 1   # a long, gentle run
 """
 
-import argparse
 import difflib
-import os
-import sys
+import json
+import logging
+import threading
 import time
 import unicodedata
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-
-from scripts._env import load_env  # noqa: E402
-
-# Reads .env and picks a database host that resolves from wherever this is run,
-# so the script works both on the server and from a local shell.
-load_env()
-
-from src.pg import init_db_engine, pg_session  # noqa: E402
-from src.photon import photonRequestLangs  # noqa: E402
-from src.station_search import process_station_results  # noqa: E402
-from py.utils import getDistance  # noqa: E402
-from src.stations import (  # noqa: E402
+from py.utils import getDistance
+from src.pg import pg_session
+from src.photon import photonRequestLangs
+from src.station_search import process_station_results
+from src.stations import (
     add_aliases,
+    country_from_flag,
     label_location,
     registry_stats,
     resync_station,
@@ -72,6 +61,8 @@ from src.stations import (  # noqa: E402
     strip_flag,
     upsert_station,
 )
+
+logger = logging.getLogger(__name__)
 
 # The OSM tags to search per mode, mirroring the tables in templates/new.html. Without them
 # a search for "Bern" finds the city rather than the station.
@@ -284,8 +275,6 @@ def _by_name(label, station_type):
     label_country = None
     stripped = strip_flag(label)
     if stripped != label and len(label) >= 2:
-        from src.stations import country_from_flag
-
         label_country = country_from_flag(label)
     if label_country and props.get("countrycode") and props["countrycode"] != label_country:
         return None
@@ -413,126 +402,254 @@ def pending_labels(limit, pg):
     ).fetchall()
 
 
-def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--limit", type=int, default=100, help="labels to attempt this run")
-    parser.add_argument(
-        "--delay", type=float, default=0.5, help="seconds between labels (default 0.5)"
-    )
-    parser.add_argument(
-        "--min-occurrences",
-        type=int,
-        default=1,
-        help="skip spellings used fewer times than this",
-    )
-    parser.add_argument("--dry-run", action="store_true")
-    args = parser.parse_args()
+def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None):
+    """Work the queue, reporting as it goes. Returns the final totals.
 
-    init_db_engine()
-
-    before = registry_stats()
-    print(
-        f"Registry: {before['stations']:,} stations, "
-        f"{before['resolved']:,}/{before['endpoints']:,} endpoints resolved "
-        f"({100.0 * before['resolved'] / max(before['endpoints'], 1):.1f}%)\n"
-    )
+    `progress(line, totals)` is called once per label with a line for a human and the running
+    counts; `should_stop()` is asked after each one, so a run can be ended without losing
+    anything — a label is finished when its auto_checked_at is set, not when the run is.
+    """
+    totals = {
+        "total": 0,
+        "attempted": 0,
+        "registered": 0,
+        "skipped": 0,
+        "failed": 0,
+        "endpoints_gained": 0,
+    }
 
     with pg_session() as pg:
-        rows = [r for r in pending_labels(args.limit, pg) if r["occurrences"] >= args.min_occurrences]
+        rows = [
+            r for r in pending_labels(limit, pg) if r["occurrences"] >= min_occurrences
+        ]
+    totals["total"] = len(rows)
 
-    registered = skipped = failed = 0
-    endpoints_gained = 0
+    def report(line):
+        totals["attempted"] += 1
+        progress(line, totals)
 
     for row in rows:
         label, station_type = row["sample_label"], row["station_type"]
         try:
             candidate = find_candidate(label, station_bucket(station_type))
         except Exception as e:
-            print(f"  !  {label!r}: {e}")
-            failed += 1
+            totals["failed"] += 1
+            report(f"!  {label}: {e}")
             # A Photon failure is not this label's fault; stop rather than burn through the
             # rest of the queue marking everything unmatched.
             break
 
         if candidate["status"] != "ok":
-            skipped += 1
+            totals["skipped"] += 1
             note = candidate["status"]
             if candidate.get("distance_m") is not None:
                 note += f", {candidate['distance_m']:,.0f}m"
-            print(f"  -  {row['occurrences']:>6,}  {label}  ({note})")
-            if not args.dry_run:
+            if not dry_run:
                 record_check(row["label_id"], candidate["status"])
-            time.sleep(args.delay)
-            continue
+            report(f"-  {row['occurrences']:,}  {label}  ({note})")
+        else:
+            props = candidate["feature"]["properties"]
+            coords = candidate["feature"]["geometry"]["coordinates"]
+            line = (
+                f"{row['occurrences']:,}  {label}  ->  {props.get('name')}  "
+                f"[{candidate['score']:.2f}, {candidate['distance_m']:,.0f}m]"
+            )
 
-        props = candidate["feature"]["properties"]
-        coords = candidate["feature"]["geometry"]["coordinates"]
-        line = (
-            f"{row['occurrences']:>6,}  {label}  ->  {props.get('name')}  "
-            f"[{candidate['score']:.2f}, {candidate['distance_m']:,.0f}m]"
-        )
+            if dry_run:
+                totals["registered"] += 1
+                report(f"~  {line}")
+            else:
+                station_id = upsert_station(
+                    station_type=station_type,
+                    name_intl=props.get("name"),
+                    name_local=props.get("name_local"),
+                    osm_type=props.get("osm_type"),
+                    osm_id=props.get("osm_id"),
+                    country_code=props.get("countrycode"),
+                    lat=coords[1],
+                    lng=coords[0],
+                )
+                if station_id is None:
+                    totals["skipped"] += 1
+                    report(f"!  {row['occurrences']:,}  {label}  (could not register)")
+                else:
+                    # The label as people write it becomes a spelling of this station — that
+                    # is what resolves their trips, and it is often not the station's own name.
+                    add_aliases(station_id, [(strip_flag(label), "alias", None)])
+                    resync_station(station_id)
 
-        if args.dry_run:
-            print(f"  ~  {line}")
-            registered += 1
-            time.sleep(args.delay)
-            continue
+                    # Registering a station is not the same as resolving the spelling: if
+                    # another station already answers to it, it stays ambiguous and resolves
+                    # to neither. Record what is true rather than what was attempted.
+                    with pg_session() as pg:
+                        attached = pg.execute(
+                            "SELECT station_id FROM station_labels WHERE label_id = :id",
+                            {"id": row["label_id"]},
+                        ).scalar()
+                    record_check(row["label_id"], "ok" if attached else "not_attached")
+                    if attached:
+                        totals["registered"] += 1
+                        totals["endpoints_gained"] += row["occurrences"]
+                        report(f"ok {line}")
+                    else:
+                        totals["skipped"] += 1
+                        report(
+                            f"!  {row['occurrences']:,}  {label}  (registered {station_id}, "
+                            f"but the spelling still does not resolve)"
+                        )
 
-        station_id = upsert_station(
-            station_type=station_type,
-            name_intl=props.get("name"),
-            name_local=props.get("name_local"),
-            osm_type=props.get("osm_type"),
-            osm_id=props.get("osm_id"),
-            country_code=props.get("countrycode"),
-            lat=coords[1],
-            lng=coords[0],
-        )
-        if station_id is None:
-            skipped += 1
-            time.sleep(args.delay)
-            continue
+        if should_stop and should_stop():
+            break
+        time.sleep(delay)
 
-        # The label as people write it becomes a spelling of this station — that is what
-        # resolves their trips, and it is often not the station's own name.
-        add_aliases(station_id, [(strip_flag(label), "alias", None)])
-        resync_station(station_id)
+    return totals
 
-        # Registering a station is not the same as resolving the spelling: if another station
-        # already answers to it, it stays ambiguous and resolves to neither. Record what is
-        # true rather than what was attempted.
+
+# ── Running one from the admin panel ──────────────────────────────────────────────────────
+#
+# The console version prints; this one writes the same lines to station_seed_runs, because the
+# browser polling for them may be talking to a different gunicorn worker than the one doing
+# the work. See migration 0067.
+
+# How much of the log to keep. Enough to see what the run has been doing, not so much that a
+# 5,000-label run carries its whole history in one row that is rewritten twice a second.
+LOG_LINES = 200
+
+# A running row whose heartbeat is older than this belongs to a worker that is gone.
+STALE_AFTER_S = 120
+
+
+def start_seed_run(app, username, limit, delay, min_occurrences, dry_run):
+    """Begin a pass in a background thread. Returns the run as /seed reports it."""
+    # Also clears a run whose worker restarted mid-pass, which would otherwise claim to be
+    # running forever and block this one.
+    run_status()
+
+    with pg_session() as pg:
+        # One run at a time, enforced in the insert rather than by reading first: two passes
+        # over the same queue would ask Photon for everything twice.
+        run_id = pg.execute(
+            # CAST() rather than ::jsonb: SQLAlchemy does not recognise a bind parameter
+            # followed by a colon, so ":params::jsonb" reaches Postgres with the ":params"
+            # still in it.
+            "INSERT INTO station_seed_runs (started_by, params)"
+            " SELECT :user, CAST(:params AS jsonb)"
+            " WHERE NOT EXISTS (SELECT 1 FROM station_seed_runs WHERE state = 'running')"
+            " RETURNING run_id",
+            {
+                "user": username,
+                "params": json.dumps(
+                    {
+                        "limit": limit,
+                        "delay": delay,
+                        "min_occurrences": min_occurrences,
+                        "dry_run": dry_run,
+                    }
+                ),
+            },
+        ).scalar()
+    if run_id is None:
+        return {"success": False, "error": "a seeding run is already going", **run_status()}
+
+    lines = []
+
+    def progress(line, totals):
+        lines.append(line)
+        del lines[:-LOG_LINES]
+        _write_progress(run_id, lines, totals)
+
+    def should_stop():
         with pg_session() as pg:
-            attached = pg.execute(
-                "SELECT station_id FROM station_labels WHERE label_id = :id",
-                {"id": row["label_id"]},
-            ).scalar()
-        record_check(row["label_id"], "ok" if attached else "not_attached")
-        if not attached:
-            skipped += 1
-            print(f"  !  {row['occurrences']:>6,}  {label}  (registered {station_id}, "
-                  f"but the spelling still does not resolve)")
-            time.sleep(args.delay)
-            continue
+            return bool(
+                pg.execute(
+                    "SELECT stop_requested FROM station_seed_runs WHERE run_id = :id",
+                    {"id": run_id},
+                ).scalar()
+            )
 
-        registered += 1
-        endpoints_gained += row["occurrences"]
-        print(f"  ok {line}")
-        time.sleep(args.delay)
+    def work():
+        try:
+            with app.app_context():
+                totals = seed_run(
+                    limit, delay, min_occurrences, dry_run, progress, should_stop
+                )
+            _finish(run_id, totals, "stopped" if should_stop() else "done")
+        except Exception as e:
+            logger.warning(f"Station seeding run {run_id} failed: {e}")
+            _finish(run_id, None, "failed", error=str(e))
 
-    after = registry_stats()
-    print(
-        f"\n{registered} registered, {skipped} left for the queue, {failed} failed."
-        f"\nRegistry: {after['stations']:,} stations, "
-        f"{after['resolved']:,}/{after['endpoints']:,} endpoints resolved "
-        f"({100.0 * after['resolved'] / max(after['endpoints'], 1):.1f}%)"
-    )
-    if not args.dry_run and after["awaiting_enrichment"]:
-        print(
-            f"{after['awaiting_enrichment']:,} station(s) awaiting enrichment; the "
-            f"background thread will fetch their tags."
+    threading.Thread(target=work, daemon=True, name=f"station-seed-{run_id}").start()
+    return {"success": True, **run_status()}
+
+
+def _write_progress(run_id, lines, totals):
+    with pg_session() as pg:
+        pg.execute(
+            """
+            UPDATE station_seed_runs
+               SET updated_at = now(), log = CAST(:log AS jsonb),
+                   total = :total, attempted = :attempted, registered = :registered,
+                   skipped = :skipped, failed = :failed,
+                   endpoints_gained = :endpoints_gained
+             WHERE run_id = :id
+            """,
+            {"log": json.dumps(lines), "id": run_id, **totals},
         )
-    return 0
 
 
-if __name__ == "__main__":
-    sys.exit(main())
+def _finish(run_id, totals, state, error=None):
+    with pg_session() as pg:
+        pg.execute(
+            """
+            UPDATE station_seed_runs
+               SET state = :state, error = :error, finished_at = now(), updated_at = now(),
+                   total = COALESCE(:total, total),
+                   attempted = COALESCE(:attempted, attempted),
+                   registered = COALESCE(:registered, registered),
+                   skipped = COALESCE(:skipped, skipped),
+                   failed = COALESCE(:failed, failed),
+                   endpoints_gained = COALESCE(:endpoints_gained, endpoints_gained)
+             WHERE run_id = :id
+            """,
+            {
+                "id": run_id,
+                "state": state,
+                "error": error,
+                **(totals or dict.fromkeys(
+                    ["total", "attempted", "registered", "skipped", "failed",
+                     "endpoints_gained"], None
+                )),
+            },
+        )
+
+
+def latest_run():
+    with pg_session() as pg:
+        row = pg.execute(
+            """
+            SELECT *, extract(epoch FROM now() - updated_at)::float AS since_update
+            FROM station_seed_runs ORDER BY run_id DESC LIMIT 1
+            """
+        ).fetchone()
+    return dict(row._mapping) if row else None
+
+
+def request_stop():
+    """Ask the current run to finish after the label it is on."""
+    with pg_session() as pg:
+        pg.execute(
+            "UPDATE station_seed_runs SET stop_requested = TRUE WHERE state = 'running'"
+        )
+    return {"success": True}
+
+
+def run_status():
+    """The last run, as the panel shows it, plus the registry totals it is moving."""
+    run = latest_run()
+    if run and run["state"] == "running" and run["since_update"] > STALE_AFTER_S:
+        # Its worker restarted mid-pass. Nothing was lost — every label it finished is
+        # recorded — but the row would otherwise claim to be running forever and block the
+        # next run from starting.
+        _finish(run["run_id"], None, "failed", error="interrupted by a restart")
+        run = latest_run()
+    return {"run": run, "stats": registry_stats()}

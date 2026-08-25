@@ -3,7 +3,7 @@
 -- A refusal used to leave no trace, so a spelling nothing had looked at and one the script
 -- examined and could not settle looked identical — and only the second needs a human.
 ALTER TABLE station_labels
-    -- NULL until checked. See find_candidate() in scripts/seed_stations.py for the verdicts.
+    -- NULL until checked. See find_candidate() in src/station_seed.py for the verdicts.
     ADD COLUMN IF NOT EXISTS auto_checked_at TIMESTAMPTZ,
     ADD COLUMN IF NOT EXISTS auto_result TEXT;
 
