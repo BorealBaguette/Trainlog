@@ -2,6 +2,7 @@
 {% block content %}
 <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-cookie"></script>
 <style>
 body { background: #e9e9ec; }
 
@@ -19,7 +20,7 @@ body { background: #e9e9ec; }
     max-width: 1400px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: center;
     gap: 10px;
     margin-bottom: 14px;
     flex-wrap: nowrap;
@@ -31,52 +32,58 @@ body { background: #e9e9ec; }
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 8px 14px;
+    height: 36px;
+    box-sizing: border-box;
+    padding: 0 14px;
     border-radius: 7px;
     background: #fff;
     color: #333;
     text-decoration: none;
-    font-size: 14px;
+    font-size: 13px;
     box-shadow: 0 1px 4px rgba(0,0,0,0.15);
 }
 .posterBackBtn:hover { background: #f4f4f4; color: #333; }
 
 .posterControls { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; flex-shrink: 0; }
 
-.posterOrientation,
-.posterBasemap { display: inline-flex; border-radius: 7px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.15); flex-shrink: 0; }
-.posterOrientation button,
-.posterBasemap button {
+/* Compact dropdowns replace what used to be full button rows for basemap/
+   orientation/label-level — same choices, a fraction of the horizontal
+   space, no scrollbar on the control bar. */
+.posterSelectGroup {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    border: none;
+    height: 36px;
+    box-sizing: border-box;
     background: #fff;
-    color: #444;
-    padding: 7px 11px;
-    font-size: 12.5px;
-    white-space: nowrap;
-    cursor: pointer;
+    border-radius: 7px;
+    padding: 0 10px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    flex-shrink: 0;
 }
-.posterOrientation button i,
-.posterBasemap button i { font-size: 0.95em; color: #888; }
-.posterOrientation button.active i,
-.posterBasemap button.active i { color: #fff; }
-.posterOrientation button + button,
-.posterBasemap button + button { border-left: 1px solid #e2e2e2; }
-.posterOrientation button.active,
-.posterBasemap button.active { background: #0d6efd; color: #fff; }
+.posterSelectGroup i { font-size: 0.9em; color: #888; }
+.posterSelectGroup select {
+    height: 100%;
+    border: none;
+    background: transparent;
+    color: #333;
+    font-size: 13px;
+    cursor: pointer;
+    outline: none;
+}
 
 .posterDownloadBtn {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    padding: 8px 16px;
+    height: 36px;
+    box-sizing: border-box;
+    padding: 0 16px;
     border: none;
     border-radius: 7px;
     background: #0d6efd;
     color: #fff;
-    font-size: 14px;
+    font-size: 13px;
     cursor: pointer;
     box-shadow: 0 1px 4px rgba(0,0,0,0.2);
 }
@@ -181,16 +188,31 @@ body { background: #e9e9ec; }
     <div class="posterTopBar">
         <a class="posterBackBtn" href="{{ url_for('public_trip', tripIds=tripIds) }}"><i class="fas fa-chevron-left"></i> {{back}}</a>
         <div class="posterControls">
-            <div class="posterBasemap" role="group">
-                <button type="button" data-basemap="light"><i class="fa-solid fa-circle-dot"></i> {{ 'Positron' }}</button>
-                <button type="button" data-basemap="colorful"><i class="fa-solid fa-map-location-dot"></i> {{ 'Liberty' }}</button>
-                <button type="button" data-basemap="bright" class="active"><i class="fa-solid fa-map"></i> {{ 'Bright' }}</button>
-                <button type="button" data-basemap="dark"><i class="fa-solid fa-moon"></i> {{ 'Dark Train' }}</button>
+            <div class="posterSelectGroup">
+                <i class="fa-solid fa-map"></i>
+                <select id="posterBasemapSelect">
+                    <option value="light">{{ 'Positron' }}</option>
+                    <option value="colorful">{{ 'Liberty' }}</option>
+                    <option value="bright" selected>{{ 'Bright' }}</option>
+                    <option value="dark">{{ 'Dark Train' }}</option>
+                </select>
             </div>
-            <div class="posterOrientation" role="group">
-                <button type="button" data-orientation="portrait"><i class="fa-solid fa-mobile-screen"></i> {{ posterPortrait }}</button>
-                <button type="button" data-orientation="square" class="active"><i class="fa-solid fa-square"></i> {{ posterSquare }}</button>
-                <button type="button" data-orientation="landscape"><i class="fa-solid fa-tv"></i> {{ posterLandscape }}</button>
+            <div class="posterSelectGroup">
+                <i class="fa-solid fa-crop-simple"></i>
+                <select id="posterOrientationSelect">
+                    <option value="portrait">{{ posterPortrait }}</option>
+                    <option value="square" selected>{{ posterSquare }}</option>
+                    <option value="landscape">{{ posterLandscape }}</option>
+                </select>
+            </div>
+            <div class="posterSelectGroup">
+                <i class="fa-solid fa-tags"></i>
+                <select id="posterLabelLevelSelect">
+                    <option value="default">{{ posterLabelDefault }}</option>
+                    <option value="current" selected>{{ posterLabelCurated }}</option>
+                    <option value="countries">{{ posterLabelCountries }}</option>
+                    <option value="none">{{ posterLabelNone }}</option>
+                </select>
             </div>
             <button type="button" class="posterBackBtn" id="posterResetLabelsBtn" style="border:none;cursor:pointer;">
                 <i class="fas fa-rotate-left"></i> {{ posterResetLabels }}
@@ -239,21 +261,34 @@ const ORIENTATIONS = {
     square:    { w: 1000, h: 1000 },
     landscape: { w: 1200, h: 900 }
 };
-let orientation = 'square';
 
 // Curated subset of the tileservers maplibre-utils.js already knows how to load
 // (see MapConfig.vectorStylePaths), named to match the app's own tileserver
 // picker (templates/includes/tileserver_picker.html) so the names mean the
-// same thing here as everywhere else in Trainlog. `declutterBasemapLabels`
-// covers both this schema (OpenMapTiles, light/colorful) and dark-train's own
-// (a separate Trainlog-authored style with different layer ids).
+// same thing here as everywhere else in Trainlog. `applyLabelLevel` covers
+// both this schema (OpenMapTiles, light/colorful) and dark-train's own (a
+// separate Trainlog-authored style with different layer ids).
 const BASEMAPS = {
     light:    { tileserver: 'ofm-positron' },
     colorful: { tileserver: 'ofm-liberty' },
     bright:   { tileserver: 'ofm-bright' },
     dark:     { tileserver: 'dark-train', isDark: true }
 };
-let basemapId = 'bright';
+
+// Remember the last choice per control (js-cookie, same convention as
+// delayDateMode elsewhere in the app) — falls back to the default if unset
+// or if it names an option that no longer exists.
+function cookieOrDefault(name, validValues, fallback) {
+    const v = (typeof Cookies !== 'undefined') ? Cookies.get(name) : undefined;
+    return validValues.includes(v) ? v : fallback;
+}
+function rememberChoice(name, value) {
+    if (typeof Cookies !== 'undefined') Cookies.set(name, value, { expires: 365 });
+}
+
+let orientation = cookieOrDefault('posterOrientation', Object.keys(ORIENTATIONS), 'square');
+let basemapId = cookieOrDefault('posterBasemap', Object.keys(BASEMAPS), 'bright');
+let labelLevel = cookieOrDefault('posterLabelLevel', ['default', 'current', 'countries', 'none'], 'current');
 
 let map = null;
 let posterTrips = null;
@@ -274,9 +309,8 @@ function setSpinner(on) {
 
 function applyOrientation(name) {
     orientation = name;
-    document.querySelectorAll('.posterOrientation button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.orientation === name);
-    });
+    rememberChoice('posterOrientation', name);
+    document.getElementById('posterOrientationSelect').value = name;
     const dims = ORIENTATIONS[name];
     const outer = document.getElementById('posterMapOuter');
     outer.style.width = dims.w + 'px';
@@ -491,9 +525,20 @@ function buildTitle(trips) {
     }
     const dated = trips.filter(t => typeof t.trip.utc_filtered_start_datetime === 'string');
     if (dated.length) {
-        const first = dated[0].trip.utc_filtered_start_datetime.substring(0, 10);
-        const last = dated[dated.length - 1].trip.utc_filtered_start_datetime.substring(0, 10);
-        subtitleEl.textContent = first === last ? first : (first + ' – ' + last);
+        const firstStr = dated[0].trip.utc_filtered_start_datetime;
+        const lastStr = dated[dated.length - 1].trip.utc_filtered_start_datetime;
+        // `langId` is Trainlog's own UI-language global (set by layout.html) —
+        // reused here so the poster's date formatting matches the viewer's
+        // locale the same way the rest of the site already does.
+        const fmt = new Intl.DateTimeFormat(langId, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+        const parseUTC = (s) => new Date(s.replace(' ', 'T') + 'Z');
+        if (firstStr.substring(0, 10) === lastStr.substring(0, 10)) {
+            subtitleEl.textContent = fmt.format(parseUTC(firstStr));
+        } else if (typeof fmt.formatRange === 'function') {
+            subtitleEl.textContent = fmt.formatRange(parseUTC(firstStr), parseUTC(lastStr));
+        } else {
+            subtitleEl.textContent = fmt.format(parseUTC(firstStr)) + ' – ' + fmt.format(parseUTC(lastStr));
+        }
     }
 }
 
@@ -538,7 +583,8 @@ async function buildMap() {
 
     const finish = () => {
         if (myGeneration !== buildGeneration) return;
-        declutterBasemapLabels(newMap);
+        captureLabelBaseFilters(newMap);
+        applyLabelLevel(newMap, labelLevel);
         localizeBasemapLabels(newMap);
         posterFeatures = addPosterLayers(newMap, trips);
         wireLabelClickToHide(newMap);
@@ -553,14 +599,14 @@ async function buildMap() {
 function applyBasemap(id) {
     if (id === basemapId) return;
     basemapId = id;
-    document.querySelectorAll('.posterBasemap button').forEach(btn => {
-        btn.classList.toggle('active', btn.dataset.basemap === id);
-    });
+    rememberChoice('posterBasemap', id);
     buildMap();
 }
 
 async function init() {
-    applyOrientation('square');
+    document.getElementById('posterBasemapSelect').value = basemapId;
+    document.getElementById('posterLabelLevelSelect').value = labelLevel;
+    applyOrientation(orientation);
 
     const response = await $.post({
         url: '{{ url_for("getPublicTrips") }}',
@@ -611,15 +657,15 @@ function suppressCapitalsNearStations(map, points, trips) {
     }
     const farEnough = farConditions.length > 1 ? ['all', ...farConditions] : farConditions[0];
 
-    // Stash on the map instance so applyHiddenLabelFilters (manual click-to-
-    // hide) can layer on top of this without needing to know or reconstruct
-    // this geometry-distance logic itself.
-    map._posterCapitalBaseFilters = {};
+    // Fold into the recorded base filter (captureLabelBaseFilters) rather than
+    // replacing it, so manual click-to-hide (applyHiddenLabelFilters) composes
+    // on top of both the style's own filter and this distance condition.
+    if (!map._posterLabelBaseFilters) map._posterLabelBaseFilters = {};
     ['label_city_capital', 'place-capital'].forEach(id => {
         if (!map.getLayer(id)) return;
-        const existing = map.getFilter(id);
+        const existing = map._posterLabelBaseFilters[id];
         const base = existing ? ['all', existing, farEnough] : farEnough;
-        map._posterCapitalBaseFilters[id] = base;
+        map._posterLabelBaseFilters[id] = base;
         map.setFilter(id, base);
     });
 }
@@ -642,16 +688,20 @@ function applyHiddenLabelFilters(map) {
     if (map.getLayer('poster-labels')) {
         map.setFilter('poster-labels', exclude);
     }
-    const baseFilters = map._posterCapitalBaseFilters || {};
+    const baseFilters = map._posterLabelBaseFilters || {};
     Object.keys(baseFilters).forEach(id => {
         if (!map.getLayer(id)) return;
-        map.setFilter(id, exclude ? ['all', baseFilters[id], exclude] : baseFilters[id]);
+        const base = baseFilters[id];
+        map.setFilter(id, exclude ? (base ? ['all', base, exclude] : exclude) : base);
     });
 }
 
 function wireLabelClickToHide(map) {
-    const layerIds = ['poster-labels'];
-    ['label_city_capital', 'place-capital'].forEach(id => { if (map.getLayer(id)) layerIds.push(id); });
+    // Every basemap label layer, not just capitals — clicking works whichever
+    // one a given label happens to render on, hidden layers simply have
+    // nothing to click so registering all of them unconditionally is safe
+    // regardless of the current label level.
+    const layerIds = ['poster-labels'].concat(allBasemapLabelLayerIds().filter(id => map.getLayer(id)));
 
     layerIds.forEach(id => {
         map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
@@ -675,9 +725,8 @@ function resetHiddenLabels() {
 // dark-train) are built on OpenMapTiles vector tiles, which carry a
 // `name:<lang>` property per place feature for many languages — the styles
 // just hardcode their text-field to name:en/name rather than reading it. We
-// only still show country names + capitals (see declutterBasemapLabels), so
-// just those layers need their text-field rewritten to prefer the viewer's
-// own Trainlog UI language.
+// this rewrites country/capital/water text-field across every label level
+// they might appear at, so it doesn't need to track which level is active.
 const OMT_LANG_OVERRIDES = {
     gsw: 'de' // Swiss German isn't in the OSM name:* set; German is the nearest available
 };
@@ -705,45 +754,82 @@ function localizeBasemapLabels(map) {
     });
 }
 
-// The ofm-positron basemap labels its own cities/towns/villages/airports/roads,
-// which duplicates (and visually collides with) our own station labels — e.g.
-// its `airport` layer independently labels the exact airport our own origin/
-// destination point already names. Keep only country names + capitals for
-// context; everything place-specific comes from the trip's own stations.
-// Layer ids are specific to this basemap style (OpenMapTiles schema), hence
-// the guarded existence checks rather than a generic "hide all symbols" pass,
-// which would also remove desired country-name context.
-function declutterBasemapLabels(map) {
-    const hideIds = [
-        // OpenMapTiles schema (ofm-positron / ofm-liberty / ofm-bright).
-        // Capitals (label_city_capital) are deliberately NOT in this list —
-        // they're useful context for a trip passing near one without
-        // stopping there (e.g. Oslo on a Trondheim-Stockholm route). Only
-        // suppressed near one of our own stations — see
-        // suppressCapitalsNearStations, called from addPosterLayers.
+// The basemap labels its own cities/towns/villages/airports/roads/POIs, which
+// duplicates (and visually collides with) our own station labels — e.g. its
+// `airport` layer independently labels the exact airport our own origin/
+// destination point already names. Grouped by tier so applyLabelLevel can
+// show progressively less of it; ids cover both OpenMapTiles-schema basemaps
+// (ofm-positron / ofm-liberty / ofm-bright) and dark-train's own schema.
+const LABEL_LAYER_GROUPS = {
+    // Roads, POIs, house numbers, villages/towns/cities — place-specific noise
+    // that either duplicates our own stations or just clutters a print poster.
+    clutter: [
         'airport',
         'label_other', 'label_village', 'label_town', 'label_city', 'label_state',
         'highway-name-path', 'highway-name-minor', 'highway-name-major',
         'highway-shield-non-us', 'highway-shield-us-interstate', 'road_shield_us',
-        // ofm-bright additionally ships POI icons/labels the other two don't.
         'poi_r20', 'poi_r7', 'poi_r1', 'poi_transit', 'road_oneway', 'road_oneway_opposite',
-        // dark-train's own schema — same idea (place-capital handled the same
-        // way as label_city_capital, see suppressCapitalsNearStations).
         'poi-label', 'housenum-label',
         'place-suburbs', 'place-village', 'place-town', 'place-city-sm', 'place-city-lg',
         'road-label-small', 'road-label-medium', 'road-label-large', 'public-transport-label',
         'tunnel-oneway', 'road-oneway', 'bridge-oneway', 'mountain_peak'
-    ];
-    hideIds.forEach(id => {
-        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+    ],
+    water: [
+        'waterway_line_label', 'water_name_point_label', 'water_name_line_label',
+        'waterway-label', 'waterarea-label', 'marine-label-point', 'marine-label-line'
+    ],
+    // Useful context for a trip passing near one without stopping there (e.g.
+    // Oslo on a Trondheim-Stockholm route) — only suppressed near one of our
+    // own stations (suppressCapitalsNearStations) or by manual click, not
+    // hidden outright, except at the 'countries'/'none' label levels.
+    capitals: ['label_city_capital', 'place-capital'],
+    countries: ['label_country_1', 'label_country_2', 'label_country_3', 'country-label-sm', 'country-label-md', 'country-label-lg']
+};
+
+function allBasemapLabelLayerIds() {
+    return [].concat(...Object.values(LABEL_LAYER_GROUPS));
+}
+
+// Records each basemap label layer's own filter (as shipped by the style)
+// before we touch anything, so suppressCapitalsNearStations and manual
+// click-to-hide (applyHiddenLabelFilters) can each layer their own condition
+// on top via ['all', base, ...] without stepping on one another or on
+// whatever the style itself already filtered that layer by.
+function captureLabelBaseFilters(map) {
+    map._posterLabelBaseFilters = {};
+    allBasemapLabelLayerIds().forEach(id => {
+        if (!map.getLayer(id)) return;
+        map._posterLabelBaseFilters[id] = map.getFilter(id) || null;
     });
 }
 
-document.querySelectorAll('.posterOrientation button').forEach(btn => {
-    btn.addEventListener('click', () => applyOrientation(btn.dataset.orientation));
-});
-document.querySelectorAll('.posterBasemap button').forEach(btn => {
-    btn.addEventListener('click', () => applyBasemap(btn.dataset.basemap));
+// Four label-density tiers, applied directly to the current map (no rebuild
+// needed — just layer visibility toggles):
+//  - 'default':   whatever the raw basemap style ships, untouched
+//  - 'current':   clutter hidden, country names + capitals kept (the original behaviour)
+//  - 'countries': clutter + capitals + water names hidden, country names only
+//  - 'none':      every basemap text label hidden — just geometry/colour
+function applyLabelLevel(map, level) {
+    const setVisible = (ids, visible) => ids.forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+    });
+
+    if (level === 'default') {
+        Object.values(LABEL_LAYER_GROUPS).forEach(ids => setVisible(ids, true));
+        return;
+    }
+    setVisible(LABEL_LAYER_GROUPS.clutter, false);
+    setVisible(LABEL_LAYER_GROUPS.water, level === 'current');
+    setVisible(LABEL_LAYER_GROUPS.capitals, level === 'current');
+    setVisible(LABEL_LAYER_GROUPS.countries, level !== 'none');
+}
+
+document.getElementById('posterOrientationSelect').addEventListener('change', (e) => applyOrientation(e.target.value));
+document.getElementById('posterBasemapSelect').addEventListener('change', (e) => applyBasemap(e.target.value));
+document.getElementById('posterLabelLevelSelect').addEventListener('change', (e) => {
+    labelLevel = e.target.value;
+    rememberChoice('posterLabelLevel', labelLevel);
+    if (map) applyLabelLevel(map, labelLevel);
 });
 document.getElementById('posterResetLabelsBtn').addEventListener('click', resetHiddenLabels);
 
