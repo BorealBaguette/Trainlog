@@ -148,12 +148,12 @@ def display_name(station: dict, mode: str = "international", user_lang: str | No
     return international
 
 
-def stations_for_osm_objects(pairs, pg_session_=None) -> dict:
-    """Map (osm_type, osm_id) pairs to the station they belong to.
+def stations_for_osm_objects(pairs, station_type, pg_session_=None) -> dict:
+    """Map (osm_type, osm_id) pairs to the station they belong to in this mode's pool.
 
     `pairs` is an iterable of (osm_type, osm_id). Missing keys mean the object is not known
-    to belong to any registered station. This is what makes deduplication exact — see
-    station_osm_objects in migration 0058.
+    to belong to any registered station of this type. Scoped by pool because one object can
+    anchor a station in several — see migration 0065.
     """
     pairs = [(t, int(i)) for t, i in pairs if t and i is not None]
     if not pairs:
@@ -165,12 +165,14 @@ def stations_for_osm_objects(pairs, pg_session_=None) -> dict:
             SELECT o.osm_type, o.osm_id, COALESCE(s.superseded_by, s.station_id) AS station_id
             FROM station_osm_objects o
             JOIN stations s ON s.station_id = o.station_id
-            WHERE (o.osm_type, o.osm_id) IN (
+            WHERE s.station_type = :station_type
+              AND (o.osm_type, o.osm_id) IN (
                 SELECT x.t, x.i FROM unnest(CAST(:types AS text[]), CAST(:ids AS bigint[]))
                      AS x(t, i)
             )
             """,
-            {"types": [t for t, _ in pairs], "ids": [i for _, i in pairs]},
+            {"types": [t for t, _ in pairs], "ids": [i for _, i in pairs],
+             "station_type": station_bucket(station_type)},
         ).fetchall()
     return {(row["osm_type"], row["osm_id"]): row["station_id"] for row in rows}
 
@@ -345,39 +347,32 @@ def check_labels_consistency(pg_session_=None) -> dict:
     }
 
 
-def upsert_station(
+def find_station(
     *,
     station_type: str,
-    name_intl: str,
-    name_local: str | None = None,
     osm_type: str | None = None,
     osm_id: int | None = None,
     wikidata: str | None = None,
     uic_ref: str | None = None,
-    country_code: str | None = None,
-    lat: float | None = None,
-    lng: float | None = None,
     pg_session_=None,
 ) -> int | None:
-    """Find or create the station for a place the user just picked. Returns its station_id.
+    """The station this place already is, or None if it would be a new one.
 
-    Matched by strength of identity, not by what the caller passed: a known OSM object
-    first, then wikidata, then uic_ref, then the object itself. The new row is left with
-    enriched_at NULL — the enrichment queue — so a trip save never waits on a third party.
-
-    Every lookup resolves through superseded_by. A merged-away station keeps its anchors
-    (migration 0062), so matching one must land on its survivor and never on the husk.
+    Matched by strength of identity, not by what the caller passed: a known OSM object first,
+    then wikidata, then uic_ref, then the object itself. Every lookup is scoped to the mode's
+    pool (migration 0065) and resolves through superseded_by, so matching a merged-away
+    station lands on its survivor and never on the husk.
     """
     bucket = station_bucket(station_type)
-
     with get_or_create_pg_session(pg_session_) as pg:
         if osm_id is not None and osm_type:
             found = pg.execute(
                 "SELECT COALESCE(s.superseded_by, s.station_id)"
                 " FROM station_osm_objects o"
                 " JOIN stations s ON s.station_id = o.station_id"
-                " WHERE o.osm_type = :osm_type AND o.osm_id = :osm_id",
-                {"osm_type": osm_type, "osm_id": osm_id},
+                " WHERE o.osm_type = :osm_type AND o.osm_id = :osm_id"
+                "   AND s.station_type = :station_type",
+                {"osm_type": osm_type, "osm_id": osm_id, "station_type": bucket},
             ).scalar()
             if found:
                 return found
@@ -395,14 +390,48 @@ def upsert_station(
                 return found
 
         if osm_id is not None and osm_type:
-            found = pg.execute(
+            return pg.execute(
                 "SELECT COALESCE(superseded_by, station_id) FROM stations"
                 " WHERE osm_type = :osm_type AND osm_id = :osm_id"
+                "   AND station_type = :station_type"
                 " ORDER BY superseded_by NULLS FIRST LIMIT 1",
-                {"osm_type": osm_type, "osm_id": osm_id},
+                {"osm_type": osm_type, "osm_id": osm_id, "station_type": bucket},
             ).scalar()
-            if found:
-                return found
+    return None
+
+
+def upsert_station(
+    *,
+    station_type: str,
+    name_intl: str,
+    name_local: str | None = None,
+    osm_type: str | None = None,
+    osm_id: int | None = None,
+    wikidata: str | None = None,
+    uic_ref: str | None = None,
+    country_code: str | None = None,
+    lat: float | None = None,
+    lng: float | None = None,
+    pg_session_=None,
+) -> int | None:
+    """Find or create the station for a place the user just picked. Returns its station_id.
+
+    Matching is find_station()'s job. A new row is left with enriched_at NULL — the enrichment
+    queue — so a trip save never waits on a third party.
+    """
+    bucket = station_bucket(station_type)
+
+    with get_or_create_pg_session(pg_session_) as pg:
+        found = find_station(
+            station_type=station_type,
+            osm_type=osm_type,
+            osm_id=osm_id,
+            wikidata=wikidata,
+            uic_ref=uic_ref,
+            pg_session_=pg,
+        )
+        if found:
+            return found
 
         if not name_intl:
             return None
@@ -436,8 +465,9 @@ def upsert_station(
             # Lost the race; the other transaction's row is as good as ours would have been.
             station_id = pg.execute(
                 "SELECT station_id FROM stations"
-                " WHERE osm_type = :osm_type AND osm_id = :osm_id",
-                {"osm_type": osm_type, "osm_id": osm_id},
+                " WHERE osm_type = :osm_type AND osm_id = :osm_id"
+                "   AND station_type = :station_type",
+                {"osm_type": osm_type, "osm_id": osm_id, "station_type": bucket},
             ).scalar()
             if station_id is None:
                 return None
@@ -447,7 +477,7 @@ def upsert_station(
             pg.execute(
                 "INSERT INTO station_osm_objects (osm_type, osm_id, station_id)"
                 " VALUES (:osm_type, :osm_id, :station_id)"
-                " ON CONFLICT (osm_type, osm_id) DO NOTHING",
+                " ON CONFLICT (osm_type, osm_id, station_id) DO NOTHING",
                 {"osm_type": osm_type, "osm_id": osm_id, "station_id": station_id},
             )
 
@@ -786,12 +816,17 @@ def unresolved_labels(
     search: str | None = None,
     offset: int = 0,
     mode: str | None = None,
+    status: str | None = None,
     pg_session_=None,
 ) -> list[dict]:
     """The admin work queue: spellings resolving to no station, costliest first.
 
     `search` filters diacritic-insensitively, so "munchen" finds "München". Filtered in SQL
     because the queue is ~143k rows and a page holds a couple of hundred.
+
+    `auto_result` is what the seeding script made of the label, NULL if it has not reached it
+    yet — the difference between "nobody has looked" and "looked, and a human is needed".
+    `status` filters on it; pass 'unchecked' for the ones with no verdict.
     """
     search = (search or "").strip()
     with get_or_create_pg_session(pg_session_) as pg:
@@ -801,23 +836,31 @@ def unresolved_labels(
                    station_type,
                    occurrences,
                    users,
+                   auto_result,
                    station_flag_country(sample_label) AS country
             FROM station_labels
             WHERE station_id IS NULL AND occurrences > 0
               AND (:search = '' OR station_fold(sample_label) LIKE '%' || station_fold(:search) || '%')
               AND (:mode = '' OR station_type = :mode)
+              AND (:status = ''
+                   OR (:status = 'unchecked' AND auto_result IS NULL)
+                   OR auto_result = :status)
             ORDER BY occurrences DESC, label_id
             LIMIT :limit OFFSET :offset
             """,
-            {"limit": limit, "search": search, "offset": offset, "mode": mode or ""},
+            {"limit": limit, "search": search, "offset": offset,
+             "mode": mode or "", "status": status or ""},
         ).fetchall()
     return [dict(row._mapping) for row in rows]
 
 
 def count_unresolved(
-    search: str | None = None, mode: str | None = None, pg_session_=None
+    search: str | None = None,
+    mode: str | None = None,
+    status: str | None = None,
+    pg_session_=None,
 ) -> int:
-    """How many unresolved spellings match `search` — not how many are being shown."""
+    """How many unresolved spellings match the filters — not how many are being shown."""
     search = (search or "").strip()
     with get_or_create_pg_session(pg_session_) as pg:
         return pg.execute(
@@ -826,8 +869,11 @@ def count_unresolved(
             WHERE station_id IS NULL AND occurrences > 0
               AND (:search = '' OR station_fold(sample_label) LIKE '%' || station_fold(:search) || '%')
               AND (:mode = '' OR station_type = :mode)
+              AND (:status = ''
+                   OR (:status = 'unchecked' AND auto_result IS NULL)
+                   OR auto_result = :status)
             """,
-            {"search": search, "mode": mode or ""},
+            {"search": search, "mode": mode or "", "status": status or ""},
         ).scalar()
 
 

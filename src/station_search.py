@@ -118,6 +118,20 @@ def merge_language_passes(responses, primary="en", local="default"):
         # with Photon's English city produced labels like "Munich - München Hbf".
         props["city_en"] = props.get("city")
         props["city_local"] = other.get("city")
+
+    # A feature the local pass ranked out of its results has no city_local, and the city prefix
+    # then fell back to the English name and glued it to a local one — "Prague - Praha-Eden",
+    # while the same station one keystroke earlier was "Praha-Eden". One response only ever
+    # describes a city one way, so the features that do know it supply the ones that do not.
+    local_by_en = {
+        f["properties"]["city_en"]: f["properties"]["city_local"]
+        for f in features
+        if f["properties"].get("city_en") and f["properties"].get("city_local")
+    }
+    for feature in features:
+        props = feature["properties"]
+        if not props.get("city_local"):
+            props["city_local"] = local_by_en.get(props.get("city_en"))
     return features
 
 
@@ -151,20 +165,18 @@ def apply_international_names(features):
 def _city_is_redundant(props, name):
     """True if the station name already tells you which city it is in.
 
-    Checked in both languages: "Kyyiv-Pasazhyrskyy" against the English "Kyiv" scores too low
-    and became "Kyiv - Kyyiv-Pasazhyrskyy", where Київ against Київ-Пасажирський matches.
+    Every known spelling of the city against every known spelling of the name, because the two
+    do not reliably arrive in the same language: "Praha-Stodůlky" scores nothing against the
+    English "Prague" and became "Praha - Praha-Stodůlky", which the Czech "Praha" catches.
     """
-    candidates = [
-        (props.get("city_en"), name),
-        (props.get("city"), name),
-        (props.get("city_local"), props.get("name_local")),
-    ]
-    for city, against in candidates:
-        if not city or not against:
-            continue
-        if stringSimmilarity(city.lower(), against.lower()) >= CITY_PREFIX_SIMILARITY:
-            return True
-    return False
+    cities = (props.get("city_en"), props.get("city"), props.get("city_local"))
+    names = (name, props.get("name_local"))
+    return any(
+        stringSimmilarity(city.lower(), against.lower()) >= CITY_PREFIX_SIMILARITY
+        for city in cities
+        for against in names
+        if city and against
+    )
 
 
 def apply_city_prefix(features):
@@ -444,11 +456,11 @@ def search_stations(args, timeout=2, trip_type="train", user_id=None, display=No
     features = process_station_results(responses, primary=primary, local=local)
 
     if registry:
-        features = _drop_already_in_registry(features, registry)
+        features = _drop_already_in_registry(features, registry, trip_type)
     return registry + features
 
 
-def _drop_already_in_registry(features, registry):
+def _drop_already_in_registry(features, registry, trip_type):
     """Remove Photon results that are the same station as one the registry already returned.
 
     Comparing (osm_type, osm_id) alone showed stations twice, because Photon's top hit is
@@ -471,7 +483,7 @@ def _drop_already_in_registry(features, registry):
     try:
         from src.stations import stations_for_osm_objects
 
-        owner = stations_for_osm_objects(pairs)
+        owner = stations_for_osm_objects(pairs, trip_type)
     except Exception as e:
         logger.warning(f"Could not resolve OSM objects for deduplication: {e}")
         return features

@@ -59,9 +59,6 @@
      innerHTML with a spinner plus .text() collapsed the resolve list's flex rows and ran the
      name into its badge ("Schiphol Airportnew"). */
   .is-busy { pointer-events: none; opacity: .6; }
-  /* While one result is being registered, none of the others may be clicked: a second
-     registration of the same label attaches it to a second station and makes it ambiguous. */
-  .is-registering .list-group-item { pointer-events: none; opacity: .5; }
 
   /* Tables: quieter chrome, so the eye lands on names and numbers rather than on rules. */
   .registry-table { --bs-table-hover-bg: #f1f5f9; }
@@ -143,6 +140,17 @@
         <span class="input-group-text"><i class="fa-solid fa-magnifying-glass"></i></span>
         <input type="text" class="form-control" id="queueSearch" placeholder="search unresolved labels…">
         <select class="form-select flex-grow-0" style="width:13rem" id="queueMode"></select>
+        {# What the seeding script made of each label. "Needs a human" is the useful default
+           view once a pass has run: those are the ones it looked at and could not settle. #}
+        <select class="form-select flex-grow-0" style="width:13rem" id="queueStatus">
+          <option value="">any state</option>
+          <option value="unchecked">not yet checked</option>
+          <option value="ambiguous">ambiguous</option>
+          <option value="far">position looks wrong</option>
+          <option value="not_attached">did not attach</option>
+          <option value="no_match">no name match</option>
+          <option value="no_location">no trip path</option>
+        </select>
       </div>
       <div class="d-flex justify-content-between align-items-center mb-1">
         <div class="table-caption" id="queueCount"></div>
@@ -160,11 +168,12 @@
           <thead><tr>
             <th style="width:5.5rem">Mode</th>
             <th>Label</th>
+            <th style="width:11rem">State</th>
             <th class="num" style="width:5.5rem">Uses</th>
             <th class="num" style="width:5rem">Users</th>
           </tr></thead>
           <tbody id="queueBody">
-            <tr><td colspan="4" class="text-muted">loading…</td></tr>
+            <tr><td colspan="5" class="text-muted">loading…</td></tr>
           </tbody>
         </table>
       </div>
@@ -234,6 +243,7 @@
         {# Two ways of asking the same question. The text search answers "what is called this?",
            which is what the label gives us; the reverse search answers "what is actually at the
            place these trips end?", which needs no name at all and so cannot be misled by one. #}
+        <div id="resolveError" class="alert alert-danger py-2 px-3" hidden></div>
         <div id="resolveResults">
           {# When both searches land on one object and nothing else is near it, there is no
              choice left to make — so stop presenting one. The lists stay a click away. #}
@@ -272,6 +282,14 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body" id="stationBody"></div>
+      {# One Save for the whole modal. The position used to arm its own button, so dragging the
+         marker and closing threw the move away — which reads as the drag not working. #}
+      <div class="modal-footer py-2" id="stationFooter">
+        <span class="text-muted small me-auto" id="stationFooterNote"></span>
+        <button type="button" class="btn btn-outline-secondary btn-sm" id="stationCancel"
+                data-bs-dismiss="modal">Close</button>
+        <button type="button" class="btn btn-primary btn-sm" id="stationSave" disabled>Save</button>
+      </div>
     </div>
   </div>
 </div>
@@ -323,6 +341,12 @@ function hideModal(selector){
   const instance = bootstrap.Modal.getInstance(el);
   if(instance) instance.hide();
 }
+// Two modals cannot overlap without stranding a backdrop, so a hand-off waits for the first
+// to finish closing rather than opening the second on top of it.
+function afterHidden(selector, fn){
+  document.querySelector(selector)
+    .addEventListener("hidden.bs.modal", fn, { once: true });
+}
 
 function loadStats(){
   return $.getJSON(BASE + "/stats", d => {
@@ -341,19 +365,42 @@ function loadStats(){
 const PAGE_SIZE = 200;
 let queueOffset = 0, stationsOffset = 0;
 
+// What the seeding script decided, if it has reached this label yet. Null is not a failure —
+// it means untouched, which is a different kind of work from one it could not settle.
+const AUTO_STATE = {
+  ambiguous:   { cls: "bg-warning text-dark", icon: "fa-code-branch",
+                 text: "ambiguous", tip: "the two searches disagreed, or two places were equally close — pick one" },
+  far:         { cls: "bg-warning text-dark", icon: "fa-location-dot",
+                 text: "position?", tip: "both searches agree on the station, but it sits far from where the trips end — check the pin" },
+  not_attached:{ cls: "bg-danger text-white", icon: "fa-link-slash",
+                 text: "did not attach", tip: "a station was registered but this spelling still resolves to nothing — another station already answers to it" },
+  no_match:    { cls: "bg-light text-dark border", icon: "fa-magnifying-glass",
+                 text: "no name match", tip: "nothing is called this; find it by location" },
+  no_location: { cls: "bg-light text-dark border", icon: "fa-route",
+                 text: "no trip path", tip: "these trips have no drawn path, so there is nothing to check a match against" },
+};
+function autoStateCell(result){
+  if(!result) return `<span class="badge bg-secondary-subtle text-secondary border" title="the seeding script has not reached this label yet">not checked</span>`;
+  const s = AUTO_STATE[result];
+  if(!s) return `<span class="badge bg-light text-dark border">${esc(result)}</span>`;
+  return `<span class="badge ${s.cls}" title="${esc(s.tip)}"><i class="fa-solid ${s.icon}"></i> ${s.text}</span>`;
+}
+
 function loadQueue(){
   const q = encodeURIComponent($("#queueSearch").val() || "");
   const m = encodeURIComponent($("#queueMode").val() || "");
-  return $.getJSON(`${BASE}/unresolved?limit=${PAGE_SIZE}&offset=${queueOffset}&q=${q}&mode=${m}`, d => {
+  const st = encodeURIComponent($("#queueStatus").val() || "");
+  return $.getJSON(`${BASE}/unresolved?limit=${PAGE_SIZE}&offset=${queueOffset}&q=${q}&mode=${m}&status=${st}`, d => {
     const rows = d.labels.map(r => `
       <tr class="queue-row" data-label="${esc(r.raw_name)}" data-count="${r.occurrences}"
           data-type="${esc(r.station_type)}">
         <td>${modeCell(r.station_type)}</td>
         <td class="fw-medium">${esc(r.raw_name)}</td>
+        <td>${autoStateCell(r.auto_result)}</td>
         <td class="queue-count num">${fmt(r.occurrences)}</td>
         <td class="text-muted mono num">${fmt(r.users)}</td>
       </tr>`).join("");
-    $("#queueBody").html(rows || `<tr><td colspan="4" class="text-muted">nothing unresolved</td></tr>`);
+    $("#queueBody").html(rows || `<tr><td colspan="5" class="text-muted">nothing unresolved</td></tr>`);
     showingCount("#queueCount", d.labels.length, d.total, queueOffset, "unresolved spelling");
     pager("#queuePrev", "#queueNext", queueOffset, d.labels.length, d.total);
   });
@@ -410,6 +457,7 @@ $("#queueSearch").on("input", () => {
 });
 
 $("#queueMode").on("change", () => { queueOffset = 0; loadQueue(); });
+$("#queueStatus").on("change", () => { queueOffset = 0; loadQueue(); });
 $("#stationsMode").on("change", () => { stationsOffset = 0; loadStations(); });
 
 $("#queuePrev").on("click", () => { queueOffset = Math.max(0, queueOffset - PAGE_SIZE); loadQueue(); });
@@ -459,6 +507,7 @@ $(document).on("click", ".queue-row[data-label]", function(){
   $("#resolveLabel").text(currentLabel);
   $("#resolveCount").text(fmt($(this).data("count")));
   $("#resolveType").html(`${modeCell(currentMode)}`);
+  $("#resolveError").prop("hidden", true).empty();
   $("#searchResults").empty();
   $("#nearbyResults").empty();
   $("#nearbySection").prop("hidden", true);
@@ -607,7 +656,6 @@ function resultRow(f){
   // is invalid HTML that browsers handle inconsistently. busy() works on any element.
   return `<div class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
       role="button" tabindex="0"
-      data-distance="${metres === null ? "" : Math.round(metres)}"
       data-payload='${esc(JSON.stringify({
         name: p.name, name_local: p.name_local, country_code: p.countrycode,
         osm_type: p.osm_type, osm_id: p.osm_id, lng: c[0], lat: c[1]
@@ -720,41 +768,86 @@ $(document).on("click", "#resolveResults .list-group-item", function(e){
   const payload = JSON.parse($(this).attr("data-payload"));
   payload.raw_name = currentLabel;
   payload.station_type = currentMode;
+  showPreview(payload, this);
+});
 
-  // Last stop before a wrong registration. Attaching a well-used label to the wrong station
-  // credits every trip using it to a place nobody went, and the two candidates that make this
-  // easy to do look identical in the list — same name, same badge. The distance is the only
-  // thing that distinguishes them, so a far one has to be said out loud rather than coloured.
-  const metres = $(this).data("distance");
-  if(metres !== "" && metres !== undefined && metres > SAME_PLACE_M){
-    if(!confirm(`“${payload.name}” is ${dist(metres)} from where this label's trips actually `
-              + `begin or end.\n\nThat usually means it is a different place with the same `
-              + `name. Register it anyway?`)) return;
-  }
-  // Lock the whole result list, not just this row.
-  //
-  // busy() guards the element it is given, which stops a double-click on one row but does
-  // nothing about a click on a *different* one — and a search for one station routinely
-  // offers several rows that are the same place. Registering twice creates two stations and
-  // attaches this label to both, which makes it ambiguous: it then resolves to neither and
-  // the spelling is worse off than before it was touched. Measured on
-  // "City of London - London Liverpool Street", two clicks left 2,100 endpoints unresolvable.
-  if($("#resolveResults").data("registering")) return;
-  $("#resolveResults").data("registering", true).addClass("is-registering");
-  const restore = busy(this);
-  const unlock = () => $("#resolveResults").data("registering", false)
-                                          .removeClass("is-registering");
-  if(!restore){ unlock(); return; }
-  $.ajax({ url: BASE + "/register", method: "POST", contentType: "application/json",
-           data: JSON.stringify(payload) })
-    .done(r => {
+// Clicking a candidate opens the station page itself, on a station that does not exist yet:
+// the same render, the same map, the same spelling list, populated from a preview that has
+// already fetched the OSM tags. The decision is made on the real page, then saved.
+let pendingRegistration = null;
+let previewLoading = false;
+
+function showPreview(payload, row){
+  // The spinner goes on the row that was clicked, but the guard covers all of them: busy()
+  // only locks the row it is given, and two previews racing would fight over the modal.
+  if(previewLoading) return;
+  const restore = busy(row);
+  if(!restore) return;
+  previewLoading = true;
+  $("#resolveError").prop("hidden", true).empty();
+  $.ajax({ url: BASE + "/register/preview", method: "POST",
+           contentType: "application/json", data: JSON.stringify(payload) })
+    .done(d => {
+      pendingRegistration = { payload: payload, preview: d };
+      afterHidden("#resolveModal", () => renderStation(d, d.action === "create" ? "create" : "attach"));
       hideModal("#resolveModal");
-      if(r.success) toast(`Registered — ${fmt(r.trips_resynced)} trips re-resolved.`);
-      else toast(r.error || "failed", true);
-      refreshAll();
     })
-    .fail(() => toast("registration failed", true))
-    .always(() => { restore(); unlock(); });
+    .fail(x => {
+      // Stop here rather than opening a page with pieces missing. The modal stays as it was,
+      // so the same candidate can be tried again once the upstream recovers.
+      $("#resolveError")
+        .text((x.responseJSON || {}).error || "Could not load this station — nothing was written.")
+        .prop("hidden", false);
+    })
+    .always(() => { previewLoading = false; restore(); });
+}
+
+$(document).on("click", "#stationSave", function(){
+  const restore = busy(this);
+  if(!restore) return;
+
+  if(pendingRegistration){
+    const payload = pendingRegistration.payload;
+    // Only send a position if the marker was actually moved, and send it as the curated one:
+    // enrichment refreshes lat/lng from OSM straight after this and would undo it otherwise.
+    const from = stationMarker && stationMarker.startedAt;
+    if(from){
+      const at = stationMarker.getLatLng();
+      if(at.lat !== from.lat || at.lng !== from.lng){
+        payload.curated_lat = at.lat;
+        payload.curated_lng = at.lng;
+      }
+    }
+    $.ajax({ url: BASE + "/register", method: "POST", contentType: "application/json",
+             data: JSON.stringify(payload) })
+      .done(r => {
+        if(r.success){
+          // Done — one modal, one decision, one save. Re-rendering it here read as the page
+          // opening a second time, and there is nothing left to decide.
+          pendingRegistration = null;
+          hideModal("#stationModal");
+          toast(`Registered — ${fmt(r.trips_resynced)} trips re-resolved.`);
+          refreshAll();
+        } else {
+          // Keep the page open on the failure: closing it would leave the admin with a toast
+          // and no way back to what they were about to save.
+          stationError(r.error || "Registration failed.");
+        }
+      })
+      .fail(x => stationError((x.responseJSON || {}).error || "Registration failed."))
+      .always(restore);
+    return;
+  }
+
+  if(!pendingPos){ restore(); return; }
+  const id = $(this).data("station");
+  post(BASE + "/station/" + id + "/position", pendingPos)
+    .done(r => {
+      if(r.success){ toast("Position moved."); openStation(id); }
+      else stationError(r.error || "Could not move the position.");
+    })
+    .fail(x => stationError((x.responseJSON || {}).error || "Could not move the position."))
+    .always(restore);
 });
 
 // ── Station detail ───────────────────────────────────────────────────────────────────
@@ -763,13 +856,25 @@ $(document).on("click", "tr[data-station]", function(){
 });
 
 function openStation(id){
-  $.getJSON(BASE + "/station/" + id, d => {
+  $.getJSON(BASE + "/station/" + id, d => renderStation(d, "saved"));
+}
+
+// One renderer for both states. `mode` is "saved" for a station that exists, or "create" /
+// "attach" while deciding whether to write one — the page is identical either way, because
+// deciding on a summary of the page was the thing that kept going wrong.
+function renderStation(d, mode){
+  {
     const s = d.station;
+    const pending = mode !== "saved";
+    // Nothing that acts on a station id can work before there is one.
+    const dis = pending ? "disabled" : "";
     // The id is shown because the merge field below asks for one. It was previously
     // nowhere on the page — not in the list, not here — so the only way to merge was to
     // guess, or to read it out of the network tab.
     $("#stationTitle").html(
-      `${esc(s.curated_name || s.name_intl)} <span class="station-id" title="station id">#${s.station_id}</span>`
+      `${esc(s.curated_name || s.name_intl)} <span class="station-id" title="station id">`
+      + (pending ? (mode === "create" ? `new ${esc(s.station_type)} station` : "already exists")
+                 : `#${s.station_id}`) + `</span>`
     );
     const aliases = d.aliases.map(a => `
       <li class="list-group-item d-flex justify-content-between align-items-center py-1">
@@ -777,7 +882,7 @@ function openStation(id){
           <span class="badge bg-light text-dark border alias-badge">${esc(a.kind)}${a.lang ? ":" + esc(a.lang) : ""}</span>
           ${a.endpoints ? `<span class="badge bg-secondary">${fmt(a.endpoints)} uses</span>` : ""}
         </span>
-        ${["intl","local"].includes(a.kind) ? ""
+        ${["intl","local"].includes(a.kind) || a.alias_id === null ? ""
           : `<button class="btn btn-sm btn-outline-danger alias-del" data-alias="${a.alias_id}">×</button>`}
       </li>`).join("");
     const objects = d.osm_objects.map(o =>
@@ -792,8 +897,8 @@ function openStation(id){
           <label class="form-label small text-muted mb-1">Curated name — overrides everything</label>
           <div class="input-group input-group-sm">
             <input class="form-control" id="curatedName" value="${esc(s.curated_name || "")}"
-                   placeholder="${esc(s.name_intl)}">
-            <button class="btn btn-outline-primary" id="saveCurated" data-station="${s.station_id}">save</button>
+                   placeholder="${esc(s.name_intl)}" ${dis}>
+            <button class="btn btn-outline-primary" id="saveCurated" data-station="${s.station_id}" ${dis}>save</button>
           </div>
           <div class="form-text">generated: ${esc(s.name_intl)}${s.name_local ? ` · local: ${esc(s.name_local)}` : ""}</div>
         </div>
@@ -806,7 +911,9 @@ function openStation(id){
             ${!s.wikidata && !s.uic_ref ? `<span class="text-muted small">no stable identity — merging is by name only</span>` : ""}
           </div>
           <div class="mt-2"><label class="form-label small text-muted mb-1">OSM objects</label><div>${objects}</div></div>
-          <div class="form-text">${s.enriched_at ? "enriched " + esc(String(s.enriched_at).slice(0,16)) : "awaiting enrichment"}</div>
+          <div class="form-text">${
+        pending ? "tags read from OSM just now"
+                : (s.enriched_at ? "enriched " + esc(String(s.enriched_at).slice(0,16)) : "awaiting enrichment")}</div>
         </div>
       </div>
       <hr>
@@ -814,11 +921,11 @@ function openStation(id){
          coordinates anchor the geometry backfill, the duplicate radius and the sibling
          lookup — so being able to move it is not cosmetic. #}
       <div class="d-flex justify-content-between align-items-center mb-1">
-        <strong class="small">Position${s.curated_lat !== null ? ` <span class="badge bg-warning text-dark">moved</span>` : ""}</strong>
+        <strong class="small">Position${s.curated_lat !== null ? ` <span class="badge bg-warning text-dark">moved</span>` : ""}
+          <span class="small fw-normal ms-2" id="posDistance"></span></strong>
         <div class="d-flex gap-1">
           <button class="btn btn-sm btn-outline-secondary" id="resetPos" data-station="${s.station_id}"
-                  ${s.curated_lat === null ? "disabled" : ""}>reset to OSM</button>
-          <button class="btn btn-sm btn-outline-primary" id="savePos" data-station="${s.station_id}" disabled>save position</button>
+                  ${s.curated_lat === null || pending ? "disabled" : ""}>reset to OSM</button>
         </div>
       </div>
       <div class="form-text mb-1">Drag the marker to where the ${esc(s.station_type)} stop actually is. The OSM position is kept underneath.</div>
@@ -827,17 +934,17 @@ function openStation(id){
       <div class="d-flex justify-content-between align-items-center mb-2">
         <strong class="small">Spellings that resolve here</strong>
         <div class="d-flex gap-1">
-          <button class="btn btn-sm btn-outline-secondary" id="enrichOne" data-station="${s.station_id}">
+          <button class="btn btn-sm btn-outline-secondary" id="enrichOne" data-station="${s.station_id}" ${dis}>
             <i class="fa-solid fa-cloud-arrow-down"></i> re-enrich</button>
         </div>
       </div>
       <ul class="list-group list-group-flush mb-2">${aliases}</ul>
       <div class="input-group input-group-sm" style="max-width:34rem">
-        <input class="form-control" id="newAlias" placeholder="add a spelling…">
+        <input class="form-control" id="newAlias" placeholder="add a spelling…" ${dis}>
         <input class="form-control flex-grow-0" style="width:7rem" id="newAliasLang"
                placeholder="lang" maxlength="7"
                title="Optional ISO code, e.g. uk, ja, pt-BR. With one, this becomes the station's name in that language and users reading it will see it — which is how a language OSM does not carry gets added. Without one, it is only an extra spelling to search by.">
-        <button class="btn btn-outline-primary" id="addAlias" data-station="${s.station_id}">add</button>
+        <button class="btn btn-outline-primary" id="addAlias" data-station="${s.station_id}" ${dis}>add</button>
       </div>
       <div class="form-text">Give a language code to make this the station's name for users reading that language; leave blank for a search-only spelling.</div>
       <hr>
@@ -850,26 +957,40 @@ function openStation(id){
           </div>
         </div>
         <button class="btn btn-sm btn-outline-danger flex-shrink-0" id="deleteStation"
-                data-station="${s.station_id}">Delete</button>
+                data-station="${s.station_id}" ${dis}>Delete</button>
       </div>
       <label class="form-label small text-muted mb-1">Merge this station into another</label>
       <div class="input-group input-group-sm" style="max-width:26rem">
         <input class="form-control" id="mergeTarget"
-               placeholder="search by name, or type #id" autocomplete="off">
-        <button class="btn btn-outline-danger" id="mergeBtn" data-station="${s.station_id}">merge</button>
+               placeholder="search by name, or type #id" autocomplete="off" ${dis}>
+        <button class="btn btn-outline-danger" id="mergeBtn" data-station="${s.station_id}" ${dis}>merge</button>
       </div>
       <div id="mergeMatches" class="merge-matches"></div>
       <div class="form-text">Nothing is deleted: this row is marked superseded and its trips move.</div>
     `);
+    $("#stationFooterNote").removeClass("text-danger").addClass("text-muted");
+    if(pending){
+      $("#stationFooterNote").text(mode === "create"
+        ? "Nothing is written until you save."
+        : "This station already exists — saving attaches the spelling to it.");
+      $("#stationCancel").text("Cancel");
+      // No id yet, so nothing may fall through to the position endpoint with a stale one.
+      $("#stationSave").prop("disabled", (d.blocked_by || []).length > 0).removeData("station");
+    } else {
+      pendingRegistration = null;
+      $("#stationFooterNote").text("");
+      $("#stationCancel").text("Close");
+      $("#stationSave").prop("disabled", true).data("station", s.station_id);
+    }
     showModal("#stationModal");
-    initStationMap(s);
-  });
+    initStationMap(s, pending && mode === "create");
+  }
 }
 
 // ── The position picker ──────────────────────────────────────────────────────────────
 let stationMap = null, stationMarker = null, osmMarker = null, pendingPos = null;
 
-function initStationMap(s){
+function initStationMap(s, draggableNew){
   const lat = s.effective_lat, lng = s.effective_lng;
   if(lat === null || lng === null){
     $("#stationMap").html(`<div class="text-muted small p-3">no coordinates for this station</div>`);
@@ -892,29 +1013,44 @@ function initStationMap(s){
         { radius: 6, color: "#6c757d", fillOpacity: .4 })
         .bindTooltip("OSM position").addTo(stationMap);
     }
-    stationMarker = L.marker([lat, lng], { draggable: true }).addTo(stationMap);
+    // Where these trips actually end, so the marker can be judged against something.
+    if(currentLocation){
+      L.circleMarker([currentLocation.lat, currentLocation.lng],
+        { radius: 6, color: "#dc3545", weight: 2, fillOpacity: .5 })
+        .bindTooltip("where these trips end").addTo(stationMap);
+    }
+    // A station being attached to already has its position; only a new one takes it from here.
+    const canDrag = draggableNew || !pendingRegistration;
+    stationMarker = L.marker([lat, lng], { draggable: canDrag }).addTo(stationMap);
+    stationMarker.startedAt = { lat: lat, lng: lng };
     stationMarker.on("dragend", () => {
       const p = stationMarker.getLatLng();
       pendingPos = { lat: p.lat, lng: p.lng };
-      $("#savePos").prop("disabled", false);
+      // While registering, Save is already in the right state — arming it here would undo the
+      // block on a spelling another station claims.
+      if(!pendingRegistration){
+        $("#stationSave").prop("disabled", false);
+        $("#stationFooterNote").text("Position moved — Save to keep it.");
+      }
     });
+    if(currentLocation){
+      const readout = () => {
+        const at = stationMarker.getLatLng();
+        const away = getDistanceFromLocations(
+          { lat: currentLocation.lat, lng: currentLocation.lng }, { lat: at.lat, lng: at.lng });
+        const v = distanceVerdict(away);
+        $("#posDistance").html(
+          `<span class="${v.cls}"><i class="fa-solid ${v.icon}"></i> ${dist(away)} away</span>`);
+      };
+      stationMarker.on("move", readout);
+      readout();
+    }
     setTimeout(() => stationMap.invalidateSize(), 50);
   };
   if(el.classList.contains("show")) build();
   else el.addEventListener("shown.bs.modal", build, { once: true });
 }
 
-$(document).on("click", "#savePos", function(){
-  if(!pendingPos) return;
-  const id = $(this).data("station"); const restore = busy(this); if(!restore) return;
-  post(BASE + "/station/" + id + "/position", pendingPos)
-    .done(r => {
-      toast(r.success ? "Position moved." : (r.error || "failed"), !r.success);
-      if(r.success) openStation(id);
-    })
-    .always(restore)
-    .fail(x => toast((x.responseJSON||{}).error || "failed", true));
-});
 
 $(document).on("click", "#resetPos", function(){
   const id = $(this).data("station"); const restore = busy(this); if(!restore) return;
@@ -927,8 +1063,13 @@ $(document).on("click", "#resetPos", function(){
 // Free the map when the modal closes; leaving it attached to a detached node leaks it and
 // makes the next open measure the old container.
 document.getElementById("stationModal").addEventListener("hidden.bs.modal", () => {
+  // Still pending means this was cancelled rather than saved, so put the candidate list back
+  // rather than dropping the admin out of the label they were working.
+  const cancelled = pendingRegistration !== null;
+  pendingRegistration = null;
   if(stationMap){ stationMap.remove(); stationMap = null; }
   pendingPos = null;
+  if(cancelled) showModal("#resolveModal");
 });
 
 // Every action here reaches a third-party API or resolves thousands of rows, so a click can
