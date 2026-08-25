@@ -1337,6 +1337,7 @@ function renderSeed(run){
   $("#seedCounts").text(
     `${fmt(run.attempted)}/${fmt(run.total)} checked · ${fmt(run.registered)} registered · `
     + `${fmt(run.skipped)} left in the queue`
+    + (run.incomplete ? ` · ${fmt(run.incomplete)} pending retry (Photon timed out)` : "")
     + (run.failed ? ` · ${fmt(run.failed)} failed` : ""));
   $("#seedBar")
     .toggleClass("progress-bar-striped progress-bar-animated", running)

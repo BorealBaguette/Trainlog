@@ -211,9 +211,27 @@ AMBIGUITY_MARGIN = 0.05
 AGREEMENT_M = 50
 AGREEMENT_RADIUS_KM = 1
 
+# Below this many trip endpoints, or this many distinct people behind them, the median in
+# label_location() is left alone as a corroborating signal and nothing more.
+#
+# Before the registry existed, someone unhappy with where a station's marker sat would drag it
+# to wherever their router actually needed it to be to route correctly. That correction never
+# made it back to OSM — only into where their trip's path starts or ends. So when a lot of
+# trips from a lot of different people agree on a spot, that agreement is itself evidence of
+# the same kind: not a geocoder's guess, but the aggregate of real people fixing the pin by
+# hand, one trip at a time. Below these counts a handful of accounts drawing paths the same
+# rough way could look like consensus and isn't; above them it is too broad a coincidence to be
+# anything else.
+MEDIAN_MIN_POINTS = 100
+MEDIAN_MIN_USERS = 5
 
-def _by_name(label, station_type):
-    """The best station the trip form would offer for this label, or None."""
+
+def _by_name(label, station_type, flags):
+    """The best station the trip form would offer for this label, or None.
+
+    `flags["incomplete"]` is set when some, but not all, of a query's per-language requests
+    failed — see the module docstring's note by PARTIAL_FAILURE_STATUSES for why that matters.
+    """
     query = strip_flag(label).strip()
     if not query:
         return None
@@ -236,6 +254,8 @@ def _by_name(label, station_type):
         responses = photonRequestLangs("/api", params, ("en", "default"), timeout=10)
         if all(r is None for r in responses.values()):
             raise RuntimeError("Photon unavailable")
+        if any(r is None for r in responses.values()):
+            flags["incomplete"] = True
         features.extend(process_station_results(responses))
 
     if not features:
@@ -282,7 +302,7 @@ def _by_name(label, station_type):
     return {"feature": best, "score": best_score}
 
 
-def _by_location(label, station_type, location):
+def _by_location(label, station_type, location, flags):
     """What is actually at the label's own location, nearest first.
 
     Asked without the label's text, so nothing about how it is spelled can mislead it.
@@ -299,6 +319,8 @@ def _by_location(label, station_type, location):
     responses = photonRequestLangs("/reverse", params, ("en", "default"), timeout=10)
     if all(r is None for r in responses.values()):
         raise RuntimeError("Photon unavailable")
+    if any(r is None for r in responses.values()):
+        flags["incomplete"] = True
     return process_station_results(responses)
 
 
@@ -319,14 +341,21 @@ def find_candidate(label, station_type):
 
     The name search answers "what is called this", the location search "what is at the place
     these trips end". The location is what decides; the name only has to not contradict it.
+
+    Every status but `ok` may also carry `incomplete: True` — some of Photon's per-language
+    requests failed (a timeout, a 504) while others still answered, so the verdict was reached
+    on partial data. `ok` never needs the flag: a positive agreement is trustworthy regardless
+    of what a missing language might have added. Anything else might have gone the other way
+    with the full picture, so the caller must not treat it as a settled "no" — see seed_run().
     """
     location = label_location(label, station_type)
     if not location:
         return {"status": "no_location"}
 
-    by_name = _by_name(label, station_type)
+    flags = {"incomplete": False}
+    by_name = _by_name(label, station_type, flags)
     if not by_name:
-        return {"status": "no_match"}
+        return {"status": "no_match", "location": location, "incomplete": flags["incomplete"]}
 
     here = {"lat": location["lat"], "lng": location["lng"]}
 
@@ -336,7 +365,7 @@ def find_candidate(label, station_type):
             return None
         return getDistance(here, {"lat": coords[1], "lng": coords[0]})
 
-    nearby = _by_location(label, station_type, location)
+    nearby = _by_location(label, station_type, location, flags)
     named_key = _osm_key(by_name["feature"])
     agreed = named_key in {_osm_key(f) for f in nearby}
 
@@ -356,8 +385,9 @@ def find_candidate(label, station_type):
                 "feature": winner,
                 "score": by_name["score"],
                 "distance_m": away,
+                "location": location,
             }
-        return {"status": "ambiguous"}
+        return {"status": "ambiguous", "incomplete": flags["incomplete"]}
 
     # Nothing that close. If both searches still picked the same object, the match is likely
     # right and the position is what is wrong — which a human fixes by dragging the marker,
@@ -368,8 +398,10 @@ def find_candidate(label, station_type):
             "feature": by_name["feature"],
             "score": by_name["score"],
             "distance_m": distance(by_name["feature"]),
+            "location": location,
+            "incomplete": flags["incomplete"],
         }
-    return {"status": "ambiguous"}
+    return {"status": "ambiguous", "incomplete": flags["incomplete"]}
 
 
 def record_check(label_id, status):
@@ -414,6 +446,7 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
         "attempted": 0,
         "registered": 0,
         "skipped": 0,
+        "incomplete": 0,
         "failed": 0,
         "endpoints_gained": 0,
     }
@@ -440,13 +473,22 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
             break
 
         if candidate["status"] != "ok":
-            totals["skipped"] += 1
             note = candidate["status"]
             if candidate.get("distance_m") is not None:
                 note += f", {candidate['distance_m']:,.0f}m"
-            if not dry_run:
-                record_check(row["label_id"], candidate["status"])
-            report(f"-  {row['occurrences']:,}  {label}  ({note})")
+
+            if candidate.get("incomplete"):
+                # Reached on partial Photon data — a 504 or timeout on one language while
+                # another still answered. This label may well resolve on a full picture, so
+                # leave auto_checked_at unset rather than recording a "no" that would exclude
+                # it from every future run (pending_labels() only offers unchecked rows).
+                totals["incomplete"] += 1
+                report(f"?  {row['occurrences']:,}  {label}  ({note}, incomplete Photon data)")
+            else:
+                totals["skipped"] += 1
+                if not dry_run:
+                    record_check(row["label_id"], candidate["status"])
+                report(f"-  {row['occurrences']:,}  {label}  ({note})")
         else:
             props = candidate["feature"]["properties"]
             coords = candidate["feature"]["geometry"]["coordinates"]
@@ -454,6 +496,18 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
                 f"{row['occurrences']:,}  {label}  ->  {props.get('name')}  "
                 f"[{candidate['score']:.2f}, {candidate['distance_m']:,.0f}m]"
             )
+
+            # Enough independent people's trips converge on the same spot that it outranks
+            # Photon's own point — see MEDIAN_MIN_POINTS.
+            location = candidate["location"]
+            trusted_median = (
+                location["points"] >= MEDIAN_MIN_POINTS
+                and location["users"] >= MEDIAN_MIN_USERS
+            )
+            curated_lat = location["lat"] if trusted_median else None
+            curated_lng = location["lng"] if trusted_median else None
+            if trusted_median:
+                line += f"  (curated to {location['points']:,}-trip median)"
 
             if dry_run:
                 totals["registered"] += 1
@@ -468,6 +522,8 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
                     country_code=props.get("countrycode"),
                     lat=coords[1],
                     lng=coords[0],
+                    curated_lat=curated_lat,
+                    curated_lng=curated_lng,
                 )
                 if station_id is None:
                     totals["skipped"] += 1
@@ -589,7 +645,7 @@ def _write_progress(run_id, lines, totals):
             UPDATE station_seed_runs
                SET updated_at = now(), log = CAST(:log AS jsonb),
                    total = :total, attempted = :attempted, registered = :registered,
-                   skipped = :skipped, failed = :failed,
+                   skipped = :skipped, incomplete = :incomplete, failed = :failed,
                    endpoints_gained = :endpoints_gained
              WHERE run_id = :id
             """,
@@ -607,6 +663,7 @@ def _finish(run_id, totals, state, error=None):
                    attempted = COALESCE(:attempted, attempted),
                    registered = COALESCE(:registered, registered),
                    skipped = COALESCE(:skipped, skipped),
+                   incomplete = COALESCE(:incomplete, incomplete),
                    failed = COALESCE(:failed, failed),
                    endpoints_gained = COALESCE(:endpoints_gained, endpoints_gained)
              WHERE run_id = :id
@@ -616,7 +673,7 @@ def _finish(run_id, totals, state, error=None):
                 "state": state,
                 "error": error,
                 **(totals or dict.fromkeys(
-                    ["total", "attempted", "registered", "skipped", "failed",
+                    ["total", "attempted", "registered", "skipped", "incomplete", "failed",
                      "endpoints_gained"], None
                 )),
             },
