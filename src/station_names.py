@@ -321,6 +321,11 @@ def normalise_for_comparison(name):
 # 0.89 against Pietarsaari-Pedersöre, "pietrsari" 0.78, while "helsink" scores 0.13.
 _SPELLING_MATCH_MIN = 0.7
 
+# And it must be clearly better than the station's own name, not fractionally: a query naming
+# a *different* station scored a hair higher against this one's abbreviation than against its
+# full name, so the name it was offered under changed as the user kept typing.
+_SPELLING_MARGIN = 0.2
+
 
 def _prefix_similarity(folded_query, folded_name):
     """How well `folded_query` matches the beginning of `folded_name`. 0.0 to 1.0.
@@ -371,6 +376,7 @@ def preferred_spelling(query, canonical, matched_alias):
     # "pietarsar" is not a substring of "pietarsaaripedersore". Compare fuzzily instead.
     alias_score = _prefix_similarity(folded_query, folded_alias)
     canonical_score = _prefix_similarity(folded_query, folded_canonical)
-    if alias_score >= _SPELLING_MATCH_MIN and alias_score > canonical_score:
+    if (alias_score >= _SPELLING_MATCH_MIN
+            and alias_score - canonical_score >= _SPELLING_MARGIN):
         return matched_alias
     return canonical

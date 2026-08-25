@@ -102,7 +102,7 @@ def alias_rows_from_tags(tags: dict, name_intl: str | None):
     return rows
 
 
-def _fetch_objects(objects) -> dict:
+def fetch_osm_objects(objects) -> dict:
     """Fetch OSM tags and position for (osm_type, osm_id) pairs in one Overpass request.
 
     Returns {(osm_type, osm_id): {"tags": {...}, "lat": float|None, "lng": float|None}}.
@@ -260,7 +260,7 @@ def enrich_stations(station_ids, map_objects: bool = True, pg_session_=None) -> 
         ).fetchall()
 
         targets = [(r["osm_type"], r["osm_id"]) for r in rows if r["osm_id"] is not None]
-        objects = _fetch_objects(targets) if targets else {}
+        objects = fetch_osm_objects(targets) if targets else {}
 
         for row in rows:
             fetched = objects.get((row["osm_type"], row["osm_id"]), {})
@@ -387,7 +387,7 @@ def enrich_stations(station_ids, map_objects: bool = True, pg_session_=None) -> 
                         pg.execute(
                             "INSERT INTO station_osm_objects (osm_type, osm_id, station_id)"
                             " VALUES (:osm_type, :osm_id, :station_id)"
-                            " ON CONFLICT (osm_type, osm_id) DO NOTHING",
+                            " ON CONFLICT (osm_type, osm_id, station_id) DO NOTHING",
                             {
                                 "osm_type": osm_type,
                                 "osm_id": osm_id,

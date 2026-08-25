@@ -11,9 +11,15 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from src.pg import pg_session
 from src.station_names import international_name
-from src.station_osm import drain_enrichment_queue, enrich_stations
+from src.station_osm import (
+    alias_rows_from_tags,
+    drain_enrichment_queue,
+    enrich_stations,
+    fetch_osm_objects,
+)
 from src.stations import (
     add_aliases,
+    find_station,
     check_labels_consistency,
     merge_stations,
     modes_in_use,
@@ -74,12 +80,13 @@ def unresolved():
     offset = max(int(request.args.get("offset", 0)), 0)
     search = request.args.get("q")
     mode = request.args.get("mode")
+    status = request.args.get("status")
     return jsonify(
         {
             "labels": unresolved_labels(
-                limit=limit, search=search, offset=offset, mode=mode
+                limit=limit, search=search, offset=offset, mode=mode, status=status
             ),
-            "total": count_unresolved(search=search, mode=mode),
+            "total": count_unresolved(search=search, mode=mode, status=status),
             "offset": offset,
         }
     )
@@ -169,15 +176,14 @@ def list_stations():
     )
 
 
-@station_registry_blueprint.route("/station/<int:station_id>")
-@admin_required
-def station_detail(station_id):
+def _station_payload(station_id):
+    """The station page's data. Shared with the registration preview so both render the same."""
     with pg_session() as pg:
         station = pg.execute(
             "SELECT * FROM stations WHERE station_id = :id", {"id": station_id}
         ).fetchone()
         if station is None:
-            return jsonify({"error": "not found"}), 404
+            return None
 
         aliases = pg.execute(
             """
@@ -197,13 +203,20 @@ def station_detail(station_id):
             {"id": station_id},
         ).fetchall()
 
-    return jsonify(
-        {
-            "station": dict(station._mapping),
-            "aliases": [dict(row._mapping) for row in aliases],
-            "osm_objects": [dict(row._mapping) for row in objects],
-        }
-    )
+    return {
+        "station": dict(station._mapping),
+        "aliases": [dict(row._mapping) for row in aliases],
+        "osm_objects": [dict(row._mapping) for row in objects],
+    }
+
+
+@station_registry_blueprint.route("/station/<int:station_id>")
+@admin_required
+def station_detail(station_id):
+    payload = _station_payload(station_id)
+    if payload is None:
+        return jsonify({"error": "not found"}), 404
+    return jsonify(payload)
 
 
 @station_registry_blueprint.route("/station/<int:station_id>/curate", methods=["POST"])
@@ -377,6 +390,133 @@ def merge():
     return jsonify(merge_stations(source_id, target_id))
 
 
+@station_registry_blueprint.route("/register/preview", methods=["POST"])
+@admin_required
+def register_preview():
+    """Everything the station page shows, for a station that does not exist yet.
+
+    Shaped exactly like /station/<id> so one renderer draws both, and the admin decides on the
+    real page rather than a summary of it. That needs the OSM tags up front, so this fetches
+    them; saving fetches them again to write them, which is one extra Overpass call per manual
+    registration.
+
+    A fetch failure stops the preview rather than degrading it: a page with no identity looks
+    exactly like a station that has none, and that is not a thing to register on.
+    """
+    body = request.json or {}
+    raw_label = (body.get("raw_name") or "").strip()
+    name = strip_flag(body.get("name") or "") or strip_flag(raw_label)
+    station_type = body.get("station_type") or "train"
+    alias = strip_flag(raw_label)
+    osm_type, osm_id = body.get("osm_type"), body.get("osm_id")
+
+    endpoints = _label_endpoints(raw_label, station_type)
+    existing = find_station(station_type=station_type, osm_type=osm_type, osm_id=osm_id)
+
+    # An existing station already has a page; return it verbatim so the two cases render from
+    # identical data and cannot drift apart.
+    if existing:
+        payload = _station_payload(existing)
+        payload.update(
+            {
+                "action": "attach",
+                "alias": alias,
+                "blocked_by": _blocked_by(alias, station_type, existing),
+                "endpoints": endpoints,
+            }
+        )
+        return jsonify(payload)
+
+    tags, position = {}, {}
+    if osm_type and osm_id:
+        try:
+            fetched = fetch_osm_objects([(osm_type, osm_id)])
+            got = fetched.get((osm_type, int(osm_id)), {})
+            tags = got.get("tags", {}) or {}
+            position = {"lat": got.get("lat"), "lng": got.get("lng")}
+        except Exception as e:
+            logger.warning(f"Preview could not reach Overpass for {osm_type}{osm_id}: {e}")
+            return jsonify(
+                {
+                    "success": False,
+                    "error": f"Could not read this object's OSM tags: {e}. "
+                             f"Nothing was written — try again in a moment.",
+                }
+            ), 502
+
+    name_local = tags.get("name") or body.get("name_local")
+    name_intl = international_name(
+        name_local, tags.get("name:en"), country_code=body.get("country_code"), tags=tags
+    ) or name
+
+    lat = position.get("lat") if position.get("lat") is not None else body.get("lat")
+    lng = position.get("lng") if position.get("lng") is not None else body.get("lng")
+
+    # The spellings this station would answer to, in the shape the page lists them.
+    aliases, seen = [], set()
+    for a, kind, lang in alias_rows_from_tags(tags, name_intl):
+        key = (a or "").strip().lower()
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        aliases.append({"alias_id": None, "alias": a, "kind": kind, "lang": lang,
+                        "endpoints": 0})
+    if alias and alias.strip().lower() not in seen:
+        aliases.append({"alias_id": None, "alias": alias, "kind": "alias", "lang": None,
+                        "endpoints": endpoints})
+
+    return jsonify(
+        {
+            "action": "create",
+            "alias": alias,
+            "blocked_by": _blocked_by(alias, station_type, None),
+            "endpoints": endpoints,
+            "station": {
+                "station_id": None,
+                "station_type": station_type,
+                "name_intl": name_intl,
+                "name_local": name_local,
+                "curated_name": None,
+                "wikidata": tags.get("wikidata"),
+                "uic_ref": tags.get("uic_ref"),
+                "country_code": body.get("country_code"),
+                "lat": lat,
+                "lng": lng,
+                "curated_lat": None,
+                "curated_lng": None,
+                "effective_lat": lat,
+                "effective_lng": lng,
+                "enriched_at": None,
+                "superseded_by": None,
+            },
+            "aliases": aliases,
+            "osm_objects": (
+                [{"osm_type": osm_type, "osm_id": osm_id}] if osm_type and osm_id else []
+            ),
+        }
+    )
+
+
+def _blocked_by(alias, station_type, existing):
+    """Other live stations already answering to this spelling, which would make it ambiguous."""
+    if not alias:
+        return []
+    return [h for h in stations_holding_alias(alias, station_type) if h != existing]
+
+
+def _label_endpoints(raw_label, station_type):
+    with pg_session() as pg:
+        return int(
+            pg.execute(
+                "SELECT COALESCE(sum(occurrences), 0) FROM station_labels"
+                " WHERE normalized = station_normalize(:label)"
+                "   AND station_type = station_type_bucket(:station_type)",
+                {"label": raw_label, "station_type": station_type},
+            ).scalar()
+            or 0
+        )
+
+
 @station_registry_blueprint.route("/register", methods=["POST"])
 @admin_required
 def register():
@@ -435,12 +575,25 @@ def register():
 
     resynced = resync_station(station_id)
 
-    # Fetch the tags immediately: the admin is waiting and one station is one request.
+    # Fetch the tags now rather than leaving the row for the background thread. The preview
+    # already showed the admin this station's identity and spellings; saving has to actually
+    # write them, or the page they approved is not the page they get.
     enriched = {}
     try:
         enriched = enrich_stations([station_id])
     except Exception as e:
-        logger.info(f"Station {station_id} registered; enrichment deferred to cron: {e}")
+        logger.warning(f"Station {station_id} registered but enrichment failed: {e}")
+
+    # A moved marker goes to the curated position, not to lat/lng: enrichment refreshes those
+    # from OSM and would put the pin straight back where the admin moved it from.
+    curated_lat, curated_lng = body.get("curated_lat"), body.get("curated_lng")
+    if curated_lat is not None and curated_lng is not None:
+        with pg_session() as pg:
+            pg.execute(
+                "UPDATE stations SET curated_lat = :lat, curated_lng = :lng"
+                " WHERE station_id = :id",
+                {"lat": float(curated_lat), "lng": float(curated_lng), "id": station_id},
+            )
 
     return jsonify(
         {

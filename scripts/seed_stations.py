@@ -13,8 +13,9 @@ its own.
 ── Pacing ────────────────────────────────────────────────────────────────────────────────
 Two very different services are involved and only one of them is yours:
 
-  Photon    self-hosted, one query per label. Yours to saturate, but it also serves the live
-            autocomplete, so --delay keeps this from competing with real users.
+  Photon    self-hosted, two or three queries per label — the name search, and a reverse
+            lookup at the label's own location. Yours to saturate, but it also serves the
+            live autocomplete, so --delay keeps this from competing with real users.
   Overpass  public, and the reason for care. Not touched here at all: this script only
             creates rows with enriched_at NULL, and the background enricher drains them at
             its own pace (60 per request, one request per pass).
@@ -25,16 +26,17 @@ noticed alongside normal traffic and gets through the meaningful part of the que
 evening.
 
 ── Resuming ──────────────────────────────────────────────────────────────────────────────
-There is no progress file and none is needed: a label is done when station_labels.station_id
-is set, and a station is enriched when enriched_at is set. Both live in the database, so
-stopping this with Ctrl-C and starting it again tomorrow simply continues, and running it
-twice does no harm.
+There is no progress file and none is needed: a label is done when it has been checked
+(station_labels.auto_checked_at), and a station is enriched when enriched_at is set. Both
+live in the database, so stopping this with Ctrl-C and starting it again tomorrow simply
+continues, and running it twice does no harm. Clearing auto_checked_at re-opens a label.
 
 ── What it will not do ───────────────────────────────────────────────────────────────────
-Guess. A label is registered only when the search returns something whose name really is
-that label; anything less confident is left for a human in the admin panel. Auto-registering
-a poor match would attribute trips to the wrong place and nothing would ever flag it — the
-whole point of the unresolved queue is that being unresolved is safe and being wrong is not.
+Guess. A label is registered only when two independent searches — one on its text, one on
+where its trips actually end — land on the same OSM object within 50m, with nothing else as
+close. Anything less certain is left for a human in the admin panel. Auto-registering a poor
+match would attribute trips to the wrong place and nothing would ever flag it — the whole
+point of the unresolved queue is that being unresolved is safe and being wrong is not.
 
 Usage:
     python3 scripts/seed_stations.py --dry-run --limit 30     # see what it would do
@@ -60,8 +62,10 @@ load_env()
 from src.pg import init_db_engine, pg_session  # noqa: E402
 from src.photon import photonRequestLangs  # noqa: E402
 from src.station_search import process_station_results  # noqa: E402
+from py.utils import getDistance  # noqa: E402
 from src.stations import (  # noqa: E402
     add_aliases,
+    label_location,
     registry_stats,
     resync_station,
     station_bucket,
@@ -211,8 +215,13 @@ def confidence(label, candidate_name):
 # a label that cannot tell them apart belongs in the queue where a human sees the whole list.
 AMBIGUITY_MARGIN = 0.05
 
+# Both searches must land on the same OSM object, this close to where the label's trips end.
+# The same rule the admin panel uses to collapse its two lists into one answer.
+AGREEMENT_M = 50
+AGREEMENT_RADIUS_KM = 1
 
-def find_candidate(label, station_type):
+
+def _by_name(label, station_type):
     """The best station the trip form would offer for this label, or None."""
     query = strip_flag(label).strip()
     if not query:
@@ -284,12 +293,115 @@ def find_candidate(label, station_type):
     return {"feature": best, "score": best_score}
 
 
+def _by_location(label, station_type, location):
+    """What is actually at the label's own location, nearest first.
+
+    Asked without the label's text, so nothing about how it is spelled can mislead it.
+    """
+    params = {
+        "lat": location["lat"],
+        "lon": location["lng"],
+        "radius": AGREEMENT_RADIUS_KM,
+        "limit": 10,
+    }
+    tags = OSM_TAGS.get(station_type)
+    if tags:
+        params["osm_tag"] = tags
+    responses = photonRequestLangs("/reverse", params, ("en", "default"), timeout=10)
+    if all(r is None for r in responses.values()):
+        raise RuntimeError("Photon unavailable")
+    return process_station_results(responses)
+
+
+def _osm_key(feature):
+    props = feature.get("properties", {})
+    return props.get("osm_type"), props.get("osm_id")
+
+
+def find_candidate(label, station_type):
+    """What the two searches make of this label. Always returns a dict with a `status`:
+
+      ok           both landed on one OSM object within AGREEMENT_M — safe to register
+      far          both agree on the object, but it sits further away than that. Probably the
+                   right station with a bad position; an admin should place the pin.
+      ambiguous    they disagree, or two different places are equally close
+      no_match     the name search found nothing confident
+      no_location  the label's trips have no path, so there is nothing to agree with
+
+    The name search answers "what is called this", the location search "what is at the place
+    these trips end". The location is what decides; the name only has to not contradict it.
+    """
+    location = label_location(label, station_type)
+    if not location:
+        return {"status": "no_location"}
+
+    by_name = _by_name(label, station_type)
+    if not by_name:
+        return {"status": "no_match"}
+
+    here = {"lat": location["lat"], "lng": location["lng"]}
+
+    def distance(feature):
+        coords = feature.get("geometry", {}).get("coordinates")
+        if not coords or len(coords) < 2:
+            return None
+        return getDistance(here, {"lat": coords[1], "lng": coords[0]})
+
+    nearby = _by_location(label, station_type, location)
+    named_key = _osm_key(by_name["feature"])
+    agreed = named_key in {_osm_key(f) for f in nearby}
+
+    # Everything either search puts within AGREEMENT_M. Two distinct objects that close is a
+    # choice, and a choice belongs to a human.
+    close = {}
+    for feature in [by_name["feature"], *nearby]:
+        away = distance(feature)
+        if away is not None and away <= AGREEMENT_M:
+            close.setdefault(_osm_key(feature), (feature, away))
+
+    if len(close) == 1:
+        (winner, away), = close.values()
+        if _osm_key(winner) == named_key and agreed:
+            return {
+                "status": "ok",
+                "feature": winner,
+                "score": by_name["score"],
+                "distance_m": away,
+            }
+        return {"status": "ambiguous"}
+
+    # Nothing that close. If both searches still picked the same object, the match is likely
+    # right and the position is what is wrong — which a human fixes by dragging the marker,
+    # not by choosing a different station.
+    if not close and agreed:
+        return {
+            "status": "far",
+            "feature": by_name["feature"],
+            "score": by_name["score"],
+            "distance_m": distance(by_name["feature"]),
+        }
+    return {"status": "ambiguous"}
+
+
+def record_check(label_id, status):
+    """Remember what this run decided, so the queue can show why a label is still in it."""
+    with pg_session() as pg:
+        pg.execute(
+            "UPDATE station_labels SET auto_checked_at = now(), auto_result = :status"
+            " WHERE label_id = :label_id",
+            {"status": status, "label_id": label_id},
+        )
+
+
 def pending_labels(limit, pg):
     return pg.execute(
         """
         SELECT label_id, sample_label, station_type, occurrences
         FROM station_labels
         WHERE station_id IS NULL AND occurrences > 0
+          -- Already looked at, whatever the verdict. Re-asking Photon the same question on
+          -- every run costs queries and changes nothing; clear auto_checked_at to redo one.
+          AND auto_checked_at IS NULL
           -- Belt and braces: an untracked mode should never be in this table at all, but a
           -- stale row from before the exclusion must not be auto-registered against a Photon
           -- result — least of all one of the personal modes, whose labels are private.
@@ -342,9 +454,14 @@ def main():
             # rest of the queue marking everything unmatched.
             break
 
-        if candidate is None:
+        if candidate["status"] != "ok":
             skipped += 1
-            print(f"  -  {row['occurrences']:>6,}  {label}  (no confident match)")
+            note = candidate["status"]
+            if candidate.get("distance_m") is not None:
+                note += f", {candidate['distance_m']:,.0f}m"
+            print(f"  -  {row['occurrences']:>6,}  {label}  ({note})")
+            if not args.dry_run:
+                record_check(row["label_id"], candidate["status"])
             time.sleep(args.delay)
             continue
 
@@ -352,7 +469,7 @@ def main():
         coords = candidate["feature"]["geometry"]["coordinates"]
         line = (
             f"{row['occurrences']:>6,}  {label}  ->  {props.get('name')}  "
-            f"[{candidate['score']:.2f}]"
+            f"[{candidate['score']:.2f}, {candidate['distance_m']:,.0f}m]"
         )
 
         if args.dry_run:
@@ -380,6 +497,22 @@ def main():
         # resolves their trips, and it is often not the station's own name.
         add_aliases(station_id, [(strip_flag(label), "alias", None)])
         resync_station(station_id)
+
+        # Registering a station is not the same as resolving the spelling: if another station
+        # already answers to it, it stays ambiguous and resolves to neither. Record what is
+        # true rather than what was attempted.
+        with pg_session() as pg:
+            attached = pg.execute(
+                "SELECT station_id FROM station_labels WHERE label_id = :id",
+                {"id": row["label_id"]},
+            ).scalar()
+        record_check(row["label_id"], "ok" if attached else "not_attached")
+        if not attached:
+            skipped += 1
+            print(f"  !  {row['occurrences']:>6,}  {label}  (registered {station_id}, "
+                  f"but the spelling still does not resolve)")
+            time.sleep(args.delay)
+            continue
 
         registered += 1
         endpoints_gained += row["occurrences"]
