@@ -7,7 +7,7 @@ names the rules get wrong. Every action is reversible and none touches a user's 
 
 import logging
 
-from flask import Blueprint, jsonify, render_template, request, session
+from flask import Blueprint, current_app, jsonify, render_template, request, session
 
 from src.pg import pg_session
 from src.station_names import international_name
@@ -33,8 +33,9 @@ from src.stations import (
     unresolved_labels,
     upsert_station,
 )
+from src.station_seed import request_stop, run_status, start_seed_run
 from src.consts import TRIP_TYPE_ICONS
-from src.utils import admin_required, getUser, has_current_trip, lang
+from src.utils import admin_required, getUser, has_current_trip, lang, owner_required
 
 logger = logging.getLogger(__name__)
 
@@ -354,6 +355,48 @@ def enrich_one(station_id):
     except Exception as e:
         logger.warning(f"Manual enrichment of station {station_id} failed: {e}")
         return jsonify({"success": False, "error": str(e)}), 502
+
+
+# ── Seeding ──────────────────────────────────────────────────────────────────────────────
+#
+# Owner-only, unlike the rest of the panel: this registers stations unattended, at a rate no
+# one is reading, and it spends the Photon that serves the live autocomplete. Everything else
+# here is one admin deciding one label.
+
+
+@station_registry_blueprint.route("/seed", methods=["GET"])
+@owner_required
+def seed_status():
+    return jsonify(run_status())
+
+
+@station_registry_blueprint.route("/seed/start", methods=["POST"])
+@owner_required
+def seed_start():
+    body = request.json or {}
+    try:
+        limit = min(max(int(body.get("limit", 100)), 1), 20000)
+        delay = min(max(float(body.get("delay", 0.5)), 0.1), 10.0)
+        min_occurrences = max(int(body.get("min_occurrences", 1)), 1)
+    except (TypeError, ValueError):
+        return jsonify({"success": False, "error": "bad parameters"}), 400
+
+    result = start_seed_run(
+        current_app._get_current_object(),
+        getUser(),
+        limit=limit,
+        delay=delay,
+        min_occurrences=min_occurrences,
+        dry_run=bool(body.get("dry_run")),
+    )
+    return jsonify(result), (200 if result.get("success") else 409)
+
+
+@station_registry_blueprint.route("/seed/stop", methods=["POST"])
+@owner_required
+def seed_stop():
+    """Ask the run to finish after the label it is on. Nothing in progress is lost."""
+    return jsonify(request_stop())
 
 
 @station_registry_blueprint.route("/enrich-queue", methods=["POST"])
