@@ -358,11 +358,14 @@ def upsert_station(
     country_code: str | None = None,
     lat: float | None = None,
     lng: float | None = None,
+    curated_lat: float | None = None,
+    curated_lng: float | None = None,
     pg_session_=None,
 ) -> int | None:
     """Find or create the station for a place the user just picked. Returns its station_id.
 
     New rows are left for the background enricher, so a trip save never waits on OSM.
+    `curated_lat`/`curated_lng` only apply to a new row.
     """
     bucket = station_bucket(station_type)
 
@@ -385,9 +388,11 @@ def upsert_station(
         station_id = pg.execute(
             """
             INSERT INTO stations (osm_type, osm_id, wikidata, uic_ref, station_type,
-                                  name_local, name_intl, country_code, lat, lng)
+                                  name_local, name_intl, country_code, lat, lng,
+                                  curated_lat, curated_lng)
             VALUES (:osm_type, :osm_id, :wikidata, :uic_ref, :station_type,
-                    :name_local, :name_intl, :country_code, :lat, :lng)
+                    :name_local, :name_intl, :country_code, :lat, :lng,
+                    :curated_lat, :curated_lng)
             ON CONFLICT DO NOTHING
             RETURNING station_id
             """,
@@ -402,6 +407,8 @@ def upsert_station(
                 "country_code": country_code,
                 "lat": lat,
                 "lng": lng,
+                "curated_lat": curated_lat,
+                "curated_lng": curated_lng,
             },
         ).scalar()
 
@@ -717,6 +724,7 @@ def label_location(label: str, station_type: str, pg_session_=None) -> dict | No
         "lat": float(row["lat"]),
         "lng": float(row["lng"]),
         "points": int(row["points"]),
+        "users": int(row["users"]),
         "spread_m": float(row["spread_m"]) if row["spread_m"] is not None else None,
     }
 

@@ -139,9 +139,18 @@ AMBIGUITY_MARGIN = 0.05
 AGREEMENT_M = 50
 AGREEMENT_RADIUS_KM = 1
 
+# With this many trip endpoints from this many people, their median position outranks
+# Photon's: users used to drag misplaced markers to where routing worked, and that
+# correction survives only in their paths.
+MEDIAN_MIN_POINTS = 100
+MEDIAN_MIN_USERS = 5
 
-def _by_name(label, station_type):
-    """The best station the trip form would offer for this label, or None."""
+
+def _by_name(label, station_type, flags):
+    """The best station the trip form would offer for this label, or None.
+
+    Sets `flags["incomplete"]` when only some language passes answered.
+    """
     query = strip_flag(label).strip()
     if not query:
         return None
@@ -161,6 +170,8 @@ def _by_name(label, station_type):
         responses = photonRequestLangs("/api", params, ("en", "default"), timeout=10)
         if all(r is None for r in responses.values()):
             raise RuntimeError("Photon unavailable")
+        if any(r is None for r in responses.values()):
+            flags["incomplete"] = True
         features.extend(process_station_results(responses))
 
     if not features:
@@ -200,7 +211,7 @@ def _by_name(label, station_type):
     return {"feature": best, "score": best_score}
 
 
-def _by_location(label, station_type, location):
+def _by_location(label, station_type, location, flags):
     """What is at the label's own location, nearest first, searched without its text."""
     params = {
         "lat": location["lat"],
@@ -214,6 +225,8 @@ def _by_location(label, station_type, location):
     responses = photonRequestLangs("/reverse", params, ("en", "default"), timeout=10)
     if all(r is None for r in responses.values()):
         raise RuntimeError("Photon unavailable")
+    if any(r is None for r in responses.values()):
+        flags["incomplete"] = True
     return process_station_results(responses)
 
 
@@ -230,14 +243,18 @@ def find_candidate(label, station_type):
       ambiguous    they disagree, or two places are equally close
       no_match     the name search found nothing confident
       no_location  the label's trips have no path to compare with
+
+    Any status but `ok` may carry `incomplete: True`: some Photon language passes failed, so
+    it is not a settled "no" (see seed_run()).
     """
     location = label_location(label, station_type)
     if not location:
         return {"status": "no_location"}
 
-    by_name = _by_name(label, station_type)
+    flags = {"incomplete": False}
+    by_name = _by_name(label, station_type, flags)
     if not by_name:
-        return {"status": "no_match"}
+        return {"status": "no_match", "location": location, "incomplete": flags["incomplete"]}
 
     here = {"lat": location["lat"], "lng": location["lng"]}
 
@@ -247,7 +264,7 @@ def find_candidate(label, station_type):
             return None
         return getDistance(here, {"lat": coords[1], "lng": coords[0]})
 
-    nearby = _by_location(label, station_type, location)
+    nearby = _by_location(label, station_type, location, flags)
     named_key = _osm_key(by_name["feature"])
     agreed = named_key in {_osm_key(f) for f in nearby}
 
@@ -266,8 +283,9 @@ def find_candidate(label, station_type):
                 "feature": winner,
                 "score": by_name["score"],
                 "distance_m": away,
+                "location": location,
             }
-        return {"status": "ambiguous"}
+        return {"status": "ambiguous", "incomplete": flags["incomplete"]}
 
     # Both searches agree but nothing is close: the station is probably right and its
     # position wrong, which a human fixes by moving the pin.
@@ -277,8 +295,10 @@ def find_candidate(label, station_type):
             "feature": by_name["feature"],
             "score": by_name["score"],
             "distance_m": distance(by_name["feature"]),
+            "location": location,
+            "incomplete": flags["incomplete"],
         }
-    return {"status": "ambiguous"}
+    return {"status": "ambiguous", "incomplete": flags["incomplete"]}
 
 
 def record_check(label_id, status):
@@ -317,6 +337,7 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
         "attempted": 0,
         "registered": 0,
         "skipped": 0,
+        "incomplete": 0,
         "failed": 0,
         "endpoints_gained": 0,
     }
@@ -342,13 +363,19 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
             break
 
         if candidate["status"] != "ok":
-            totals["skipped"] += 1
             note = candidate["status"]
             if candidate.get("distance_m") is not None:
                 note += f", {candidate['distance_m']:,.0f}m"
-            if not dry_run:
-                record_check(row["label_id"], candidate["status"])
-            report(f"-  {row['occurrences']:,}  {label}  ({note})")
+
+            if candidate.get("incomplete"):
+                # Partial Photon data: leave it unchecked so the next run asks again.
+                totals["incomplete"] += 1
+                report(f"?  {row['occurrences']:,}  {label}  ({note}, incomplete Photon data)")
+            else:
+                totals["skipped"] += 1
+                if not dry_run:
+                    record_check(row["label_id"], candidate["status"])
+                report(f"-  {row['occurrences']:,}  {label}  ({note})")
         else:
             props = candidate["feature"]["properties"]
             coords = candidate["feature"]["geometry"]["coordinates"]
@@ -356,6 +383,16 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
                 f"{row['occurrences']:,}  {label}  ->  {props.get('name')}  "
                 f"[{candidate['score']:.2f}, {candidate['distance_m']:,.0f}m]"
             )
+
+            location = candidate["location"]
+            trusted_median = (
+                location["points"] >= MEDIAN_MIN_POINTS
+                and location["users"] >= MEDIAN_MIN_USERS
+            )
+            curated_lat = location["lat"] if trusted_median else None
+            curated_lng = location["lng"] if trusted_median else None
+            if trusted_median:
+                line += f"  (curated to {location['points']:,}-trip median)"
 
             if dry_run:
                 totals["registered"] += 1
@@ -370,6 +407,8 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
                     country_code=props.get("countrycode"),
                     lat=coords[1],
                     lng=coords[0],
+                    curated_lat=curated_lat,
+                    curated_lng=curated_lng,
                 )
                 if station_id is None:
                     totals["skipped"] += 1
@@ -478,7 +517,7 @@ def _write_progress(run_id, lines, totals):
             UPDATE station_seed_runs
                SET updated_at = now(), log = CAST(:log AS jsonb),
                    total = :total, attempted = :attempted, registered = :registered,
-                   skipped = :skipped, failed = :failed,
+                   skipped = :skipped, incomplete = :incomplete, failed = :failed,
                    endpoints_gained = :endpoints_gained
              WHERE run_id = :id
             """,
@@ -496,6 +535,7 @@ def _finish(run_id, totals, state, error=None):
                    attempted = COALESCE(:attempted, attempted),
                    registered = COALESCE(:registered, registered),
                    skipped = COALESCE(:skipped, skipped),
+                   incomplete = COALESCE(:incomplete, incomplete),
                    failed = COALESCE(:failed, failed),
                    endpoints_gained = COALESCE(:endpoints_gained, endpoints_gained)
              WHERE run_id = :id
@@ -505,7 +545,7 @@ def _finish(run_id, totals, state, error=None):
                 "state": state,
                 "error": error,
                 **(totals or dict.fromkeys(
-                    ["total", "attempted", "registered", "skipped", "failed",
+                    ["total", "attempted", "registered", "skipped", "incomplete", "failed",
                      "endpoints_gained"], None
                 )),
             },

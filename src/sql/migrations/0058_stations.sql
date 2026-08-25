@@ -306,6 +306,7 @@ CREATE TABLE station_seed_runs (
     attempted        INTEGER NOT NULL DEFAULT 0,
     registered       INTEGER NOT NULL DEFAULT 0,
     skipped          INTEGER NOT NULL DEFAULT 0,
+    incomplete       INTEGER NOT NULL DEFAULT 0,
     failed           INTEGER NOT NULL DEFAULT 0,
     endpoints_gained INTEGER NOT NULL DEFAULT 0,
     error            TEXT,
