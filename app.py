@@ -3826,10 +3826,15 @@ def vector_style(language, style):
 
     with open(json_path, "r", encoding="utf-8") as f:
         file_contents = f.read()
+        # Match the incoming request's scheme rather than hardcoding https: in
+        # local dev (plain http) a forced https sprite URL is a different
+        # origin from the page itself — nothing listens there, so the sprite
+        # fetch just times out/CORS-fails. In production this still resolves
+        # to https, since the site itself is only ever served over https.
         file_contents = file_contents.replace(
             "{{mapPinUrl}}",
             url_for(
-                "static", filename="styles/vector_maps", _scheme="https", _external=True
+                "static", filename="styles/vector_maps", _scheme=request.scheme, _external=True
             ),
         )
         template_url = "https://tiles.trainlog.me/tile/streets-v2+landcover-v1.1+hillshade-v1/{x}/{y}/{z}/{language}"
@@ -4921,6 +4926,15 @@ def public_trip(tripIds=None, tagId=None, ticketId=None):
         colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
     return render_public_trip_page(
         tripIds, tagId, ticketId, template="public/new_trip.html"
+    )
+
+
+@app.route("/public/trip/<tripIds>/poster")
+@app.route("/public/tag/<tagId>/poster")
+@app.route("/public/ticket/<ticketId>/poster")
+def public_trip_poster(tripIds=None, tagId=None, ticketId=None):
+    return render_public_trip_page(
+        tripIds, tagId, ticketId, template="public/trip_poster.html"
     )
 
 
