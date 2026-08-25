@@ -44,7 +44,9 @@ async function initializeMapLibre(options = {}) {
         userLanguage = 'en',
         center = [10, 50],
         zoom = 5,
-        styleUrl = null
+        styleUrl = null,
+        preserveDrawingBuffer = false,
+        pixelRatio = null
     } = options;
 
     let mapStyle;
@@ -89,12 +91,17 @@ async function initializeMapLibre(options = {}) {
     }
 
     // Create map
+    // preserveDrawingBuffer/pixelRatio are only needed to export the canvas as an
+    // image (e.g. the print poster) — left off by default since they cost extra
+    // GPU memory/bandwidth on the normal interactive map.
     const map = new maplibregl.Map({
         container: container,
         style: mapStyle,
         center: center,
         zoom: zoom,
-        doubleClickZoom: false
+        doubleClickZoom: false,
+        preserveDrawingBuffer: preserveDrawingBuffer,
+        ...(pixelRatio ? { pixelRatio } : {})
     });
 
     // Add a sentinel layer that trip layers will sit above

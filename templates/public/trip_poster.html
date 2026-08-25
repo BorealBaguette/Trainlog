@@ -1,0 +1,883 @@
+{% extends "layout.html" %}
+{% block content %}
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+<style>
+body { background: #e9e9ec; }
+
+.posterPage {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 16px 48px;
+    box-sizing: border-box;
+}
+
+.posterTopBar {
+    width: 100%;
+    max-width: 1400px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px; /* keeps a horizontal scrollbar (narrow screens) off the buttons */
+}
+
+.posterBackBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 8px 14px;
+    border-radius: 7px;
+    background: #fff;
+    color: #333;
+    text-decoration: none;
+    font-size: 14px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+.posterBackBtn:hover { background: #f4f4f4; color: #333; }
+
+.posterControls { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; flex-shrink: 0; }
+
+.posterOrientation,
+.posterBasemap { display: inline-flex; border-radius: 7px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.15); flex-shrink: 0; }
+.posterOrientation button,
+.posterBasemap button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    border: none;
+    background: #fff;
+    color: #444;
+    padding: 7px 11px;
+    font-size: 12.5px;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.posterOrientation button i,
+.posterBasemap button i { font-size: 0.95em; color: #888; }
+.posterOrientation button.active i,
+.posterBasemap button.active i { color: #fff; }
+.posterOrientation button + button,
+.posterBasemap button + button { border-left: 1px solid #e2e2e2; }
+.posterOrientation button.active,
+.posterBasemap button.active { background: #0d6efd; color: #fff; }
+
+.posterDownloadBtn {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 7px;
+    background: #0d6efd;
+    color: #fff;
+    font-size: 14px;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.posterDownloadBtn:hover { filter: brightness(0.95); }
+.posterDownloadBtn:disabled { opacity: 0.6; cursor: default; }
+
+.posterCardWrap {
+    box-shadow: 0 10px 34px rgba(0,0,0,0.22);
+    background: #fff;
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* The card mirrors the exported PNG 1:1: header (title), map, footer (legend +
+   watermark) — nothing overlaid on the map itself except the small credit chip,
+   so text never fights the route/labels for space and the exported PNG is a
+   faithful copy of what's on screen. */
+.posterCard {
+    display: flex;
+    flex-direction: column;
+    background: #fff;
+}
+
+.posterHeader {
+    padding: 22px 30px 14px;
+    text-align: center;
+}
+.posterTitle {
+    font-size: 22px;
+    font-weight: 700;
+    color: #1a1a1a;
+    margin: 0;
+    line-height: 1.25;
+}
+.posterSubtitle {
+    font-size: 13px;
+    color: #767676;
+    margin: 4px 0 0;
+}
+
+.posterMapOuter { position: relative; background: #dfe3e6; }
+#posterMap { width: 100%; height: 100%; }
+
+/* Small always-on-image credit, bottom-right corner of the map itself so it
+   survives even if the footer legend gets cropped for a t-shirt print. */
+.posterCredit {
+    position: absolute;
+    right: 12px;
+    bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px 5px 6px;
+    background: rgba(255,255,255,0.88);
+    border-radius: 999px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    pointer-events: none;
+    z-index: 5;
+}
+.posterCredit img { width: 18px; height: 18px; display: block; }
+.posterCredit span { font-size: 11px; font-weight: 600; color: #333; letter-spacing: 0.02em; }
+
+.posterFooter {
+    padding: 12px 24px 20px;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 16px;
+}
+.posterLegendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: #444;
+}
+.posterLegendSwatch { width: 16px; height: 4px; border-radius: 2px; display: inline-block; }
+
+.posterHint {
+    max-width: 900px;
+    width: 100%;
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: #6a6a6a;
+    text-align: center;
+}
+
+.posterSpinner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.6);
+    font-size: 13px;
+    color: #555;
+    z-index: 6;
+}
+</style>
+
+<div class="posterPage">
+    <div class="posterTopBar">
+        <a class="posterBackBtn" href="{{ url_for('public_trip', tripIds=tripIds) }}"><i class="fas fa-chevron-left"></i> {{back}}</a>
+        <div class="posterControls">
+            <div class="posterBasemap" role="group">
+                <button type="button" data-basemap="light"><i class="fa-solid fa-circle-dot"></i> {{ 'Positron' }}</button>
+                <button type="button" data-basemap="colorful"><i class="fa-solid fa-map-location-dot"></i> {{ 'Liberty' }}</button>
+                <button type="button" data-basemap="bright" class="active"><i class="fa-solid fa-map"></i> {{ 'Bright' }}</button>
+                <button type="button" data-basemap="dark"><i class="fa-solid fa-moon"></i> {{ 'Dark Train' }}</button>
+            </div>
+            <div class="posterOrientation" role="group">
+                <button type="button" data-orientation="portrait"><i class="fa-solid fa-mobile-screen"></i> {{ posterPortrait }}</button>
+                <button type="button" data-orientation="square" class="active"><i class="fa-solid fa-square"></i> {{ posterSquare }}</button>
+                <button type="button" data-orientation="landscape"><i class="fa-solid fa-tv"></i> {{ posterLandscape }}</button>
+            </div>
+            <button type="button" class="posterBackBtn" id="posterResetLabelsBtn" style="border:none;cursor:pointer;">
+                <i class="fas fa-rotate-left"></i> {{ posterResetLabels }}
+            </button>
+            <button type="button" class="posterDownloadBtn" id="posterDownloadBtn">
+                <i class="fas fa-download"></i> {{wrapped_download_image}}
+            </button>
+        </div>
+    </div>
+
+    <div class="posterCardWrap">
+        <div class="posterCard" id="posterCard">
+            <div class="posterHeader">
+                <p class="posterTitle" id="posterTitle">&nbsp;</p>
+                <p class="posterSubtitle" id="posterSubtitle"></p>
+            </div>
+            <div class="posterMapOuter" id="posterMapOuter">
+                <div id="posterMap"></div>
+                <div class="posterSpinner" id="posterSpinner">{{wrapped_generating}}</div>
+                <div class="posterCredit">
+                    <img src="{{ url_for('static', filename='images/logo_square.png') }}" alt="">
+                    <span>trainlog.me</span>
+                </div>
+            </div>
+            <div class="posterFooter" id="posterFooter"></div>
+        </div>
+    </div>
+
+    <p class="posterHint">{{ posterClickHint }}</p>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<script>
+// Export resolution: the on-screen card is CSS-sized (comfortable to preview),
+// MapLibre's pixelRatio renders the underlying canvas at this multiple, so the
+// downloaded PNG is print resolution without the DOM card itself being huge.
+// A custom pixelRatio much above typical retina density (2) pushes MapLibre's
+// label/glyph rendering into territory it isn't well exercised at, which reads
+// as pixelated text — 2x plus a bigger CSS canvas gets similar export
+// resolution without that.
+const POSTER_PIXEL_RATIO = 2;
+const ORIENTATIONS = {
+    portrait:  { w: 900, h: 1200 },
+    square:    { w: 1000, h: 1000 },
+    landscape: { w: 1200, h: 900 }
+};
+let orientation = 'square';
+
+// Curated subset of the tileservers maplibre-utils.js already knows how to load
+// (see MapConfig.vectorStylePaths), named to match the app's own tileserver
+// picker (templates/includes/tileserver_picker.html) so the names mean the
+// same thing here as everywhere else in Trainlog. `declutterBasemapLabels`
+// covers both this schema (OpenMapTiles, light/colorful) and dark-train's own
+// (a separate Trainlog-authored style with different layer ids).
+const BASEMAPS = {
+    light:    { tileserver: 'ofm-positron' },
+    colorful: { tileserver: 'ofm-liberty' },
+    bright:   { tileserver: 'ofm-bright' },
+    dark:     { tileserver: 'dark-train', isDark: true }
+};
+let basemapId = 'bright';
+
+let map = null;
+let posterTrips = null;
+let posterFeatures = null;
+const tripIds = {{ tripIds|tojson }};
+// `langId` is already declared globally by layout.html — reuse it.
+
+const transportTypeText = {
+    "air": "{{air}}", "train": "{{train}}", "tram": "{{tram}}", "metro": "{{metro}}",
+    "bus": "{{bus}}", "ferry": "{{ferry}}", "car": "{{car}}", "cycle": "{{cycle}}",
+    "walk": "{{walk}}", "aerialway": "{{aerialway}}", "scooter": "{{scooter}}",
+    "funicular": "{{funicular}}", "rail": "{{rail}}", "ski": "{{ski}}"
+};
+
+function setSpinner(on) {
+    document.getElementById('posterSpinner').style.display = on ? 'flex' : 'none';
+}
+
+function applyOrientation(name) {
+    orientation = name;
+    document.querySelectorAll('.posterOrientation button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.orientation === name);
+    });
+    const dims = ORIENTATIONS[name];
+    const outer = document.getElementById('posterMapOuter');
+    outer.style.width = dims.w + 'px';
+    outer.style.height = dims.h + 'px';
+    if (map) {
+        setSpinner(true);
+        map.resize();
+        refit();
+    }
+}
+
+function refit() {
+    if (!map || !posterFeatures) return;
+    const filters = { viewMode: 'all', years: [], transportTypes: new Set(MapLibreUtils.MapConfig.transportTypes.map(t => t.id)) };
+    MapLibreUtils.fitBoundsToVisibleFeatures(map, posterFeatures, filters).then(() => {
+        map.once('idle', () => setSpinner(false));
+    });
+}
+
+// Real station names on the map instead of sidebar-dependent pin numbers.
+// MapLibre's own label-collision handling (text-allow-overlap:false + a sort
+// key that favours start/end) resolves the "labels cut by the path" problem
+// without hand-rolled placement logic.
+// MapLibre's label collision system only avoids symbol-vs-symbol overlap — it
+// has no idea a label is sitting on top of a route line, since that's a
+// separate 'line' layer. So instead of letting MapLibre auto-pick an anchor
+// (which can and does place text right along a line running through the
+// point), pick a single anchor ourselves, offset perpendicular to the local
+// direction of the line through that station — sideways for a roughly N-S
+// line, up/down for a roughly E-W one — which keeps the text off the line
+// it sits on regardless of which way MapLibre would have guessed.
+// MapLibre's text-anchor names the edge of the text box that sits AT the
+// point, so the text itself appears on the opposite side: anchor 'left' puts
+// text to the point's right, 'top' puts text below it, etc. (confirmed
+// against the style spec — https://maplibre.org/maplibre-style-spec/layers/#layout-symbol-text-anchor).
+// dLon/dLat here is the direction we want the text pushed toward (outward
+// from the route's centroid, see buildLabelPoints), so each case below picks
+// the anchor whose text ends up on that side.
+function pickAnchor(dLon, dLat) {
+    if (Math.abs(dLat) > Math.abs(dLon)) return dLat >= 0 ? 'bottom' : 'top'; // push north -> text above; push south -> text below
+    return dLon >= 0 ? 'left' : 'right'; // push east -> text to the right; push west -> text to the left
+}
+
+function buildLabelPoints(trips) {
+    const byKey = new Map();
+    function addPoint(latlon, name, kind) {
+        if (!latlon || !name) return;
+        // Keyed on the station name alone (not name+coord): the same station
+        // logged as one trip's destination and the next trip's origin can carry
+        // slightly different coordinates, which would otherwise defeat dedup and
+        // print the same label twice right next to each other.
+        const key = name.trim().toLowerCase();
+        const existing = byKey.get(key);
+        if (existing) {
+            if (kind === 'start' || kind === 'end') existing.kind = kind;
+            return;
+        }
+        byKey.set(key, { coord: [latlon[1], latlon[0]], name: name, kind: kind });
+    }
+    trips.forEach((trip, i) => {
+        if (!trip.path || trip.path.length < 2) return;
+        const n = trip.path.length;
+        addPoint(trip.path[0], trip.trip.origin_station, i === 0 ? 'start' : 'stop');
+        addPoint(trip.path[n - 1], trip.trip.destination_station, i === trips.length - 1 ? 'end' : 'stop');
+    });
+
+    const points = Array.from(byKey.values());
+
+    // Push each label outward from the route's overall centre rather than
+    // reacting to just the one line segment passing through it: stations tend
+    // to be busiest (multiple lines/points close together) near the middle of
+    // a trip's extent and clearest near its edges, so aiming labels away from
+    // the middle reliably lands them in the open space — e.g. the far corners
+    // of a journey (a round-trip's shared start/end, a southern terminus, an
+    // eastern hub) each get pushed further toward their own corner.
+    if (points.length) {
+        const lons = points.map(p => p.coord[0]), lats = points.map(p => p.coord[1]);
+        const centerLon = (Math.min(...lons) + Math.max(...lons)) / 2;
+        const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+        points.forEach(p => {
+            const dLon = p.coord[0] - centerLon, dLat = p.coord[1] - centerLat;
+            p.anchor = pickAnchor(dLon, dLat);
+        });
+    }
+    return points;
+}
+
+function addPosterLayers(map, trips) {
+    // Route lines: same per-mode colours as the interactive map, thickened for print.
+    const features = MapLibreUtils.buildTripLayers(map, trips, MapLibreUtils.MapConfig.transportTypes, { showShadows: false });
+    const allTypes = new Set(MapLibreUtils.MapConfig.transportTypes.map(t => t.id));
+    MapLibreUtils.updateLayerVisibility(map, MapLibreUtils.MapConfig.transportTypes, { viewMode: 'all', years: [], transportTypes: allTypes });
+    MapLibreUtils.MapConfig.transportTypes.forEach(type => {
+        ['past', 'future', 'planned-base', 'planned-overlay'].forEach(suffix => {
+            const id = `${type.id}-${suffix}`;
+            if (map.getLayer(id)) map.setPaintProperty(id, 'line-width', type.id === 'air' ? 2 : 5);
+        });
+    });
+
+    const points = buildLabelPoints(trips);
+    suppressCapitalsNearStations(map, points, trips);
+    map.addSource('poster-points', {
+        type: 'geojson',
+        data: { type: 'FeatureCollection', features: points.map(p => ({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: p.coord },
+            properties: { name: p.name, kind: p.kind, anchor: p.anchor }
+        })) }
+    });
+
+    map.addLayer({
+        id: 'poster-point-halo',
+        type: 'circle',
+        source: 'poster-points',
+        paint: {
+            'circle-radius': ['case', ['==', ['get', 'kind'], 'stop'], 5, 7],
+            'circle-color': '#ffffff',
+            'circle-stroke-width': 0
+        }
+    });
+    map.addLayer({
+        id: 'poster-points-layer',
+        type: 'circle',
+        source: 'poster-points',
+        paint: {
+            'circle-radius': ['case', ['==', ['get', 'kind'], 'stop'], 3.5, 5.5],
+            'circle-color': ['match', ['get', 'kind'], 'start', '#2e7d32', 'end', '#c62828', '#3887be'],
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 1.5
+        }
+    });
+
+    // Reuse whatever font the base style already ships glyphs for, so labels
+    // don't silently disappear because of a missing font stack.
+    let labelFont = ['Noto Sans Regular'];
+    const styleLayers = map.getStyle().layers || [];
+    for (const l of styleLayers) {
+        if (l.type === 'symbol' && l.layout && l.layout['text-font']) { labelFont = l.layout['text-font']; break; }
+    }
+
+    map.addLayer({
+        id: 'poster-labels',
+        type: 'symbol',
+        source: 'poster-points',
+        layout: {
+            'text-field': ['get', 'name'],
+            'text-font': labelFont,
+            'text-size': ['case', ['==', ['get', 'kind'], 'stop'], 12, 15],
+            // A fixed per-feature anchor (picked in buildLabelPoints, perpendicular
+            // to the line running through that station) rather than MapLibre's
+            // automatic text-variable-anchor search, which only avoids other
+            // labels — it has no notion of "don't sit on top of the route line".
+            'text-anchor': ['get', 'anchor'],
+            // 1.1em clears the route line's width and the point marker's halo
+            // (radius 5-7px) at these text sizes without pushing the label
+            // noticeably far from its own station.
+            // Offset direction must match text-anchor's own convention (the
+            // text sits on the OPPOSITE side from the named edge — anchor
+            // 'left' already puts text to the point's right, so a further
+            // rightward/positive-x nudge adds gap in that same direction).
+            'text-offset': ['match', ['get', 'anchor'],
+                'left', ['literal', [1.1, 0]],
+                'right', ['literal', [-1.1, 0]],
+                'top', ['literal', [0, 1.1]],
+                ['literal', [0, -1.1]]
+            ],
+            'text-justify': 'auto',
+            'text-allow-overlap': false,
+            'text-optional': true,
+            // Extra collision margin so two nearby labels are more likely to
+            // hide one of them outright than to render almost touching.
+            'text-padding': 6,
+            'symbol-sort-key': ['case', ['==', ['get', 'kind'], 'stop'], 1, 0]
+        },
+        paint: BASEMAPS[basemapId].isDark
+            ? { 'text-color': '#f5f5f5', 'text-halo-color': '#111111', 'text-halo-width': 1.6 }
+            : { 'text-color': '#1a1a1a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 }
+    });
+
+    return features;
+}
+
+function buildFooterLegend(trips) {
+    const seen = new Set();
+    trips.forEach(trip => {
+        let type = trip.trip.type;
+        if (["accommodation", "restaurant", "poi"].includes(type)) return;
+        if (type === 'helicopter') type = 'air';
+        seen.add(type);
+    });
+    const footer = document.getElementById('posterFooter');
+    footer.innerHTML = '';
+    MapLibreUtils.MapConfig.transportTypes.forEach(t => {
+        if (!seen.has(t.id)) return;
+        const item = document.createElement('div');
+        item.className = 'posterLegendItem';
+        item.innerHTML = `<span class="posterLegendSwatch" style="background:${t.color}"></span><span>${transportTypeText[t.id] || t.id}</span>`;
+        footer.appendChild(item);
+    });
+}
+
+function buildTitle(trips) {
+    const explicitTitle = {{ (tag_description or '') | tojson }};
+    const titleEl = document.getElementById('posterTitle');
+    const subtitleEl = document.getElementById('posterSubtitle');
+    if (explicitTitle) {
+        titleEl.textContent = explicitTitle;
+    } else if (trips.length) {
+        titleEl.textContent = trips[0].trip.origin_station + ' → ' + trips[trips.length - 1].trip.destination_station;
+    } else {
+        titleEl.textContent = 'Trainlog';
+    }
+    const dated = trips.filter(t => typeof t.trip.utc_filtered_start_datetime === 'string');
+    if (dated.length) {
+        const first = dated[0].trip.utc_filtered_start_datetime.substring(0, 10);
+        const last = dated[dated.length - 1].trip.utc_filtered_start_datetime.substring(0, 10);
+        subtitleEl.textContent = first === last ? first : (first + ' – ' + last);
+    }
+}
+
+// (Re)creates the map for the currently selected basemap. Switching basemaps
+// tears down and rebuilds rather than calling MapLibre's setStyle(), since
+// setStyle replaces the whole layer list and doesn't carry over the layers we
+// add on top (route, labels, points) — a fresh instance re-running the same
+// build steps is simpler than reconciling that.
+// A generation token: two rapid basemap switches both create a map instance
+// via the async initializeMapLibre() call below, and without this guard the
+// first call's `finish` can still fire (its 'load' event lands late) after
+// the second has already taken over — re-adding the same sources/layers onto
+// what by then is the current map and throwing "Source already exists".
+let buildGeneration = 0;
+
+async function buildMap() {
+    if (!posterTrips) return;
+    const myGeneration = ++buildGeneration;
+    if (map) { map.remove(); map = null; }
+    setSpinner(true);
+
+    const trips = posterTrips;
+    const firstCoord = (trips.length && trips[0].path && trips[0].path.length)
+        ? [trips[0].path[0][1], trips[0].path[0][0]]
+        : [10, 30];
+
+    const newMap = await MapLibreUtils.initializeMapLibre({
+        container: 'posterMap',
+        tileserver: BASEMAPS[basemapId].tileserver,
+        useGlobe: false,
+        userLanguage: langId,
+        center: firstCoord,
+        zoom: 5,
+        preserveDrawingBuffer: true,
+        pixelRatio: POSTER_PIXEL_RATIO
+    });
+    if (myGeneration !== buildGeneration) { newMap.remove(); return; }
+    map = newMap;
+    // No interactive chrome on a poster preview.
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+
+    const finish = () => {
+        if (myGeneration !== buildGeneration) return;
+        declutterBasemapLabels(newMap);
+        localizeBasemapLabels(newMap);
+        posterFeatures = addPosterLayers(newMap, trips);
+        wireLabelClickToHide(newMap);
+        applyHiddenLabelFilters(newMap);
+        buildFooterLegend(trips);
+        buildTitle(trips);
+        refit();
+    };
+    if (newMap.isStyleLoaded()) finish(); else newMap.once('load', finish);
+}
+
+function applyBasemap(id) {
+    if (id === basemapId) return;
+    basemapId = id;
+    document.querySelectorAll('.posterBasemap button').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.basemap === id);
+    });
+    buildMap();
+}
+
+async function init() {
+    applyOrientation('square');
+
+    const response = await $.post({
+        url: '{{ url_for("getPublicTrips") }}',
+        contentType: 'application/json',
+        data: JSON.stringify({ tripIds: tripIds })
+    });
+    let trips = response[0];
+    trips.reverse();
+    trips.sort(function(a, b) {
+        function key(t) {
+            try {
+                const dt = t.trip.utc_filtered_start_datetime;
+                const ts = new Date(String(dt).replace(' ', 'T') + 'Z').getTime();
+                return isNaN(ts) ? 0 : ts;
+            } catch (e) { return 0; }
+        }
+        return key(a) - key(b);
+    });
+    posterTrips = trips;
+    await buildMap();
+}
+
+// Rather than hiding capital-city labels outright (losing useful context like
+// "Oslo" on a route that passes near it without stopping there), only drop a
+// capital's label when it's actually close to one of our own station points
+// — where it would otherwise sit right on top of (or right next to) our own
+// label for the same place. Uses MapLibre's `distance` expression to filter
+// by real geographic proximity rather than fragile name-matching (a station
+// like "Copenhagen Kastrup Airport (CPH)" doesn't equal the basemap's plain
+// "Copenhagen", but is very much the same place).
+function suppressCapitalsNearStations(map, points, trips) {
+    if (!points.length) return;
+    const thresholdMeters = 5000;
+
+    // A station itself can be well outside the threshold of its own city's
+    // capital marker (Copenhagen's Kastrup airport is ~8km from central
+    // Copenhagen) even though the drawn route line runs right past/through
+    // the city on its way there — so check distance to the route lines
+    // themselves too, not just to our station points.
+    const farConditions = [
+        ['>', ['distance', { type: 'MultiPoint', coordinates: points.map(p => p.coord) }], thresholdMeters]
+    ];
+    const lineCoords = trips
+        .filter(t => t.path && t.path.length >= 2)
+        .map(t => t.path.map(c => [c[1], c[0]])); // stored [lat,lon] -> geometry [lon,lat]
+    if (lineCoords.length) {
+        farConditions.push(['>', ['distance', { type: 'MultiLineString', coordinates: lineCoords }], thresholdMeters]);
+    }
+    const farEnough = farConditions.length > 1 ? ['all', ...farConditions] : farConditions[0];
+
+    // Stash on the map instance so applyHiddenLabelFilters (manual click-to-
+    // hide) can layer on top of this without needing to know or reconstruct
+    // this geometry-distance logic itself.
+    map._posterCapitalBaseFilters = {};
+    ['label_city_capital', 'place-capital'].forEach(id => {
+        if (!map.getLayer(id)) return;
+        const existing = map.getFilter(id);
+        const base = existing ? ['all', existing, farEnough] : farEnough;
+        map._posterCapitalBaseFilters[id] = base;
+        map.setFilter(id, base);
+    });
+}
+
+// Manual click-to-hide: the automatic dedup/decluttering above catches most
+// cases, but which point a vector tile source picks to represent a city (or
+// how far a station's real-world coordinates are from that point) varies by
+// source — Dark Train's own "Copenhagen" point sits close enough to pass the
+// distance check, OpenFreeMap's doesn't, and no single threshold covers both.
+// Rather than chase every such mismatch, let the label itself be clicked away
+// — it survives basemap switches (kept by name, not by map instance) and a
+// "Reset labels" button clears it.
+let hiddenLabelNames = new Set();
+
+function applyHiddenLabelFilters(map) {
+    const exclude = hiddenLabelNames.size
+        ? ['!', ['in', ['get', 'name'], ['literal', Array.from(hiddenLabelNames)]]]
+        : null;
+
+    if (map.getLayer('poster-labels')) {
+        map.setFilter('poster-labels', exclude);
+    }
+    const baseFilters = map._posterCapitalBaseFilters || {};
+    Object.keys(baseFilters).forEach(id => {
+        if (!map.getLayer(id)) return;
+        map.setFilter(id, exclude ? ['all', baseFilters[id], exclude] : baseFilters[id]);
+    });
+}
+
+function wireLabelClickToHide(map) {
+    const layerIds = ['poster-labels'];
+    ['label_city_capital', 'place-capital'].forEach(id => { if (map.getLayer(id)) layerIds.push(id); });
+
+    layerIds.forEach(id => {
+        map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
+        map.on('click', id, (e) => {
+            e.originalEvent.stopPropagation();
+            const name = e.features[0] && e.features[0].properties && e.features[0].properties.name;
+            if (!name) return;
+            hiddenLabelNames.add(name);
+            applyHiddenLabelFilters(map);
+        });
+    });
+}
+
+function resetHiddenLabels() {
+    hiddenLabelNames.clear();
+    if (map) applyHiddenLabelFilters(map);
+}
+
+// Both basemap sources (OpenFreeMap's ofm-* styles and Trainlog's own
+// dark-train) are built on OpenMapTiles vector tiles, which carry a
+// `name:<lang>` property per place feature for many languages — the styles
+// just hardcode their text-field to name:en/name rather than reading it. We
+// only still show country names + capitals (see declutterBasemapLabels), so
+// just those layers need their text-field rewritten to prefer the viewer's
+// own Trainlog UI language.
+const OMT_LANG_OVERRIDES = {
+    gsw: 'de' // Swiss German isn't in the OSM name:* set; German is the nearest available
+};
+function omtLangCode(id) {
+    // OpenMapTiles' name:* tiers are plain language codes (name:sv, name:pt, ...),
+    // not region variants — sv-FI/pt-BR/pt-PT etc. all just need the part before
+    // the dash. Only gsw needs an actual substitution.
+    return OMT_LANG_OVERRIDES[id] || id.split('-')[0];
+}
+
+function localizeBasemapLabels(map) {
+    const lang = omtLangCode(langId);
+    // OpenMapTiles data is inconsistent about English specifically: OpenFreeMap's
+    // styles read it from `name_en` (underscore), dark-train's from `name:en`
+    // (colon) — every other language always uses the colon form. Try both.
+    const textField = ['coalesce', ['get', `name:${lang}`], ['get', 'name_en'], ['get', 'name:en'], ['get', 'name']];
+    [
+        'label_city_capital', 'label_country_1', 'label_country_2', 'label_country_3',
+        'place-capital', 'country-label-sm', 'country-label-md', 'country-label-lg',
+        // Sea/water body names — same hardcoded name:en/name pattern in both schemas.
+        'waterway_line_label', 'water_name_point_label', 'water_name_line_label',
+        'waterway-label', 'waterarea-label', 'marine-label-point', 'marine-label-line'
+    ].forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'text-field', textField);
+    });
+}
+
+// The ofm-positron basemap labels its own cities/towns/villages/airports/roads,
+// which duplicates (and visually collides with) our own station labels — e.g.
+// its `airport` layer independently labels the exact airport our own origin/
+// destination point already names. Keep only country names + capitals for
+// context; everything place-specific comes from the trip's own stations.
+// Layer ids are specific to this basemap style (OpenMapTiles schema), hence
+// the guarded existence checks rather than a generic "hide all symbols" pass,
+// which would also remove desired country-name context.
+function declutterBasemapLabels(map) {
+    const hideIds = [
+        // OpenMapTiles schema (ofm-positron / ofm-liberty / ofm-bright).
+        // Capitals (label_city_capital) are deliberately NOT in this list —
+        // they're useful context for a trip passing near one without
+        // stopping there (e.g. Oslo on a Trondheim-Stockholm route). Only
+        // suppressed near one of our own stations — see
+        // suppressCapitalsNearStations, called from addPosterLayers.
+        'airport',
+        'label_other', 'label_village', 'label_town', 'label_city', 'label_state',
+        'highway-name-path', 'highway-name-minor', 'highway-name-major',
+        'highway-shield-non-us', 'highway-shield-us-interstate', 'road_shield_us',
+        // ofm-bright additionally ships POI icons/labels the other two don't.
+        'poi_r20', 'poi_r7', 'poi_r1', 'poi_transit', 'road_oneway', 'road_oneway_opposite',
+        // dark-train's own schema — same idea (place-capital handled the same
+        // way as label_city_capital, see suppressCapitalsNearStations).
+        'poi-label', 'housenum-label',
+        'place-suburbs', 'place-village', 'place-town', 'place-city-sm', 'place-city-lg',
+        'road-label-small', 'road-label-medium', 'road-label-large', 'public-transport-label',
+        'tunnel-oneway', 'road-oneway', 'bridge-oneway', 'mountain_peak'
+    ];
+    hideIds.forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', 'none');
+    });
+}
+
+document.querySelectorAll('.posterOrientation button').forEach(btn => {
+    btn.addEventListener('click', () => applyOrientation(btn.dataset.orientation));
+});
+document.querySelectorAll('.posterBasemap button').forEach(btn => {
+    btn.addEventListener('click', () => applyBasemap(btn.dataset.basemap));
+});
+document.getElementById('posterResetLabelsBtn').addEventListener('click', resetHiddenLabels);
+
+document.getElementById('posterDownloadBtn').addEventListener('click', async () => {
+    const btn = document.getElementById('posterDownloadBtn');
+    btn.disabled = true;
+    try {
+        await downloadPoster();
+    } catch (e) {
+        console.error(e);
+        alert("{{wrapped_download_error}}");
+    } finally {
+        btn.disabled = false;
+    }
+});
+
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+    });
+}
+
+async function downloadPoster() {
+    if (!map) return;
+    await new Promise(resolve => {
+        if (map.loaded() && !map.isMoving()) resolve();
+        else map.once('idle', resolve);
+    });
+
+    const pr = POSTER_PIXEL_RATIO;
+    const dims = ORIENTATIONS[orientation];
+    const headerH = 78, footerH = 56; // CSS px, matches the on-screen header/footer roughly
+    const out = document.createElement('canvas');
+    out.width = dims.w * pr;
+    out.height = (headerH + dims.h + footerH) * pr;
+    const ctx = out.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, out.width, out.height);
+
+    // Title
+    const titleText = document.getElementById('posterTitle').textContent || '';
+    const subtitleText = document.getElementById('posterSubtitle').textContent || '';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#1a1a1a';
+    ctx.font = `700 ${22 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillText(titleText, out.width / 2, 34 * pr, out.width - 40 * pr);
+    if (subtitleText) {
+        ctx.fillStyle = '#767676';
+        ctx.font = `${13 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+        ctx.fillText(subtitleText, out.width / 2, 56 * pr, out.width - 40 * pr);
+    }
+
+    // Preload the logo before touching the WebGL canvas below: nothing async
+    // may happen between forcing a fresh paint and reading its pixels, or
+    // some browsers silently hand back a blank buffer even with
+    // preserveDrawingBuffer set (a known MapLibre/Chrome timing quirk —
+    // https://github.com/maplibre/maplibre-gl-js/discussions/3900).
+    const logo = await loadImage("{{ url_for('static', filename='images/logo_square.png') }}");
+
+    // Force one more paint and read the canvas synchronously inside that
+    // render callback, rather than trusting whatever the canvas already
+    // holds from the last (possibly stale/cleared) frame.
+    await new Promise(resolve => {
+        map.once('render', () => {
+            ctx.drawImage(map.getCanvas(), 0, headerH * pr, dims.w * pr, dims.h * pr);
+            resolve();
+        });
+        map.triggerRepaint();
+    });
+
+    // Credit chip baked into the map area, bottom-right — survives a footer crop.
+    const chipH = 26 * pr, chipPad = 8 * pr, iconSize = 16 * pr;
+    ctx.font = `600 ${11 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    const label = 'trainlog.me';
+    const labelWidth = ctx.measureText(label).width;
+    const chipW = chipPad * 2 + iconSize + 6 * pr + labelWidth;
+    const chipX = dims.w * pr - chipW - 12 * pr;
+    const chipY = (headerH + dims.h) * pr - chipH - 12 * pr;
+    ctx.fillStyle = 'rgba(255,255,255,0.88)';
+    roundRect(ctx, chipX, chipY, chipW, chipH, chipH / 2);
+    ctx.fill();
+    ctx.drawImage(logo, chipX + chipPad, chipY + (chipH - iconSize) / 2, iconSize, iconSize);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#333333';
+    ctx.fillText(label, chipX + chipPad + iconSize + 6 * pr, chipY + chipH / 2 + 4 * pr);
+
+    // Legend footer
+    const legendItems = Array.from(document.querySelectorAll('#posterFooter .posterLegendItem')).map(el => ({
+        color: el.querySelector('.posterLegendSwatch').style.background,
+        label: el.querySelector('span:last-child').textContent
+    }));
+    ctx.font = `${12 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    const gap = 18 * pr, swatchW = 16 * pr, swatchGap = 6 * pr;
+    const widths = legendItems.map(it => swatchW + swatchGap + ctx.measureText(it.label).width);
+    const totalWidth = widths.reduce((a, b) => a + b, 0) + gap * Math.max(0, legendItems.length - 1);
+    let x = (out.width - totalWidth) / 2;
+    const legendY = (headerH + dims.h) * pr + footerH * pr / 2;
+    ctx.textAlign = 'left';
+    legendItems.forEach((it, i) => {
+        ctx.fillStyle = it.color;
+        roundRect(ctx, x, legendY - 2 * pr, swatchW, 4 * pr, 2 * pr);
+        ctx.fill();
+        ctx.fillStyle = '#444444';
+        ctx.fillText(it.label, x + swatchW + swatchGap, legendY + 4 * pr);
+        x += widths[i] + gap;
+    });
+
+    out.toBlob(blob => {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'trainlog-poster.png';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }, 'image/png');
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+
+init();
+</script>
+{% endblock %}
