@@ -998,7 +998,9 @@ async function buildMap() {
         container: 'posterMap',
         tileserver: BASEMAPS[basemapId].tileserver,
         useGlobe: false,
-        userLanguage: langId,
+        // The one special case left: "International" asks for English labels
+        // rather than the viewer's own language.
+        userLanguage: mapLangMode === 'intl' ? 'en' : langId,
         center: firstCoord,
         zoom: 5,
         preserveDrawingBuffer: true,
@@ -1025,7 +1027,6 @@ async function buildMap() {
         applyCardTheme();
         captureLabelBaseFilters(newMap);
         applyLabelLevel(newMap, labelLevel);
-        localizeBasemapLabels(newMap);
         posterFeatures = addPosterLayers(newMap, trips);
         wireLabelClickToHide(newMap);
         applyHiddenLabelFilters(newMap);
@@ -1214,39 +1215,6 @@ function resetHiddenLabels() {
     if (map) applyHiddenLabelFilters(map);
 }
 
-// Both basemap sources (OpenFreeMap's ofm-* styles and Trainlog's own
-// dark-train) are built on OpenMapTiles vector tiles, which carry a
-// `name:<lang>` property per place feature for many languages — the styles
-// just hardcode their text-field to name:en/name rather than reading it. We
-// this rewrites country/capital/water text-field across every label level
-// they might appear at, so it doesn't need to track which level is active.
-const OMT_LANG_OVERRIDES = {
-    gsw: 'de' // Swiss German isn't in the OSM name:* set; German is the nearest available
-};
-function omtLangCode(id) {
-    // OpenMapTiles' name:* tiers are plain language codes (name:sv, name:pt, ...),
-    // not region variants — sv-FI/pt-BR/pt-PT etc. all just need the part before
-    // the dash. Only gsw needs an actual substitution.
-    return OMT_LANG_OVERRIDES[id] || id.split('-')[0];
-}
-
-function localizeBasemapLabels(map) {
-    const lang = omtLangCode(mapLangMode === 'intl' ? 'en' : langId);
-    // OpenMapTiles data is inconsistent about English specifically: OpenFreeMap's
-    // styles read it from `name_en` (underscore), dark-train's from `name:en`
-    // (colon) — every other language always uses the colon form. Try both.
-    const textField = ['coalesce', ['get', `name:${lang}`], ['get', 'name_en'], ['get', 'name:en'], ['get', 'name']];
-    [
-        'label_city_capital', 'label_country_1', 'label_country_2', 'label_country_3',
-        'place-capital', 'country-label-sm', 'country-label-md', 'country-label-lg',
-        // Sea/water body names — same hardcoded name:en/name pattern in both schemas.
-        'waterway_line_label', 'water_name_point_label', 'water_name_line_label',
-        'waterway-label', 'waterarea-label', 'marine-label-point', 'marine-label-line'
-    ].forEach(id => {
-        if (map.getLayer(id)) map.setLayoutProperty(id, 'text-field', textField);
-    });
-}
-
 // The basemap labels its own cities/towns/villages/airports/roads/POIs, which
 // duplicates (and visually collides with) our own station labels — e.g. its
 // `airport` layer independently labels the exact airport our own origin/
@@ -1327,15 +1295,11 @@ document.getElementById('posterLabelLevelSelect').addEventListener('change', (e)
 document.getElementById('posterMapLangSelect').addEventListener('change', (e) => {
     mapLangMode = e.target.value;
     rememberChoice('posterMapLang', mapLangMode);
-    if (map) localizeBasemapLabels(map);
-    if (posterTrips) {
-        buildTitle(posterTrips);
-        // A locale swap can change the date subtitle's length enough to wrap
-        // differently, which changes the header's own height — re-fit the
-        // map area to match, same as finish() does after the initial build.
-        resizeCardToOrientation();
-        if (map) { map.resize(); refit(); }
-    }
+    // Labels are localised when the style loads, so this rebuilds the map the
+    // same way a basemap switch does; finish() then redoes the title and the
+    // re-fit a locale swap needs anyway (a longer date subtitle can wrap to a
+    // taller header).
+    buildMap();
 });
 document.getElementById('posterPrivateCheckbox').addEventListener('change', (e) => {
     includePrivate = e.target.checked;
