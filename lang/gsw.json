@@ -946,6 +946,8 @@
     "analyze": "Analysiere",
     "back": "Zruck",
     "poster": "Poster",
+    "posterMapLangMine": "Mini Sprach",
+    "posterMapLangIntl": "International",
     "posterLabelDefault": "Standard",
     "posterLabelCurated": "Kuratiert",
     "posterLabelCountries": "Nur Länder",

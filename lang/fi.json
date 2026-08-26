@@ -946,6 +946,8 @@
     "analyze": "Analysoi",
     "back": "Takaisin",
     "poster": "Juliste",
+    "posterMapLangMine": "Oma kieli",
+    "posterMapLangIntl": "Kansainvälinen",
     "posterLabelDefault": "Oletus",
     "posterLabelCurated": "Valikoitu",
     "posterLabelCountries": "Vain maat",

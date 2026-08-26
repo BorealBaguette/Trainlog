@@ -960,6 +960,8 @@
     "analyze": "Analyze",
     "back": "Back",
     "poster": "Poster",
+    "posterMapLangMine": "My language",
+    "posterMapLangIntl": "International",
     "posterLabelDefault": "Default",
     "posterLabelCurated": "Curated",
     "posterLabelCountries": "Countries only",

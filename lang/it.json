@@ -948,6 +948,8 @@
     "analyze": "Analizza",
     "back": "Indietro",
     "poster": "Poster",
+    "posterMapLangMine": "La mia lingua",
+    "posterMapLangIntl": "Internazionale",
     "posterLabelDefault": "Predefinito",
     "posterLabelCurated": "Curato",
     "posterLabelCountries": "Solo paesi",

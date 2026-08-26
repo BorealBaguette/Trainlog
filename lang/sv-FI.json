@@ -948,6 +948,8 @@
     "analyze": "Analysera",
     "back": "Tillbaka",
     "poster": "Affisch",
+    "posterMapLangMine": "Mitt språk",
+    "posterMapLangIntl": "Internationellt",
     "posterLabelDefault": "Standard",
     "posterLabelCurated": "Utvalt",
     "posterLabelCountries": "Endast länder",

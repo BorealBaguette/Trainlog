@@ -945,6 +945,8 @@
     "analyze": "分析",
     "back": "返回",
     "poster": "海报",
+    "posterMapLangMine": "我的语言",
+    "posterMapLangIntl": "国际",
     "posterLabelDefault": "默认",
     "posterLabelCurated": "精选",
     "posterLabelCountries": "仅国家",

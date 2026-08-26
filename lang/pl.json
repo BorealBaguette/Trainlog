@@ -951,6 +951,8 @@
     "analyze": "Analizuj",
     "back": "Wstecz",
     "poster": "Plakat",
+    "posterMapLangMine": "Mój język",
+    "posterMapLangIntl": "Międzynarodowy",
     "posterLabelDefault": "Domyślne",
     "posterLabelCurated": "Wyselekcjonowane",
     "posterLabelCountries": "Tylko kraje",
