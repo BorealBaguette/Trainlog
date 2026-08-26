@@ -175,13 +175,21 @@ body { background: #e9e9ec; }
     padding: 22px 30px 24px;
     text-align: center;
 }
+/* Editable in place, for the cases where the generated title gets it wrong. The
+   affordance is deliberately faint — it belongs to the screen, never to the export,
+   which redraws the text on canvas from textContent. */
 .posterTitle {
+    cursor: text;
+    border-radius: 4px;
+    outline: none;
     font-size: 22px;
     font-weight: 700;
     color: var(--poster-title, #1a1a1a);
     margin: 0;
     line-height: 1.25;
 }
+.posterTitle:hover { box-shadow: 0 0 0 1px rgba(0,0,0,0.12); }
+.posterTitle:focus { box-shadow: 0 0 0 2px rgba(13,110,253,0.45); }
 .posterSubtitle {
     font-size: 13px;
     color: var(--poster-subtitle, #767676);
@@ -397,7 +405,7 @@ body { background: #e9e9ec; }
     <div class="posterCardWrap" id="posterCardWrap">
         <div class="posterCard" id="posterCard">
             <div class="posterHeader">
-                <p class="posterTitle" id="posterTitle">&nbsp;</p>
+                <p class="posterTitle" id="posterTitle" contenteditable="plaintext-only" spellcheck="false" title="{{ edit }}">&nbsp;</p>
                 <p class="posterSubtitle" id="posterSubtitle"></p>
             </div>
             <div class="posterMapOuter" id="posterMapOuter">
@@ -510,7 +518,10 @@ function resizeCardToOrientation() {
     outer.style.width = (dims.w - mat * 2) + 'px';
     // The mat's top/bottom edges — must be set before measuring below, since
     // they change the header/footer heights we're about to read.
-    header.style.paddingBottom = mat + 'px';
+    // Optically, not mathematically, equal to the side mat: the subtitle's own
+    // line box already carries ~15px of empty descent under its glyphs, so a full
+    // mat here reads as a wider gap than the map's left/right margins.
+    header.style.paddingBottom = Math.round(mat * 0.6) + 'px';
     footer.style.paddingTop = mat + 'px';
     const headerH = header.offsetHeight;
     const footerH = footer.offsetHeight;
@@ -545,6 +556,54 @@ function applyPreviewScale() {
     if (scale < 1) wrap.style.transform = 'scale(' + scale + ')';
     stage.style.height = Math.ceil(cardH * scale) + 'px';
 }
+
+// Title editing. A longer title can wrap to a second line, which changes the header
+// height and so the map area — re-fit only when it actually did, so typing doesn't
+// re-frame the map on every keystroke.
+(function wireTitleEditing() {
+    const titleEl = document.getElementById('posterTitle');
+    let headerH = 0;
+    let refitTimer = null;
+
+    // Firefox before 136 has no plaintext-only mode: it falls back to rich text,
+    // where a paste can drop markup into the title. Insert the plain text instead.
+    titleEl.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text').replace(/\s+/g, ' ');
+        document.execCommand('insertText', false, text);
+    });
+
+    // The title is one line by definition — the export draws it with a single
+    // fillText — so Enter finishes the edit rather than starting a paragraph.
+    titleEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); }
+    });
+
+    titleEl.addEventListener('focus', () => {
+        headerH = document.querySelector('.posterHeader').offsetHeight;
+    });
+
+    titleEl.addEventListener('input', () => {
+        titleEdited = true;
+        clearTimeout(refitTimer);
+        refitTimer = setTimeout(() => {
+            const header = document.querySelector('.posterHeader');
+            if (header.offsetHeight === headerH) return;
+            headerH = header.offsetHeight;
+            resizeCardToOrientation();
+            if (map) { map.resize(); refit(); }
+        }, 250);
+    });
+
+    // An emptied title falls back to the generated one rather than exporting blank.
+    titleEl.addEventListener('blur', () => {
+        if (titleEl.textContent.trim()) return;
+        titleEdited = false;
+        if (posterTrips) buildTitle(posterTrips);
+        resizeCardToOrientation();
+        if (map) { map.resize(); refit(); }
+    });
+})();
 
 // Rotating a phone changes the available width, and so the preview scale — but
 // not the card's own layout, so only the scale needs recomputing here.
@@ -809,14 +868,86 @@ function buildFooterLegend(trips) {
     });
 }
 
+const sameStation = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+
+// Where the journey actually went: the stop with the longest stay, measured from
+// one leg's arrival to the next leg's departure. This beats "farthest from home"
+// for a trip like London-SFO-Phoenix and back, where the connection airport is
+// marginally the farther point but the fortnight was spent in Phoenix.
+// Needs times on every leg, so it returns null for undated trips.
+function longestStayStop(trips, home) {
+    let best = { seconds: 0, name: null };
+    for (let i = 0; i < trips.length - 1; i++) {
+        const t = trips[i], next = trips[i + 1];
+        const stop = t.trip.destination_station;
+        if (sameStation(stop, home)) continue;
+        const arrival = tripEndTime(t), departure = tripStartTime(next);
+        if (arrival === null || departure === null) return null;
+        const stay = (departure - arrival) / 1000;
+        if (stay > best.seconds) best = { seconds: stay, name: stop };
+    }
+    return best.name;
+}
+
+function tripStartTime(t) {
+    const dt = t.trip.utc_filtered_start_datetime;
+    if (typeof dt !== 'string') return null;
+    const ts = new Date(dt.replace(' ', 'T') + 'Z').getTime();
+    return isNaN(ts) ? null : ts;
+}
+
+function tripEndTime(t) {
+    const start = tripStartTime(t);
+    const duration = Array.isArray(t.trip.trip_duration) ? t.trip.trip_duration[1] : null;
+    if (start === null || typeof duration !== 'number') return null;
+    return start + duration * 1000;
+}
+
+// Fallback for an undated round trip: the leg endpoint farthest from home.
+// Equirectangular approximation — only the ranking matters, and a journey's legs
+// are never far enough apart in latitude for the distortion to reorder them.
+function farthestStop(trips, home) {
+    const start = (trips[0].path || [])[0];
+    if (!start) return null;
+    return trips.reduce((best, t) => {
+        const path = t.path || [];
+        const stop = path[path.length - 1];
+        if (!stop || sameStation(t.trip.destination_station, home)) return best;
+        const dLat = stop[0] - start[0];
+        const dLon = (stop[1] - start[1]) * Math.cos(start[0] * Math.PI / 180);
+        const d = dLat * dLat + dLon * dLon;
+        return d > best.d ? { d: d, name: t.trip.destination_station } : best;
+    }, { d: -1, name: null }).name;
+}
+
+// "A → A" for a return journey reads as a mistake rather than as a round trip.
+// When the journey ends where it started, name the turnaround point instead and
+// join the two with a two-way arrow.
+function journeyTitle(trips) {
+    const home = trips[0].trip.origin_station;
+    const end = trips[trips.length - 1].trip.destination_station;
+    if (!sameStation(home, end)) return home + ' → ' + end;
+
+    const turnaround = longestStayStop(trips, home) || farthestStop(trips, home);
+    // A single loop leg (leaves and returns with nothing named in between) has no
+    // turnaround to show — its own name is the whole story.
+    return turnaround ? home + ' ⇄ ' + turnaround : home;
+}
+
+// Set once the viewer types their own title, so nothing that rebuilds the poster
+// (a basemap switch, a language change, toggling private trips) overwrites it.
+let titleEdited = false;
+
 function buildTitle(trips) {
     const explicitTitle = {{ (tag_description or '') | tojson }};
     const titleEl = document.getElementById('posterTitle');
     const subtitleEl = document.getElementById('posterSubtitle');
-    if (explicitTitle) {
+    if (titleEdited) {
+        // fall through to the subtitle, which stays generated
+    } else if (explicitTitle) {
         titleEl.textContent = explicitTitle;
     } else if (trips.length) {
-        titleEl.textContent = trips[0].trip.origin_station + ' → ' + trips[trips.length - 1].trip.destination_station;
+        titleEl.textContent = journeyTitle(trips);
     } else {
         titleEl.textContent = 'Trainlog';
     }
