@@ -1,0 +1,51 @@
+"""Site-wide light/dark theme.
+
+The choice lives on the user row, but no route passes it: a context processor
+injects `theme` into every render_template call instead. That keeps the ~90
+render_template sites untouched, unlike `colorblind`, which is threaded through
+each route by hand.
+"""
+
+from flask import session
+from sqlalchemy import text
+
+from src.users import User, authDb
+
+THEMES = ("auto", "light", "dark")
+
+DEFAULT_THEME = "auto"
+
+
+def current_theme():
+    """The logged-in user's theme, or the default for anonymous visitors."""
+    username = session.get("logged_in")
+    if not username:
+        return DEFAULT_THEME
+    user = User.query.filter_by(username=username).first()
+    return getattr(user, "theme", None) or DEFAULT_THEME
+
+
+def ensure_theme_column():
+    """Add user.theme to an existing auth.db.
+
+    The auth database is SQLite driven straight off the SQLAlchemy model, with no
+    migration runner of its own (the numbered migrations under src/sql are
+    Postgres-only), so a new column has to be added here.
+    """
+    with authDb.engine.connect() as conn:
+        columns = {row[1] for row in conn.execute(text("PRAGMA table_info(user)"))}
+        if "theme" not in columns:
+            conn.execute(
+                text(f"ALTER TABLE user ADD COLUMN theme VARCHAR(10) "
+                     f"NOT NULL DEFAULT '{DEFAULT_THEME}'")
+            )
+            conn.commit()
+
+
+def init_app(app):
+    with app.app_context():
+        ensure_theme_column()
+
+    @app.context_processor
+    def inject_theme():
+        return {"theme": current_theme()}

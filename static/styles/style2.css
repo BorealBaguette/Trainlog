@@ -1,4 +1,77 @@
 :root{
+  --tl-shadow: rgba(0, 0, 0, 0.35);
+
+  /* The trips card layout's palette (templates/dynamic_trips.html), also used by the
+     trip forms. Bespoke tints with no Bootstrap equivalent; theme.css restates the set
+     for dark. */
+  --card-bg: #fff;
+  --card-border: #e3e7eb;
+  --card-shadow: rgba(15, 23, 42, 0.05);
+  --card-seam: #aab4c0;
+  --card-title: #4b5563;
+  --card-meta: #6c757d;
+  --card-icon: #adb5bd;
+  --card-sunken: #f8f9fa;
+  --card-sunken-border: #e9ecef;
+  --card-gutter-border: #eef1f4;
+  --card-control-fg: #8a93a2;
+  --card-pressed-bg: #e9edf1;
+  --card-pressed-fg: #495057;
+  --card-label: #495057;
+  --card-input-border: #dee2e6;
+  --card-focus-border: #86b7fe;
+  --card-accent-bg: #eff5fd;
+  --card-accent-border: #c3d8f5;
+  --card-accent-fg: #207cca;
+  --card-accent-solid: #207cca;
+  --card-sel-bg: #e7f0fb;
+  --card-sel-border: #0d6efd;
+  --card-sel-gutter: #dbe7fa;
+  --card-page-fg: #374151;
+  --card-check-empty: #ced4da;
+
+  /* Plans palette. Shared by templates/plans/plan_list.html and plan.html, which are
+     two views of one thing and were drifting apart on near-identical greys; theme.css
+     restates the set for dark. */
+  --plan-surface: #fff;
+  --plan-sunken: #f8f9fa;
+  --plan-border: #e9ecef;
+  --plan-border-input: #e2e6ea;
+  --plan-border-hover: #ced4da;
+  --plan-hairline: #f0f1f3;
+  --plan-row-hover: #fafbfc;
+  --plan-title: #1a202c;
+  --plan-body: #374151;
+  --plan-muted: #6c757d;
+  --plan-faint: #8a909a;
+  --plan-chip-fg: #5a6472;
+  --plan-chip-bg: #f0f2f5;
+  --plan-accent: #4b78d6;
+  --plan-accent-solid: #4b78d6;
+  --plan-accent-bg: #e8eeff;
+  --plan-accent-soft: rgba(75, 120, 214, .12);
+  --plan-icon-from: #e9f0ff;
+  --plan-icon-to: #dbeafe;
+  --plan-archived-bg: #f0f0f0;
+  --plan-archived-fg: #aaa;
+  --plan-action-fg: #98a0ab;
+  --plan-action-hover-fg: #1f2937;
+  --plan-overlay: rgba(0, 0, 0, .05);
+  --plan-overlay-soft: rgba(0, 0, 0, .04);
+  --plan-shadow: rgba(0, 0, 0, .07);
+  --plan-focus: #86b7fe;
+  --plan-focus-ring: rgba(13, 110, 253, .15);
+  --plan-search-icon: #adb5bd;
+  --plan-toggle-border: #dee2e6;
+  --plan-toggle-hover-fg: #495057;
+  --plan-sep-label: #6b7280;
+  --plan-wd-fg: #7c5eb4;
+  --plan-wd-bg: rgba(124, 94, 180, .12);
+  --plan-moon: #5b60a6;
+  --plan-danger-border: #f5c2c7;
+  --plan-danger: #dc3545;
+  --plan-warn: #b45309;
+
   --air:rgb(64, 185, 31);
   --train: rgb(82, 176, 254);
   --tram: rgb(162, 215, 255);
@@ -242,13 +315,13 @@
 }
 .ui-menu .ui-menu-item .tag-create-option {
   background-color: rgba(13, 110, 253, 0.04);
-  color: #6c757d;
-  border-top: 1px solid #e9ecef;
+  color: var(--bs-secondary-color);
+  border-top: 1px solid var(--bs-border-color);
 }
 .ui-menu .ui-menu-item .tag-create-option.ui-state-active {
   background-color: rgba(13, 110, 253, 0.1);
-  color: #495057;
-  border-color: #e9ecef;
+  color: var(--bs-body-color);
+  border-color: var(--bs-border-color);
 }
 
 .airframe{
@@ -371,7 +444,7 @@ td .operatorList .operatorListItem{
 }
 
 td .operatorList .operatorListItem + .operatorListItem{
-  border-top: 1px solid rgba(0, 0, 0, 0.07);
+  border-top: 1px solid var(--bs-border-color);
 }
 
 td .operatorList .operatorListLogo{
@@ -451,7 +524,7 @@ button.multiDropdown{
 .delay-badge.delay-ontime{ color: #7f8c8d; }
 .delay-late  { color: #c0392b; }
 .delay-early { color: #27ae60; }
-.planned-value { color: #999; font-size: .9em; }
+.planned-value { color: var(--bs-secondary-color); font-size: .9em; }
 
 #tripRows td div.duration.est:before{
   content:"\A";
@@ -571,7 +644,7 @@ td.child table tr td{
   vertical-align: baseline;
 }
 td.child table tr:not(:last-child) td{
-  border-bottom: 1px solid rgba(0, 0, 0, 0.07);
+  border-bottom: 1px solid var(--bs-border-color);
 }
 
 @media screen and (max-width: 600px) {
@@ -588,7 +661,7 @@ td.child table tr:not(:last-child) td{
     left: 0;
     bottom: 0;
     width: 100%;
-    background-color: rgb(255, 255, 255);
+    background-color: var(--bs-body-bg);
     padding-bottom: 5px;
   }
 
@@ -696,7 +769,7 @@ body::before {
   width: 100%;
   min-height: 32px;
   padding: 3px 8px;
-  background-color: #f3f3f3;
+  background-color: var(--bs-tertiary-bg);
   cursor: text;
 }
 
@@ -706,7 +779,7 @@ body::before {
   gap: 4px;
   height: 26px;
   padding: 0 4px 0 6px;
-  background-color: #fff;
+  background-color: var(--bs-body-bg);
   border-radius: 4px;
   max-width: 100%;
 }
@@ -730,13 +803,13 @@ body::before {
   border: 0;
   background: none;
   padding: 0 2px;
-  color: #999;
+  color: var(--bs-secondary-color);
   font-size: 1rem;
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
 }
-.operatorPillsField .op-pill-x:hover{ color: #333; }
+.operatorPillsField .op-pill-x:hover{ color: var(--bs-emphasis-color); }
 
 /* The text input shares the field with the pills, so it has no chrome of its own
    and takes only the space left on the current row. The #form variant outranks the
@@ -778,13 +851,13 @@ body::before {
   background: none;
   padding: 0 2px;
   margin-left: auto;
-  color: #999;
+  color: var(--bs-secondary-color);
   font-size: 0.85rem;
   line-height: 1;
   cursor: pointer;
   flex-shrink: 0;
 }
-.operatorPillsField .op-mode-toggle:hover{ color: #333; }
+.operatorPillsField .op-mode-toggle:hover{ color: var(--bs-emphasis-color); }
 
 /* Trip form only: the field sits beside the trip-type icon and carries the spacing
    below it. Both are inline-level boxes, and vertical-align:middle centres their
@@ -804,8 +877,8 @@ body::before {
 /* In a modal the neighbours are Bootstrap .form-control inputs, so match those
    instead of the trip form's flat grey. */
 .modal .operatorPillsField{
-  background-color: #fff;
-  border: 1px solid #ced4da;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.375rem;
   min-height: 38px;
 }
@@ -831,7 +904,7 @@ body::before {
 .op-suggestion-hint{
   margin-left: auto;
   padding-left: 12px;
-  color: #888;
+  color: var(--bs-secondary-color);
   font-size: 0.8em;
   white-space: nowrap;
   overflow: hidden;
@@ -875,7 +948,7 @@ body::before {
   width: calc(100% - 37px);
   margin-left: 5px;
   height: 32px;
-  border: 1px solid #ccc;
+  border: 1px solid var(--bs-border-color);
 }
 
 .logo img{
@@ -890,9 +963,9 @@ body::before {
   margin: 0 auto;
   margin-top: 50px;
   margin-bottom: 50px;
-  background-color: #fcfcfc;
+  background-color: var(--bs-body-bg);
   padding: 20px 50px 40px;
-  box-shadow: 1px 4px 10px 1px #aaa;
+  box-shadow: 1px 4px 10px 1px var(--tl-shadow);
   font-family: sans-serif;
 }
 
@@ -918,14 +991,14 @@ body::before {
   height: 32px;
   padding: 6px 16px;
   border: 0;
-  background-color: #f3f3f3;
+  background-color: var(--bs-tertiary-bg);
   margin: 0 0 1rem;
   display: grid;
   justify-content: start;
   align-items: center;
   text-align: left;
   line-height: 1;
-  color: black;
+  color: var(--bs-body-color);
   -webkit-appearance: none;
   appearance: none;
 }
@@ -935,15 +1008,15 @@ body::before {
   height: 32px;
   padding: 6px 16px;
   border: 0;
-  background-color: #FFF;
-  border: 1px solid #c5c5c5;
+  background-color: var(--bs-body-bg);
+  border: 1px solid var(--bs-border-color);
   margin: 0 0 1rem;
   display: grid;
   justify-content: start;
   align-items: center;
   text-align: left;
   line-height: 1;
-  color: black;
+  color: var(--bs-body-color);
   -webkit-appearance: none;
   appearance: none;
 }
@@ -953,14 +1026,14 @@ body::before {
   height: 32px;
   padding: 6px 16px;
   border: 0;
-  background-color: #f3f3f3;
+  background-color: var(--bs-tertiary-bg);
   margin: 0 0 1rem;
   display: grid;
   justify-content: start;
   align-items: center;
   text-align: left;
   line-height: 1;
-  color: black;
+  color: var(--bs-body-color);
 }
 
 #form select#visibility:has(> option[value=""]:checked) {
@@ -976,7 +1049,7 @@ body::before {
   min-width: 5em;
   height: 32px;
   border: none;
-  background-color: #f3f3f3;
+  background-color: var(--bs-tertiary-bg);
   -webkit-appearance: none; /* Removes default styling for select elements on WebKit browsers */
   -moz-appearance: none; /* Removes default styling for select elements on Firefox */
   appearance: none; /* Standard way to remove default arrow */
@@ -986,7 +1059,7 @@ body::before {
   padding-right: 6px;
   text-align:left;
   line-height: 1;
-  color: black;
+  color: var(--bs-body-color);
 }
 
 input[type=number] {
@@ -1019,23 +1092,23 @@ input[type=number] {
 }
 
 #form label:not(.btn) {
-  color: #777;
+  color: var(--bs-secondary-color);
   font-size: 0.9em;
   display: block;
 }
 
 #form label a{
-  color: #777;
+  color: var(--bs-secondary-color);
 }
 
 #form .text {
-  color: #777;
+  color: var(--bs-secondary-color);
   font-size: 0.9em;
   display: block;
 }
 
 #form .text a{
-  color: #777;
+  color: var(--bs-secondary-color);
 }
 
 #form group {
@@ -1212,7 +1285,7 @@ input[type=number] {
 }
 
 #form hr {
-  border-bottom: 1px solid #aaa;
+  border-bottom: 1px solid var(--bs-border-color);
 }
 
 #form .inline-inputs {
@@ -1242,7 +1315,7 @@ input[type=number] {
   border: none;
   color: #eee;
   font-weight: 700;
-  box-shadow: 1px 4px 10px 1px #aaa;
+  box-shadow: 1px 4px 10px 1px var(--tl-shadow);
 }
 
 #form button[id=submit]{
@@ -1275,7 +1348,7 @@ input[type=number] {
   grid-column-start: 1;
   grid-column-end: -1;
   display: block;
-  color: #777;
+  color: var(--bs-secondary-color);
   font-size: 0.9rem;
   margin: 0;
 }
@@ -1306,7 +1379,7 @@ html, body {
 }
 #overpass-api-controls {
   padding: 10px;
-  background-color: rgb(255, 255, 255);
+  background-color: var(--bs-body-bg);
 }
 #overpass-api-controls a {
   display: inline;
@@ -1430,8 +1503,8 @@ html, body {
   display: block;
   width: 30px;
   height: 30px;
-  background-color: #fff;
-  color: #333;
+  background-color: var(--bs-body-bg);
+  color: var(--bs-body-color);
   text-align: center;
   line-height: 30px;
   font-size: 18px;
@@ -1441,12 +1514,12 @@ html, body {
 }
 
 .legend-toggle a:hover {
-  background-color: #f4f4f4;
-  color: #000;
+  background-color: var(--bs-tertiary-bg);
+  color: var(--bs-emphasis-color);
 }
 
 .legend-content {
-  background-color: #fff;
+  background-color: var(--bs-body-bg);
   padding: 10px;
   border-radius: 4px;
   box-shadow: 0 1px 5px rgba(0,0,0,0.65);
@@ -1464,14 +1537,14 @@ html, body {
 .legend-header h4 {
   margin: 0;
   font-size: 16px;
-  color: #333;
+  color: var(--bs-body-color);
 }
 
 .legend-close {
   background: none;
   border: none;
   font-size: 18px;
-  color: #000;
+  color: var(--bs-emphasis-color);
   text-decoration: none;
   cursor: pointer;
 }
@@ -1487,7 +1560,7 @@ html, body {
   align-items: center;
   margin-bottom: 5px;
   font-size: 14px;
-  color: #333;
+  color: var(--bs-body-color);
 }
 
 .legend-icon {
@@ -1495,7 +1568,7 @@ html, body {
   width: 20px;
   height: 10px;
   margin-right: 8px;
-  border: 1px solid #333;
+  border: 1px solid var(--bs-border-color);
   border-radius: 2px;
 }
 
@@ -1672,14 +1745,14 @@ html, body {
 /* Future Toggle */
 
 .futureToggle {
-  background-color: #ffffff;
+  background-color: var(--bs-body-bg);
   padding: 2px;
 }
 
 /* Info Panel */
 #infoPanel {
   width: 320px;
-  background-color: white;
+  background-color: var(--bs-body-bg);
   padding-top: 4px;
   transition: all 0.2s ease;
   box-sizing: border-box;
@@ -1842,7 +1915,7 @@ html, body {
 #leaderboard .child td, 
 #leaderboard .child th {
   padding: 5px;  /* adjust as needed */
-  border: 1px solid #ddd;  /* adjust as needed */
+  border: 1px solid var(--bs-border-color);  /* adjust as needed */
 }
 
 
@@ -1855,7 +1928,7 @@ html, body {
 .tagLink{
   text-decoration: none;
   transition: filter 0.1s;
-  color:#000;
+  color:var(--bs-body-color);
 }
 
 .leaderboardLink:hover {
@@ -1888,19 +1961,19 @@ html, body {
   font-size: 0.875rem;
   font-weight: 400;
   line-height: 1.5;
-  color: #212529;
-  background-color: #fff;
+  color: var(--bs-body-color);
+  background-color: var(--bs-body-bg);
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
   background-repeat: no-repeat;
   background-position: right 0.5rem center;
   background-size: 16px 12px;
-  border: 1px solid #aaa;
+  border: 1px solid var(--bs-border-color);
   border-radius: 0.25rem;
   cursor: pointer;
   white-space: nowrap;
 }
 .dt-sort-btn:hover {
-  background-color: #f8f9fa;
+  background-color: var(--bs-tertiary-bg);
 }
 .dt-sort-btn.sort-asc {
   background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 11 6-6 6 6'/%3e%3c/svg%3e");
@@ -1955,7 +2028,7 @@ html, body {
   height: auto;
   box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
   border-radius: 4px;
-  background: #fff;
+  background: var(--bs-body-bg);
   pointer-events: none;   /* never stands between the cursor and what is under it */
 }
 /* The fallback when the script has not run: fixed with no offsets lands the picture at

@@ -48,7 +48,7 @@
                     <td class="px-3 py-3 border-0">{{ ticket.purchasing_date }}</td>
                     <td class="px-3 py-3 border-0">
                         {% if ticket.trip_ids %}
-                            <a class="leaderboardLink link-dark text-decoration-none fw-medium" href="{{ url_for('public_trip', ticketId=ticket.uid) }}?price">{{ ticket.trip_count }}</a>
+                            <a class="leaderboardLink link-body-emphasis text-decoration-none fw-medium" href="{{ url_for('public_trip', ticketId=ticket.uid) }}?price">{{ ticket.trip_count }}</a>
                         {% else %}
                             {{ ticket.trip_count }}
                         {% endif %}

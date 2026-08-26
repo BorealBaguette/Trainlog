@@ -267,6 +267,7 @@ from src.plans.validate_plan import validate_plan
 from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
 from src.users import User, Friendship, authDb
+from src import theme as theme_module
 from src.email_parser import start_email_listener
 from src.photon import photonInstances, photonRequest, photonRequestSingle
 from src.routing import forward_routing_core
@@ -382,6 +383,7 @@ app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 
 
 authDb.init_app(app)
+theme_module.init_app(app)
 
 def fetch_and_filter_flights(flight_filter_key, flight_filter_value, target_date):
     from_iso = f"{target_date - timedelta(days=1)}T12:00:00"
@@ -9246,6 +9248,8 @@ def user_settings(username):
         params["friend_search"] = "friend_search" in request.form
         params["appear_on_global"] = "appear_on_global" in request.form
         params["colorblind"] = "colorblind" in request.form
+        if request.form.get("theme") in theme_module.THEMES:
+            params["theme"] = request.form["theme"]
         params["lang"] = request.form["lang"]
         params["user_currency"] = request.form["user_currency"]
         params["default_landing"] = request.form["default_landing"]
@@ -9285,6 +9289,7 @@ def user_settings(username):
         friend_search_checked=friend_search_checked,
         appear_on_global_checked=appear_on_global_checked,
         colorblind_checked=colorblind_checked,
+        user_theme=user.theme,
         flight_3d_checked=flight_3d_checked,
         live_tracking_checked=live_tracking_checked,
         user_currency=user.user_currency,

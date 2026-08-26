@@ -11,45 +11,45 @@
   .plan-toolbar .btn { border-radius: 8px; }
   /* stat tiles */
   .stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: .75rem; }
-  .stat-tile { background: var(--bs-body-bg, #fff); border: 1px solid var(--bs-border-color, #e5e7eb);
+  .stat-tile { background: var(--plan-surface); border: 1px solid var(--plan-border);
                border-radius: 12px; padding: .85rem 1rem; }
-  .stat-tile .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: #8a909a; }
+  .stat-tile .lbl { font-size: .72rem; text-transform: uppercase; letter-spacing: .04em; color: var(--plan-faint); }
   .stat-tile .val { font-size: 1.4rem; font-weight: 700; line-height: 1.1; }
-  .breakdown { border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; background: #fff; }
+  .breakdown { border: 1px solid var(--plan-border); border-radius: 12px; overflow: hidden; background: var(--plan-surface); }
   .breakdown table { width: 100%; margin: 0; border-collapse: collapse; background: transparent; }
   .breakdown thead th { font-size: .7rem; text-transform: uppercase; letter-spacing: .03em;
-                        color: #8a909a !important; font-weight: 600; border: 0 !important;
-                        background: #f7f8fa !important; padding: .5rem .9rem; text-align: left; }
+                        color: var(--plan-faint) !important; font-weight: 600; border: 0 !important;
+                        background: var(--plan-sunken) !important; padding: .5rem .9rem; text-align: left; }
   .breakdown thead th.text-end { text-align: right; }
-  .breakdown td { border: 0; border-top: 1px solid #f0f1f3; background: transparent;
-                  padding: .5rem .9rem; vertical-align: middle; color: #374151; }
-  .breakdown tbody tr:hover td { background: #fafbfc; }
+  .breakdown td { border: 0; border-top: 1px solid var(--plan-hairline); background: transparent;
+                  padding: .5rem .9rem; vertical-align: middle; color: var(--plan-body); }
+  .breakdown tbody tr:hover td { background: var(--plan-row-hover); }
   /* trip timeline */
   .plan-list { list-style: none; padding: 0; margin: 0; }
   .plan-leg { display: flex; align-items: center; gap: .9rem; padding: .8rem 1rem;
-              border: 1px solid var(--bs-border-color, #e5e7eb); border-radius: 12px;
-              margin-bottom: .55rem; background: var(--bs-body-bg, #fff); transition: box-shadow .12s, border-color .12s; }
-  .plan-leg:hover { box-shadow: 0 2px 10px rgba(0,0,0,.06); border-color: #cbd2db; }
+              border: 1px solid var(--plan-border); border-radius: 12px;
+              margin-bottom: .55rem; background: var(--plan-surface); transition: box-shadow .12s, border-color .12s; }
+  .plan-leg:hover { box-shadow: 0 2px 10px var(--plan-shadow); border-color: var(--plan-border-hover); }
   /* Impossible connection: this leg departs before the previous one arrives. */
-  .plan-leg.leg-impossible { border-color: #dc3545; background: rgba(220,53,69,.05); }
-  .leg-warning { font-size: .78rem; font-weight: 600; color: #dc3545; margin-top: .12rem; }
+  .plan-leg.leg-impossible { border-color: var(--plan-danger); background: rgba(220,53,69,.05); }
+  .leg-warning { font-size: .78rem; font-weight: 600; color: var(--plan-danger); margin-top: .12rem; }
   .leg-warning i { margin-right: .25rem; }
   /* Weekday constraint: with Day 1 = anchor date, this leg lands on a day the
      service doesn't run. Softer than the impossible-connection red. */
-  .leg-warning.leg-warning-weekday { color: #b45309; }
-  .wd-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: #7c5eb4;
-             background: rgba(124,94,180,.12); border-radius: 999px; padding: .05rem .5rem; }
+  .leg-warning.leg-warning-weekday { color: var(--plan-warn); }
+  .wd-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: var(--plan-wd-fg);
+             background: var(--plan-wd-bg); border-radius: 999px; padding: .05rem .5rem; }
   .leg-icon { width: 40px; height: 40px; flex: 0 0 40px; border-radius: 10px;
-              background: rgba(0,0,0,.04); display: flex; align-items: center; justify-content: center; }
+              background: var(--plan-overlay-soft); display: flex; align-items: center; justify-content: center; }
   .leg-icon img { height: 24px; }
   .leg-body { min-width: 0; flex: 1 1 auto; }
   .leg-route { font-weight: 600; }
-  .leg-meta { font-size: .82rem; color: #8a909a; margin-top: .1rem; }
-  .day-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: #4b78d6;
-              background: rgba(75,120,214,.12); border-radius: 999px; padding: .05rem .5rem; margin-right: .35rem; }
-  .leg-actions .btn { border: 0; color: #98a0ab; padding: .25rem .45rem; }
-  .leg-actions .btn:hover { color: #1f2937; background: rgba(0,0,0,.05); }
-  .leg-actions .btn.act-del:hover { color: #dc3545; background: rgba(220,53,69,.1); }
+  .leg-meta { font-size: .82rem; color: var(--plan-faint); margin-top: .1rem; }
+  .day-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: var(--plan-accent);
+              background: var(--plan-accent-soft); border-radius: 999px; padding: .05rem .5rem; margin-right: .35rem; }
+  .leg-actions .btn { border: 0; color: var(--plan-action-fg); padding: .25rem .45rem; }
+  .leg-actions .btn:hover { color: var(--plan-action-hover-fg); background: var(--plan-overlay); }
+  .leg-actions .btn.act-del:hover { color: var(--plan-danger); background: rgba(220,53,69,.1); }
   /* Day separators: a labelled divider before the first leg of each new day, so
      the timeline reads as distinct days. Overnight legs stay under their departure
      day; the "→ Day N+1" on the leg itself shows where they cross midnight. */
@@ -57,12 +57,12 @@
                   margin: 1.1rem .15rem .55rem; }
   .plan-day-sep:first-child { margin-top: .1rem; }
   .plan-day-sep .day-sep-label { font-size: .74rem; font-weight: 700; text-transform: uppercase;
-                  letter-spacing: .05em; color: #6b7280; white-space: nowrap; }
+                  letter-spacing: .05em; color: var(--plan-sep-label); white-space: nowrap; }
   .plan-day-sep .day-sep-line { flex: 1 1 auto; height: 1px;
-                  background: var(--bs-border-color, #e5e7eb); }
+                  background: var(--plan-border); }
   /* Overnight marker: a moon on the day transition (Day N -> Day N+1), so the
      "runs through the night" fact sits with its cause rather than on a separate row. */
-  .ovn-moon { color: #5b60a6; margin: 0 .05rem; }
+  .ovn-moon { color: var(--plan-moon); margin: 0 .05rem; }
 </style>
 
 <div class="container plan-wrap" style="margin-top:1.5rem;">
@@ -120,7 +120,7 @@
 
   <!-- plan settings (name + description + Day-1 anchor), tucked behind the gear toggle -->
   <div class="collapse mb-4" id="planSettings">
-    <form method="post" action="{{ url_for('update_plan_route', username=username, plan_uuid=plan.uuid) }}" class="p-3 rounded" style="background:#f7f8fa; border:1px solid #e5e7eb;">
+    <form method="post" action="{{ url_for('update_plan_route', username=username, plan_uuid=plan.uuid) }}" class="p-3 rounded" style="background:var(--plan-sunken); border:1px solid var(--plan-border);">
       <div class="d-flex gap-2 align-items-center flex-wrap mb-2">
         <label class="small text-muted mb-0">{{ nameLabel|default('Name') }}</label>
         <input type="text" name="name" value="{{ plan.name }}" class="form-control form-control-sm" style="max-width:260px;"/>
@@ -140,7 +140,7 @@
 
     <!-- Move existing real trips into this plan (by id) -->
     <form method="post" action="{{ url_for('import_trips_to_plan_route', username=username, plan_uuid=plan.uuid) }}"
-          class="p-3 rounded mt-2" style="background:#f7f8fa; border:1px solid #e5e7eb;"
+          class="p-3 rounded mt-2" style="background:var(--plan-sunken); border:1px solid var(--plan-border);"
           onsubmit="return confirm('{{ confirmImportTrips|default('Move these trips into the plan? They will be removed from your trips.') }}');">
       <label class="small text-muted mb-1 d-block">{{ importTrips|default('Move trips into this plan') }}</label>
       <div class="d-flex gap-2 align-items-center flex-wrap">
@@ -193,7 +193,7 @@
       <tbody>
         {% for c in plan_costs %}
         <tr>
-          <td><i class="bi bi-tag" style="color:#8a909a; margin-right:8px;"></i>{{ c.name }}</td>
+          <td><i class="bi bi-tag" style="color:var(--plan-faint); margin-right:8px;"></i>{{ c.name }}</td>
           <td class="text-end text-muted"><span class="fmt-num" data-n="{{ c.leg_count }}">{{ c.leg_count }}</span> {{ costLegs|default('legs') }}</td>
           <td class="text-end text-muted">{% if c.price_per_leg %}<span class="fmt-num" data-n="{{ c.price_per_leg|round|int }}">{{ c.price_per_leg|round|int }}</span> {{ c.currency }}/{{ costLeg|default('leg') }}{% endif %}</td>
           <td class="text-end"><span class="fmt-num" data-n="{{ c.price|round|int }}">{{ c.price|round|int }}</span> {{ c.currency }}</td>
@@ -207,7 +207,7 @@
         </tr>
         {% endfor %}
         <tr>
-          <td colspan="5" style="border-top:1px solid #f0f1f3;">
+          <td colspan="5" style="border-top:1px solid var(--plan-hairline);">
             <form method="post" action="{{ url_for('submit_plan_cost_route', username=username, plan_uuid=plan.uuid) }}" class="d-flex gap-2 align-items-center flex-wrap py-1">
               <input type="text" name="name" placeholder="{{ addCost|default('Add a shared cost') }}" required class="form-control form-control-sm" style="max-width:220px;"/>
               <input type="number" step="any" name="price" placeholder="{{ price|default('Price') }}" required class="form-control form-control-sm" style="max-width:110px;"/>
@@ -279,8 +279,8 @@
         {% endif %}
         {% if plan_costs %}
         <div class="leg-meta mt-1">
-          <i class="bi bi-tag" style="color:#98a0ab;"></i>
-          <select class="leg-cost-select" data-uid="{{ t.uid }}" style="border:1px solid #e5e7eb; border-radius:6px; font-size:.8rem; padding:.05rem .3rem; color:#6b7280;">
+          <i class="bi bi-tag" style="color:var(--plan-action-fg);"></i>
+          <select class="leg-cost-select" data-uid="{{ t.uid }}" style="border:1px solid var(--plan-border); border-radius:6px; font-size:.8rem; padding:.05rem .3rem; color:var(--plan-sep-label);">
             <option value="">{{ noCost|default('No shared cost') }}</option>
             {% for c in plan_costs %}<option value="{{ c.uid }}" {% if t.cost_id == c.uid %}selected{% endif %}>{{ c.name }}</option>{% endfor %}
           </select>
