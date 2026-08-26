@@ -4686,7 +4686,11 @@ def listOperatorsLogos(tripType=None):
 
 
 def render_public_trip_page(
-    tripIds=None, tagId=None, ticketId=None, template="public/public_trip.html"
+    tripIds=None,
+    tagId=None,
+    ticketId=None,
+    template="public/public_trip.html",
+    owner_only=False,
 ):
     
     user_obj = None
@@ -4876,8 +4880,19 @@ def render_public_trip_page(
         tileserver = user.tileserver
         globe = user.globe
 
+    # The poster is a personal keepsake, not a share view: it is offered, and served,
+    # only when every trip on the page belongs to the viewer (the site owner, as
+    # everywhere else on this page, sees it regardless).
+    own_trips = bool(session.get(owner)) or (
+        user is not None
+        and all(trip["username"] == user.username for trip in trip_list_sorted)
+    )
+    if owner_only and not own_trips:
+        abort(401)
+
     return render_template(
         template,
+        own_trips=own_trips,
         logosList=listOperatorsLogos(),
         tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
         title=lang[session["userinfo"]["lang"]]["sharedLink"],
@@ -4934,7 +4949,7 @@ def public_trip(tripIds=None, tagId=None, ticketId=None):
 @app.route("/public/ticket/<ticketId>/poster")
 def public_trip_poster(tripIds=None, tagId=None, ticketId=None):
     return render_public_trip_page(
-        tripIds, tagId, ticketId, template="public/trip_poster.html"
+        tripIds, tagId, ticketId, template="public/trip_poster.html", owner_only=True
     )
 
 

@@ -292,7 +292,7 @@ body { background: #e9e9ec; }
 
 <div class="posterPage">
     <div class="posterTopBar">
-        <a class="posterBackBtn" href="{{ url_for('public_trip', tripIds=tripIds) }}"><i class="fas fa-chevron-left"></i> {{back}}</a>
+        <a class="posterBackBtn" id="posterBackLink" href="{{ url_for('public_trip', tripIds=tripIds) }}"><i class="fas fa-chevron-left"></i> {{back}}</a>
         <div class="posterControls">
             <div class="posterSelectGroup">
                 <i class="fa-solid fa-map"></i>
@@ -1373,6 +1373,18 @@ function roundRect(ctx, x, y, w, h, r) {
     ctx.arcTo(x, y, x + w, y, r);
     ctx.closePath();
 }
+
+// The trip page's own Back is history.back(), so following this link would push a
+// second trip entry and leave the two pages toggling. Step back instead when the
+// trip page is where we came from, and keep the href for every other entry point.
+document.getElementById('posterBackLink').addEventListener('click', function (e) {
+    if (!document.referrer) return;
+    var ref = new URL(document.referrer);
+    if (ref.origin === location.origin && /^\/public\/(trip|tag|ticket)\//.test(ref.pathname)) {
+        e.preventDefault();
+        history.back();
+    }
+});
 
 init();
 </script>

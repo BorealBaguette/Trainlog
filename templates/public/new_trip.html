@@ -14,30 +14,42 @@
 }
 .publicTsToggle:hover,
 .publicTsToggle.open { color: #0d6efd; }
-/* Action row under the proportion bars: ride-along and tag Play share one style */
-.tripActionButtons {
-  display: flex;
-  gap: 8px;
-  margin: 10px 0 2px;
+/* Poster, ride-along, tag Play and plan copy are all rarely used, so they live behind
+   one more-actions button in the map control stack rather than a row of their own. */
+.tripActions { position: relative; }
+.tripActions .control-button { width: 40px; height: 40px; }
+.tripActionsMenu {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: calc(100% + 6px);
+  min-width: 170px;
+  padding: 4px;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.35);
 }
-/* A POST-only action (the plan copy) needs a form wrapper; keep the button itself the
-   flex item so it lines up with the plain <button>/<a> actions. */
-.tripActionButtons form { margin: 0; display: contents; }
+.tripActions.open .tripActionsMenu { display: block; }
+.tripActionsMenu form { margin: 0; }
 .tripActionBtn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
+  gap: 9px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
   border: none;
   border-radius: 4px;
+  background: none;
   cursor: pointer;
   font-size: 14px;
-  color: #fff;
+  text-align: left;
+  color: #222;
   text-decoration: none;
+  white-space: nowrap;
 }
-.tripActionBtn:hover { color: #fff; filter: brightness(0.92); }
-.tripActionBtn.rideAlongBtn { background: #4caf50; }
-.tripActionBtn.playBtn { background: #0d6efd; }
+.tripActionBtn:hover { background: #f2f4f7; color: #222; }
+.tripActionBtn i { width: 14px; text-align: center; color: #8a8a8a; }
 /* Wagon images are sized in JS against the strip's median height (normalizeStrip), so
    each source's px-per-metre cancels out and relative proportions are gently preserved;
    the scroll wrapper's default 16px bottom padding keeps the scrollbar clear of the pills. */
@@ -620,29 +632,6 @@
           {% if num_hidden_trips > 0 %}
             <div id="hiddenTripsInfo">(+{{ num_hidden_trips }} {% if num_hidden_trips == 1 %}{{ trip_view_hidden_trips_singular }}{% else %}{{ trip_view_hidden_trips_plural }}{% endif %})</div>
           {% endif %}
-          {% if show_ride_along or tag_uuid or plan_copy_url %}
-            <div class="tripActionButtons">
-              {# Same idea as Ride along, for a shared plan: save an independent copy
-                 into your own plans (the panel already shows the plan's name). #}
-              {% if plan_copy_url %}
-              <form method="post" action="{{ plan_copy_url }}">
-                <button type="submit" class="tripActionBtn rideAlongBtn" title="{{ planSaveCopyHint }}">
-                  <i class="fa-solid fa-copy"></i> {{ planSaveCopy }}
-                </button>
-              </form>
-              {% endif %}
-              {% if show_ride_along %}
-              <button id="rideAlong" onClick="showRideAlongModal()" class="tripActionBtn rideAlongBtn">
-                <i class="fa-solid fa-copy"></i> {{ rideAlong }}
-              </button>
-              {% endif %}
-              {% if tag_uuid %}
-              <a class="tripActionBtn playBtn" href="{{ url_for('multi_trip', tagUuid=tag_uuid) }}">
-                <i class="fa-solid fa-play"></i> {{ play_tag }}
-              </a>
-              {% endif %}
-            </div>
-          {% endif %}
           <br>
           <div id="tripDate"></div>              
         </div>
@@ -653,6 +642,41 @@
 <div class="map-utils">
     <button class="control-button" onclick="leave()" title="{{back}}"><i class="fas fa-chevron-left"></i></button>
     <button class="control-button" onclick="copyURL()" title="{{copy}}"><i class="fas fa-clipboard"></i></button>
+  {# The poster is served only to the owner of every trip on the page (401 otherwise). #}
+  {% set poster_url = (url_for('public_trip_poster', tagId=tag_uuid) if tag_uuid else (url_for('public_trip_poster', tripIds=tripIds) if tripIds else None)) if own_trips else None %}
+  {% if poster_url or show_ride_along or tag_uuid or plan_copy_url %}
+    <div class="tripActions" id="tripActions">
+      <button type="button" class="control-button" onclick="toggleTripActions(event)" title="{{ actions }}" aria-label="{{ actions }}">
+        <i class="fa-solid fa-ellipsis"></i>
+      </button>
+      <div class="tripActionsMenu">
+        {% if poster_url %}
+        <a class="tripActionBtn" href="{{ poster_url }}">
+          <i class="fa-solid fa-image"></i> {{ poster }}
+        </a>
+        {% endif %}
+        {# Same idea as Ride along, for a shared plan: save an independent copy
+           into your own plans. #}
+        {% if plan_copy_url %}
+        <form method="post" action="{{ plan_copy_url }}">
+          <button type="submit" class="tripActionBtn" title="{{ planSaveCopyHint }}">
+            <i class="fa-solid fa-copy"></i> {{ planSaveCopy }}
+          </button>
+        </form>
+        {% endif %}
+        {% if show_ride_along %}
+        <button id="rideAlong" onClick="showRideAlongModal()" class="tripActionBtn">
+          <i class="fa-solid fa-copy"></i> {{ rideAlong }}
+        </button>
+        {% endif %}
+        {% if tag_uuid %}
+        <a class="tripActionBtn" href="{{ url_for('multi_trip', tagUuid=tag_uuid) }}">
+          <i class="fa-solid fa-play"></i> {{ play_tag }}
+        </a>
+        {% endif %}
+      </div>
+    </div>
+  {% endif %}
 </div>
 
 {% if planControls %}
@@ -820,6 +844,15 @@ function getActualTripDuration(trip) {
     trip.trip_duration[1] + (trip.arrival_delay || 0) - (trip.departure_delay || 0)
   );
 }
+function toggleTripActions(e) {
+  e.stopPropagation();
+  document.getElementById("tripActions").classList.toggle("open");
+}
+document.addEventListener("click", function () {
+  var el = document.getElementById("tripActions");
+  if (el) el.classList.remove("open");
+});
+
 {% if show_ride_along %}
 function showRideAlongModal() {
   document.getElementById("rideAlongModal").style.display = "flex";
