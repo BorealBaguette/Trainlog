@@ -72,6 +72,27 @@ body { background: #e9e9ec; }
     outline: none;
 }
 
+/* Same pill shape as .posterSelectGroup, but for the private-trips checkbox
+   — only shown at all when the trip set actually has a private leg in it
+   (see init()), so it doesn't clutter the bar for posters that don't need it. */
+.posterPrivateToggle {
+    display: none;
+    align-items: center;
+    gap: 7px;
+    height: 36px;
+    box-sizing: border-box;
+    background: #fff;
+    border-radius: 7px;
+    padding: 0 12px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    font-size: 12.5px;
+    color: #333;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+.posterPrivateToggle input { cursor: pointer; }
+
 .posterDownloadBtn {
     display: inline-flex;
     align-items: center;
@@ -90,12 +111,34 @@ body { background: #e9e9ec; }
 .posterDownloadBtn:hover { filter: brightness(0.95); }
 .posterDownloadBtn:disabled { opacity: 0.6; cursor: default; }
 
+/* "Matboard" layout: the map is inset by a uniform margin on all four sides
+   and the card around it is a neutral mount, the way a framed print sits in
+   its mat. Colours come from the --poster-* custom properties (applyCardTheme);
+   the literals here are only the pre-load fallback.
+   The previous half-bleed (map running to the left/right edges but boxed top
+   and bottom) read as unresolved, and sea-coloured shoulders only blended
+   where the map's edge happened to be water — where a landmass met the edge
+   it cut abruptly. A uniform mat makes every edge deliberate instead. */
 .posterCardWrap {
     box-shadow: 0 10px 34px rgba(0,0,0,0.22);
-    background: #fff;
+    background: var(--poster-shoulder, #fff);
     border-radius: 10px;
     overflow: hidden;
 }
+
+/* Transparent-mount preview: the export leaves the mount unpainted, so show
+   the conventional checkerboard here rather than silently looking unchanged.
+   Painted on the wrap only — .posterCard's own background is cleared so the
+   pattern shows through behind the header/footer text. */
+.posterCardWrap.transparentBg {
+    background-color: #fff;
+    background-image:
+        linear-gradient(45deg, #d8d8d8 25%, transparent 25%, transparent 75%, #d8d8d8 75%),
+        linear-gradient(45deg, #d8d8d8 25%, transparent 25%, transparent 75%, #d8d8d8 75%);
+    background-size: 18px 18px;
+    background-position: 0 0, 9px 9px;
+}
+.posterCardWrap.transparentBg .posterCard { background: transparent; }
 
 /* The card mirrors the exported PNG 1:1: header (title), map, footer (legend +
    watermark) — nothing overlaid on the map itself except the small credit chip,
@@ -104,28 +147,65 @@ body { background: #e9e9ec; }
 .posterCard {
     display: flex;
     flex-direction: column;
-    background: #fff;
+    background: var(--poster-shoulder, #fff);
 }
 
+/* The bottom padding here (and the top padding on .posterFooter) is the mat's
+   top/bottom margin. Both are overwritten at runtime by resizeCardToOrientation
+   from posterMat(); the literals are just a sane pre-layout default. */
 .posterHeader {
-    padding: 22px 30px 14px;
+    padding: 22px 30px 24px;
     text-align: center;
 }
 .posterTitle {
     font-size: 22px;
     font-weight: 700;
-    color: #1a1a1a;
+    color: var(--poster-title, #1a1a1a);
     margin: 0;
     line-height: 1.25;
 }
 .posterSubtitle {
     font-size: 13px;
-    color: #767676;
+    color: var(--poster-subtitle, #767676);
     margin: 4px 0 0;
 }
 
-.posterMapOuter { position: relative; background: #dfe3e6; }
+/* The map: inset from the card edges by the mat margin, with its own rounded
+   corners and a hairline edge so it reads as a distinct print mounted on the
+   card. The side margins are set at runtime from posterMat() to match the
+   header/footer padding, so the border stays uniform at any card size; the
+   literal below is only the pre-layout default.
+   position:relative anchors the absolutely-positioned credit chip. */
+.posterMapOuter {
+    position: relative;
+    margin: 0 24px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #dfe3e6;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
+}
 #posterMap { width: 100%; height: 100%; }
+
+/* `.dark` now only covers things that sit ON the map rather than on the
+   shoulders — the credit chip, the pre-tile-load placeholder, and the map's
+   hairline, which needs to be light-on-dark to stay visible. */
+.posterCardWrap.dark .posterMapOuter {
+    background: #1a1d28;
+    /* Dark Train's own land sits around #343332, so the mount is pushed to
+       near-black (#0b0c0e) to open up the gap; this hairline is brighter than
+       the light theme's to hold the edge over that darker surround. */
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.22);
+}
+/* The credit chip sits on the map itself, not the shoulders, but should
+   still flip to match — invert() turns the plain black-on-transparent icon
+   white without needing a separate asset (no white square-icon file exists,
+   only the full white wordmark, which would reopen the "repeats the brand"
+   problem the icon+CSS-text redesign was meant to fix). */
+.posterCardWrap.dark .posterCredit { background: rgba(30,32,38,0.9); box-shadow: 0 2px 12px rgba(0,0,0,0.5); }
+.posterCardWrap.dark .posterCredit img { filter: invert(1); }
+.posterCardWrap.dark .posterCreditName { color: #f2f2f2; }
+.posterCardWrap.dark .posterCreditName span { color: #aaa; }
+.posterCardWrap.dark .posterCreditTagline { color: #999; }
 
 /* Small always-on-image credit, bottom-right corner of the map itself so it
    survives even if the footer legend gets cropped for a t-shirt print.
@@ -155,7 +235,7 @@ body { background: #e9e9ec; }
 .posterCreditTagline { font-size: 9.5px; font-style: italic; color: #8a8a8a; margin-top: 1px; }
 
 .posterFooter {
-    padding: 12px 24px 20px;
+    padding: 24px 24px 20px;   /* top overwritten from posterMat(), see .posterHeader */
     display: flex;
     flex-wrap: wrap;
     justify-content: center;
@@ -166,7 +246,7 @@ body { background: #e9e9ec; }
     align-items: center;
     gap: 6px;
     font-size: 12px;
-    color: #444;
+    color: var(--poster-legend, #444);
 }
 .posterLegendSwatch { width: 16px; height: 4px; border-radius: 2px; display: inline-block; }
 
@@ -247,6 +327,14 @@ body { background: #e9e9ec; }
                     <option value="intl">{{ posterMapLangIntl }}</option>
                 </select>
             </div>
+            <label class="posterPrivateToggle" id="posterPrivateToggle">
+                <input type="checkbox" id="posterPrivateCheckbox">
+                <span>{{ posterIncludePrivate }}</span>
+            </label>
+            <label class="posterPrivateToggle" id="posterTransparentToggle" style="display:flex;">
+                <input type="checkbox" id="posterTransparentCheckbox">
+                <span>{{ posterTransparentBg }}</span>
+            </label>
             <button type="button" class="posterBackBtn" id="posterResetLabelsBtn" style="border:none;cursor:pointer;">
                 <i class="fas fa-rotate-left"></i> {{ posterResetLabels }}
             </button>
@@ -256,7 +344,7 @@ body { background: #e9e9ec; }
         </div>
     </div>
 
-    <div class="posterCardWrap">
+    <div class="posterCardWrap" id="posterCardWrap">
         <div class="posterCard" id="posterCard">
             <div class="posterHeader">
                 <p class="posterTitle" id="posterTitle">&nbsp;</p>
@@ -330,18 +418,62 @@ function effectivePixelRatio() {
     return Math.min(POSTER_PIXEL_RATIO, MAX_CANVAS_DIMENSION / longestSide);
 }
 
+// Mat margin around the map, in CSS px. Proportional rather than fixed: a
+// flat 24px is only ~2% of a 1000px card, thin enough to read as a seam
+// rather than a deliberate border, and it wouldn't hold its proportions
+// across the orientation presets or a custom ?w=&h=. Driven from JS (which
+// also writes the matching header/footer padding) so there's one source of
+// truth instead of a CSS literal to keep in sync.
+function posterMat() {
+    const dims = getPosterDims();
+    return Math.round(Math.min(dims.w, dims.h) * 0.045);
+}
+
+// The credit chip scales with the card for the same reason the mat does: at a
+// fixed size it shrinks into insignificance on a large print and dominates a
+// small one. 1000px — the square preset's shorter side — is the reference at
+// which it draws at its natural size. Clamped so an extreme custom ?w=&h=
+// can't produce a comically large or vanishing chip.
+function posterCreditScale() {
+    const dims = getPosterDims();
+    return Math.min(2, Math.max(0.7, Math.min(dims.w, dims.h) / 1000));
+}
+
 // Sizes the map area so the WHOLE card (header + map + footer) comes out to
 // the requested total dimensions. Header/footer height depends on their text
-// content wrapping at the current card WIDTH, so width is set first and the
-// header/footer are measured live (offsetHeight forces the browser to flush
-// the layout from the width change) rather than assumed.
+// content wrapping at the current card WIDTH, so width and padding are set
+// first and the header/footer are measured live (offsetHeight forces the
+// browser to flush the layout from those changes) rather than assumed.
 function resizeCardToOrientation() {
     const dims = getPosterDims();
+    const mat = posterMat();
+    const wrap = document.getElementById('posterCardWrap');
     const outer = document.getElementById('posterMapOuter');
-    outer.style.width = dims.w + 'px';
-    const headerH = document.querySelector('.posterHeader').offsetHeight;
-    const footerH = document.querySelector('.posterFooter').offsetHeight;
+    const header = document.querySelector('.posterHeader');
+    const footer = document.querySelector('.posterFooter');
+    // Pin the card itself rather than letting it shrink-wrap the map: a long
+    // title would otherwise widen the card past the requested dimensions
+    // instead of wrapping, and the export assumes exactly dims.w.
+    wrap.style.width = dims.w + 'px';
+    outer.style.margin = '0 ' + mat + 'px';
+    outer.style.width = (dims.w - mat * 2) + 'px';
+    // The mat's top/bottom edges — must be set before measuring below, since
+    // they change the header/footer heights we're about to read.
+    header.style.paddingBottom = mat + 'px';
+    footer.style.paddingTop = mat + 'px';
+    const headerH = header.offsetHeight;
+    const footerH = footer.offsetHeight;
     outer.style.height = Math.max(200, dims.h - headerH - footerH) + 'px';
+
+    // Scale the whole chip as one unit rather than restyling each part.
+    // transform-origin bottom-right pins it to the map's corner, and scaling
+    // the offsets too keeps its inset gap proportional rather than fixed.
+    const credit = document.querySelector('.posterCredit');
+    const cs = posterCreditScale();
+    credit.style.transformOrigin = 'bottom right';
+    credit.style.transform = 'scale(' + cs + ')';
+    credit.style.right = (14 * cs) + 'px';
+    credit.style.bottom = (14 * cs) + 'px';
 }
 
 // Curated subset of the tileservers maplibre-utils.js already knows how to load
@@ -372,6 +504,13 @@ let orientation = cookieOrDefault('posterOrientation', Object.keys(ORIENTATIONS)
 let basemapId = cookieOrDefault('posterBasemap', Object.keys(BASEMAPS), 'bright');
 let labelLevel = cookieOrDefault('posterLabelLevel', ['default', 'current', 'countries', 'none'], 'current');
 let mapLangMode = cookieOrDefault('posterMapLang', ['auto', 'intl'], 'auto');
+// Defaults to excluded: a poster is often meant to be shared/printed, and a
+// trip logged as private was presumably marked that way on purpose — opting
+// it back in should be a deliberate choice, not a silent default.
+let includePrivate = cookieOrDefault('posterIncludePrivate', ['true', 'false'], 'false') === 'true';
+// Export-only: leaves the mount unpainted so the PNG carries alpha there,
+// for printing onto a garment/surface that supplies its own background.
+let transparentBg = cookieOrDefault('posterTransparentBg', ['true', 'false'], 'false') === 'true';
 
 let map = null;
 let posterTrips = null;
@@ -641,7 +780,7 @@ async function buildMap() {
     if (map) { map.remove(); map = null; }
     setSpinner(true);
 
-    const trips = posterTrips;
+    const trips = includePrivate ? posterTrips : posterTrips.filter(t => t.trip.visibility !== 'private');
     const firstCoord = (trips.length && trips[0].path && trips[0].path.length)
         ? [trips[0].path[0][1], trips[0].path[0][0]]
         : [10, 30];
@@ -674,6 +813,7 @@ async function buildMap() {
 
     const finish = () => {
         if (myGeneration !== buildGeneration) return;
+        applyCardTheme();
         captureLabelBaseFilters(newMap);
         applyLabelLevel(newMap, labelLevel);
         localizeBasemapLabels(newMap);
@@ -692,6 +832,32 @@ async function buildMap() {
         refit();
     };
     if (newMap.isStyleLoaded()) finish(); else newMap.once('load', finish);
+}
+
+// The mount is a neutral surface, not the map's sea colour: matching the sea
+// only blended where the map's edge happened to be water, and cut abruptly
+// wherever a landmass reached the edge. A neutral mat makes the map read as a
+// deliberately framed print instead.
+// Kept in sync with the CSS custom properties so the PNG export can draw the
+// same colours without re-reading the DOM.
+let posterTheme = { shoulder: '#ffffff', title: '#1a1a1a', subtitle: '#5a5a5a', legend: '#3a3a3a' };
+
+function applyCardTheme() {
+    const wrap = document.getElementById('posterCardWrap');
+    const dark = !!BASEMAPS[basemapId].isDark;
+    // Also drives the credit chip, the pre-tile-load placeholder and the map's
+    // hairline edge, which all sit on the map rather than on the mount.
+    wrap.classList.toggle('dark', dark);
+    wrap.classList.toggle('transparentBg', transparentBg);
+
+    posterTheme = dark
+        ? { shoulder: '#0b0c0e', title: '#f2f2f2', subtitle: '#a0a0a0', legend: '#cfcfcf' }
+        : { shoulder: '#ffffff', title: '#1a1a1a', subtitle: '#5a5a5a', legend: '#3a3a3a' };
+
+    wrap.style.setProperty('--poster-shoulder', posterTheme.shoulder);
+    wrap.style.setProperty('--poster-title', posterTheme.title);
+    wrap.style.setProperty('--poster-subtitle', posterTheme.subtitle);
+    wrap.style.setProperty('--poster-legend', posterTheme.legend);
 }
 
 // Copies the (hidden) AttributionControl's computed HTML — correct per the
@@ -713,6 +879,7 @@ async function init() {
     document.getElementById('posterBasemapSelect').value = basemapId;
     document.getElementById('posterLabelLevelSelect').value = labelLevel;
     document.getElementById('posterMapLangSelect').value = mapLangMode;
+    document.getElementById('posterTransparentCheckbox').checked = transparentBg;
     applyOrientation(orientation);
 
     const response = await $.post({
@@ -733,6 +900,16 @@ async function init() {
         return key(a) - key(b);
     });
     posterTrips = trips;
+
+    // Only shown when relevant: a viewer other than the trip owner never even
+    // receives private trips from getPublicTrips in the first place (the
+    // backend already screens those out), so the toggle would just be dead
+    // UI for them.
+    if (trips.some(t => t.trip.visibility === 'private')) {
+        document.getElementById('posterPrivateToggle').style.display = 'flex';
+        document.getElementById('posterPrivateCheckbox').checked = includePrivate;
+    }
+
     await buildMap();
 }
 
@@ -951,6 +1128,20 @@ document.getElementById('posterMapLangSelect').addEventListener('change', (e) =>
         if (map) { map.resize(); refit(); }
     }
 });
+document.getElementById('posterPrivateCheckbox').addEventListener('change', (e) => {
+    includePrivate = e.target.checked;
+    rememberChoice('posterIncludePrivate', String(includePrivate));
+    // The trip set itself changes (route lines, points, bounds, title/legend
+    // all derive from it) — same magnitude of change as a basemap switch, so
+    // it needs the same full rebuild, not just a filter/visibility toggle.
+    buildMap();
+});
+document.getElementById('posterTransparentCheckbox').addEventListener('change', (e) => {
+    transparentBg = e.target.checked;
+    rememberChoice('posterTransparentBg', String(transparentBg));
+    // Preview-only class; the export reads `transparentBg` directly.
+    document.getElementById('posterCardWrap').classList.toggle('transparentBg', transparentBg);
+});
 document.getElementById('posterResetLabelsBtn').addEventListener('click', resetHiddenLabels);
 
 document.getElementById('posterDownloadBtn').addEventListener('click', async () => {
@@ -1005,24 +1196,41 @@ async function downloadPoster() {
     const headerH = document.querySelector('.posterHeader').offsetHeight;
     const footerH = document.querySelector('.posterFooter').offsetHeight;
     const mapH = dims.h - headerH - footerH;
+    // Map rectangle in device pixels, inset by the mat — mirrors
+    // .posterMapOuter's margins on screen.
+    const mat = posterMat();
+    const mapX = mat * pr;
+    const mapY = headerH * pr;
+    const mapW = (dims.w - mat * 2) * pr;
+    const mapHpx = mapH * pr;
+    const mapRadius = 6 * pr;
     const out = document.createElement('canvas');
     out.width = dims.w * pr;
     out.height = dims.h * pr;
     const ctx = out.getContext('2d');
 
-    // Background
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, out.width, out.height);
+    // Shoulders + text reuse the exact colours applyCardTheme derived from
+    // the basemap's sea colour, so the export matches the preview for any
+    // basemap without duplicating the luminance logic here. isDarkTheme is
+    // still used further down for the credit chip, which sits on the map.
+    const isDarkTheme = !!BASEMAPS[basemapId].isDark;
+    // Skipped entirely when transparentBg is on: the canvas starts fully
+    // transparent, and PNG keeps the alpha. Only the mount is affected — the
+    // map itself is an opaque raster and stays that way.
+    if (!transparentBg) {
+        ctx.fillStyle = posterTheme.shoulder;
+        ctx.fillRect(0, 0, out.width, out.height);
+    }
 
     // Title
     const titleText = document.getElementById('posterTitle').textContent || '';
     const subtitleText = document.getElementById('posterSubtitle').textContent || '';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#1a1a1a';
+    ctx.fillStyle = posterTheme.title;
     ctx.font = `700 ${22 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
     ctx.fillText(titleText, out.width / 2, 34 * pr, out.width - 40 * pr);
     if (subtitleText) {
-        ctx.fillStyle = '#767676';
+        ctx.fillStyle = posterTheme.subtitle;
         ctx.font = `${13 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
         ctx.fillText(subtitleText, out.width / 2, 56 * pr, out.width - 40 * pr);
     }
@@ -1039,11 +1247,27 @@ async function downloadPoster() {
     // holds from the last (possibly stale/cleared) frame.
     await new Promise(resolve => {
         map.once('render', () => {
-            ctx.drawImage(map.getCanvas(), 0, headerH * pr, dims.w * pr, mapH * pr);
+            // Clip to the mat's rounded rectangle so the exported map has the
+            // same rounded corners as the on-screen .posterMapOuter.
+            ctx.save();
+            roundRect(ctx, mapX, mapY, mapW, mapHpx, mapRadius);
+            ctx.clip();
+            ctx.drawImage(map.getCanvas(), mapX, mapY, mapW, mapHpx);
+            ctx.restore();
             resolve();
         });
         map.triggerRepaint();
     });
+
+    // Hairline edge around the mounted map (matches .posterMapOuter's 1px
+    // box-shadow ring). Offset by half a line width so the stroke lands on the
+    // pixel boundary rather than straddling it.
+    ctx.save();
+    ctx.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = pr;
+    roundRect(ctx, mapX + pr / 2, mapY + pr / 2, mapW - pr, mapHpx - pr, mapRadius);
+    ctx.stroke();
+    ctx.restore();
 
     // Credit chip baked into the map area, bottom-right — survives a footer
     // crop. Reproduces the logo's icon+wordmark composition in real canvas
@@ -1051,48 +1275,61 @@ async function downloadPoster() {
     // would need a second "trainlog.me" caption repeating the brand name —
     // and folds the domain into the name itself, since "Trainlog" alone
     // doesn't reliably surface the site in a search engine.
-    const padLeft = 8 * pr, padRight = 14 * pr, padY = 8 * pr, iconGap = 8 * pr;
-    const iconSize = 34 * pr;
-    ctx.font = `800 ${17 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    // `cs` mirrors the CSS transform:scale() applied to .posterCredit on
+    // screen, so every dimension below scales with the card exactly as the
+    // preview does. `u` is the combined device-pixel + scale unit.
+    const cs = posterCreditScale();
+    const u = pr * cs;
+    const nameSize = 17 * u, taglineSize = 9.5 * u;
+    const padLeft = 8 * u, padRight = 14 * u, padY = 8 * u, iconGap = 8 * u;
+    const iconSize = 34 * u;
+    ctx.font = `800 ${nameSize}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
     const nameWidth = ctx.measureText('Trainlog.me').width;
-    ctx.font = `italic ${9.5 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.font = `italic ${taglineSize}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
     const taglineWidth = ctx.measureText('Your online train diary').width;
     const textW = Math.max(nameWidth, taglineWidth);
-    const textH = 17 * pr * 1.15 + 1 * pr + 9.5 * pr; // name line-height + tagline margin + tagline size
+    const textH = nameSize * 1.15 + 1 * u + taglineSize; // name line-height + tagline margin + tagline size
     const chipW = padLeft + iconSize + iconGap + textW + padRight;
     const chipH = padY * 2 + Math.max(iconSize, textH);
-    const chipX = dims.w * pr - chipW - 14 * pr;
-    const chipY = (headerH + mapH) * pr - chipH - 14 * pr;
+    // Positioned against the map's own inset rectangle, not the card edge, so
+    // it stays inside the mounted map exactly as .posterCredit does.
+    const chipX = mapX + mapW - chipW - 14 * u;
+    const chipY = mapY + mapHpx - chipH - 14 * u;
     ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.22)';
-    ctx.shadowBlur = 10 * pr;
-    ctx.shadowOffsetY = 2 * pr;
-    ctx.fillStyle = 'rgba(255,255,255,0.92)';
-    roundRect(ctx, chipX, chipY, chipW, chipH, 12 * pr);
+    ctx.shadowColor = isDarkTheme ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.22)';
+    ctx.shadowBlur = 10 * u;
+    ctx.shadowOffsetY = 2 * u;
+    ctx.fillStyle = isDarkTheme ? 'rgba(30,32,38,0.9)' : 'rgba(255,255,255,0.92)';
+    roundRect(ctx, chipX, chipY, chipW, chipH, 12 * u);
     ctx.fill();
     ctx.restore();
 
     const contentH = Math.max(iconSize, textH);
     const iconY = chipY + padY + (contentH - iconSize) / 2;
+    // Matches the CSS filter:invert(1) on .posterCredit img — flips the
+    // plain black-on-transparent icon white for the dark theme with no
+    // separate asset needed.
+    if (isDarkTheme) ctx.filter = 'invert(1)';
     ctx.drawImage(logo, chipX + padLeft, iconY, iconSize, iconSize);
+    if (isDarkTheme) ctx.filter = 'none';
 
     ctx.textAlign = 'left';
     const textX = chipX + padLeft + iconSize + iconGap;
     const textTop = chipY + padY + (contentH - textH) / 2;
-    ctx.font = `800 ${17 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
-    ctx.fillStyle = '#1a1a1a';
-    ctx.fillText('Trainlog', textX, textTop + 17 * pr * 0.85);
+    ctx.font = `800 ${nameSize}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillStyle = isDarkTheme ? '#f2f2f2' : '#1a1a1a';
+    ctx.fillText('Trainlog', textX, textTop + nameSize * 0.85);
     // Measure "Trainlog" while its own (800-weight) font is still active —
     // measuring after switching to the .me font below under-measures it
     // (700 is narrower than 800), which shifted ".me" left far enough to
     // overlap/hide the dot behind "Trainlog"'s g.
     const trainlogWidth = ctx.measureText('Trainlog').width;
-    ctx.fillStyle = '#666666';
-    ctx.font = `700 ${17 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
-    ctx.fillText('.me', textX + trainlogWidth, textTop + 17 * pr * 0.85);
-    ctx.font = `italic ${9.5 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
-    ctx.fillStyle = '#8a8a8a';
-    ctx.fillText('Your online train diary', textX, textTop + 17 * pr * 1.15 + 1 * pr + 9.5 * pr * 0.85);
+    ctx.fillStyle = isDarkTheme ? '#aaaaaa' : '#666666';
+    ctx.font = `700 ${nameSize}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillText('.me', textX + trainlogWidth, textTop + nameSize * 0.85);
+    ctx.font = `italic ${taglineSize}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillStyle = isDarkTheme ? '#999999' : '#8a8a8a';
+    ctx.fillText('Your online train diary', textX, textTop + nameSize * 1.15 + 1 * u + taglineSize * 0.85);
 
     // Legend footer
     const legendItems = Array.from(document.querySelectorAll('#posterFooter .posterLegendItem')).map(el => ({
@@ -1110,7 +1347,7 @@ async function downloadPoster() {
         ctx.fillStyle = it.color;
         roundRect(ctx, x, legendY - 2 * pr, swatchW, 4 * pr, 2 * pr);
         ctx.fill();
-        ctx.fillStyle = '#444444';
+        ctx.fillStyle = posterTheme.legend;
         ctx.fillText(it.label, x + swatchW + swatchGap, legendY + 4 * pr);
         x += widths[i] + gap;
     });

@@ -951,6 +951,8 @@
     "analyze": "Analiziraj",
     "back": "Natrag",
     "poster": "Plakat",
+    "posterTransparentBg": "Prozirna pozadina",
+    "posterIncludePrivate": "Uključi privatna putovanja",
     "posterMapLangMine": "Moj jezik",
     "posterMapLangIntl": "Međunarodni",
     "posterLabelDefault": "Zadano",

@@ -960,6 +960,8 @@
     "analyze": "Analyser",
     "back": "Retour",
     "poster": "Affiche",
+    "posterTransparentBg": "Fond transparent",
+    "posterIncludePrivate": "Inclure les trajets privés",
     "posterMapLangMine": "Ma langue",
     "posterMapLangIntl": "International",
     "posterLabelDefault": "Défaut",

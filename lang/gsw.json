@@ -946,6 +946,8 @@
     "analyze": "Analysiere",
     "back": "Zruck",
     "poster": "Poster",
+    "posterTransparentBg": "Transparente Hintergrund",
+    "posterIncludePrivate": "Privati Reise inbegriffe",
     "posterMapLangMine": "Mini Sprach",
     "posterMapLangIntl": "International",
     "posterLabelDefault": "Standard",

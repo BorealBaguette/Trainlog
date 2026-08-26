@@ -960,6 +960,8 @@
     "analyze": "Analyze",
     "back": "Back",
     "poster": "Poster",
+    "posterTransparentBg": "Transparent background",
+    "posterIncludePrivate": "Include private trips",
     "posterMapLangMine": "My language",
     "posterMapLangIntl": "International",
     "posterLabelDefault": "Default",
