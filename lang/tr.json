@@ -945,6 +945,8 @@
     "analyze": "Analiz et",
     "back": "Geri",
     "poster": "Poster",
+    "posterMapLangMine": "Dilim",
+    "posterMapLangIntl": "Uluslararası",
     "posterLabelDefault": "Varsayılan",
     "posterLabelCurated": "Seçilmiş",
     "posterLabelCountries": "Sadece ülkeler",

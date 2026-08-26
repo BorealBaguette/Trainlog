@@ -948,6 +948,8 @@
     "analyze": "Analyseren",
     "back": "Terug",
     "poster": "Poster",
+    "posterMapLangMine": "Mijn taal",
+    "posterMapLangIntl": "Internationaal",
     "posterLabelDefault": "Standaard",
     "posterLabelCurated": "Uitgekozen",
     "posterLabelCountries": "Alleen landen",

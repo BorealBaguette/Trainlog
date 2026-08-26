@@ -951,6 +951,8 @@
     "analyze": "Анализировать",
     "back": "Назад",
     "poster": "Постер",
+    "posterMapLangMine": "Мой язык",
+    "posterMapLangIntl": "Международный",
     "posterLabelDefault": "По умолчанию",
     "posterLabelCurated": "Отобранные",
     "posterLabelCountries": "Только страны",

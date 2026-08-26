@@ -131,20 +131,20 @@ body { background: #e9e9ec; }
    survives even if the footer legend gets cropped for a t-shirt print. */
 .posterCredit {
     position: absolute;
-    right: 12px;
-    bottom: 12px;
+    right: 14px;
+    bottom: 14px;
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 10px 5px 6px;
+    gap: 8px;
+    padding: 7px 14px 7px 8px;
     background: rgba(255,255,255,0.88);
     border-radius: 999px;
     box-shadow: 0 1px 3px rgba(0,0,0,0.25);
     pointer-events: none;
     z-index: 5;
 }
-.posterCredit img { width: 18px; height: 18px; display: block; }
-.posterCredit span { font-size: 11px; font-weight: 600; color: #333; letter-spacing: 0.02em; }
+.posterCredit img { width: 26px; height: 26px; display: block; }
+.posterCredit span { font-size: 14px; font-weight: 600; color: #333; letter-spacing: 0.02em; }
 
 .posterFooter {
     padding: 12px 24px 20px;
@@ -182,6 +182,24 @@ body { background: #e9e9ec; }
     color: #555;
     z-index: 6;
 }
+
+/* MapLibre's own attribution corner control is kept registered (its content
+   is required by the tile data's licence, and computing that content
+   correctly per basemap is exactly what the control already does) but never
+   shown as a map overlay — its text is mirrored into .posterAttribution
+   below instead (see syncAttributionText), so it reads as a normal caption
+   under the poster rather than UI chrome sitting on top of the map. */
+.maplibregl-ctrl-bottom-left .maplibregl-ctrl-attrib { display: none !important; }
+
+.posterAttribution {
+    max-width: 900px;
+    width: 100%;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #9a9a9a;
+    text-align: center;
+}
+.posterAttribution a { color: #9a9a9a; }
 </style>
 
 <div class="posterPage">
@@ -214,6 +232,13 @@ body { background: #e9e9ec; }
                     <option value="none">{{ posterLabelNone }}</option>
                 </select>
             </div>
+            <div class="posterSelectGroup">
+                <i class="fa-solid fa-language"></i>
+                <select id="posterMapLangSelect">
+                    <option value="auto" selected>{{ posterMapLangMine }}</option>
+                    <option value="intl">{{ posterMapLangIntl }}</option>
+                </select>
+            </div>
             <button type="button" class="posterBackBtn" id="posterResetLabelsBtn" style="border:none;cursor:pointer;">
                 <i class="fas fa-rotate-left"></i> {{ posterResetLabels }}
             </button>
@@ -241,6 +266,7 @@ body { background: #e9e9ec; }
         </div>
     </div>
 
+    <p class="posterAttribution" id="posterAttribution"></p>
     <p class="posterHint">{{ posterClickHint }}</p>
 </div>
 
@@ -256,11 +282,56 @@ body { background: #e9e9ec; }
 // as pixelated text — 2x plus a bigger CSS canvas gets similar export
 // resolution without that.
 const POSTER_PIXEL_RATIO = 2;
+// w/h here are the TOTAL card size (header + map + footer — "shoulders"
+// included), not just the map area; resizeCardToOrientation derives the map
+// area's own height by subtracting the header/footer's actual rendered
+// height, so e.g. 'square' really is a square card, not a square map with
+// a title bar and legend hanging off the bottom of it.
 const ORIENTATIONS = {
-    portrait:  { w: 900, h: 1200 },
+    portrait:  { w: 900, h: 1350 },
     square:    { w: 1000, h: 1000 },
-    landscape: { w: 1200, h: 900 }
+    landscape: { w: 1350, h: 900 }
 };
+
+// Hidden power-user escape hatch: ?w=1234&h=5678 in the URL overrides
+// whichever orientation preset is selected with exact pixel dimensions —
+// deliberately not exposed in the UI, just reachable for anyone who needs a
+// precise size (e.g. a specific print-shop spec) that doesn't match a preset.
+function getPosterDims() {
+    const params = new URLSearchParams(window.location.search);
+    const w = parseInt(params.get('w'), 10);
+    const h = parseInt(params.get('h'), 10);
+    if (w > 0 && h > 0) return { w, h };
+    return ORIENTATIONS[orientation] || ORIENTATIONS.square;
+}
+
+// A WebGL canvas can't grow past the GPU/browser's max texture size (commonly
+// 8192px, sometimes 4096px on older/weaker hardware) — request more than
+// that and the browser doesn't error, it just silently clamps or falls back
+// to a lower-quality render, which is indistinguishable from "pixelated" at
+// a glance. Scaling pixelRatio down instead keeps the request inside that
+// ceiling, so a large card size still renders as sharp as the hardware
+// allows rather than exceeding it and degrading unpredictably.
+const MAX_CANVAS_DIMENSION = 8192;
+function effectivePixelRatio() {
+    const dims = getPosterDims();
+    const longestSide = Math.max(dims.w, dims.h);
+    return Math.min(POSTER_PIXEL_RATIO, MAX_CANVAS_DIMENSION / longestSide);
+}
+
+// Sizes the map area so the WHOLE card (header + map + footer) comes out to
+// the requested total dimensions. Header/footer height depends on their text
+// content wrapping at the current card WIDTH, so width is set first and the
+// header/footer are measured live (offsetHeight forces the browser to flush
+// the layout from the width change) rather than assumed.
+function resizeCardToOrientation() {
+    const dims = getPosterDims();
+    const outer = document.getElementById('posterMapOuter');
+    outer.style.width = dims.w + 'px';
+    const headerH = document.querySelector('.posterHeader').offsetHeight;
+    const footerH = document.querySelector('.posterFooter').offsetHeight;
+    outer.style.height = Math.max(200, dims.h - headerH - footerH) + 'px';
+}
 
 // Curated subset of the tileservers maplibre-utils.js already knows how to load
 // (see MapConfig.vectorStylePaths), named to match the app's own tileserver
@@ -289,6 +360,7 @@ function rememberChoice(name, value) {
 let orientation = cookieOrDefault('posterOrientation', Object.keys(ORIENTATIONS), 'square');
 let basemapId = cookieOrDefault('posterBasemap', Object.keys(BASEMAPS), 'bright');
 let labelLevel = cookieOrDefault('posterLabelLevel', ['default', 'current', 'countries', 'none'], 'current');
+let mapLangMode = cookieOrDefault('posterMapLang', ['auto', 'intl'], 'auto');
 
 let map = null;
 let posterTrips = null;
@@ -311,10 +383,7 @@ function applyOrientation(name) {
     orientation = name;
     rememberChoice('posterOrientation', name);
     document.getElementById('posterOrientationSelect').value = name;
-    const dims = ORIENTATIONS[name];
-    const outer = document.getElementById('posterMapOuter');
-    outer.style.width = dims.w + 'px';
-    outer.style.height = dims.h + 'px';
+    resizeCardToOrientation();
     if (map) {
         setSpinner(true);
         map.resize();
@@ -573,13 +642,23 @@ async function buildMap() {
         center: firstCoord,
         zoom: 5,
         preserveDrawingBuffer: true,
-        pixelRatio: POSTER_PIXEL_RATIO
+        pixelRatio: effectivePixelRatio()
     });
     if (myGeneration !== buildGeneration) { newMap.remove(); return; }
     map = newMap;
     // No interactive chrome on a poster preview.
     map.dragRotate.disable();
     map.touchZoomRotate.disableRotation();
+
+    // MapLibre auto-adds its own required attribution control (bottom-right
+    // by default). Keep one around — it's what correctly computes which
+    // sources need crediting for whichever basemap is active — but it's kept
+    // out of the map's corners entirely (CSS: display:none) and its text is
+    // mirrored into the static .posterAttribution line below the card
+    // instead (syncAttributionText), so nothing sits on top of the map.
+    const existingAttrib = newMap._controls.find(c => c instanceof maplibregl.AttributionControl);
+    if (existingAttrib) newMap.removeControl(existingAttrib);
+    newMap.addControl(new maplibregl.AttributionControl(), 'bottom-left');
 
     const finish = () => {
         if (myGeneration !== buildGeneration) return;
@@ -591,9 +670,24 @@ async function buildMap() {
         applyHiddenLabelFilters(newMap);
         buildFooterLegend(trips);
         buildTitle(trips);
+        syncAttributionText();
+        // Header/footer content (title, legend) is only known once trips are
+        // loaded — resize now that it can be measured for real, not just on
+        // the empty placeholder shell resizeCardToOrientation saw at the
+        // very first applyOrientation() call in init().
+        resizeCardToOrientation();
+        newMap.resize();
         refit();
     };
     if (newMap.isStyleLoaded()) finish(); else newMap.once('load', finish);
+}
+
+// Copies the (hidden) AttributionControl's computed HTML — correct per the
+// active basemap's actual sources — into the static line below the card.
+function syncAttributionText() {
+    const inner = document.querySelector('.maplibregl-ctrl-bottom-left .maplibregl-ctrl-attrib-inner');
+    const target = document.getElementById('posterAttribution');
+    if (inner && target) target.innerHTML = inner.innerHTML;
 }
 
 function applyBasemap(id) {
@@ -606,6 +700,7 @@ function applyBasemap(id) {
 async function init() {
     document.getElementById('posterBasemapSelect').value = basemapId;
     document.getElementById('posterLabelLevelSelect').value = labelLevel;
+    document.getElementById('posterMapLangSelect').value = mapLangMode;
     applyOrientation(orientation);
 
     const response = await $.post({
@@ -738,7 +833,7 @@ function omtLangCode(id) {
 }
 
 function localizeBasemapLabels(map) {
-    const lang = omtLangCode(langId);
+    const lang = omtLangCode(mapLangMode === 'intl' ? 'en' : langId);
     // OpenMapTiles data is inconsistent about English specifically: OpenFreeMap's
     // styles read it from `name_en` (underscore), dark-train's from `name:en`
     // (colon) — every other language always uses the colon form. Try both.
@@ -831,6 +926,11 @@ document.getElementById('posterLabelLevelSelect').addEventListener('change', (e)
     rememberChoice('posterLabelLevel', labelLevel);
     if (map) applyLabelLevel(map, labelLevel);
 });
+document.getElementById('posterMapLangSelect').addEventListener('change', (e) => {
+    mapLangMode = e.target.value;
+    rememberChoice('posterMapLang', mapLangMode);
+    if (map) localizeBasemapLabels(map);
+});
 document.getElementById('posterResetLabelsBtn').addEventListener('click', resetHiddenLabels);
 
 document.getElementById('posterDownloadBtn').addEventListener('click', async () => {
@@ -845,6 +945,21 @@ document.getElementById('posterDownloadBtn').addEventListener('click', async () 
         btn.disabled = false;
     }
 });
+
+// Station names can carry a flag emoji (Trainlog prefixes some station
+// display names with one), which makes for a poor filename — strip emoji and
+// collapse everything else that isn't a letter/number (arrows, punctuation,
+// whitespace) into single hyphens, keeping accented letters (e.g.
+// "København" stays "københavn" rather than being mangled by an ASCII-only
+// word-character filter).
+function filenameForTrip(titleText) {
+    const slug = (titleText || '')
+        .replace(/[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '')
+        .replace(/[^\p{L}\p{N}]+/gu, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase();
+    return (slug || 'trainlog-trip') + '.png';
+}
 
 function loadImage(src) {
     return new Promise((resolve, reject) => {
@@ -862,12 +977,17 @@ async function downloadPoster() {
         else map.once('idle', resolve);
     });
 
-    const pr = POSTER_PIXEL_RATIO;
-    const dims = ORIENTATIONS[orientation];
-    const headerH = 78, footerH = 56; // CSS px, matches the on-screen header/footer roughly
+    const pr = effectivePixelRatio(); // must match whatever buildMap() actually rendered the map canvas at
+    const dims = getPosterDims(); // total card size
+    // Real measured height, matching whatever resizeCardToOrientation already
+    // fit the on-screen card to — not a guess, so the export is a faithful
+    // copy of the preview regardless of how long the title/legend text is.
+    const headerH = document.querySelector('.posterHeader').offsetHeight;
+    const footerH = document.querySelector('.posterFooter').offsetHeight;
+    const mapH = dims.h - headerH - footerH;
     const out = document.createElement('canvas');
     out.width = dims.w * pr;
-    out.height = (headerH + dims.h + footerH) * pr;
+    out.height = dims.h * pr;
     const ctx = out.getContext('2d');
 
     // Background
@@ -899,27 +1019,27 @@ async function downloadPoster() {
     // holds from the last (possibly stale/cleared) frame.
     await new Promise(resolve => {
         map.once('render', () => {
-            ctx.drawImage(map.getCanvas(), 0, headerH * pr, dims.w * pr, dims.h * pr);
+            ctx.drawImage(map.getCanvas(), 0, headerH * pr, dims.w * pr, mapH * pr);
             resolve();
         });
         map.triggerRepaint();
     });
 
     // Credit chip baked into the map area, bottom-right — survives a footer crop.
-    const chipH = 26 * pr, chipPad = 8 * pr, iconSize = 16 * pr;
-    ctx.font = `600 ${11 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    const chipH = 40 * pr, chipPad = 10 * pr, iconSize = 26 * pr;
+    ctx.font = `600 ${14 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
     const label = 'trainlog.me';
     const labelWidth = ctx.measureText(label).width;
-    const chipW = chipPad * 2 + iconSize + 6 * pr + labelWidth;
-    const chipX = dims.w * pr - chipW - 12 * pr;
-    const chipY = (headerH + dims.h) * pr - chipH - 12 * pr;
+    const chipW = chipPad * 2 + iconSize + 8 * pr + labelWidth;
+    const chipX = dims.w * pr - chipW - 14 * pr;
+    const chipY = (headerH + mapH) * pr - chipH - 14 * pr;
     ctx.fillStyle = 'rgba(255,255,255,0.88)';
     roundRect(ctx, chipX, chipY, chipW, chipH, chipH / 2);
     ctx.fill();
     ctx.drawImage(logo, chipX + chipPad, chipY + (chipH - iconSize) / 2, iconSize, iconSize);
     ctx.textAlign = 'left';
     ctx.fillStyle = '#333333';
-    ctx.fillText(label, chipX + chipPad + iconSize + 6 * pr, chipY + chipH / 2 + 4 * pr);
+    ctx.fillText(label, chipX + chipPad + iconSize + 8 * pr, chipY + chipH / 2 + 5 * pr);
 
     // Legend footer
     const legendItems = Array.from(document.querySelectorAll('#posterFooter .posterLegendItem')).map(el => ({
@@ -931,7 +1051,7 @@ async function downloadPoster() {
     const widths = legendItems.map(it => swatchW + swatchGap + ctx.measureText(it.label).width);
     const totalWidth = widths.reduce((a, b) => a + b, 0) + gap * Math.max(0, legendItems.length - 1);
     let x = (out.width - totalWidth) / 2;
-    const legendY = (headerH + dims.h) * pr + footerH * pr / 2;
+    const legendY = (headerH + mapH) * pr + footerH * pr / 2;
     ctx.textAlign = 'left';
     legendItems.forEach((it, i) => {
         ctx.fillStyle = it.color;
@@ -946,7 +1066,7 @@ async function downloadPoster() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'trainlog-poster.png';
+        a.download = filenameForTrip(titleText);
         document.body.appendChild(a);
         a.click();
         a.remove();

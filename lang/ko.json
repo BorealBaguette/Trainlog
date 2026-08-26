@@ -945,6 +945,8 @@
     "analyze": "분석하기",
     "back": "뒤로",
     "poster": "포스터",
+    "posterMapLangMine": "내 언어",
+    "posterMapLangIntl": "국제 표기",
     "posterLabelDefault": "기본값",
     "posterLabelCurated": "엄선됨",
     "posterLabelCountries": "국가만",

@@ -945,6 +945,8 @@
     "analyze": "Elemzés",
     "back": "Vissza",
     "poster": "Poszter",
+    "posterMapLangMine": "Saját nyelvem",
+    "posterMapLangIntl": "Nemzetközi",
     "posterLabelDefault": "Alapértelmezett",
     "posterLabelCurated": "Válogatott",
     "posterLabelCountries": "Csak országok",

@@ -945,6 +945,8 @@
     "analyze": "Analüüsida",
     "back": "Tagasi",
     "poster": "Plakat",
+    "posterMapLangMine": "Minu keel",
+    "posterMapLangIntl": "Rahvusvaheline",
     "posterLabelDefault": "Vaikimisi",
     "posterLabelCurated": "Valitud",
     "posterLabelCountries": "Ainult riigid",

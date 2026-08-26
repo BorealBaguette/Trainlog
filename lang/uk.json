@@ -951,6 +951,8 @@
     "analyze": "Аналізувати",
     "back": "Назад",
     "poster": "Постер",
+    "posterMapLangMine": "Моя мова",
+    "posterMapLangIntl": "Міжнародний",
     "posterLabelDefault": "За замовчуванням",
     "posterLabelCurated": "Дібрані",
     "posterLabelCountries": "Лише країни",

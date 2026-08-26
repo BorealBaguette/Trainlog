@@ -951,6 +951,8 @@
     "analyze": "Analiziraj",
     "back": "Natrag",
     "poster": "Plakat",
+    "posterMapLangMine": "Moj jezik",
+    "posterMapLangIntl": "Međunarodni",
     "posterLabelDefault": "Zadano",
     "posterLabelCurated": "Odabrano",
     "posterLabelCountries": "Samo države",

@@ -948,6 +948,8 @@
     "analyze": "Analyser",
     "back": "Tilbake",
     "poster": "Plakat",
+    "posterMapLangMine": "Mitt språk",
+    "posterMapLangIntl": "Internasjonalt",
     "posterLabelDefault": "Standard",
     "posterLabelCurated": "Utvalgt",
     "posterLabelCountries": "Kun land",

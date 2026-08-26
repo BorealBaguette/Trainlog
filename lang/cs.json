@@ -951,6 +951,8 @@
     "analyze": "Analyzovat",
     "back": "Zpět",
     "poster": "Plakát",
+    "posterMapLangMine": "Můj jazyk",
+    "posterMapLangIntl": "Mezinárodní",
     "posterLabelDefault": "Výchozí",
     "posterLabelCurated": "Vybrané",
     "posterLabelCountries": "Jen státy",
