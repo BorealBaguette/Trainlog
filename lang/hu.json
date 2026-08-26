@@ -945,6 +945,8 @@
     "analyze": "Elemzés",
     "back": "Vissza",
     "poster": "Poszter",
+    "posterTransparentBg": "Átlátszó háttér",
+    "posterIncludePrivate": "Privát utazások belefoglalása",
     "posterMapLangMine": "Saját nyelvem",
     "posterMapLangIntl": "Nemzetközi",
     "posterLabelDefault": "Alapértelmezett",

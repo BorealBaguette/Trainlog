@@ -951,6 +951,8 @@
     "analyze": "Analizuj",
     "back": "Wstecz",
     "poster": "Plakat",
+    "posterTransparentBg": "Przezroczyste tło",
+    "posterIncludePrivate": "Uwzględnij prywatne podróże",
     "posterMapLangMine": "Mój język",
     "posterMapLangIntl": "Międzynarodowy",
     "posterLabelDefault": "Domyślne",

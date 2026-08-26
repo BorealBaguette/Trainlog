@@ -948,6 +948,8 @@
     "analyze": "Analyser",
     "back": "Tilbake",
     "poster": "Plakat",
+    "posterTransparentBg": "Gjennomsiktig bakgrunn",
+    "posterIncludePrivate": "Inkluder private reiser",
     "posterMapLangMine": "Mitt språk",
     "posterMapLangIntl": "Internasjonalt",
     "posterLabelDefault": "Standard",

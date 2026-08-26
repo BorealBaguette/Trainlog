@@ -948,6 +948,8 @@
     "analyze": "Analisar",
     "back": "Voltar",
     "poster": "Poster",
+    "posterTransparentBg": "Fundo transparente",
+    "posterIncludePrivate": "Incluir viagens privadas",
     "posterMapLangMine": "A minha língua",
     "posterMapLangIntl": "Internacional",
     "posterLabelDefault": "Padrão",

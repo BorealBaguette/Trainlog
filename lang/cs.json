@@ -951,6 +951,8 @@
     "analyze": "Analyzovat",
     "back": "Zpět",
     "poster": "Plakát",
+    "posterTransparentBg": "Průhledné pozadí",
+    "posterIncludePrivate": "Zahrnout soukromé výlety",
     "posterMapLangMine": "Můj jazyk",
     "posterMapLangIntl": "Mezinárodní",
     "posterLabelDefault": "Výchozí",

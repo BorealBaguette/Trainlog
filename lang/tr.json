@@ -945,6 +945,8 @@
     "analyze": "Analiz et",
     "back": "Geri",
     "poster": "Poster",
+    "posterTransparentBg": "Şeffaf arka plan",
+    "posterIncludePrivate": "Özel yolculukları dahil et",
     "posterMapLangMine": "Dilim",
     "posterMapLangIntl": "Uluslararası",
     "posterLabelDefault": "Varsayılan",

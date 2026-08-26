@@ -948,6 +948,8 @@
     "analyze": "Analyseren",
     "back": "Terug",
     "poster": "Poster",
+    "posterTransparentBg": "Transparante achtergrond",
+    "posterIncludePrivate": "Privéreizen opnemen",
     "posterMapLangMine": "Mijn taal",
     "posterMapLangIntl": "Internationaal",
     "posterLabelDefault": "Standaard",

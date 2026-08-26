@@ -948,6 +948,8 @@
     "analyze": "Analysera",
     "back": "Tillbaka",
     "poster": "Affisch",
+    "posterTransparentBg": "Genomskinlig bakgrund",
+    "posterIncludePrivate": "Inkludera privata resor",
     "posterMapLangMine": "Mitt språk",
     "posterMapLangIntl": "Internationellt",
     "posterLabelDefault": "Standard",

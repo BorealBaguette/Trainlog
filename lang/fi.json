@@ -946,6 +946,8 @@
     "analyze": "Analysoi",
     "back": "Takaisin",
     "poster": "Juliste",
+    "posterTransparentBg": "Läpinäkyvä tausta",
+    "posterIncludePrivate": "Sisällytä yksityiset matkat",
     "posterMapLangMine": "Oma kieli",
     "posterMapLangIntl": "Kansainvälinen",
     "posterLabelDefault": "Oletus",

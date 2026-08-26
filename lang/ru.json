@@ -951,6 +951,8 @@
     "analyze": "Анализировать",
     "back": "Назад",
     "poster": "Постер",
+    "posterTransparentBg": "Прозрачный фон",
+    "posterIncludePrivate": "Включить приватные поездки",
     "posterMapLangMine": "Мой язык",
     "posterMapLangIntl": "Международный",
     "posterLabelDefault": "По умолчанию",

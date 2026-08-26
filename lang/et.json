@@ -945,6 +945,8 @@
     "analyze": "Analüüsida",
     "back": "Tagasi",
     "poster": "Plakat",
+    "posterTransparentBg": "Läbipaistev taust",
+    "posterIncludePrivate": "Kaasa privaatsed reisid",
     "posterMapLangMine": "Minu keel",
     "posterMapLangIntl": "Rahvusvaheline",
     "posterLabelDefault": "Vaikimisi",

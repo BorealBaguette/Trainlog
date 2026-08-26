@@ -945,6 +945,8 @@
     "analyze": "分析する",
     "back": "戻る",
     "poster": "ポスター",
+    "posterTransparentBg": "背景を透過",
+    "posterIncludePrivate": "非公開の旅程を含める",
     "posterMapLangMine": "自分の言語",
     "posterMapLangIntl": "国際表記",
     "posterLabelDefault": "デフォルト",
