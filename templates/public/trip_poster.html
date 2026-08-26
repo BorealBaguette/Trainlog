@@ -119,7 +119,25 @@ body { background: #e9e9ec; }
    and bottom) read as unresolved, and sea-coloured shoulders only blended
    where the map's edge happened to be water — where a landmass met the edge
    it cut abruptly. A uniform mat makes every edge deliberate instead. */
+/* The card is laid out at its true export size (900-1350px wide) so the PNG stays a
+   faithful copy of the preview. On a screen narrower than that, the stage scales the
+   whole card down visually — the export draws from the unscaled numbers and is
+   unaffected — which is what keeps the page free of horizontal scroll on a phone. */
+.posterStage {
+    display: flex;
+    justify-content: center;
+    /* Not `stretch`: the stage is given the card's SCALED height, and a stretched
+       card would be forced to that height and clipped by its own overflow:hidden —
+       which then measures shorter, scales shorter, and so on. */
+    align-items: flex-start;
+    width: 100%;
+}
 .posterCardWrap {
+    /* A flex item shrinks by default; this card must keep the exact pixel width
+       resizeCardToOrientation gives it (the export assumes it), and be scaled by
+       the transform alone. */
+    flex: 0 0 auto;
+    transform-origin: top center;
     box-shadow: 0 10px 34px rgba(0,0,0,0.22);
     background: var(--poster-shoulder, #fff);
     border-radius: 10px;
@@ -288,6 +306,37 @@ body { background: #e9e9ec; }
     text-align: center;
 }
 .posterAttribution a { color: #9a9a9a; }
+
+/* Phones: the control bar becomes a wrapping grid of pills instead of a single
+   horizontally-scrolling row (which hid the download button off-screen), and the
+   page padding gives the scaled-down card as much width as possible. */
+@media (max-width: 700px) {
+    /* The card's drop shadow would otherwise spill a few px past the scaled
+       card and put a horizontal scrollbar back on the page. */
+    .posterPage { padding: 10px 8px 32px; overflow-x: hidden; }
+    .posterTopBar {
+        flex-wrap: wrap;
+        overflow-x: visible;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+    .posterControls {
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+        flex-shrink: 1;
+        min-width: 0;
+    }
+    .posterBackBtn,
+    .posterSelectGroup,
+    .posterPrivateToggle,
+    .posterDownloadBtn { height: 40px; }
+    /* Comfortable tap targets, and a select that can shrink with its pill
+       rather than forcing the pill wider than the screen. */
+    .posterSelectGroup { max-width: 46vw; }
+    .posterSelectGroup select { min-width: 0; max-width: 100%; }
+    .posterDownloadBtn { flex-basis: 100%; justify-content: center; }
+}
 </style>
 
 <div class="posterPage">
@@ -344,6 +393,7 @@ body { background: #e9e9ec; }
         </div>
     </div>
 
+    <div class="posterStage" id="posterStage">
     <div class="posterCardWrap" id="posterCardWrap">
         <div class="posterCard" id="posterCard">
             <div class="posterHeader">
@@ -363,6 +413,7 @@ body { background: #e9e9ec; }
             </div>
             <div class="posterFooter" id="posterFooter"></div>
         </div>
+    </div>
     </div>
 
     <p class="posterAttribution" id="posterAttribution"></p>
@@ -474,7 +525,34 @@ function resizeCardToOrientation() {
     credit.style.transform = 'scale(' + cs + ')';
     credit.style.right = (14 * cs) + 'px';
     credit.style.bottom = (14 * cs) + 'px';
+
+    applyPreviewScale();
 }
+
+// Fits the export-sized card into whatever width the viewport actually offers.
+// Measured from the card's own laid-out box (offsetWidth/Height ignore transforms)
+// rather than from the requested dims, so the reserved space always matches what
+// is actually on screen — the footer legend is built after the first layout pass
+// and makes the card taller than dims.h until the next resize call catches up.
+// A CSS transform doesn't move anything below it, hence the explicit stage height.
+function applyPreviewScale() {
+    const stage = document.getElementById('posterStage');
+    const wrap = document.getElementById('posterCardWrap');
+    wrap.style.transform = '';
+    const cardW = wrap.offsetWidth;
+    const cardH = wrap.offsetHeight;
+    const scale = Math.min(1, stage.clientWidth / cardW);
+    if (scale < 1) wrap.style.transform = 'scale(' + scale + ')';
+    stage.style.height = Math.ceil(cardH * scale) + 'px';
+}
+
+// Rotating a phone changes the available width, and so the preview scale — but
+// not the card's own layout, so only the scale needs recomputing here.
+let previewScaleTimer = null;
+window.addEventListener('resize', function () {
+    clearTimeout(previewScaleTimer);
+    previewScaleTimer = setTimeout(applyPreviewScale, 120);
+});
 
 // Curated subset of the tileservers maplibre-utils.js already knows how to load
 // (see MapConfig.vectorStylePaths), named to match the app's own tileserver
