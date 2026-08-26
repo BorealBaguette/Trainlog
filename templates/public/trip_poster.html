@@ -128,7 +128,12 @@ body { background: #e9e9ec; }
 #posterMap { width: 100%; height: 100%; }
 
 /* Small always-on-image credit, bottom-right corner of the map itself so it
-   survives even if the footer legend gets cropped for a t-shirt print. */
+   survives even if the footer legend gets cropped for a t-shirt print.
+   Reproduces the logo's icon+wordmark composition in real CSS text (rather
+   than the raster logo.png, which would need a second "trainlog.me" caption
+   next to it — repeating the brand name reads as clutter) and folds the
+   domain right into the name, since "Trainlog" alone doesn't reliably
+   surface the site in a search engine the way "trainlog.me" does. */
 .posterCredit {
     position: absolute;
     right: 14px;
@@ -136,15 +141,18 @@ body { background: #e9e9ec; }
     display: flex;
     align-items: center;
     gap: 8px;
-    padding: 7px 14px 7px 8px;
-    background: rgba(255,255,255,0.88);
-    border-radius: 999px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.25);
+    padding: 8px 14px 8px 8px;
+    background: rgba(255,255,255,0.92);
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.14);
     pointer-events: none;
     z-index: 5;
 }
-.posterCredit img { width: 26px; height: 26px; display: block; }
-.posterCredit span { font-size: 14px; font-weight: 600; color: #333; letter-spacing: 0.02em; }
+.posterCredit img { width: 34px; height: 34px; display: block; }
+.posterCreditText { display: flex; flex-direction: column; line-height: 1.15; }
+.posterCreditName { font-size: 17px; font-weight: 800; color: #1a1a1a; letter-spacing: -0.01em; }
+.posterCreditName span { color: #666; font-weight: 700; }
+.posterCreditTagline { font-size: 9.5px; font-style: italic; color: #8a8a8a; margin-top: 1px; }
 
 .posterFooter {
     padding: 12px 24px 20px;
@@ -259,7 +267,10 @@ body { background: #e9e9ec; }
                 <div class="posterSpinner" id="posterSpinner">{{wrapped_generating}}</div>
                 <div class="posterCredit">
                     <img src="{{ url_for('static', filename='images/logo_square.png') }}" alt="">
-                    <span>trainlog.me</span>
+                    <div class="posterCreditText">
+                        <div class="posterCreditName">Trainlog<span>.me</span></div>
+                        <div class="posterCreditTagline">Your online train diary</div>
+                    </div>
                 </div>
             </div>
             <div class="posterFooter" id="posterFooter"></div>
@@ -1025,21 +1036,54 @@ async function downloadPoster() {
         map.triggerRepaint();
     });
 
-    // Credit chip baked into the map area, bottom-right — survives a footer crop.
-    const chipH = 40 * pr, chipPad = 10 * pr, iconSize = 26 * pr;
-    ctx.font = `600 ${14 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
-    const label = 'trainlog.me';
-    const labelWidth = ctx.measureText(label).width;
-    const chipW = chipPad * 2 + iconSize + 8 * pr + labelWidth;
+    // Credit chip baked into the map area, bottom-right — survives a footer
+    // crop. Reproduces the logo's icon+wordmark composition in real canvas
+    // text (matching .posterCredit) rather than the raster logo.png, which
+    // would need a second "trainlog.me" caption repeating the brand name —
+    // and folds the domain into the name itself, since "Trainlog" alone
+    // doesn't reliably surface the site in a search engine.
+    const padLeft = 8 * pr, padRight = 14 * pr, padY = 8 * pr, iconGap = 8 * pr;
+    const iconSize = 34 * pr;
+    ctx.font = `800 ${17 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    const nameWidth = ctx.measureText('Trainlog.me').width;
+    ctx.font = `italic ${9.5 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    const taglineWidth = ctx.measureText('Your online train diary').width;
+    const textW = Math.max(nameWidth, taglineWidth);
+    const textH = 17 * pr * 1.15 + 1 * pr + 9.5 * pr; // name line-height + tagline margin + tagline size
+    const chipW = padLeft + iconSize + iconGap + textW + padRight;
+    const chipH = padY * 2 + Math.max(iconSize, textH);
     const chipX = dims.w * pr - chipW - 14 * pr;
     const chipY = (headerH + mapH) * pr - chipH - 14 * pr;
-    ctx.fillStyle = 'rgba(255,255,255,0.88)';
-    roundRect(ctx, chipX, chipY, chipW, chipH, chipH / 2);
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,0.22)';
+    ctx.shadowBlur = 10 * pr;
+    ctx.shadowOffsetY = 2 * pr;
+    ctx.fillStyle = 'rgba(255,255,255,0.92)';
+    roundRect(ctx, chipX, chipY, chipW, chipH, 12 * pr);
     ctx.fill();
-    ctx.drawImage(logo, chipX + chipPad, chipY + (chipH - iconSize) / 2, iconSize, iconSize);
+    ctx.restore();
+
+    const contentH = Math.max(iconSize, textH);
+    const iconY = chipY + padY + (contentH - iconSize) / 2;
+    ctx.drawImage(logo, chipX + padLeft, iconY, iconSize, iconSize);
+
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#333333';
-    ctx.fillText(label, chipX + chipPad + iconSize + 8 * pr, chipY + chipH / 2 + 5 * pr);
+    const textX = chipX + padLeft + iconSize + iconGap;
+    const textTop = chipY + padY + (contentH - textH) / 2;
+    ctx.font = `800 ${17 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillStyle = '#1a1a1a';
+    ctx.fillText('Trainlog', textX, textTop + 17 * pr * 0.85);
+    // Measure "Trainlog" while its own (800-weight) font is still active —
+    // measuring after switching to the .me font below under-measures it
+    // (700 is narrower than 800), which shifted ".me" left far enough to
+    // overlap/hide the dot behind "Trainlog"'s g.
+    const trainlogWidth = ctx.measureText('Trainlog').width;
+    ctx.fillStyle = '#666666';
+    ctx.font = `700 ${17 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillText('.me', textX + trainlogWidth, textTop + 17 * pr * 0.85);
+    ctx.font = `italic ${9.5 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillStyle = '#8a8a8a';
+    ctx.fillText('Your online train diary', textX, textTop + 17 * pr * 1.15 + 1 * pr + 9.5 * pr * 0.85);
 
     // Legend footer
     const legendItems = Array.from(document.querySelectorAll('#posterFooter .posterLegendItem')).map(el => ({
