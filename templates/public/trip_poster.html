@@ -607,10 +607,11 @@ function buildTitle(trips) {
     if (dated.length) {
         const firstStr = dated[0].trip.utc_filtered_start_datetime;
         const lastStr = dated[dated.length - 1].trip.utc_filtered_start_datetime;
-        // `langId` is Trainlog's own UI-language global (set by layout.html) —
-        // reused here so the poster's date formatting matches the viewer's
-        // locale the same way the rest of the site already does.
-        const fmt = new Intl.DateTimeFormat(langId, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+        // Follows the same "My language" / "International" choice as the map
+        // labels (mapLangMode) — someone picking English map labels almost
+        // certainly wants English-formatted dates too, not a mix of the two.
+        const dateLocale = mapLangMode === 'intl' ? 'en' : langId;
+        const fmt = new Intl.DateTimeFormat(dateLocale, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
         const parseUTC = (s) => new Date(s.replace(' ', 'T') + 'Z');
         if (firstStr.substring(0, 10) === lastStr.substring(0, 10)) {
             subtitleEl.textContent = fmt.format(parseUTC(firstStr));
@@ -941,6 +942,14 @@ document.getElementById('posterMapLangSelect').addEventListener('change', (e) =>
     mapLangMode = e.target.value;
     rememberChoice('posterMapLang', mapLangMode);
     if (map) localizeBasemapLabels(map);
+    if (posterTrips) {
+        buildTitle(posterTrips);
+        // A locale swap can change the date subtitle's length enough to wrap
+        // differently, which changes the header's own height — re-fit the
+        // map area to match, same as finish() does after the initial build.
+        resizeCardToOrientation();
+        if (map) { map.resize(); refit(); }
+    }
 });
 document.getElementById('posterResetLabelsBtn').addEventListener('click', resetHiddenLabels);
 
