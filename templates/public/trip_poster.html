@@ -1,5 +1,14 @@
 {% extends "layout.html" %}
 {% block content %}
+{# The site navigation, which this layout (unlike bootstrap/layout.html) carries
+   none of. It is Bootstrap markup, so the framework comes with it; style2.css is
+   re-linked afterwards to restore the precedence it has on every Bootstrap page,
+   and the poster's own <style> below then wins over both. #}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="{{ static_autoversion(filename='styles/style2.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js"></script>
+{% if username %}{% include "bootstrap/navigation.html" %}{% endif %}
 <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/js-cookie"></script>
@@ -7,7 +16,6 @@
 body { background: #e9e9ec; }
 
 .posterPage {
-    min-height: 100vh;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -31,6 +39,8 @@ body { background: #e9e9ec; }
 .posterBackBtn {
     display: inline-flex;
     align-items: center;
+    flex-shrink: 0;
+    white-space: nowrap;
     gap: 7px;
     height: 36px;
     box-sizing: border-box;
@@ -46,56 +56,149 @@ body { background: #e9e9ec; }
 
 .posterControls { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; flex-shrink: 0; }
 
-/* Compact dropdowns replace what used to be full button rows for basemap/
-   orientation/label-level — same choices, a fraction of the horizontal
-   space, no scrollbar on the control bar. */
-.posterSelectGroup {
-    display: inline-flex;
+/* Settings modal. The controls used to be pills in the top bar, one per option;
+   past about four of them the bar ran out of width and pushed the download
+   button off the edge, so they all moved in here and the bar kept only the
+   three things a viewer reaches for constantly: back, settings, download. */
+.posterModal {
+    position: fixed;
+    inset: 0;
+    z-index: 1040;
+    display: flex;
     align-items: center;
-    gap: 6px;
-    height: 36px;
-    box-sizing: border-box;
-    background: #fff;
-    border-radius: 7px;
-    padding: 0 10px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
-    flex-shrink: 0;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(20,20,24,0.45);
 }
-.posterSelectGroup i { font-size: 0.9em; color: #888; }
-.posterSelectGroup select {
-    height: 100%;
+.posterModal[hidden] { display: none; }
+.posterModalCard {
+    width: 100%;
+    max-width: 380px;
+    max-height: 86vh;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 12px;
+    padding: 6px 18px 18px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.3);
+}
+.posterModalHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #222;
+    border-bottom: 1px solid #ececec;
+}
+.posterModalClose {
     border: none;
-    background: transparent;
+    background: none;
+    font-size: 24px;
+    line-height: 1;
+    color: #888;
+    cursor: pointer;
+    padding: 0 4px;
+}
+.posterModalClose:hover { color: #333; }
+
+/* Label on the left, controls flush right. The label — not a margin on the
+   controls — is what takes up the free space, so a row with an extra button in
+   it keeps its select in the same column as every other row. */
+.posterModalRow {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 0;
+    font-size: 13px;
+    color: #333;
+    border-bottom: 1px solid #f2f2f2;
+}
+.posterModalRow i { width: 16px; flex: 0 0 auto; text-align: center; color: #999; }
+.posterModalRow > span { flex: 1 1 auto; min-width: 0; }
+/* One fixed width for every dropdown in the panel, so they line up on both edges
+   however long their own label or options are. */
+.posterModalRow select {
+    flex: 0 0 148px;
+    width: 148px;
+    height: 32px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
     color: #333;
     font-size: 13px;
+    padding: 0 6px;
     cursor: pointer;
     outline: none;
 }
-
-/* Same pill shape as .posterSelectGroup, but for the private-trips checkbox
-   — only shown at all when the trip set actually has a private leg in it
-   (see init()), so it doesn't clutter the bar for posters that don't need it. */
-.posterPrivateToggle {
-    display: none;
-    align-items: center;
-    gap: 7px;
-    height: 36px;
-    box-sizing: border-box;
+/* Sits between the label and the select (not in the select's column) so the
+   dropdowns stay aligned with the rows that have no button. */
+.posterModalIconBtn {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+    border: 1px solid #ddd;
+    border-radius: 6px;
     background: #fff;
-    border-radius: 7px;
-    padding: 0 12px;
-    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
-    font-size: 12.5px;
+    color: #666;
+    font-size: 12px;
+    cursor: pointer;
+}
+.posterModalIconBtn:hover { background: #f6f6f6; color: #333; }
+.posterModalIconBtn i { width: auto; color: inherit; }
+
+.posterModalCheck {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0;
+    padding: 11px 0;
+    font-size: 13px;
     color: #333;
     cursor: pointer;
-    flex-shrink: 0;
-    white-space: nowrap;
+    border-bottom: 1px solid #f2f2f2;
 }
-.posterPrivateToggle input { cursor: pointer; }
+.posterModalCheck i { width: 16px; flex: 0 0 auto; text-align: center; color: #999; }
+.posterModalCheck > span { flex: 1 1 auto; min-width: 0; }
+/* Bootstrap's own switch, rebuilt in a few lines: this page extends the plain
+   layout, which ships no Bootstrap CSS, and pulling the framework in for two
+   toggles would restyle the whole poster. */
+.posterSwitch {
+    position: relative;
+    flex: 0 0 auto;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+    background: #dfdfdf;
+    cursor: pointer;
+    transition: background 0.15s ease-in-out;
+}
+.posterSwitch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    transition: transform 0.15s ease-in-out;
+}
+.posterSwitch:checked { background: #0d6efd; }
+.posterSwitch:checked::after { transform: translateX(16px); }
+.posterSwitch:focus-visible { outline: 2px solid rgba(13,110,253,0.5); outline-offset: 2px; }
+/* Only shown when the trip set actually has a private leg in it (see init()),
+   so it isn't dead UI for posters that don't need it. */
+#posterPrivateToggle { display: none; }
 
 .posterDownloadBtn {
     display: inline-flex;
     align-items: center;
+    flex-shrink: 0;
+    white-space: nowrap;
     gap: 8px;
     height: 36px;
     box-sizing: border-box;
@@ -357,15 +460,9 @@ body { background: #e9e9ec; }
         flex-shrink: 1;
         min-width: 0;
     }
+    /* Comfortable tap targets. */
     .posterBackBtn,
-    .posterSelectGroup,
-    .posterPrivateToggle,
     .posterDownloadBtn { height: 40px; }
-    /* Comfortable tap targets, and a select that can shrink with its pill
-       rather than forcing the pill wider than the screen. */
-    .posterSelectGroup { max-width: 46vw; }
-    .posterSelectGroup select { min-width: 0; max-width: 100%; }
-    .posterDownloadBtn { flex-basis: 100%; justify-content: center; }
 }
 </style>
 
@@ -373,25 +470,47 @@ body { background: #e9e9ec; }
     <div class="posterTopBar">
         <a class="posterBackBtn" id="posterBackLink" href="{{ url_for('public_trip', tripIds=tripIds) }}"><i class="fas fa-chevron-left"></i> {{back}}</a>
         <div class="posterControls">
-            <div class="posterSelectGroup">
-                <i class="fa-solid fa-map"></i>
+            <button type="button" class="posterBackBtn" id="posterSettingsBtn" style="border:none;cursor:pointer;">
+                <i class="fas fa-sliders"></i> {{ posterSettings }}
+            </button>
+            <button type="button" class="posterDownloadBtn" id="posterDownloadBtn">
+                <i class="fas fa-download"></i> {{wrapped_download_image}}
+            </button>
+        </div>
+    </div>
+
+    <!-- Every poster option lives here rather than in the top bar: the bar ran out
+         of width once there were six of them, and pushed the download button off
+         the right edge. -->
+    <div class="posterModal" id="posterSettingsModal" hidden>
+        <div class="posterModalCard" role="dialog" aria-modal="true">
+            <div class="posterModalHead">
+                <span>{{ posterSettings }}</span>
+                <button type="button" class="posterModalClose" id="posterSettingsClose" aria-label="{{ close }}">&times;</button>
+            </div>
+            <div class="posterModalRow">
+                <i class="fa-solid fa-map"></i><span>{{ posterSettingBasemap }}</span>
                 <select id="posterBasemapSelect">
-                    <option value="light">{{ 'Positron' }}</option>
-                    <option value="colorful">{{ 'Liberty' }}</option>
-                    <option value="bright" selected>{{ 'Bright' }}</option>
-                    <option value="dark">{{ 'Dark Train' }}</option>
+                    <option value="light">Positron</option>
+                    <option value="colorful">Liberty</option>
+                    <option value="bright" selected>Bright</option>
+                    <option value="dark">Dark Train</option>
                 </select>
             </div>
-            <div class="posterSelectGroup">
-                <i class="fa-solid fa-crop-simple"></i>
+            <div class="posterModalRow">
+                <i class="fa-solid fa-crop-simple"></i><span>{{ posterSettingFormat }}</span>
                 <select id="posterOrientationSelect">
                     <option value="portrait">{{ posterPortrait }}</option>
                     <option value="square" selected>{{ posterSquare }}</option>
                     <option value="landscape">{{ posterLandscape }}</option>
                 </select>
             </div>
-            <div class="posterSelectGroup">
-                <i class="fa-solid fa-tags"></i>
+            <div class="posterModalRow">
+                <i class="fa-solid fa-tags"></i><span>{{ posterSettingLabels }}</span>
+                <button type="button" class="posterModalIconBtn" id="posterResetLabelsBtn"
+                        title="{{ posterResetLabels }}" aria-label="{{ posterResetLabels }}">
+                    <i class="fas fa-rotate-left"></i>
+                </button>
                 <select id="posterLabelLevelSelect">
                     <option value="default">{{ posterLabelDefault }}</option>
                     <option value="current" selected>{{ posterLabelCurated }}</option>
@@ -399,8 +518,8 @@ body { background: #e9e9ec; }
                     <option value="none">{{ posterLabelNone }}</option>
                 </select>
             </div>
-            <div class="posterSelectGroup">
-                <i class="fa-solid fa-earth-europe"></i>
+            <div class="posterModalRow">
+                <i class="fa-solid fa-earth-europe"></i><span>{{ posterSettingCountries }}</span>
                 <select id="posterCountriesSelect">
                     <option value="none">{{ posterCountriesOff }}</option>
                     <option value="chrono" selected>{{ posterCountriesChrono }}</option>
@@ -408,27 +527,21 @@ body { background: #e9e9ec; }
                     <option value="duration">{{ posterCountriesDuration }}</option>
                 </select>
             </div>
-            <div class="posterSelectGroup">
-                <i class="fa-solid fa-language"></i>
+            <div class="posterModalRow">
+                <i class="fa-solid fa-language"></i><span>{{ posterSettingMapLang }}</span>
                 <select id="posterMapLangSelect">
                     <option value="auto" selected>{{ posterMapLangMine }}</option>
                     <option value="intl">{{ posterMapLangIntl }}</option>
                 </select>
             </div>
-            <label class="posterPrivateToggle" id="posterPrivateToggle">
-                <input type="checkbox" id="posterPrivateCheckbox">
-                <span>{{ posterIncludePrivate }}</span>
+            <label class="posterModalCheck" id="posterPrivateToggle">
+                <i class="fa-solid fa-lock"></i><span>{{ posterIncludePrivate }}</span>
+                <input type="checkbox" class="posterSwitch" id="posterPrivateCheckbox">
             </label>
-            <label class="posterPrivateToggle" id="posterTransparentToggle" style="display:flex;">
-                <input type="checkbox" id="posterTransparentCheckbox">
-                <span>{{ posterTransparentBg }}</span>
+            <label class="posterModalCheck" id="posterTransparentToggle">
+                <i class="fa-solid fa-chess-board"></i><span>{{ posterTransparentBg }}</span>
+                <input type="checkbox" class="posterSwitch" id="posterTransparentCheckbox">
             </label>
-            <button type="button" class="posterBackBtn" id="posterResetLabelsBtn" style="border:none;cursor:pointer;">
-                <i class="fas fa-rotate-left"></i> {{ posterResetLabels }}
-            </button>
-            <button type="button" class="posterDownloadBtn" id="posterDownloadBtn">
-                <i class="fas fa-download"></i> {{wrapped_download_image}}
-            </button>
         </div>
     </div>
 
@@ -1492,6 +1605,19 @@ document.getElementById('posterTransparentCheckbox').addEventListener('change', 
     document.getElementById('posterCardWrap').classList.toggle('transparentBg', transparentBg);
 });
 document.getElementById('posterResetLabelsBtn').addEventListener('click', resetHiddenLabels);
+
+// Settings modal: opened from the top bar, closed by its own button, a click on
+// the backdrop, or Escape. Every control inside keeps working the moment it is
+// changed — there is no apply step, so the poster updates behind the panel.
+(function wireSettingsModal() {
+    const modal = document.getElementById('posterSettingsModal');
+    const open = () => { modal.hidden = false; };
+    const close = () => { modal.hidden = true; };
+    document.getElementById('posterSettingsBtn').addEventListener('click', open);
+    document.getElementById('posterSettingsClose').addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) close(); });
+})();
 
 document.getElementById('posterDownloadBtn').addEventListener('click', async () => {
     const btn = document.getElementById('posterDownloadBtn');
