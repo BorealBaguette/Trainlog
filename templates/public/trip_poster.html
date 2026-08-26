@@ -276,6 +276,28 @@ body { background: #e9e9ec; }
 }
 .posterLegendSwatch { width: 16px; height: 4px; border-radius: 2px; display: inline-block; }
 
+/* Countries visited, between the map and the legend. Same centred wrapping row
+   as the footer legend; its top padding is the mat margin (written at runtime
+   by resizeCardToOrientation), and the fixed 18px line height is what lets the
+   PNG export place every row exactly where the preview put it. */
+.posterCountries {
+    display: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 14px;
+    padding: 0 24px;
+}
+.posterCountryItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--poster-legend, #444);
+}
+.posterCountryItem img { display: block; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
+.posterCountryMetric { color: var(--poster-subtitle, #767676); }
+
 .posterHint {
     max-width: 900px;
     width: 100%;
@@ -378,6 +400,15 @@ body { background: #e9e9ec; }
                 </select>
             </div>
             <div class="posterSelectGroup">
+                <i class="fa-solid fa-earth-europe"></i>
+                <select id="posterCountriesSelect">
+                    <option value="none">{{ posterCountriesOff }}</option>
+                    <option value="chrono" selected>{{ posterCountriesChrono }}</option>
+                    <option value="distance">{{ posterCountriesDistance }}</option>
+                    <option value="duration">{{ posterCountriesDuration }}</option>
+                </select>
+            </div>
+            <div class="posterSelectGroup">
                 <i class="fa-solid fa-language"></i>
                 <select id="posterMapLangSelect">
                     <option value="auto" selected>{{ posterMapLangMine }}</option>
@@ -419,6 +450,7 @@ body { background: #e9e9ec; }
                     </div>
                 </div>
             </div>
+            <div class="posterCountries" id="posterCountries"></div>
             <div class="posterFooter" id="posterFooter"></div>
         </div>
     </div>
@@ -510,6 +542,7 @@ function resizeCardToOrientation() {
     const outer = document.getElementById('posterMapOuter');
     const header = document.querySelector('.posterHeader');
     const footer = document.querySelector('.posterFooter');
+    const countries = document.getElementById('posterCountries');
     // Pin the card itself rather than letting it shrink-wrap the map: a long
     // title would otherwise widen the card past the requested dimensions
     // instead of wrapping, and the export assumes exactly dims.w.
@@ -522,10 +555,17 @@ function resizeCardToOrientation() {
     // line box already carries ~15px of empty descent under its glyphs, so a full
     // mat here reads as a wider gap than the map's left/right margins.
     header.style.paddingBottom = Math.round(mat * 0.6) + 'px';
-    footer.style.paddingTop = mat + 'px';
+    countries.style.padding = Math.round(mat * 0.6) + 'px ' + mat + 'px 0';
+    // 0 when the strip is switched off (display:none), so the map simply keeps
+    // the whole height it had before.
+    const countriesH = countries.offsetHeight;
+    // The legend sits closer under the countries strip than it does under the
+    // map: a full mat between two text rows reads as a hole, where the same gap
+    // against the map's hard edge reads as margin.
+    footer.style.paddingTop = (countriesH ? Math.round(mat * 0.45) : mat) + 'px';
     const headerH = header.offsetHeight;
     const footerH = footer.offsetHeight;
-    outer.style.height = Math.max(200, dims.h - headerH - footerH) + 'px';
+    outer.style.height = Math.max(200, dims.h - headerH - footerH - countriesH) + 'px';
 
     // Scale the whole chip as one unit rather than restyling each part.
     // transform-origin bottom-right pins it to the map's corner, and scaling
@@ -648,9 +688,13 @@ let includePrivate = cookieOrDefault('posterIncludePrivate', ['true', 'false'], 
 // Export-only: leaves the mount unpainted so the PNG carries alpha there,
 // for printing onto a garment/surface that supplies its own background.
 let transparentBg = cookieOrDefault('posterTransparentBg', ['true', 'false'], 'false') === 'true';
+let countriesMode = cookieOrDefault('posterCountriesMode', ['none', 'chrono', 'distance', 'duration'], 'chrono');
 
 let map = null;
 let posterTrips = null;
+// The trip set the poster is currently drawn from (posterTrips minus private
+// legs unless they were opted in) — what the countries strip counts.
+let posterVisibleTrips = null;
 let posterFeatures = null;
 const tripIds = {{ tripIds|tojson }};
 // `langId` is already declared globally by layout.html — reuse it.
@@ -868,6 +912,123 @@ function buildFooterLegend(trips) {
     });
 }
 
+// Countries visited. `trips.countries` maps a country code to the metres covered
+// in it (either a number, or an object of sub-distances to add up).
+const FLAG_HEIGHT = 13;
+const FLAG_DIR = "{{ url_for('static', filename='images/flags') }}";
+
+// The flag assets carry a viewBox but no width/height, so they have no intrinsic
+// size and Firefox refuses to draw them onto a canvas. Stamp the viewBox's size
+// on as real attributes and load that copy instead — the same image then serves
+// both the preview and the export.
+const flagImages = new Map();
+function loadFlagImage(code) {
+    if (!flagImages.has(code)) {
+        flagImages.set(code, fetch(FLAG_DIR + '/' + code.toLowerCase() + '.svg')
+            .then(res => res.ok ? res.text() : Promise.reject())
+            .then(svg => {
+                const box = (svg.match(/viewBox="([^"]+)"/) || [])[1];
+                const parts = box ? box.trim().split(/[\s,]+/).map(Number) : [];
+                if (parts.length === 4) svg = svg.replace('<svg', `<svg width="${parts[2]}" height="${parts[3]}"`);
+                return loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
+            })
+            .catch(() => null));
+    }
+    return flagImages.get(code);
+}
+
+function countryMeters(value) {
+    if (typeof value === 'number') return value;
+    if (value && typeof value === 'object') return Object.values(value).reduce((a, b) => a + (b || 0), 0);
+    return 0;
+}
+
+function countryTotals(trips) {
+    const byCode = new Map();
+    trips.forEach((t, index) => {
+        let distances;
+        try { distances = JSON.parse(t.trip.countries); } catch (e) { return; }
+        if (!distances) return;
+        const length = t.trip.trip_length || 0;
+        const duration = Array.isArray(t.trip.trip_duration) && typeof t.trip.trip_duration[1] === 'number'
+            ? t.trip.trip_duration[1] : 0;
+        Object.keys(distances).forEach(code => {
+            // "UN" is the international-waters bucket, not a country visited.
+            if (code === 'UN') return;
+            const meters = countryMeters(distances[code]);
+            let entry = byCode.get(code);
+            if (!entry) { entry = { code: code, meters: 0, seconds: 0, order: index }; byCode.set(code, entry); }
+            entry.meters += meters;
+            // Nothing finer-grained than the per-country distance exists to split
+            // a leg's duration by, so time follows distance within each leg.
+            if (length > 0) entry.seconds += duration * (meters / length);
+        });
+    });
+    return Array.from(byCode.values());
+}
+
+// A mode switch can land while the previous render is still fetching flags.
+let countriesGeneration = 0;
+
+async function renderCountries(trips) {
+    const generation = ++countriesGeneration;
+    const el = document.getElementById('posterCountries');
+    el.innerHTML = '';
+    el.style.display = countriesMode === 'none' ? 'none' : 'flex';
+    if (countriesMode === 'none') return;
+
+    const entries = countryTotals(trips);
+    if (countriesMode === 'distance') entries.sort((a, b) => b.meters - a.meters);
+    else if (countriesMode === 'duration') entries.sort((a, b) => b.seconds - a.seconds);
+    else entries.sort((a, b) => a.order - b.order || b.meters - a.meters);
+
+    const images = await Promise.all(entries.map(e => loadFlagImage(e.code)));
+    if (generation !== countriesGeneration) return;
+
+    entries.forEach((entry, i) => {
+        const item = document.createElement('div');
+        item.className = 'posterCountryItem';
+        item.dataset.cc = entry.code;
+        const image = images[i];
+        if (image) {
+            const flag = document.createElement('img');
+            flag.src = image.src;
+            // Sized from the flag's own ratio rather than a fixed box: they range
+            // from 1:1 to 2:1, and neither cropping nor letterboxing them looks
+            // like a printed flag.
+            flag.style.height = FLAG_HEIGHT + 'px';
+            flag.style.width = (FLAG_HEIGHT * (image.naturalWidth / image.naturalHeight)) + 'px';
+            item.appendChild(flag);
+        }
+        const name = document.createElement('span');
+        // A code the browser doesn't know (Intl.DisplayNames throws on some) still
+        // deserves a row — its own code reads better than a missing entry.
+        let label = entry.code;
+        try { label = regionNames.of(entry.code) || entry.code; } catch (e) {}
+        name.textContent = label;
+        item.appendChild(name);
+        const metricText = countriesMode === 'distance' ? mToKm(entry.meters) + ' km'
+            : (countriesMode === 'duration' && entry.seconds >= 60) ? secondsToDhm(Math.round(entry.seconds), langId)
+            : '';
+        if (metricText) {
+            const metric = document.createElement('span');
+            metric.className = 'posterCountryMetric';
+            metric.textContent = metricText;
+            item.appendChild(metric);
+        }
+        el.appendChild(item);
+    });
+}
+
+// The strip's height comes out of the map's, so anything that changes it has to
+// re-fit the map as an orientation change would.
+function refreshCountries() {
+    return renderCountries(posterVisibleTrips || []).then(() => {
+        resizeCardToOrientation();
+        if (map) { setSpinner(true); map.resize(); refit(); }
+    });
+}
+
 const sameStation = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
 
 // Where the journey actually went: the stop with the longest stay, measured from
@@ -990,6 +1151,7 @@ async function buildMap() {
     setSpinner(true);
 
     const trips = includePrivate ? posterTrips : posterTrips.filter(t => t.trip.visibility !== 'private');
+    posterVisibleTrips = trips;
     const firstCoord = (trips.length && trips[0].path && trips[0].path.length)
         ? [trips[0].path[0][1], trips[0].path[0][0]]
         : [10, 30];
@@ -1040,6 +1202,14 @@ async function buildMap() {
         resizeCardToOrientation();
         newMap.resize();
         refit();
+        // Flags load asynchronously, so the strip settles (and the map is re-fit
+        // to whatever height it leaves) a moment after the rest of the card.
+        renderCountries(trips).then(() => {
+            if (myGeneration !== buildGeneration) return;
+            resizeCardToOrientation();
+            newMap.resize();
+            refit();
+        });
     };
     if (newMap.isStyleLoaded()) finish(); else newMap.once('load', finish);
 }
@@ -1089,6 +1259,7 @@ async function init() {
     document.getElementById('posterBasemapSelect').value = basemapId;
     document.getElementById('posterLabelLevelSelect').value = labelLevel;
     document.getElementById('posterMapLangSelect').value = mapLangMode;
+    document.getElementById('posterCountriesSelect').value = countriesMode;
     document.getElementById('posterTransparentCheckbox').checked = transparentBg;
     applyOrientation(orientation);
 
@@ -1301,6 +1472,11 @@ document.getElementById('posterMapLangSelect').addEventListener('change', (e) =>
     // taller header).
     buildMap();
 });
+document.getElementById('posterCountriesSelect').addEventListener('change', (e) => {
+    countriesMode = e.target.value;
+    rememberChoice('posterCountriesMode', countriesMode);
+    refreshCountries();
+});
 document.getElementById('posterPrivateCheckbox').addEventListener('change', (e) => {
     includePrivate = e.target.checked;
     rememberChoice('posterIncludePrivate', String(includePrivate));
@@ -1368,7 +1544,9 @@ async function downloadPoster() {
     // copy of the preview regardless of how long the title/legend text is.
     const headerH = document.querySelector('.posterHeader').offsetHeight;
     const footerH = document.querySelector('.posterFooter').offsetHeight;
-    const mapH = dims.h - headerH - footerH;
+    const countriesEl = document.getElementById('posterCountries');
+    const countriesH = countriesEl.offsetHeight;
+    const mapH = dims.h - headerH - footerH - countriesH;
     // Map rectangle in device pixels, inset by the mat — mirrors
     // .posterMapOuter's margins on screen.
     const mat = posterMat();
@@ -1414,6 +1592,10 @@ async function downloadPoster() {
     // preserveDrawingBuffer set (a known MapLibre/Chrome timing quirk —
     // https://github.com/maplibre/maplibre-gl-js/discussions/3900).
     const logo = await loadImage("{{ url_for('static', filename='images/logo_square.png') }}");
+    // Already cached from the preview, but awaited here for the same reason as the
+    // logo: nothing may go async between the map's repaint and reading its pixels.
+    const countryItems = Array.from(countriesEl.querySelectorAll('.posterCountryItem'));
+    const countryFlags = await Promise.all(countryItems.map(item => loadFlagImage(item.dataset.cc)));
 
     // Force one more paint and read the canvas synchronously inside that
     // render callback, rather than trusting whatever the canvas already
@@ -1504,6 +1686,43 @@ async function downloadPoster() {
     ctx.fillStyle = isDarkTheme ? '#999999' : '#8a8a8a';
     ctx.fillText('Your online train diary', textX, textTop + nameSize * 1.15 + 1 * u + taglineSize * 0.85);
 
+    // Countries strip. Each piece is drawn at the offset the browser already laid
+    // it out at, so a row that wrapped on screen wraps identically in the PNG
+    // rather than being re-flowed here from canvas text metrics.
+    if (countryItems.length) {
+        const stripTop = countriesEl.offsetTop - document.getElementById('posterCard').offsetTop;
+        ctx.textAlign = 'left';
+        // The page's own font, not the canvas default stack: the text is placed at
+        // the offsets the DOM laid out with that font, so a wider glyph set here
+        // would run the metric into the country name.
+        const itemStyle = getComputedStyle(countryItems[0]);
+        ctx.font = `${parseFloat(itemStyle.fontSize) * pr}px ${itemStyle.fontFamily}`;
+        countryItems.forEach((item, i) => {
+            Array.from(item.children).forEach(child => {
+                const x = (child.offsetLeft - countriesEl.offsetLeft) * pr;
+                const y = (stripTop + child.offsetTop - countriesEl.offsetTop) * pr;
+                if (child.tagName === 'IMG') {
+                    if (!countryFlags[i]) return;
+                    const w = child.offsetWidth * pr, h = child.offsetHeight * pr;
+                    ctx.save();
+                    roundRect(ctx, x, y, w, h, 2 * pr);
+                    ctx.clip();
+                    ctx.drawImage(countryFlags[i], x, y, w, h);
+                    ctx.restore();
+                    // Matches the hairline the CSS box-shadow draws around the flag.
+                    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+                    ctx.lineWidth = pr;
+                    roundRect(ctx, x + pr / 2, y + pr / 2, w - pr, h - pr, 2 * pr);
+                    ctx.stroke();
+                    return;
+                }
+                ctx.fillStyle = child.classList.contains('posterCountryMetric') ? posterTheme.subtitle : posterTheme.legend;
+                // 13/18 of the item's line box puts the baseline where the DOM has it.
+                ctx.fillText(child.textContent, x, y + child.offsetHeight * pr * (13 / 18));
+            });
+        });
+    }
+
     // Legend footer
     const legendItems = Array.from(document.querySelectorAll('#posterFooter .posterLegendItem')).map(el => ({
         color: el.querySelector('.posterLegendSwatch').style.background,
@@ -1514,7 +1733,7 @@ async function downloadPoster() {
     const widths = legendItems.map(it => swatchW + swatchGap + ctx.measureText(it.label).width);
     const totalWidth = widths.reduce((a, b) => a + b, 0) + gap * Math.max(0, legendItems.length - 1);
     let x = (out.width - totalWidth) / 2;
-    const legendY = (headerH + mapH) * pr + footerH * pr / 2;
+    const legendY = (headerH + mapH + countriesH) * pr + footerH * pr / 2;
     ctx.textAlign = 'left';
     legendItems.forEach((it, i) => {
         ctx.fillStyle = it.color;
