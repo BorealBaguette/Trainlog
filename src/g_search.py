@@ -9,6 +9,7 @@ import requests
 from google_images_search import GoogleImagesSearch
 
 from py.utils import load_config
+from src.search_terms import like_pattern
 from src.wikidata import find_ship_image
 
 mids_list = json.load(open("static/data/mids.json"))
@@ -254,7 +255,7 @@ def find_vessel_ids(pg, term):
         -- ship's former name finds every trip on that hull, including the ones now
         -- displayed under its current name.
         """,
-        {"pattern": f"%{term.strip()}%", "term": term.strip()},
+        {"pattern": like_pattern(term.strip()), "term": term.strip()},
     ).fetchall()
 
     return [row[0] for row in rows]
