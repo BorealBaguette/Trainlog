@@ -187,8 +187,9 @@ from src.global_map import (
     get_cache_path,
 )
 from src.operators import find_operator_ids, get_trip_operator_logos
-from src.search_terms import has_wildcard, like_pattern
 from src.pg import setup_db, pg_session
+from src.search_terms import like_pattern
+from src.trip_search import base_type_filter, filter_conditions, parse_filters
 from src.suspicious_activity import (
     check_denied_login,
     log_denied_login,
@@ -8718,158 +8719,23 @@ def get_trips_api_internal(username, is_public=False):
     except (ValueError, TypeError):
         global_not_terms = []
 
-    # Handle column-specific searches
-    column_searches = {}
-    for i in range(20):  # Check up to 20 columns
-        column_search = request.form.get(f"columns[{i}][search][value]", "")
-        column_exact = request.form.get(f"columns[{i}][search][exact]", "false") == "true"
-        column_negate = request.form.get(f"columns[{i}][search][negate]", "false") == "true"
-        column_searches[i] = {
-            "value": column_search,
-            "exact": column_exact,
-            "negate": column_negate,
+    # Field filters ("from:Oslo", "duration>2h"): a list rather than one value per
+    # column, so a field can carry several terms. They are ANDed, the alternatives
+    # inside one term ORed.
+    filters = parse_filters(request.form.get("filters"), is_public=is_public)
+
+    additional_conditions, search_params = filter_conditions(filters)
+    search_params.update(
+        {
+            "username": username,
+            "past": past,
+            "include_planned": include_planned,
         }
+    )
 
-    # Build additional WHERE conditions for column-specific searches
-    additional_conditions = []
-    search_params = {
-        "username": username,
-        "past": past,
-        "include_planned": include_planned,
-    }
-    
-    # Add column-specific search conditions
-    for column_index, search_data in column_searches.items():
-        if column_index < len(trip_column_names):
-            column_name = trip_column_names[column_index]
-            param_name = f"col_search_{column_index}"
-            search_term = search_data["value"]
-            is_exact = search_data["exact"]
-            is_negate = search_data["negate"]
-
-            # Choose LIKE pattern based on exact/partial matching. A wildcard
-            # term ("from:Paris*") already says what the whole value looks like,
-            # so it matches with an anchored LIKE whether or not it was quoted as
-            # exact — the `=` branches below are for exact terms without one.
-            if has_wildcard(search_term):
-                is_exact = False
-                search_pattern = like_pattern(search_term)
-            elif is_exact:
-                search_pattern = search_term  # Exact match
-            else:
-                search_pattern = like_pattern(search_term)  # Partial match
-
-            # Each branch below appends exactly one predicate; remember the position
-            # so a negated search ("from:!Paris") can wrap that predicate in NOT.
-            _cond_start = len(additional_conditions)
-
-            # Map frontend column names to actual query column names in FilteredTrips
-            if column_name == "type":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(type) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(type)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "origin_station":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(origin_station) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(origin_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "destination_station":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(destination_station) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(destination_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "start_datetime":
-                if is_exact:
-                    additional_conditions.append(f"COALESCE(to_char(start_datetime, 'YYYY-MM-DD'), '') = :{param_name}")
-                else:
-                    additional_conditions.append(f"COALESCE(to_char(start_datetime, 'YYYY-MM-DD'), '') LIKE :{param_name}")
-            elif column_name == "operator":
-                if is_exact:
-                    operator_match = f"LOWER(COALESCE(operator, '')) = LOWER(:{param_name})"
-                else:
-                    operator_match = f"remove_diacritics(LOWER(COALESCE(operator, ''))) LIKE remove_diacritics(LOWER(:{param_name}))"
-                # Also match trips whose operator resolves to the same company under a
-                # different spelling, so "operator:SBB" finds one logged as CFF. The
-                # names are resolved to ids once here rather than per row, leaving an
-                # indexed integer lookup in the correlated subquery.
-                operator_ids = find_operator_ids(search_term, exact=is_exact)
-                if operator_ids:
-                    ids_param = f"{param_name}_operator_ids"
-                    search_params[ids_param] = operator_ids
-                    operator_match = (
-                        f"({operator_match} OR EXISTS (SELECT 1 FROM trip_operators tvs"
-                        f" WHERE tvs.trip_id = FilteredTrips.uid"
-                        f" AND tvs.operator_id = ANY(:{ids_param})))"
-                    )
-                additional_conditions.append(operator_match)
-            elif column_name == "line_name":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(line_name, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(line_name, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "countries":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(countries) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(countries)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "visibility":
-                if is_exact and search_term == "":
-                    additional_conditions.append(f"visibility IS NULL")
-                elif is_exact:
-                    additional_conditions.append(f"LOWER(visibility) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(visibility)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "material_type":
-                if is_exact:
-                    additional_conditions.append(f"(LOWER(COALESCE(material_type, '')) = LOWER(:{param_name}) OR LOWER(iata) = LOWER(:{param_name}) OR LOWER(manufacturer) = LOWER(:{param_name}) OR LOWER(model) = LOWER(:{param_name}))")
-                else:
-                    additional_conditions.append(f"(remove_diacritics(LOWER(COALESCE(material_type, ''))) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(iata)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(manufacturer)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(model)) LIKE remove_diacritics(LOWER(:{param_name})))")
-            elif column_name == "reg":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(reg, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(reg, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "notes":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(notes, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(notes, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            else:
-                # Fallback for other columns. CAST to text first: these include
-                # numeric/time columns (start_time, end_time, trip_length,
-                # trip_speed, trip_duration_seconds, price) and PG won't COALESCE
-                # them with '' the way SQLite's dynamic typing did.
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(CAST({column_name} AS text), '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(CAST({column_name} AS text), ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-
-            # Negate the predicate this column just appended. COALESCE(..., FALSE)
-            # makes NULL columns (e.g. a missing operator) count as "not matching",
-            # so they are included by a negative filter rather than dropped.
-            if is_negate and len(additional_conditions) > _cond_start:
-                additional_conditions[-1] = (
-                    f"NOT COALESCE({additional_conditions[-1]}, FALSE)"
-                )
-
-            search_params[param_name] = search_pattern
-
-    # Push an exact trip-type filter down into the base CTE. The column-specific
-    # "type" search above is a diacritics-insensitive LIKE, which no index can
-    # serve, so the CTE would materialise every one of the user's trips and only
-    # then drop the other types. When the value names a real trip type exactly
-    # (a partial "type:fer" still falls back to the LIKE) and isn't negated, we
-    # also constrain base by trip_type = :base_type, letting the
-    # (user_id, trip_type) index fetch just those rows. The LIKE stays on the
-    # outer query, so results are identical — this only narrows the scan.
-    base_type = None
-    type_search = column_searches.get(0)
-    if type_search and type_search["value"] and not type_search["negate"]:
-        candidate = type_search["value"].strip().lower()
-        if candidate in {t.value for t in TripTypes}:
-            base_type = candidate
-            search_params["base_type"] = base_type
+    base_type = base_type_filter(filters, {t.value for t in TripTypes})
+    if base_type:
+        search_params["base_type"] = base_type
 
     # Global free-text search across every field. Appended to the outer query only
     # when there is something to match, so the common empty-search case lets Postgres
@@ -8957,7 +8823,7 @@ def get_trips_api_internal(username, is_public=False):
         )
 
     # Build the queries
-    cte = get_dynamic_user_trips_query(base_type_filter=base_type is not None)
+    cte = get_dynamic_user_trips_query(base_type_filter=bool(base_type))
     # The anchor rides along with the count that is run anyway: how many of the
     # matching rows sit above now, which — the order being descending on the same
     # expression — is the rank of the first past row.
