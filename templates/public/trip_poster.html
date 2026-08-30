@@ -1007,7 +1007,10 @@ function cloneCollection(clones) {
     return { type: 'FeatureCollection', features: clones.map(c => ({
         type: 'Feature',
         geometry: { type: 'Point', coordinates: c.coord },
-        properties: { key: c.key, name: c.name, size: c.size, face: c.face, offset: c.offset }
+        properties: {
+            key: c.key, name: c.name, offset: c.offset,
+            size: c.size, face: c.face, color: c.color, halo: c.halo, haloWidth: c.haloWidth
+        }
     })) };
 }
 
@@ -1060,7 +1063,13 @@ function addPosterLayers(map, trips) {
     let labelFont = ['Noto Sans Regular'];
     const styleLayers = map.getStyle().layers || [];
     for (const l of styleLayers) {
-        if (l.type === 'symbol' && l.layout && l.layout['text-font']) { labelFont = l.layout['text-font']; break; }
+        if (l.type !== 'symbol' || !l.layout || !Array.isArray(l.layout['text-font'])) continue;
+        // Not simply the first one: in trainlog-dark that is housenum-label,
+        // whose face is Noto Sans Italic — which is why every station label on
+        // the dark poster came out italic. Take the first upright face instead.
+        if (fontFace(l.layout['text-font']) !== 'regular') continue;
+        labelFont = l.layout['text-font'];
+        break;
     }
 
     map.addLayer({
@@ -1095,6 +1104,7 @@ function addPosterLayers(map, trips) {
         paint: labelPaint()
     });
 
+    clonedLabels.forEach(c => Object.assign(c, cloneStyle(map, c.layerId)));
     map._posterClonePoints = clonedLabels;
     map.addSource('poster-clones', { type: 'geojson', data: cloneCollection(clonedLabels) });
     map.addLayer({
@@ -1122,7 +1132,13 @@ function addPosterLayers(map, trips) {
             'text-allow-overlap': true,
             'text-ignore-placement': true
         },
-        paint: labelPaint()
+        // Its own layer's paint, not ours: a promoted label has to sit among
+        // the basemap's remaining labels without announcing itself.
+        paint: {
+            'text-color': ['get', 'color'],
+            'text-halo-color': ['get', 'halo'],
+            'text-halo-width': ['get', 'haloWidth']
+        }
     });
 
     return features;
@@ -1706,6 +1722,37 @@ function fontFace(font) {
     return 'regular';
 }
 
+// Everything a clone needs to render like the layer it was lifted from. Read
+// from the live style rather than stored once, so switching basemap restyles
+// the labels already promoted. Anything expression-driven (poi-label's colour
+// is a match on class) falls back to the poster's own label paint.
+function cloneStyle(map, layerId) {
+    // Switching basemap renames the layers — dark-train's place-village is
+    // label_village on the OpenFreeMap styles — so the layer a label was
+    // promoted from usually no longer exists. Fall back to any of the new
+    // style's label layers for the colours (within one style they are all but
+    // identical) and keep the size and face captured at promotion.
+    const origin = map.getLayer(layerId) ? layerId
+        : basemapLabelLayers(map).find(id => typeof map.getPaintProperty(id, 'text-color') === 'string');
+    if (!origin) return {};
+
+    const paint = labelPaint();
+    const color = map.getPaintProperty(origin, 'text-color');
+    const halo = map.getPaintProperty(origin, 'text-halo-color');
+    const haloWidth = map.getPaintProperty(origin, 'text-halo-width');
+    const style = {
+        color: typeof color === 'string' ? color : paint['text-color'],
+        halo: typeof halo === 'string' ? halo : paint['text-halo-color'],
+        // Unset means the style draws no halo at all, which is worth copying.
+        haloWidth: typeof haloWidth === 'number' ? haloWidth : 0
+    };
+    if (origin === layerId) {
+        style.size = sizeAtZoom(map.getLayoutProperty(origin, 'text-size'), map.getZoom(), 12);
+        style.face = fontFace(map.getLayoutProperty(origin, 'text-font'));
+    }
+    return style;
+}
+
 // The basemap's labels can't be moved where they are — their geometry is baked
 // into the vector tiles and MapLibre offers no per-feature placement override.
 // Dragging one therefore lifts it out: a copy goes into our own source (which
@@ -1720,18 +1767,17 @@ function promoteBasemapLabel(map, layerId, feature, lngLat) {
     const existing = (map._posterClonePoints || []).find(c => c.key === key);
     if (existing) return existing;
 
-    const clone = {
+    const clone = Object.assign({
         key: key,
         name: name,
+        layerId: layerId,
         // A line-placed label (a river, a road) has no single point to inherit,
         // so it starts where it was grabbed.
         coord: feature.geometry && feature.geometry.type === 'Point'
             ? feature.geometry.coordinates.slice()
             : [lngLat.lng, lngLat.lat],
-        size: sizeAtZoom(map.getLayoutProperty(layerId, 'text-size'), map.getZoom(), 12),
-        face: fontFace(map.getLayoutProperty(layerId, 'text-font')),
         offset: [0, 0]
-    };
+    }, cloneStyle(map, layerId));
     clonedLabels.push(clone);
     map._posterClonePoints = clonedLabels;
     refreshCloneSource(map);
@@ -1894,8 +1940,57 @@ function captureLabelBaseFilters(map) {
     map._posterLabelBaseFilters = {};
     allBasemapLabelLayerIds().forEach(id => {
         if (!map.getLayer(id)) return;
-        map._posterLabelBaseFilters[id] = map.getFilter(id) || null;
+        map._posterLabelBaseFilters[id] = toExpressionFilter(map.getFilter(id)) || null;
     });
+}
+
+// These styles mix both filter syntaxes — place-town is
+// ["==", ["get","class"], "town"] while place-village is still the legacy
+// ["in", "class", "village", "hamlet"]. The two cannot be combined: given
+// ['all', legacyFilter, ourExpression] MapLibre decides the whole filter is
+// legacy and then throws on the expression inside it, so the click that was
+// meant to hide a village label failed — and took the rest of the layer loop
+// with it. Converting the legacy forms up front keeps every composition we
+// build (this one, suppressCapitalsNearStations) purely expression-based.
+function toExpressionFilter(filter) {
+    if (!Array.isArray(filter) || !filter.length) return filter;
+    const op = filter[0];
+    const args = filter.slice(1);
+    const property = (key) => key === '$type' ? ['geometry-type'] : key === '$id' ? ['id'] : ['get', key];
+    const legacyKey = typeof filter[1] === 'string';
+
+    switch (op) {
+        case 'all':
+        case 'any':
+            return [op].concat(args.map(toExpressionFilter));
+        case 'none':
+            return ['!', ['any'].concat(args.map(toExpressionFilter))];
+        case 'has':
+            return legacyKey ? ['has', filter[1]] : filter;
+        case '!has':
+            return ['!', ['has', filter[1]]];
+        case 'in':
+        case '!in': {
+            // Modern form already: ["in", <expression>, ["literal", [...]]].
+            if (!legacyKey || Array.isArray(filter[2])) return filter;
+            const values = args.slice(1);
+            // A missing property reads as null, which `in` refuses as a needle.
+            const needle = values.every(v => typeof v === 'string')
+                ? ['coalesce', property(filter[1]), '']
+                : property(filter[1]);
+            const test = ['in', needle, ['literal', values]];
+            return op === 'in' ? test : ['!', test];
+        }
+        case '==':
+        case '!=':
+        case '<':
+        case '<=':
+        case '>':
+        case '>=':
+            return legacyKey ? [op, property(filter[1]), filter[2]] : filter;
+        default:
+            return filter;
+    }
 }
 
 // Four label-density tiers, applied directly to the current map (no rebuild
