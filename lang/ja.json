@@ -1265,5 +1265,12 @@
     "statsStopsVisited": "訪問バス停",
     "statsPlacesVisited": "訪問地点",
     "hideMarkers": "マーカーを非表示",
-    "showMarkers": "マーカーを表示"
+    "showMarkers": "マーカーを表示",
+    "posterSideItinerary": "旅程",
+    "posterQrHint": "スキャンしてインタラクティブマップを開く",
+    "posterTripCount": {
+        "other": "{n}件の旅行"
+    },
+    "posterStatTotal": "全体の所要時間",
+    "posterStatTravel": "移動時間"
 }

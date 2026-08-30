@@ -1265,5 +1265,12 @@
     "statsStopsVisited": "Ziyaret edilen duraklar",
     "statsPlacesVisited": "Ziyaret edilen yerler",
     "hideMarkers": "İşaretçileri gizle",
-    "showMarkers": "İşaretçileri göster"
+    "showMarkers": "İşaretçileri göster",
+    "posterSideItinerary": "Güzergâh",
+    "posterQrHint": "Etkileşimli haritayı açmak için tarayın",
+    "posterTripCount": {
+        "other": "{n} yolculuk"
+    },
+    "posterStatTotal": "Seyahatte",
+    "posterStatTravel": "Yolda"
 }

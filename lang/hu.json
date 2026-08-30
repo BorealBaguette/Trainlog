@@ -1265,5 +1265,12 @@
     "statsStopsVisited": "Meglátogatott megállók",
     "statsPlacesVisited": "Meglátogatott helyek",
     "hideMarkers": "Jelölők elrejtése",
-    "showMarkers": "Jelölők megjelenítése"
+    "showMarkers": "Jelölők megjelenítése",
+    "posterSideItinerary": "Útiterv",
+    "posterQrHint": "Olvassa be az interaktív térkép megnyitásához",
+    "posterTripCount": {
+        "other": "{n} utazás"
+    },
+    "posterStatTotal": "Teljes időtartam",
+    "posterStatTravel": "Utazási idő"
 }

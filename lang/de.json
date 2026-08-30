@@ -1268,5 +1268,13 @@
     "statsStopsVisited": "Besuchte Haltestellen",
     "statsPlacesVisited": "Besuchte Orte",
     "hideMarkers": "Marker ausblenden",
-    "showMarkers": "Marker einblenden"
+    "showMarkers": "Marker einblenden",
+    "posterSideItinerary": "Reiseverlauf",
+    "posterQrHint": "Scannen, um die interaktive Karte zu öffnen",
+    "posterTripCount": {
+        "one": "{n} Reise",
+        "other": "{n} Reisen"
+    },
+    "posterStatTotal": "Auf Reisen",
+    "posterStatTravel": "Unterwegs"
 }

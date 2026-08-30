@@ -1268,5 +1268,13 @@
     "statsStopsVisited": "Bezochte haltes",
     "statsPlacesVisited": "Bezochte plaatsen",
     "hideMarkers": "Markers verbergen",
-    "showMarkers": "Markers tonen"
+    "showMarkers": "Markers tonen",
+    "posterSideItinerary": "Reisschema",
+    "posterQrHint": "Scan om de interactieve kaart te openen",
+    "posterTripCount": {
+        "one": "{n} rit",
+        "other": "{n} ritten"
+    },
+    "posterStatTotal": "Op reis",
+    "posterStatTravel": "Onderweg"
 }

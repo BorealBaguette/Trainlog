@@ -1266,5 +1266,13 @@
     "statsStopsVisited": "Bsuechti Haltstelle",
     "statsPlacesVisited": "Bsuechti Ort",
     "hideMarkers": "Marker uusblände",
-    "showMarkers": "Marker izeige"
+    "showMarkers": "Marker izeige",
+    "posterSideItinerary": "Reiseverlauf",
+    "posterQrHint": "Scanne, zum d'interaktivi Charte z'öffne",
+    "posterTripCount": {
+        "one": "{n} Reis",
+        "other": "{n} Reise"
+    },
+    "posterStatTotal": "Uf Reise",
+    "posterStatTravel": "Underwägs"
 }

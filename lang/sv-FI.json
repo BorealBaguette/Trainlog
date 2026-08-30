@@ -1268,5 +1268,13 @@
     "statsStopsVisited": "Besökta hållplatser",
     "statsPlacesVisited": "Besökta platser",
     "hideMarkers": "Dölj markörer",
-    "showMarkers": "Visa markörer"
+    "showMarkers": "Visa markörer",
+    "posterSideItinerary": "Resplan",
+    "posterQrHint": "Skanna för att öppna den interaktiva kartan",
+    "posterTripCount": {
+        "one": "{n} resa",
+        "other": "{n} resor"
+    },
+    "posterStatTotal": "Total tid",
+    "posterStatTravel": "Restid"
 }

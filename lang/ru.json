@@ -1271,5 +1271,14 @@
     "statsStopsVisited": "Посещённые остановки",
     "statsPlacesVisited": "Посещённые места",
     "hideMarkers": "Скрыть маркеры",
-    "showMarkers": "Показать маркеры"
+    "showMarkers": "Показать маркеры",
+    "posterSideItinerary": "Маршрут",
+    "posterQrHint": "Отсканируйте, чтобы открыть интерактивную карту",
+    "posterTripCount": {
+        "one": "{n} поездка",
+        "few": "{n} поездки",
+        "many": "{n} поездок"
+    },
+    "posterStatTotal": "В поездке",
+    "posterStatTravel": "В пути"
 }

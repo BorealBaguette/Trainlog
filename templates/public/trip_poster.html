@@ -12,6 +12,7 @@
 <link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/js-cookie"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <style>
 body { background: #e9e9ec; }
 
@@ -236,6 +237,10 @@ body { background: #e9e9ec; }
     width: 100%;
 }
 .posterCardWrap {
+    /* Positioned: the hidden side is parked off-screen inside it (see .showBack),
+       and only a positioned wrap both clips that with its own overflow and keeps
+       it out of the page's scroll width. */
+    position: relative;
     /* A flex item shrinks by default; this card must keep the exact pixel width
        resizeCardToOrientation gives it (the export assumes it), and be scaled by
        the transform alone. */
@@ -260,6 +265,37 @@ body { background: #e9e9ec; }
     background-position: 0 0, 9px 9px;
 }
 .posterCardWrap.transparentBg .posterCard { background: transparent; }
+
+/* Front/back switch. The hidden side is moved off-screen rather than
+   display:none'd: the back's layout measures the front header's real height (so
+   both faces put the title in the same place), and a display:none element
+   measures zero. */
+.posterCardWrap.showBack #posterCard { position: absolute; top: 0; left: -100000px; width: 100%; }
+.posterCardWrap:not(.showBack) #posterBackCard { display: none; }
+#posterBackCanvas { display: block; }
+
+.posterSideTabs {
+    display: inline-flex;
+    flex-shrink: 0;
+    background: #fff;
+    border-radius: 7px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    overflow: hidden;
+}
+.posterSideTab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 36px;
+    padding: 0 14px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    color: #444;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.posterSideTab.active { background: #0d6efd; color: #fff; }
 
 /* The card mirrors the exported PNG 1:1: header (title), map, footer (legend +
    watermark) — nothing overlaid on the map itself except the small credit chip,
@@ -462,6 +498,7 @@ body { background: #e9e9ec; }
     }
     /* Comfortable tap targets. */
     .posterBackBtn,
+    .posterSideTab,
     .posterDownloadBtn { height: 40px; }
 }
 </style>
@@ -470,6 +507,10 @@ body { background: #e9e9ec; }
     <div class="posterTopBar">
         <a class="posterBackBtn" id="posterBackLink" href="{{ url_for('public_trip', tripIds=tripIds) }}"><i class="fas fa-chevron-left"></i> {{back}}</a>
         <div class="posterControls">
+            <div class="posterSideTabs">
+                <button type="button" class="posterSideTab active" data-side="front"><i class="fas fa-map"></i> {{ map }}</button>
+                <button type="button" class="posterSideTab" data-side="back"><i class="fas fa-list-ul"></i> {{ posterSideItinerary }}</button>
+            </div>
             <button type="button" class="posterBackBtn" id="posterSettingsBtn" style="border:none;cursor:pointer;">
                 <i class="fas fa-sliders"></i> {{ posterSettings }}
             </button>
@@ -565,6 +606,12 @@ body { background: #e9e9ec; }
             </div>
             <div class="posterCountries" id="posterCountries"></div>
             <div class="posterFooter" id="posterFooter"></div>
+        </div>
+        <!-- The other face of the poster: the itinerary, drawn entirely on canvas
+             (see drawBackPoster) — this element is both the preview and the
+             exported PNG. -->
+        <div class="posterCard" id="posterBackCard">
+            <canvas id="posterBackCanvas"></canvas>
         </div>
     </div>
     </div>
@@ -744,6 +791,7 @@ function applyPreviewScale() {
             if (header.offsetHeight === headerH) return;
             headerH = header.offsetHeight;
             resizeCardToOrientation();
+            refreshBack();
             if (map) { map.resize(); refit(); }
         }, 250);
     });
@@ -828,6 +876,7 @@ function applyOrientation(name) {
     rememberChoice('posterOrientation', name);
     document.getElementById('posterOrientationSelect').value = name;
     resizeCardToOrientation();
+    refreshBack();
     if (map) {
         setSpinner(true);
         map.resize();
@@ -1313,6 +1362,9 @@ async function buildMap() {
         // the empty placeholder shell resizeCardToOrientation saw at the
         // very first applyOrientation() call in init().
         resizeCardToOrientation();
+        // After the resize, so the itinerary side reads the header height the
+        // title it was just given actually needs.
+        refreshBack();
         newMap.resize();
         refit();
         // Flags load asynchronously, so the strip settles (and the map is re-fit
@@ -1603,6 +1655,7 @@ document.getElementById('posterTransparentCheckbox').addEventListener('change', 
     rememberChoice('posterTransparentBg', String(transparentBg));
     // Preview-only class; the export reads `transparentBg` directly.
     document.getElementById('posterCardWrap').classList.toggle('transparentBg', transparentBg);
+    refreshBack();
 });
 document.getElementById('posterResetLabelsBtn').addEventListener('click', resetHiddenLabels);
 
@@ -1638,13 +1691,13 @@ document.getElementById('posterDownloadBtn').addEventListener('click', async () 
 // whitespace) into single hyphens, keeping accented letters (e.g.
 // "København" stays "københavn" rather than being mangled by an ASCII-only
 // word-character filter).
-function filenameForTrip(titleText) {
+function filenameForTrip(titleText, suffix) {
     const slug = (titleText || '')
         .replace(/[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '')
         .replace(/[^\p{L}\p{N}]+/gu, '-')
         .replace(/^-+|-+$/g, '')
         .toLowerCase();
-    return (slug || 'trainlog-trip') + '.png';
+    return (slug || 'trainlog-trip') + (suffix || '') + '.png';
 }
 
 function loadImage(src) {
@@ -1657,6 +1710,13 @@ function loadImage(src) {
 }
 
 async function downloadPoster() {
+    // The back side is its own image: whichever face is on screen is what the
+    // download button hands over.
+    if (posterSide === 'back') {
+        const canvas = await renderBack();
+        saveCanvas(canvas, filenameForTrip(document.getElementById('posterTitle').textContent, '-itinerary'));
+        return;
+    }
     if (!map) return;
     await new Promise(resolve => {
         if (map.loaded() && !map.isMoving()) resolve();
@@ -1870,17 +1930,652 @@ async function downloadPoster() {
         x += widths[i] + gap;
     });
 
-    out.toBlob(blob => {
+    saveCanvas(out, filenameForTrip(titleText));
+}
+
+function saveCanvas(canvas, filename) {
+    canvas.toBlob(blob => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = filenameForTrip(titleText);
+        a.download = filename;
         document.body.appendChild(a);
         a.click();
         a.remove();
         setTimeout(() => URL.revokeObjectURL(url), 5000);
     }, 'image/png');
 }
+
+// ── The poster's back side: the itinerary ────────────────────────────────────
+// A second, standalone image in the same frame as the map side: stops threaded
+// on a coloured rail, a totals line, and a QR code back to the interactive trip
+// page. Unlike the front (a DOM card the export re-draws onto a canvas), the
+// back is drawn on canvas only — it is a list, and a text layout is far shorter
+// to write once in canvas than to write in CSS and then mirror in canvas. The
+// preview element IS the export canvas, so what is on screen is the PNG.
+let posterSide = 'front';
+const FONT_STACK = 'system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+// Stays/visits have no journey between two stations, so they are no part of an
+// itinerary — same exclusions as the footer legend.
+const ITINERARY_SKIP_TYPES = ['accommodation', 'restaurant', 'poi'];
+
+function showSide(side) {
+    posterSide = side;
+    document.getElementById('posterCardWrap').classList.toggle('showBack', side === 'back');
+    document.querySelectorAll('.posterSideTab').forEach(b => b.classList.toggle('active', b.dataset.side === side));
+    document.querySelector('.posterHint').style.display = side === 'back' ? 'none' : '';
+    if (side === 'back') renderBack(); else applyPreviewScale();
+}
+
+function refreshBack() {
+    if (posterSide === 'back') renderBack();
+}
+
+function transportColor(type) {
+    if (type === 'helicopter') type = 'air';
+    const t = MapLibreUtils.MapConfig.transportTypes.find(t => t.id === type);
+    return t ? t.color : '#888888';
+}
+
+function itineraryLegs(trips) {
+    return (trips || []).filter(t => !ITINERARY_SKIP_TYPES.includes(t.trip.type));
+}
+
+// Same "My language" / "International" choice as the map labels and the subtitle.
+function itineraryDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00Z');
+    if (isNaN(d.getTime())) return '';
+    const locale = mapLangMode === 'intl' ? 'en' : langId;
+    return new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(d);
+}
+
+// Rows of the itinerary, in drawing order. A leg that starts on the same day
+// where the previous one ended shares its stop (arrival and departure times on
+// the one row) so the rail runs unbroken. A leg starting somewhere else opens a
+// new chain after a dashed gap; a leg starting on a later day opens a new day
+// section, repeating the stop under its date — two times on one row would
+// otherwise read as a connection when they are a night apart.
+function buildItineraryRows(trips) {
+    const legs = itineraryLegs(trips);
+    const rows = [];
+    let lastDate = null;
+    legs.forEach((t, i) => {
+        const trip = t.trip;
+        const prev = i ? legs[i - 1].trip : null;
+        const sameStop = prev && sameStation(prev.destination_station, trip.origin_station);
+        const newDay = trip.start_date && trip.start_date !== lastDate;
+        if (sameStop && !newDay) {
+            const last = rows[rows.length - 1];
+            if (last && last.kind === 'stop' && trip.start_time) last.time2 = trip.start_time;
+        } else {
+            if (prev && !sameStop) rows.push({ kind: 'gap', h: 18 });
+            if (newDay) {
+                lastDate = trip.start_date;
+                rows.push({ kind: 'date', text: itineraryDate(trip.start_date), h: 28 });
+            }
+            rows.push({ kind: 'stop', name: trip.origin_station, time: trip.start_time, h: 30 });
+        }
+        const meta = [];
+        if (trip.trip_length) meta.push(mToKm(trip.trip_length) + ' km');
+        const seconds = Array.isArray(trip.trip_duration) ? trip.trip_duration[1] : null;
+        if (typeof seconds === 'number' && seconds >= 60) meta.push(secondsToDhm(Math.round(seconds), langId));
+        if (trip.operator) meta.push(String(trip.operator).split(',')[0].trim());
+        rows.push({
+            kind: 'leg',
+            color: transportColor(trip.type),
+            label: transportTypeText[trip.type === 'helicopter' ? 'air' : trip.type] || trip.type,
+            meta: meta.join(' · '),
+            h: 34
+        });
+        rows.push({ kind: 'stop', name: trip.destination_station, time: trip.end_time, h: 30 });
+    });
+    return rows;
+}
+
+// "6 trajets", "5 podróży": one form per plural category, picked between by
+// util.js's pluralize — Slavic languages need three forms where English needs
+// two, and no amount of putting a number in front of one fixed word gets those
+// right.
+const POSTER_TRIP_COUNT = {{ posterTripCount | tojson }};
+
+// The mode's own icon as a canvas glyph. Rather than keeping a copy of every
+// Font Awesome / Bootstrap Icons codepoint here (a table that silently rots the
+// next time the icon set moves), ask the browser what the icon class actually
+// renders: the ::before rule the stylesheet already carries names both the
+// character and the font to draw it in.
+// Same icons the trip page puts on a leg's own distance and duration
+// (new_trip.html's leg meta row), plus an hourglass for the span, so the two
+// clock-like numbers aren't told apart by their labels alone.
+const STAT_ICONS = {
+    distance: { id: 'stat-distance', icon: 'fa-arrows-left-right' },
+    duration: { id: 'stat-duration', icon: 'fa-clock', iconClass: 'fa-regular' },
+    total: { id: 'stat-total', icon: 'fa-hourglass-half' }
+};
+
+const iconGlyphs = new Map();
+function iconGlyph(type) {
+    if (!iconGlyphs.has(type.id)) {
+        const probe = document.createElement('i');
+        probe.className = (type.iconClass || 'fa-solid') + ' ' + type.icon;
+        probe.style.cssText = 'position:absolute;left:-9999px;visibility:hidden';
+        document.body.appendChild(probe);
+        const style = getComputedStyle(probe, '::before');
+        const character = (style.content || '').replace(/^["']|["']$/g, '');
+        const glyph = (character && character !== 'none' && character.length <= 2)
+            ? { character: character, family: style.fontFamily, weight: style.fontWeight }
+            : null;
+        probe.remove();
+        iconGlyphs.set(type.id, glyph);
+    }
+    return iconGlyphs.get(type.id);
+}
+
+// An icon font draws as blank boxes (or not at all) on a canvas until the font
+// file itself is loaded — the stylesheet alone isn't enough.
+function loadIconFonts() {
+    if (!document.fonts) return Promise.resolve();
+    const specs = new Set();
+    MapLibreUtils.MapConfig.transportTypes.concat(Object.values(STAT_ICONS)).forEach(type => {
+        const glyph = iconGlyph(type);
+        if (glyph) specs.add(`${glyph.weight} 16px ${glyph.family}`);
+    });
+    return Promise.all(Array.from(specs).map(spec => document.fonts.load(spec).catch(() => {})));
+}
+
+// Distance and time per mode: the summary's totals say how far and how long,
+// this says how the journey was actually made. Same order as the front's footer
+// legend, so the two sides list the modes alike.
+function modeStats(trips) {
+    const byType = new Map();
+    itineraryLegs(trips).forEach(t => {
+        const type = t.trip.type === 'helicopter' ? 'air' : t.trip.type;
+        const seconds = Array.isArray(t.trip.trip_duration) ? t.trip.trip_duration[1] : null;
+        const entry = byType.get(type) || { meters: 0, seconds: 0 };
+        entry.meters += t.trip.trip_length || 0;
+        if (typeof seconds === 'number') entry.seconds += seconds;
+        byType.set(type, entry);
+    });
+    return MapLibreUtils.MapConfig.transportTypes
+        .filter(type => byType.has(type.id))
+        .map(type => {
+            const entry = byType.get(type.id);
+            const detail = [];
+            if (entry.meters) detail.push(mToKm(entry.meters) + ' km');
+            if (entry.seconds >= 60) detail.push(secondsToDhm(Math.round(entry.seconds), langId));
+            return {
+                color: type.color,
+                glyph: iconGlyph(type),
+                label: transportTypeText[type.id] || type.id,
+                detail: detail.join(' · ')
+            };
+        });
+}
+
+// First departure to last arrival, wall-clock: the whole journey including the
+// nights and the waiting, which is a different (usually much larger) number
+// from the moving time. Needs a start time on the first leg and a duration on
+// the last, so it is simply left out when the trips aren't dated.
+function itinerarySpan(trips) {
+    const legs = itineraryLegs(trips);
+    if (!legs.length) return null;
+    const first = legs[0], last = legs[legs.length - 1];
+    const start = tripStartTime(first), end = tripEndTime(last);
+    if (start === null || end === null || end <= start) return null;
+    // One leg straight through: the span is the moving time already on the
+    // totals line, and printing the same duration twice says nothing.
+    let moving = 0;
+    legs.forEach(t => {
+        const seconds = Array.isArray(t.trip.trip_duration) ? t.trip.trip_duration[1] : null;
+        if (typeof seconds === 'number') moving += seconds;
+    });
+    const elapsed = (end - start) / 1000;
+    if (elapsed - moving < 60) return null;
+    const from = localDateTimeText(first.trip.start_datetime);
+    const to = localDateTimeText(last.trip.end_datetime);
+    if (!from || !to) return null;
+    return { seconds: elapsed, text: from + ' → ' + to };
+}
+
+// The times as logged (local to each end of the journey), not converted to one
+// zone: a departure reads as the time the clock showed on the platform.
+function localDateTimeText(datetime) {
+    if (typeof datetime !== 'string') return '';
+    const date = new Date(datetime.replace(' ', 'T') + 'Z');
+    if (isNaN(date.getTime())) return '';
+    const locale = mapLangMode === 'intl' ? 'en' : langId;
+    const day = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date);
+    return day + ' ' + datetime.substring(11, 16);
+}
+
+// The big numbers of the journey, each with its own label — "6h 51min" alone
+// invites the question the labels answer: time on board, against the whole span
+// from first departure to last arrival.
+function summaryStats(trips) {
+    const legs = itineraryLegs(trips);
+    let meters = 0, seconds = 0;
+    legs.forEach(t => {
+        meters += t.trip.trip_length || 0;
+        const duration = Array.isArray(t.trip.trip_duration) ? t.trip.trip_duration[1] : null;
+        if (typeof duration === 'number') seconds += duration;
+    });
+    const tiles = [];
+    if (meters) tiles.push({ value: mToKm(meters) + ' km', label: "{{ sortDistance }}", icon: STAT_ICONS.distance });
+    if (seconds >= 60) tiles.push({ value: secondsToDhm(Math.round(seconds), langId), label: "{{ posterStatTravel }}", icon: STAT_ICONS.duration });
+    const span = itinerarySpan(trips);
+    if (span) tiles.push({ value: secondsToDhm(Math.round(span.seconds), langId), label: "{{ posterStatTotal }}", icon: STAT_ICONS.total });
+    return tiles;
+}
+
+// Under the numbers: how many legs they cover, and between which two moments.
+function summaryCaption(trips) {
+    const parts = [pluralize(POSTER_TRIP_COUNT, itineraryLegs(trips).length)];
+    const span = itinerarySpan(trips);
+    if (span) parts.push(span.text);
+    return parts.join('  ·  ');
+}
+
+function rowsHeight(rows, scale) {
+    return rows.reduce((sum, row) => sum + row.h * scale, 0);
+}
+
+// Splits the itinerary into two balanced columns at a leg, so the column break
+// falls between a stop and its next leg — and repeats that stop at the top of
+// the second column, the way a printed timetable continues a route across a page.
+function splitRows(rows) {
+    const total = rowsHeight(rows, 1);
+    let best = null;
+    rows.forEach((row, i) => {
+        if (row.kind !== 'leg') return;
+        const head = rowsHeight(rows.slice(0, i), 1);
+        const diff = Math.abs(head - (total - head));
+        if (!best || diff < best.diff) best = { i: i, diff: diff };
+    });
+    if (!best) return null;
+    const second = [Object.assign({}, rows[best.i - 1], { time2: null })].concat(rows.slice(best.i));
+    return [rows.slice(0, best.i), second];
+}
+
+// One column at full size where it fits; otherwise shrink, and once shrinking
+// would make the text too small to read on a print, go to two columns instead.
+function fitItinerary(rows, width, availableHeight) {
+    const gap = 34;
+    const need = rowsHeight(rows, 1);
+    if (need <= availableHeight) return { columns: [rows], scale: 1, width: width, gap: gap };
+    const scale = availableHeight / need;
+    if (scale >= 0.62) return { columns: [rows], scale: scale, width: width, gap: gap };
+    const split = splitRows(rows);
+    if (split) {
+        const scale2 = Math.min(1, availableHeight / Math.max(rowsHeight(split[0], 1), rowsHeight(split[1], 1)));
+        if (scale2 > scale) return { columns: split, scale: scale2, width: (width - gap) / 2, gap: gap };
+    }
+    return { columns: [rows], scale: scale, width: width, gap: gap };
+}
+
+function fitText(ctx, text, maxWidth) {
+    text = text || '';
+    if (maxWidth <= 0 || ctx.measureText(text).width <= maxWidth) return text;
+    let cut = text;
+    while (cut.length > 1 && ctx.measureText(cut + '…').width > maxWidth) cut = cut.slice(0, -1);
+    return cut + '…';
+}
+
+function drawItineraryColumn(ctx, rows, x, y, width, scale) {
+    const isDark = !!BASEMAPS[basemapId].isDark;
+    const hairline = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)';
+    const railX = x + 7 * scale;
+    const textX = x + 22 * scale;
+    const radius = 4.5 * scale;
+    let cursor = y;
+    rows.forEach(row => { row._y = cursor + row.h * scale / 2; cursor += row.h * scale; });
+
+    // The rail first, so the stop markers sit on top of the segments they join.
+    rows.forEach((row, i) => {
+        if (row.kind === 'leg') {
+            ctx.strokeStyle = row.color;
+            ctx.lineWidth = 3 * scale;
+            ctx.beginPath();
+            ctx.moveTo(railX, rows[i - 1]._y + radius);
+            ctx.lineTo(railX, rows[i + 1]._y - radius);
+            ctx.stroke();
+        } else if (row.kind === 'gap') {
+            ctx.strokeStyle = hairline;
+            ctx.lineWidth = 2 * scale;
+            ctx.setLineDash([2 * scale, 4 * scale]);
+            ctx.beginPath();
+            ctx.moveTo(railX, row._y - row.h * scale / 2);
+            ctx.lineTo(railX, row._y + row.h * scale / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    });
+
+    rows.forEach(row => {
+        if (row.kind === 'date') {
+            ctx.textAlign = 'left';
+            ctx.font = `600 ${11 * scale}px ${FONT_STACK}`;
+            ctx.fillStyle = posterTheme.subtitle;
+            const text = row.text.toUpperCase();
+            ctx.fillText(text, x, row._y + 4 * scale);
+            const textWidth = ctx.measureText(text).width;
+            ctx.strokeStyle = hairline;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x + textWidth + 10 * scale, row._y);
+            ctx.lineTo(x + width, row._y);
+            ctx.stroke();
+        } else if (row.kind === 'stop') {
+            ctx.font = `${11.5 * scale}px ${FONT_STACK}`;
+            const time = (row.time && row.time2) ? row.time + ' – ' + row.time2 : (row.time || row.time2 || '');
+            let timeWidth = 0;
+            if (time) {
+                ctx.textAlign = 'right';
+                ctx.fillStyle = posterTheme.subtitle;
+                ctx.fillText(time, x + width, row._y + 4 * scale);
+                timeWidth = ctx.measureText(time).width + 10 * scale;
+            }
+            ctx.beginPath();
+            ctx.arc(railX, row._y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = posterTheme.shoulder;
+            ctx.fill();
+            ctx.strokeStyle = posterTheme.legend;
+            ctx.lineWidth = 2 * scale;
+            ctx.stroke();
+            ctx.textAlign = 'left';
+            ctx.font = `600 ${14 * scale}px ${FONT_STACK}`;
+            ctx.fillStyle = posterTheme.title;
+            ctx.fillText(fitText(ctx, row.name, width - (textX - x) - timeWidth), textX, row._y + 5 * scale);
+        } else if (row.kind === 'leg') {
+            ctx.textAlign = 'left';
+            ctx.font = `600 ${11.5 * scale}px ${FONT_STACK}`;
+            ctx.fillStyle = row.color;
+            ctx.fillText(row.label, textX, row._y + 4 * scale);
+            if (row.meta) {
+                const labelWidth = ctx.measureText(row.label).width;
+                ctx.font = `${11.5 * scale}px ${FONT_STACK}`;
+                ctx.fillStyle = posterTheme.subtitle;
+                const meta = '  ·  ' + row.meta;
+                ctx.fillText(fitText(ctx, meta, width - (textX - x) - labelWidth), textX + labelWidth, row._y + 4 * scale);
+            }
+        }
+    });
+}
+
+// One centred row of chips, one per mode: the mode's own icon in its map colour,
+// its name, then its share of the distance and time. Shrunk to fit rather than
+// wrapped — a second line would shift the itinerary above it every time a mode
+// is added or dropped.
+function drawModeChips(ctx, modes, centerX, baselineY, maxWidth, cs) {
+    const gap = 20 * cs, iconGap = 6 * cs, detailGap = 5 * cs;
+    let size = 12 * cs, widths, total;
+    const measure = () => {
+        widths = modes.map(mode => {
+            ctx.font = `600 ${size}px ${FONT_STACK}`;
+            let width = ctx.measureText(mode.label).width + iconGap + size * 1.2;
+            if (mode.detail) {
+                ctx.font = `${size}px ${FONT_STACK}`;
+                width += detailGap + ctx.measureText(mode.detail).width;
+            }
+            return width;
+        });
+        total = widths.reduce((a, b) => a + b, 0) + gap * (modes.length - 1);
+    };
+    for (measure(); total > maxWidth && size > 8 * cs; size -= 0.5 * cs) measure();
+
+    ctx.textAlign = 'left';
+    let x = centerX - total / 2;
+    modes.forEach((mode, i) => {
+        ctx.fillStyle = mode.color;
+        if (mode.glyph) {
+            ctx.font = `${mode.glyph.weight} ${size}px ${mode.glyph.family}`;
+            ctx.fillText(mode.glyph.character, x, baselineY);
+        } else {
+            // No icon resolved (an icon set that moved, a font that never
+            // loaded): the footer legend's swatch says the same thing.
+            roundRect(ctx, x, baselineY - 4 * cs, size, 3.5 * cs, 2 * cs);
+            ctx.fill();
+        }
+        let textX = x + size * 1.2 + iconGap;
+        ctx.font = `600 ${size}px ${FONT_STACK}`;
+        ctx.fillText(mode.label, textX, baselineY);
+        if (mode.detail) {
+            textX += ctx.measureText(mode.label).width + detailGap;
+            ctx.font = `${size}px ${FONT_STACK}`;
+            ctx.fillStyle = posterTheme.subtitle;
+            ctx.fillText(mode.detail, textX, baselineY);
+        }
+        x += widths[i] + gap;
+    });
+    ctx.textAlign = 'center';
+}
+
+// The headline numbers, each under its own icon and label — a label hanging
+// below a number reads as a stray caption, above it as the thing being counted.
+function drawStatTiles(ctx, tiles, centerX, top, maxWidth, cs) {
+    const gap = 44 * cs, iconGap = 5 * cs;
+    let valueSize = 20 * cs, labelSize = 9.5 * cs, heads, widths, total;
+    const measure = () => {
+        ctx.font = `700 ${valueSize}px ${FONT_STACK}`;
+        const values = tiles.map(tile => ctx.measureText(tile.value).width);
+        ctx.font = `${labelSize}px ${FONT_STACK}`;
+        heads = tiles.map(tile => {
+            const glyph = iconGlyph(tile.icon);
+            const label = tile.label.toUpperCase();
+            return {
+                glyph: glyph,
+                label: label,
+                width: ctx.measureText(label).width + (glyph ? labelSize * 1.1 + iconGap : 0)
+            };
+        });
+        widths = tiles.map((tile, i) => Math.max(values[i], heads[i].width));
+        total = widths.reduce((a, b) => a + b, 0) + gap * (tiles.length - 1);
+    };
+    for (measure(); total > maxWidth && valueSize > 12 * cs; valueSize -= 0.5 * cs) {
+        labelSize -= 0.2 * cs;
+        measure();
+    }
+
+    let x = centerX - total / 2;
+    tiles.forEach((tile, i) => {
+        const tileCenter = x + widths[i] / 2;
+        const head = heads[i];
+        ctx.fillStyle = posterTheme.subtitle;
+        let headX = tileCenter - head.width / 2;
+        ctx.textAlign = 'left';
+        if (head.glyph) {
+            ctx.font = `${head.glyph.weight} ${labelSize * 1.1}px ${head.glyph.family}`;
+            ctx.fillText(head.glyph.character, headX, top + labelSize);
+            headX += labelSize * 1.1 + iconGap;
+        }
+        ctx.font = `${labelSize}px ${FONT_STACK}`;
+        ctx.fillText(head.label, headX, top + labelSize);
+        ctx.textAlign = 'center';
+        ctx.font = `700 ${valueSize}px ${FONT_STACK}`;
+        ctx.fillStyle = posterTheme.title;
+        ctx.fillText(tile.value, tileCenter, top + labelSize + 8 * cs + valueSize);
+        x += widths[i] + gap;
+    });
+}
+
+// The interactive page this poster was made from — the poster URL is that page's
+// with /poster on the end, so nothing here needs to know which of trip/tag/ticket
+// it came from.
+function posterPublicUrl() {
+    return location.origin + location.pathname.replace(/\/poster\/?$/, '');
+}
+
+// Always black on white, whatever the poster's theme: a code inverted for a dark
+// poster is refused by some phone cameras, and a white patch reads as a label.
+function drawQr(ctx, text, x, y, size) {
+    if (typeof qrcode !== 'function') return;
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    const count = qr.getModuleCount();
+    const quiet = size * 0.07;
+    ctx.fillStyle = '#ffffff';
+    roundRect(ctx, x, y, size, size, 4);
+    ctx.fill();
+    const cell = (size - quiet * 2) / count;
+    ctx.fillStyle = '#000000';
+    for (let r = 0; r < count; r++) {
+        for (let c = 0; c < count; c++) {
+            // Cells are drawn a hair wider than they measure: at a fractional cell
+            // size, exact rects leave hairline seams between neighbouring modules.
+            if (qr.isDark(r, c)) ctx.fillRect(x + quiet + c * cell, y + quiet + r * cell, cell + 0.5, cell + 0.5);
+        }
+    }
+}
+
+function drawBackPoster(ctx, dims) {
+    const mat = posterMat();
+    const cs = posterCreditScale();
+    const isDark = !!BASEMAPS[basemapId].isDark;
+    const hairline = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)';
+    if (!transparentBg) {
+        ctx.fillStyle = posterTheme.shoulder;
+        ctx.fillRect(0, 0, dims.w, dims.h);
+    }
+
+    // Same title, same offsets as the front, so the two faces line up when the
+    // pair is printed back to back.
+    const titleText = document.getElementById('posterTitle').textContent || '';
+    const subtitleText = document.getElementById('posterSubtitle').textContent || '';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = posterTheme.title;
+    ctx.font = `700 22px ${FONT_STACK}`;
+    ctx.fillText(titleText, dims.w / 2, 34, dims.w - 40);
+    if (subtitleText) {
+        ctx.fillStyle = posterTheme.subtitle;
+        ctx.font = `13px ${FONT_STACK}`;
+        ctx.fillText(subtitleText, dims.w / 2, 56, dims.w - 40);
+    }
+
+    // Bottom of the card, laid out upward from its edge: the credit row (QR
+    // code, logo, wordmark), then the summary panel above it.
+    const qrSize = Math.round(84 * cs);
+    const qrY = dims.h - mat - qrSize;
+    const qrX = dims.w - mat - qrSize;
+    drawQr(ctx, posterPublicUrl(), qrX, qrY, qrSize);
+
+    // Brand at one end, code at the other, the invitation to scan between them:
+    // the row reads across the whole card instead of bunching up on the left.
+    const logoSize = 34 * cs;
+    const middleY = qrY + qrSize / 2;
+    let textX = mat;
+    if (posterLogo) {
+        // Matches the CSS filter:invert(1) the front's credit chip uses — flips
+        // the black-on-transparent icon white for the dark theme, no second asset.
+        if (isDark) ctx.filter = 'invert(1)';
+        ctx.drawImage(posterLogo, textX, middleY - logoSize / 2, logoSize, logoSize);
+        if (isDark) ctx.filter = 'none';
+        textX += logoSize + 10 * cs;
+    }
+    ctx.textAlign = 'left';
+    ctx.font = `800 ${18 * cs}px ${FONT_STACK}`;
+    ctx.fillStyle = posterTheme.title;
+    ctx.fillText('Trainlog', textX, middleY - 1 * cs);
+    const brandWidth = ctx.measureText('Trainlog').width;
+    ctx.font = `700 ${18 * cs}px ${FONT_STACK}`;
+    ctx.fillStyle = posterTheme.subtitle;
+    ctx.fillText('.me', textX + brandWidth, middleY - 1 * cs);
+    const nameWidth = brandWidth + ctx.measureText('.me').width;
+    ctx.font = `italic ${10 * cs}px ${FONT_STACK}`;
+    ctx.fillText('Your online train diary', textX, middleY + 13 * cs);
+    const brandRight = textX + Math.max(nameWidth, ctx.measureText('Your online train diary').width);
+
+    ctx.textAlign = 'right';
+    ctx.font = `${11.5 * cs}px ${FONT_STACK}`;
+    ctx.fillStyle = posterTheme.legend;
+    ctx.fillText(fitText(ctx, "{{ posterQrHint }}", qrX - 16 * cs - brandRight), qrX - 16 * cs, middleY + 4 * cs);
+
+    // Summary panel. Each part earns its place or is left out entirely: the mode
+    // chips only once there is more than one mode to compare, the whole panel
+    // only when there are numbers to put in it.
+    const tiles = summaryStats(posterVisibleTrips);
+    const modes = modeStats(posterVisibleTrips);
+    const chips = modes.length > 1 ? modes : [];
+    let panelBottom = qrY - 20 * cs;
+    if (tiles.length) {
+        const padding = 15 * cs;
+        const chipsHeight = chips.length ? 30 * cs : 0;
+        // Clears the values' descenders before the caption starts — the tiles are
+        // the tallest thing in the panel and a tight caption reads as a collision.
+        const tilesHeight = 47 * cs;
+        const captionHeight = 17 * cs;
+        const panelHeight = padding * 2 + chipsHeight + tilesHeight + captionHeight;
+        const panelTop = panelBottom - panelHeight;
+        // A faint tint rather than a box with a border: it groups the numbers as
+        // one block without drawing a second frame inside the poster's own mat.
+        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.035)';
+        roundRect(ctx, mat, panelTop, dims.w - mat * 2, panelHeight, 10 * cs);
+        ctx.fill();
+
+        let y = panelTop + padding;
+        if (chips.length) {
+            drawModeChips(ctx, chips, dims.w / 2, y + 12 * cs, dims.w - mat * 2 - padding * 2, cs);
+            y += chipsHeight;
+            ctx.strokeStyle = hairline;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(mat + padding * 2, y - 8 * cs);
+            ctx.lineTo(dims.w - mat - padding * 2, y - 8 * cs);
+            ctx.stroke();
+        }
+        drawStatTiles(ctx, tiles, dims.w / 2, y, dims.w - mat * 2 - padding * 2, cs);
+        y += tilesHeight;
+        ctx.textAlign = 'center';
+        ctx.font = `${11 * cs}px ${FONT_STACK}`;
+        ctx.fillStyle = posterTheme.subtitle;
+        ctx.fillText(summaryCaption(posterVisibleTrips), dims.w / 2, y + 10 * cs);
+        panelBottom = panelTop;
+    }
+
+    const rows = buildItineraryRows(posterVisibleTrips);
+    if (!rows.length) return;
+    const top = document.querySelector('.posterHeader').offsetHeight;
+    const available = (panelBottom - 20 * cs) - top;
+    const layout = fitItinerary(rows, dims.w - mat * 2, available);
+    layout.columns.forEach((column, i) => {
+        // A short itinerary is centred in the space rather than left hanging under
+        // the title with the whole page empty below it.
+        const y = top + Math.max(0, (available - rowsHeight(column, layout.scale)) / 2);
+        drawItineraryColumn(ctx, column, mat + i * (layout.width + layout.gap), y, layout.width, layout.scale);
+    });
+}
+
+// The logo and the icon fonts are loaded once, before any drawing: canvas text
+// and images draw synchronously from whatever is already loaded, so anything
+// not there yet simply doesn't appear.
+let posterLogo = null;
+
+async function renderBack() {
+    if (!posterLogo) {
+        posterLogo = await loadImage("{{ url_for('static', filename='images/logo_square.png') }}").catch(() => null);
+    }
+    await loadIconFonts();
+    const canvas = document.getElementById('posterBackCanvas');
+    const dims = getPosterDims();
+    const pr = effectivePixelRatio();
+    canvas.width = Math.round(dims.w * pr);
+    canvas.height = Math.round(dims.h * pr);
+    canvas.style.width = dims.w + 'px';
+    canvas.style.height = dims.h + 'px';
+    const ctx = canvas.getContext('2d');
+    // Everything below draws in CSS pixels; the device-pixel scale-up for the
+    // export lives here alone.
+    ctx.setTransform(pr, 0, 0, pr, 0, 0);
+    ctx.clearRect(0, 0, dims.w, dims.h);
+    drawBackPoster(ctx, dims);
+    applyPreviewScale();
+    return canvas;
+}
+
+(function wireSideTabs() {
+    document.querySelectorAll('.posterSideTab').forEach(button => {
+        button.addEventListener('click', () => showSide(button.dataset.side));
+    });
+})();
 
 function roundRect(ctx, x, y, w, h, r) {
     ctx.beginPath();

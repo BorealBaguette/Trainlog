@@ -1265,5 +1265,13 @@
     "statsStopsVisited": "Külastatud peatused",
     "statsPlacesVisited": "Külastatud kohad",
     "hideMarkers": "Peida markerid",
-    "showMarkers": "Näita markereid"
+    "showMarkers": "Näita markereid",
+    "posterSideItinerary": "Reisiplaan",
+    "posterQrHint": "Skanni interaktiivse kaardi avamiseks",
+    "posterTripCount": {
+        "one": "{n} reis",
+        "other": "{n} reisi"
+    },
+    "posterStatTotal": "Reisil",
+    "posterStatTravel": "Teel"
 }

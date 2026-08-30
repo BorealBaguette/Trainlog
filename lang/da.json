@@ -1268,5 +1268,13 @@
     "statsStopsVisited": "Besøgte stoppesteder",
     "statsPlacesVisited": "Besøgte steder",
     "hideMarkers": "Skjul markører",
-    "showMarkers": "Vis markører"
+    "showMarkers": "Vis markører",
+    "posterSideItinerary": "Rejseplan",
+    "posterQrHint": "Scan for at åbne det interaktive kort",
+    "posterTripCount": {
+        "one": "{n} rejse",
+        "other": "{n} rejser"
+    },
+    "posterStatTotal": "På rejse",
+    "posterStatTravel": "Undervejs"
 }

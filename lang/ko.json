@@ -1265,5 +1265,12 @@
     "statsStopsVisited": "방문한 정류소",
     "statsPlacesVisited": "방문한 장소",
     "hideMarkers": "마커 숨기기",
-    "showMarkers": "마커 표시"
+    "showMarkers": "마커 표시",
+    "posterSideItinerary": "여정",
+    "posterQrHint": "스캔하여 인터랙티브 지도 열기",
+    "posterTripCount": {
+        "other": "{n}개의 여정"
+    },
+    "posterStatTotal": "총 소요 시간",
+    "posterStatTravel": "이동 시간"
 }

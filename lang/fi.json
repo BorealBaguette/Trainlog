@@ -1266,5 +1266,13 @@
     "statsStopsVisited": "Vieraillut pysäkit",
     "statsPlacesVisited": "Vieraillut paikat",
     "hideMarkers": "Piilota merkit",
-    "showMarkers": "Näytä merkit"
+    "showMarkers": "Näytä merkit",
+    "posterSideItinerary": "Matkasuunnitelma",
+    "posterQrHint": "Skannaa avataksesi interaktiivisen kartan",
+    "posterTripCount": {
+        "one": "{n} matka",
+        "other": "{n} matkaa"
+    },
+    "posterStatTotal": "Kokonaiskesto",
+    "posterStatTravel": "Matka-aika"
 }

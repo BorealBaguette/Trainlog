@@ -1271,5 +1271,14 @@
     "statsStopsVisited": "Posjećena stajališta",
     "statsPlacesVisited": "Posjećena mjesta",
     "hideMarkers": "Sakrij oznake",
-    "showMarkers": "Prikaži oznake"
+    "showMarkers": "Prikaži oznake",
+    "posterSideItinerary": "Itinerar",
+    "posterQrHint": "Skenirajte za otvaranje interaktivne karte",
+    "posterTripCount": {
+        "one": "{n} putovanje",
+        "few": "{n} putovanja",
+        "other": "{n} putovanja"
+    },
+    "posterStatTotal": "Na putovanju",
+    "posterStatTravel": "Na putu"
 }
