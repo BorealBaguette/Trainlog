@@ -591,15 +591,6 @@
     <div class="itineraryWrapper">
       <ul class="events" id="itinerary">
         <div id="tripDetails">
-        <div id="rideAlongModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
-          <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
-            <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
-            <div style="display:flex;gap:10px;justify-content:flex-end;">
-              <button onclick="hideRideAlongModal()" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;">{{ cancel }}</button>
-              <button id="rideAlongConfirmBtn" onclick="bulkCopyTrips()" style="padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;">{{ submit }}</button>
-            </div>
-          </div>
-        </div>
        {% if tag_description != None %}
             <div class="itinerary_tag_description">
             {% if collection_voyage == 'collection' %}
@@ -636,6 +627,15 @@
           <div id="tripDate"></div>              
         </div>
       </ul>
+    </div>
+  </div>
+</div>
+<div id="rideAlongModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
+    <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="hideRideAlongModal()" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;">{{ cancel }}</button>
+      <button id="rideAlongConfirmBtn" onclick="bulkCopyTrips()" style="padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;">{{ submit }}</button>
     </div>
   </div>
 </div>
