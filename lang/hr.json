@@ -1269,5 +1269,7 @@
     "statsAirportsVisited": "Posjećene zračne luke",
     "statsTerminalsVisited": "Posjećeni terminali",
     "statsStopsVisited": "Posjećena stajališta",
-    "statsPlacesVisited": "Posjećena mjesta"
+    "statsPlacesVisited": "Posjećena mjesta",
+    "hideMarkers": "Sakrij oznake",
+    "showMarkers": "Prikaži oznake"
 }

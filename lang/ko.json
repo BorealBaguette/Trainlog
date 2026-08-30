@@ -1263,5 +1263,7 @@
     "statsAirportsVisited": "방문한 공항",
     "statsTerminalsVisited": "방문한 터미널",
     "statsStopsVisited": "방문한 정류소",
-    "statsPlacesVisited": "방문한 장소"
+    "statsPlacesVisited": "방문한 장소",
+    "hideMarkers": "마커 숨기기",
+    "showMarkers": "마커 표시"
 }

@@ -1269,5 +1269,7 @@
     "statsAirportsVisited": "Посещённые аэропорты",
     "statsTerminalsVisited": "Посещённые терминалы",
     "statsStopsVisited": "Посещённые остановки",
-    "statsPlacesVisited": "Посещённые места"
+    "statsPlacesVisited": "Посещённые места",
+    "hideMarkers": "Скрыть маркеры",
+    "showMarkers": "Показать маркеры"
 }

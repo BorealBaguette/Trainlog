@@ -1263,5 +1263,7 @@
     "statsAirportsVisited": "訪問空港",
     "statsTerminalsVisited": "訪問ターミナル",
     "statsStopsVisited": "訪問バス停",
-    "statsPlacesVisited": "訪問地点"
+    "statsPlacesVisited": "訪問地点",
+    "hideMarkers": "マーカーを非表示",
+    "showMarkers": "マーカーを表示"
 }

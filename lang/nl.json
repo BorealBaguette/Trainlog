@@ -1266,5 +1266,7 @@
     "statsAirportsVisited": "Bezochte luchthavens",
     "statsTerminalsVisited": "Bezochte terminals",
     "statsStopsVisited": "Bezochte haltes",
-    "statsPlacesVisited": "Bezochte plaatsen"
+    "statsPlacesVisited": "Bezochte plaatsen",
+    "hideMarkers": "Markers verbergen",
+    "showMarkers": "Markers tonen"
 }

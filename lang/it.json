@@ -1266,5 +1266,7 @@
     "statsAirportsVisited": "Aeroporti frequentati",
     "statsTerminalsVisited": "Terminal frequentati",
     "statsStopsVisited": "Fermate frequentate",
-    "statsPlacesVisited": "Luoghi frequentati"
+    "statsPlacesVisited": "Luoghi frequentati",
+    "hideMarkers": "Nascondi i segnaposto",
+    "showMarkers": "Mostra i segnaposto"
 }

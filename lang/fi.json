@@ -1264,5 +1264,7 @@
     "statsAirportsVisited": "Vieraillut lentoasemat",
     "statsTerminalsVisited": "Vieraillut terminaalit",
     "statsStopsVisited": "Vieraillut pysäkit",
-    "statsPlacesVisited": "Vieraillut paikat"
+    "statsPlacesVisited": "Vieraillut paikat",
+    "hideMarkers": "Piilota merkit",
+    "showMarkers": "Näytä merkit"
 }
