@@ -909,6 +909,12 @@
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>from:</code></span> <span>{{smart_search_from}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>to:</code></span> <span>{{smart_search_to}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>date:</code></span> <span>{{smart_search_date}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>duration:</code></span> <span>{{smart_search_duration}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>distance:</code></span> <span>{{smart_search_distance}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>speed:</code></span> <span>{{smart_search_speed}}</span></div>
+{%- if not isPublic %}
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>price:</code></span> <span>{{smart_search_price}}</span></div>
+{%- endif %}
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>operator:</code></span> <span>{{smart_search_operator}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>line:</code></span> <span>{{smart_search_line}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>country:</code></span> <span>{{smart_search_country}}</span></div>
@@ -933,8 +939,17 @@
                             <div class="mb-2">
                                 <strong>tex*</strong> - {{smart_search_star_desc}}
                             </div>
-                            <div>
+                            <div class="mb-2">
                                 <strong>te?t</strong> - {{smart_search_question_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>duration&gt;2h</strong> - {{smart_search_compare_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>duration:2h..4h</strong> - {{smart_search_range_desc}}
+                            </div>
+                            <div>
+                                <strong>train|bus</strong> - {{smart_search_or_desc}}
                             </div>
                         </div>
                     </div>
@@ -952,6 +967,12 @@
 
                 <div class="search-example">from:Ber* to:*hagen</div>
                 <small class="text-muted d-block mb-2">{{smart_search_example_wildcard_desc}}</small>
+
+                <div class="search-example">duration&gt;2h date:2024-01-01..2024-06-30</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_range_desc}}</small>
+
+                <div class="search-example">date:2020 date:!2020-02..2020-03 type:train|bus</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_and_desc}}</small>
 
                 <div class="search-example">from:Oslo express date:2024-01-15</div>
                 <small class="text-muted d-block mb-3">{{smart_search_example_mixed_desc}}</small>
@@ -2169,17 +2190,22 @@ function renderMaterialType(data, type, row){
 var table = $('#tripRows');
 
     const SEARCH_PREFIXES = {
-        'type:': {{ trip_column_names.index("type") }},
-        'from:': {{ trip_column_names.index("origin_station") }},
-        'to:': {{ trip_column_names.index("destination_station") }},
-        'date:': {{ trip_column_names.index("start_datetime") }},
-        'operator:': {{ trip_column_names.index("operator") }},
-        'line:': {{ trip_column_names.index("line_name") }},
-        'country:': {{ trip_column_names.index("countries") }},
-        'visibility:': {{ trip_column_names.index("visibility") }},
-        'material:': {{ trip_column_names.index("material_type") }},
-        'reg:': {{ trip_column_names.index("reg") }},
-        'notes:': {{ trip_column_names.index("notes") }}
+        'type': 'type',
+        'from': 'origin_station',
+        'to': 'destination_station',
+        'date': 'start_datetime',
+        'duration': 'trip_duration_seconds',
+        'distance': 'trip_length',
+        'length': 'trip_length',
+        'speed': 'trip_speed',
+        {% if not isPublic %}'price': 'price',{% endif %}
+        'operator': 'operator',
+        'line': 'line_name',
+        'country': 'countries',
+        'visibility': 'visibility',
+        'material': 'material_type',
+        'reg': 'reg',
+        'notes': 'notes'
     };
 
     // Strip a wrapping pair of " (spaces) or ` (exact). Returns {value, isExact}.
@@ -2194,24 +2220,37 @@ var table = $('#tripRows');
     }
 
     function parseSmartSearch(searchValue) {
-        const columnFilters = {};
+        const filters = [];
         let globalSearch = '';
         const globalNot = [];
         // Tokens: bare words, "double-quoted" (spaces) or `backtick-quoted` (exact).
         const terms = searchValue.match(/(?:[^\s"`]+|"[^"]*"|`[^`]*`)+/g) || [];
         terms.forEach(term => {
             let matched = false;
-            for (const [prefix, columnIndex] of Object.entries(SEARCH_PREFIXES)) {
-                if (term.toLowerCase().startsWith(prefix)) {
-                    let value = term.substring(prefix.length);
-                    let negate = false;
-                    if (value.startsWith('!')) { negate = true; value = value.substring(1); }
-                    if (value) {
-                        const { value: cleanValue, isExact } = stripQuotes(value);
-                        columnFilters[columnIndex] = { value: cleanValue, isExact, negate };
-                        matched = true;
-                        break;
-                    }
+            // A field is followed either by ':' or straight by a comparison
+            // operator, so "duration>2h" reads as it would be said out loud. The
+            // operator stays part of the value; the colon does not.
+            const prefixed = term.match(/^([a-zA-Z]+)(:|>=|<=|>|<|=)([\s\S]*)$/);
+            if (prefixed && SEARCH_PREFIXES.hasOwnProperty(prefixed[1].toLowerCase())) {
+                const field = SEARCH_PREFIXES[prefixed[1].toLowerCase()];
+                let value = (prefixed[2] === ':' ? '' : prefixed[2]) + prefixed[3];
+                let negate = false;
+                if (value.startsWith('!')) { negate = true; value = value.substring(1); }
+                if (value) {
+                    // '|' separates alternatives ("type:train|bus"), unless the value
+                    // is quoted — there the bar is part of the text being searched.
+                    const quoted = /^(".*"|`.*`)$/.test(value);
+                    const parts = quoted ? [value] : value.split('|').filter(Boolean);
+                    const values = parts.map(part => stripQuotes(part).value);
+                    // Every term is kept: repeated fields are ANDed, so "date:2020
+                    // date:!2020-02..2020-03" reads as "2020 except February–March".
+                    filters.push({
+                        field,
+                        values,
+                        exact: stripQuotes(parts[0]).isExact,
+                        negate,
+                    });
+                    matched = true;
                 }
             }
             if (!matched) {
@@ -2229,7 +2268,7 @@ var table = $('#tripRows');
                 }
             }
         });
-        return { columnFilters, globalSearch, globalNot };
+        return { filters, globalSearch, globalNot };
     }
 
     var _urlParams = new URLSearchParams(window.location.search);
@@ -2360,27 +2399,15 @@ var table = $('#tripRows');
 
             // Parse smart search
             const searchValue = d.search.value || '';
-            const { columnFilters, globalSearch, globalNot } = parseSmartSearch(searchValue);
+            const { filters, globalSearch, globalNot } = parseSmartSearch(searchValue);
 
             // Set global search to the non-prefixed terms
             d.search.value = globalSearch;
             // Negative global terms ("!term"): JSON list the backend excludes
             d.search_not = JSON.stringify(globalNot);
-
-            // Add column-specific searches
-            if (d.columns) {
-                d.columns.forEach((column, index) => {
-                    if (columnFilters[index]) {
-                        column.search = {
-                            value: columnFilters[index].value,
-                            regex: false
-                        };
-                        // Add exact / negate flags as separate parameters
-                        d[`columns[${index}][search][exact]`] = columnFilters[index].isExact ? 'true' : 'false';
-                        d[`columns[${index}][search][negate]`] = columnFilters[index].negate ? 'true' : 'false';
-                    }
-                });
-            }
+            // Field filters ("from:Oslo", "duration>2h"): a list, so the same field
+            // can carry several terms.
+            d.filters = JSON.stringify(filters);
             if (customSort.field) {
                 d.sort_field = customSort.field;
                 d.sort_dir = customSort.dir;

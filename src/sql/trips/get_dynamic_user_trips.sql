@@ -49,7 +49,7 @@ WITH base AS (
     -- materialising every one of the user's trips and filtering afterwards. Only
     -- injected when the search names a real type exactly; the equivalent LIKE is
     -- still applied on the outer query, so this is a pure narrowing.
-    AND trip_type = :base_type
+    AND trip_type = ANY(:base_type)
     {%- endif %}
 ),
 sub AS (
