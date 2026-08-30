@@ -1,5 +1,7 @@
 {
     "news_react_add": "リアクションを追加",
+    "news_react_who": "リアクションした人",
+    "news_load_more": "過去のお知らせを読み込む",
     "news_last_updated": "最終更新",
     "langId": "ja",
     "internationalWaters": "国際水域",

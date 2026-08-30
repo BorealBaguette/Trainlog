@@ -30,6 +30,8 @@
     "newTripEnd": "Fin du trajet",
     "submit": "Valider",
     "news_react_add": "Ajouter une réaction",
+    "news_react_who": "Qui a réagi",
+    "news_load_more": "Voir les actualités plus anciennes",
     "news_last_updated": "Mis à jour le",
     "noRelFound": "Aucune ligne trouvée",
     "userName": "Nom d'utilisateur",
