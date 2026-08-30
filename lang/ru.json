@@ -1,5 +1,7 @@
 {
     "news_react_add": "Добавить реакцию",
+    "news_react_who": "Кто отреагировал",
+    "news_load_more": "Загрузить старые новости",
     "news_last_updated": "Обновлено",
     "langId": "ru",
     "internationalWaters": "Международные воды",

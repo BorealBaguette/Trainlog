@@ -1,0 +1,71 @@
+<article class="news-card" data-news-id="{{ item.id }}">
+    <div class="d-flex justify-content-between align-items-start gap-3">
+        <div class="flex-grow-1">
+            <h2 class="news-title">{{ item.title }}</h2>
+            <div class="news-content">
+                {{ item.content_html|safe }}
+            </div>
+            <div class="news-meta">
+                <span class="news-author">
+                    <i class="fa-solid fa-crown"></i> {{ item.author_display }}
+                </span>
+                {% set item_date = item.last_modified or item.created %}
+                <span class="news-date">
+                    <i class="fa-regular fa-calendar"></i>
+                    {{ item_date.strftime('%Y-%m-%d %H:%M') if item_date else (news_unknown or "Unknown") }}
+                </span>
+                {% if is_owner %}
+                <span class="news-views">
+                    <i class="fa-regular fa-eye"></i> {{ item.views or 0 }}
+                </span>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Edit/Delete Buttons (Owner Only) -->
+        {% if is_owner %}
+        <div class="news-actions d-flex gap-2 flex-shrink-0">
+            <button type="button" class="btn"
+                    data-news-id="{{ item.id }}"
+                    data-news-title="{{ item.title }}"
+                    data-news-content="{{ item.content }}"
+                    onclick="editNewsFromData(this)">
+                <i class="fa-solid fa-edit"></i>
+            </button>
+            <button type="button" class="btn btn-del"
+                    data-news-id="{{ item.id }}"
+                    data-news-title="{{ item.title }}"
+                    onclick="deleteNewsFromData(this)">
+                <i class="fa-solid fa-trash"></i>
+            </button>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Emoji Reactions -->
+    {% if item.reactions or (username and username != 'public') %}
+    <div class="news-reactions" data-news-id="{{ item.id }}"
+         data-reactions='{{ item.reactions | tojson }}'>
+        {% for r in item.reactions %}
+        <button type="button"
+                class="reaction-chip{{ ' reacted' if r.reacted else '' }}"
+                data-emoji="{{ r.emoji }}">
+            <span class="reaction-emoji">{{ r.emoji }}</span>
+            <span class="reaction-count">{{ r.count }}</span>
+        </button>
+        {% endfor %}
+        {% if username and username != 'public' %}
+        <button type="button" class="reaction-add"
+                title="{{ news_react_add or 'Add reaction' }}"
+                aria-label="{{ news_react_add or 'Add reaction' }}">
+            <i class="fa-regular fa-face-smile"></i>
+        </button>
+        <button type="button" class="reaction-who{{ ' d-none' if not item.reactions else '' }}"
+                title="{{ news_react_who or 'Who reacted' }}"
+                aria-label="{{ news_react_who or 'Who reacted' }}">
+            <i class="fa-regular fa-user"></i>
+        </button>
+        {% endif %}
+    </div>
+    {% endif %}
+</article>

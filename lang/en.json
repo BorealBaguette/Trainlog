@@ -30,6 +30,8 @@
     "newTripEnd": "Trip end",
     "submit": "Submit",
     "news_react_add": "Add reaction",
+    "news_react_who": "Who reacted",
+    "news_load_more": "Load older news",
     "news_last_updated": "Last updated",
     "noRelFound": "No line found",
     "userName": "Username",

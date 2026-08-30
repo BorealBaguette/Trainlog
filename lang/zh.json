@@ -1,5 +1,7 @@
 {
     "news_react_add": "添加反应",
+    "news_react_who": "谁点了表情",
+    "news_load_more": "加载更早的消息",
     "news_last_updated": "最后更新",
     "langId": "zh",
     "internationalWaters": "国际水域",
