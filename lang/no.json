@@ -1276,5 +1276,13 @@
         "other": "{n} reiser"
     },
     "posterStatTotal": "På reise",
-    "posterStatTravel": "Underveis"
+    "posterStatTravel": "Underveis",
+    "leaderboardWagons": "Vogntegnere",
+    "leaderboardWagonsTitle": "Rangeringsliste over vogntegnere",
+    "leaderboardWagonsDrawings": "Tegninger",
+    "leaderboardWagonsTrainsets": "Togsett",
+    "leaderboardWagonsUses": "Reiser",
+    "leaderboardWagonsUsers": "Brukere",
+    "leaderboardWagonsHallOfFame": "Hall of fame — samlingen alt annet bygger på",
+    "leaderboardWagonsSortBy": "Sorter etter"
 }

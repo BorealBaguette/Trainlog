@@ -1273,5 +1273,13 @@
         "other": "{n} trips"
     },
     "posterStatTotal": "Total duration",
-    "posterStatTravel": "Travel time"
+    "posterStatTravel": "Travel time",
+    "leaderboardWagons": "Wagon Artists",
+    "leaderboardWagonsTitle": "Wagon Artists Leaderboard",
+    "leaderboardWagonsDrawings": "Drawings",
+    "leaderboardWagonsTrainsets": "Trainsets",
+    "leaderboardWagonsUses": "Trips",
+    "leaderboardWagonsUsers": "Users",
+    "leaderboardWagonsHallOfFame": "Hall of fame — the collection everything else is built on",
+    "leaderboardWagonsSortBy": "Sort by"
 }

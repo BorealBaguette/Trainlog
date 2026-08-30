@@ -1272,5 +1272,13 @@
         "other": "{n}件の旅行"
     },
     "posterStatTotal": "全体の所要時間",
-    "posterStatTravel": "移動時間"
+    "posterStatTravel": "移動時間",
+    "leaderboardWagons": "車両イラスト作者",
+    "leaderboardWagonsTitle": "車両イラスト作者ランキング",
+    "leaderboardWagonsDrawings": "作画数",
+    "leaderboardWagonsTrainsets": "編成",
+    "leaderboardWagonsUses": "記録数",
+    "leaderboardWagonsUsers": "ユーザー数",
+    "leaderboardWagonsHallOfFame": "殿堂 — 他のすべての土台となるコレクション",
+    "leaderboardWagonsSortBy": "並び替え"
 }

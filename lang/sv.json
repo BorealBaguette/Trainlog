@@ -1276,5 +1276,13 @@
         "other": "{n} resor"
     },
     "posterStatTotal": "Total tid",
-    "posterStatTravel": "Restid"
+    "posterStatTravel": "Restid",
+    "leaderboardWagons": "Vagnstecknare",
+    "leaderboardWagonsTitle": "Topplista över vagnstecknare",
+    "leaderboardWagonsDrawings": "Teckningar",
+    "leaderboardWagonsTrainsets": "Tågset",
+    "leaderboardWagonsUses": "Resor",
+    "leaderboardWagonsUsers": "Användare",
+    "leaderboardWagonsHallOfFame": "Hall of fame — samlingen som allt annat bygger på",
+    "leaderboardWagonsSortBy": "Sortera efter"
 }

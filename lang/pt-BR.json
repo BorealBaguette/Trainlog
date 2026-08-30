@@ -1276,5 +1276,13 @@
         "other": "{n} viagens"
     },
     "posterStatTotal": "Em viagem",
-    "posterStatTravel": "A caminho"
+    "posterStatTravel": "A caminho",
+    "leaderboardWagons": "Desenhistas de vagões",
+    "leaderboardWagonsTitle": "Placar dos desenhistas de vagões",
+    "leaderboardWagonsDrawings": "Desenhos",
+    "leaderboardWagonsTrainsets": "Composições",
+    "leaderboardWagonsUses": "Viagens",
+    "leaderboardWagonsUsers": "Usuários",
+    "leaderboardWagonsHallOfFame": "Hall da fama — a coleção sobre a qual tudo o mais é construído",
+    "leaderboardWagonsSortBy": "Ordenar por"
 }

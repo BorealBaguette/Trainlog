@@ -1280,5 +1280,13 @@
         "many": "{n} поездок"
     },
     "posterStatTotal": "В поездке",
-    "posterStatTravel": "В пути"
+    "posterStatTravel": "В пути",
+    "leaderboardWagons": "Художники вагонов",
+    "leaderboardWagonsTitle": "Рейтинг художников вагонов",
+    "leaderboardWagonsDrawings": "Рисунки",
+    "leaderboardWagonsTrainsets": "Составы",
+    "leaderboardWagonsUses": "Поездки",
+    "leaderboardWagonsUsers": "Пользователи",
+    "leaderboardWagonsHallOfFame": "Зал славы — коллекция, на которой держится всё остальное",
+    "leaderboardWagonsSortBy": "Сортировать по"
 }

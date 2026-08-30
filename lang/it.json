@@ -1276,5 +1276,13 @@
         "other": "{n} viaggi"
     },
     "posterStatTotal": "Durata totale",
-    "posterStatTravel": "Tempo di viaggio"
+    "posterStatTravel": "Tempo di viaggio",
+    "leaderboardWagons": "Disegnatori di carrozze",
+    "leaderboardWagonsTitle": "Classifica dei disegnatori di carrozze",
+    "leaderboardWagonsDrawings": "Disegni",
+    "leaderboardWagonsTrainsets": "Composizioni",
+    "leaderboardWagonsUses": "Viaggi",
+    "leaderboardWagonsUsers": "Utenti",
+    "leaderboardWagonsHallOfFame": "Albo d'oro — la collezione su cui si basa tutto il resto",
+    "leaderboardWagonsSortBy": "Ordina per"
 }

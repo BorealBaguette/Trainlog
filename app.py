@@ -179,6 +179,7 @@ from src.api.timeline import timeline_blueprint
 from src import visualisations as viz_module
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
+from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
 from src.consts import DbNames, TripTypes
 from src.global_map import (
     available_bins,
@@ -313,6 +314,7 @@ app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
 app.register_blueprint(trips_blueprint)
 app.register_blueprint(live_tracks_blueprint)
+app.register_blueprint(wagon_leaderboard_blueprint)
 
 app.config["CACHE_TYPE"] = "SimpleCache"
 app.config["CACHE_DEFAULT_TIMEOUT"] = 864000
@@ -12114,6 +12116,8 @@ def leaderboard(type):
         template = "leaderboard_world_squares.html"
     elif type == "carbon":
         template = "leaderboard_carbon.html"
+    elif type == "wagons":
+        template = "leaderboard_wagons.html"
     else:
         template = "leaderboard.html"
 

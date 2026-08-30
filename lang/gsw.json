@@ -1274,5 +1274,13 @@
         "other": "{n} Reise"
     },
     "posterStatTotal": "Uf Reise",
-    "posterStatTravel": "Underwägs"
+    "posterStatTravel": "Underwägs",
+    "leaderboardWagons": "Wageziichner",
+    "leaderboardWagonsTitle": "Besteliste vo de Wageziichner",
+    "leaderboardWagonsDrawings": "Ziichnige",
+    "leaderboardWagonsTrainsets": "Zugsets",
+    "leaderboardWagonsUses": "Fahrte",
+    "leaderboardWagonsUsers": "Benutzer",
+    "leaderboardWagonsHallOfFame": "Ruehmeshalle — d Sammlig, wo alles andere druf ufbaut",
+    "leaderboardWagonsSortBy": "Sortiere nach"
 }

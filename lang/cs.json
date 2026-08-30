@@ -1280,5 +1280,13 @@
         "other": "{n} cest"
     },
     "posterStatTotal": "Na cestách",
-    "posterStatTravel": "Na cestě"
+    "posterStatTravel": "Na cestě",
+    "leaderboardWagons": "Kreslíři vagónů",
+    "leaderboardWagonsTitle": "Žebříček kreslířů vagónů",
+    "leaderboardWagonsDrawings": "Kresby",
+    "leaderboardWagonsTrainsets": "Soupravy",
+    "leaderboardWagonsUses": "Cesty",
+    "leaderboardWagonsUsers": "Uživatelé",
+    "leaderboardWagonsHallOfFame": "Síň slávy — sbírka, na které stojí všechno ostatní",
+    "leaderboardWagonsSortBy": "Seřadit podle"
 }
