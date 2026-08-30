@@ -987,6 +987,75 @@ function labelPaint() {
         : { 'text-color': '#1a1a1a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 };
 }
 
+// The mode colours are chosen against a light map, and the darkest of them —
+// ferry #1e1e7c, metro #004595, cycle #6e211a — disappear into a dark poster's
+// background. Lifting lightness while keeping hue and saturation keeps each
+// mode recognisably itself instead of washing it out towards white, and the
+// lift is driven by measured contrast rather than a lightness threshold: a
+// saturated blue still reads as dark at the lightness a yellow is bright at.
+const POSTER_MIN_CONTRAST = 4;
+
+function hexToRgb(color) {
+    const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(color).trim());
+    if (!match) return null;
+    let hex = match[1];
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    return [0, 2, 4].map(i => parseInt(hex.substr(i, 2), 16) / 255);
+}
+
+// WCAG relative luminance, the only measure that puts a saturated blue and a
+// yellow of the same nominal lightness where the eye actually sees them.
+function contrastRatio(a, b) {
+    const luminance = (rgb) => {
+        const [r, g, bl] = rgb.map(c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+        return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+    };
+    const light = Math.max(luminance(a), luminance(b));
+    const dark = Math.min(luminance(a), luminance(b));
+    return (light + 0.05) / (dark + 0.05);
+}
+
+function rgbToHsl(rgb) {
+    const max = Math.max.apply(null, rgb), min = Math.min.apply(null, rgb);
+    const lightness = (max + min) / 2;
+    const delta = max - min;
+    if (!delta) return { h: 0, s: 0, l: lightness };
+    let hue;
+    if (max === rgb[0]) hue = ((rgb[1] - rgb[2]) / delta) % 6;
+    else if (max === rgb[1]) hue = (rgb[2] - rgb[0]) / delta + 2;
+    else hue = (rgb[0] - rgb[1]) / delta + 4;
+    return { h: hue, s: delta / (1 - Math.abs(2 * lightness - 1)), l: lightness };
+}
+
+function hslToRgb(h, s, l) {
+    const chroma = (1 - Math.abs(2 * l - 1)) * s;
+    const second = chroma * (1 - Math.abs((h % 2 + 2) % 2 - 1));
+    const base = [[chroma, second, 0], [second, chroma, 0], [0, chroma, second],
+                  [0, second, chroma], [second, 0, chroma], [chroma, 0, second]][((Math.floor(h) % 6) + 6) % 6];
+    const offset = l - chroma / 2;
+    return base.map(c => c + offset);
+}
+
+function rgbToHex(rgb) {
+    return '#' + rgb.map(c => Math.round(Math.min(1, Math.max(0, c)) * 255).toString(16).padStart(2, '0')).join('');
+}
+
+function posterModeColor(color) {
+    if (!BASEMAPS[basemapId].isDark) return color;
+    const rgb = hexToRgb(color);
+    const background = hexToRgb(posterTheme.shoulder);
+    if (!rgb || !background) return color;
+    if (contrastRatio(rgb, background) >= POSTER_MIN_CONTRAST) return color;
+
+    const hsl = rgbToHsl(rgb);
+    // Stop at 0.9: past that every hue turns into the same pale tint.
+    for (let l = hsl.l + 0.02; l <= 0.9; l += 0.02) {
+        const lifted = hslToRgb(hsl.h, hsl.s, l);
+        if (contrastRatio(lifted, background) >= POSTER_MIN_CONTRAST) return rgbToHex(lifted);
+    }
+    return rgbToHex(hslToRgb(hsl.h, hsl.s, 0.9));
+}
+
 function labelCollection(points) {
     return { type: 'FeatureCollection', features: points.map(p => ({
         type: 'Feature',
@@ -1027,7 +1096,11 @@ function addPosterLayers(map, trips) {
     MapLibreUtils.MapConfig.transportTypes.forEach(type => {
         ['past', 'future', 'planned-base', 'planned-overlay'].forEach(suffix => {
             const id = `${type.id}-${suffix}`;
-            if (map.getLayer(id)) map.setPaintProperty(id, 'line-width', type.id === 'air' ? 2 : 5);
+            if (!map.getLayer(id)) return;
+            map.setPaintProperty(id, 'line-width', type.id === 'air' ? 2 : 5);
+            // Not the overlay: that one is the white dashes drawn over a
+            // planned trip's base line, and it has no mode colour to lift.
+            if (suffix !== 'planned-overlay') map.setPaintProperty(id, 'line-color', posterModeColor(type.color));
         });
     });
 
@@ -1158,7 +1231,7 @@ function buildFooterLegend(trips) {
         if (!seen.has(t.id)) return;
         const item = document.createElement('div');
         item.className = 'posterLegendItem';
-        item.innerHTML = `<span class="posterLegendSwatch" style="background:${t.color}"></span><span>${transportTypeText[t.id] || t.id}</span>`;
+        item.innerHTML = `<span class="posterLegendSwatch" style="background:${posterModeColor(t.color)}"></span><span>${transportTypeText[t.id] || t.id}</span>`;
         footer.appendChild(item);
     });
 }
@@ -2367,7 +2440,7 @@ function refreshBack() {
 function transportColor(type) {
     if (type === 'helicopter') type = 'air';
     const t = MapLibreUtils.MapConfig.transportTypes.find(t => t.id === type);
-    return t ? t.color : '#888888';
+    return posterModeColor(t ? t.color : '#888888');
 }
 
 function itineraryLegs(trips) {
@@ -2497,7 +2570,7 @@ function modeStats(trips) {
             if (entry.meters) detail.push(mToKm(entry.meters) + ' km');
             if (entry.seconds >= 60) detail.push(secondsToDhm(Math.round(entry.seconds), langId));
             return {
-                color: type.color,
+                color: posterModeColor(type.color),
                 glyph: iconGlyph(type),
                 label: transportTypeText[type.id] || type.id,
                 detail: detail.join(' · ')
@@ -2572,37 +2645,83 @@ function rowsHeight(rows, scale) {
     return rows.reduce((sum, row) => sum + row.h * scale, 0);
 }
 
-// Splits the itinerary into two balanced columns at a leg, so the column break
+// Splits the itinerary into balanced columns, breaking at a leg so the break
 // falls between a stop and its next leg — and repeats that stop at the top of
-// the second column, the way a printed timetable continues a route across a page.
-function splitRows(rows) {
+// the next column, the way a printed timetable continues a route across a page.
+function splitRows(rows, parts) {
     const total = rowsHeight(rows, 1);
-    let best = null;
-    rows.forEach((row, i) => {
-        if (row.kind !== 'leg') return;
-        const head = rowsHeight(rows.slice(0, i), 1);
-        const diff = Math.abs(head - (total - head));
-        if (!best || diff < best.diff) best = { i: i, diff: diff };
+    const breaks = [];
+    for (let part = 1; part < parts; part++) {
+        const target = total * part / parts;
+        let best = null;
+        rows.forEach((row, i) => {
+            if (row.kind !== 'leg' || breaks.indexOf(i) !== -1) return;
+            const diff = Math.abs(rowsHeight(rows.slice(0, i), 1) - target);
+            if (!best || diff < best.diff) best = { i: i, diff: diff };
+        });
+        // Too few legs to break that many times — fewer columns it is.
+        if (!best) return null;
+        breaks.push(best.i);
+    }
+    breaks.sort((a, b) => a - b);
+
+    const columns = [];
+    let start = 0;
+    breaks.concat([rows.length]).forEach(end => {
+        const column = rows.slice(start, end);
+        columns.push(start > 0 ? [Object.assign({}, rows[start - 1], { time2: null })].concat(column) : column);
+        start = end;
     });
-    if (!best) return null;
-    const second = [Object.assign({}, rows[best.i - 1], { time2: null })].concat(rows.slice(best.i));
-    return [rows.slice(0, best.i), second];
+    return columns;
 }
 
+// Below this a column truncates station names into uselessness, whatever the
+// scale says — the point of a third column is fitting more, not fitting worse.
+const MIN_COLUMN_WIDTH = 240;
+
+// The smallest the itinerary is allowed to be drawn. Past it the text stops
+// being readable on a print, and a poster of 154 legs squeezed onto a fixed
+// card is no use to anyone — so the back of the card grows taller instead
+// (see renderBack), which is the one dimension a poster can afford to give.
+const MIN_ITINERARY_SCALE = 0.62;
+
 // One column at full size where it fits; otherwise shrink, and once shrinking
-// would make the text too small to read on a print, go to two columns instead.
-function fitItinerary(rows, width, availableHeight) {
+// would make the text too small to read on a print, add columns instead — up to
+// four, and only while each extra one buys a bigger scale than the last and
+// still leaves the columns wide enough to read.
+function fitItinerary(rows, width, availableHeight, forcedColumns) {
     const gap = 34;
+    // Second pass on a card grown to fit: the column count is already settled,
+    // and re-deciding it against the new height would undo the split and hand
+    // back one enormous column.
+    if (forcedColumns > 1) {
+        const split = splitRows(rows, forcedColumns);
+        if (split) {
+            const tallest = Math.max.apply(null, split.map(column => rowsHeight(column, 1)));
+            return {
+                columns: split,
+                scale: Math.min(1, availableHeight / tallest),
+                width: (width - gap * (forcedColumns - 1)) / forcedColumns,
+                gap: gap
+            };
+        }
+    }
     const need = rowsHeight(rows, 1);
     if (need <= availableHeight) return { columns: [rows], scale: 1, width: width, gap: gap };
     const scale = availableHeight / need;
-    if (scale >= 0.62) return { columns: [rows], scale: scale, width: width, gap: gap };
-    const split = splitRows(rows);
-    if (split) {
-        const scale2 = Math.min(1, availableHeight / Math.max(rowsHeight(split[0], 1), rowsHeight(split[1], 1)));
-        if (scale2 > scale) return { columns: split, scale: scale2, width: (width - gap) / 2, gap: gap };
+    if (scale >= MIN_ITINERARY_SCALE) return { columns: [rows], scale: scale, width: width, gap: gap };
+
+    let best = { columns: [rows], scale: scale, width: width, gap: gap };
+    for (let parts = 2; parts <= 4; parts++) {
+        const columnWidth = (width - gap * (parts - 1)) / parts;
+        if (columnWidth < MIN_COLUMN_WIDTH) break;
+        const split = splitRows(rows, parts);
+        if (!split) continue;
+        const tallest = Math.max.apply(null, split.map(column => rowsHeight(column, 1)));
+        const columnScale = Math.min(1, availableHeight / tallest);
+        if (columnScale > best.scale) best = { columns: split, scale: columnScale, width: columnWidth, gap: gap };
     }
-    return { columns: [rows], scale: scale, width: width, gap: gap };
+    return best;
 }
 
 function fitText(ctx, text, maxWidth) {
@@ -2698,7 +2817,11 @@ function drawItineraryColumn(ctx, rows, x, y, width, scale) {
 // its name, then its share of the distance and time. Shrunk to fit rather than
 // wrapped — a second line would shift the itinerary above it every time a mode
 // is added or dropped.
-function drawModeChips(ctx, modes, centerX, baselineY, maxWidth, cs) {
+// Measured before anything is drawn, because the panel has to know how tall the
+// chips are before it can place them: with enough modes (nine of them on a long
+// multi-country trip) they no longer fit one line even at the smallest size, so
+// they wrap rather than run off both edges of the panel.
+function layoutModeChips(ctx, modes, maxWidth, cs) {
     const gap = 20 * cs, iconGap = 6 * cs, detailGap = 5 * cs;
     let size = 12 * cs, widths, total;
     const measure = () => {
@@ -2715,29 +2838,67 @@ function drawModeChips(ctx, modes, centerX, baselineY, maxWidth, cs) {
     };
     for (measure(); total > maxWidth && size > 8 * cs; size -= 0.5 * cs) measure();
 
+    // The fewest rows the chips fit in, split evenly rather than filled to the
+    // brim: eight modes read as 4 + 4, nine as 5 + 4, instead of a packed line
+    // with a short remainder hanging under it.
+    let rows = null;
+    for (let count = 1; count <= modes.length && !rows; count++) {
+        rows = balancedChipRows(modes, widths, gap, maxWidth, count);
+    }
+    // A single chip wider than the panel: nothing to balance, just stack them.
+    if (!rows) rows = modes.map((mode, i) => ({ items: [{ mode: mode, width: widths[i] }], width: widths[i] }));
+    return { size: size, gap: gap, iconGap: iconGap, detailGap: detailGap, rows: rows };
+}
+
+// Contiguous groups of as equal a size as the count allows, the extra chips
+// going to the upper rows. Null when any row comes out too wide to draw.
+function balancedChipRows(modes, widths, gap, maxWidth, count) {
+    const base = Math.floor(modes.length / count);
+    if (!base) return null;
+    const extra = modes.length % count;
+    const rows = [];
+    let i = 0;
+    for (let r = 0; r < count; r++) {
+        const row = { items: [], width: 0 };
+        for (let taken = base + (r < extra ? 1 : 0); taken > 0; taken--, i++) {
+            row.width += (row.items.length ? gap : 0) + widths[i];
+            row.items.push({ mode: modes[i], width: widths[i] });
+        }
+        if (row.width > maxWidth) return null;
+        rows.push(row);
+    }
+    return rows;
+}
+
+function drawModeChips(ctx, layout, centerX, baselineY, cs) {
+    const { size, gap, iconGap, detailGap } = layout;
     ctx.textAlign = 'left';
-    let x = centerX - total / 2;
-    modes.forEach((mode, i) => {
-        ctx.fillStyle = mode.color;
-        if (mode.glyph) {
-            ctx.font = `${mode.glyph.weight} ${size}px ${mode.glyph.family}`;
-            ctx.fillText(mode.glyph.character, x, baselineY);
-        } else {
-            // No icon resolved (an icon set that moved, a font that never
-            // loaded): the footer legend's swatch says the same thing.
-            roundRect(ctx, x, baselineY - 4 * cs, size, 3.5 * cs, 2 * cs);
-            ctx.fill();
-        }
-        let textX = x + size * 1.2 + iconGap;
-        ctx.font = `600 ${size}px ${FONT_STACK}`;
-        ctx.fillText(mode.label, textX, baselineY);
-        if (mode.detail) {
-            textX += ctx.measureText(mode.label).width + detailGap;
-            ctx.font = `${size}px ${FONT_STACK}`;
-            ctx.fillStyle = posterTheme.subtitle;
-            ctx.fillText(mode.detail, textX, baselineY);
-        }
-        x += widths[i] + gap;
+    layout.rows.forEach((row, r) => {
+        const y = baselineY + r * 20 * cs;
+        let x = centerX - row.width / 2;
+        row.items.forEach(item => {
+            const mode = item.mode;
+            ctx.fillStyle = mode.color;
+            if (mode.glyph) {
+                ctx.font = `${mode.glyph.weight} ${size}px ${mode.glyph.family}`;
+                ctx.fillText(mode.glyph.character, x, y);
+            } else {
+                // No icon resolved (an icon set that moved, a font that never
+                // loaded): the footer legend's swatch says the same thing.
+                roundRect(ctx, x, y - 4 * cs, size, 3.5 * cs, 2 * cs);
+                ctx.fill();
+            }
+            let textX = x + size * 1.2 + iconGap;
+            ctx.font = `600 ${size}px ${FONT_STACK}`;
+            ctx.fillText(mode.label, textX, y);
+            if (mode.detail) {
+                textX += ctx.measureText(mode.label).width + detailGap;
+                ctx.font = `${size}px ${FONT_STACK}`;
+                ctx.fillStyle = posterTheme.subtitle;
+                ctx.fillText(mode.detail, textX, y);
+            }
+            x += item.width + gap;
+        });
     });
     ctx.textAlign = 'center';
 }
@@ -2820,7 +2981,7 @@ function drawQr(ctx, text, x, y, size) {
     }
 }
 
-function drawBackPoster(ctx, dims) {
+function drawBackPoster(ctx, dims, forcedColumns) {
     const mat = posterMat();
     const cs = posterCreditScale();
     const isDark = !!BASEMAPS[basemapId].isDark;
@@ -2891,7 +3052,10 @@ function drawBackPoster(ctx, dims) {
     let panelBottom = qrY - 20 * cs;
     if (tiles.length) {
         const padding = 15 * cs;
-        const chipsHeight = chips.length ? 30 * cs : 0;
+        const chipsLayout = chips.length
+            ? layoutModeChips(ctx, chips, dims.w - mat * 2 - padding * 2, cs)
+            : null;
+        const chipsHeight = chipsLayout ? 30 * cs + (chipsLayout.rows.length - 1) * 20 * cs : 0;
         // Clears the values' descenders before the caption starts — the tiles are
         // the tallest thing in the panel and a tight caption reads as a collision.
         const tilesHeight = 47 * cs;
@@ -2905,8 +3069,8 @@ function drawBackPoster(ctx, dims) {
         ctx.fill();
 
         let y = panelTop + padding;
-        if (chips.length) {
-            drawModeChips(ctx, chips, dims.w / 2, y + 12 * cs, dims.w - mat * 2 - padding * 2, cs);
+        if (chipsLayout) {
+            drawModeChips(ctx, chipsLayout, dims.w / 2, y + 12 * cs, cs);
             y += chipsHeight;
             ctx.strokeStyle = hairline;
             ctx.lineWidth = 1;
@@ -2925,16 +3089,24 @@ function drawBackPoster(ctx, dims) {
     }
 
     const rows = buildItineraryRows(posterVisibleTrips);
-    if (!rows.length) return;
+    if (!rows.length) return null;
     const top = document.querySelector('.posterHeader').offsetHeight;
     const available = (panelBottom - 20 * cs) - top;
-    const layout = fitItinerary(rows, dims.w - mat * 2, available);
+    const layout = fitItinerary(rows, dims.w - mat * 2, available, forcedColumns);
+    // Everything under the itinerary — panel, credits, QR — is laid out upward
+    // from the bottom edge, so a taller card gives the itinerary exactly the
+    // height it is short of. Report it and let the caller redraw at that size.
+    if (!forcedColumns && layout.scale < MIN_ITINERARY_SCALE) {
+        const tallest = Math.max.apply(null, layout.columns.map(column => rowsHeight(column, 1)));
+        return { overflow: Math.ceil(tallest * MIN_ITINERARY_SCALE - available), columns: layout.columns.length };
+    }
     layout.columns.forEach((column, i) => {
         // A short itinerary is centred in the space rather than left hanging under
         // the title with the whole page empty below it.
         const y = top + Math.max(0, (available - rowsHeight(column, layout.scale)) / 2);
         drawItineraryColumn(ctx, column, mat + i * (layout.width + layout.gap), y, layout.width, layout.scale);
     });
+    return null;
 }
 
 // The logo and the icon fonts are loaded once, before any drawing: canvas text
@@ -2948,18 +3120,34 @@ async function renderBack() {
     }
     await loadIconFonts();
     const canvas = document.getElementById('posterBackCanvas');
-    const dims = getPosterDims();
     const pr = effectivePixelRatio();
-    canvas.width = Math.round(dims.w * pr);
-    canvas.height = Math.round(dims.h * pr);
-    canvas.style.width = dims.w + 'px';
-    canvas.style.height = dims.h + 'px';
     const ctx = canvas.getContext('2d');
-    // Everything below draws in CSS pixels; the device-pixel scale-up for the
-    // export lives here alone.
-    ctx.setTransform(pr, 0, 0, pr, 0, 0);
-    ctx.clearRect(0, 0, dims.w, dims.h);
-    drawBackPoster(ctx, dims);
+    const size = (dims) => {
+        canvas.width = Math.round(dims.w * pr);
+        canvas.height = Math.round(dims.h * pr);
+        canvas.style.width = dims.w + 'px';
+        canvas.style.height = dims.h + 'px';
+        // Everything below draws in CSS pixels; the device-pixel scale-up for
+        // the export lives here alone.
+        ctx.setTransform(pr, 0, 0, pr, 0, 0);
+        ctx.clearRect(0, 0, dims.w, dims.h);
+    };
+
+    let dims = getPosterDims();
+    size(dims);
+    // A long enough itinerary doesn't fit the chosen card at a readable size,
+    // however many columns it is split into. Rather than shrink it to nothing,
+    // the back of the card grows by exactly what it was short of — the front
+    // keeps the requested proportions, the back becomes a longer sheet.
+    const short = drawBackPoster(ctx, dims);
+    if (short && short.overflow > 0) {
+        // The canvas ceiling still applies: past it the browser silently gives
+        // back a blank or downscaled bitmap, so a truly enormous itinerary goes
+        // back to being scaled down rather than losing the poster altogether.
+        dims = { w: dims.w, h: Math.min(dims.h + short.overflow, MAX_CANVAS_DIMENSION / pr) };
+        size(dims);
+        drawBackPoster(ctx, dims, short.columns);
+    }
     applyPreviewScale();
     return canvas;
 }
