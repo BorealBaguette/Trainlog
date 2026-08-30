@@ -916,6 +916,19 @@ function pickAnchor(dLon, dLat) {
     return dLon >= 0 ? 'left' : 'right'; // push east -> text to the right; push west -> text to the left
 }
 
+// The gap between point and text, in ems of the label's own text-size. The
+// direction must match text-anchor's convention (the text sits on the OPPOSITE
+// side from the named edge — anchor 'left' already puts text to the point's
+// right, so a further positive-x nudge adds gap in that same direction).
+// 1.1em clears the route line's width and the point marker's halo (radius
+// 5-7px) at these text sizes without pushing the label noticeably far from its
+// own station. Dragging a label edits these numbers.
+const ANCHOR_OFFSETS = { left: [1.1, 0], right: [-1.1, 0], top: [0, 1.1], bottom: [0, -1.1] };
+
+// Same normalisation as the label dedup, so a hand-placed offset keeps matching
+// its station across basemap rebuilds.
+function labelKey(name) { return String(name).trim().toLowerCase(); }
+
 function buildLabelPoints(trips) {
     const byKey = new Map();
     function addPoint(latlon, name, kind) {
@@ -924,13 +937,13 @@ function buildLabelPoints(trips) {
         // logged as one trip's destination and the next trip's origin can carry
         // slightly different coordinates, which would otherwise defeat dedup and
         // print the same label twice right next to each other.
-        const key = name.trim().toLowerCase();
+        const key = labelKey(name);
         const existing = byKey.get(key);
         if (existing) {
             if (kind === 'start' || kind === 'end') existing.kind = kind;
             return;
         }
-        byKey.set(key, { coord: [latlon[1], latlon[0]], name: name, kind: kind });
+        byKey.set(key, { key: key, coord: [latlon[1], latlon[0]], name: name, kind: kind });
     }
     trips.forEach((trip, i) => {
         if (!trip.path || trip.path.length < 2) return;
@@ -955,9 +968,52 @@ function buildLabelPoints(trips) {
         points.forEach(p => {
             const dLon = p.coord[0] - centerLon, dLat = p.coord[1] - centerLat;
             p.anchor = pickAnchor(dLon, dLat);
+            // A label dragged by hand keeps its position through basemap
+            // switches and private/transparent rebuilds, which each rebuild the
+            // points from scratch — same reasoning as hiddenLabelNames.
+            const moved = movedLabelOffsets.get(p.key);
+            p.offset = moved ? moved.slice() : ANCHOR_OFFSETS[p.anchor].slice();
+            p.pinned = !!moved;
         });
     }
     return points;
+}
+
+// Same treatment for our labels and for promoted basemap ones, so a poster
+// reads as one set of labels whichever basemap is under it.
+function labelPaint() {
+    return BASEMAPS[basemapId].isDark
+        ? { 'text-color': '#f5f5f5', 'text-halo-color': '#111111', 'text-halo-width': 1.6 }
+        : { 'text-color': '#1a1a1a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 };
+}
+
+function labelCollection(points) {
+    return { type: 'FeatureCollection', features: points.map(p => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: p.coord },
+        properties: { name: p.name, kind: p.kind, anchor: p.anchor, offset: p.offset, pinned: p.pinned }
+    })) };
+}
+
+function refreshLabelSource(map) {
+    const source = map.getSource('poster-points');
+    if (source) source.setData(labelCollection(map._posterLabelPoints || []));
+}
+
+// A promoted basemap label carries its own type face and size (read off the
+// layer it came from), so it keeps looking like the basemap's own label rather
+// than turning into a station label the moment it is touched.
+function cloneCollection(clones) {
+    return { type: 'FeatureCollection', features: clones.map(c => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: c.coord },
+        properties: { key: c.key, name: c.name, size: c.size, face: c.face, offset: c.offset }
+    })) };
+}
+
+function refreshCloneSource(map) {
+    const source = map.getSource('poster-clones');
+    if (source) source.setData(cloneCollection(map._posterClonePoints || []));
 }
 
 function addPosterLayers(map, trips) {
@@ -974,14 +1030,8 @@ function addPosterLayers(map, trips) {
 
     const points = buildLabelPoints(trips);
     suppressCapitalsNearStations(map, points, trips);
-    map.addSource('poster-points', {
-        type: 'geojson',
-        data: { type: 'FeatureCollection', features: points.map(p => ({
-            type: 'Feature',
-            geometry: { type: 'Point', coordinates: p.coord },
-            properties: { name: p.name, kind: p.kind, anchor: p.anchor }
-        })) }
-    });
+    map._posterLabelPoints = points;
+    map.addSource('poster-points', { type: 'geojson', data: labelCollection(points) });
 
     map.addLayer({
         id: 'poster-point-halo',
@@ -1026,30 +1076,53 @@ function addPosterLayers(map, trips) {
             // automatic text-variable-anchor search, which only avoids other
             // labels — it has no notion of "don't sit on top of the route line".
             'text-anchor': ['get', 'anchor'],
-            // 1.1em clears the route line's width and the point marker's halo
-            // (radius 5-7px) at these text sizes without pushing the label
-            // noticeably far from its own station.
-            // Offset direction must match text-anchor's own convention (the
-            // text sits on the OPPOSITE side from the named edge — anchor
-            // 'left' already puts text to the point's right, so a further
-            // rightward/positive-x nudge adds gap in that same direction).
-            'text-offset': ['match', ['get', 'anchor'],
-                'left', ['literal', [1.1, 0]],
-                'right', ['literal', [-1.1, 0]],
-                'top', ['literal', [0, 1.1]],
-                ['literal', [0, -1.1]]
-            ],
+            // Per-feature so a drag can rewrite just the one label's gap; see
+            // ANCHOR_OFFSETS for what the untouched value means.
+            'text-offset': ['array', 'number', 2, ['get', 'offset']],
             'text-justify': 'auto',
             'text-allow-overlap': false,
             'text-optional': true,
             // Extra collision margin so two nearby labels are more likely to
             // hide one of them outright than to render almost touching.
             'text-padding': 6,
-            'symbol-sort-key': ['case', ['==', ['get', 'kind'], 'stop'], 1, 0]
+            // A hand-placed label is placed first so it wins any collision it
+            // is put into — text-allow-overlap can't say this per feature.
+            'symbol-sort-key': ['case',
+                ['get', 'pinned'], -1,
+                ['==', ['get', 'kind'], 'stop'], 1,
+                0]
         },
-        paint: BASEMAPS[basemapId].isDark
-            ? { 'text-color': '#f5f5f5', 'text-halo-color': '#111111', 'text-halo-width': 1.6 }
-            : { 'text-color': '#1a1a1a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 }
+        paint: labelPaint()
+    });
+
+    map._posterClonePoints = clonedLabels;
+    map.addSource('poster-clones', { type: 'geojson', data: cloneCollection(clonedLabels) });
+    map.addLayer({
+        id: 'poster-clone-labels',
+        type: 'symbol',
+        source: 'poster-clones',
+        layout: {
+            'text-field': ['get', 'name'],
+            // MapLibre collects the glyph ranges to download by enumerating a
+            // text-font expression's possible outputs, so the faces have to be
+            // written out as literals — a ['get'] has none to enumerate and the
+            // label ends up with no glyphs at all, i.e. invisible. All four
+            // basemaps ship the same three Noto faces, so matching on a face
+            // name captured at promotion time covers every label.
+            'text-font': ['match', ['get', 'face'],
+                'italic', ['literal', ['Noto Sans Italic']],
+                'bold', ['literal', ['Noto Sans Bold']],
+                ['literal', labelFont]
+            ],
+            'text-size': ['get', 'size'],
+            'text-anchor': 'center',
+            'text-offset': ['array', 'number', 2, ['get', 'offset']],
+            // Hand-placed by definition: it goes exactly where it was dropped,
+            // and it doesn't push the basemap's remaining labels around.
+            'text-allow-overlap': true,
+            'text-ignore-placement': true
+        },
+        paint: labelPaint()
     });
 
     return features;
@@ -1353,6 +1426,7 @@ async function buildMap() {
         applyLabelLevel(newMap, labelLevel);
         posterFeatures = addPosterLayers(newMap, trips);
         wireLabelClickToHide(newMap);
+        wireLabelDrag(newMap);
         applyHiddenLabelFilters(newMap);
         buildFooterLegend(trips);
         buildTitle(trips);
@@ -1509,14 +1583,32 @@ function suppressCapitalsNearStations(map, points, trips) {
 // — it survives basemap switches (kept by name, not by map instance) and a
 // "Reset labels" button clears it.
 let hiddenLabelNames = new Set();
+// Kept apart from the basemap's names: hiding (or promoting) the basemap's
+// "Bergen" must not take our own station label of the same name with it — that
+// pairing is the whole point of suppressCapitalsNearStations.
+let hiddenStationNames = new Set();
+// Basemap labels lifted into our own draggable layer (see promoteBasemapLabel).
+let clonedLabels = [];
+// Station name -> hand-placed text-offset, in ems (see ANCHOR_OFFSETS).
+let movedLabelOffsets = new Map();
+// A drag ends with a click on the same label, which would otherwise hide it.
+let suppressLabelClick = false;
 
 function applyHiddenLabelFilters(map) {
+    // Match every field the label could have been rendered from, not just
+    // `name`: applyStyleLanguage rewrites text-field to a coalesce over
+    // name:<lang> / name:latin / name, so a label showing "Breivikon" out of
+    // name:latin is not matched by a filter that only ever reads `name` — the
+    // click looked like it did nothing at all.
+    const names = ['literal', Array.from(hiddenLabelNames)];
     const exclude = hiddenLabelNames.size
-        ? ['!', ['in', ['get', 'name'], ['literal', Array.from(hiddenLabelNames)]]]
+        ? ['!', ['any'].concat(nameFields().map(f => ['in', ['coalesce', ['get', f], ''], names]))]
         : null;
 
     if (map.getLayer('poster-labels')) {
-        map.setFilter('poster-labels', exclude);
+        map.setFilter('poster-labels', hiddenStationNames.size
+            ? ['!', ['in', ['get', 'name'], ['literal', Array.from(hiddenStationNames)]]]
+            : null);
     }
     const baseFilters = map._posterLabelBaseFilters || {};
     Object.keys(baseFilters).forEach(id => {
@@ -1526,29 +1618,235 @@ function applyHiddenLabelFilters(map) {
     });
 }
 
+// The name fields a label can be rendered from, in the order text-field
+// coalesces them. Empty-string coalesce keeps `in` off a null needle.
+function nameFields() {
+    const code = mapLangMode === 'intl' ? 'en' : (langId === 'gsw' ? 'de' : String(langId).split('-')[0]);
+    return ['name', 'name:latin', 'name:' + code];
+}
+
+// What the label actually reads on screen, and every field that could hide it.
+function displayedName(props) {
+    const fields = nameFields();
+    return props[fields[2]] || props[fields[1]] || props[fields[0]] || '';
+}
+
+function nameVariants(props) {
+    return nameFields().map(f => props[f]).filter(Boolean);
+}
+
 function wireLabelClickToHide(map) {
     // Every basemap label layer, not just capitals — clicking works whichever
     // one a given label happens to render on, hidden layers simply have
     // nothing to click so registering all of them unconditionally is safe
     // regardless of the current label level.
-    const layerIds = ['poster-labels'].concat(allBasemapLabelLayerIds().filter(id => map.getLayer(id)));
+    const layerIds = ['poster-labels', 'poster-clone-labels'].concat(basemapLabelLayers(map));
 
     layerIds.forEach(id => {
+        if (!map.getLayer(id)) return;
         map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
         map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
         map.on('click', id, (e) => {
             e.originalEvent.stopPropagation();
-            const name = e.features[0] && e.features[0].properties && e.features[0].properties.name;
-            if (!name) return;
-            hiddenLabelNames.add(name);
+            if (suppressLabelClick) { suppressLabelClick = false; return; }
+            const props = (e.features[0] && e.features[0].properties) || {};
+            // A promoted label is ours, so it goes away by dropping the clone —
+            // its original is already hidden by name.
+            if (id === 'poster-clone-labels') {
+                clonedLabels = clonedLabels.filter(c => c.key !== props.key);
+                map._posterClonePoints = clonedLabels;
+                refreshCloneSource(map);
+                return;
+            }
+            if (id === 'poster-labels') {
+                if (!props.name) return;
+                hiddenStationNames.add(props.name);
+                applyHiddenLabelFilters(map);
+                return;
+            }
+            const variants = nameVariants(props);
+            if (!variants.length) return;
+            variants.forEach(n => hiddenLabelNames.add(n));
             applyHiddenLabelFilters(map);
         });
     });
 }
 
+function basemapLabelLayers(map) {
+    return allBasemapLabelLayerIds().filter(id => map.getLayer(id));
+}
+
+// text-size in these styles is either a plain number or an
+// ["interpolate", ["linear"], ["zoom"], z, size, ...] ramp, so reading the
+// size a label renders at right now is a short evaluation rather than a reason
+// to reach for MapLibre internals. Anything else (a nested step, a property
+// function) falls back to the default rather than guessing.
+function sizeAtZoom(value, zoom, fallback) {
+    if (typeof value === 'number') return value;
+    if (!Array.isArray(value) || value[0] !== 'interpolate') return fallback;
+    const stops = [];
+    for (let i = 3; i + 1 < value.length; i += 2) {
+        if (typeof value[i] === 'number' && typeof value[i + 1] === 'number') stops.push([value[i], value[i + 1]]);
+    }
+    if (!stops.length) return fallback;
+    if (zoom <= stops[0][0]) return stops[0][1];
+    for (let i = 0; i + 1 < stops.length; i++) {
+        const [z0, s0] = stops[i], [z1, s1] = stops[i + 1];
+        if (zoom <= z1) return s0 + (s1 - s0) * (zoom - z0) / (z1 - z0);
+    }
+    return stops[stops.length - 1][1];
+}
+
+// Which of the three faces the source layer draws in, as a name the clone
+// layer's text-font can match on.
+function fontFace(font) {
+    const stack = Array.isArray(font) ? font.join(' ') : '';
+    if (/Italic/i.test(stack)) return 'italic';
+    if (/Bold/i.test(stack)) return 'bold';
+    return 'regular';
+}
+
+// The basemap's labels can't be moved where they are — their geometry is baked
+// into the vector tiles and MapLibre offers no per-feature placement override.
+// Dragging one therefore lifts it out: a copy goes into our own source (which
+// we can place freely, and which draws above the route), and the original is
+// hidden by name, exactly as a click would have hidden it. The copy keeps the
+// font and the size the original was rendering at, so the swap is invisible.
+function promoteBasemapLabel(map, layerId, feature, lngLat) {
+    const props = feature.properties || {};
+    const name = displayedName(props);
+    if (!name) return null;
+    const key = layerId + ':' + labelKey(name);
+    const existing = (map._posterClonePoints || []).find(c => c.key === key);
+    if (existing) return existing;
+
+    const clone = {
+        key: key,
+        name: name,
+        // A line-placed label (a river, a road) has no single point to inherit,
+        // so it starts where it was grabbed.
+        coord: feature.geometry && feature.geometry.type === 'Point'
+            ? feature.geometry.coordinates.slice()
+            : [lngLat.lng, lngLat.lat],
+        size: sizeAtZoom(map.getLayoutProperty(layerId, 'text-size'), map.getZoom(), 12),
+        face: fontFace(map.getLayoutProperty(layerId, 'text-font')),
+        offset: [0, 0]
+    };
+    clonedLabels.push(clone);
+    map._posterClonePoints = clonedLabels;
+    refreshCloneSource(map);
+    nameVariants(props).forEach(n => hiddenLabelNames.add(n));
+    applyHiddenLabelFilters(map);
+    return clone;
+}
+
+// Our own station labels can also be dragged: the basemap's labels live inside
+// the vector tiles and can only be hidden, but ours come from a source we own,
+// so a drag is just an edit to that feature's text-offset. Kept by name (like
+// hiddenLabelNames) so a basemap switch doesn't throw the placement away.
+function wireLabelDrag(map) {
+    let drag = null;
+
+    const end = (cursor) => {
+        if (!drag) return;
+        if (drag.dragged) {
+            if (!drag.clone) movedLabelOffsets.set(drag.point.key, drag.point.offset.slice());
+            suppressLabelClick = true;
+        }
+        drag = null;
+        map.getCanvas().style.cursor = cursor;
+    };
+
+    const start = (point, e, clone) => {
+        drag = {
+            point: point,
+            clone: clone,
+            from: e.point,
+            offset: point.offset.slice(),
+            // text-offset is in ems, so pixels have to be divided by the size
+            // this label actually renders at.
+            size: clone ? point.size : (point.kind === 'stop' ? 12 : 15),
+            dragged: false
+        };
+        map.getCanvas().style.cursor = 'grabbing';
+    };
+
+    map.on('mousedown', 'poster-labels', (e) => {
+        const feature = e.features && e.features[0];
+        if (!feature) return;
+        const point = (map._posterLabelPoints || []).find(p => p.key === labelKey(feature.properties.name));
+        if (!point) return;
+        // Keeps the gesture from panning the map underneath the label.
+        e.preventDefault();
+        start(point, e, false);
+    });
+
+    map.on('mousedown', 'poster-clone-labels', (e) => {
+        const feature = e.features && e.features[0];
+        if (!feature) return;
+        const point = (map._posterClonePoints || []).find(c => c.key === feature.properties.key);
+        if (!point) return;
+        e.preventDefault();
+        start(point, e, true);
+    });
+
+    // A basemap label becomes one of ours only once the gesture turns out to be
+    // a drag: promoting on mousedown would put a clone under the pointer in
+    // time for the trailing click to delete it again, so a press-and-release
+    // (or a slow click) made the label vanish. Until the threshold it is just a
+    // click, which hides the label the way it always did.
+    basemapLabelLayers(map).forEach(id => {
+        map.on('mousedown', id, (e) => {
+            const feature = e.features && e.features[0];
+            if (!feature || drag) return;
+            e.preventDefault();
+            drag = { pending: { layerId: id, feature: feature, lngLat: e.lngLat }, from: e.point, dragged: false };
+        });
+    });
+
+    map.on('mousemove', (e) => {
+        if (!drag) return;
+        const dx = e.point.x - drag.from.x, dy = e.point.y - drag.from.y;
+        // Below the threshold the gesture is still a click, which hides.
+        if (!drag.dragged && Math.hypot(dx, dy) < 3) return;
+        if (drag.pending) {
+            const p = drag.pending;
+            const clone = promoteBasemapLabel(map, p.layerId, p.feature, p.lngLat);
+            if (!clone) { drag = null; return; }
+            const from = drag.from;
+            start(clone, { point: from }, true);
+            drag.from = from;
+        }
+        drag.dragged = true;
+        drag.point.offset = [drag.offset[0] + dx / drag.size, drag.offset[1] + dy / drag.size];
+        if (drag.clone) {
+            refreshCloneSource(map);
+        } else {
+            drag.point.pinned = true;
+            refreshLabelSource(map);
+        }
+    });
+
+    // Still over the label it just dropped, hence the hover cursor back.
+    map.on('mouseup', () => end('pointer'));
+    // Releasing the button off the canvas never reaches map 'mouseup'.
+    map.on('mouseout', () => end(''));
+}
+
 function resetHiddenLabels() {
     hiddenLabelNames.clear();
-    if (map) applyHiddenLabelFilters(map);
+    hiddenStationNames.clear();
+    movedLabelOffsets.clear();
+    clonedLabels = [];
+    if (!map) return;
+    map._posterClonePoints = clonedLabels;
+    refreshCloneSource(map);
+    (map._posterLabelPoints || []).forEach(p => {
+        p.offset = ANCHOR_OFFSETS[p.anchor].slice();
+        p.pinned = false;
+    });
+    refreshLabelSource(map);
+    applyHiddenLabelFilters(map);
 }
 
 // The basemap labels its own cities/towns/villages/airports/roads/POIs, which
