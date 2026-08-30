@@ -12,7 +12,12 @@
                 {% set item_date = item.last_modified or item.created %}
                 <span class="news-date">
                     <i class="fa-regular fa-calendar"></i>
-                    {{ item_date.strftime('%Y-%m-%d %H:%M') if item_date else (news_unknown or "Unknown") }}
+                    {% if item_date %}
+                    <time class="news-datetime" data-style="datetime"
+                          datetime="{{ item_date.isoformat() }}">{{ item_date.strftime('%Y-%m-%d %H:%M') }}</time>
+                    {% else %}
+                    {{ news_unknown or "Unknown" }}
+                    {% endif %}
                 </span>
                 {% if is_owner %}
                 <span class="news-views">
