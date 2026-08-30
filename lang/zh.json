@@ -1272,5 +1272,13 @@
         "other": "{n} 段行程"
     },
     "posterStatTotal": "总时长",
-    "posterStatTravel": "旅行时间"
+    "posterStatTravel": "旅行时间",
+    "leaderboardWagons": "车辆绘图作者",
+    "leaderboardWagonsTitle": "车辆绘图作者排行榜",
+    "leaderboardWagonsDrawings": "绘图数",
+    "leaderboardWagonsTrainsets": "编组",
+    "leaderboardWagonsUses": "行程",
+    "leaderboardWagonsUsers": "用户",
+    "leaderboardWagonsHallOfFame": "名人堂 — 其他一切的基础收藏",
+    "leaderboardWagonsSortBy": "排序方式"
 }

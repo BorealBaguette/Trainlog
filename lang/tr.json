@@ -1272,5 +1272,13 @@
         "other": "{n} yolculuk"
     },
     "posterStatTotal": "Seyahatte",
-    "posterStatTravel": "Yolda"
+    "posterStatTravel": "Yolda",
+    "leaderboardWagons": "Vagon çizerleri",
+    "leaderboardWagonsTitle": "Vagon çizerleri lider tablosu",
+    "leaderboardWagonsDrawings": "Çizimler",
+    "leaderboardWagonsTrainsets": "Tren setleri",
+    "leaderboardWagonsUses": "Seyahatler",
+    "leaderboardWagonsUsers": "Kullanıcılar",
+    "leaderboardWagonsHallOfFame": "Şöhret salonu — diğer her şeyin üzerine kurulduğu koleksiyon",
+    "leaderboardWagonsSortBy": "Sırala"
 }

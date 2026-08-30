@@ -1273,5 +1273,13 @@
         "other": "{n} reisi"
     },
     "posterStatTotal": "Reisil",
-    "posterStatTravel": "Teel"
+    "posterStatTravel": "Teel",
+    "leaderboardWagons": "Vagunijoonistajad",
+    "leaderboardWagonsTitle": "Vagunijoonistajate edetabel",
+    "leaderboardWagonsDrawings": "Joonised",
+    "leaderboardWagonsTrainsets": "Rongikoosseisud",
+    "leaderboardWagonsUses": "Reisid",
+    "leaderboardWagonsUsers": "Kasutajad",
+    "leaderboardWagonsHallOfFame": "Kuulsuste hall — kogu, millele kõik muu tugineb",
+    "leaderboardWagonsSortBy": "Sorteeri"
 }

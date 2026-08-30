@@ -1280,5 +1280,13 @@
         "many": "{n} podróży"
     },
     "posterStatTotal": "W podróży",
-    "posterStatTravel": "W drodze"
+    "posterStatTravel": "W drodze",
+    "leaderboardWagons": "Rysownicy wagonów",
+    "leaderboardWagonsTitle": "Ranking rysowników wagonów",
+    "leaderboardWagonsDrawings": "Rysunki",
+    "leaderboardWagonsTrainsets": "Składy",
+    "leaderboardWagonsUses": "Podróże",
+    "leaderboardWagonsUsers": "Użytkownicy",
+    "leaderboardWagonsHallOfFame": "Galeria sław — kolekcja, na której opiera się wszystko inne",
+    "leaderboardWagonsSortBy": "Sortuj według"
 }

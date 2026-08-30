@@ -1272,5 +1272,13 @@
         "other": "{n}개의 여정"
     },
     "posterStatTotal": "총 소요 시간",
-    "posterStatTravel": "이동 시간"
+    "posterStatTravel": "이동 시간",
+    "leaderboardWagons": "차량 그림 작가",
+    "leaderboardWagonsTitle": "차량 그림 작가 순위표",
+    "leaderboardWagonsDrawings": "그림 수",
+    "leaderboardWagonsTrainsets": "편성",
+    "leaderboardWagonsUses": "여정 수",
+    "leaderboardWagonsUsers": "사용자 수",
+    "leaderboardWagonsHallOfFame": "명예의 전당 — 나머지 모두의 바탕이 되는 컬렉션",
+    "leaderboardWagonsSortBy": "정렬 기준"
 }

@@ -1273,5 +1273,13 @@
         "other": "{n} trajets"
     },
     "posterStatTotal": "En voyage",
-    "posterStatTravel": "En route"
+    "posterStatTravel": "En route",
+    "leaderboardWagons": "Dessinateurs de wagons",
+    "leaderboardWagonsTitle": "Classement des dessinateurs de wagons",
+    "leaderboardWagonsDrawings": "Dessins",
+    "leaderboardWagonsTrainsets": "Rames",
+    "leaderboardWagonsUses": "Voyages",
+    "leaderboardWagonsUsers": "Utilisateurs",
+    "leaderboardWagonsHallOfFame": "Panthéon — la collection sur laquelle repose tout le reste",
+    "leaderboardWagonsSortBy": "Trier par"
 }

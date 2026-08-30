@@ -1280,5 +1280,13 @@
         "other": "{n} putovanja"
     },
     "posterStatTotal": "Na putovanju",
-    "posterStatTravel": "Na putu"
+    "posterStatTravel": "Na putu",
+    "leaderboardWagons": "Crtači vagona",
+    "leaderboardWagonsTitle": "Poredak crtača vagona",
+    "leaderboardWagonsDrawings": "Crteži",
+    "leaderboardWagonsTrainsets": "Kompozicije",
+    "leaderboardWagonsUses": "Putovanja",
+    "leaderboardWagonsUsers": "Korisnici",
+    "leaderboardWagonsHallOfFame": "Kuća slavnih — zbirka na kojoj počiva sve ostalo",
+    "leaderboardWagonsSortBy": "Poredaj po"
 }

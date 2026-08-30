@@ -1276,5 +1276,13 @@
         "other": "{n} ritten"
     },
     "posterStatTotal": "Op reis",
-    "posterStatTravel": "Onderweg"
+    "posterStatTravel": "Onderweg",
+    "leaderboardWagons": "Rijtuigtekenaars",
+    "leaderboardWagonsTitle": "Ranglijst van rijtuigtekenaars",
+    "leaderboardWagonsDrawings": "Tekeningen",
+    "leaderboardWagonsTrainsets": "Treinstellen",
+    "leaderboardWagonsUses": "Reizen",
+    "leaderboardWagonsUsers": "Gebruikers",
+    "leaderboardWagonsHallOfFame": "Hall of fame — de collectie waarop al het andere is gebouwd",
+    "leaderboardWagonsSortBy": "Sorteren op"
 }

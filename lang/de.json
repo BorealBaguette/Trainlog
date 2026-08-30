@@ -1276,5 +1276,13 @@
         "other": "{n} Reisen"
     },
     "posterStatTotal": "Auf Reisen",
-    "posterStatTravel": "Unterwegs"
+    "posterStatTravel": "Unterwegs",
+    "leaderboardWagons": "Wagenzeichner",
+    "leaderboardWagonsTitle": "Bestenliste der Wagenzeichner",
+    "leaderboardWagonsDrawings": "Zeichnungen",
+    "leaderboardWagonsTrainsets": "Zugsets",
+    "leaderboardWagonsUses": "Fahrten",
+    "leaderboardWagonsUsers": "Nutzer",
+    "leaderboardWagonsHallOfFame": "Ruhmeshalle — die Sammlung, auf der alles andere aufbaut",
+    "leaderboardWagonsSortBy": "Sortieren nach"
 }

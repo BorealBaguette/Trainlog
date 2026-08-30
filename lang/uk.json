@@ -1280,5 +1280,13 @@
         "many": "{n} подорожей"
     },
     "posterStatTotal": "У подорожі",
-    "posterStatTravel": "У дорозі"
+    "posterStatTravel": "У дорозі",
+    "leaderboardWagons": "Художники вагонів",
+    "leaderboardWagonsTitle": "Таблиця лідерів художників вагонів",
+    "leaderboardWagonsDrawings": "Малюнки",
+    "leaderboardWagonsTrainsets": "Состави",
+    "leaderboardWagonsUses": "Поїздки",
+    "leaderboardWagonsUsers": "Користувачі",
+    "leaderboardWagonsHallOfFame": "Зала слави — колекція, на якій тримається все інше",
+    "leaderboardWagonsSortBy": "Сортувати за"
 }

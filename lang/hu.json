@@ -1272,5 +1272,13 @@
         "other": "{n} utazás"
     },
     "posterStatTotal": "Teljes időtartam",
-    "posterStatTravel": "Utazási idő"
+    "posterStatTravel": "Utazási idő",
+    "leaderboardWagons": "Kocsirajzolók",
+    "leaderboardWagonsTitle": "Kocsirajzolók rangsora",
+    "leaderboardWagonsDrawings": "Rajzok",
+    "leaderboardWagonsTrainsets": "Szerelvények",
+    "leaderboardWagonsUses": "Utazások",
+    "leaderboardWagonsUsers": "Felhasználók",
+    "leaderboardWagonsHallOfFame": "Hírességek csarnoka — a gyűjtemény, amelyre minden más épül",
+    "leaderboardWagonsSortBy": "Rendezés"
 }

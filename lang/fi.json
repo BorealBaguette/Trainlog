@@ -1274,5 +1274,13 @@
         "other": "{n} matkaa"
     },
     "posterStatTotal": "Kokonaiskesto",
-    "posterStatTravel": "Matka-aika"
+    "posterStatTravel": "Matka-aika",
+    "leaderboardWagons": "Vaunupiirtäjät",
+    "leaderboardWagonsTitle": "Vaunupiirtäjien sijoitustaulukko",
+    "leaderboardWagonsDrawings": "Piirrokset",
+    "leaderboardWagonsTrainsets": "Junayhdistelmät",
+    "leaderboardWagonsUses": "Matkat",
+    "leaderboardWagonsUsers": "Käyttäjät",
+    "leaderboardWagonsHallOfFame": "Kunniagalleria — kokoelma, jonka varaan kaikki muu rakentuu",
+    "leaderboardWagonsSortBy": "Järjestä"
 }
