@@ -1269,5 +1269,7 @@
     "statsAirportsVisited": "Відвідані аеропорти",
     "statsTerminalsVisited": "Відвідані термінали",
     "statsStopsVisited": "Відвідані зупинки",
-    "statsPlacesVisited": "Відвідані місця"
+    "statsPlacesVisited": "Відвідані місця",
+    "hideMarkers": "Сховати маркери",
+    "showMarkers": "Показати маркери"
 }

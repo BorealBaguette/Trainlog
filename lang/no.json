@@ -1266,5 +1266,7 @@
     "statsAirportsVisited": "Besøkte flyplasser",
     "statsTerminalsVisited": "Besøkte terminaler",
     "statsStopsVisited": "Besøkte holdeplasser",
-    "statsPlacesVisited": "Besøkte steder"
+    "statsPlacesVisited": "Besøkte steder",
+    "hideMarkers": "Skjul markører",
+    "showMarkers": "Vis markører"
 }

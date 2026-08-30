@@ -1266,5 +1266,7 @@
     "statsAirportsVisited": "Besökta flygplatser",
     "statsTerminalsVisited": "Besökta terminaler",
     "statsStopsVisited": "Besökta hållplatser",
-    "statsPlacesVisited": "Besökta platser"
+    "statsPlacesVisited": "Besökta platser",
+    "hideMarkers": "Dölj markörer",
+    "showMarkers": "Visa markörer"
 }

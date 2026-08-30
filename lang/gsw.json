@@ -1264,5 +1264,7 @@
     "statsAirportsVisited": "Bsuechti Flughäfe",
     "statsTerminalsVisited": "Bsuechti Terminals",
     "statsStopsVisited": "Bsuechti Haltstelle",
-    "statsPlacesVisited": "Bsuechti Ort"
+    "statsPlacesVisited": "Bsuechti Ort",
+    "hideMarkers": "Marker uusblände",
+    "showMarkers": "Marker izeige"
 }

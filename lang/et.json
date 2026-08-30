@@ -1263,5 +1263,7 @@
     "statsAirportsVisited": "Külastatud lennujaamad",
     "statsTerminalsVisited": "Külastatud terminalid",
     "statsStopsVisited": "Külastatud peatused",
-    "statsPlacesVisited": "Külastatud kohad"
+    "statsPlacesVisited": "Külastatud kohad",
+    "hideMarkers": "Peida markerid",
+    "showMarkers": "Näita markereid"
 }

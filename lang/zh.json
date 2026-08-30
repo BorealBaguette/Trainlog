@@ -1263,5 +1263,7 @@
     "statsAirportsVisited": "访问过的机场",
     "statsTerminalsVisited": "访问过的码头",
     "statsStopsVisited": "访问过的车站",
-    "statsPlacesVisited": "访问过的地点"
+    "statsPlacesVisited": "访问过的地点",
+    "hideMarkers": "隐藏标记",
+    "showMarkers": "显示标记"
 }

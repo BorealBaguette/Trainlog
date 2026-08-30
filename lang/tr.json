@@ -1263,5 +1263,7 @@
     "statsAirportsVisited": "Ziyaret edilen havalimanları",
     "statsTerminalsVisited": "Ziyaret edilen iskeleler",
     "statsStopsVisited": "Ziyaret edilen duraklar",
-    "statsPlacesVisited": "Ziyaret edilen yerler"
+    "statsPlacesVisited": "Ziyaret edilen yerler",
+    "hideMarkers": "İşaretçileri gizle",
+    "showMarkers": "İşaretçileri göster"
 }

@@ -1263,5 +1263,7 @@
     "statsAirportsVisited": "Meglátogatott repülőterek",
     "statsTerminalsVisited": "Meglátogatott terminálok",
     "statsStopsVisited": "Meglátogatott megállók",
-    "statsPlacesVisited": "Meglátogatott helyek"
+    "statsPlacesVisited": "Meglátogatott helyek",
+    "hideMarkers": "Jelölők elrejtése",
+    "showMarkers": "Jelölők megjelenítése"
 }
