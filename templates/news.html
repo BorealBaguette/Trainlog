@@ -259,7 +259,10 @@
             {% if news_list and news_list[0].created %}
             <p class="news-subtitle">
                 <i class="fa-regular fa-clock"></i>
-                {{ news_last_updated or "Last updated" }} {{ (news_list[0].last_modified or news_list[0].created).strftime('%d %b %Y') }}
+                {% set last_update = news_list[0].last_modified or news_list[0].created %}
+                {{ news_last_updated or "Last updated" }}
+                <time class="news-datetime" data-style="date"
+                      datetime="{{ last_update.isoformat() }}">{{ last_update.strftime('%d %b %Y') }}</time>
             </p>
             {% endif %}
         </div>
@@ -572,6 +575,26 @@ document.getElementById('editNewsModal').addEventListener('hidden.bs.modal', fun
 (function () {
     const list = document.getElementById('newsList');
 
+    const dateLocale = '{{ langId or "en" }}';
+    const dateFmt = new Intl.DateTimeFormat(dateLocale, { dateStyle: 'long' });
+    const dateTimeFmt = new Intl.DateTimeFormat(dateLocale, {
+        dateStyle: 'medium', timeStyle: 'short'
+    });
+
+    // Timestamps are rendered naive so the browser shows them as sent, not shifted
+    function formatDates() {
+        document.querySelectorAll('time.news-datetime:not([data-formatted])')
+            .forEach(function (el) {
+                const value = new Date(el.getAttribute('datetime'));
+                if (isNaN(value)) return;
+                el.textContent =
+                    (el.dataset.style === 'date' ? dateFmt : dateTimeFmt).format(value);
+                el.dataset.formatted = '1';
+            });
+    }
+
+    formatDates();
+
 {% if username and username != 'public' %}
     // A view is only recorded once the reader has stayed on the page, so
     // opening the news just to clear the notification badge does not count
@@ -614,6 +637,7 @@ document.getElementById('editNewsModal').addEventListener('hidden.bs.modal', fun
                     } else {
                         moreBtn.remove();
                     }
+                    formatDates();
                     scheduleViews();
                 })
                 .catch(function () { moreBtn.disabled = false; });
