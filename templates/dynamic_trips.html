@@ -919,7 +919,7 @@
                         </div>
                     </div>
                     <div class="col-md-5">
-                        <h6 class="fw-bold mb-2">{{smart_search_quotes_title}}</h6>
+                        <h6 class="fw-bold mb-2">{{smart_search_special_chars_title}}</h6>
                         <div class="small">
                             <div class="mb-2">
                                 <strong>"text"</strong> - {{smart_search_double_quotes_desc}}
@@ -927,8 +927,14 @@
                             <div class="mb-2">
                                 <strong>`text`</strong> - {{smart_search_exact_desc}}
                             </div>
-                            <div>
+                            <div class="mb-2">
                                 <strong>!text</strong> - {{smart_search_negate_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>tex*</strong> - {{smart_search_star_desc}}
+                            </div>
+                            <div>
+                                <strong>te?t</strong> - {{smart_search_question_desc}}
                             </div>
                         </div>
                     </div>
@@ -944,8 +950,18 @@
                 <div class="search-example">type:train to:!Paris</div>
                 <small class="text-muted d-block mb-2">{{smart_search_example_negate_desc}}</small>
 
+                <div class="search-example">from:Ber* to:*hagen</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_wildcard_desc}}</small>
+
                 <div class="search-example">from:Oslo express date:2024-01-15</div>
-                <small class="text-muted d-block">{{smart_search_example_mixed_desc}}</small>
+                <small class="text-muted d-block mb-3">{{smart_search_example_mixed_desc}}</small>
+
+                <h6 class="fw-bold mb-2">{{smart_search_tips_title}}</h6>
+                <ul class="small text-muted mb-0 ps-3">
+                    <li>{{smart_search_global_exact_desc}}</li>
+                    <li>{{smart_search_alias_desc}}</li>
+                    <li>{{smart_search_vessel_desc}}</li>
+                </ul>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{close}}</button>

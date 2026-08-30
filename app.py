@@ -187,6 +187,7 @@ from src.global_map import (
     get_cache_path,
 )
 from src.operators import find_operator_ids, get_trip_operator_logos
+from src.search_terms import has_wildcard, like_pattern
 from src.pg import setup_db, pg_session
 from src.suspicious_activity import (
     check_denied_login,
@@ -8746,11 +8747,17 @@ def get_trips_api_internal(username, is_public=False):
             is_exact = search_data["exact"]
             is_negate = search_data["negate"]
 
-            # Choose LIKE pattern based on exact/partial matching
-            if is_exact:
+            # Choose LIKE pattern based on exact/partial matching. A wildcard
+            # term ("from:Paris*") already says what the whole value looks like,
+            # so it matches with an anchored LIKE whether or not it was quoted as
+            # exact — the `=` branches below are for exact terms without one.
+            if has_wildcard(search_term):
+                is_exact = False
+                search_pattern = like_pattern(search_term)
+            elif is_exact:
                 search_pattern = search_term  # Exact match
             else:
-                search_pattern = f"%{search_term}%"  # Partial match
+                search_pattern = like_pattern(search_term)  # Partial match
 
             # Each branch below appends exactly one predicate; remember the position
             # so a negated search ("from:!Paris") can wrap that predicate in NOT.
@@ -8917,7 +8924,7 @@ def get_trips_api_internal(username, is_public=False):
         return "(" + " OR ".join(terms) + ")"
 
     if search_value:
-        search_params["search"] = f"%{search_value}%"
+        search_params["search"] = like_pattern(search_value)
         global_operator_ids = find_operator_ids(search_value)
         if global_operator_ids:
             search_params["search_operator_ids"] = global_operator_ids
@@ -8933,7 +8940,7 @@ def get_trips_api_internal(username, is_public=False):
     # term. COALESCE(..., FALSE) so a trip with all-NULL fields still passes the NOT.
     for idx, neg_term in enumerate(global_not_terms):
         neg_param = f"search_not_{idx}"
-        search_params[neg_param] = f"%{neg_term}%"
+        search_params[neg_param] = like_pattern(neg_term)
         # Exclude by alias too, so "!SBB" also drops trips logged as CFF — otherwise
         # a negative filter would leave behind the spellings it looks equivalent to.
         neg_operator_ids = find_operator_ids(neg_term)
