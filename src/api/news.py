@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 news_blueprint = Blueprint("news", __name__)
 
-NEWS_PAGE_SIZE = 5
+NEWS_PAGE_SIZE = 1
 # A view only counts once the reader has stayed on the page for a while,
 # so opening the page just to clear the notification badge does not count
 NEWS_VIEW_DELAY_SECONDS = 5
