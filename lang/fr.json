@@ -1265,5 +1265,13 @@
     "statsStopsVisited": "Arrêts fréquentés",
     "statsPlacesVisited": "Lieux fréquentés",
     "hideMarkers": "Masquer les marqueurs",
-    "showMarkers": "Afficher les marqueurs"
+    "showMarkers": "Afficher les marqueurs",
+    "posterSideItinerary": "Itinéraire",
+    "posterQrHint": "Scannez pour ouvrir la carte interactive",
+    "posterTripCount": {
+        "one": "{n} trajet",
+        "other": "{n} trajets"
+    },
+    "posterStatTotal": "En voyage",
+    "posterStatTravel": "En route"
 }

@@ -1268,5 +1268,13 @@
     "statsStopsVisited": "Fermate frequentate",
     "statsPlacesVisited": "Luoghi frequentati",
     "hideMarkers": "Nascondi i segnaposto",
-    "showMarkers": "Mostra i segnaposto"
+    "showMarkers": "Mostra i segnaposto",
+    "posterSideItinerary": "Itinerario",
+    "posterQrHint": "Scansiona per aprire la mappa interattiva",
+    "posterTripCount": {
+        "one": "{n} viaggio",
+        "other": "{n} viaggi"
+    },
+    "posterStatTotal": "Durata totale",
+    "posterStatTravel": "Tempo di viaggio"
 }

@@ -1265,5 +1265,12 @@
     "statsStopsVisited": "访问过的车站",
     "statsPlacesVisited": "访问过的地点",
     "hideMarkers": "隐藏标记",
-    "showMarkers": "显示标记"
+    "showMarkers": "显示标记",
+    "posterSideItinerary": "行程",
+    "posterQrHint": "扫描以打开交互式地图",
+    "posterTripCount": {
+        "other": "{n} 段行程"
+    },
+    "posterStatTotal": "总时长",
+    "posterStatTravel": "旅行时间"
 }

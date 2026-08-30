@@ -1265,5 +1265,13 @@
     "statsStopsVisited": "Visited stops",
     "statsPlacesVisited": "Visited places",
     "hideMarkers": "Hide markers",
-    "showMarkers": "Show markers"
+    "showMarkers": "Show markers",
+    "posterSideItinerary": "Itinerary",
+    "posterQrHint": "Scan to open the interactive map",
+    "posterTripCount": {
+        "one": "{n} trip",
+        "other": "{n} trips"
+    },
+    "posterStatTotal": "Total duration",
+    "posterStatTravel": "Travel time"
 }

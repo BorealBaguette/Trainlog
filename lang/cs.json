@@ -1271,5 +1271,14 @@
     "statsStopsVisited": "Navštívené zastávky",
     "statsPlacesVisited": "Navštívená místa",
     "hideMarkers": "Skrýt značky",
-    "showMarkers": "Zobrazit značky"
+    "showMarkers": "Zobrazit značky",
+    "posterSideItinerary": "Itinerář",
+    "posterQrHint": "Naskenujte pro otevření interaktivní mapy",
+    "posterTripCount": {
+        "one": "{n} cesta",
+        "few": "{n} cesty",
+        "other": "{n} cest"
+    },
+    "posterStatTotal": "Na cestách",
+    "posterStatTravel": "Na cestě"
 }

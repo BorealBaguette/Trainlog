@@ -1268,5 +1268,13 @@
     "statsStopsVisited": "Paradas visitadas",
     "statsPlacesVisited": "Lugares visitados",
     "hideMarkers": "Ocultar marcadores",
-    "showMarkers": "Mostrar marcadores"
+    "showMarkers": "Mostrar marcadores",
+    "posterSideItinerary": "Itinerario",
+    "posterQrHint": "Escanea para abrir el mapa interactivo",
+    "posterTripCount": {
+        "one": "{n} viaje",
+        "other": "{n} viajes"
+    },
+    "posterStatTotal": "De viaje",
+    "posterStatTravel": "En ruta"
 }

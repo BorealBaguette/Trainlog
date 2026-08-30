@@ -1271,5 +1271,14 @@
     "statsStopsVisited": "Відвідані зупинки",
     "statsPlacesVisited": "Відвідані місця",
     "hideMarkers": "Сховати маркери",
-    "showMarkers": "Показати маркери"
+    "showMarkers": "Показати маркери",
+    "posterSideItinerary": "Маршрут",
+    "posterQrHint": "Відскануйте, щоб відкрити інтерактивну карту",
+    "posterTripCount": {
+        "one": "{n} подорож",
+        "few": "{n} подорожі",
+        "many": "{n} подорожей"
+    },
+    "posterStatTotal": "У подорожі",
+    "posterStatTravel": "У дорозі"
 }
