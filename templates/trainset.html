@@ -154,7 +154,10 @@ body {
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
-.ac-thumb img { max-width: 100%; max-height: 100%; object-fit: contain; image-rendering: pixelated; }
+.ac-thumb img { max-width: 100%; max-height: 100%; object-fit: contain;
+  /* max-* only ever shrinks the art here, and nearest-neighbour downscaling aliases
+     it — see the image-rendering note in static/js/wagon_img.js. */
+  image-rendering: auto; }
 .ac-thumb-none { font-size: 18px; opacity: .3; }
 .ac-text { flex: 1; min-width: 0; }
 .ac-nom { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--accent); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
