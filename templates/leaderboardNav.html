@@ -1,22 +1,10 @@
-{% set tabs = [
-     ('all', leaderboardTotal),
-     ('train', train),
-     ('bus', bus),
-     ('air', air),
-     ('ferry', ferry),
-     ('aerialway', aerialway),
-     ('metro', metro),
-     ('tram', tram),
-     ('train_countries', leaderboardTrainCountries),
-     ('world_squares', worldSquares),
-     ('countries', crossedCountries),
-     ('carbon', CO2),
-] + ([('wagons', leaderboardWagons)] if is_owner else []) %}
+{% import "includes/leaderboard_types.html" as lb with context %}
+{% set tabs = lb.leaderboard_types %}
 
 <div class="leaderboard-switcher">
   <!-- Desktop / tablet -->
   <nav class="d-none d-md-flex justify-content-center switch-tabs">
-    {% for code, label in tabs %}
+    {% for code, icon, label in tabs %}
     <a href="{{ url_for('leaderboard', type=code) }}"
        class="switch-tab"
        aria-current="{{ 'page' if type == code else 'false' }}">
@@ -32,7 +20,7 @@
       {{ leaderboardSelectType }}
     </button>
     <ul class="dropdown-menu shadow-lg rounded-3 w-100" aria-labelledby="leaderboardDropdown">
-      {% for code, label in tabs %}
+      {% for code, icon, label in tabs %}
       <li><a class="dropdown-item {{ 'active' if type == code }}" href="{{ url_for('leaderboard', type=code) }}">{{ label }}</a></li>
       {% endfor %}
     </ul>

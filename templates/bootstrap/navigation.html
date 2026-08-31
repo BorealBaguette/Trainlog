@@ -1,3 +1,5 @@
+{% import "includes/leaderboard_types.html" as lb with context %}
+{% set leaderboard_types = lb.leaderboard_types %}
 {% set friendsIcon = getFriendsRequestsNumber() %}
 {% set tagInvitesIcon = getTagInvitesNumber() %}
 {% set stalePremiumIcon = getStalePremiumCount() %}
@@ -214,8 +216,17 @@
           {% endif %}
       </div>
       </li>
-      <li class="nav-item">
-        <a class="nav-link" href="{{ url_for('leaderboard') }}"><i class="bi bi-trophy"></i> {{leaderboard}}</a>
+      <li class="nav-item dropdown">
+        <a class="nav-link dropdown-toggle" data-bs-toggle="dropdown" href="#" role="button" aria-expanded="false">
+          <i class="bi bi-trophy"></i> {{leaderboard}}
+        </a>
+        <ul class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
+          {%- for code, icon, label in leaderboard_types %}
+          <li>
+            <a class="dropdown-item" href="{{ url_for('leaderboard', type=code) }}"><i class="{{ icon }}"></i> {{ label }}</a>
+          </li>
+          {%- endfor %}
+        </ul>
       </li>
       <li class="nav-item dropdown">
         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
