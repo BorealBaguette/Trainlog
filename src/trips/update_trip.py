@@ -47,6 +47,7 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
                 "material_type": trip.material_type,
                 "material_type_advanced": trip.material_type_advanced,
                 "seat": trip.seat,
+                "seat_car": trip.seat_car,
                 "reg": trip.reg,
                 "waypoints": trip.waypoints,
                 "notes": trip.notes,

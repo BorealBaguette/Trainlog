@@ -242,6 +242,7 @@ def split_trip(trip_id, split_index, mid_station, user_id):
                 "material_type": trip["material_type"],
                 "material_type_advanced": trip["material_type_advanced"],
                 "seat": trip["seat"],
+                "seat_car": trip["seat_car"],
                 "reg": trip["reg"],
                 # A sliced route's stored waypoints no longer describe it.
                 "waypoints": None,
@@ -287,6 +288,7 @@ def split_trip(trip_id, split_index, mid_station, user_id):
                 "material_type": trip["material_type"],
                 "material_type_advanced": trip["material_type_advanced"],
                 "seat": trip["seat"],
+                "seat_car": trip["seat_car"],
                 "reg": trip["reg"],
                 "waypoints": None,
                 "notes": trip["notes"],

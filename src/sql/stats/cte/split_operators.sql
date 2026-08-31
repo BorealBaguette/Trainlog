@@ -23,7 +23,7 @@ SELECT
     COALESCE(-o.group_id, tv.operator_id) AS grouping_id,
     -- Only set when the spelling matched no alias, in which case it groups by itself.
     CASE WHEN tv.operator_id IS NULL THEN tv.raw_name END AS unresolved_name,
-    t.trip_length, t.is_past, t.is_planned_future, t.is_project, t.trip_duration, t.carbon
+    t.trip_length, t.is_past, t.is_planned_future, t.is_project, t.trip_duration, t.carbon, t.arrival_delay
 FROM time_categories t
 JOIN trip_operators tv
   ON tv.trip_id = t.trip_id

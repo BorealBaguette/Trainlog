@@ -1,0 +1,19 @@
+{#- The leaderboards, in one place: the navbar dropdown and the switcher on the
+    leaderboard pages both read this list, so a new board is added once.
+    Imported with context — the labels are lang globals.
+    Each entry is (code, icon, label). -#}
+{% set leaderboard_types = [
+     ('all', 'fa-solid fa-layer-group', leaderboardTotal),
+     ('train', 'fa-solid fa-train', train),
+     ('bus', 'fa-solid fa-bus', bus),
+     ('air', 'fa-solid fa-plane-up', air),
+     ('ferry', 'fa-solid fa-ship', ferry),
+     ('aerialway', 'fa-solid fa-cable-car', aerialway),
+     ('metro', 'fa-solid fa-train-subway', metro),
+     ('tram', 'fa-solid fa-train-tram', tram),
+     ('train_countries', 'fa-solid fa-flag', leaderboardTrainCountries),
+     ('world_squares', 'fa-solid fa-border-all', worldSquares),
+     ('countries', 'bi bi-flag', crossedCountries),
+     ('carbon', 'fa-solid fa-leaf', CO2),
+     ('wagons', 'fa-solid fa-trailer', leaderboardWagons),
+] %}

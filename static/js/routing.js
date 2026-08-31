@@ -61,6 +61,36 @@ var ferrySplitEnabled = false;
 var markergroup = new L.featureGroup(markerIconStart, markerIconEnd);
 
 var routeDetails = null;
+
+// Which upstream router answered the last bus routing request (HTTP status set by
+// forward_routing_core in src/routing.py). 234/235 mean the road (car) router was
+// used as a fallback, so the route may follow roads buses aren't allowed on.
+var busRouterCode = null;
+var BUS_ROUTER_CODES = {
+  231: { key: "busRouterDedicated", warn: false },
+  233: { key: "busRouterDedicated", warn: false },
+  234: { key: "busRouterFallback",  warn: true  },
+  235: { key: "busRouterFallbackError", warn: true },
+};
+
+// Small info/warning icon shown next to the distance telling which bus router answered.
+function busRouterHint() {
+  var info = BUS_ROUTER_CODES[busRouterCode];
+  if (!info || !texts[info.key]) return '';
+  var icon = info.warn ? 'fa-triangle-exclamation' : 'fa-circle-info';
+  return `<details class="route-hint${info.warn ? ' route-hint-warn' : ''}">`
+       + `<summary><i class="fa-solid ${icon}"></i></summary>`
+       + `<div class="route-bubble">${texts[info.key]}</div></details>`;
+}
+
+// The hint bubbles are <details>, which stay open until re-clicked — close them on any
+// click outside so they behave like a popover.
+document.addEventListener('click', function (e) {
+  document.querySelectorAll('#sidebar .route-hint[open]').forEach(function (d) {
+    if (!d.contains(e.target)) d.removeAttribute('open');
+  });
+});
+
 (function() {
   var originalOpen = XMLHttpRequest.prototype.open;
   var originalSend = XMLHttpRequest.prototype.send;
@@ -75,9 +105,14 @@ var routeDetails = null;
     var originalOnReadyStateChange = this.onreadystatechange;
 
     this.onreadystatechange = function() {
-      if (self.readyState === 4 && self.status === 200) {
-        // Check if this is an OSRM routing request
-        if (self._requestUrl && self._requestUrl.includes('/route/')) {
+      if (self.readyState === 4 && self._requestUrl && self._requestUrl.includes('/route/')) {
+        // /forwardRouting/bus picks between several upstream routers and reports which
+        // one answered through the (2xx) status code — see BUS_ROUTER_CODES below.
+        if (self._requestUrl.includes('/forwardRouting/bus/')) {
+          busRouterCode = self.status;
+        }
+        if (self.status === 200) {
+          // Check if this is an OSRM routing request
           try {
             var response = JSON.parse(self.responseText);
             if (response.routes && response.routes[0] && response.routes[0].details) {
@@ -672,9 +707,10 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
 
   L.Control.MyControl = L.Control.extend({
     onAdd: function(map) {
-      var el = L.DomUtil.create('div', 'leaflet-bar');
+      var el = L.DomUtil.create('div', 'reopen-panel-control');
       if (showSidebar){
-        el.innerHTML += '<button class="button" onclick="sidebar.show()">⬅️</button>';
+        el.innerHTML += '<button type="button" class="btn btn-primary btn-sm reopen-panel-btn" onclick="sidebar.show()">'
+                      + '<i class="fa-solid fa-arrow-left"></i></button>';
       }
 
       return el;
@@ -921,7 +957,9 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
           </div>
         `;
         // Tuck the "adjust the markers" hint behind a small info icon (rendered inline with distance).
-        hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div>${texts.fineTuneNote}</div></details>`;
+        hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${texts.fineTuneNote}</div></details>`;
+      } else if (type === "bus") {
+        hintHtml = busRouterHint();
       }
       
       // Add note about freehand segments if any exist
@@ -965,7 +1003,9 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       var time = secondsToDhm(durationS, "en");
       
       var formattedData = `${texts.distanceTime.replace("{km}", km).replace("{time}", time)}`;
-      content += `<div class="route-meta"><span class="route-dist">${formattedData}</span>${hintHtml}</div>`;
+      // The hint badge sits on the distance chip's top-right corner, so it has to live
+      // inside the (relatively positioned) wrapper rather than beside the chip.
+      content += `<div class="route-meta"><span class="route-dist-wrap"><span class="route-dist">${formattedData}</span>${hintHtml}</span></div>`;
 
       flutterBridge.routeInfo(formattedData, distanceM, durationS);
       flutterBridge.loading(false);

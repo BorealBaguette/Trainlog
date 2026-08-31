@@ -75,6 +75,14 @@
     /* Dated future trips shown on the past page via the "show upcoming" toggle */
     tr.upcoming-trip > td { opacity: 0.65; }
 
+    /* Where that same listing crosses the present: the class goes on the first past
+       row below an upcoming one. A hairline and nothing else — the timeline either
+       side of it is continuous, so this is a seam to notice, not a section break.
+       In card layout the cards carry their own borders and this rule is overridden
+       (see the `> td { border: 0 }` card rule below); the line is drawn in the gap
+       above the card instead. */
+    #dataTable tbody tr.now-boundary > td { border-top: 1px dashed #aab4c0; }
+
     /* Expand arrow for the details row. Responsive draws this itself only for
        `details.type: 'inline'`, where the control is whichever column happens to be
        first on screen; this table names the type column as the control instead (see
@@ -102,9 +110,9 @@
     /* --- Mobile card layout ---
        On a phone one table row cannot hold two station names, so both ended up
        ellipsed to uselessness. Below 768px each row is re-laid out as a card: the
-       origin, the destination and a meta line (date, departure, distance, operator)
-       each get their own line and wrap in full, with the type logo in a left gutter
-       and the actions kebab in the right one. Everything else stays in the detail
+       origin, the destination and a meta line (date, distance, times, duration) each
+       get their own line and wrap in full, with the type logo in a left gutter and the
+       actions kebab in the right one. Everything else stays in the detail
        row, which processHiddenData now fills from the complement of the card fields.
 
        All of this is scoped through `.trip-card-host > #dataTable`: Responsive clones
@@ -139,10 +147,16 @@
         .trip-card-host > #dataTable thead { display: none !important; }
 
         .trip-card-host > #dataTable,
-        .trip-card-host > #dataTable > tbody,
-        .trip-card-host > #dataTable > tbody > tr { display: block; width: auto; }
+        .trip-card-host > #dataTable > tbody { display: block; width: auto; }
 
+        /* The card is a wrapping flex row rather than a block, so that the meta line's
+           values can be reordered: the arrival is the column right after the departure
+           in the table, but on the card the duration goes between them, and `order` is
+           the only way to say so without touching the table's own column order. */
         .trip-card-host > #dataTable > tbody > tr {
+            display: flex;
+            flex-wrap: wrap;
+            width: auto;
             position: relative;
             margin-bottom: 10px;
             /* The right padding clears the operator column, which the actions pill shares
@@ -159,6 +173,19 @@
             border-radius: 10px;
             background: #fff;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+        }
+
+        /* The now-boundary as a card: the cards are already separated, so the seam is
+           a wider gap with the same hairline drawn across it. Absolute against the
+           card, which is positioned above for the sake of its own gutter items. */
+        .trip-card-host > #dataTable > tbody > tr.now-boundary { margin-top: 22px; }
+        .trip-card-host > #dataTable > tbody > tr.now-boundary::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: -12px;
+            border-top: 1px dashed #aab4c0;
         }
 
         /* An open detail row is part of the card above it, not a card of its own. */
@@ -213,12 +240,34 @@
         .trip-card-host > #dataTable > tbody > tr > td.col-origin,
         .trip-card-host > #dataTable > tbody > tr > td.col-dest,
         .trip-card-host > #dataTable > tbody > tr > td.child,
-        .trip-card-host > #dataTable > tbody > tr > td.dt-empty { display: block !important; }
+        .trip-card-host > #dataTable > tbody > tr > td.dt-empty {
+            display: block !important;
+            flex: 0 0 100%;
+            /* A flex item does not shrink below its content by default, so a long
+               station name would push the card wider than the viewport. */
+            min-width: 0;
+        }
 
         .trip-card-host > #dataTable > tbody > tr > td.col-date,
-        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length,
         .trip-card-host > #dataTable > tbody > tr > td.col-duration,
-        .trip-card-host > #dataTable > tbody > tr > td.col-length { display: inline-block !important; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime { display: block !important; }
+
+        /* Card line order, independent of where the columns sit in the table. The two
+           times stay side by side, which is what lets one arrow sit between them and serve
+           both, so the pair reads as one value — and the duration follows them, since it
+           is the span from one to the other and says nothing on its own. Broken in two
+           (tr.meta-2x2, below) the pair drops to the second line whole, arrow and all,
+           with the duration still behind it. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-origin { order: 1; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-dest { order: 2; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-date { order: 3; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-length { order: 4; }
+        /* 5 is the line break the two-line layout inserts here (tr.meta-2x2, below). */
+        .trip-card-host > #dataTable > tbody > tr > td.col-time { order: 6; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime { order: 7; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration { order: 8; }
 
         .trip-card-host > #dataTable > tbody > tr > td.col-type,
         .trip-card-host > #dataTable > tbody > tr > td.col-actions {
@@ -259,57 +308,114 @@
         .trip-card-host > #dataTable > tbody > tr > td.col-origin .flag,
         .trip-card-host > #dataTable > tbody > tr > td.col-dest .flag { flex: 0 0 auto; }
 
-        /* Meta line. The values simply follow one another, separated by a leading dot on
-           each slot rather than a trailing one on the slot before, so the dots read as
-           separators and not as punctuation on the previous value. There are no fixed
-           slot widths: the operator, the one item that made the line's width unpredictable
-           from card to card, now has its own place in the right gutter, and the four text
-           values left are short enough that a phone fits them without help. */
+        /* Meta line: date, distance, the two times as one value, then the duration, on
+           one line where the card has room for one. The values simply follow one another at
+           their own widths — the operator, the one item that made the line's width
+           unpredictable from card to card, has its own place in the right gutter.
+
+           Every slot opens with an icon of its own — calendar, route, hourglass, clock —
+           rather than closing with a separator, so each mark reads as belonging to the
+           value after it and the spacing is the same everywhere: one gap between slots,
+           then icon, then a hair before the value. Every icon occupies the same 1em box,
+           so the values read at an even rhythm however long each one is. */
         .trip-card-host > #dataTable > tbody > tr > td.col-date,
-        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length,
         .trip-card-host > #dataTable > tbody > tr > td.col-duration,
-        .trip-card-host > #dataTable > tbody > tr > td.col-length {
+        .trip-card-host > #dataTable > tbody > tr > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime {
+            flex: 0 0 auto;
+            min-width: 0;
             margin-top: 3px;
             color: #6c757d;
             font-size: 0.8rem;
-            vertical-align: middle;
             box-sizing: border-box;
-            padding-right: 0.2em;
+            /* The one gap between slots. All the other spacing on the line is fixed, so
+               this is the only number that sets how far apart the values read. */
+            padding-right: 0.85em;
         }
-        .trip-card-host > #dataTable > tbody > tr > td.col-time:not(:empty)::before,
+        /* Except between the two times, which are one slot: the departure closes up to
+           the arrow so that `08:16 → 08:40` reads as a single value with the arrow inside
+           it, rather than as two slots that happen to be adjacent. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-time { padding-right: 0.35em; }
+
+        /* The icons are Font Awesome's own glyphs, addressed by codepoint rather than by
+           putting an <i> in the cell: the cells are column values shared with the desktop
+           table, and only the card wants a mark in front of them. Solid (900) is the one
+           free weight that has all five.
+
+           Font Awesome centres its glyphs on the em box, which sits lower than the text
+           they label — aligned on the baseline the icons hang below the digits. Aligning
+           the box on `middle` instead puts the glyph's centre on the text's. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-date:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before,
         .trip-card-host > #dataTable > tbody > tr > td.col-duration:not(:empty)::before,
-        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before {
-            content: "\00b7";
-            margin-right: 0.4em;
+        .trip-card-host > #dataTable > tbody > tr > td.col-time:not(:empty)::before,
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime:not(:empty)::before {
+            display: inline-block;
+            width: 1em;
+            margin-right: 0.3em;
+            text-align: center;
+            vertical-align: middle;
+            /* `middle` puts the glyph's centre on the text's x-height centre, which is a
+               shade below where the eye wants a mark that labels a line of digits: the
+               digits have no descenders, so their optical centre sits higher than the
+               font's. A pixel back up. */
+            position: relative;
+            top: -1px;
             color: #adb5bd;
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            font-size: 0.78em;
+            line-height: 1;
         }
+        .trip-card-host > #dataTable > tbody > tr > td.col-date:not(:empty)::before { content: "\f133"; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-length:not(:empty)::before { content: "\f4d7"; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-duration:not(:empty)::before { content: "\f252"; }
+        .trip-card-host > #dataTable > tbody > tr > td.col-time:not(:empty)::before { content: "\f017"; }
+        /* The arrow is the arrival's mark, and it is the whole of what separates the two
+           times: one glyph doing the work of a separator and a label at once, in either
+           layout, since the pair never breaks apart. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-endtime:not(:empty)::before { content: "\f061"; }
+
+        /* A meta line that cannot fit breaks in two — date and distance, then the times
+           and the duration — instead of wrap's three-and-an-orphan. The class is set per
+           row by updateMetaWrap(), which measures the natural one-line layout.
+
+           The break is a flex item of zero height and full width, generated on the row
+           itself and ordered between the distance and the departure: everything before it
+           fills the first line, everything after starts the second. Nothing is aligned
+           into columns across the two lines, and that is the point — a column has to be
+           as wide as the widest thing in it, so the moment the departure shared one with
+           the distance above it, a long distance pushed the arrow away from its time and
+           the pair stopped reading as one value. Each line is packed from the left
+           instead, and the times keep their own spacing whatever else is on the card. */
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2::before {
+            content: "";
+            flex: 0 0 100%;
+            height: 0;
+            order: 5;
+        }
+        /* An open card has no meta line left to break. */
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2.dtr-expanded::before { content: none; }
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-endtime,
+        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-duration {
+            margin-top: 2px;
+        }
+
         /* An open card drops the meta line: everything on it is repeated, labelled and
            full size, in the detail row just below (see META_COLUMN_CLASSES), so leaving
            it up would say the same things twice at two different levels. The station
            names stay, and the detail row moves up to meet them. The operator is not part
            of this — it lives in the gutter, not on the line, and stays put. */
         .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-date,
-        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-length,
         .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-duration,
-        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-length { display: none !important; }
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-time,
+        .trip-card-host > #dataTable > tbody > tr.dtr-expanded > td.col-endtime { display: none !important; }
 
         /* renderDuration wraps its value in a div, which would take the whole line. */
         .trip-card-host > #dataTable > tbody > tr > td.col-duration .duration { display: inline; }
-
-        /* A meta line that cannot fit breaks as two columns of two — date over duration,
-           time over distance — instead of inline wrap's three-and-an-orphan. The class
-           is set per row by updateMetaWrap(), which measures the natural one-line layout;
-           50% cells work because the four tds are adjacent in the DOM with no text nodes
-           between them (hidden cells in between have no boxes). */
-        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-date,
-        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-time,
-        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-duration,
-        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-length {
-            width: 50%;
-            margin-top: 2px;
-        }
-        /* The duration opens the second line, so its leading separator dot goes. */
-        .trip-card-host > #dataTable > tbody > tr.meta-2x2 > td.col-duration::before { content: none; }
 
         /* The operator's reserved column on the right. No strip behind it: shading both
            edges made the card read as three boxes, and put the operator's wordmark and
@@ -803,6 +909,12 @@
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>from:</code></span> <span>{{smart_search_from}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>to:</code></span> <span>{{smart_search_to}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>date:</code></span> <span>{{smart_search_date}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>duration:</code></span> <span>{{smart_search_duration}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>distance:</code></span> <span>{{smart_search_distance}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>speed:</code></span> <span>{{smart_search_speed}}</span></div>
+{%- if not isPublic %}
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>price:</code></span> <span>{{smart_search_price}}</span></div>
+{%- endif %}
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>operator:</code></span> <span>{{smart_search_operator}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>line:</code></span> <span>{{smart_search_line}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>country:</code></span> <span>{{smart_search_country}}</span></div>
@@ -813,7 +925,7 @@
                         </div>
                     </div>
                     <div class="col-md-5">
-                        <h6 class="fw-bold mb-2">{{smart_search_quotes_title}}</h6>
+                        <h6 class="fw-bold mb-2">{{smart_search_special_chars_title}}</h6>
                         <div class="small">
                             <div class="mb-2">
                                 <strong>"text"</strong> - {{smart_search_double_quotes_desc}}
@@ -821,8 +933,23 @@
                             <div class="mb-2">
                                 <strong>`text`</strong> - {{smart_search_exact_desc}}
                             </div>
-                            <div>
+                            <div class="mb-2">
                                 <strong>!text</strong> - {{smart_search_negate_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>tex*</strong> - {{smart_search_star_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>te?t</strong> - {{smart_search_question_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>duration&gt;2h</strong> - {{smart_search_compare_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>duration:2h..4h</strong> - {{smart_search_range_desc}}
+                            </div>
+                            <div>
+                                <strong>train|bus</strong> - {{smart_search_or_desc}}
                             </div>
                         </div>
                     </div>
@@ -838,8 +965,24 @@
                 <div class="search-example">type:train to:!Paris</div>
                 <small class="text-muted d-block mb-2">{{smart_search_example_negate_desc}}</small>
 
+                <div class="search-example">from:Ber* to:*hagen</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_wildcard_desc}}</small>
+
+                <div class="search-example">duration&gt;2h date:2024-01-01..2024-06-30</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_range_desc}}</small>
+
+                <div class="search-example">date:2020 date:!2020-02..2020-03 type:train|bus</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_and_desc}}</small>
+
                 <div class="search-example">from:Oslo express date:2024-01-15</div>
-                <small class="text-muted d-block">{{smart_search_example_mixed_desc}}</small>
+                <small class="text-muted d-block mb-3">{{smart_search_example_mixed_desc}}</small>
+
+                <h6 class="fw-bold mb-2">{{smart_search_tips_title}}</h6>
+                <ul class="small text-muted mb-0 ps-3">
+                    <li>{{smart_search_global_exact_desc}}</li>
+                    <li>{{smart_search_alias_desc}}</li>
+                    <li>{{smart_search_vessel_desc}}</li>
+                </ul>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{close}}</button>
@@ -1250,7 +1393,7 @@ function _advancedHasTrainset(adv) {
     }
 }
 
-function openCompositionModal(trainName, dateStr, materialType) {
+function openCompositionModal(trainName, dateStr, materialType, seatInfo) {
     $('#compositionModalTitle').text(trainName + (dateStr ? ` (${dateStr})` : ''));
     var $modalBody = $('#compositionModal .modal-body');
     $modalBody.html(`
@@ -1263,7 +1406,7 @@ function openCompositionModal(trainName, dateStr, materialType) {
 
     if (materialType) {
         _resolveUnits(materialType, '{{ username }}')
-            .done(function(r) { _renderTrainset($modalBody, r.units, r.name); })
+            .done(function(r) { _renderTrainset($modalBody, r.units, r.name, seatInfo); })
             .fail(function()  { $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>'); });
     } else {
         $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>');
@@ -1280,6 +1423,11 @@ function toggleTypeFilter() {
 function toggleIncludeFuture() {
     const switchState = document.getElementById('includeFutureSwitch').checked;
     setCookie('includeFutureSwitch', switchState, 7);
+    // Switching it on inserts a whole block of upcoming trips above the listing, so
+    // the page being shown is no longer the page it was: reload() would reset to
+    // offset 0, which is now the furthest-off plan. Anchor on now instead, exactly as
+    // a fresh load does. Switching it off just goes back to the top of the past.
+    _anchorNow = switchState && canAnchorNow();
     tableObject.ajax.reload();
 }
 
@@ -1327,16 +1475,17 @@ function isEllipsisActive(el){
 // Everything else belongs in the detail row, whatever Responsive itself decided to
 // hide — on a wide phone it keeps more columns than the card has room for, and those
 // would otherwise be reachable from neither place.
-var CARD_COLUMN_CLASSES = ['col-type', 'col-origin', 'col-dest', 'col-date', 'col-time', 'col-duration', 'col-length', 'col-operator', 'col-actions'];
+var CARD_COLUMN_CLASSES = ['col-type', 'col-origin', 'col-dest', 'col-date', 'col-length', 'col-duration', 'col-time', 'col-endtime', 'col-operator', 'col-actions'];
 
-// The meta line — the compact `date · time · duration · distance` strip under the station
-// names. It is a summary of fields the detail row labels properly, so an open card hides it
-// (see the .dtr-expanded rule in the stylesheet) and these columns come down into the detail
-// row instead, where they line up with everything else rather than being repeated in two
+// The meta line — the compact `date, distance, departure → arrival, duration` strip
+// under the station names, which breaks in two when it does not fit (see updateMetaWrap).
+// It is a summary of fields the detail row labels properly, so an open card hides it (see
+// the .dtr-expanded rule in the stylesheet) and these columns come down into the detail row
+// instead, where they line up with everything else rather than being repeated in two
 // places at two levels. The operator is deliberately not one of them: it has its own column
 // in the card's right gutter and stays legible there, open or shut, so sending it down as
 // well would be the repetition this avoids.
-var META_COLUMN_CLASSES = ['col-date', 'col-time', 'col-duration', 'col-length'];
+var META_COLUMN_CLASSES = ['col-date', 'col-length', 'col-duration', 'col-time', 'col-endtime'];
 
 function isCardLayout() {
     return window.matchMedia('(max-width: 767px)').matches;
@@ -1345,7 +1494,7 @@ function isCardLayout() {
 // Cells that select their row on click. The default excludes the first cell, the last
 // one and the origin (which carries the expand control); on a card the control has
 // moved to the type gutter, so every text line of the card selects instead.
-var CARD_SELECT_SELECTOR = 'td.col-origin, td.col-dest, td.col-date, td.col-time, td.col-duration, td.col-length, td.col-operator';
+var CARD_SELECT_SELECTOR = 'td.col-origin, td.col-dest, td.col-date, td.col-length, td.col-duration, td.col-time, td.col-endtime, td.col-operator';
 var DEFAULT_SELECT_SELECTOR = 'td:not(:nth-child(2)):not(:last-child):not(:first-child)';
 
 // The stylesheet's rule for this did not take in testing, so the header row is also
@@ -1356,6 +1505,24 @@ var DEFAULT_SELECT_SELECTOR = 'td:not(:nth-child(2)):not(:last-child):not(:first
 function hideCardHeader() {
     if (!isCardLayout()) return;
     $(tableObject.table().header()).find('tr').hide();
+}
+
+/* A hairline above the first past trip on a page that also holds upcoming ones, so
+   the point the list crosses the present is visible rather than inferred from the
+   dates. Nothing is inserted into the table — the line is drawn by the stylesheet off
+   this class — so no row here is anything DataTables did not put there itself. */
+function markNowBoundary() {
+    $('#dataTable tbody tr').removeClass('now-boundary');
+    if (!isPast) return;
+    var rows = tableObject.rows({ page: 'current' });
+    var data = rows.data();
+    var nodes = rows.nodes();
+    for (var i = 1; i < data.length; i++) {
+        if (data[i - 1].plannedFuture == 1 && data[i].plannedFuture != 1) {
+            $(nodes[i]).addClass('now-boundary');
+            break;
+        }
+    }
 }
 
 function columnIndexesWithClass(wanted) {
@@ -1486,21 +1653,32 @@ function processHiddenData(rowIdx, columns){
             var reg = col.data;
             var country = ""
             
-            var url = `{{url_for('getVesselPhoto')}}?vesselName=${reg}`
+            // The trip's date, so a crossing from before a rename keeps the name and
+            // flag the ship carried then. The sentinels (1 / -1) are "no date"; the
+            // lookup then answers with the current identity, which is all there is.
+            var tripData = tableObject.row(rowIdx).data() || {};
+            var tripAt = (typeof tripData.start_datetime === 'string') ? tripData.start_datetime : '';
+            var url = `{{url_for('getVesselPhoto')}}?vesselName=${encodeURIComponent(reg)}`
+                    + (tripAt ? `&at=${encodeURIComponent(tripAt)}` : '')
             $.get( url, function( data ) {
-                if(data.length > 0){
-                    country = data[2];
-                    var thumbnail = data[0];
-                    var attr = ''; 
+                // { image, link, country, name } — or null when nothing is found.
+                if(data && data.image){
+                    country = data.country || "";
+                    var thumbnail = data.image;
                     var image = new Image();
                     image.src = thumbnail;
                     $('#preload').append(image);                    
-                    var link = data[1];
-                    
-                    if (link && link.length > 0) {
-                        attr = `©Vesselfinder.com`;
-                    }
+                    var link = data.link;
+                    // Credit as the row says: a Commons photo names its author and
+                    // licence (that is the condition of showing it), an upload needs
+                    // nothing, vesselfinder gets its own line.
+                    var attr = data.attribution || '';
 
+                    // The lookup may know the ship's name where the row did not — a
+                    // trip logged by IMO or MMSI still reads as the ship.
+                    if (data.name) {
+                        $(`#vehiclePhoto${rowIdx}`).text(data.name);
+                    }
                     $(`#vehiclePhoto${rowIdx}`).attr("data-img", thumbnail);
                     $(`#vehiclePhoto${rowIdx}`).popover({
                         html: true,
@@ -1508,7 +1686,11 @@ function processHiddenData(rowIdx, columns){
                         "data-container":"body",
                         placement: 'top',
                         content: function(){
-                            return `<div class="vehiclePhotoContainer"><img width=600px src="${thumbnail}"/>${link ? `<a href="${link}" class="vehiclePhotoAttr">${attr}</a>` : ''}</div>`;
+                            var credit = attr
+                                ? (link ? `<a href="${link}" class="vehiclePhotoAttr">${attr}</a>`
+                                        : `<span class="vehiclePhotoAttr">${attr}</span>`)
+                                : '';
+                            return `<div class="vehiclePhotoContainer"><img width=600px src="${thumbnail}"/>${credit}</div>`;
                         }
                     });
                     if (country != ""){
@@ -1586,18 +1768,19 @@ function processHiddenData(rowIdx, columns){
                 }
                 if (isValid) {
                     formatted += `<div id="trainsetInline${rowIdx}"></div>`;
-                    (function(rowId, mat, personal) {
+                    (function(rowId, mat, personal, seatInfo) {
                         setTimeout(function() {
                             var labels = {};
                             if (personal) labels.personal = personal;
                             _resolveUnits(mat, '{{ username }}')
                                 .done(function(r) {
                                     if (r.name && r.name !== labels.personal) labels.saved = r.name;
-                                    _renderTrainsetInline(rowId, r.units, labels);
+                                    _renderTrainsetInline(rowId, r.units, labels, seatInfo);
                                 })
                                 .fail(function() { $('#trainsetInline' + rowId).remove(); });
                         }, 0);
-                    })(rowIdx, primary, rawMat !== primary ? rawMat : null);
+                    })(rowIdx, primary, rawMat !== primary ? rawMat : null,
+                       { car: rowData.seat_car, seat: rowData.seat });
                 }
                 col.data = formatted;
             }
@@ -1784,16 +1967,21 @@ function renderLineName(data, type, row) {
             var dateStr  = row.start_date || '';
             var safeName = (data || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
             var safeMat  = mat.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            var safeSeat = (row.seat || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            var seatCarLit = (row.seat_car === null || row.seat_car === undefined || row.seat_car === '')
+                ? 'null' : parseInt(row.seat_car, 10);
             // Icon only when the advanced field has a resolvable trainset (race-free);
             // fall back to the name cache only for a legacy plain material_type match.
             var btn = (adv ? _advancedHasTrainset(adv) : _isValidMaterial(mat)) ? `
                     <a href="javascript:void(0);"
-                       onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}')"
-                       class="text-decoration-none ms-2"
+                       onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}', {car: ${seatCarLit}, seat: '${safeSeat}'})"
+                       class="text-decoration-none me-2"
                        title="View Composition">
                        <i class="fas fa-train"></i>
                     </a>` : '';
-            if (data || btn) return `<span>${sanitize(data || '')}${btn}</span>`;
+            // Icon first: a long line name would otherwise push it past the column's
+            // visible width and hide it.
+            if (data || btn) return `<span>${btn}${sanitize(data || '')}</span>`;
         }
     }
     return data;
@@ -1952,7 +2140,7 @@ function _formatTrainsetStr(mat) {
     try {
         var units = JSON.parse(mat);
         if (units && !Array.isArray(units) && Array.isArray(units.trainsets)) {
-            return units.trainsets.join(' + ');
+            return tsbJoinNames(units.trainsets);
         }
         if (Array.isArray(units) && units.length > 0) {
             var result = [], i = 0;
@@ -1974,6 +2162,16 @@ function renderPlainText(data, type, row) {
     return data;
 }
 
+/* A ferry's `reg` holds whatever identified the ship to the user — its name, its IMO
+   or its MMSI. It always reads as the name: `vessel_name` is resolved server-side from
+   all three (migration 0054) and is absent only for a vessel we hold no record of,
+   which keeps showing what was typed. Sorting and filtering still work on the stored
+   value, so `type !== 'display'` is left alone. */
+function renderReg(data, type, row) {
+    if (type === 'display') return sanitize((row && row.vessel_name) || data || '');
+    return data;
+}
+
 function renderMaterialType(data, type, row){
     if (typeof TRAIN_TYPES !== 'undefined' && TRAIN_TYPES.includes(row.type)) {
         var adv = row.material_type_advanced || '';
@@ -1992,17 +2190,22 @@ function renderMaterialType(data, type, row){
 var table = $('#tripRows');
 
     const SEARCH_PREFIXES = {
-        'type:': {{ trip_column_names.index("type") }},
-        'from:': {{ trip_column_names.index("origin_station") }},
-        'to:': {{ trip_column_names.index("destination_station") }},
-        'date:': {{ trip_column_names.index("start_datetime") }},
-        'operator:': {{ trip_column_names.index("operator") }},
-        'line:': {{ trip_column_names.index("line_name") }},
-        'country:': {{ trip_column_names.index("countries") }},
-        'visibility:': {{ trip_column_names.index("visibility") }},
-        'material:': {{ trip_column_names.index("material_type") }},
-        'reg:': {{ trip_column_names.index("reg") }},
-        'notes:': {{ trip_column_names.index("notes") }}
+        'type': 'type',
+        'from': 'origin_station',
+        'to': 'destination_station',
+        'date': 'start_datetime',
+        'duration': 'trip_duration_seconds',
+        'distance': 'trip_length',
+        'length': 'trip_length',
+        'speed': 'trip_speed',
+        {% if not isPublic %}'price': 'price',{% endif %}
+        'operator': 'operator',
+        'line': 'line_name',
+        'country': 'countries',
+        'visibility': 'visibility',
+        'material': 'material_type',
+        'reg': 'reg',
+        'notes': 'notes'
     };
 
     // Strip a wrapping pair of " (spaces) or ` (exact). Returns {value, isExact}.
@@ -2017,24 +2220,37 @@ var table = $('#tripRows');
     }
 
     function parseSmartSearch(searchValue) {
-        const columnFilters = {};
+        const filters = [];
         let globalSearch = '';
         const globalNot = [];
         // Tokens: bare words, "double-quoted" (spaces) or `backtick-quoted` (exact).
         const terms = searchValue.match(/(?:[^\s"`]+|"[^"]*"|`[^`]*`)+/g) || [];
         terms.forEach(term => {
             let matched = false;
-            for (const [prefix, columnIndex] of Object.entries(SEARCH_PREFIXES)) {
-                if (term.toLowerCase().startsWith(prefix)) {
-                    let value = term.substring(prefix.length);
-                    let negate = false;
-                    if (value.startsWith('!')) { negate = true; value = value.substring(1); }
-                    if (value) {
-                        const { value: cleanValue, isExact } = stripQuotes(value);
-                        columnFilters[columnIndex] = { value: cleanValue, isExact, negate };
-                        matched = true;
-                        break;
-                    }
+            // A field is followed either by ':' or straight by a comparison
+            // operator, so "duration>2h" reads as it would be said out loud. The
+            // operator stays part of the value; the colon does not.
+            const prefixed = term.match(/^([a-zA-Z]+)(:|>=|<=|>|<|=)([\s\S]*)$/);
+            if (prefixed && SEARCH_PREFIXES.hasOwnProperty(prefixed[1].toLowerCase())) {
+                const field = SEARCH_PREFIXES[prefixed[1].toLowerCase()];
+                let value = (prefixed[2] === ':' ? '' : prefixed[2]) + prefixed[3];
+                let negate = false;
+                if (value.startsWith('!')) { negate = true; value = value.substring(1); }
+                if (value) {
+                    // '|' separates alternatives ("type:train|bus"), unless the value
+                    // is quoted — there the bar is part of the text being searched.
+                    const quoted = /^(".*"|`.*`)$/.test(value);
+                    const parts = quoted ? [value] : value.split('|').filter(Boolean);
+                    const values = parts.map(part => stripQuotes(part).value);
+                    // Every term is kept: repeated fields are ANDed, so "date:2020
+                    // date:!2020-02..2020-03" reads as "2020 except February–March".
+                    filters.push({
+                        field,
+                        values,
+                        exact: stripQuotes(parts[0]).isExact,
+                        negate,
+                    });
+                    matched = true;
                 }
             }
             if (!matched) {
@@ -2052,7 +2268,7 @@ var table = $('#tripRows');
                 }
             }
         });
-        return { columnFilters, globalSearch, globalNot };
+        return { filters, globalSearch, globalNot };
     }
 
     var _urlParams = new URLSearchParams(window.location.search);
@@ -2140,10 +2356,24 @@ var table = $('#tripRows');
         ];
     }
     var customSort = { field: 'temporal', dir: isPast ? 'desc' : 'asc', label: '{{tripStartTime}}' };
+    /* With "show upcoming" on, the descending timeline reads [far future … now …
+       oldest past], so its first page is the most distant plan. Ask the backend to
+       centre the first load on now instead — but only that load, and only when the
+       URL did not name a page, since an explicit ?page= is the user's own choice.
+       Any later draw (paging, sorting, searching) leaves the offset alone. */
     if (_urlSortParam) {
         var _sp = _urlSortParam.split(':');
         if (_sp.length === 2) { customSort.field = _sp[0]; customSort.dir = _sp[1]; customSort.label = _sp[0]; }
     }
+    /* Set for the one draw the anchor produced, so it can be kept out of the URL. */
+    var _anchoredDraw = false;
+    /* "Above/below now" only means something in the order that runs on time. */
+    window.canAnchorNow = function() {
+        return isPast && customSort.field === 'temporal' && customSort.dir === 'desc';
+    };
+    var _anchorNow = canAnchorNow()
+        && !_urlParams.get('page')
+        && getCookie('includeFutureSwitch') === 'true';
     var tableObject = $('#dataTable').DataTable({
     processing: true,
     serverSide: true,
@@ -2165,30 +2395,19 @@ var table = $('#tripRows');
         "data": function(d) {
             d.filterTypes = (getCookie('filterTypeSwitch') === 'true') ? 0 : 1;
             d.includeFuture = (isPast && getCookie('includeFutureSwitch') === 'true') ? 1 : 0;
-            
+            if (_anchorNow) d.anchorNow = 1;
+
             // Parse smart search
             const searchValue = d.search.value || '';
-            const { columnFilters, globalSearch, globalNot } = parseSmartSearch(searchValue);
+            const { filters, globalSearch, globalNot } = parseSmartSearch(searchValue);
 
             // Set global search to the non-prefixed terms
             d.search.value = globalSearch;
             // Negative global terms ("!term"): JSON list the backend excludes
             d.search_not = JSON.stringify(globalNot);
-
-            // Add column-specific searches
-            if (d.columns) {
-                d.columns.forEach((column, index) => {
-                    if (columnFilters[index]) {
-                        column.search = {
-                            value: columnFilters[index].value,
-                            regex: false
-                        };
-                        // Add exact / negate flags as separate parameters
-                        d[`columns[${index}][search][exact]`] = columnFilters[index].isExact ? 'true' : 'false';
-                        d[`columns[${index}][search][negate]`] = columnFilters[index].negate ? 'true' : 'false';
-                    }
-                });
-            }
+            // Field filters ("from:Oslo", "duration>2h"): a list, so the same field
+            // can carry several terms.
+            d.filters = JSON.stringify(filters);
             if (customSort.field) {
                 d.sort_field = customSort.field;
                 d.sort_dir = customSort.dir;
@@ -2206,7 +2425,7 @@ var table = $('#tripRows');
         { data: 'destination_station', render: renderStation, className: 'col-dest' },
         { data: 'start_date', className: 'tripDate col-date' },
         { data: 'start_time', render: renderStartTime, className: 'col-time' },
-        { data: 'end_time', render: renderEndTime },
+        { data: 'end_time', render: renderEndTime, className: 'col-endtime' },
         { data: 'trip_duration', render: renderDuration, className: 'col-duration' },
         { data: 'trip_length', render: renderLength, className: 'col-length' },
         {
@@ -2237,7 +2456,7 @@ var table = $('#tripRows');
             render: renderMaterialType,
             defaultContent: "",
         },
-        { data: 'reg', render: renderPlainText },
+        { data: 'reg', render: renderReg },
         { data: 'seat', render: renderPlainText },
         { data: 'notes', render: renderPlainText },
         { data: 'tags' },
@@ -2308,10 +2527,22 @@ var table = $('#tripRows');
             }
         }
     }
+}).on('xhr.dt', function(e, settings, json) {
+    // The anchored draw asked for offset 0 and was answered with the rows around now
+    // instead. `xhr` fires before the table is drawn, so writing the offset the server
+    // actually used here is enough for the pager and the "showing x to y" line to
+    // describe the rows about to appear. One-shot: the flag is cleared either way, so
+    // everything after this — paging, sorting, searching — pages from where it says.
+    if (json && typeof json.start === 'number') {
+        settings._iDisplayStart = json.start;
+        _anchoredDraw = true;
+    }
+    _anchorNow = false;
 }).on('responsive-display', function(e, datatable, row, showHide, update) {
     resetObjects();
 }).on('draw', function() {
     hideCardHeader();
+    markNowBoundary();
     tableObject.rows().every(function(rowIdx, tableLoop, rowLoop) {
         var row = this.node();
         var data = this.data();
@@ -2338,7 +2569,14 @@ var table = $('#tripRows');
         url.searchParams.delete('sort');
     }
     var _pi = tableObject.page.info();
-    if (_pi.page > 0) {
+    if (_anchoredDraw) {
+        // The anchored offset is not a page the user asked for, and it is not one
+        // either: it lands mid-grid, so ?page= could not reproduce it anyway. Leaving
+        // it out of the URL is also what lets a reload anchor again rather than
+        // freeze on whatever page number now happened to fall in today.
+        url.searchParams.delete('page');
+        _anchoredDraw = false;
+    } else if (_pi.page > 0) {
         url.searchParams.set('page', _pi.page + 1);
     } else {
         url.searchParams.delete('page');
@@ -2392,7 +2630,14 @@ tableObject.on('length.dt', function() {
     // Remembered per browser, so this device opens on the same length next time. The
     // custom-value path routes through here too — it sets the length via the API, which
     // fires this — so there is nothing to persist separately.
-    setCookie(ROWS_COOKIE, _autoRowsActive ? 'auto' : String(tableObject.page.len()), 365);
+    //
+    // "All" (-1) is deliberately not persisted: picking it is a one-off "just this once"
+    // action, not a lasting preference. If it were remembered, a page that was small
+    // enough to load whole on day one silently keeps trying to load "all" forever,
+    // including after the trip count has grown large enough to choke on it.
+    var len = tableObject.page.len();
+    if (len === -1) return;
+    setCookie(ROWS_COOKIE, _autoRowsActive ? 'auto' : String(len), 365);
 });
 
 function lengthSelect() {
@@ -2877,19 +3122,20 @@ function updateSelectionMessage() {
 
 resetObjects();
 
-// Meta lines that wrap get re-laid as two columns of two (tr.meta-2x2 in the
-// stylesheet) instead of leaving one value orphaned on a second line. Wrap is
-// detected on the natural single-line layout — class off, then compare the meta
-// cells' offsets within the card — so the class always reflects the current
-// content and width. Cells hidden with the meta line (open cards) have no
-// offsetParent and drop out, leaving those rows untouched.
+// The meta line breaks in two (tr.meta-2x2 in the stylesheet) only when it does not
+// fit on one, so a card with room keeps the single line. Wrap is
+// detected on the natural one-line layout — class off, then compare the meta cells'
+// offsets within the card — so the class always reflects the current content and
+// width, and the measurement never sees the layout it decides on. Cells hidden with
+// the meta line (open cards) have no offsetParent and drop out, leaving those rows
+// untouched.
 function updateMetaWrap() {
     var $rows = $('#dataTable > tbody > tr').not('.child');
     if (!isCardLayout()) { $rows.removeClass('meta-2x2'); return; }
     $rows.each(function() {
         var $tr = $(this).removeClass('meta-2x2');
         var tops = [];
-        $tr.children('td.col-date, td.col-time, td.col-duration, td.col-length').each(function() {
+        $tr.children('td.col-date, td.col-length, td.col-duration, td.col-time, td.col-endtime').each(function() {
             if (this.offsetParent) tops.push(this.offsetTop);
         });
         if (tops.length > 1 && Math.max.apply(null, tops) - Math.min.apply(null, tops) > 4) {
@@ -3274,7 +3520,7 @@ function openMassEditTsb() {
         try {
             var units = JSON.parse(value);
             if (Array.isArray(units)) label = units.map(function(u) { return u.label || u.nom || u.name; }).join(' + ');
-            else if (units && Array.isArray(units.trainsets)) label = units.trainsets.join(' + ');
+            else if (units && Array.isArray(units.trainsets)) label = tsbJoinNames(units.trainsets);
         } catch (e) {
             label = value;
             _trainsetNames.add(value); // keep cache current so the icon renders after table reload
@@ -3360,7 +3606,9 @@ function submitMassEdit() {
         if (failed) {
             alert(failed.error || 'Error');
         } else {
-            tableObject.ajax.reload();
+            // false keeps the current page — a mass edit never changes the row
+            // count, so resetting paging would just throw the user back to page 1.
+            tableObject.ajax.reload(null, false);
             $('#massEditModal').modal('hide');
             deselectAll();
         }

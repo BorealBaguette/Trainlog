@@ -14,27 +14,42 @@
 }
 .publicTsToggle:hover,
 .publicTsToggle.open { color: #0d6efd; }
-/* Action row under the proportion bars: ride-along and tag Play share one style */
-.tripActionButtons {
-  display: flex;
-  gap: 8px;
-  margin: 10px 0 2px;
+/* Poster, ride-along, tag Play and plan copy are all rarely used, so they live behind
+   one more-actions button in the map control stack rather than a row of their own. */
+.tripActions { position: relative; }
+.tripActions .control-button { width: 40px; height: 40px; }
+.tripActionsMenu {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: calc(100% + 6px);
+  min-width: 170px;
+  padding: 4px;
+  background: #fff;
+  border-radius: 4px;
+  box-shadow: 0 1px 6px rgba(0,0,0,.35);
 }
+.tripActions.open .tripActionsMenu { display: block; }
+.tripActionsMenu form { margin: 0; }
 .tripActionBtn {
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
+  gap: 9px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 7px 10px;
   border: none;
   border-radius: 4px;
+  background: none;
   cursor: pointer;
   font-size: 14px;
-  color: #fff;
+  text-align: left;
+  color: #222;
   text-decoration: none;
+  white-space: nowrap;
 }
-.tripActionBtn:hover { color: #fff; filter: brightness(0.92); }
-.tripActionBtn.rideAlongBtn { background: #4caf50; }
-.tripActionBtn.playBtn { background: #0d6efd; }
+.tripActionBtn:hover { background: #f2f4f7; color: #222; }
+.tripActionBtn i { width: 14px; text-align: center; color: #8a8a8a; }
 /* Wagon images are sized in JS against the strip's median height (normalizeStrip), so
    each source's px-per-metre cancels out and relative proportions are gently preserved;
    the scroll wrapper's default 16px bottom padding keeps the scrollbar clear of the pills. */
@@ -323,6 +338,19 @@
     background-color: #f0f0f0;
 }
 
+/* Toggled-off state of a control button (markers hidden) */
+.control-button.off {
+    color: #9a9a9a;
+    background-color: #ececec;
+}
+
+/* The start/end pins are DOM markers, so they hide with CSS rather than a layer */
+body.markers-hidden .marker-green,
+body.markers-hidden .marker-red,
+body.markers-hidden .marker-red-green {
+    display: none;
+}
+
 .control-button.buttonSmall {
     display: none;
 }
@@ -490,6 +518,11 @@
 }
 .events .itinerary-marker-badge::before { content: none; }
 
+/* Keep the row's text clear of the absolutely-positioned badge. */
+.events li.itinerary-trip .itinerary-marker-badge ~ span {
+  padding-right: 34px;
+}
+
 .events li.itinerary-trip {
   position: relative;   /* anchors the badge; no layout change */
   z-index: 1;           /* keep rows above the trip-card overlay below */
@@ -576,15 +609,6 @@
     <div class="itineraryWrapper">
       <ul class="events" id="itinerary">
         <div id="tripDetails">
-        <div id="rideAlongModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
-          <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
-            <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
-            <div style="display:flex;gap:10px;justify-content:flex-end;">
-              <button onclick="hideRideAlongModal()" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;">{{ cancel }}</button>
-              <button id="rideAlongConfirmBtn" onclick="bulkCopyTrips()" style="padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;">{{ submit }}</button>
-            </div>
-          </div>
-        </div>
        {% if tag_description != None %}
             <div class="itinerary_tag_description">
             {% if collection_voyage == 'collection' %}
@@ -617,16 +641,6 @@
           {% if num_hidden_trips > 0 %}
             <div id="hiddenTripsInfo">(+{{ num_hidden_trips }} {% if num_hidden_trips == 1 %}{{ trip_view_hidden_trips_singular }}{% else %}{{ trip_view_hidden_trips_plural }}{% endif %})</div>
           {% endif %}
-          <div class="tripActionButtons">
-              {% if show_ride_along %}
-                <button id="rideAlong" onClick="showRideAlongModal()" class="tripActionBtn rideAlongBtn">
-                  <i class="fa-solid fa-copy"></i> {{ rideAlong }}
-                </button>
-              {% endif %}
-              <a class="tripActionBtn playBtn" href="{{ multitrip_url }}">
-                <i class="fa-solid fa-play"></i> {{ play_tag }}
-              </a>
-          </div>
           <br>
           <div id="tripDate"></div>              
         </div>
@@ -634,9 +648,52 @@
     </div>
   </div>
 </div>
+<div id="rideAlongModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:9999;align-items:center;justify-content:center;">
+  <div style="background:#fff;border-radius:6px;padding:24px;max-width:360px;width:90%;box-shadow:0 4px 20px rgba(0,0,0,.3);">
+    <p style="margin:0 0 16px;font-size:15px;">{{ rideAlongConfirm }}</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="hideRideAlongModal()" style="padding:6px 14px;border:1px solid #ccc;border-radius:4px;background:#fff;cursor:pointer;">{{ cancel }}</button>
+      <button id="rideAlongConfirmBtn" onclick="bulkCopyTrips()" style="padding:6px 14px;background:#4caf50;color:#fff;border:none;border-radius:4px;cursor:pointer;">{{ submit }}</button>
+    </div>
+  </div>
+</div>
 <div class="map-utils">
     <button class="control-button" onclick="leave()" title="{{back}}"><i class="fas fa-chevron-left"></i></button>
     <button class="control-button" onclick="copyURL()" title="{{copy}}"><i class="fas fa-clipboard"></i></button>
+    <button class="control-button" id="markersToggle" onclick="toggleMarkers()" title="{{hideMarkers}}"><i class="fas fa-map-pin"></i></button>
+  {# The poster is served only to the owner of every trip on the page (401 otherwise). #}
+  {% set poster_url = (url_for('public_trip_poster', tagId=tag_uuid) if tag_uuid else (url_for('public_trip_poster', tripIds=tripIds) if tripIds else None)) if own_trips else None %}
+  {% if poster_url or show_ride_along or tag_uuid or plan_copy_url %}
+    <div class="tripActions" id="tripActions">
+      <button type="button" class="control-button" onclick="toggleTripActions(event)" title="{{ actions }}" aria-label="{{ actions }}">
+        <i class="fa-solid fa-ellipsis"></i>
+      </button>
+      <div class="tripActionsMenu">
+        {% if poster_url %}
+        <a class="tripActionBtn" href="{{ poster_url }}">
+          <i class="fa-solid fa-image"></i> {{ poster }}
+        </a>
+        {% endif %}
+        {# Same idea as Ride along, for a shared plan: save an independent copy
+           into your own plans. #}
+        {% if plan_copy_url %}
+        <form method="post" action="{{ plan_copy_url }}">
+          <button type="submit" class="tripActionBtn" title="{{ planSaveCopyHint }}">
+            <i class="fa-solid fa-copy"></i> {{ planSaveCopy }}
+          </button>
+        </form>
+        {% endif %}
+        {% if show_ride_along %}
+        <button id="rideAlong" onClick="showRideAlongModal()" class="tripActionBtn">
+          <i class="fa-solid fa-copy"></i> {{ rideAlong }}
+        </button>
+        {% endif %}
+        <a class="tripActionBtn" href="{{ multitrip_url }}">
+          <i class="fa-solid fa-play"></i> {{ play_tag }}
+        </a>
+      </div>
+    </div>
+  {% endif %}
 </div>
 
 {% if planControls %}
@@ -666,16 +723,16 @@
     <select id="plan-add-select" onchange="if(this.value){location.href=this.value}" aria-label="{{ singularTrip|default('Trip') }}">
         <option value="">+ {{ singularTrip|default('Trip') }}</option>
         {% for vt in ['train','bus','tram','metro','air','helicopter','ferry','car','walk','cycle','aerialway','funicular','rail','scooter','ski','accommodation','poi','restaurant'] %}
-        <option value="{{ url_for('new', username=plan_owner, vehicle_type=vt) }}?plan={{ plan.uuid }}">{{ vt }}</option>
+        <option value="{{ url_for('new', username=plan_author, vehicle_type=vt) }}?plan={{ plan.uuid }}">{{ vt }}</option>
         {% endfor %}
     </select>
     <button class="plan-btn plan-btn--primary" onclick="planValidate()">{{ submit|default('Validate') }}</button>
     <a class="plan-btn" href="{{ url_for('public_plan', plan_uuid=plan.uuid) }}" target="_blank">{{ shareTrip|default('Share') }}</a>
-    <form method="post" action="{{ url_for('archive_plan_route', username=plan_owner, plan_uuid=plan.uuid) }}">
+    <form method="post" action="{{ url_for('archive_plan_route', username=plan_author, plan_uuid=plan.uuid) }}">
         <input type="hidden" name="archived" value="{{ 'false' if plan.archived else 'true' }}"/>
         <button class="plan-btn" type="submit">{{ 'Unarchive' if plan.archived else 'Archive' }}</button>
     </form>
-    <form id="plan-validate-form" method="post" action="{{ url_for('validate_plan_route', username=plan_owner, plan_uuid=plan.uuid) }}" style="display:none;">
+    <form id="plan-validate-form" method="post" action="{{ url_for('validate_plan_route', username=plan_author, plan_uuid=plan.uuid) }}" style="display:none;">
         <input type="hidden" name="start_date" id="plan-validate-date"/>
     </form>
 </div>
@@ -804,6 +861,15 @@ function getActualTripDuration(trip) {
     trip.trip_duration[1] + (trip.arrival_delay || 0) - (trip.departure_delay || 0)
   );
 }
+function toggleTripActions(e) {
+  e.stopPropagation();
+  document.getElementById("tripActions").classList.toggle("open");
+}
+document.addEventListener("click", function () {
+  var el = document.getElementById("tripActions");
+  if (el) el.classList.remove("open");
+});
+
 {% if show_ride_along %}
 function showRideAlongModal() {
   document.getElementById("rideAlongModal").style.display = "flex";
@@ -855,7 +921,8 @@ function renderPublicTrainset($container, ts) {
         } else {
             wagon.append(_makePlaceholder(true, isFirst, isLast, u._phType));
         }
-        wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline">' + esc(u.label || '') + '</span>');
+        var lbl = esc(u.label || '');
+        wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline" title="' + lbl + '">' + lbl + '</span>');
         strip.append(wagon);
     });
     if (!strip.children().length) return;
@@ -949,7 +1016,7 @@ function enablePhotoToggle($head, $media, fetchPhoto) {
         $media.append($photo);
         $photo.find('img')
             .on('load', refitTripCard)
-            // ship_pictures rows can outlive their file on disk (the whole local
+            // Cached photo rows can outlive their file on disk (the whole local
             // cache is absent in dev) — drop the frame rather than show a broken icon.
             .on('error', function() {
                 $photo.remove(); $photo = null; showingPhoto = false;
@@ -1002,16 +1069,29 @@ function renderPublicAirframe($container, info, reg) {
     enablePhotoToggle($head, $media, function() { return fetchAircraftPhoto(reg); });
 }
 
-function renderPublicVessel($container, reg, country) {
+/* A ship is logged by name, IMO or MMSI and always shown by name (migration 0054).
+   `name` is the resolved one from the trip's vessel join, absent for a vessel we hold
+   no record of — the raw reg then stands in, and is replaced if the photo lookup
+   turns out to know the ship after all. */
+function renderPublicVessel($container, reg, country, name, at) {
     var $head = vehiclePanel($container, null);
     var $media = $('<div class="publicVehicleMedia"></div>').appendTo($container);
-    var showFlag = appendReg($head, reg);
-    // Flag up front from the ship_pictures join. Vessels not yet in that cache have
-    // no country until something fetches them, so fall back to the photo response.
+    var showFlag = appendReg($head, name || reg);
+    // Flag up front from the vessel join. Vessels not yet on record have no country
+    // until something fetches them, so fall back to the photo response.
     showFlag(country);
     enablePhotoToggle($head, $media, function() {
-        var promise = fetchVesselPhoto(VESSEL_PHOTO_URL, reg);
-        if (!country) promise.then(function(photo) { if (photo) showFlag(photo.country); });
+        var promise = fetchVesselPhoto(VESSEL_PHOTO_URL, reg, at);
+        if (!country || !name) {
+            promise.then(function(photo) {
+                if (!photo) return;
+                if (!country) showFlag(photo.country);
+                if (!name && photo.name) {
+                    $head.find('.publicVehicleRegText').text(photo.name);
+                    refitTripCard();
+                }
+            });
+        }
         return promise;
     });
 }
@@ -1054,6 +1134,39 @@ const transportTypeText = {
     "rail": '{{rail}}',
     "ski": '{{ski}}'
 };
+
+// Displayed a fifth larger than Leaflet's 25x41 pin, so two-digit numbers have
+// room in the badge. Applied through the image's pixel ratio, so the icon is
+// drawn in Leaflet's own coordinates.
+const PIN_ZOOM = 1.2;
+// Rasterised at exactly the screen's pixel density: MapLibre samples icons with
+// no mipmaps, so an image bigger than its on-screen size comes out aliased.
+// Capped because a canvas beyond that buys nothing.
+const PIN_SCALE = PIN_ZOOM * Math.min(window.devicePixelRatio || 1, 3);
+
+// The Leaflet pin bitmaps, reused for the numbered markers so this map matches
+// the Leaflet one. Preloaded because the icons are composited synchronously, and
+// resized here rather than at draw time: letting the icon canvas shrink a 6x
+// asset in one step leaves the browser to bilinear-filter it, which is what made
+// the pins look aliased.
+const pinImages = {};
+const pinAssetsReady = Promise.all([
+    ['pin', "{{ url_for('static', filename='images/icons/emptyIconX6.png') }}", 25, 41],
+    ['shadow', "{{ url_for('static', filename='images/icons/marker-shadow.png') }}", 41, 41]
+].map(([key, src, w, h]) => new Promise(resolve => {
+    const img = new Image();
+    img.onerror = () => { pinImages[key] = null; resolve(); };
+    img.onload = () => {
+        pinImages[key] = img;
+        if (!window.createImageBitmap) return resolve();
+        createImageBitmap(img, {
+            resizeWidth: Math.round(w * PIN_SCALE),
+            resizeHeight: Math.round(h * PIN_SCALE),
+            resizeQuality: 'high'
+        }).then(bitmap => { pinImages[key] = bitmap; }).catch(() => {}).then(resolve);
+    };
+    img.src = src;
+})));
 
 // Initialize map
 async function initializeMapAndTrips() {
@@ -1105,6 +1218,8 @@ async function initializeMapAndTrips() {
         ? [trips[0].path[0][1], trips[0].path[0][0]]
         : [10, 30];
     
+    await pinAssetsReady;
+
     // Initialize map
     map = await MapLibreUtils.initializeMapLibre({
         container: 'map',
@@ -1115,6 +1230,14 @@ async function initializeMapAndTrips() {
         zoom: 5
     });
     
+    // Clicking the map away from any trip line or marker clears the selection.
+    map.on('click', (e) => {
+        if (highlightedTripUid == null) return;
+        const onFeature = map.queryRenderedFeatures(e.point)
+            .some(f => ['trips', 'current-trips', 'numbered-markers'].includes(f.source));
+        if (!onFeature) clearHighlight();
+    });
+
     // Display trips once loaded
     if (map.isStyleLoaded()) {
         buildItinerary(trips, prices);
@@ -1387,7 +1510,12 @@ function buildItinerary(trips, prices) {
             renderPublicAirframe(tsContainer, airInfo, tripReg);
         } else if (trip.trip.type === 'ferry' && tripReg) {
             tsContainer = $('<div>').addClass('publicVehicle');
-            renderPublicVessel(tsContainer, tripReg, trip.trip.vessel_country);
+            // The trip's own date, so the lookup answers with the ship as it was then.
+            // Undated trips carry the legacy 1 / -1 sentinels as numbers, not strings —
+            // those mean "no date", and the lookup then answers with the current identity.
+            var vesselAt = (typeof trip.trip.start_datetime === 'string') ? trip.trip.start_datetime : '';
+            renderPublicVessel(tsContainer, tripReg, trip.trip.vessel_country,
+                               trip.trip.vessel_name, vesselAt);
         }
 
         let endTimeDisplay, startTimeDisplay;
@@ -1850,44 +1978,37 @@ function placePolylines(trips) {
         highlightTrip($(this).data('trip-uid'), { toggle: true, fit: true });
     });
 
-// Numbered teardrop pin icon on canvas (head circle + tail to a bottom tip, like
-// the default Leaflet marker). Used with icon-anchor:'bottom' so the tip sits on
-// the exact location. Drawn at 2x for retina.
+// Numbered pin icon: the Leaflet marker bitmap and its shadow, with the white
+// number badge drawn over the head — the same composition as the Leaflet map's
+// NumberedDivIcon. Laid out in Leaflet's coordinates (25x41 pin anchored at
+// 13,41; 41x41 shadow on the same anchor) on a canvas padded so that the anchor
+// falls on the bottom centre, for icon-anchor:'bottom'.
 function createNumberedIcon(number) {
-    // Drawn at high resolution (then downscaled by icon-size) for crisp edges.
-    const W = 160, H = 208;
+    const W = 56, H = 41, X0 = 15;   // canvas box, and the pin's left edge in it
     const canvas = document.createElement('canvas');
-    canvas.width = W;
-    canvas.height = H;
+    canvas.width = Math.round(W * PIN_SCALE);
+    canvas.height = Math.round(H * PIN_SCALE);
     const ctx = canvas.getContext('2d');
-    ctx.imageSmoothingEnabled = true;
-    const cx = W / 2;
-    const r = 67;            // head radius
-    const cy = r + 9;        // head centre (top padding for the white outline)
+    ctx.scale(PIN_SCALE, PIN_SCALE);
 
-    // Pin = circular head + triangular tail converging at `tip`.
-    function pin(rr, tip, color) {
-        ctx.fillStyle = color;
-        const flankY = cy + rr * 0.50;
-        const flankX = rr * 0.78;
-        ctx.beginPath();
-        ctx.moveTo(cx - flankX, flankY);
-        ctx.lineTo(cx + flankX, flankY);
-        ctx.lineTo(cx, tip);
-        ctx.closePath();
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(cx, cy, rr, 0, Math.PI * 2);
-        ctx.fill();
-    }
-    pin(r + 6, H - 3, '#ffffff');   // white outline
-    pin(r, H - 14, '#3887be');      // blue body
+    if (pinImages.shadow) ctx.drawImage(pinImages.shadow, X0, 0, 41, 41);
+    if (pinImages.pin) ctx.drawImage(pinImages.pin, X0, 0, 25, 41);
 
+    const bx = X0 + 12.5, by = 12.5; // badge centre, over the pin head
+    ctx.beginPath();
+    ctx.arc(bx, by, 10, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 74px Arial';
+    ctx.fill();
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = '#ccc';
+    ctx.stroke();
+
+    const label = String(number);
+    ctx.fillStyle = '#898989';
+    ctx.font = (label.length > 2 ? '9.5px' : label.length > 1 ? '13px' : '15px') + ' Verdana, Geneva, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(String(number), cx, cy);
+    ctx.fillText(label, bx, by + 1);
 
     return canvas;
 }
@@ -1998,7 +2119,7 @@ if (numberedMarkers.length > 0) {
             width: iconCanvas.width,
             height: iconCanvas.height,
             data: imageData.data
-        }, { pixelRatio: 2 });
+        }, { pixelRatio: PIN_SCALE / PIN_ZOOM });
     });
     
     // Create features with icon references
@@ -2036,7 +2157,7 @@ if (numberedMarkers.length > 0) {
             'circle-color': '#3887be',
             'circle-opacity': 0.55,
             'circle-blur': 0.7,
-            'circle-translate': [0, -26],            // up toward the pin head
+            'circle-translate': [0, -35],            // up toward the pin head
             'circle-translate-anchor': 'viewport'
         }
     });
@@ -2048,7 +2169,7 @@ if (numberedMarkers.length > 0) {
         source: 'numbered-markers',
         layout: {
             'icon-image': ['get', 'icon'],
-            'icon-size': 0.4, // Scale down since the icon is drawn at high res
+            'icon-size': 1,
             'icon-anchor': 'bottom',
             'icon-allow-overlap': true,
             'icon-ignore-placement': true
@@ -2404,6 +2525,30 @@ function hideTripCard() {
     clearConnectorOffsets();
 }
 
+// Numbered pins and the start/end pins can bury a dense itinerary; hide them
+// without touching the routes. The numbered pins are a symbol layer, the
+// start/end pins are DOM markers hidden through the body class.
+let markersHidden = false;
+function toggleMarkers() {
+    markersHidden = !markersHidden;
+    ['numbered-markers', 'numbered-markers-highlight'].forEach(id => {
+        if (map.getLayer(id)) {
+            map.setLayoutProperty(id, 'visibility', markersHidden ? 'none' : 'visible');
+        }
+    });
+    document.body.classList.toggle('markers-hidden', markersHidden);
+    const btn = document.getElementById('markersToggle');
+    btn.classList.toggle('off', markersHidden);
+    btn.title = markersHidden ? {{ showMarkers|tojson }} : {{ hideMarkers|tojson }};
+}
+
+function clearHighlight() {
+    setHighlightFilter(['==', ['get', 'id'], '__none__']);
+    highlightedTripUid = null;
+    $('.itinerary-trip').removeClass('active');
+    hideTripCard();
+}
+
 // Highlight a single trip's path on the map and its itinerary leg(s).
 // opts: toggle (clicking the active leg again clears it), fit (zoom to the trip),
 // scrollItinerary (bring the itinerary leg into view).
@@ -2412,10 +2557,7 @@ function highlightTrip(uid, opts) {
     if (uid == null || !map || !map.getLayer('trip-highlight-core')) return;
 
     if (opts.toggle && highlightedTripUid != null && String(highlightedTripUid) === String(uid)) {
-        setHighlightFilter(['==', ['get', 'id'], '__none__']);
-        highlightedTripUid = null;
-        $('.itinerary-trip').removeClass('active');
-        hideTripCard();
+        clearHighlight();
         return;
     }
 

@@ -1,0 +1,129 @@
+{# One row of the ships register.
+
+   Its own file because it is rendered twice: by the table on /admin/ships, and on its
+   own by /admin/ships/<id>/row, which is what the page fetches after an edit instead of
+   reloading. Both go through the same markup, so a refreshed row can never drift from
+   the one it replaces.
+
+   `ship` is a row of _register_rows(), or an unregistered one — a name logged on trips
+   that resolves to no hull, carrying the same keys with the hull's own left empty. #}
+<tr {% if ship.unregistered %}class="unregistered-row"{% else %}data-vessel-id="{{ ship.uid }}"{% endif %}>
+    {# The numbers link out to vesselfinder — the same source the cached photos are
+       credited to, so a doubtful row can be checked against the place the photo came
+       from. #}
+    <td>
+        {% if ship.imo %}
+            <a href="https://www.vesselfinder.com/vessels/details/{{ ship.imo }}"
+               target="_blank" rel="noopener noreferrer">{{ ship.imo }}</a>
+        {% else %}
+            <span class="text-muted">—</span>
+        {% endif %}
+    </td>
+    <td class="text-muted small">
+        {% if ship.unregistered %}
+            <span class="badge bg-warning text-dark">unregistered</span>
+        {% else %}
+            {{ ship.trainlog_id }}
+        {% endif %}
+    </td>
+    {# The most recent registration, shown so a row is recognisable — flag, name and
+       photo together, the way the ship is now. None of it is a property of the hull; it
+       all lives under Periods. For an unregistered row there is only the text people
+       typed. #}
+    <td>
+        {% if ship.local_image_path %}
+            <span class="ship-thumb me-2">
+                <img src="/static/images/ship_pictures/{{ ship.local_image_path }}"
+                     width="64" height="40" loading="lazy" decoding="async" alt="">
+                <img class="ship-thumb-full"
+                     src="/static/images/ship_pictures/{{ ship.local_image_path }}"
+                     loading="lazy" decoding="async" alt="">
+            </span>
+        {% endif %}
+        {{ ship.flag }}
+        {{ ship.name or '' }}
+        {% if ship.former_names %}
+            {# Former names, so a hull is recognisable — and findable — by a name it no
+               longer carries. DataTables searches the row's text, so this is what makes
+               "Amorella" match a ship now sailing as Mega Victoria. #}
+            <div class="text-muted small">ex {{ ship.former_names | join(', ') }}</div>
+        {% endif %}
+        {% if ship.unregistered and ship.spellings | length > 1 %}
+            {# The other spellings folded into this row. Shown because the grouping is a
+               guess about what is one ship, and this is the only place it can be seen to
+               be wrong. #}
+            <div class="text-muted small">
+                also {{ ship.spellings | reject('equalto', ship.reg) | join(', ') }}
+            </div>
+        {% endif %}
+    </td>
+    {# Decoration: whoever runs her on most of the logged trips. Often the clearest
+       identification of a small ferry, whose name is generic and whose hull has no IMO.
+       Resolved through operator_aliases, so a spelling variant still finds the logo. #}
+    <td>
+        {% if ship.operator_logo %}
+            {# title=, because a logo is a picture of a name and several of them are
+               unreadable at 20px — and the resolved name is not always the text that was
+               logged (SNCM's logo comes back under Corsica Linea), so hovering is the
+               only way to see which operator this actually resolved to. #}
+            <img src="/static/{{ ship.operator_logo }}" alt="{{ ship.operator_name }}"
+                 data-bs-toggle="tooltip" data-bs-placement="top"
+                 title="{{ ship.operator_name or ship.operator }}"
+                 height="20" loading="lazy" decoding="async"
+                 style="max-width:90px;object-fit:contain;vertical-align:middle;">
+        {% elif ship.operator %}
+            <span class="text-muted small">{{ ship.operator }}</span>
+        {% endif %}
+    </td>
+    {# data-order, because these two cells hold more than their number — "7 · 2 users",
+       and an icon and a dash below — and DataTables orders on the cell's TEXT unless
+       told otherwise, which sorted 71 between 8 and 7. #}
+    <td data-order="{{ ship.trips }}">
+        <span class="trip-count">{{ ship.trips }}</span>
+        {# On every row, hull or not: how many people sailed her says something the trip
+           count alone does not — forty crossings by one commuter is not the same ship to
+           be curating as forty by forty travellers. Shown even when it is 1, because a
+           blank read as "no count here" rather than as "one person". Suppressed only for
+           a hull with no trips at all, where "0 · 0 users" says nothing twice. #}
+        {% if ship.trips %}
+            <span class="trip-users text-muted small">
+                · {{ ship.users }} user{{ '' if ship.users == 1 else 's' }}
+            </span>
+        {% endif %}
+    </td>
+    <td data-order="{{ -1 if ship.unregistered else ship.registrations }}">
+        {% if ship.unregistered %}
+            <span class="text-muted">—</span>
+        {% else %}
+            {# The count is the sort key; the button opens the history. A hull with more
+               than one period has been renamed or re-flagged. #}
+            <button class="btn btn-sm periods-btn {% if ship.registrations > 1 %}btn-info{% else %}btn-outline-secondary{% endif %}"
+                    data-vessel-id="{{ ship.uid }}"
+                    data-label="{{ ship.name or ship.imo or ship.trainlog_id }}">
+                <i class="fa-regular fa-clock"></i> {{ ship.registrations }}
+            </button>
+        {% endif %}
+    </td>
+    <td>
+        {% if ship.unregistered %}
+            <button class="btn btn-success btn-sm adopt-btn"
+                    data-reg="{{ ship.reg }}"
+                    data-trips="{{ ship.trips }}"
+                    data-operator="{{ ship.operator_name or ship.operator or '' }}">
+                <i class="fa-solid fa-plus"></i> Register
+            </button>
+        {% else %}
+            <button class="btn btn-warning btn-sm edit-ship-btn" data-bs-toggle="modal" data-bs-target="#shipModal"
+                data-vessel-id="{{ ship.uid }}" data-imo="{{ ship.imo or '' }}"
+                data-name="{{ ship.name or '' }}" data-trainlog-id="{{ ship.trainlog_id }}"><i class="fa-regular fa-pen-to-square"></i></button>
+            {# The same ship reaches the register more than once, once per spelling
+               nobody recognised. This is the way back: fold this row into the one that
+               is the ship. #}
+            <button class="btn btn-secondary btn-sm merge-ship-btn"
+                    data-vessel-id="{{ ship.uid }}"
+                    data-label="{{ ship.name or ship.imo or ship.trainlog_id }}"
+                    title="Merge into another hull"><i class="fa-solid fa-code-merge"></i></button>
+            <button class="btn btn-danger btn-sm delete-ship-btn" data-vessel-id="{{ ship.uid }}"><i class="fa-regular fa-trash-can"></i></button>
+        {% endif %}
+    </td>
+</tr>

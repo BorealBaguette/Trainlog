@@ -99,6 +99,15 @@
               <button class="dropdown-item" type="submit"><i class="bi bi-files me-2"></i>{{ duplicate|default('Duplicate') }}</button>
             </form>
           </li>
+          {% if is_owner %}
+          {# Site-owner only: drop a copy of this plan into any account. #}
+          <li>
+            <form id="planCopyToUserForm" method="post" action="{{ url_for('copy_plan_to_user_route', username=username, plan_uuid=plan.uuid) }}">
+              <input type="hidden" name="target" id="planCopyToUserTarget"/>
+              <button class="dropdown-item" type="button" onclick="planCopyToUser()"><i class="bi bi-person-plus me-2"></i>{{ planCopyToUser }}</button>
+            </form>
+          </li>
+          {% endif %}
           <li>
             <form method="post" action="{{ url_for('delete_plan_route', username=username, plan_uuid=plan.uuid) }}" onsubmit="return confirm('{{ confirmDeletePlan|default('Delete this plan and all its trips?') }}');">
               <button class="dropdown-item text-danger" type="submit"><i class="bi bi-trash3 me-2"></i>{{ delete|default('Delete') }}</button>
@@ -395,6 +404,16 @@
     el.textContent = names.join('·');
   });
 })();
+
+{% if is_owner %}
+// Site-owner only: copy this plan into another account (see copy_plan_to_user_route).
+function planCopyToUser() {
+  var u = prompt({{ planCopyToUserPrompt|tojson }}, "");
+  if (!u) return;
+  document.getElementById('planCopyToUserTarget').value = u.trim();
+  document.getElementById('planCopyToUserForm').submit();
+}
+{% endif %}
 
 function planValidate() {
   {% if plan_has_relative %}

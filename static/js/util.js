@@ -612,6 +612,11 @@ function updateCountryNames(selectElement, formatFlagEmoji = false) {
   const options = selectElement.options;
   for (let i = 0; i < options.length; i++) {
       const code = options[i].getAttribute('data-code');
+      // A select may carry a placeholder option with no country at all. Intl's
+      // DisplayNames.of() throws a RangeError on anything that is not a region code, and
+      // an uncaught throw here kills the rest of the caller's ready block — which is how
+      // an empty first option once left a whole form unbound and submitting natively.
+      if (!code) continue;
       const countryName = regionNames.of(code); // Get the country name from Intl.DisplayNames
       options[i].textContent = (formatFlagEmoji ? getFlagEmoji(options[i].value) : options[i].value) + '\xa0\xa0' + countryName; // Update option text
   }
@@ -1248,7 +1253,7 @@ function getRegionFromCode(region_code){
     "ES-AN": "Andalucía", "ES-AR": "Aragón", "ES-AS": "Asturias", "ES-CB": "Cantabria", "ES-CE": "Ceuta", "ES-CL": "Castilla y León", "ES-CM": "Castilla-La Mancha", "ES-CN": "Canarias", "ES-CT": "Cataluña", "ES-EX": "Extremadura", "ES-GA": "Galicia", "ES-IB": "Islas Baleares", "ES-MC": "Región de Murcia", "ES-MD": "Comunidad de Madrid", "ES-ML": "Melilla", "ES-NC": "Navarra", "ES-PV": "País Vasco", "ES-RI": "La Rioja", "ES-VC": "Comunidad Valenciana",
     "KR-11": "Seoul", "KR-26": "Busan", "KR-27": "Daegu", "KR-28": "Incheon", "KR-29": "Gwangju", "KR-30": "Daejeon", "KR-31": "Ulsan", "KR-41": "Gyeonggi", "KR-42": "Gangwon", "KR-43": "Chungcheongbuk", "KR-44": "Chungcheongnam", "KR-45": "Jeollabuk", "KR-46": "Jeollanam", "KR-47": "Gyeongsangbuk", "KR-48": "Gyeongsangnam", "KR-49": "Jeju", "KR-50": "Sejong",
     "IN-AP": "Andhra Pradesh", "IN-AR": "Arunachal Pradesh", "IN-AS": "Assam", "IN-BR": "Bihar", "IN-CG": "Chhattisgarh", "IN-CH": "Chandigarh", "IN-DL": "Delhi", "IN-GA": "Goa", "IN-GJ": "Gujarat", "IN-HP": "Himachal Pradesh", "IN-HR": "Haryana", "IN-JH": "Jharkhand", "IN-JK": "Jammu and Kashmir", "IN-KA": "Karnataka", "IN-KL": "Kerala", "IN-MH": "Maharashtra", "IN-ML": "Meghalaya", "IN-MN": "Manipur", "IN-MP": "Madhya Pradesh", "IN-MZ": "Mizoram", "IN-NL": "Nagaland", "IN-OD": "Odisha", "IN-PB": "Punjab", "IN-PY": "Puducherry", "IN-RJ": "Rajasthan", "IN-TN": "Tamil Nadu", "IN-TR": "Tripura", "IN-TS": "Telangana", "IN-UK": "Uttarakhand", "IN-UP": "Uttar Pradesh", "IN-WB": "West Bengal",
-    "RU-AD": "Respublika Adygeya", "RU-ALT": "Altayskiy kray", "RU-AMU": "Amurskaya oblast", "RU-ARK": "Arkhangelskaya oblast", "RU-AST": "Astrakhanskaya oblast", "RU-BA": "Respublika Bashkortostan", "RU-BEL": "Belgorodskaya oblast", "RU-BRY": "Bryanskaya oblast", "RU-BU": "Respublika Buryatiya", "RU-CE": "Chechenskaya Respublika", "RU-CHE": "Chelyabinskaya oblast", "RU-CHU": "Chukotskiy avtonomnyy okrug", "RU-CU": "Chuvashskaya Respublika", "RU-DA": "Respublika Dagestan", "RU-IN": "Respublika Ingushetiya", "RU-IRK": "Irkutskaya oblast", "RU-IVA": "Ivanovskaya oblast", "RU-KAM": "Kamchatskiy kray", "RU-KB": "Kabardino-Balkarskaya Respublika", "RU-KC": "Karachayevo-Cherkesskaya Respublika", "RU-KDA": "Krasnodarskiy kray", "RU-KEM": "Kemerovskaya oblast", "RU-KGD": "Kaliningradskaya oblast", "RU-KGN": "Kurganskaya oblast", "RU-KHA": "Khabarovskiy kray", "RU-KHM": "Khanty-Mansiyskiy avtonomnyy okrug", "RU-KIR": "Kirovskaya oblast", "RU-KK": "Respublika Khakasiya", "RU-KL": "Respublika Kalmykiya", "RU-KLU": "Kaluzhskaya oblast", "RU-KO": "Respublika Komi", "RU-KOS": "Kostromskaya oblast", "RU-KR": "Respublika Kareliya", "RU-KRS": "Kurskaya oblast", "RU-KYA": "Krasnoyarskiy kray", "RU-LEN": "Leningradskaya oblast", "RU-LIP": "Lipetskaya oblast", "RU-ME": "Respublika Mariy El", "RU-MO": "Respublika Mordoviya", "RU-MOS": "Moskovskaya oblast", "RU-MOW": "Moskva", "RU-MUR": "Murmanskaya oblast", "RU-NGR": "Novgorodskaya oblast", "RU-NIZ": "Nizhegorodskaya oblast", "RU-NVS": "Novosibirskaya oblast", "RU-OMS": "Omskaya oblast", "RU-ORE": "Orenburgskaya oblast", "RU-ORL": "Orlovskaya oblast", "RU-PER": "Permskiy kray", "RU-PRI": "Primorskiy kray", "RU-PSK": "Pskovskaya oblast", "RU-ROS": "Rostovskaya oblast", "RU-RYA": "Ryazanskaya oblast", "RU-SA": "Respublika Sakha", "RU-SAK": "Sakhalinskaya oblast", "RU-SAM": "Samarskaya oblast", "RU-SAR": "Saratovskaya oblast", "RU-SE": "Respublika Severnaya Osetiya", "RU-SMO": "Smolenskaya oblast", "RU-SPE": "Sankt-Peterburg", "RU-STA": "Stavropolskiy kray", "RU-SVE": "Sverdlovskaya oblast", "RU-TA": "Respublika Tatarstan", "RU-TAM": "Tambovskaya oblast", "RU-TOM": "Tomskaya oblast", "RU-TUL": "Tulskaya oblast", "RU-TVE": "Tverskaya oblast", "RU-TY": "Respublika Tyva", "RU-TYU": "Tyumenskaya oblast", "RU-UD": "Udmurtskaya Respublika", "RU-ULY": "Ulyanovskaya oblast", "RU-VGG": "Volgogradskaya oblast", "RU-VLA": "Vladimirskaya oblast", "RU-VLG": "Vologodskaya oblast", "RU-VOR": "Voronezhskaya oblast", "RU-YAN": "Yamalo-Nenetskiy avtonomnyy okrug", "RU-YAR": "Yaroslavskaya oblast", "RU-YEV": "Evreyskaya avtonomnaya oblast", "RU-ZAB": "Zabaykalskiy kray"
+    "RU-AD": "Respublika Adygeya", "RU-ALT": "Altayskiy kray", "RU-AMU": "Amurskaya oblast", "RU-ARK": "Arkhangelskaya oblast", "RU-AST": "Astrakhanskaya oblast", "RU-BA": "Respublika Bashkortostan", "RU-BEL": "Belgorodskaya oblast", "RU-BRY": "Bryanskaya oblast", "RU-BU": "Respublika Buryatiya", "RU-CE": "Chechenskaya Respublika", "RU-CHE": "Chelyabinskaya oblast", "RU-CHU": "Chukotskiy avtonomnyy okrug", "RU-CU": "Chuvashskaya Respublika", "RU-DA": "Respublika Dagestan", "RU-IN": "Respublika Ingushetiya", "RU-IRK": "Irkutskaya oblast", "RU-IVA": "Ivanovskaya oblast", "RU-KAM": "Kamchatskiy kray", "RU-KB": "Kabardino-Balkarskaya Respublika", "RU-KC": "Karachayevo-Cherkesskaya Respublika", "RU-KDA": "Krasnodarskiy kray", "RU-KEM": "Kemerovskaya oblast", "RU-KGD": "Kaliningradskaya oblast", "RU-KGN": "Kurganskaya oblast", "RU-KHA": "Khabarovskiy kray", "RU-KHM": "Khanty-Mansiyskiy avtonomnyy okrug", "RU-KIR": "Kirovskaya oblast", "RU-KK": "Respublika Khakasiya", "RU-KL": "Respublika Kalmykiya", "RU-KLU": "Kaluzhskaya oblast", "RU-KO": "Respublika Komi", "RU-KOS": "Kostromskaya oblast", "RU-KR": "Respublika Kareliya", "RU-KRS": "Kurskaya oblast", "RU-KYA": "Krasnoyarskiy kray", "RU-LEN": "Leningradskaya oblast", "RU-LIP": "Lipetskaya oblast", "RU-ME": "Respublika Mariy El", "RU-MO": "Respublika Mordoviya", "RU-MOS": "Moskovskaya oblast", "RU-MOW": "Moskva", "RU-MUR": "Murmanskaya oblast", "RU-NGR": "Novgorodskaya oblast", "RU-NIZ": "Nizhegorodskaya oblast", "RU-NVS": "Novosibirskaya oblast", "RU-OMS": "Omskaya oblast", "RU-ORE": "Orenburgskaya oblast", "RU-ORL": "Orlovskaya oblast", "RU-PER": "Permskiy kray", "RU-PNZ": "Penzenskaya oblast", "RU-PRI": "Primorskiy kray", "RU-PSK": "Pskovskaya oblast", "RU-ROS": "Rostovskaya oblast", "RU-RYA": "Ryazanskaya oblast", "RU-SA": "Respublika Sakha", "RU-SAK": "Sakhalinskaya oblast", "RU-SAM": "Samarskaya oblast", "RU-SAR": "Saratovskaya oblast", "RU-SE": "Respublika Severnaya Osetiya", "RU-SMO": "Smolenskaya oblast", "RU-SPE": "Sankt-Peterburg", "RU-STA": "Stavropolskiy kray", "RU-SVE": "Sverdlovskaya oblast", "RU-TA": "Respublika Tatarstan", "RU-TAM": "Tambovskaya oblast", "RU-TOM": "Tomskaya oblast", "RU-TUL": "Tulskaya oblast", "RU-TVE": "Tverskaya oblast", "RU-TY": "Respublika Tyva", "RU-TYU": "Tyumenskaya oblast", "RU-UD": "Udmurtskaya Respublika", "RU-ULY": "Ulyanovskaya oblast", "RU-VGG": "Volgogradskaya oblast", "RU-VLA": "Vladimirskaya oblast", "RU-VLG": "Vologodskaya oblast", "RU-VOR": "Voronezhskaya oblast", "RU-YAN": "Yamalo-Nenetskiy avtonomnyy okrug", "RU-YAR": "Yaroslavskaya oblast", "RU-YEV": "Evreyskaya avtonomnaya oblast", "RU-ZAB": "Zabaykalskiy kray"
   };
   return regions[region_code]
 }
@@ -1722,3 +1727,27 @@ function pluralize(forms, n) {
   return form.replace('{n}', n);
 }
 window.pluralize = pluralize;
+
+/* A bootstrap-select search box inside a modal.
+ *
+ * Bootstrap's modal enforces its own focus: it listens for focusin on the document and
+ * pulls focus straight back to the dialog whenever something outside it is focused. A
+ * selectpicker with data-container="body" draws its menu — and its live-search input —
+ * as a child of <body>, which is outside the dialog by that test, so clicking the search
+ * box focused it and lost it in the same tick and nothing could be typed.
+ *
+ * data-container="body" is not optional for those pickers: inside a scrollable modal the
+ * menu is otherwise clipped by the modal's own overflow. So the focus grab is what has
+ * to give. This handler runs before Bootstrap's — it is bound at load, Bootstrap binds
+ * its own each time a modal is shown — and stops the event reaching it for anything
+ * belonging to a dropdown.
+ *
+ * Global, because the same pairing appears on the ship register, the wagon admin, the
+ * ticket form and the map filters.
+ */
+document.addEventListener('focusin', function (event) {
+  var target = event.target;
+  if (target && target.closest && target.closest('.bootstrap-select, .bs-searchbox, .dropdown-menu')) {
+    event.stopImmediatePropagation();
+  }
+});

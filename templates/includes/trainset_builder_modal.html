@@ -11,6 +11,7 @@
   .tsb-unit[draggable="true"] { cursor: grab; }
   .tsb-unit.tsb-drag-over-left  { border-left: 3px solid #0d6efd; }
   .tsb-unit.tsb-drag-over-right { border-right: 3px solid #0d6efd; }
+  .tsb-unit.tsb-seat-car { background: #d1e7dd; border-color: #198754; }
 </style>
 <script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 
@@ -69,13 +70,20 @@
     saveFailed:      '{{tsSaveFailed}}',
     public:          '{{tsPubBadge}}',
     addUnknown:      '{{addUnknownWagon}}',
-    notInCatalogue:  '{{notInCatalogue}}'
+    notInCatalogue:  '{{notInCatalogue}}',
+    seat:            '{{seat}}'
   };
   var _adminSets    = [];
   var _personalSets = [];
   var _refNames     = []; // pure-reference mode: stack of trainset names; null = loose wagons (edited)
   var _dragUid      = null;
   var _phTypes      = [null, 'loco_l', 'loco_both', 'loco_r', 'mid']; // null = auto
+  // Which car (by _uid) the trip's seat is in. Only meaningful — and the picker only
+  // shown — on pages with a #seat_car field (the trip new/edit forms); the standalone
+  // trainset builder (templates/trainset.html) has no such field and gets no picker.
+  var _seatUid      = null;
+
+  function _seatField() { return document.getElementById('seat_car'); }
 
   /* Parse a composite material_type_advanced value ({"trainsets": [names]}) → names array or null */
   window.tsbCompositeNames = window.tsbCompositeNames || function (val) {
@@ -100,13 +108,24 @@
           });
       });
     });
-    chain.then(_render);
+    return chain.then(_render);
+  }
+
+  // Resolve the seat field's stored index into this session's freshly-assigned
+  // _uid, once _units is populated. Indices are only ever compared within one
+  // open/close of the modal — see the comment on the migration for why the
+  // array position itself (not a persisted uid) is the thing that's saved.
+  function _applySeatIndex(idx) {
+    _seatUid = (idx !== null && _units[idx]) ? _units[idx]._uid : null;
   }
 
   /* ── open ── */
   window.openTsbModal = function () {
     _units = [];
     _refNames = [];
+    _seatUid = null;
+    var seatEl = _seatField();
+    var savedSeatIdx = (seatEl && seatEl.value !== '') ? parseInt(seatEl.value, 10) : null;
     var sourceId = window._tsbAdvTarget || 'material_type_advanced';
     var sourceEl = document.getElementById(sourceId);
     var val = sourceEl ? sourceEl.value : '';
@@ -114,7 +133,7 @@
     var isInlineArray = false;
     try { isInlineArray = Array.isArray(JSON.parse(val)); } catch (e) {}
     if (composite) {
-      _loadRefStack(composite);
+      _loadRefStack(composite).then(function () { _applySeatIndex(savedSeatIdx); _render(); });
     } else if (isInlineArray) {
       // Inline array of units — re-enrich from the catalogue via the API so fields like
       // image_ext are current (fixes e.g. PNG wagons whose stored value predates image_ext).
@@ -123,11 +142,12 @@
         .then(function (r) { return r.json(); })
         .then(function (units) {
           units.forEach(function (u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L' })); });
+          _applySeatIndex(savedSeatIdx);
           _render();
         });
     } else if (val) {
       // val is a trainset name — load in reference mode
-      _loadRefStack([val]);
+      _loadRefStack([val]).then(function () { _applySeatIndex(savedSeatIdx); _render(); });
     }
     document.getElementById('tsb-q').value = '';
     document.getElementById('tsb-results').innerHTML = '';
@@ -409,6 +429,22 @@
       nom.textContent = u.label || '?';
       card.appendChild(nom);
 
+      if (_seatField()) {
+        var isSeatCar = u._uid === _seatUid;
+        if (isSeatCar) card.classList.add('tsb-seat-car');
+        var seatBtn = document.createElement('button');
+        seatBtn.type = 'button';
+        seatBtn.className = 'btn btn-outline-' + (isSeatCar ? 'success' : 'secondary') + ' p-0 mt-1';
+        seatBtn.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
+        seatBtn.title = _i18n.seat;
+        seatBtn.innerHTML = '<i class="fas fa-chair"></i>';
+        seatBtn.onclick = (function (uid) { return function () {
+          _seatUid = (_seatUid === uid ? null : uid);
+          _render();
+        }; })(u._uid);
+        card.appendChild(seatBtn);
+      }
+
       if (!inRefMode) {
         card.draggable = true;
         card.addEventListener('dragstart', (function(uid, c) { return function(e) {
@@ -501,6 +537,11 @@
   function _tsbWriteAndClose(value) {
     var targetId = window._tsbAdvTarget || 'material_type_advanced';
     document.getElementById(targetId).value = value;
+    var seatEl = _seatField();
+    if (seatEl) {
+      var seatIdx = _units.findIndex(function (u) { return u._uid === _seatUid; });
+      seatEl.value = seatIdx === -1 ? '' : seatIdx;
+    }
     if (typeof window._tsbAdvCallback === 'function') {
       window._tsbAdvCallback(value);
     }

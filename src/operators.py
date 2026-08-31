@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Iterable, Literal, NotRequired, TypedDict
 
 from src.pg import get_or_create_pg_session, pg_session
+from src.search_terms import like_pattern
 from src.sql.operators import (
     get_trip_operator_logos_query,
     insert_trip_operators_query,
@@ -88,7 +89,7 @@ def find_operator_ids(name: str, exact: bool = False, pg_session_=None) -> list[
     if not name or not name.strip():
         return []
 
-    pattern = name.strip() if exact else f"%{name.strip()}%"
+    pattern = like_pattern(name.strip(), exact=exact)
     with get_or_create_pg_session(pg_session_) as pg:
         # Expanded to the whole equivalence group: searching SBB must also find trips
         # logged as CFF, exactly as it does for an alias of the same operator.
