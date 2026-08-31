@@ -144,6 +144,10 @@
 
     /* Trainset strip (MLG images) */
     .ts-strip { gap: 2px; }
+    /* Compact strips (several sets on one page — the wagon-artist leaderboard) */
+    .compo-container.compo-compact { padding: 10px 8px; border-radius: 6px; }
+    .compo-compact .ts-strip { gap: 1px; }
+    .compo-compact .ts-nom { font-size: 0.52rem; padding: 1px 0; }
     /* Public views draw the cars smaller (normalizeStrip target ~20px), where a 2px
        gap reads as a visible break in the rake — tighten it to 1px. */
     .publicTrainset .ts-strip { gap: 1px; }
@@ -219,28 +223,45 @@ function _authorName(a) {
     return _authorLinkName(a) || a;
 }
 
+/* Authors grouped under the licence they drew for. A composition often mixes
+   stock released under different terms — listing every author then every licence
+   side by side leaves the reader guessing which applies to whom. */
+function _attributionGroups(units) {
+    var order = [], byLicense = {};
+    (units || []).forEach(function(u) {
+        if (!u.author && !u.license) return;
+        var lic = u.license || '';
+        if (!byLicense[lic]) { order.push(lic); byLicense[lic] = []; }
+        if (u.author && byLicense[lic].indexOf(u.author) === -1) byLicense[lic].push(u.author);
+    });
+    return order.map(function(lic) { return { license: lic, authors: byLicense[lic] }; });
+}
+
+function _attributionJoin(groups, sources, renderAuthor) {
+    var parts = groups.map(function(g) {
+        var authors = g.authors.map(renderAuthor).join(', ');
+        var license = g.license ? esc(_licenseLabel(g.license)) : '';
+        if (authors && license) return '© ' + authors + ' (' + license + ')';
+        return authors ? '© ' + authors : license;
+    });
+    if (sources.length) parts.push(sources.map(function(s) { return esc(s); }).join(', '));
+    return parts.join(' · ');
+}
+
 /* HTML version with clickable author links — for modal display */
 function _attributionHtml(units) {
-    var p = _attributionParts(units);
-    var parts = [];
-    if (p.authors.length)  parts.push(p.authors.map(function(a) {
-        var n = _authorLinkName(a);
-        return n ? '© <a href="' + esc(a) + '" target="_blank" rel="noopener">' + esc(n) + '</a>'
-                 : '© ' + esc(a);
-    }).join(', '));
-    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(_licenseLabel(l)); }).join(', '));
-    if (p.sources.length)  parts.push(p.sources.map(function(s) { return esc(s); }).join(', '));
-    return parts.join(' · ');
+    return _attributionJoin(_attributionGroups(units), _attributionParts(units).sources,
+        function(a) {
+            var n = _authorLinkName(a);
+            return n ? '<a href="' + esc(a) + '" target="_blank" rel="noopener">' + esc(n) + '</a>'
+                     : esc(a);
+        });
 }
 
 /* Plain-text version — for tooltips */
 function _attributionText(units) {
-    var p = _attributionParts(units);
-    var parts = [];
-    if (p.authors.length)  parts.push(p.authors.map(function(a) { return '© ' + esc(_authorName(a)); }).join(', '));
-    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(_licenseLabel(l)); }).join(', '));
-    if (p.sources.length)  parts.push(p.sources.map(function(s) { return esc(s); }).join(', '));
-    return parts.join(' · ');
+    return _attributionJoin(_attributionGroups(units), _attributionParts(units).sources,
+        function(a) { return esc(_authorName(a)); });
 }
 
 /* Parse a composite material_type_advanced value ({"trainsets": [names]}) → names array or null */
@@ -292,8 +313,11 @@ function _appendSeatMarker(wagon, i, seatInfo) {
     wagon.prepend('<div class="compo-seat-marker">' + label + '&#9660;</div>');
 }
 
-/* Render into a modal body element */
-function _renderTrainset($modalBody, units, setName, seatInfo) {
+/* Render into a modal body element.
+   `opts` (optional): {scale: {target,min,max} for normalizeStrip, compact: bool}
+   — the leaderboard draws many strips at once and wants them smaller. */
+function _renderTrainset($modalBody, units, setName, seatInfo, opts) {
+    opts = opts || {};
     var strip = $('<div class="compo-strip ts-strip"></div>');
     var all = units || [];
     all.forEach(function(u, i) {
@@ -318,8 +342,9 @@ function _renderTrainset($modalBody, units, setName, seatInfo) {
         return;
     }
     var container = $('<div class="compo-container"></div>').append(strip);
+    if (opts.compact) container.addClass('compo-compact');
     $modalBody.empty().append(container);
-    normalizeStrip(strip[0], { target: 46, min: 26, max: 72 });
+    normalizeStrip(strip[0], opts.scale || { target: 46, min: 26, max: 72 });
     var sourceLines = [];
     if (setName) sourceLines.push('Trainset: ' + esc(setName));
     var attr = _attributionHtml(units);

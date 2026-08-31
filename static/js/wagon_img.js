@@ -23,7 +23,12 @@
  *   compresses the spread but, because it scales each image by its total bounding box, it also
  *   shrinks the BODY of any image with roof equipment out of line with its neighbours. The
  *   median reference already normalizes absolute scale BETWEEN strips.
- *   Dimensions are read at runtime (naturalHeight) and it re-runs as images load.
+ *   Dimensions are read at runtime (naturalHeight) and it re-runs as images load. Each
+ *   image also gets an `image-rendering` matched to its scale direction: 'pixelated'
+ *   at or above native size, 'auto' (smooth) below it, where nearest-neighbour would
+ *   drop pixel rows and alias the artwork. A size landing within ~15% of an image's
+ *   native height snaps to it exactly, since a near-1:1 resample degrades pixel art
+ *   more than the small scale difference costs.
  *   opts: { target=30, gamma=1, min=0, max=Infinity, refMeters=4, fallbackPpm=10,
  *           selector='img', skipClass='wagon-placeholder-img', onApply } — refMeters is the
  *   real height (metres) a target-sized wagon represents; fallbackPpm is the assumed px/m for
@@ -76,12 +81,30 @@
     var imgs = Array.prototype.slice.call(container.querySelectorAll(selector));
     if (!imgs.length) return;
 
-    function sizeImg(img, h) {
-      h = Math.max(minH, Math.min(maxH, h));
-      img.style.height    = Math.round(h) + 'px';
+    function sizeImg(img, h, isPlaceholder) {
+      h = Math.round(Math.max(minH, Math.min(maxH, h)));
+      // Resampling pixel art by a hair is the worst case of all — an 18px-tall car
+      // redrawn at 16px loses two rows of a body that is only eighteen deep, and no
+      // filter hides that. When the computed size lands within a few percent of the
+      // artwork's native height (and that height is inside the caller's clamp), draw
+      // it 1:1 instead: crisper, and at most a hair off the shared absolute scale.
+      var native = img.naturalHeight;
+      if (!isPlaceholder && native && native >= minH && native <= maxH &&
+          Math.abs(native - h) <= Math.max(1, h * 0.15)) {
+        h = native;
+      }
+      img.style.height    = h + 'px';
       img.style.width     = 'auto';
       img.style.maxHeight = 'none';
       img.style.maxWidth  = 'none';
+      // Nearest-neighbour ('pixelated') is what keeps this artwork crisp when it is
+      // enlarged or drawn 1:1 — but DOWNSCALING with it just drops whole rows and
+      // columns of pixels, which is what turns a detailed coach into speckle at the
+      // small sizes public views use. Below native size, hand it to the browser's
+      // smooth filter instead. Inline, so it beats the `image-rendering: pixelated`
+      // each caller sets in CSS.
+      var nh = img.naturalHeight;
+      img.style.imageRendering = (nh && h < nh) ? 'auto' : 'pixelated';
     }
 
     function apply() {
@@ -96,7 +119,7 @@
       if (fbPpm > 0) {
         var phH = (phPx / fbPpm) * screenScale;
         imgs.forEach(function (img) {
-          if (img.classList.contains(skip)) sizeImg(img, phH);
+          if (img.classList.contains(skip)) sizeImg(img, phH, true);
         });
       }
 

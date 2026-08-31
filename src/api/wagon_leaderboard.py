@@ -7,12 +7,13 @@ time, so MLG is served as a headline and the ranking covers the rest.
 
 import json
 import re
+from collections import Counter
 from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify
 
 from src.api.admin.wagons import _wagon_usage
-from src.api.trainset import _enrich_units, _slim_units
+from src.api.trainset import _slim_units
 from src.pg import pg_session
 
 wagon_leaderboard_blueprint = Blueprint("wagon_leaderboard", __name__)
@@ -20,6 +21,17 @@ wagon_leaderboard_blueprint = Blueprint("wagon_leaderboard", __name__)
 MLG_SOURCE = "MLG Traffic"
 MLG_URL = "https://mlgtraffic.net"
 TRAINLOG_AUTHOR = "https://trainlog.me/public/"
+
+# Trainsets shown per artist: one strip is drawn on load, the rest open on click.
+SETS_PER_ARTIST = 4
+# Flags shown per artist, most-travelled first.
+FLAGS_PER_ARTIST = 6
+
+# What the strip renderer needs — deliberately leaner than the trainset editor's
+# enrichment, since a page carrying several sets for every artist would otherwise
+# ship a lot of unused prose (notes, era, categories).
+_UNIT_COLS = ("name, label, image, image_type, image_ext, px_per_meter, "
+              "author, license, source")
 
 
 def _credit(author):
@@ -38,24 +50,41 @@ def _credit(author):
     return {"name": author, "url": None, "username": None}
 
 
-def _representative(pg, wagons, public_sets):
-    """The public trainset showing off most of `wagons`, rendered as enriched units."""
-    best_name, best_units, best_hits = None, [], 0
+def _enrich(units, catalogue):
+    """Slim unit refs → display units, from a pre-loaded wagons lookup."""
+    enriched = []
+    for u in units:
+        wagon = catalogue.get(u["name"])
+        unit = dict(wagon) if wagon else {
+            "name": u["name"], "label": u.get("label", u["name"]),
+            "image": None, "image_type": "plain", "image_ext": "gif",
+            "px_per_meter": None, "source": None, "author": None, "license": None,
+        }
+        unit["_side"] = u.get("_side", "L")
+        if u.get("_phType"):
+            unit["_phType"] = u["_phType"]
+        enriched.append(unit)
+    return enriched
+
+
+def _representatives(wagons, public_sets, catalogue):
+    """The public trainsets showing off most of `wagons`, best first."""
+    scored = []
     for name, units in public_sets:
         hits = sum(1 for u in units if u.get("name") in wagons)
-        if hits > best_hits:
-            best_name, best_units, best_hits = name, units, hits
-    if not best_hits:
-        return None
-    return {"name": best_name, "units": _enrich_units(pg, _slim_units(best_units))}
+        if hits:
+            scored.append((hits, name, units))
+    scored.sort(key=lambda s: (-s[0], s[1].lower()))
+    return [{"name": name, "units": _enrich(_slim_units(units), catalogue)}
+            for _, name, units in scored[:SETS_PER_ARTIST]]
 
 
 def wagon_authors():
-    trips, riders, trainsets = _wagon_usage()
+    trips, riders, trainsets, wagon_countries = _wagon_usage()
 
     with pg_session() as pg:
         rows = pg.execute(
-            "SELECT name, author, license, source FROM wagons WHERE image IS NOT NULL"
+            "SELECT name, author, source FROM wagons WHERE image IS NOT NULL"
         ).fetchall()
 
         headline = _new_entry({"name": MLG_SOURCE, "url": MLG_URL, "username": None})
@@ -75,8 +104,7 @@ def wagon_authors():
                 entry["trainsets"] += trainsets.get(row["name"], 0)
                 entry["users"] |= riders.get(row["name"], set())
                 entry["wagons"].add(row["name"])
-                if row["license"]:
-                    entry["licenses"].add(row["license"])
+                entry["countries"].update(wagon_countries.get(row["name"], {}))
 
         ranked = sorted(authors.values(), key=lambda a: (-a["drawings"], a["name"].lower()))
 
@@ -89,17 +117,32 @@ def wagon_authors():
             except ValueError:
                 continue
 
+        # One lookup for every wagon those sets can draw, rather than a query per
+        # unit per set per artist.
+        set_wagons = sorted({u.get("name") for _, units in public_sets for u in units
+                             if isinstance(u, dict) and u.get("name")})
+        catalogue = {
+            r["name"]: dict(r)
+            for r in pg.execute(
+                f"SELECT {_UNIT_COLS} FROM wagons WHERE name = ANY(:names)",
+                {"names": set_wagons},
+            ).fetchall()
+        }
+
         for entry in [headline, *ranked]:
-            entry["trainset"] = _representative(pg, entry.pop("wagons"), public_sets)
+            entry["trainsets_shown"] = _representatives(
+                entry.pop("wagons"), public_sets, catalogue
+            )
             entry["users"] = len(entry["users"])
-            entry["licenses"] = sorted(entry["licenses"])
+            entry["countries"] = [cc for cc, _ in
+                                  entry["countries"].most_common(FLAGS_PER_ARTIST)]
 
     return {"headline": headline, "authors": ranked}
 
 
 def _new_entry(credit):
     return {**credit, "drawings": 0, "trips": 0, "trainsets": 0,
-            "users": set(), "licenses": set(), "wagons": set()}
+            "users": set(), "countries": Counter(), "wagons": set()}
 
 
 @wagon_leaderboard_blueprint.route("/getWagonAuthors")

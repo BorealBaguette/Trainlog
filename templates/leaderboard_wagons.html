@@ -43,7 +43,14 @@
 .artist-stat .value { font-size: 1.3rem; font-weight: 600; }
 .artist-stat .label { font-size: .8rem; opacity: .7; }
 .artist-stat.active .value { color: #207cca; }
-.artist-license { font-size: .78rem; opacity: .65; margin-bottom: .4rem; }
+.artist-flags { display: inline-flex; align-items: center; gap: .25rem; margin-left: .25rem; }
+.artist-flags .flagPNG { height: 15px; max-width: 24px; vertical-align: -2px; }
+.artist-sets { display: flex; flex-direction: column; gap: .5rem; }
+.btn.btn-more {
+    align-self: flex-start; border: 1px solid #c9ced6; background: #f8f9fa; color: #1f2937;
+    border-radius: 9999px; padding: .2rem .7rem; font-size: .8rem; font-weight: 500;
+}
+.btn.btn-more:hover { background: #eef1f5; }
 .sort-label { font-size: .85rem; opacity: .7; }
 .btn.btn-sort {
     border: 1px solid #c9ced6; background: #f8f9fa; color: #1f2937;
@@ -75,6 +82,17 @@ function rankIcon(rank) {
     return rank;
 }
 
+/* Where the trips using this artist's stock actually ran, busiest first. */
+function flagsHTML(countries) {
+    if (!countries || !countries.length) return '';
+    return '<span class="artist-flags">' + countries.map(function (cc) {
+        var name = '';
+        try { name = regionNames.of(cc) || cc; } catch (e) { name = cc; }
+        return '<span data-toggle="tooltip" data-placement="top" title="' + sanitize(name) + '">' +
+               getTooltipSVG(cc) + '</span>';
+    }).join('') + '</span>';
+}
+
 function statsHTML(artist, sortKey) {
     return '<div class="artist-stats">' + KEYS.map(function (k) {
         return '<div class="artist-stat' + (k === sortKey ? ' active' : '') + '">' +
@@ -83,20 +101,48 @@ function statsHTML(artist, sortKey) {
     }).join('') + '</div>';
 }
 
+/* Strips are decoration here, not the subject — several to a card, so draw them
+   well below the trainset-editor size. */
+var SET_SCALE = { target: 26, min: 16, max: 40 };
+
+/* First set drawn straight away; the rest wait behind a button so a card with
+   four rakes doesn't open as a wall of trains. */
+function setsHTML(card, sets) {
+    if (!sets || !sets.length) return;
+    var wrap = $('<div class="artist-sets"></div>').appendTo(card);
+    var opts = { scale: SET_SCALE, compact: true };
+    _renderTrainset($('<div></div>').appendTo(wrap), sets[0].units, sets[0].name, null, opts);
+    if (sets.length < 2) return;
+
+    var rest = $('<div style="display:none"></div>');
+    var button = $('<button type="button" class="btn btn-more"></button>')
+        .html('<i class="fa fa-chevron-down"></i> +' + (sets.length - 1) + ' ' + L.trainsets)
+        .on('click', function () {
+            if (!rest.data('drawn')) {
+                sets.slice(1).forEach(function (set) {
+                    _renderTrainset($('<div class="mt-2"></div>').appendTo(rest),
+                                    set.units, set.name, null, opts);
+                });
+                rest.data('drawn', true);
+            }
+            var open = rest.is(':visible');
+            rest.toggle(!open);
+            $(this).find('i').toggleClass('fa-chevron-down', open)
+                             .toggleClass('fa-chevron-up', !open);
+        });
+    wrap.append(button).append(rest);
+}
+
 function artistCard(artist, rank, sortKey) {
     var name = sanitize(artist.name);
     if (artist.url) name = '<a class="leaderboardLink" href="' + sanitize(artist.url) + '">' + name + '</a>';
 
     var card = $('<div class="artist-card"></div>')
-        .append('<div class="artist-head"><span class="artist-rank">' + rankIcon(rank) + '</span>' + name + '</div>')
+        .append('<div class="artist-head"><span class="artist-rank">' + rankIcon(rank) + '</span>' +
+                name + flagsHTML(artist.countries) + '</div>')
         .append(statsHTML(artist, sortKey));
-    if (artist.licenses.length) {
-        card.append($('<div class="artist-license"></div>').text(artist.licenses.join(', ')));
-    }
-    if (artist.trainset) {
-        var body = $('<div></div>').appendTo(card);
-        _renderTrainset(body, artist.trainset.units, artist.trainset.name, null);
-    }
+    card.find('.artist-flags [data-toggle="tooltip"]').tooltip();
+    setsHTML(card, artist.trainsets_shown);
     return card;
 }
 
@@ -105,10 +151,12 @@ $.get('{{ url_for("wagon_leaderboard.get_wagon_authors") }}', function (data) {
     $('#headline').html(
         '<div class="text-uppercase small fw-bold" style="opacity:.6">' + L.hallOfFame + '</div>' +
         '<div class="artist-head"><span class="artist-rank"><i class="fa fa-crown" style="color: gold;"></i></span>' +
-            '<a class="leaderboardLink" href="' + h.url + '" target="_blank" rel="noopener">' + sanitize(h.name) + '</a></div>' +
-        statsHTML(h, null) + '<div id="headlineSet"></div>'
+            '<a class="leaderboardLink" href="' + h.url + '" target="_blank" rel="noopener">' + sanitize(h.name) + '</a>' +
+            flagsHTML(h.countries) + '</div>' +
+        statsHTML(h, null) + '<div id="headlineSets"></div>'
     );
-    if (h.trainset) _renderTrainset($('#headlineSet'), h.trainset.units, h.trainset.name, null);
+    $('#headline .artist-flags [data-toggle="tooltip"]').tooltip();
+    setsHTML($('#headlineSets'), h.trainsets_shown);
 
     var sortKey = 'drawings';
 
