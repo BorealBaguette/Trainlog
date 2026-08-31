@@ -138,17 +138,19 @@
           <div class="row g-2 mb-2">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Category</label>
-              <input type="text" class="form-control" name="category" placeholder="e.g. Electric locomotives">
+              <input type="text" class="form-control" name="category" list="dl-category"
+                     placeholder="e.g. Electric locomotives">
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">Subcategory</label>
-              <input type="text" class="form-control" name="subcategory" placeholder="e.g. Sr3">
+              <input type="text" class="form-control" name="subcategory" list="dl-subcategory"
+                     placeholder="e.g. Sr3">
             </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-2">
               <label class="form-label fw-semibold">Era</label>
-              <input type="text" class="form-control" name="era" placeholder="e.g. 5b,6">
+              <input type="text" class="form-control" name="era" list="dl-era" placeholder="e.g. 5b,6">
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Image type</label>
@@ -161,7 +163,7 @@
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Gauge (mm)</label>
-              <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
+              <input type="number" class="form-control" name="gauge" list="dl-gauge" placeholder="e.g. 1435">
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Scale (px/m)</label>
@@ -172,12 +174,14 @@
           <div class="row g-2 mb-2">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Author</label>
-              <input type="text" class="form-control" name="author" placeholder="e.g. https://trainlog.me/public/username">
+              <input type="text" class="form-control" name="author" list="dl-author"
+                     placeholder="e.g. https://trainlog.me/public/username">
               <div class="form-text">A Trainlog or wiki user page URL is rendered as a link named after the user. Any other URL or name is shown as-is.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">License</label>
-              <input type="text" class="form-control" name="license" id="addLicense" placeholder="e.g. CC BY-NC-SA 3.0">
+              <input type="text" class="form-control" name="license" id="addLicense" list="dl-license"
+                     placeholder="e.g. CC BY-NC-SA 3.0">
               <div class="form-check-inline-wrap mt-1">
                 <input class="form-check-input" type="checkbox" id="addLicenseTrainlog">
                 <label class="form-check-label small" for="addLicenseTrainlog">Licensed to Trainlog</label>
@@ -275,17 +279,19 @@
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Category</label>
-              <input type="text" class="form-control" name="category" placeholder="e.g. Electric locomotives">
+              <input type="text" class="form-control" name="category" list="dl-category"
+                     placeholder="e.g. Electric locomotives">
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Subcategory</label>
-              <input type="text" class="form-control" name="subcategory" placeholder="e.g. Sr3">
+              <input type="text" class="form-control" name="subcategory" list="dl-subcategory"
+                     placeholder="e.g. Sr3">
             </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-2">
               <label class="form-label fw-semibold">Era</label>
-              <input type="text" class="form-control" name="era" placeholder="e.g. 5b,6">
+              <input type="text" class="form-control" name="era" list="dl-era" placeholder="e.g. 5b,6">
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Image type</label>
@@ -298,7 +304,7 @@
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Gauge (mm)</label>
-              <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
+              <input type="number" class="form-control" name="gauge" list="dl-gauge" placeholder="e.g. 1435">
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Scale (px/m)</label>
@@ -309,12 +315,14 @@
           <div class="row g-2 mb-2">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Author</label>
-              <input type="text" class="form-control" name="author" placeholder="e.g. https://trainlog.me/public/username">
+              <input type="text" class="form-control" name="author" list="dl-author"
+                     placeholder="e.g. https://trainlog.me/public/username">
               <div class="form-text">A Trainlog or wiki user page URL is rendered as a link named after the user. Any other URL or name is shown as-is.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">License</label>
-              <input type="text" class="form-control" name="license" id="editLicense" placeholder="e.g. CC BY-NC-SA 3.0">
+              <input type="text" class="form-control" name="license" id="editLicense" list="dl-license"
+                     placeholder="e.g. CC BY-NC-SA 3.0">
               <div class="form-check-inline-wrap mt-1">
                 <input class="form-check-input" type="checkbox" id="editLicenseTrainlog">
                 <label class="form-check-label small" for="editLicenseTrainlog">Licensed to Trainlog</label>
@@ -337,7 +345,7 @@
           <div class="row g-2 mb-2">
             <div class="col-md-12">
               <label class="form-label fw-semibold">Source</label>
-              <input type="text" class="form-control" name="source" placeholder="e.g. MLG Traffic">
+              <input type="text" class="form-control" name="source" list="dl-source" placeholder="e.g. MLG Traffic">
             </div>
           </div>
           <div>
@@ -1081,6 +1089,93 @@ function deleteWagon(wname, label) {
     .catch(err => toast(`Error: ${err}`, 'danger'));
 }
 
+/* ── field suggestions ──────────────────────────────────────────
+   Every repeatable field is offered as a datalist of what the catalogue already
+   holds, plus a "did you mean" nudge on near-misses. A single mistyped character
+   forks the vocabulary silently — the wagon-artist leaderboard ranked
+   "Paul Nikolic (niko1266)" and "Paul Nikolik (Niko1266)" as two separate people. */
+const SUGGEST_FIELDS = ['category','subcategory','era','gauge','author','license','source'];
+let _suggest = {};
+
+function levenshtein(a, b) {
+  // Only ever called on a typed value against one vocabulary, both short.
+  const m = a.length, n = b.length;
+  if (Math.abs(m - n) > 2) return 3;          // caller only cares about <= 2
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1,
+                        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+const digitsOf = s => s.replace(/\D/g, '');
+
+/* The closest existing value to `value` that is not `value` itself, or null.
+   Case-only differences always count — "niko1266" vs "Niko1266" is never deliberate.
+   Values whose digits differ never do: "CC BY-NC-SA 3.0" and "CC BY-NC-SA 4.0" are one
+   edit apart and are two different licences. */
+function nearMatch(field, value) {
+  const v = value.trim();
+  if (!v) return null;
+  const options = _suggest[field] || [];
+  if (options.includes(v)) return null;
+  const lower = v.toLowerCase(), digits = digitsOf(v);
+  let best = null, bestDist = 3;
+  for (const opt of options) {
+    const ol = opt.toLowerCase();
+    if (ol === lower) return opt;                       // same word, different case
+    if (v.length < 5) continue;                         // too short to guess at
+    if (digitsOf(opt) !== digits) continue;             // a version/number, not a typo
+    const d = levenshtein(lower, ol);
+    if (d < bestDist) { best = opt; bestDist = d; }
+  }
+  return bestDist <= 2 ? best : null;
+}
+
+function attachSuggest(input, field) {
+  const hint = document.createElement('div');
+  hint.className = 'form-text text-warning-emphasis d-none';
+  input.insertAdjacentElement('afterend', hint);
+  const check = () => {
+    const match = nearMatch(field, input.value);
+    hint.classList.toggle('d-none', !match);
+    if (!match) return;
+    hint.innerHTML = '';
+    hint.append('\u26a0\ufe0f Close to an existing value: ');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-link btn-sm p-0 align-baseline';
+    btn.textContent = match;
+    btn.addEventListener('click', () => {
+      input.value = match;
+      hint.classList.add('d-none');
+    });
+    hint.append(btn);
+  };
+  input.addEventListener('change', check);
+  input.addEventListener('blur', check);
+  input.addEventListener('input', () => hint.classList.add('d-none'));
+}
+
+fetch(`${API}/suggestions`)
+  .then(res => res.ok ? res.json() : {})
+  .then(data => {
+    _suggest = data;
+    SUGGEST_FIELDS.forEach(field => {
+      const dl = document.getElementById(`dl-${field}`);
+      if (dl) dl.innerHTML = (data[field] || [])
+        .map(v => `<option value="${esc(v)}"></option>`).join('');
+      document.querySelectorAll(`input[list="dl-${field}"]`)
+              .forEach(input => attachSuggest(input, field));
+    });
+  })
+  .catch(() => { /* suggestions are a convenience; the form works without them */ });
+
 /* ── toast ──────────────────────────────────────────────────────── */
 function toast(msg, type = 'success') {
   const el = document.createElement('div');
@@ -1094,5 +1189,13 @@ function toast(msg, type = 'success') {
   el.addEventListener('hidden.bs.toast', () => el.remove());
 }
 </script>
+
+<datalist id="dl-category"></datalist>
+<datalist id="dl-subcategory"></datalist>
+<datalist id="dl-era"></datalist>
+<datalist id="dl-gauge"></datalist>
+<datalist id="dl-author"></datalist>
+<datalist id="dl-license"></datalist>
+<datalist id="dl-source"></datalist>
 
 {% endblock %}

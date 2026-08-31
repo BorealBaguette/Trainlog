@@ -29,6 +29,10 @@ _COL_MAP = {0: "name", 1: "label", 2: "category", 3: "subcategory",
 WAGONS_ROOT   = Path("static/images/wagons").resolve()
 CUSTOM_FOLDER = "images/custom"          # relative to WAGONS_ROOT, stored in DB
 
+# Sentinel stored in wagons.license for drawings licensed directly to Trainlog
+# (mirrored by TRAINLOG_LICENSE in static/js/wagon_img.js).
+TRAINLOG_LICENSE = "TRAINLOG_LICENSED"
+
 
 _USAGE_TTL = 300          # seconds; the admin table re-queries on every page change
 _usage_cache: dict = {"at": 0.0, "counts": {}, "users": {}, "sets": {},
@@ -400,6 +404,49 @@ def _uploaded_sides(image_type: str) -> list[tuple[str, object]]:
         suffix = {"sides_L": "_L", "sides_R": "_R"}.get(image_type, "")
         pairs = [(suffix, request.files.get("file"))]
     return [(sfx, f) for sfx, f in pairs if f and f.filename]
+
+
+# Free-text columns whose values repeat across wagons, so the form can offer what
+# is already in the catalogue. Fixed tuple — these names are interpolated into SQL.
+_SUGGEST_FIELDS = ("category", "subcategory", "era", "author", "license",
+                   "source", "gauge")
+
+
+@wagons_admin_blueprint.route("suggestions", methods=["GET"])
+@admin_required
+def wagon_suggestions():
+    """
+    Existing values for each repeatable field, most-used first.
+
+    Typing these by hand splits the catalogue on a single character — the wagon-artist
+    leaderboard ranked "Paul Nikolic (niko1266)" and "Paul Nikolik (Niko1266)" as two
+    different people — so the form offers what is already there instead.
+    """
+    out = {}
+    with pg_session() as pg:
+        for field in _SUGGEST_FIELDS:
+            rows = pg.execute(
+                f"""SELECT {field}::text AS value, COUNT(*) AS n
+                    FROM wagons
+                    WHERE {field} IS NOT NULL AND {field}::text <> ''
+                    GROUP BY 1
+                    ORDER BY n DESC, 1"""
+            ).fetchall()
+            if field == "author":
+                # One drawing can credit several people, stored comma-separated;
+                # suggest the individuals, not the combinations.
+                counts: Counter = Counter()
+                for row in rows:
+                    for part in row["value"].split(","):
+                        part = part.strip()
+                        if part:
+                            counts[part] += row["n"]
+                out[field] = [v for v, _ in counts.most_common()]
+            else:
+                # The Trainlog sentinel has its own checkbox; nobody should type it.
+                out[field] = [r["value"] for r in rows
+                              if r["value"] != TRAINLOG_LICENSE]
+    return jsonify(out)
 
 
 @wagons_admin_blueprint.route("suggest-cuts", methods=["POST"])
