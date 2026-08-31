@@ -19,8 +19,17 @@ from src.pg import pg_session
 wagon_leaderboard_blueprint = Blueprint("wagon_leaderboard", __name__)
 
 MLG_SOURCE = "MLG Traffic"
-MLG_URL = "https://mlgtraffic.net"
+# HTTP only — the host resets TLS connections (see also mlg_crawl.py).
+MLG_URL = "http://mlgtraffic.net"
 TRAINLOG_AUTHOR = "https://trainlog.me/public/"
+
+# Personal sites whose owner signs by name rather than by URL. Keyed by host, so
+# http/https and a www. prefix all land on the same person. Mirrored by
+# SITE_AUTHORS in templates/includes/trainset_display.html, which credits the same
+# people under the strips.
+SITE_AUTHORS = {
+    "arthurstreinenpagina.nl": "Arthur Pijpers",
+}
 
 # Trainsets shown per artist: one strip is drawn on load, the rest open on click.
 SETS_PER_ARTIST = 4
@@ -45,6 +54,9 @@ def _credit(author):
         username = author[len(TRAINLOG_AUTHOR):].strip("/")
         return {"name": username, "url": f"/public/{username}", "username": username}
     if author.startswith("http"):
+        host = urlparse(author).netloc.lower().removeprefix("www.")
+        if host in SITE_AUTHORS:
+            return {"name": SITE_AUTHORS[host], "url": author, "username": None}
         match = re.search(r"User:([^/]+)", author)
         name = match.group(1) if match else urlparse(author).netloc
         # Commons appends the home wiki to imported accounts; nobody signs that way
