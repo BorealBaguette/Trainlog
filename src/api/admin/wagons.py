@@ -31,13 +31,28 @@ CUSTOM_FOLDER = "images/custom"          # relative to WAGONS_ROOT, stored in DB
 
 
 _USAGE_TTL = 300          # seconds; the admin table re-queries on every page change
-_usage_cache: dict = {"at": 0.0, "counts": {}, "users": {}, "sets": {}}
+_usage_cache: dict = {"at": 0.0, "counts": {}, "users": {}, "sets": {},
+                      "countries": {}}
 
 
-def _wagon_usage() -> tuple[dict[str, int], dict[str, set], dict[str, int]]:
+def _trip_countries(value) -> set:
+    """Country codes of a trip, from the {"CC": metres} map stored on trips.countries."""
+    try:
+        parsed = json.loads(value or "{}")
+    except (TypeError, ValueError):
+        return set()
+    if not isinstance(parsed, dict):
+        return set()
+    # Region-level keys ("CN-11") still count for their country.
+    return {cc.split("-")[0].upper() for cc in parsed if isinstance(cc, str) and cc}
+
+
+def _wagon_usage() -> tuple[dict[str, int], dict[str, set], dict[str, int],
+                            dict[str, Counter]]:
     """
     Trips using each wagon, keyed by wagon name, plus the distinct users those trips
-    belong to and how many saved trainsets contain it.
+    belong to, how many saved trainsets contain it, and how many of those trips ran
+    in each country.
 
     The users come back as sets, not counts, so that callers grouping several wagons
     together (the artist leaderboard) can union them instead of double-counting.
@@ -51,10 +66,12 @@ def _wagon_usage() -> tuple[dict[str, int], dict[str, set], dict[str, int]]:
     """
     now = time.time()
     if now - _usage_cache["at"] < _USAGE_TTL:
-        return _usage_cache["counts"], _usage_cache["users"], _usage_cache["sets"]
+        return (_usage_cache["counts"], _usage_cache["users"],
+                _usage_cache["sets"], _usage_cache["countries"])
 
     counts: Counter = Counter()
     user_sets: dict[str, set] = {}
+    wagon_countries: dict[str, Counter] = {}
     try:
         with pg_session() as pg:
             sets = {}
@@ -68,15 +85,17 @@ def _wagon_usage() -> tuple[dict[str, int], dict[str, set], dict[str, int]]:
                 # than guessing which one a given trip meant.
                 sets.setdefault(r["name"], set()).update(names)
 
-            # Grouped by (composition, user) rather than just composition, so a
-            # composition's trip count and its distinct-user count can both be
-            # derived without re-scanning the trips table.
+            # Grouped by (composition, user, countries) rather than just
+            # composition, so a composition's trip count, its distinct-user count
+            # and the countries it ran in can all be derived without re-scanning
+            # the trips table.
             rows = pg.execute(
                 """
-                SELECT material_type_advanced AS mta, user_id, COUNT(*) AS n
+                SELECT material_type_advanced AS mta, user_id, countries,
+                       COUNT(*) AS n
                 FROM trips
                 WHERE material_type_advanced IS NOT NULL AND material_type_advanced <> ''
-                GROUP BY material_type_advanced, user_id
+                GROUP BY material_type_advanced, user_id, countries
                 """
             ).fetchall()
 
@@ -98,18 +117,26 @@ def _wagon_usage() -> tuple[dict[str, int], dict[str, set], dict[str, int]]:
             else:
                 names = sets.get(value, set())
 
+            ccs = _trip_countries(row["countries"])
             for wagon in names:
                 counts[wagon] += n
                 user_sets.setdefault(wagon, set()).add(user_id)
+                if ccs:
+                    wagon_countries.setdefault(wagon, Counter()).update(
+                        dict.fromkeys(ccs, n)
+                    )
     except Exception as e:                        # never break the listing over a stat
         logger.warning("wagon usage count failed: %s", e)
-        return _usage_cache["counts"], _usage_cache["users"], _usage_cache["sets"]
+        return (_usage_cache["counts"], _usage_cache["users"],
+                _usage_cache["sets"], _usage_cache["countries"])
 
     set_counts: Counter = Counter()
     for names in sets.values():
         set_counts.update(names)
-    _usage_cache.update(at=now, counts=dict(counts), users=user_sets, sets=dict(set_counts))
-    return _usage_cache["counts"], _usage_cache["users"], _usage_cache["sets"]
+    _usage_cache.update(at=now, counts=dict(counts), users=user_sets,
+                        sets=dict(set_counts), countries=wagon_countries)
+    return (_usage_cache["counts"], _usage_cache["users"],
+            _usage_cache["sets"], _usage_cache["countries"])
 
 
 def _sanitize_name(label: str) -> str:
@@ -170,7 +197,7 @@ def list_wagons():
     order_dir = "ASC" if request.args.get("order[0][dir]", "asc") == "asc" else "DESC"
 
     # Must run before the session below opens — pg_session() refuses to nest.
-    usage, usage_users, _ = _wagon_usage()
+    usage, usage_users, _, _ = _wagon_usage()
 
     with pg_session() as pg:
         total = pg.execute("SELECT COUNT(*) FROM wagons").scalar()
