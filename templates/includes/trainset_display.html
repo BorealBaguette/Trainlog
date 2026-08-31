@@ -211,12 +211,22 @@ function _attributionParts(units) {
     return { authors: distinct('author'), licenses: distinct('license'), sources: distinct('source') };
 }
 
-/* Profile URLs we can shorten to a username: Trainlog public pages and MediaWiki
-   user pages. Returns null for anything else (plain names, other URLs). */
+/* Personal sites whose owner signs by name rather than by URL. Keyed by host, so
+   http/https and a www. prefix all land on the same person. Mirrors SITE_AUTHORS in
+   src/api/wagon_leaderboard.py, which ranks the same people. */
+var SITE_AUTHORS = {
+    'arthurstreinenpagina.nl': 'Arthur Pijpers'
+};
+
+/* Author URLs we can show as a name: Trainlog public pages, MediaWiki user pages,
+   and the personal sites above. Returns null for anything else (plain names, other
+   URLs), which are then printed as-is. */
 function _authorLinkName(a) {
     var m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/)
          || a.match(/^https?:\/\/[^/]+\/wiki\/User:(.+)$/i);
-    return m ? m[1] : null;
+    if (m) return m[1];
+    var host = a.match(/^https?:\/\/(?:www\.)?([^/]+)/);
+    return host ? (SITE_AUTHORS[host[1].toLowerCase()] || null) : null;
 }
 
 function _authorName(a) {
