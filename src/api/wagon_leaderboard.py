@@ -24,6 +24,9 @@ TRAINLOG_AUTHOR = "https://trainlog.me/public/"
 
 # Trainsets shown per artist: one strip is drawn on load, the rest open on click.
 SETS_PER_ARTIST = 4
+# Drawings shown when no public trainset uses any of them — trams and other single
+# units are logged on their own, so their artists would otherwise get a bare card.
+SOLO_WAGONS = 5
 # Flags shown per artist, most-travelled first.
 FLAGS_PER_ARTIST = 6
 
@@ -67,16 +70,26 @@ def _enrich(units, catalogue):
     return enriched
 
 
-def _representatives(wagons, public_sets, catalogue):
-    """The public trainsets showing off most of `wagons`, best first."""
+def _representatives(wagons, public_sets, trips):
+    """
+    What to draw for an artist, as (set name or None, slim units), best first.
+
+    Normally the public trainsets showing off most of `wagons`. Where no public set
+    uses any of them — a tram or a railcar runs as itself, so nobody builds a
+    composition for it — fall back to a strip of the artist's own busiest drawings,
+    unnamed, since it is a sampler rather than a real train.
+    """
     scored = []
     for name, units in public_sets:
         hits = sum(1 for u in units if u.get("name") in wagons)
         if hits:
             scored.append((hits, name, units))
-    scored.sort(key=lambda s: (-s[0], s[1].lower()))
-    return [{"name": name, "units": _enrich(_slim_units(units), catalogue)}
-            for _, name, units in scored[:SETS_PER_ARTIST]]
+    if scored:
+        scored.sort(key=lambda s: (-s[0], s[1].lower()))
+        return [(name, _slim_units(units)) for _, name, units in scored[:SETS_PER_ARTIST]]
+
+    solo = sorted(wagons, key=lambda n: (-trips.get(n, 0), n))[:SOLO_WAGONS]
+    return [(None, [{"name": n} for n in solo])] if solo else []
 
 
 def wagon_authors():
@@ -117,22 +130,27 @@ def wagon_authors():
             except ValueError:
                 continue
 
-        # One lookup for every wagon those sets can draw, rather than a query per
-        # unit per set per artist.
-        set_wagons = sorted({u.get("name") for _, units in public_sets for u in units
-                             if isinstance(u, dict) and u.get("name")})
+        entries = [headline, *ranked]
+        chosen = [_representatives(entry.pop("wagons"), public_sets, trips)
+                  for entry in entries]
+
+        # One lookup for every wagon actually drawn, rather than a query per unit
+        # per set per artist.
+        needed = sorted({u["name"] for sets in chosen for _, units in sets
+                         for u in units})
         catalogue = {
             r["name"]: dict(r)
             for r in pg.execute(
                 f"SELECT {_UNIT_COLS} FROM wagons WHERE name = ANY(:names)",
-                {"names": set_wagons},
+                {"names": needed},
             ).fetchall()
         }
 
-        for entry in [headline, *ranked]:
-            entry["trainsets_shown"] = _representatives(
-                entry.pop("wagons"), public_sets, catalogue
-            )
+        for entry, sets in zip(entries, chosen):
+            entry["trainsets_shown"] = [
+                {"name": name, "units": _enrich(units, catalogue)}
+                for name, units in sets
+            ]
             entry["users"] = len(entry["users"])
             entry["countries"] = [cc for cc, _ in
                                   entry["countries"].most_common(FLAGS_PER_ARTIST)]
