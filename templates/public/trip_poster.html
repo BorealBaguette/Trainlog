@@ -54,6 +54,8 @@ body { background: #e9e9ec; }
     box-shadow: 0 1px 4px rgba(0,0,0,0.15);
 }
 .posterBackBtn:hover { background: #f4f4f4; color: #333; }
+.posterBackBtn:disabled { opacity: 0.6; cursor: default; }
+.posterBackBtn:disabled:hover { background: #fff; }
 
 .posterControls { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; flex-shrink: 0; }
 
@@ -514,7 +516,10 @@ body { background: #e9e9ec; }
             <button type="button" class="posterBackBtn" id="posterSettingsBtn" style="border:none;cursor:pointer;">
                 <i class="fas fa-sliders"></i> {{ posterSettings }}
             </button>
-            <button type="button" class="posterDownloadBtn" id="posterDownloadBtn">
+            <button type="button" class="posterBackBtn" id="posterCopyBtn" style="border:none;cursor:pointer;display:none;" disabled>
+                <i class="fas fa-copy"></i> <span id="posterCopyBtnLabel">{{ posterCopyImage }}</span>
+            </button>
+            <button type="button" class="posterDownloadBtn" id="posterDownloadBtn" disabled>
                 <i class="fas fa-download"></i> {{wrapped_download_image}}
             </button>
         </div>
@@ -867,8 +872,23 @@ const transportTypeText = {
     "funicular": "{{funicular}}", "rail": "{{rail}}", "ski": "{{ski}}"
 };
 
+// Export is dead while the poster is still drawing: a click then would either
+// hand over a half-rendered map or silently block on `map.once('idle')` with
+// no feedback. Both buttons therefore follow the spinner, and an export in
+// flight greys out the other button as well.
+let posterDrawing = true;
+let exportRunning = false;
+
+function syncExportButtons() {
+    const off = posterDrawing || exportRunning;
+    document.getElementById('posterDownloadBtn').disabled = off;
+    document.getElementById('posterCopyBtn').disabled = off;
+}
+
 function setSpinner(on) {
     document.getElementById('posterSpinner').style.display = on ? 'flex' : 'none';
+    posterDrawing = on;
+    syncExportButtons();
 }
 
 function applyOrientation(name) {
@@ -2139,17 +2159,43 @@ document.getElementById('posterResetLabelsBtn').addEventListener('click', resetH
 })();
 
 document.getElementById('posterDownloadBtn').addEventListener('click', async () => {
-    const btn = document.getElementById('posterDownloadBtn');
-    btn.disabled = true;
+    exportRunning = true;
+    syncExportButtons();
     try {
-        await downloadPoster();
+        await downloadPoster('download');
     } catch (e) {
         console.error(e);
         alert("{{wrapped_download_error}}");
     } finally {
-        btn.disabled = false;
+        exportRunning = false;
+        syncExportButtons();
     }
 });
+
+// Copying an image needs both the async Clipboard API and ClipboardItem; on
+// browsers without them (or on insecure origins, where navigator.clipboard is
+// undefined) the button stays hidden and download remains the only route.
+const posterCopyBtn = document.getElementById('posterCopyBtn');
+if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+    posterCopyBtn.style.display = 'inline-flex';
+    posterCopyBtn.addEventListener('click', async () => {
+        const label = document.getElementById('posterCopyBtnLabel');
+        const original = label.textContent;
+        exportRunning = true;
+        syncExportButtons();
+        try {
+            await downloadPoster('copy');
+            label.textContent = "{{ posterCopied }}";
+            setTimeout(() => { label.textContent = original; }, 2000);
+        } catch (e) {
+            console.error(e);
+            alert("{{ posterCopyError }}");
+        } finally {
+            exportRunning = false;
+            syncExportButtons();
+        }
+    });
+}
 
 // Station names can carry a flag emoji (Trainlog prefixes some station
 // display names with one), which makes for a poor filename — strip emoji and
@@ -2175,12 +2221,14 @@ function loadImage(src) {
     });
 }
 
-async function downloadPoster() {
+// mode: 'download' saves the rendered poster as a PNG file, 'copy' puts it on
+// the clipboard. Everything up to the finished canvas is identical.
+async function downloadPoster(mode) {
     // The back side is its own image: whichever face is on screen is what the
-    // download button hands over.
+    // download/copy button hands over.
     if (posterSide === 'back') {
         const canvas = await renderBack();
-        saveCanvas(canvas, filenameForTrip(document.getElementById('posterTitle').textContent, '-itinerary'));
+        await saveCanvas(canvas, filenameForTrip(document.getElementById('posterTitle').textContent, '-itinerary'), mode);
         return;
     }
     if (!map) return;
@@ -2396,20 +2444,30 @@ async function downloadPoster() {
         x += widths[i] + gap;
     });
 
-    saveCanvas(out, filenameForTrip(titleText));
+    await saveCanvas(out, filenameForTrip(titleText), mode);
 }
 
-function saveCanvas(canvas, filename) {
-    canvas.toBlob(blob => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 5000);
-    }, 'image/png');
+async function saveCanvas(canvas, filename, mode) {
+    const blobPromise = new Promise((resolve, reject) => {
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('toBlob returned null')), 'image/png');
+    });
+
+    if (mode === 'copy') {
+        // Safari only accepts a ClipboardItem whose data is still a pending
+        // promise, so hand it the promise rather than awaiting the blob first.
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })]);
+        return;
+    }
+
+    const blob = await blobPromise;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
 // ── The poster's back side: the itinerary ────────────────────────────────────
