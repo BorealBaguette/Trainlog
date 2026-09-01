@@ -7101,6 +7101,21 @@ def router_status_single():
         return jsonify({"status": "DOWN", "message": str(e)})
 
 
+@app.route("/status/trip_counter")
+def status_trip_counter():
+    """Highest trip_id ever assigned, for the live counter on /status. Deliberately
+    just the MAX: trip_id is the SERIAL primary key, so this is a backwards index
+    scan that stops at the first row and stays cheap enough to poll every second.
+    The trips/min rate is derived client-side from successive values."""
+    with pg_session() as pg:
+        max_id = pg.execute(
+            "SELECT COALESCE(MAX(trip_id), 0) FROM trips"
+        ).scalar()
+    response = jsonify({"max_trip_id": max_id})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @app.route("/photon_status/<instance>")
 def router_status_photon(instance):
     if instance not in photonInstances:
@@ -13431,10 +13446,42 @@ def user_bounds(username, year=None):
     )
 
 
+SEED_RATE_WINDOW_MIN = 5
+
+
+def get_trip_activity_seed():
+    """Highest trip_id plus the recent creation rate, so /status can render the
+    odometer and speedometer already populated instead of spending the first
+    minute measuring. `created` is written as a naive local datetime.now()
+    (not PG now()), so the cutoff is computed on the same clock.
+    """
+    cutoff = datetime.now() - timedelta(minutes=SEED_RATE_WINDOW_MIN)
+    with pg_session() as pg:
+        row = pg.execute(
+            """
+            SELECT COALESCE(MAX(trip_id), 0) AS max_id,
+                   COUNT(*) FILTER (WHERE created >= :cutoff) AS recent
+            FROM trips
+            """,
+            {"cutoff": cutoff},
+        ).fetchone()
+    return {
+        "max_trip_id": row.max_id,
+        "seed_rate": round(row.recent / SEED_RATE_WINDOW_MIN, 2),
+        "seed_window_min": SEED_RATE_WINDOW_MIN,
+    }
+
+
 @app.route("/status")
 def router_status():
     latest_commit_hex = latest_commit.hexsha
     latest_commit_dt = latest_commit.committed_datetime
+
+    try:
+        trip_seed = get_trip_activity_seed()
+    except Exception:
+        # A gimmick must never take the status page down with it.
+        trip_seed = None
 
     return render_template(
         "status.html",
@@ -13446,6 +13493,7 @@ def router_status():
         latest_commit_hex_short=latest_commit_hex[:7],
         latest_commit_display=latest_commit_dt.strftime("%Y-%m-%d %H:%M UTC"),
         latest_commit_ago=time_ago(latest_commit_dt),
+        trip_seed=trip_seed,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
