@@ -220,6 +220,7 @@ from src.utils import (
     get_default_trip_visibility,
     current_user_is_friend_with,
     external_url,
+    parse_date,
 )
 from src.trips import (
     Trip,
@@ -8264,11 +8265,16 @@ def processPublicTrips(tripIds):
         # (which would raise TypeError when mixing dated and non-dated trips).
         dt = d["trip"]["utc_filtered_start_datetime"]
         if isinstance(dt, str):
-            return (1, dt)
+            # Adjust start datetime by departure delay (in seconds)
+            # TODO: remove this part here once the postgres query provides "actual_departure_time"
+            dt_obj = parse_date(dt)
+            departure_delay = d["trip"]["departure_delay"] or 0
+            dt_obj += timedelta(seconds=departure_delay)
+            return (1, dt_obj.strftime("%Y-%m-%d %H:%M:%S"))
         return (0 if dt == -1 else 2, "")
 
-    sortedTripList = sorted(tripList, key=lambda d: d["trip"]["uid"], reverse=True)
-    sortedTripList = sorted(sortedTripList, key=_pub_trip_sort_key, reverse=True)
+    sortedTripList = sorted(tripList, key=lambda d: d["trip"]["uid"])
+    sortedTripList = sorted(sortedTripList, key=_pub_trip_sort_key)
     
     priceDict = {
         "total_price": total_price, 
@@ -8379,7 +8385,6 @@ def bulkSetPowerType(username):
 def mergeTrips(username, tripIds):
     # Process and sort the trips (includes permission checks)
     sortedTripList, priceDict = processPublicTrips(tripIds)
-    sortedTripList.reverse()
 
     if not sortedTripList:
         return jsonify({"error": "No trips found to merge."}), 400
