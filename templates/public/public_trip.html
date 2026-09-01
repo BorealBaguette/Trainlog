@@ -850,18 +850,8 @@ $.post({
   success: function(data, status) {
     var trips = data[0];
     var prices = data[1];
-    trips.reverse();
-    trips.sort(function(a, b) {
-      var getKey = function(t) {
-        try {
-          var dt = t.trip.utc_filtered_start_datetime;
-          if (!dt) return 0;
-          var ts = new Date(dt + 'Z').getTime();
-          return isNaN(ts) ? 0 : ts + (t.trip.departure_delay || 0) * 1000;
-        } catch(e) { return 0; }
-      };
-      return getKey(a) - getKey(b);
-    });
+    // Ordered by actual departure server-side; the old key here also sent every
+    // undated trip to the front instead of splitting past from future.
     buildItinerary(trips, prices);
     placePolylines(trips);
     $('.futurePolyline').show();

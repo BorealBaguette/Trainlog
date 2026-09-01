@@ -1616,18 +1616,9 @@ async function init() {
         contentType: 'application/json',
         data: JSON.stringify({ tripIds: tripIds })
     });
+    // processPublicTrips already orders by actual departure (planned + delay),
+    // so re-sorting here on the planned time would undo it.
     let trips = response[0];
-    trips.reverse();
-    trips.sort(function(a, b) {
-        function key(t) {
-            try {
-                const dt = t.trip.utc_filtered_start_datetime;
-                const ts = new Date(String(dt).replace(' ', 'T') + 'Z').getTime();
-                return isNaN(ts) ? 0 : ts;
-            } catch (e) { return 0; }
-        }
-        return key(a) - key(b);
-    });
     posterTrips = trips;
 
     // Only shown when relevant: a viewer other than the trip owner never even

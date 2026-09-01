@@ -8391,7 +8391,6 @@ def bulkSetPowerType(username):
 def mergeTrips(username, tripIds):
     # Process and sort the trips (includes permission checks)
     sortedTripList, priceDict = processPublicTrips(tripIds)
-    sortedTripList.reverse()
 
     if not sortedTripList:
         return jsonify({"error": "No trips found to merge."}), 400
