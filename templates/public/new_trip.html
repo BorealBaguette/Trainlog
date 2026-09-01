@@ -663,7 +663,7 @@ body.markers-hidden .marker-red-green {
     <button class="control-button" id="markersToggle" onclick="toggleMarkers()" title="{{hideMarkers}}"><i class="fas fa-map-pin"></i></button>
   {# The poster is served only to the owner of every trip on the page (401 otherwise). #}
   {% set poster_url = (url_for('public_trip_poster', tagId=tag_uuid) if tag_uuid else (url_for('public_trip_poster', tripIds=tripIds) if tripIds else None)) if own_trips else None %}
-  {% if poster_url or show_ride_along or tag_uuid or plan_copy_url %}
+  {% if poster_url or show_ride_along or multitrip_url or plan_copy_url %}
     <div class="tripActions" id="tripActions">
       <button type="button" class="control-button" onclick="toggleTripActions(event)" title="{{ actions }}" aria-label="{{ actions }}">
         <i class="fa-solid fa-ellipsis"></i>
@@ -688,8 +688,8 @@ body.markers-hidden .marker-red-green {
           <i class="fa-solid fa-copy"></i> {{ rideAlong }}
         </button>
         {% endif %}
-        {% if tag_uuid %}
-        <a class="tripActionBtn" href="{{ url_for('multi_trip', tagUuid=tag_uuid) }}">
+        {% if multitrip_url %}
+        <a class="tripActionBtn" href="{{ multitrip_url }}">
           <i class="fa-solid fa-play"></i> {{ play_tag }}
         </a>
         {% endif %}
