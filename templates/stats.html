@@ -297,12 +297,21 @@
             formatValue: (value) => formatCarbonFootprint(value, LANG),
             enabled: true
         },
-        // Accumulated arrival delay, in seconds. Only trips where a delay was
+        // Delay on arrival, in seconds. Only trips where a delay was
         // actually recorded contribute, so this is "delay I logged", not an
         // average across everything.
         delay: {
             label: '{{statsDelay}}',
             suffix: 'Delay',
+            formatValue: (value) => secondsToDhm(value, LANG, "long"),
+            enabled: true
+        },
+        // Delay accumulated during the trip: arrival_delay - departure_delay.
+        // Positive values mean the delay increased en route; negative means time
+        // was made up. Measured in seconds.
+        delayAccumulated: {
+            label: '{{statsDelayAccumulated}}',
+            suffix: 'DelayAccumulated',
             formatValue: (value) => secondsToDhm(value, LANG, "long"),
             enabled: true
         }
@@ -2234,7 +2243,7 @@
 
     // Metrics measured in seconds get the time-aware axis.
     function isDurationLike(metric) {
-        return metric === 'duration' || metric === 'delay';
+        return metric === 'duration' || metric === 'delay' || metric === 'delayAccumulated';
     }
 
     function valueAxisConfig(maxValue, axisBreak) {

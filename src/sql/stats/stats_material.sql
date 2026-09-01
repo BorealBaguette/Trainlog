@@ -26,7 +26,9 @@ SELECT
     SUM(m.carbon * m.is_planned_future) AS "plannedFutureCO2",
     SUM(m.carbon * (m.is_past + m.is_planned_future)) AS "totalCO2",
     SUM(COALESCE(m.arrival_delay, 0) * m.is_past) AS "pastDelay",
-    SUM(COALESCE(m.arrival_delay, 0) * m.is_planned_future) AS "plannedFutureDelay"
+    SUM(COALESCE(m.arrival_delay, 0) * m.is_planned_future) AS "plannedFutureDelay",
+    SUM((COALESCE(m.arrival_delay, 0) - COALESCE(m.departure_delay, 0)) * m.is_past) AS "pastDelayAccumulated",
+    SUM((COALESCE(m.arrival_delay, 0) - COALESCE(m.departure_delay, 0)) * m.is_planned_future) AS "plannedFutureDelayAccumulated"
 FROM split_material m
 LEFT JOIN airliners a ON m.material_type = a.iata
 GROUP BY material
