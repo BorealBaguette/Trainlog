@@ -6,39 +6,11 @@
     {% include "bootstrap/no_user_nav.html" %}
 {% endif %}
 <div class="container mt-4">
+    <!-- Layout: the short cards stack full width at the top, then the tall
+         router table and the equally tall odometer sit side by side. -->
     <div class="card mb-4">
         <div class="card-header">
-            <h5><i class="fa-solid fa-location-dot"></i> Photon Geocoder Status</h5>
-        </div>
-        <div class="card-body">
-            <div id="photon-status-row" class="d-flex flex-wrap" style="gap: 2rem;">
-                <!-- Statuses injected here -->
-            </div>
-        </div>
-    </div>
-    <div class="card mb-4">
-        <div class="card-header">
-            <h5 class="header"><i class="fa-solid fa-route"></i> Router Status</h5>
-        </div>
-        <div class="card-body">
-            <table class="table table-bordered" style="color: #333;">
-                <thead class="thead-dark">
-                    <tr>
-                        <th>Transport Mode</th>
-                        <th>Region</th>
-                        <th>Provider</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody id="router-status-tbody">
-                    <!-- Rows injected by JS -->
-                </tbody>
-            </table>
-        </div>
-    </div>
-        <div class="card mb-4">
-        <div class="card-header">
-            <h5><i class="fa-solid fa-code-branch"></i> Trainlog </h5>
+            <h5><i class="fa-solid fa-code-branch"></i> Trainlog</h5>
         </div>
         <div class="card-body">
             <p class="mb-0">
@@ -50,6 +22,62 @@
                     (committed {{ latest_commit_ago }})
                 </span>
             </p>
+        </div>
+    </div>
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5><i class="fa-solid fa-location-dot"></i> Photon Geocoder Status</h5>
+        </div>
+        <div class="card-body">
+            <div id="photon-status-row" class="d-flex flex-wrap" style="gap: 2rem;">
+                <!-- Statuses injected here -->
+            </div>
+        </div>
+    </div>
+    <!-- h-100 on both cards, margin on the row: the two columns then end level
+         instead of leaving the odometer floating above a gap. -->
+    <div class="row mb-4">
+        <div class="col-lg-7">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5 class="header"><i class="fa-solid fa-route"></i> Router Status</h5>
+                </div>
+                <div class="card-body">
+                    <table class="table table-bordered" style="color: #333;">
+                        <thead class="thead-dark">
+                            <tr>
+                                <th>Transport Mode</th>
+                                <th>Region</th>
+                                <th>Provider</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="router-status-tbody">
+                            <!-- Rows injected by JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-lg-5">
+            <div class="card h-100">
+                <div class="card-header">
+                    <h5><i class="fa-solid fa-gauge-high"></i> Trip Odometer</h5>
+                </div>
+                <div class="card-body odometer-body">
+                    <div class="odometer-caption">
+                        Highest trip ID
+                        <span id="trip-odometer-tick" class="odometer-tick"></span>
+                    </div>
+                    <div id="trip-odometer" class="odometer" aria-label="Highest trip ID">
+                        <span class="spinner-border spinner-border-sm"></span>
+                    </div>
+                    <svg id="trip-speedo" class="speedo" viewBox="0 0 260 206"
+                         role="img" aria-label="Trips per minute">
+                        <!-- dial, ticks, labels and needle injected by JS -->
+                    </svg>
+                </div>
+            </div>
         </div>
     </div>
 </div>
@@ -92,6 +120,287 @@ function renderPhotonStatus() {
   });
 }
 renderPhotonStatus();
+
+// Silly gimmick: a rolling odometer of the highest trip ID plus an analog
+// speedometer of trips/min. Both come straight from the server, on separate
+// intervals: the id is a primary-key lookup asked for every second, the rate a
+// count over a long window asked for every ten. Deriving the rate here from id
+// deltas instead made it sag between trips and jump on each one, which read as
+// noise rather than activity.
+(function () {
+  const POLL_MS = 1000;       // the id: a primary-key lookup, cheap
+  const RATE_POLL_MS = 10000; // the rate: a scan, so asked for far less often
+
+  // Gauge geometry: a 240-degree sweep, needle straight up at half scale.
+  const CX = 130, CY = 132, R = 88;
+  const SWEEP = 120; // degrees either side of vertical
+
+  const box = document.getElementById("trip-odometer");
+  const tickEl = document.getElementById("trip-odometer-tick");
+  const svg = document.getElementById("trip-speedo");
+
+  let current = null;
+  let pending = null;   // target we are counting up towards
+  let stepping = false; // guards against overlapping count-up chains
+  let scaleMax = null;  // current full-scale reading
+  let needle = null, readout = null, valueArc = null;
+  let lastFrac = 0, arcTween = null;
+
+  // Server-rendered seed: max id and the trips/min over the last few minutes,
+  // computed from `created`, so the dial opens on a real reading.
+  const seed = {{ trip_seed | tojson }};
+
+  // Full-scale values the gauge picks between. Trainlog idles under a trip a
+  // minute but a bulk import can push hundreds, so the dial re-ranges rather
+  // than pinning the needle. Each divides by five into round tick labels.
+  const SCALES = [1, 2.5, 5, 10, 25, 50, 100, 250, 500, 1000, 2500];
+
+  function polar(r, angle) {
+    const a = (angle * Math.PI) / 180;
+    return [CX + r * Math.sin(a), CY - r * Math.cos(a)];
+  }
+
+  function arcPath(r, fromAngle, toAngle) {
+    const [x1, y1] = polar(r, fromAngle);
+    const [x2, y2] = polar(r, toAngle);
+    const large = Math.abs(toAngle - fromAngle) > 180 ? 1 : 0;
+    return `M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2}`;
+  }
+
+  function el(name, attrs, text) {
+    const node = document.createElementNS("http://www.w3.org/2000/svg", name);
+    for (const k in attrs) node.setAttribute(k, attrs[k]);
+    if (text !== undefined) node.textContent = text;
+    return node;
+  }
+
+  function fmtScale(v) {
+    if (v >= 1000) return (v / 1000) + "k";
+    return Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10);
+  }
+
+  // Redraw the whole face for a given full-scale value.
+  function drawFace(max) {
+    scaleMax = max;
+    svg.textContent = "";
+
+    // One gradient across the dial: green at rest, red when it's really moving.
+    const defs = el("defs", {});
+    const grad = el("linearGradient", {
+      id: "speedo-grad", gradientUnits: "userSpaceOnUse",
+      x1: CX - R, y1: 0, x2: CX + R, y2: 0
+    });
+    [["0%", "#28a745"], ["55%", "#ffc107"], ["100%", "#dc3545"]].forEach(stop => {
+      grad.appendChild(el("stop", { offset: stop[0], "stop-color": stop[1] }));
+    });
+    defs.appendChild(grad);
+    svg.appendChild(defs);
+
+    // Outer bezel, then the recessed track the value arc fills.
+    svg.appendChild(el("path", {
+      d: arcPath(R + 13, -SWEEP, SWEEP), class: "speedo-bezel"
+    }));
+    svg.appendChild(el("path", {
+      d: arcPath(R, -SWEEP, SWEEP), class: "speedo-track"
+    }));
+
+    // The filled portion is redrawn as real geometry (tweened below) rather
+    // than faked with a dash offset, so it can't drift out of step with the
+    // needle whatever the arc's measured length is.
+    valueArc = el("path", { d: "", class: "speedo-value" });
+    svg.appendChild(valueArc);
+
+    // Five major divisions: every scale in SCALES divides into round numbers.
+    const majors = 5;
+    for (let i = 0; i <= majors * 2; i++) {
+      const frac = i / (majors * 2);
+      const angle = -SWEEP + frac * SWEEP * 2;
+      const major = i % 2 === 0;
+      const [x1, y1] = polar(R + (major ? 8 : 10), angle);
+      const [x2, y2] = polar(R + (major ? 17 : 14), angle);
+      svg.appendChild(el("line", {
+        x1: x1, y1: y1, x2: x2, y2: y2,
+        class: major ? "speedo-tick-major" : "speedo-tick-minor"
+      }));
+      if (major) {
+        const [lx, ly] = polar(R + 28, angle);
+        svg.appendChild(el("text", {
+          x: lx, y: ly + 4, class: "speedo-label"
+        }, fmtScale(max * frac)));
+      }
+    }
+
+    // Needle: a tapered blade with a counterweight tail, so it reads as a real
+    // pointer pivoting rather than a triangle stuck on a dot.
+    needle = el("g", { class: "speedo-needle" });
+    needle.appendChild(el("path", {
+      d: `M ${CX - 4.5} ${CY} Q ${CX - 2} ${CY - R * 0.45} ${CX} ${CY - R + 12} `
+        + `Q ${CX + 2} ${CY - R * 0.45} ${CX + 4.5} ${CY} Z`
+    }));
+    needle.appendChild(el("circle", { cx: CX, cy: CY + 13, r: 4.5 }));
+    svg.appendChild(needle);
+
+    svg.appendChild(el("circle", { cx: CX, cy: CY, r: 10, class: "speedo-hub" }));
+    svg.appendChild(el("circle", { cx: CX, cy: CY, r: 4, class: "speedo-hub-pin" }));
+
+    readout = el("text", { x: CX, y: CY + 48, class: "speedo-readout" }, "—");
+    svg.appendChild(readout);
+    svg.appendChild(el("text", {
+      x: CX, y: CY + 63, class: "speedo-unit"
+    }, "trips / min"));
+  }
+
+  // Smallest scale that fits, with hysteresis so the dial doesn't flap between
+  // two ranges on every poll.
+  function pickScale(rate) {
+    if (scaleMax !== null && rate <= scaleMax * 0.95 && rate >= scaleMax * 0.2) {
+      return scaleMax;
+    }
+    for (const candidate of SCALES) {
+      if (rate <= candidate * 0.9) return candidate;
+    }
+    return SCALES[SCALES.length - 1];
+  }
+
+  function drawValueArc(frac) {
+    // A zero-length arc would still paint a dot through the round linecap.
+    valueArc.setAttribute(
+      "d", frac < 0.005 ? "" : arcPath(R, -SWEEP, -SWEEP + frac * SWEEP * 2)
+    );
+  }
+
+  // Tween the filled arc alongside the needle's CSS transition, with the same
+  // gentle overshoot, so the two never disagree mid-flight.
+  function tweenArc(from, to) {
+    const started = performance.now();
+    const DURATION = 700;
+    if (arcTween) cancelAnimationFrame(arcTween);
+    const frame = now => {
+      const t = Math.min(1, (now - started) / DURATION);
+      const eased = 1 - Math.pow(1 - t, 3);
+      drawValueArc(from + (to - from) * eased);
+      if (t < 1) arcTween = requestAnimationFrame(frame);
+      else arcTween = null;
+    };
+    arcTween = requestAnimationFrame(frame);
+  }
+
+  function setRate(rate) {
+    const wanted = pickScale(rate);
+    const rescaled = wanted !== scaleMax;
+    if (rescaled) drawFace(wanted);
+    const frac = Math.max(0, Math.min(1, rate / scaleMax));
+    needle.style.transform = `rotate(${-SWEEP + frac * SWEEP * 2}deg)`;
+    if (rescaled) {
+      drawValueArc(frac); // fresh face: no previous arc to travel from
+    } else {
+      tweenArc(lastFrac, frac);
+    }
+    lastFrac = frac;
+    readout.textContent = rate >= 10 ? rate.toFixed(0) : rate.toFixed(1);
+    readout.classList.toggle("speedo-readout-hot", rate >= 1);
+  }
+
+  function restartAnimation(node, className) {
+    node.classList.remove(className);
+    void node.offsetWidth; // force reflow so the animation replays
+    node.classList.add(className);
+  }
+
+  function renderDigits(value) {
+    const digits = String(value).split("");
+    const existing = box.querySelectorAll(".odometer-digit");
+    if (existing.length !== digits.length) {
+      box.innerHTML = digits
+        .map(d => `<span class="odometer-digit">${d}</span>`)
+        .join("");
+      return;
+    }
+    digits.forEach((d, i) => {
+      if (existing[i].textContent !== d) {
+        existing[i].textContent = d;
+        restartAnimation(existing[i], "odometer-roll");
+      }
+    });
+  }
+
+  // Walk up to `pending` one id at a time, pacing the steps so the whole climb
+  // finishes within a poll interval however many ids arrived at once.
+  function countTo(target) {
+    pending = target;
+    if (current === null) {
+      current = target;
+      renderDigits(current);
+      return;
+    }
+    if (stepping) return;
+    stepping = true;
+    const step = () => {
+      if (current >= pending) {
+        stepping = false;
+        return;
+      }
+      const remaining = pending - current;
+      if (remaining > 40) {
+        current = pending; // too big to be fun, just snap
+      } else {
+        current += 1;
+      }
+      renderDigits(current);
+      if (current >= pending) {
+        stepping = false;
+        return;
+      }
+      setTimeout(step, Math.max(60, Math.min(200, POLL_MS / remaining)));
+    };
+    step();
+  }
+
+  function poll() {
+    fetch("/status/trip_counter", { cache: "no-store" })
+      .then(r => r.json())
+      .then(data => {
+        countTo(data.max_trip_id);
+        tickEl.textContent = "●";
+        restartAnimation(tickEl, "odometer-blink");
+      })
+      .catch(() => {
+        if (current === null) box.textContent = "—";
+      });
+  }
+
+  function pollRate() {
+    fetch("/status/trip_rate", { cache: "no-store" })
+      .then(r => r.json())
+      .then(data => setRate(data.rate))
+      .catch(() => { /* keep the last good reading on the dial */ });
+  }
+
+  if (seed) {
+    current = seed.max_trip_id;
+    renderDigits(current);
+    drawFace(pickScale(seed.rate));
+    setRate(seed.rate);
+  } else {
+    drawFace(SCALES[0]);
+  }
+  poll();
+  let timer = setInterval(poll, POLL_MS);
+  let rateTimer = setInterval(pollRate, RATE_POLL_MS);
+
+  // Don't hammer the endpoint from a tab nobody is looking at.
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden) {
+      clearInterval(timer);
+      clearInterval(rateTimer);
+    } else {
+      poll();
+      pollRate();
+      timer = setInterval(poll, POLL_MS);
+      rateTimer = setInterval(pollRate, RATE_POLL_MS);
+    }
+  });
+})();
 
 // Define routers with more detailed information about their purpose
 const routers = [
@@ -303,6 +612,156 @@ document.addEventListener("DOMContentLoaded", function() {
   display: flex;
   align-items: center;
   gap: 0.6em;
+}
+
+.odometer-body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    /* The card is stretched to match the router table, so spread the dial and
+       the digits down the available height rather than stacking them at top. */
+    justify-content: space-evenly;
+    padding: 1.5rem 1rem;
+}
+
+.odometer-caption {
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    font-size: 0.7rem;
+    color: #adb5bd;
+    margin-bottom: 0.6rem;
+}
+
+.odometer {
+    display: inline-flex;
+    gap: 5px;
+}
+
+.odometer-digit {
+    display: inline-block;
+    min-width: 0.72em;
+    padding: 0.12em 0.16em;
+    font-family: "Courier New", monospace;
+    font-size: 2.6rem;
+    font-weight: bold;
+    line-height: 1.1;
+    text-align: center;
+    color: #f8f9fa;
+    /* split-flap seam across the middle of each tile */
+    background: linear-gradient(#414a52 0 49%, #2b3238 49% 51%, #343c43 51% 100%);
+    border-radius: 7px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+@keyframes odometer-roll {
+    0%   { transform: translateY(-55%) rotateX(70deg); opacity: 0; }
+    100% { transform: translateY(0) rotateX(0); opacity: 1; }
+}
+
+.odometer-roll {
+    animation: odometer-roll 0.28s ease-out;
+}
+
+.odometer-tick {
+    color: #28a745;
+    opacity: 0;
+    margin-left: 2px;
+}
+
+@keyframes odometer-blink {
+    0%   { opacity: 1; }
+    100% { opacity: 0; }
+}
+
+.odometer-blink {
+    animation: odometer-blink 1.2s ease-out;
+}
+
+.speedo {
+    width: 100%;
+    max-width: 340px;
+    height: auto;
+    margin: 0 auto;
+    display: block;
+    overflow: visible;
+}
+
+.speedo-bezel {
+    fill: none;
+    stroke: rgba(0, 0, 0, 0.05);
+    stroke-width: 3;
+    stroke-linecap: round;
+}
+
+.speedo-track {
+    fill: none;
+    stroke: #e9ecef;
+    stroke-width: 13;
+    stroke-linecap: round;
+}
+
+.speedo-value {
+    fill: none;
+    stroke: url(#speedo-grad);
+    stroke-width: 13;
+    stroke-linecap: round;
+}
+
+.speedo-tick-major {
+    stroke: #868e96;
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+
+.speedo-tick-minor {
+    stroke: #ced4da;
+    stroke-width: 1.5;
+    stroke-linecap: round;
+}
+
+.speedo-label {
+    fill: #868e96;
+    font-size: 11px;
+    font-family: "Courier New", monospace;
+    text-anchor: middle;
+}
+
+.speedo-needle {
+    fill: #dc3545;
+    transform-origin: 130px 132px;
+    transform: rotate(-120deg);
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+    /* slight overshoot, like a real needle settling */
+    transition: transform 0.7s cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+
+.speedo-hub {
+    fill: #343a40;
+}
+
+.speedo-hub-pin {
+    fill: #6c757d;
+}
+
+.speedo-readout {
+    fill: #495057;
+    font-size: 26px;
+    font-weight: bold;
+    font-family: "Courier New", monospace;
+    text-anchor: middle;
+    transition: fill 0.4s ease;
+}
+
+.speedo-readout-hot {
+    fill: #28a745;
+}
+
+.speedo-unit {
+    fill: #adb5bd;
+    font-size: 9px;
+    text-anchor: middle;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
 }
 
 code a {

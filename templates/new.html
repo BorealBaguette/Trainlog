@@ -1,6 +1,10 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
 
+{% if vehicle_type == 'ferry' %}
+<script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
+{% endif %}
+
 {% include "bootstrap/navigation.html"%}
 
 <style>
@@ -242,9 +246,12 @@
         </div>
         {% endif %}
         <label for="reg" class="sr-only">{{reg}}</label>
-        <input type="text" class="non_poi" name="reg" id="reg" placeholder="{{reg}}">
+        <input type="text" class="non_poi" name="reg" id="reg" placeholder="{{reg}}" autocomplete="off">
+        <!-- Ferries store the ship's IMO/MMSI, so name the ship the number stands for. -->
+        <small id="regVesselName" class="form-text text-muted" style="display:none;margin-top:-.6rem;margin-bottom:.6rem;"></small>
         <label for="seat" class="sr-only">{{seat}}</label>
         <input type="text" class="non_poi" name="seat" id="seat" placeholder="{{seat}}">
+        <input type="hidden" name="seat_car" id="seat_car">
         <label for="notes" class="sr-only">{{notes}}</label>
         <input type="text" name="notes" id="notes" placeholder="{{notes}}">
         <label for="tagSearchInput">{{tags|default('Tags')}}</label>
@@ -1371,6 +1378,13 @@
     bar.attr('aria-valuenow', percent);
     bar.text(`${percent}%`);
   }
+{% endif %}
+
+{% if vehicle_type == 'ferry' %}
+  // ---------- Ferry-specific behaviour ----------
+  // Suggestions match name, IMO or MMSI; what lands in the field is the number (see
+  // vessel_field.js), with the ship named on the hint line under it.
+  initVesselField('#reg', '#regVesselName', "{{ url_for('vesselAutocomplete') }}");
 {% endif %}
 </script>
 

@@ -1,0 +1,606 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+
+<style>
+    /* A worklist, not a report: the page is a queue of decisions an admin works
+       through, so everything is sized to be compared and clicked rather than read.
+
+       One card per unresolved name. The candidates inside it stay a table — lining
+       flag under flag and operator under operator is the whole job — but each name
+       gets its own, so two hundred candidates are not one unreadable grid. */
+    .bf-card {
+        border: 1px solid var(--bs-border-color, #dee2e6);
+        border-radius: .5rem;
+        margin-bottom: .75rem;
+        /* Deliberately NOT overflow:hidden. The photo preview is an absolutely
+           positioned image that has to escape its cell to be any use, and a card that
+           clips its own overflow cuts it off at the border. The head rounds its own top
+           corners instead, which is all the clipping was for. */
+    }
+    .bf-card > .bf-card-head {
+        padding: .55rem .85rem;
+        background: rgba(0, 0, 0, .03);
+        border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+        border-radius: .45rem .45rem 0 0;
+        display: flex;
+        flex-wrap: wrap;
+        gap: .5rem;
+        align-items: baseline;
+    }
+    .bf-card table { margin-bottom: 0; }
+    .bf-card table td, .bf-card table th { vertical-align: middle; }
+    /* The hint row, marked rather than sorted: a candidate run by the operator of the
+       trips is probably the one, and it should be the row the eye lands on. */
+    tr.bf-likely > td { background: rgba(25, 135, 84, .07); }
+    /* Bootstrap 5.1 here, so no *-subtle classes: .badge alone is white text on nothing,
+       which is how this read as an empty box. Spelled out instead of guessed. */
+    .badge.bf-likely-badge {
+        background-color: #d1e7dd;
+        color: #0a3622;
+        border: 1px solid #a3cfbb;
+        font-weight: 600;
+    }
+
+    /* Photos: the comparison is the point, so both pictures are shown at a size you
+       can actually judge instead of a 56px thumbnail with a hover popup. */
+    .bf-photo-card { display: flex; gap: .75rem; align-items: center; flex-wrap: wrap; }
+    .bf-photo-card img { border-radius: .25rem; max-height: 110px; max-width: 190px; object-fit: cover; }
+    .bf-photo-none {
+        width: 190px; height: 110px; border-radius: .25rem;
+        border: 1px dashed var(--bs-border-color, #dee2e6);
+        display: flex; align-items: center; justify-content: center;
+    }
+
+    .bf-done { opacity: .55; }
+    /* Sticky, because the Apply button belongs with a list that can be pages long. */
+    .bf-sticky {
+        position: sticky; bottom: 0; z-index: 5;
+        background: var(--bs-body-bg, #fff);
+        border-top: 1px solid var(--bs-border-color, #dee2e6);
+        padding: .6rem 0;
+    }
+</style>
+
+<div class="container mb-5">
+    <div class="d-flex flex-wrap gap-2 align-items-center mt-3 mb-1">
+        <h1 class="mb-0 me-auto">Wikidata backfill</h1>
+        <a href="/admin/ships" class="btn btn-outline-secondary btn-sm">
+            <i class="fa-solid fa-arrow-left"></i> Ship register
+        </a>
+    </div>
+    <p class="text-muted mb-1">
+        Looks up every gap in the register on Wikidata and lists the work in three piles:
+        fields it can fill in on its own, photos it can license properly, and names only a
+        human can resolve.
+    </p>
+    <p class="text-muted">
+        <strong>Scanning writes nothing.</strong> Every write on this page is a button
+        press, and each button does exactly what it says the moment you press it. Only
+        empty fields are ever filled, so anything curated by hand survives a re-run.
+    </p>
+
+    <!-- Step 1. The scan is the slow half — several SPARQL round trips to an external
+         service, tens of seconds — so it says so, and counts while it waits. -->
+    <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+        <button type="button" id="scanBtn" class="btn btn-primary">
+            <i class="fa-solid fa-magnifying-glass"></i> <span id="scanBtnLabel">Scan Wikidata</span>
+        </button>
+        <span id="scanState" class="text-muted small"></span>
+    </div>
+
+    <div id="scanError" class="alert alert-danger" style="display:none;"></div>
+
+    <!-- Step 2. The three piles. The tab carries the count, so the summary and the
+         navigation are the same thing rather than two lists of the same numbers. -->
+    <div id="results" style="display:none;">
+        <ul class="nav nav-tabs mb-3" id="paneTabs">
+            <li class="nav-item">
+                <button type="button" class="nav-link active" data-pane="auto">
+                    Fill in <span class="badge bg-secondary" id="tabAuto">0</span>
+                </button>
+            </li>
+            <li class="nav-item">
+                <button type="button" class="nav-link" data-pane="photos">
+                    Photos <span class="badge bg-secondary" id="tabPhotos">0</span>
+                </button>
+            </li>
+            <li class="nav-item">
+                <button type="button" class="nav-link" data-pane="names">
+                    Identify <span class="badge bg-secondary" id="tabNames">0</span>
+                </button>
+            </li>
+        </ul>
+
+        <!-- Automatic changes: numbers and names matched by IMO or MMSI, which is an
+             identifier and not a guess, so these are applied in one go. -->
+        <div class="bf-pane" id="paneAuto">
+            <p class="text-muted small">
+                Matched on a number, so the ship is the same one — an IMO or an MMSI
+                identifies a hull, which is why these need no judgement. Untick anything
+                you would rather not have. Every ticked row is re-checked against the
+                register as it is written, so a field somebody filled in meanwhile is
+                skipped rather than overwritten.
+            </p>
+            <div id="autoBody"></div>
+            <div class="bf-sticky" id="autoActions" style="display:none;">
+                <button type="button" class="btn btn-success" id="applyBtn">
+                    <i class="fa-solid fa-cloud-arrow-down"></i> Write <span id="applyCount">0</span> ticked change(s)
+                </button>
+                <span id="applyState" class="text-muted small ms-2"></span>
+            </div>
+        </div>
+
+        <!-- Photos: a licence upgrade, one ship at a time. -->
+        <div class="bf-pane" id="panePhotos" style="display:none;">
+            <p class="text-muted small">
+                The cached photos are copyrighted stills from an image search. Where
+                Wikidata knows the ship by number, Commons has one under a licence that
+                permits the use, with an author to credit. Offered one by one: the free
+                file is not always the better picture. Replacing keeps the old one on
+                file — it just stops being the one shown.
+            </p>
+            <div class="form-check form-check-inline mb-2">
+                <input class="form-check-input" type="checkbox" id="photoOnlyMissing">
+                <label class="form-check-label small" for="photoOnlyMissing">Only ships with no photo</label>
+            </div>
+            <div id="photoBody"></div>
+        </div>
+
+        <!-- Names: the part that needs a human. -->
+        <div class="bf-pane" id="paneNames" style="display:none;">
+            <p class="text-muted small">
+                Trips that name a ship the register does not know. Matched on the name
+                alone, so this is a lead and not a fact — several real ships share a name.
+                Assigning creates the ship <strong>and rewrites those trips</strong> to
+                point at it.
+            </p>
+            <div class="row g-2 align-items-center mb-2">
+                <div class="col-sm-5">
+                    <input type="search" class="form-control form-control-sm" id="nameFilter"
+                           placeholder="Filter by name…">
+                </div>
+                <div class="col-sm-auto">
+                    <div class="form-check form-check-inline mb-0">
+                        <input class="form-check-input" type="checkbox" id="nameOnlyLikely">
+                        <label class="form-check-label small" for="nameOnlyLikely">Only with a likely match</label>
+                    </div>
+                    <div class="form-check form-check-inline mb-0">
+                        <input class="form-check-input" type="checkbox" id="nameHideEmpty" checked>
+                        <label class="form-check-label small" for="nameHideEmpty">Hide names with no candidate</label>
+                    </div>
+                </div>
+            </div>
+            <div id="nameBody"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* The scan result, kept in sessionStorage. A scan costs tens of seconds against an
+   external service, so a reload — or a trip to the register and back — should not throw
+   it away. Items handled here are removed from the stored copy, so what comes back is
+   the work that is still outstanding. */
+var STORE = 'shipBackfillScan';
+var state = null;
+
+function esc(v) { return $('<div>').text(v == null ? '' : v).html(); }
+
+function save() {
+    try { sessionStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* full or private */ }
+}
+
+function load() {
+    try {
+        var raw = sessionStorage.getItem(STORE);
+        if (raw) { state = JSON.parse(raw); }
+    } catch (e) { state = null; }
+}
+
+// ISO codes as flags with the country name on hover, the way the rest of the site
+// shows them.
+function flags(codes) {
+    return (codes || []).map(function(code) {
+        var name;
+        try { name = regionNames.of(code); } catch (e) { name = code; }
+        return '<span title="' + esc(name) + '">' + getFlagEmoji(code) + '</span>';
+    }).join(' ');
+}
+
+function operatorMarkup(name, logo) {
+    if (logo) {
+        return '<img src="/static/' + esc(logo) + '" height="16" alt="' + esc(name) + '"'
+             + ' title="' + esc(name) + '"'
+             + ' style="max-width:70px;object-fit:contain;vertical-align:middle;">';
+    }
+    return name ? esc(name) : '';
+}
+
+function thumb(src, full) {
+    return '<span class="ship-thumb">'
+         + '<img src="' + esc(src) + '" width="56" height="34" loading="lazy" alt="">'
+         + '<img class="ship-thumb-full" src="' + esc(full || src) + '" loading="lazy" alt="">'
+         + '</span>';
+}
+
+/* ── Scan ──────────────────────────────────────────────────────────────── */
+var scanTimer = null;
+
+$('#scanBtn').on('click', function() {
+    if (state && !confirm('Scan again? Anything still listed below is replaced by fresh results.')) return;
+    var started = Date.now();
+    $('#scanError').hide();
+    $('#scanBtn').prop('disabled', true);
+    scanTimer = setInterval(function() {
+        var secs = Math.round((Date.now() - started) / 1000);
+        $('#scanState').html('<i class="fa-solid fa-spinner fa-spin"></i> Querying Wikidata… '
+            + secs + 's');
+    }, 1000);
+    $('#scanState').html('<i class="fa-solid fa-spinner fa-spin"></i> Querying Wikidata…');
+
+    $.post('/admin/ships/backfill', {})
+        .done(function(res) {
+            state = {
+                filled: res.filled || [], created: res.created || [],
+                photos: res.photos || [], suggestions: res.suggestions || [],
+                at: new Date().toISOString()
+            };
+            save();
+            render();
+        })
+        .fail(function(xhr) {
+            $('#scanError').text((xhr.responseJSON && xhr.responseJSON.error) || 'Scan failed').show();
+        })
+        .always(function() {
+            clearInterval(scanTimer);
+            $('#scanBtn').prop('disabled', false);
+            $('#scanBtnLabel').text('Scan again');
+            scanState();
+        });
+});
+
+function scanState() {
+    if (!state) { $('#scanState').text('Nothing scanned yet.'); return; }
+    // Just when the list was taken. It used to add "nothing written yet", which stopped
+    // being true the moment anything on the page was pressed and had no way of knowing.
+    var when = new Date(state.at);
+    $('#scanState').text('Scanned at ' + when.toLocaleTimeString());
+}
+
+/* ── Panes ─────────────────────────────────────────────────────────────── */
+$('#paneTabs button').on('click', function() { showPane($(this).data('pane')); });
+
+function setCount(key, n) {
+    $('#tab' + key).text(n)
+        .toggleClass('bg-secondary', !n)
+        .toggleClass('bg-primary', !!n);
+}
+
+function showPane(pane) {
+    $('#paneTabs .nav-link').removeClass('active')
+        .filter('[data-pane="' + pane + '"]').addClass('active');
+    $('.bf-pane').hide();
+    $('#pane' + pane.charAt(0).toUpperCase() + pane.slice(1)).show();
+}
+
+function render() {
+    if (!state) { $('#results').hide(); scanState(); return; }
+    $('#results').show();
+    scanState();
+
+    // An empty pile stays grey; one with work in it is worth looking at.
+    var counts = {
+        Auto: state.filled.length + state.created.length,
+        Photos: state.photos.length,
+        Names: state.suggestions.length
+    };
+    Object.keys(counts).forEach(function(k) { setCount(k, counts[k]); });
+
+    renderAuto();
+    renderPhotos();
+    renderNames();
+}
+
+/* Ticked rows only. The index into state.filled / state.created is the key, so what is
+   written is a subset of the list on screen and nothing else. */
+function selectedPlan() {
+    var pick = function(list, kind) {
+        return list.filter(function(_, i) {
+            return $('#autoBody .bf-pick[data-kind="' + kind + '"][data-i="' + i + '"]').is(':checked');
+        });
+    };
+    return { filled: pick(state.filled, 'filled'), created: pick(state.created, 'created') };
+}
+
+function renderAuto() {
+    var out = '';
+    if (state.filled.length) {
+        out += '<h6 class="mt-2">' + state.filled.length + ' ship(s) to complete</h6>'
+             + '<table class="table table-sm align-middle"><thead><tr>'
+             + '<th style="width:2rem;"><input type="checkbox" class="form-check-input bf-pick-all"'
+             + ' data-kind="filled" checked></th>'
+             + '<th>Ship</th><th>Fields Wikidata would add</th></tr></thead><tbody>';
+        state.filled.forEach(function(f, i) {
+            var fields = Object.keys(f.changes).map(function(k) {
+                return '<span class="badge bg-light text-dark border me-1">' + esc(k)
+                     + ' <strong>' + esc(f.changes[k]) + '</strong></span>';
+            }).join('');
+            out += '<tr><td><input type="checkbox" class="form-check-input bf-pick"'
+                 + ' data-kind="filled" data-i="' + i + '" checked></td>'
+                 + '<td>' + esc(f.label) + ' <span class="text-muted small">#' + f.uid
+                 + '</span></td><td>' + fields + '</td></tr>';
+        });
+        out += '</tbody></table>';
+    }
+    if (state.created.length) {
+        out += '<h6 class="mt-3">' + state.created.length
+             + ' ship(s) to create from numbers logged on trips</h6>'
+             + '<table class="table table-sm align-middle"><thead><tr>'
+             + '<th style="width:2rem;"><input type="checkbox" class="form-check-input bf-pick-all"'
+             + ' data-kind="created" checked></th>'
+             + '<th>On trips as</th><th>Name</th><th>IMO</th><th>MMSI</th>'
+             + '</tr></thead><tbody>';
+        state.created.forEach(function(c, i) {
+            out += '<tr><td><input type="checkbox" class="form-check-input bf-pick"'
+                 + ' data-kind="created" data-i="' + i + '" checked></td>'
+                 + '<td class="text-muted">' + esc(c.reg) + '</td>'
+                 + '<td>' + esc(c.name || '(no name)') + '</td>'
+                 + '<td>' + (c.imo ? esc(c.imo) : '<span class="text-muted">—</span>') + '</td>'
+                 + '<td>' + (c.mmsi ? esc(c.mmsi) : '<span class="text-muted">—</span>') + '</td></tr>';
+        });
+        out += '</tbody></table>';
+    }
+    var total = state.filled.length + state.created.length;
+    $('#autoBody').html(out || '<p class="text-muted">Nothing to fill in — every ship'
+        + ' Wikidata knows by number is already complete.</p>');
+    $('#autoActions').toggle(total > 0);
+    countPicked();
+}
+
+function countPicked() {
+    var n = $('#autoBody .bf-pick:checked').length;
+    $('#applyCount').text(n);
+    $('#applyBtn').prop('disabled', !n);
+}
+
+$(document).on('change', '#autoBody .bf-pick', countPicked);
+$(document).on('change', '#autoBody .bf-pick-all', function() {
+    $('#autoBody .bf-pick[data-kind="' + $(this).data('kind') + '"]')
+        .prop('checked', $(this).is(':checked'));
+    countPicked();
+});
+
+$('#applyBtn').on('click', function() {
+    var plan = selectedPlan();
+    var total = plan.filled.length + plan.created.length;
+    if (!total) return;
+    if (!confirm('Write the ' + total + ' ticked change(s) now?')) return;
+    var $btn = $(this).prop('disabled', true);
+    $('#autoActions details').remove();
+    $('#applyState').html('<i class="fa-solid fa-spinner fa-spin"></i> Writing…');
+    $.post('/admin/ships/backfill', {
+        plan: JSON.stringify(plan)
+    }).done(function(res) {
+        // Written, so it stops being outstanding work. Only the ticked rows go: an
+        // unticked one was a decision not to write it, not a decision to forget it.
+        var wrote = function(list, key) {
+            var done = {};
+            list.forEach(function(x) { done[x[key]] = true; });
+            return function(x) { return !done[x[key]]; };
+        };
+        state.filled = state.filled.filter(wrote(plan.filled, 'uid'));
+        state.created = state.created.filter(wrote(plan.created, 'reg'));
+        save();
+        render();
+        var skipped = (res.skipped || []).length;
+        $('#applyState').html('<span class="text-success">'
+            + '<i class="fa-solid fa-check"></i> ' + (res.filled || []).length + ' completed, '
+            + (res.created || []).length + ' created'
+            + (skipped ? ' — ' + skipped + ' skipped (the register moved since the scan)' : '')
+            + '</span>');
+        if (skipped) {
+            // Appended under the button rather than into the list: what is left in the
+            // list is still work, and replacing it would throw it away.
+            $('#autoActions').append('<details class="mt-2 small"><summary>'
+                + skipped + ' skipped</summary><ul>'
+                + res.skipped.map(function(m) { return '<li>' + esc(m) + '</li>'; }).join('')
+                + '</ul></details>');
+        }
+    }).fail(function(xhr) {
+        $('#applyState').html('<span class="text-danger">'
+            + esc((xhr.responseJSON && xhr.responseJSON.error) || 'Apply failed') + '</span>');
+    }).always(function() {
+        $btn.prop('disabled', false);
+    });
+});
+
+/* ── Photos ────────────────────────────────────────────────────────────── */
+$('#photoOnlyMissing').on('change', renderPhotos);
+
+function renderPhotos() {
+    var rows = state.photos;
+    if ($('#photoOnlyMissing').is(':checked')) {
+        rows = rows.filter(function(p) { return !p.current_image; });
+    }
+    if (!rows.length) {
+        $('#photoBody').html('<p class="text-muted">Nothing to offer.</p>');
+        return;
+    }
+    var out = rows.map(function(p) {
+        var label = esc(p.name || p.imo || p.mmsi || '');
+        var number = p.imo ? 'IMO ' + esc(p.imo) : (p.mmsi ? 'MMSI ' + esc(p.mmsi) : '');
+        return '<div class="bf-card" data-registration="' + p.registration_id + '">'
+             + '<div class="bf-card-head"><strong>' + label + '</strong>'
+             + ' <span class="text-muted small">' + number + '</span></div>'
+             + '<div class="p-2 bf-photo-card">'
+             + '<div class="text-center">'
+             + (p.current_image
+                ? '<img src="' + esc(p.current_image) + '" loading="lazy" alt="">'
+                : '<div class="bf-photo-none text-muted small">no photo</div>')
+             + '<div class="text-muted small mt-1">now'
+             + (p.current_source ? ' · ' + esc(p.current_source) : '') + '</div></div>'
+             + '<i class="fa-solid fa-arrow-right text-muted"></i>'
+             + '<div class="text-center">'
+             + '<a href="' + esc(p.image) + '" target="_blank" rel="noopener noreferrer">'
+             + '<img src="' + esc(p.image) + '?width=380" loading="lazy" alt=""></a>'
+             + '<div class="text-muted small mt-1">Wikimedia Commons</div></div>'
+             + '<div class="ms-auto pe-2">'
+             + '<button class="btn btn-outline-success photo-swap-btn"'
+             + ' data-registration="' + p.registration_id + '"'
+             + ' data-image="' + esc(p.image) + '">'
+             + (p.current_image ? 'Replace' : 'Use this one') + '</button></div>'
+             + '</div></div>';
+    }).join('');
+    $('#photoBody').html(out);
+}
+
+$(document).on('click', '.photo-swap-btn', function() {
+    var $btn = $(this).prop('disabled', true);
+    var label = $btn.text();
+    var registration = $btn.data('registration');
+    $btn.html('<i class="fa-solid fa-spinner fa-spin"></i>');
+    $.post('/admin/ships/backfill/photo', {
+        registration_id: registration, image: $btn.data('image')
+    }).done(function() {
+        // Handled, so it stops being work: dropped from the stored scan and greyed out
+        // here rather than rebuilding a list that cost a minute to obtain.
+        state.photos = state.photos.filter(function(p) { return p.registration_id !== registration; });
+        save();
+        setCount('Photos', state.photos.length);
+        $btn.closest('.bf-card').addClass('bf-done');
+        $btn.replaceWith('<span class="text-success"><i class="fa-solid fa-check"></i> done</span>');
+    }).fail(function(xhr) {
+        $btn.prop('disabled', false).text(label)
+            .after('<div class="text-danger small">'
+                + esc((xhr.responseJSON && xhr.responseJSON.error) || 'Failed') + '</div>');
+    });
+});
+
+/* ── Names ─────────────────────────────────────────────────────────────── */
+$('#nameFilter').on('input', renderNames);
+$('#nameOnlyLikely, #nameHideEmpty').on('change', renderNames);
+
+/* A hint, not a verdict: a candidate run by the same operator as the trips, or flagged
+   in a country they sailed through, is probably the one. Both can be wrong — an operator
+   sells a ship, a ferry transits a country it is not registered in — so it only ever
+   marks a row. */
+function likely(s, o) {
+    var sameOperator = s.trip_operator && o.operators.some(function(name) {
+        var a = name.toLowerCase(), b = s.trip_operator.toLowerCase();
+        return a.indexOf(b) >= 0 || b.indexOf(a) >= 0;
+    });
+    var sameCountry = o.countries.some(function(code) {
+        return s.trip_countries.indexOf(code) >= 0;
+    });
+    return sameOperator ? 'same operator as the trips'
+         : (sameCountry ? 'registered where the trips sailed' : null);
+}
+
+function renderNames() {
+    var needle = ($('#nameFilter').val() || '').toLowerCase();
+    var rows = state.suggestions.filter(function(s) {
+        if (needle && s.name.toLowerCase().indexOf(needle) < 0) return false;
+        if ($('#nameHideEmpty').is(':checked') && !s.options.length) return false;
+        if ($('#nameOnlyLikely').is(':checked')) {
+            return s.options.some(function(o) { return likely(s, o); });
+        }
+        return true;
+    });
+    if (!rows.length) {
+        $('#nameBody').html('<p class="text-muted">Nothing matching.</p>');
+        return;
+    }
+
+    var out = rows.map(function(s) {
+        var trips = s.trips + (s.trips === 1 ? ' trip' : ' trips');
+        // The name being resolved and everything known about the trips that use it —
+        // the left-hand side of every comparison below it.
+        var head = '<div class="bf-card-head"><strong>' + esc(s.name) + '</strong>'
+                 + '<span class="text-muted small">' + trips + '</span>'
+                 + '<span>' + flags(s.trip_countries) + '</span>'
+                 + '<span>' + operatorMarkup(s.trip_operator, s.trip_operator_logo) + '</span>'
+                 + '</div>';
+
+        if (!s.options.length) {
+            return '<div class="bf-card">' + head
+                 + '<div class="p-2 text-muted small">Nothing on Wikidata under this name.</div>'
+                 + '</div>';
+        }
+
+        var body = '<table class="table table-sm mb-0"><thead><tr>'
+                 + '<th></th><th>Flag</th><th>IMO</th><th>MMSI</th><th>Operator</th>'
+                 + '<th>Photo</th><th>Wikidata</th><th></th></tr></thead><tbody>';
+        s.options.forEach(function(o) {
+            var hint = likely(s, o);
+            body += '<tr' + (hint ? ' class="bf-likely"' : '') + '>'
+                 + '<td>' + (hint
+                    ? '<span class="badge bf-likely-badge" title="' + esc(hint) + '">likely</span>'
+                    : '') + '</td>'
+                 + '<td>' + flags(o.countries) + '</td>'
+                 + '<td>' + (o.imo
+                    ? '<a href="https://www.vesselfinder.com/vessels/details/' + esc(o.imo)
+                      + '" target="_blank" rel="noopener noreferrer">' + esc(o.imo) + '</a>'
+                    : '<span class="text-muted">—</span>') + '</td>'
+                 + '<td>' + (o.mmsi ? esc(o.mmsi) : '<span class="text-muted">—</span>') + '</td>'
+                 + '<td class="small">' + (o.operators.length ? esc(o.operators.join(', ')) : '') + '</td>'
+                 + '<td>' + (o.image ? thumb(o.image + '?width=120', o.image + '?width=600') : '') + '</td>'
+                 + '<td class="small"><a href="https://www.wikidata.org/wiki/' + esc(o.wikidata)
+                 + '" target="_blank" rel="noopener noreferrer" class="text-muted">'
+                 + esc(o.wikidata) + '</a></td>'
+                 // Always offered: plenty of small ferries have neither number, and a
+                 // ship known only by its name and flag is a ship the register can hold.
+                 + '<td class="text-end"><button class="btn btn-sm btn-outline-success suggestion-btn"'
+                 + ' data-name="' + esc(s.name) + '"'
+                 + ' data-imo="' + esc(o.imo || '') + '"'
+                 + ' data-mmsi="' + esc(o.mmsi || '') + '"'
+                 + ' data-country="' + esc(o.countries[0] || '') + '"'
+                 + ' data-image="' + esc(o.image || '') + '"'
+                 + ' data-wikidata="' + esc(o.wikidata) + '"'
+                 + ' data-trips="' + s.trips + '">Assign</button></td></tr>';
+        });
+        body += '</tbody></table>';
+        return '<div class="bf-card">' + head + body + '</div>';
+    }).join('');
+    $('#nameBody').html(out);
+}
+
+$(document).on('click', '.suggestion-btn', function() {
+    var $btn = $(this);
+    var name = $btn.data('name');
+    var target = $btn.data('imo') ? 'IMO ' + $btn.data('imo')
+               : ($btn.data('mmsi') ? 'MMSI ' + $btn.data('mmsi') : 'no IMO or MMSI');
+    // Spell the consequence out: this rewrites the reg on real trips, and picking the
+    // wrong namesake points them at the wrong ship.
+    if (!confirm('Create ' + name + ' (' + target + ') and rewrite '
+                 + $btn.data('trips') + ' trip(s) to point at it?')) return;
+    var $card = $btn.closest('.bf-card');
+    $card.find('.suggestion-btn').prop('disabled', true);
+    $btn.html('<i class="fa-solid fa-spinner fa-spin"></i>');
+    $.post('/admin/ships/backfill/confirm', {
+        name: name, imo: $btn.data('imo'), mmsi: $btn.data('mmsi'),
+        country_code: $btn.data('country'), image: $btn.data('image'),
+        wikidata: $btn.data('wikidata')
+    }).done(function(res) {
+        // This name is resolved — no other candidate for it is on offer any more.
+        state.suggestions = state.suggestions.filter(function(s) { return s.name !== name; });
+        save();
+        setCount('Names', state.suggestions.length);
+        $card.addClass('bf-done');
+        $btn.replaceWith('<span class="text-success small"><i class="fa-solid fa-check"></i> created'
+            + (res.trips ? ' — ' + res.trips + ' trip(s) now point at it' : '') + '</span>');
+    }).fail(function(xhr) {
+        $card.find('.suggestion-btn').prop('disabled', false);
+        $btn.text('Assign').after('<div class="text-danger small">'
+            + esc((xhr.responseJSON && xhr.responseJSON.error) || 'Could not create') + '</div>');
+    });
+});
+
+$(document).ready(function() {
+    load();
+    if (state) { $('#scanBtnLabel').text('Scan again'); }
+    render();
+});
+</script>
+
+{% endblock %}

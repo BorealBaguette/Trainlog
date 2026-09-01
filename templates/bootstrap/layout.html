@@ -82,6 +82,9 @@
       <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
     <!-- Custom --> 
       <script src="{{ static_autoversion(filename='js/util.js') }}"></script>
+      <!-- Places the ship photo hover preview. Global because .ship-thumb appears on the
+           admin register, the backfill page and the ferry field on the trip forms. -->
+      <script src="{{ static_autoversion(filename='js/ship_thumb.js') }}"></script>
     <!--JS cookie-->
       <script src="https://cdn.jsdelivr.net/npm/js-cookie"></script>
     <!-- Masonry -->

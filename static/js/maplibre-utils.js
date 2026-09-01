@@ -44,7 +44,9 @@ async function initializeMapLibre(options = {}) {
         userLanguage = 'en',
         center = [10, 50],
         zoom = 5,
-        styleUrl = null
+        styleUrl = null,
+        preserveDrawingBuffer = false,
+        pixelRatio = null
     } = options;
 
     let mapStyle;
@@ -74,6 +76,10 @@ async function initializeMapLibre(options = {}) {
             }
             mapStyle = await response.json();
 
+            if (OFM_SOURCED_STYLES.includes(effectiveTileserver)) {
+                applyStyleLanguage(mapStyle, userLanguage);
+            }
+
             // Add globe projection if requested
             if (useGlobe) {
                 mapStyle.projection = { type: 'globe' };
@@ -89,12 +95,17 @@ async function initializeMapLibre(options = {}) {
     }
 
     // Create map
+    // preserveDrawingBuffer/pixelRatio are only needed to export the canvas as an
+    // image (e.g. the print poster) — left off by default since they cost extra
+    // GPU memory/bandwidth on the normal interactive map.
     const map = new maplibregl.Map({
         container: container,
         style: mapStyle,
         center: center,
         zoom: zoom,
-        doubleClickZoom: false
+        doubleClickZoom: false,
+        preserveDrawingBuffer: preserveDrawingBuffer,
+        ...(pixelRatio ? { pixelRatio } : {})
     });
 
     // Add a sentinel layer that trip layers will sit above
@@ -189,6 +200,20 @@ function isVectorTileServer(tileserver) {
         'ofm-positron'
     ];
     return vectorServers.includes(tileserver);
+}
+
+// Styles served from OpenFreeMap tiles, whose per-language name fields let the
+// labels be localised client-side (Jawg instead gets its language server-side).
+const OFM_SOURCED_STYLES = ['dark-train', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
+
+function applyStyleLanguage(style, userLanguage) {
+    const code = userLanguage === 'gsw' ? 'de' : userLanguage.split('-')[0];
+    for (const layer of style.layers) {
+        if (layer.type !== 'symbol' || !layer.layout || !layer.layout['text-field']) continue;
+        if (!JSON.stringify(layer.layout['text-field']).includes('name')) continue;
+        layer.layout['text-field'] = ['coalesce',
+            ['get', `name:${code}`], ['get', 'name:latin'], ['get', 'name']];
+    }
 }
 
 // Get vector style URL based on tileserver

@@ -131,12 +131,52 @@
 
     /* Trainset strip (MLG images) */
     .ts-strip { gap: 2px; }
+    /* Compact strips (several sets on one page — the wagon-artist leaderboard) */
+    .compo-container.compo-compact { padding: 10px 8px; border-radius: 6px; }
+    .compo-compact .ts-strip { gap: 0; }
+    /* Smaller type, but keep the pill's side padding — text flush against the
+       background edge reads as clipped. */
+    .compo-compact .ts-nom { font-size: 0.52rem; padding: 1px 4px; }
+    /* Public views draw the cars smaller (normalizeStrip target ~20px), where a 2px
+       gap reads as a visible break in the rake — tighten it to 1px. */
+    .publicTrainset .ts-strip { gap: 1px; }
     .ts-unit img { max-height: 70px; image-rendering: pixelated; display: block; }
-    .ts-nom { font-size: 0.6rem; color: #ccc; text-align: center; max-width: 90px;
-              overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 2px 0; }
+    /* A car's column must be exactly as wide as its image, so the images touch and
+       read as one train — a rake has no gaps between its cars. In flow, a name wider
+       than the artwork (a short car such as a GTW power module, or a small `target` as
+       in the public trip sidebar) sets the column width instead and leaves the image
+       floating in the middle of it.
+       Taking the label out of flow solves that: it is laid out at the car's width
+       less 4px — so consecutive labels read as one row of plates with a hairline
+       between them — while contributing nothing to the column's own width. It adds no
+       height either, so the column reserves its row with padding-bottom below. The
+       text ellipsises at the car's width; the full name stays in the title tooltip. */
+    .ts-strip .compo-wagon { padding-bottom: 19px; }
+    .compo-compact .ts-strip .compo-wagon { padding-bottom: 16px; }
+    .ts-nom {
+        position: absolute; bottom: 0; left: 50%; transform: translateX(-50%);
+        width: calc(100% - 4px);          /* full-length plate, 4px clear of its neighbours */
+        margin-top: 0;
+        box-sizing: border-box;
+        font-size: 0.6rem; color: #ccc; text-align: center;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
 
     /* Placeholder for wagons not yet in the catalogue */
     .wagon-placeholder-img { height: 44px; width: auto; opacity: 0.5; display: block; flex-shrink: 0; }
+
+    /* Seat marker — flows above the marked car's image; the strip is bottom-aligned
+       (align-items: flex-end) so this only pushes that one car's column taller,
+       instead of needing absolute positioning that could clip against a container. */
+    .compo-seat-marker {
+        font-size: 0.65rem;
+        line-height: 1.2;
+        color: #198754;
+        font-weight: 700;
+        text-align: center;
+        white-space: nowrap;
+        margin-bottom: 2px;
+    }
 </style>
 
 {# ── JavaScript ───────────────────────────────────────────────────────────── #}
@@ -178,40 +218,67 @@ function _attributionParts(units) {
     return { authors: distinct('author'), licenses: distinct('license'), sources: distinct('source') };
 }
 
-/* Profile URLs we can shorten to a username: Trainlog public pages and MediaWiki
-   user pages. Returns null for anything else (plain names, other URLs). */
+/* Personal sites whose owner signs by name rather than by URL. Keyed by host, so
+   http/https and a www. prefix all land on the same person. Mirrors SITE_AUTHORS in
+   src/api/wagon_leaderboard.py, which ranks the same people. */
+var SITE_AUTHORS = {
+    'arthurstreinenpagina.nl': 'Arthur Pijpers'
+};
+
+/* Author URLs we can show as a name: Trainlog public pages, MediaWiki user pages,
+   and the personal sites above. Returns null for anything else (plain names, other
+   URLs), which are then printed as-is. */
 function _authorLinkName(a) {
     var m = a.match(/^https?:\/\/[^/]+\/public\/(.+)$/)
          || a.match(/^https?:\/\/[^/]+\/wiki\/User:(.+)$/i);
-    return m ? m[1] : null;
+    if (m) return m[1];
+    var host = a.match(/^https?:\/\/(?:www\.)?([^/]+)/);
+    return host ? (SITE_AUTHORS[host[1].toLowerCase()] || null) : null;
 }
 
 function _authorName(a) {
     return _authorLinkName(a) || a;
 }
 
+/* Authors grouped under the licence they drew for. A composition often mixes
+   stock released under different terms — listing every author then every licence
+   side by side leaves the reader guessing which applies to whom. */
+function _attributionGroups(units) {
+    var order = [], byLicense = {};
+    (units || []).forEach(function(u) {
+        if (!u.author && !u.license) return;
+        var lic = u.license || '';
+        if (!byLicense[lic]) { order.push(lic); byLicense[lic] = []; }
+        if (u.author && byLicense[lic].indexOf(u.author) === -1) byLicense[lic].push(u.author);
+    });
+    return order.map(function(lic) { return { license: lic, authors: byLicense[lic] }; });
+}
+
+function _attributionJoin(groups, sources, renderAuthor) {
+    var parts = groups.map(function(g) {
+        var authors = g.authors.map(renderAuthor).join(', ');
+        var license = g.license ? esc(_licenseLabel(g.license)) : '';
+        if (authors && license) return '© ' + authors + ' (' + license + ')';
+        return authors ? '© ' + authors : license;
+    });
+    if (sources.length) parts.push(sources.map(function(s) { return esc(s); }).join(', '));
+    return parts.join(' · ');
+}
+
 /* HTML version with clickable author links — for modal display */
 function _attributionHtml(units) {
-    var p = _attributionParts(units);
-    var parts = [];
-    if (p.authors.length)  parts.push(p.authors.map(function(a) {
-        var n = _authorLinkName(a);
-        return n ? '© <a href="' + esc(a) + '" target="_blank" rel="noopener">' + esc(n) + '</a>'
-                 : '© ' + esc(a);
-    }).join(', '));
-    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(_licenseLabel(l)); }).join(', '));
-    if (p.sources.length)  parts.push(p.sources.map(function(s) { return esc(s); }).join(', '));
-    return parts.join(' · ');
+    return _attributionJoin(_attributionGroups(units), _attributionParts(units).sources,
+        function(a) {
+            var n = _authorLinkName(a);
+            return n ? '<a href="' + esc(a) + '" target="_blank" rel="noopener">' + esc(n) + '</a>'
+                     : esc(a);
+        });
 }
 
 /* Plain-text version — for tooltips */
 function _attributionText(units) {
-    var p = _attributionParts(units);
-    var parts = [];
-    if (p.authors.length)  parts.push(p.authors.map(function(a) { return '© ' + esc(_authorName(a)); }).join(', '));
-    if (p.licenses.length) parts.push(p.licenses.map(function(l) { return esc(_licenseLabel(l)); }).join(', '));
-    if (p.sources.length)  parts.push(p.sources.map(function(s) { return esc(s); }).join(', '));
-    return parts.join(' · ');
+    return _attributionJoin(_attributionGroups(units), _attributionParts(units).sources,
+        function(a) { return esc(_authorName(a)); });
 }
 
 /* Parse a composite material_type_advanced value ({"trainsets": [names]}) → names array or null */
@@ -221,6 +288,20 @@ window.tsbCompositeNames = window.tsbCompositeNames || function (val) {
         if (parsed && !Array.isArray(parsed) && Array.isArray(parsed.trainsets)) return parsed.trainsets;
     } catch(e) {}
     return null;
+};
+
+/* Join a list of coupled trainset names for display, collapsing runs of the same
+   name into "2\xd7 NAME" — two identical units coupled together read as one set
+   doubled, not as the name printed twice. Runs only, so A + B + A stays as written. */
+window.tsbJoinNames = window.tsbJoinNames || function (names) {
+    var out = [], i = 0;
+    while (i < names.length) {
+        var n = names[i], count = 1;
+        while (i + count < names.length && names[i + count] === n) count++;
+        out.push(count > 1 ? count + '\xd7 ' + n : n);
+        i += count;
+    }
+    return out.join(' + ');
 };
 
 /* Resolve a material_type_advanced value to enriched units (Promise-based).
@@ -233,7 +314,7 @@ function _resolveUnits(value, owner) {
     var composite = tsbCompositeNames(value);
     if (isInline || composite) {
         return $.getJSON('/api/trainsets/resolve', { value: value, owner: owner || '' }).then(function(units) {
-            return { units: units, name: composite ? composite.join(' + ') : null };
+            return { units: units, name: composite ? tsbJoinNames(composite) : null };
         });
     }
     return $.getJSON('/api/trainsets/by-name', { name: value, owner: owner || '' }).then(function(ts) {
@@ -241,8 +322,19 @@ function _resolveUnits(value, owner) {
     });
 }
 
-/* Render into a modal body element */
-function _renderTrainset($modalBody, units, setName) {
+/* A small marker flowed above the car matching seatInfo.car, showing seatInfo.seat.
+   seatInfo is optional ({car, seat}) — omit it wherever there's no trip context. */
+function _appendSeatMarker(wagon, i, seatInfo) {
+    if (!seatInfo || seatInfo.car !== i) return;
+    var label = seatInfo.seat ? esc(seatInfo.seat) + '<br>' : '';
+    wagon.prepend('<div class="compo-seat-marker">' + label + '&#9660;</div>');
+}
+
+/* Render into a modal body element.
+   `opts` (optional): {scale: {target,min,max} for normalizeStrip, compact: bool}
+   — the leaderboard draws many strips at once and wants them smaller. */
+function _renderTrainset($modalBody, units, setName, seatInfo, opts) {
+    opts = opts || {};
     var strip = $('<div class="compo-strip ts-strip"></div>');
     var all = units || [];
     all.forEach(function(u, i) {
@@ -258,7 +350,9 @@ function _renderTrainset($modalBody, units, setName) {
         } else {
             wagon.append(_makePlaceholder(false, isFirst, isLast, u._phType));
         }
-        wagon.append('<span class="compo-coach-no ts-nom">' + esc(u.label || u.nom || '') + '</span>');
+        var _lbl = esc(u.label || u.nom || '');
+        wagon.append('<span class="compo-coach-no ts-nom" title="' + _lbl + '">' + _lbl + '</span>');
+        _appendSeatMarker(wagon, i, seatInfo);
         strip.append(wagon);
     });
     if (!strip.children().length) {
@@ -266,8 +360,9 @@ function _renderTrainset($modalBody, units, setName) {
         return;
     }
     var container = $('<div class="compo-container"></div>').append(strip);
+    if (opts.compact) container.addClass('compo-compact');
     $modalBody.empty().append(container);
-    normalizeStrip(strip[0], { target: 46, min: 26, max: 72 });
+    normalizeStrip(strip[0], opts.scale || { target: 46, min: 26, max: 72 });
     var sourceLines = [];
     if (setName) sourceLines.push('Trainset: ' + esc(setName));
     var attr = _attributionHtml(units);
@@ -277,7 +372,7 @@ function _renderTrainset($modalBody, units, setName) {
 }
 
 /* Render into an inline container element (#trainsetInline<rowId>) */
-function _renderTrainsetInline(rowId, units, labels) {
+function _renderTrainsetInline(rowId, units, labels, seatInfo) {
     var $container = $('#trainsetInline' + rowId);
     if (!$container.length) return;
     var strip = $('<div class="compo-strip ts-strip"></div>');
@@ -295,7 +390,9 @@ function _renderTrainsetInline(rowId, units, labels) {
         } else {
             wagon.append(_makePlaceholder(true, isFirst, isLast, u._phType));
         }
-        wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline">' + esc(u.label || u.nom || '') + '</span>');
+        var _lbl = esc(u.label || u.nom || '');
+        wagon.append('<span class="compo-coach-no ts-nom ts-nom-inline" title="' + _lbl + '">' + _lbl + '</span>');
+        _appendSeatMarker(wagon, i, seatInfo);
         strip.append(wagon);
     });
     if (!strip.children().length) { $container.remove(); return; }

@@ -29,6 +29,13 @@
                                  max-height: 260px; overflow-y: auto; }
   .country-flags { font-size: 1.05rem; letter-spacing: .1rem; cursor: help; }
   .uses-badge { cursor: help; font-variant-numeric: tabular-nums; }
+  .users-badge {
+    display: inline-flex; align-items: center; gap: .25rem;
+    font-size: .72rem; font-variant-numeric: tabular-nums; font-weight: 600;
+    color: var(--bs-gray-700); background: var(--bs-gray-200);
+    border-radius: 1rem; padding: .1rem .45rem; cursor: help;
+  }
+  .users-badge i { font-size: .68rem; color: var(--bs-gray-600); }
   .country-more  { font-size: .75rem; color: var(--bs-gray-600); letter-spacing: normal; }
 
   /* style2.css puts .navbar at z-index 2000, well above Bootstrap's modal (1055)
@@ -43,10 +50,37 @@
      rather than the viewport, or a long multi-car strip runs off the dialog. */
   #imgPreview img { max-width: 100%; max-height: 280px; height: auto; object-fit: contain; }
   #imgPreview .side-view { min-width: 0; flex: 1 1 100%; }
+
+  /* Cut editor: the strip is shown at natural size so cut positions stay pixel-exact */
+  #cutScroll, #cutScrollR {
+               overflow-x: auto; border: 1px solid var(--bs-border-color); border-radius: 6px;
+               background: repeating-conic-gradient(#eee 0% 25%, #fff 0% 50%) 50%/12px 12px; }
+  #cutInner  { position: relative; cursor: crosshair; }
+  #cutInnerR { position: relative; }
+  #cutInner img, #cutInnerR img { display: block; image-rendering: pixelated; }
+  #cutInnerR .cut-line { cursor: default; }
+  #cutInnerR .cut-line .grip { display: none; }
+  .cut-line { position: absolute; top: 0; bottom: 0; width: 1px; background: #dc3545;
+              box-shadow: 0 0 0 1px rgba(220,53,69,.35); cursor: ew-resize; }
+  .cut-line .grip { position: absolute; top: -2px; left: -7px; width: 15px; height: 15px;
+                    border-radius: 50%; background: #dc3545; color: #fff; font-size: 10px;
+                    line-height: 15px; text-align: center; cursor: ew-resize; user-select: none; }
+  .seg-table input { font-size: .85rem; }
+  /* Car key drawn over each segment of the strip, so you can see what's what */
+  .car-tag { position: absolute; top: 2px; transform: translateX(-50%);
+             font-size: 10px; line-height: 1.3; font-family: monospace;
+             color: #b02a37; background: rgba(255,255,255,.82); border-radius: 3px;
+             padding: 0 3px; white-space: nowrap; pointer-events: none;
+             max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  #cutInner, #cutInnerR { padding-top: 16px; }
 </style>
 
 <div class="container-fluid px-4">
   <h1 class="mt-3">Wagons</h1>
+  <div class="btn-group btn-group-sm mb-3" role="group">
+    <a href="{{ url_for('admin.wagons_admin') }}" class="btn btn-outline-secondary active">Wagons</a>
+    <a href="{{ url_for('admin.trainsets_admin') }}" class="btn btn-outline-secondary">Trainsets</a>
+  </div>
   <div class="mb-3 d-flex gap-2">
     <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addModal">
       <i class="fas fa-plus me-1"></i>Add Wagon
@@ -66,6 +100,7 @@
         <th data-priority="6">Era</th>
         <th data-priority="5">Countries</th>
         <th data-priority="3">Uses</th>
+        <th data-priority="4">Users</th>
         <th data-priority="2">Type</th>
         <th data-priority="2" data-orderable="false">Image</th>
         <th data-priority="3" data-orderable="false">Info</th>
@@ -103,17 +138,19 @@
           <div class="row g-2 mb-2">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Category</label>
-              <input type="text" class="form-control" name="category" placeholder="e.g. Electric locomotives">
+              <input type="text" class="form-control" name="category" list="dl-category"
+                     placeholder="e.g. Electric locomotives">
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">Subcategory</label>
-              <input type="text" class="form-control" name="subcategory" placeholder="e.g. Sr3">
+              <input type="text" class="form-control" name="subcategory" list="dl-subcategory"
+                     placeholder="e.g. Sr3">
             </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-2">
               <label class="form-label fw-semibold">Era</label>
-              <input type="text" class="form-control" name="era" placeholder="e.g. 5b,6">
+              <input type="text" class="form-control" name="era" list="dl-era" placeholder="e.g. 5b,6">
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Image type</label>
@@ -126,7 +163,7 @@
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Gauge (mm)</label>
-              <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
+              <input type="number" class="form-control" name="gauge" list="dl-gauge" placeholder="e.g. 1435">
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Scale (px/m)</label>
@@ -137,12 +174,14 @@
           <div class="row g-2 mb-2">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Author</label>
-              <input type="text" class="form-control" name="author" placeholder="e.g. https://trainlog.me/public/username">
+              <input type="text" class="form-control" name="author" list="dl-author"
+                     placeholder="e.g. https://trainlog.me/public/username">
               <div class="form-text">A Trainlog or wiki user page URL is rendered as a link named after the user. Any other URL or name is shown as-is.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">License</label>
-              <input type="text" class="form-control" name="license" id="addLicense" placeholder="e.g. CC BY-NC-SA 3.0">
+              <input type="text" class="form-control" name="license" id="addLicense" list="dl-license"
+                     placeholder="e.g. CC BY-NC-SA 3.0">
               <div class="form-check-inline-wrap mt-1">
                 <input class="form-check-input" type="checkbox" id="addLicenseTrainlog">
                 <label class="form-check-label small" for="addLicenseTrainlog">Licensed to Trainlog</label>
@@ -168,6 +207,44 @@
           <div class="mb-3 p-3 border rounded bg-light">
             <label class="form-label fw-semibold small text-uppercase text-muted">Image upload</label>
             <div id="addUploadSection"></div>
+          </div>
+
+          <!-- Cut editor: one drawing can hold a whole multi-car unit, so it can be
+               split here into one wagon per car before anything is saved. -->
+          <div class="mb-3 d-none" id="cutSection">
+            <div class="d-flex align-items-center gap-2 mb-2 flex-wrap">
+              <span class="fw-semibold">Split into cars</span>
+              <button type="button" class="btn btn-sm btn-outline-primary" id="autoCutBtn">
+                <i class="fas fa-wand-magic-sparkles me-1"></i>Auto-detect
+              </button>
+              <button type="button" class="btn btn-sm btn-outline-secondary" id="clearCutBtn">Clear</button>
+              <span class="text-muted small">
+                Click the strip to add a cut, drag a marker to move it, click its dot to remove it.
+              </span>
+            </div>
+            <div id="cutScroll" class="mb-1">
+              <div id="cutInner"><img id="cutImg" alt=""></div>
+            </div>
+            <!-- The other side, with the same cuts echoed where each car lands there -->
+            <div class="small text-muted mb-1 d-none" id="cutRLabel"></div>
+            <div id="cutScrollR" class="mb-2 d-none">
+              <div id="cutInnerR"><img id="cutImgR" alt=""></div>
+            </div>
+            <div id="cutStatus" class="small text-muted mb-2"></div>
+            <!-- One row per car; every other field is shared with the form above -->
+            <div class="table-responsive d-none" id="segWrap">
+              <table class="table table-sm align-middle seg-table">
+                <thead>
+                  <tr>
+                    <th style="width:4rem">Car</th>
+                    <th style="width:6rem">Width</th>
+                    <th>Name (key)</th>
+                    <th>Label</th>
+                  </tr>
+                </thead>
+                <tbody id="segBody"></tbody>
+              </table>
+            </div>
           </div>
 
           <div>
@@ -202,17 +279,19 @@
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Category</label>
-              <input type="text" class="form-control" name="category" placeholder="e.g. Electric locomotives">
+              <input type="text" class="form-control" name="category" list="dl-category"
+                     placeholder="e.g. Electric locomotives">
             </div>
             <div class="col-md-4">
               <label class="form-label fw-semibold">Subcategory</label>
-              <input type="text" class="form-control" name="subcategory" placeholder="e.g. Sr3">
+              <input type="text" class="form-control" name="subcategory" list="dl-subcategory"
+                     placeholder="e.g. Sr3">
             </div>
           </div>
           <div class="row g-2 mb-2">
             <div class="col-md-2">
               <label class="form-label fw-semibold">Era</label>
-              <input type="text" class="form-control" name="era" placeholder="e.g. 5b,6">
+              <input type="text" class="form-control" name="era" list="dl-era" placeholder="e.g. 5b,6">
             </div>
             <div class="col-md-3">
               <label class="form-label fw-semibold">Image type</label>
@@ -225,7 +304,7 @@
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Gauge (mm)</label>
-              <input type="number" class="form-control" name="gauge" placeholder="e.g. 1435">
+              <input type="number" class="form-control" name="gauge" list="dl-gauge" placeholder="e.g. 1435">
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Scale (px/m)</label>
@@ -236,12 +315,14 @@
           <div class="row g-2 mb-2">
             <div class="col-md-6">
               <label class="form-label fw-semibold">Author</label>
-              <input type="text" class="form-control" name="author" placeholder="e.g. https://trainlog.me/public/username">
+              <input type="text" class="form-control" name="author" list="dl-author"
+                     placeholder="e.g. https://trainlog.me/public/username">
               <div class="form-text">A Trainlog or wiki user page URL is rendered as a link named after the user. Any other URL or name is shown as-is.</div>
             </div>
             <div class="col-md-6">
               <label class="form-label fw-semibold">License</label>
-              <input type="text" class="form-control" name="license" id="editLicense" placeholder="e.g. CC BY-NC-SA 3.0">
+              <input type="text" class="form-control" name="license" id="editLicense" list="dl-license"
+                     placeholder="e.g. CC BY-NC-SA 3.0">
               <div class="form-check-inline-wrap mt-1">
                 <input class="form-check-input" type="checkbox" id="editLicenseTrainlog">
                 <label class="form-check-label small" for="editLicenseTrainlog">Licensed to Trainlog</label>
@@ -264,7 +345,7 @@
           <div class="row g-2 mb-2">
             <div class="col-md-12">
               <label class="form-label fw-semibold">Source</label>
-              <input type="text" class="form-control" name="source" placeholder="e.g. MLG Traffic">
+              <input type="text" class="form-control" name="source" list="dl-source" placeholder="e.g. MLG Traffic">
             </div>
           </div>
           <div>
@@ -350,6 +431,16 @@ function renderUses(n) {
                 title="${v} trip${v === 1 ? '' : 's'} use this wagon">${v}</span>`;
 }
 
+/* Distinct users behind those trips — its own sortable column so "used a lot by one
+   person" and "used a little by many" can each be found. */
+function renderUsers(u) {
+  const v = Number(u) || 0;
+  if (!v) return '<span class="meta-none">0</span>';
+  return `<span class="users-badge" ${TIP}
+                title="${v} distinct user${v === 1 ? '' : 's'}">
+                <i class="fa-solid fa-user"></i>${v}</span>`;
+}
+
 function renderMeta(row) {
   const bits = [];
 
@@ -393,8 +484,10 @@ const table = $('#wagonsTable').DataTable({
     data: d => ({
       draw: d.draw, start: d.start, length: d.length,
       'search[value]': d.search.value,
-      'order[0][column]': d.order[0].column,
-      'order[0][dir]':    d.order[0].dir,
+      // d.order can be empty (a click that lands on "no sort"), so fall back to the
+      // table's own initial order rather than let that crash the request.
+      'order[0][column]': (d.order[0] || {}).column ?? 6,
+      'order[0][dir]':    (d.order[0] || {}).dir    ?? 'desc',
     })
   },
   columns: [
@@ -406,6 +499,8 @@ const table = $('#wagonsTable').DataTable({
     { data: 'countries',   orderable: true,  render: (d, t) => t === 'display' ? renderCountries(d) : (d || '') },
     { data: 'uses',        orderable: true,  className: 'text-center',
       render: (d, t) => t === 'display' ? renderUses(d) : (d || 0) },
+    { data: 'users',       orderable: true,  className: 'text-center',
+      render: (d, t) => t === 'display' ? renderUsers(d) : (d || 0) },
     { data: 'image_type',  orderable: false, render: (d) => `<span class="badge bg-secondary text-white">${esc(d)}</span>` },
     {
       data: 'image', orderable: false,
@@ -486,8 +581,257 @@ function renderAddUpload(itype) {
 
 document.getElementById('addImageType').addEventListener('change', function () {
   renderAddUpload(this.value);
+  loadCutStrips();
 });
 renderAddUpload('sides');
+
+/* ── Cut editor ───────────────────────────────────────────────────────
+   A single drawing often holds a whole multi-car unit. The admin can cut it here
+   into one wagon per car: the picture is sliced server-side at these positions and
+   each car is saved as its own catalogue entry, sharing every other field on the
+   form. Same geometry as the VagonWeb importer, minus the AI. */
+let cuts    = [];      // x positions in image pixels, ascending
+let cutMain = null;    // { file, url, width } — the strip the cuts are placed on
+let cutSide = null;    // the opposite view, if one was picked too ({ url })
+let cutMirrorR = false; // an R view that follows an L one runs in reverse order
+
+function cutFiles() {
+  /* The picked file(s), primary first. For 'sides' the L view defines car order;
+     with only an R view that one is cut as it is drawn. */
+  const byName = n => {
+    const el = document.querySelector(`#addUploadSection input[name="${n}"]`);
+    return el && el.files[0] ? el.files[0] : null;
+  };
+  if (document.getElementById('addImageType').value === 'sides') {
+    const l = byName('file_l'), r = byName('file_r');
+    return l ? { main: l, side: r, mirror: !!r } : { main: r, side: null, mirror: false };
+  }
+  return { main: byName('file'), side: null, mirror: false };
+}
+
+function resetCutEditor() {
+  cuts = [];
+  document.getElementById('segBody').innerHTML = '';
+  document.getElementById('segWrap').classList.add('d-none');
+  document.getElementById('cutStatus').textContent = '';
+}
+
+/* Show whatever is currently picked at natural size, ready to be cut */
+function loadCutStrips() {
+  const picked = cutFiles();
+  const section = document.getElementById('cutSection');
+  resetCutEditor();
+  if (cutMain) URL.revokeObjectURL(cutMain.url);
+  if (cutSide) URL.revokeObjectURL(cutSide.url);
+  cutMain = cutSide = null;
+  cutMirrorR = picked.mirror;
+
+  if (!picked.main) { section.classList.add('d-none'); return; }
+  section.classList.remove('d-none');
+
+  const url = URL.createObjectURL(picked.main);
+  const img = document.getElementById('cutImg');
+  img.onload = () => {
+    cutMain = { file: picked.main, url, width: img.naturalWidth };
+    document.getElementById('cutInner').style.width = cutMain.width + 'px';
+    img.width = cutMain.width; img.height = img.naturalHeight;
+    renderCuts();
+  };
+  img.src = url;
+
+  const hasSide = !!picked.side;
+  document.getElementById('cutScrollR').classList.toggle('d-none', !hasSide);
+  document.getElementById('cutRLabel').classList.toggle('d-none', !hasSide);
+  if (hasSide) {
+    const urlR = URL.createObjectURL(picked.side);
+    const imgR = document.getElementById('cutImgR');
+    imgR.onload = () => {
+      cutSide = { url: urlR, width: imgR.naturalWidth };
+      document.getElementById('cutInnerR').style.width = cutSide.width + 'px';
+      imgR.width = cutSide.width; imgR.height = imgR.naturalHeight;
+      renderCuts();
+    };
+    imgR.src = urlR;
+    document.getElementById('cutRLabel').textContent =
+      'R view — same cuts, mirrored; check they still land on the joints';
+  }
+}
+
+document.getElementById('addUploadSection').addEventListener('change', loadCutStrips);
+
+function renderCuts() {
+  if (!cutMain) return;
+  const inner = document.getElementById('cutInner');
+  inner.querySelectorAll('.cut-line').forEach(el => el.remove());
+  cuts.sort((a, b) => a - b);
+  cuts.forEach((x, i) => {
+    const line = document.createElement('div');
+    line.className = 'cut-line';
+    line.style.left = x + 'px';
+    line.innerHTML = '<span class="grip">&times;</span>';
+    line.querySelector('.grip').addEventListener('click', e => {
+      e.stopPropagation();
+      cuts.splice(i, 1);
+      renderCuts(); renderSegments();
+    });
+    line.addEventListener('mousedown', e => startCutDrag(e, i));
+    inner.appendChild(line);
+  });
+  renderCutsR();
+  renderCarTags();
+
+  // Both views are cut at the same x positions, so mismatched widths can't work
+  if (cutSide && cutSide.width !== cutMain.width) {
+    document.getElementById('cutStatus').innerHTML =
+      '<span class="text-danger">The two views have different widths — they cannot be ' +
+      'cut at the same positions.</span>';
+  }
+}
+
+/* Read-only echo of the cuts on the other view. Car i occupies the mirrored
+   x-range there, because that side shows the same set from the other end. */
+function renderCutsR() {
+  const inner = document.getElementById('cutInnerR');
+  inner.querySelectorAll('.cut-line').forEach(el => el.remove());
+  if (!cutSide) return;
+  cuts.forEach(x => {
+    const line = document.createElement('div');
+    line.className = 'cut-line';
+    line.style.left = (cutMirrorR ? cutSide.width - x : x) + 'px';
+    inner.appendChild(line);
+  });
+}
+
+/* Label each segment with its Name (key) on both strips */
+function renderCarTags() {
+  if (!cutMain) return;
+  const bounds = [0, ...cuts, cutMain.width];
+  const names  = [...document.querySelectorAll('#segBody input[data-field="name"]')]
+                   .map(i => i.value);
+
+  [['cutInner', false], ['cutInnerR', true]].forEach(([id, isSide]) => {
+    const inner = document.getElementById(id);
+    inner.querySelectorAll('.car-tag').forEach(el => el.remove());
+    if (isSide && !cutSide) return;
+    for (let i = 0; i < bounds.length - 1; i++) {
+      const mid = (bounds[i] + bounds[i + 1]) / 2;
+      const tag = document.createElement('div');
+      tag.className = 'car-tag';
+      tag.style.left = (isSide && cutMirrorR ? cutSide.width - mid : mid) + 'px';
+      tag.style.maxWidth = (bounds[i + 1] - bounds[i] - 4) + 'px';
+      tag.textContent = names[i] || `car ${i + 1}`;
+      tag.title = tag.textContent;
+      inner.appendChild(tag);
+    }
+  });
+}
+
+function startCutDrag(e, i) {
+  e.preventDefault(); e.stopPropagation();
+  const inner = document.getElementById('cutInner');
+  const move = ev => {
+    const x = Math.round(ev.clientX - inner.getBoundingClientRect().left);
+    cuts[i] = Math.max(1, Math.min(cutMain.width - 1, x));
+    renderCuts(); renderSegments();
+  };
+  const up = () => {
+    document.removeEventListener('mousemove', move);
+    document.removeEventListener('mouseup', up);
+  };
+  document.addEventListener('mousemove', move);
+  document.addEventListener('mouseup', up);
+}
+
+/* Rebuild the per-car rows, keeping anything already typed in place by index */
+function renderSegments() {
+  const body = document.getElementById('segBody');
+  const wrap = document.getElementById('segWrap');
+  if (!cutMain || !cuts.length) {          // uncut: the form's own name/label apply
+    body.innerHTML = '';
+    wrap.classList.add('d-none');
+    renderCarTags();
+    return;
+  }
+  wrap.classList.remove('d-none');
+
+  // Only hand-edited values survive a cut change; the rest are re-derived so the
+  // "_c1, _c2…" naming follows the cuts around.
+  const typed = [...body.querySelectorAll('tr')].map(tr => {
+    const v = {};
+    tr.querySelectorAll('input').forEach(inp => {
+      if (inp.dataset.dirty) v[inp.dataset.field] = inp.value;
+    });
+    return v;
+  });
+
+  const bounds   = [0, ...cuts, cutMain.width];
+  const baseName = slugify(_addName.value || _addLabel.value) || 'wagon';
+  const baseLbl  = _addLabel.value.trim() || baseName;
+
+  body.innerHTML = bounds.slice(0, -1).map((_, i) => {
+    const prev = typed[i] || {};
+    const defaults = { name: `${baseName}_c${i + 1}`, label: `${baseLbl} — car ${i + 1}` };
+    const cell = (field, extra = '') => {
+      const dirty = prev[field] !== undefined;
+      const value = dirty ? prev[field] : defaults[field];
+      return `<td><input class="form-control form-control-sm ${extra}" data-field="${field}"
+                         ${dirty ? 'data-dirty="1"' : ''} value="${esc(value)}"></td>`;
+    };
+    return `
+      <tr>
+        <td class="text-muted">${i + 1}</td>
+        <td class="text-muted small">${bounds[i + 1] - bounds[i]} px</td>
+        ${cell('name', 'font-monospace')}
+        ${cell('label')}
+      </tr>`;
+  }).join('');
+
+  body.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      inp.dataset.dirty = '1';
+      if (inp.dataset.field === 'name') renderCarTags();
+    });
+  });
+  renderCarTags();
+}
+
+document.getElementById('cutInner').addEventListener('click', e => {
+  if (!cutMain || e.target.closest('.cut-line')) return;
+  const x = Math.round(e.clientX - e.currentTarget.getBoundingClientRect().left);
+  if (x <= 0 || x >= cutMain.width) return;
+  cuts.push(x);
+  renderCuts(); renderSegments();
+});
+
+document.getElementById('autoCutBtn').addEventListener('click', function () {
+  if (!cutMain) return;
+  const status = document.getElementById('cutStatus');
+  const fd = new FormData();
+  fd.append('file', cutMain.file);
+  this.disabled = true;
+  status.textContent = 'Looking for joints…';
+  fetch(`${API}/suggest-cuts`, { method: 'POST', body: fd })
+    .then(res => res.json().then(j => {
+      if (!res.ok) throw new Error(j.error || res.status);
+      return j;
+    }))
+    .then(j => {
+      cuts = j.cuts || [];
+      document.getElementById('segBody').innerHTML = '';   // regenerate defaults
+      renderCuts(); renderSegments();
+      status.textContent = cuts.length
+        ? `${cuts.length + 1} cars detected — check the cut positions.`
+        : 'No joints found; this looks like a single vehicle.';
+    })
+    .catch(err => { status.textContent = `Error: ${err.message || err}`; })
+    .finally(() => { this.disabled = false; });
+});
+
+document.getElementById('clearCutBtn').addEventListener('click', () => {
+  cuts = [];
+  document.getElementById('segBody').innerHTML = '';
+  renderCuts(); renderSegments();
+});
 
 /* Name (key) mirrors the label — sanitised like _sanitize_name() server-side —
    until the admin types their own, after which it is left alone. */
@@ -509,6 +853,7 @@ document.getElementById('addModal').addEventListener('show.bs.modal', function (
   document.getElementById('addForm').reset();
   _nameTouched = false;
   renderAddUpload('sides');
+  loadCutStrips();          // no file picked yet: hides the cut editor and clears it
 });
 
 /* ── "Licensed to Trainlog" toggle ──────────────────────────────────
@@ -566,6 +911,19 @@ function submitAdd() {
   const body = new FormData(f);
   body.set('license', addLicense.get());
   ($('#addCountries').val() || []).forEach(c => body.append('countries[]', c));
+
+  // A cut strip is saved as one wagon per car instead of one wagon per form
+  if (cuts.length) {
+    const units = [...document.querySelectorAll('#segBody tr')].map(tr => {
+      const u = {};
+      tr.querySelectorAll('input').forEach(inp => { u[inp.dataset.field] = inp.value.trim(); });
+      return u;
+    });
+    if (units.some(u => !u.name)) { toast('Each car needs a name', 'warning'); return; }
+    body.set('cuts',  JSON.stringify(cuts));
+    body.set('units', JSON.stringify(units));
+  }
+
   fetch(API, { method: 'POST', body })
     .then(res => {
       if (!res.ok) return res.json().then(j => { throw new Error(j.error || res.status); });
@@ -574,7 +932,9 @@ function submitAdd() {
     .then(j => {
       $('#addModal').modal('hide');
       table.ajax.reload();
-      toast(`Wagon "${j.label}" added (${j.name})`);
+      toast(j.created && j.created.length > 1
+        ? `${j.created.length} wagons added (${j.created.join(', ')})`
+        : `Wagon "${j.label}" added (${j.name})`);
     })
     .catch(err => toast(`Error: ${err}`, 'danger'));
 }
@@ -729,6 +1089,93 @@ function deleteWagon(wname, label) {
     .catch(err => toast(`Error: ${err}`, 'danger'));
 }
 
+/* ── field suggestions ──────────────────────────────────────────
+   Every repeatable field is offered as a datalist of what the catalogue already
+   holds, plus a "did you mean" nudge on near-misses. A single mistyped character
+   forks the vocabulary silently — the wagon-artist leaderboard ranked
+   "Paul Nikolic (niko1266)" and "Paul Nikolik (Niko1266)" as two separate people. */
+const SUGGEST_FIELDS = ['category','subcategory','era','gauge','author','license','source'];
+let _suggest = {};
+
+function levenshtein(a, b) {
+  // Only ever called on a typed value against one vocabulary, both short.
+  const m = a.length, n = b.length;
+  if (Math.abs(m - n) > 2) return 3;          // caller only cares about <= 2
+  let prev = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1,
+                        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+const digitsOf = s => s.replace(/\D/g, '');
+
+/* The closest existing value to `value` that is not `value` itself, or null.
+   Case-only differences always count — "niko1266" vs "Niko1266" is never deliberate.
+   Values whose digits differ never do: "CC BY-NC-SA 3.0" and "CC BY-NC-SA 4.0" are one
+   edit apart and are two different licences. */
+function nearMatch(field, value) {
+  const v = value.trim();
+  if (!v) return null;
+  const options = _suggest[field] || [];
+  if (options.includes(v)) return null;
+  const lower = v.toLowerCase(), digits = digitsOf(v);
+  let best = null, bestDist = 3;
+  for (const opt of options) {
+    const ol = opt.toLowerCase();
+    if (ol === lower) return opt;                       // same word, different case
+    if (v.length < 5) continue;                         // too short to guess at
+    if (digitsOf(opt) !== digits) continue;             // a version/number, not a typo
+    const d = levenshtein(lower, ol);
+    if (d < bestDist) { best = opt; bestDist = d; }
+  }
+  return bestDist <= 2 ? best : null;
+}
+
+function attachSuggest(input, field) {
+  const hint = document.createElement('div');
+  hint.className = 'form-text text-warning-emphasis d-none';
+  input.insertAdjacentElement('afterend', hint);
+  const check = () => {
+    const match = nearMatch(field, input.value);
+    hint.classList.toggle('d-none', !match);
+    if (!match) return;
+    hint.innerHTML = '';
+    hint.append('\u26a0\ufe0f Close to an existing value: ');
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn btn-link btn-sm p-0 align-baseline';
+    btn.textContent = match;
+    btn.addEventListener('click', () => {
+      input.value = match;
+      hint.classList.add('d-none');
+    });
+    hint.append(btn);
+  };
+  input.addEventListener('change', check);
+  input.addEventListener('blur', check);
+  input.addEventListener('input', () => hint.classList.add('d-none'));
+}
+
+fetch(`${API}/suggestions`)
+  .then(res => res.ok ? res.json() : {})
+  .then(data => {
+    _suggest = data;
+    SUGGEST_FIELDS.forEach(field => {
+      const dl = document.getElementById(`dl-${field}`);
+      if (dl) dl.innerHTML = (data[field] || [])
+        .map(v => `<option value="${esc(v)}"></option>`).join('');
+      document.querySelectorAll(`input[list="dl-${field}"]`)
+              .forEach(input => attachSuggest(input, field));
+    });
+  })
+  .catch(() => { /* suggestions are a convenience; the form works without them */ });
+
 /* ── toast ──────────────────────────────────────────────────────── */
 function toast(msg, type = 'success') {
   const el = document.createElement('div');
@@ -742,5 +1189,13 @@ function toast(msg, type = 'success') {
   el.addEventListener('hidden.bs.toast', () => el.remove());
 }
 </script>
+
+<datalist id="dl-category"></datalist>
+<datalist id="dl-subcategory"></datalist>
+<datalist id="dl-era"></datalist>
+<datalist id="dl-gauge"></datalist>
+<datalist id="dl-author"></datalist>
+<datalist id="dl-license"></datalist>
+<datalist id="dl-source"></datalist>
 
 {% endblock %}

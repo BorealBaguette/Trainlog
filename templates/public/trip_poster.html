@@ -1,0 +1,3243 @@
+{% extends "layout.html" %}
+{% block content %}
+{# The site navigation, which this layout (unlike bootstrap/layout.html) carries
+   none of. It is Bootstrap markup, so the framework comes with it; style2.css is
+   re-linked afterwards to restore the precedence it has on every Bootstrap page,
+   and the poster's own <style> below then wins over both. #}
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css">
+<link rel="stylesheet" href="{{ static_autoversion(filename='styles/style2.css') }}">
+<script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.10.2/dist/umd/popper.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js"></script>
+{% if username %}{% include "bootstrap/navigation.html" %}{% endif %}
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/js-cookie"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
+<style>
+body { background: #e9e9ec; }
+
+.posterPage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 16px 48px;
+    box-sizing: border-box;
+}
+
+.posterTopBar {
+    width: 100%;
+    max-width: 1400px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    padding-bottom: 2px; /* keeps a horizontal scrollbar (narrow screens) off the buttons */
+}
+
+.posterBackBtn {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    white-space: nowrap;
+    gap: 7px;
+    height: 36px;
+    box-sizing: border-box;
+    padding: 0 14px;
+    border-radius: 7px;
+    background: #fff;
+    color: #333;
+    text-decoration: none;
+    font-size: 13px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+}
+.posterBackBtn:hover { background: #f4f4f4; color: #333; }
+.posterBackBtn:disabled { opacity: 0.6; cursor: default; }
+.posterBackBtn:disabled:hover { background: #fff; }
+
+.posterControls { display: flex; align-items: center; gap: 8px; flex-wrap: nowrap; flex-shrink: 0; }
+
+/* Settings modal. The controls used to be pills in the top bar, one per option;
+   past about four of them the bar ran out of width and pushed the download
+   button off the edge, so they all moved in here and the bar kept only the
+   three things a viewer reaches for constantly: back, settings, download. */
+.posterModal {
+    position: fixed;
+    inset: 0;
+    z-index: 1040;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(20,20,24,0.45);
+}
+.posterModal[hidden] { display: none; }
+.posterModalCard {
+    width: 100%;
+    max-width: 380px;
+    max-height: 86vh;
+    overflow-y: auto;
+    background: #fff;
+    border-radius: 12px;
+    padding: 6px 18px 18px;
+    box-shadow: 0 18px 50px rgba(0,0,0,0.3);
+}
+.posterModalHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0 10px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #222;
+    border-bottom: 1px solid #ececec;
+}
+.posterModalClose {
+    border: none;
+    background: none;
+    font-size: 24px;
+    line-height: 1;
+    color: #888;
+    cursor: pointer;
+    padding: 0 4px;
+}
+.posterModalClose:hover { color: #333; }
+
+/* Label on the left, controls flush right. The label — not a margin on the
+   controls — is what takes up the free space, so a row with an extra button in
+   it keeps its select in the same column as every other row. */
+.posterModalRow {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 11px 0;
+    font-size: 13px;
+    color: #333;
+    border-bottom: 1px solid #f2f2f2;
+}
+.posterModalRow i { width: 16px; flex: 0 0 auto; text-align: center; color: #999; }
+.posterModalRow > span { flex: 1 1 auto; min-width: 0; }
+/* One fixed width for every dropdown in the panel, so they line up on both edges
+   however long their own label or options are. */
+.posterModalRow select {
+    flex: 0 0 148px;
+    width: 148px;
+    height: 32px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    color: #333;
+    font-size: 13px;
+    padding: 0 6px;
+    cursor: pointer;
+    outline: none;
+}
+/* Sits between the label and the select (not in the select's column) so the
+   dropdowns stay aligned with the rows that have no button. */
+.posterModalIconBtn {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    background: #fff;
+    color: #666;
+    font-size: 12px;
+    cursor: pointer;
+}
+.posterModalIconBtn:hover { background: #f6f6f6; color: #333; }
+.posterModalIconBtn i { width: auto; color: inherit; }
+
+.posterModalCheck {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 0;
+    padding: 11px 0;
+    font-size: 13px;
+    color: #333;
+    cursor: pointer;
+    border-bottom: 1px solid #f2f2f2;
+}
+.posterModalCheck i { width: 16px; flex: 0 0 auto; text-align: center; color: #999; }
+.posterModalCheck > span { flex: 1 1 auto; min-width: 0; }
+/* Bootstrap's own switch, rebuilt in a few lines: this page extends the plain
+   layout, which ships no Bootstrap CSS, and pulling the framework in for two
+   toggles would restyle the whole poster. */
+.posterSwitch {
+    position: relative;
+    flex: 0 0 auto;
+    appearance: none;
+    -webkit-appearance: none;
+    width: 36px;
+    height: 20px;
+    border-radius: 999px;
+    background: #dfdfdf;
+    cursor: pointer;
+    transition: background 0.15s ease-in-out;
+}
+.posterSwitch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    transition: transform 0.15s ease-in-out;
+}
+.posterSwitch:checked { background: #0d6efd; }
+.posterSwitch:checked::after { transform: translateX(16px); }
+.posterSwitch:focus-visible { outline: 2px solid rgba(13,110,253,0.5); outline-offset: 2px; }
+/* Only shown when the trip set actually has a private leg in it (see init()),
+   so it isn't dead UI for posters that don't need it. */
+#posterPrivateToggle { display: none; }
+
+.posterDownloadBtn {
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    white-space: nowrap;
+    gap: 8px;
+    height: 36px;
+    box-sizing: border-box;
+    padding: 0 16px;
+    border: none;
+    border-radius: 7px;
+    background: #0d6efd;
+    color: #fff;
+    font-size: 13px;
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2);
+}
+.posterDownloadBtn:hover { filter: brightness(0.95); }
+.posterDownloadBtn:disabled { opacity: 0.6; cursor: default; }
+
+/* "Matboard" layout: the map is inset by a uniform margin on all four sides
+   and the card around it is a neutral mount, the way a framed print sits in
+   its mat. Colours come from the --poster-* custom properties (applyCardTheme);
+   the literals here are only the pre-load fallback.
+   The previous half-bleed (map running to the left/right edges but boxed top
+   and bottom) read as unresolved, and sea-coloured shoulders only blended
+   where the map's edge happened to be water — where a landmass met the edge
+   it cut abruptly. A uniform mat makes every edge deliberate instead. */
+/* The card is laid out at its true export size (900-1350px wide) so the PNG stays a
+   faithful copy of the preview. On a screen narrower than that, the stage scales the
+   whole card down visually — the export draws from the unscaled numbers and is
+   unaffected — which is what keeps the page free of horizontal scroll on a phone. */
+.posterStage {
+    display: flex;
+    justify-content: center;
+    /* Not `stretch`: the stage is given the card's SCALED height, and a stretched
+       card would be forced to that height and clipped by its own overflow:hidden —
+       which then measures shorter, scales shorter, and so on. */
+    align-items: flex-start;
+    width: 100%;
+}
+.posterCardWrap {
+    /* Positioned: the hidden side is parked off-screen inside it (see .showBack),
+       and only a positioned wrap both clips that with its own overflow and keeps
+       it out of the page's scroll width. */
+    position: relative;
+    /* A flex item shrinks by default; this card must keep the exact pixel width
+       resizeCardToOrientation gives it (the export assumes it), and be scaled by
+       the transform alone. */
+    flex: 0 0 auto;
+    transform-origin: top center;
+    box-shadow: 0 10px 34px rgba(0,0,0,0.22);
+    background: var(--poster-shoulder, #fff);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Transparent-mount preview: the export leaves the mount unpainted, so show
+   the conventional checkerboard here rather than silently looking unchanged.
+   Painted on the wrap only — .posterCard's own background is cleared so the
+   pattern shows through behind the header/footer text. */
+.posterCardWrap.transparentBg {
+    background-color: #fff;
+    background-image:
+        linear-gradient(45deg, #d8d8d8 25%, transparent 25%, transparent 75%, #d8d8d8 75%),
+        linear-gradient(45deg, #d8d8d8 25%, transparent 25%, transparent 75%, #d8d8d8 75%);
+    background-size: 18px 18px;
+    background-position: 0 0, 9px 9px;
+}
+.posterCardWrap.transparentBg .posterCard { background: transparent; }
+
+/* Front/back switch. The hidden side is moved off-screen rather than
+   display:none'd: the back's layout measures the front header's real height (so
+   both faces put the title in the same place), and a display:none element
+   measures zero. */
+.posterCardWrap.showBack #posterCard { position: absolute; top: 0; left: -100000px; width: 100%; }
+.posterCardWrap:not(.showBack) #posterBackCard { display: none; }
+#posterBackCanvas { display: block; }
+
+.posterSideTabs {
+    display: inline-flex;
+    flex-shrink: 0;
+    background: #fff;
+    border-radius: 7px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+    overflow: hidden;
+}
+.posterSideTab {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    height: 36px;
+    padding: 0 14px;
+    border: none;
+    background: transparent;
+    font-size: 13px;
+    color: #444;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.posterSideTab.active { background: #0d6efd; color: #fff; }
+
+/* The card mirrors the exported PNG 1:1: header (title), map, footer (legend +
+   watermark) — nothing overlaid on the map itself except the small credit chip,
+   so text never fights the route/labels for space and the exported PNG is a
+   faithful copy of what's on screen. */
+.posterCard {
+    display: flex;
+    flex-direction: column;
+    background: var(--poster-shoulder, #fff);
+}
+
+/* The bottom padding here (and the top padding on .posterFooter) is the mat's
+   top/bottom margin. Both are overwritten at runtime by resizeCardToOrientation
+   from posterMat(); the literals are just a sane pre-layout default. */
+.posterHeader {
+    padding: 22px 30px 24px;
+    text-align: center;
+}
+/* Editable in place, for the cases where the generated title gets it wrong. The
+   affordance is deliberately faint — it belongs to the screen, never to the export,
+   which redraws the text on canvas from textContent. */
+.posterTitle {
+    cursor: text;
+    border-radius: 4px;
+    outline: none;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--poster-title, #1a1a1a);
+    margin: 0;
+    line-height: 1.25;
+}
+.posterTitle:hover { box-shadow: 0 0 0 1px rgba(0,0,0,0.12); }
+.posterTitle:focus { box-shadow: 0 0 0 2px rgba(13,110,253,0.45); }
+.posterSubtitle {
+    font-size: 13px;
+    color: var(--poster-subtitle, #767676);
+    margin: 4px 0 0;
+}
+
+/* The map: inset from the card edges by the mat margin, with its own rounded
+   corners and a hairline edge so it reads as a distinct print mounted on the
+   card. The side margins are set at runtime from posterMat() to match the
+   header/footer padding, so the border stays uniform at any card size; the
+   literal below is only the pre-layout default.
+   position:relative anchors the absolutely-positioned credit chip. */
+.posterMapOuter {
+    position: relative;
+    margin: 0 24px;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #dfe3e6;
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.12);
+}
+#posterMap { width: 100%; height: 100%; }
+
+/* `.dark` now only covers things that sit ON the map rather than on the
+   shoulders — the credit chip, the pre-tile-load placeholder, and the map's
+   hairline, which needs to be light-on-dark to stay visible. */
+.posterCardWrap.dark .posterMapOuter {
+    background: #1a1d28;
+    /* Dark Train's own land sits around #343332, so the mount is pushed to
+       near-black (#0b0c0e) to open up the gap; this hairline is brighter than
+       the light theme's to hold the edge over that darker surround. */
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.22);
+}
+/* The credit chip sits on the map itself, not the shoulders, but should
+   still flip to match — invert() turns the plain black-on-transparent icon
+   white without needing a separate asset (no white square-icon file exists,
+   only the full white wordmark, which would reopen the "repeats the brand"
+   problem the icon+CSS-text redesign was meant to fix). */
+.posterCardWrap.dark .posterCredit { background: rgba(30,32,38,0.9); box-shadow: 0 2px 12px rgba(0,0,0,0.5); }
+.posterCardWrap.dark .posterCredit img { filter: invert(1); }
+.posterCardWrap.dark .posterCreditName { color: #f2f2f2; }
+.posterCardWrap.dark .posterCreditName span { color: #aaa; }
+.posterCardWrap.dark .posterCreditTagline { color: #999; }
+
+/* Small always-on-image credit, bottom-right corner of the map itself so it
+   survives even if the footer legend gets cropped for a t-shirt print.
+   Reproduces the logo's icon+wordmark composition in real CSS text (rather
+   than the raster logo.png, which would need a second "trainlog.me" caption
+   next to it — repeating the brand name reads as clutter) and folds the
+   domain right into the name, since "Trainlog" alone doesn't reliably
+   surface the site in a search engine the way "trainlog.me" does. */
+.posterCredit {
+    position: absolute;
+    right: 14px;
+    bottom: 14px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px 8px 8px;
+    background: rgba(255,255,255,0.92);
+    border-radius: 12px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.14);
+    pointer-events: none;
+    z-index: 5;
+}
+.posterCredit img { width: 34px; height: 34px; display: block; }
+.posterCreditText { display: flex; flex-direction: column; line-height: 1.15; }
+.posterCreditName { font-size: 17px; font-weight: 800; color: #1a1a1a; letter-spacing: -0.01em; }
+.posterCreditName span { color: #666; font-weight: 700; }
+.posterCreditTagline { font-size: 9.5px; font-style: italic; color: #8a8a8a; margin-top: 1px; }
+
+.posterFooter {
+    padding: 24px 24px 20px;   /* top overwritten from posterMat(), see .posterHeader */
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 16px;
+}
+.posterLegendItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--poster-legend, #444);
+}
+.posterLegendSwatch { width: 16px; height: 4px; border-radius: 2px; display: inline-block; }
+
+/* Countries visited, between the map and the legend. Same centred wrapping row
+   as the footer legend; its top padding is the mat margin (written at runtime
+   by resizeCardToOrientation), and the fixed 18px line height is what lets the
+   PNG export place every row exactly where the preview put it. */
+.posterCountries {
+    display: none;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 6px 14px;
+    padding: 0 24px;
+}
+.posterCountryItem {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    line-height: 18px;
+    color: var(--poster-legend, #444);
+}
+.posterCountryItem img { display: block; border-radius: 2px; box-shadow: 0 0 0 1px rgba(0,0,0,0.15); }
+.posterCountryMetric { color: var(--poster-subtitle, #767676); }
+
+.posterHint {
+    max-width: 900px;
+    width: 100%;
+    margin-top: 12px;
+    font-size: 12.5px;
+    color: #6a6a6a;
+    text-align: center;
+}
+
+.posterSpinner {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255,255,255,0.6);
+    font-size: 13px;
+    color: #555;
+    z-index: 6;
+}
+
+/* MapLibre's own attribution corner control is kept registered (its content
+   is required by the tile data's licence, and computing that content
+   correctly per basemap is exactly what the control already does) but never
+   shown as a map overlay — its text is mirrored into .posterAttribution
+   below instead (see syncAttributionText), so it reads as a normal caption
+   under the poster rather than UI chrome sitting on top of the map. */
+.maplibregl-ctrl-bottom-left .maplibregl-ctrl-attrib { display: none !important; }
+
+.posterAttribution {
+    max-width: 900px;
+    width: 100%;
+    margin-top: 4px;
+    font-size: 11px;
+    color: #9a9a9a;
+    text-align: center;
+}
+.posterAttribution a { color: #9a9a9a; }
+
+/* Phones: the control bar becomes a wrapping grid of pills instead of a single
+   horizontally-scrolling row (which hid the download button off-screen), and the
+   page padding gives the scaled-down card as much width as possible. */
+@media (max-width: 700px) {
+    /* The card's drop shadow would otherwise spill a few px past the scaled
+       card and put a horizontal scrollbar back on the page. */
+    .posterPage { padding: 10px 8px 32px; overflow-x: hidden; }
+    .posterTopBar {
+        flex-wrap: wrap;
+        overflow-x: visible;
+        gap: 8px;
+        margin-bottom: 12px;
+    }
+    .posterControls {
+        flex-wrap: wrap;
+        justify-content: center;
+        width: 100%;
+        flex-shrink: 1;
+        min-width: 0;
+    }
+    /* Comfortable tap targets. */
+    .posterBackBtn,
+    .posterSideTab,
+    .posterDownloadBtn { height: 40px; }
+}
+</style>
+
+<div class="posterPage">
+    <div class="posterTopBar">
+        <a class="posterBackBtn" id="posterBackLink" href="{{ url_for('public_trip', tripIds=tripIds) }}"><i class="fas fa-chevron-left"></i> {{back}}</a>
+        <div class="posterControls">
+            <div class="posterSideTabs">
+                <button type="button" class="posterSideTab active" data-side="front"><i class="fas fa-map"></i> {{ map }}</button>
+                <button type="button" class="posterSideTab" data-side="back"><i class="fas fa-list-ul"></i> {{ posterSideItinerary }}</button>
+            </div>
+            <button type="button" class="posterBackBtn" id="posterSettingsBtn" style="border:none;cursor:pointer;">
+                <i class="fas fa-sliders"></i> {{ posterSettings }}
+            </button>
+            <button type="button" class="posterBackBtn" id="posterCopyBtn" style="border:none;cursor:pointer;display:none;" disabled>
+                <i class="fas fa-copy"></i> <span id="posterCopyBtnLabel">{{ posterCopyImage }}</span>
+            </button>
+            <button type="button" class="posterDownloadBtn" id="posterDownloadBtn" disabled>
+                <i class="fas fa-download"></i> {{wrapped_download_image}}
+            </button>
+        </div>
+    </div>
+
+    <!-- Every poster option lives here rather than in the top bar: the bar ran out
+         of width once there were six of them, and pushed the download button off
+         the right edge. -->
+    <div class="posterModal" id="posterSettingsModal" hidden>
+        <div class="posterModalCard" role="dialog" aria-modal="true">
+            <div class="posterModalHead">
+                <span>{{ posterSettings }}</span>
+                <button type="button" class="posterModalClose" id="posterSettingsClose" aria-label="{{ close }}">&times;</button>
+            </div>
+            <div class="posterModalRow">
+                <i class="fa-solid fa-map"></i><span>{{ posterSettingBasemap }}</span>
+                <select id="posterBasemapSelect">
+                    <option value="light">Positron</option>
+                    <option value="colorful">Liberty</option>
+                    <option value="bright" selected>Bright</option>
+                    <option value="dark">Dark Train</option>
+                </select>
+            </div>
+            <div class="posterModalRow">
+                <i class="fa-solid fa-crop-simple"></i><span>{{ posterSettingFormat }}</span>
+                <select id="posterOrientationSelect">
+                    <option value="portrait">{{ posterPortrait }}</option>
+                    <option value="square" selected>{{ posterSquare }}</option>
+                    <option value="landscape">{{ posterLandscape }}</option>
+                </select>
+            </div>
+            <div class="posterModalRow">
+                <i class="fa-solid fa-tags"></i><span>{{ posterSettingLabels }}</span>
+                <button type="button" class="posterModalIconBtn" id="posterResetLabelsBtn"
+                        title="{{ posterResetLabels }}" aria-label="{{ posterResetLabels }}">
+                    <i class="fas fa-rotate-left"></i>
+                </button>
+                <select id="posterLabelLevelSelect">
+                    <option value="default">{{ posterLabelDefault }}</option>
+                    <option value="current" selected>{{ posterLabelCurated }}</option>
+                    <option value="countries">{{ posterLabelCountries }}</option>
+                    <option value="none">{{ posterLabelNone }}</option>
+                </select>
+            </div>
+            <div class="posterModalRow">
+                <i class="fa-solid fa-earth-europe"></i><span>{{ posterSettingCountries }}</span>
+                <select id="posterCountriesSelect">
+                    <option value="none">{{ posterCountriesOff }}</option>
+                    <option value="chrono" selected>{{ posterCountriesChrono }}</option>
+                    <option value="distance">{{ posterCountriesDistance }}</option>
+                    <option value="duration">{{ posterCountriesDuration }}</option>
+                </select>
+            </div>
+            <div class="posterModalRow">
+                <i class="fa-solid fa-language"></i><span>{{ posterSettingMapLang }}</span>
+                <select id="posterMapLangSelect">
+                    <option value="auto" selected>{{ posterMapLangMine }}</option>
+                    <option value="intl">{{ posterMapLangIntl }}</option>
+                </select>
+            </div>
+            <label class="posterModalCheck" id="posterPrivateToggle">
+                <i class="fa-solid fa-lock"></i><span>{{ posterIncludePrivate }}</span>
+                <input type="checkbox" class="posterSwitch" id="posterPrivateCheckbox">
+            </label>
+            <label class="posterModalCheck" id="posterTransparentToggle">
+                <i class="fa-solid fa-chess-board"></i><span>{{ posterTransparentBg }}</span>
+                <input type="checkbox" class="posterSwitch" id="posterTransparentCheckbox">
+            </label>
+        </div>
+    </div>
+
+    <div class="posterStage" id="posterStage">
+    <div class="posterCardWrap" id="posterCardWrap">
+        <div class="posterCard" id="posterCard">
+            <div class="posterHeader">
+                <p class="posterTitle" id="posterTitle" contenteditable="plaintext-only" spellcheck="false" title="{{ edit }}">&nbsp;</p>
+                <p class="posterSubtitle" id="posterSubtitle"></p>
+            </div>
+            <div class="posterMapOuter" id="posterMapOuter">
+                <div id="posterMap"></div>
+                <div class="posterSpinner" id="posterSpinner">{{wrapped_generating}}</div>
+                <div class="posterCredit">
+                    <img src="{{ url_for('static', filename='images/logo_square.png') }}" alt="">
+                    <div class="posterCreditText">
+                        <div class="posterCreditName">Trainlog<span>.me</span></div>
+                        <div class="posterCreditTagline">Your online train diary</div>
+                    </div>
+                </div>
+            </div>
+            <div class="posterCountries" id="posterCountries"></div>
+            <div class="posterFooter" id="posterFooter"></div>
+        </div>
+        <!-- The other face of the poster: the itinerary, drawn entirely on canvas
+             (see drawBackPoster) — this element is both the preview and the
+             exported PNG. -->
+        <div class="posterCard" id="posterBackCard">
+            <canvas id="posterBackCanvas"></canvas>
+        </div>
+    </div>
+    </div>
+
+    <p class="posterAttribution" id="posterAttribution"></p>
+    <p class="posterHint">{{ posterClickHint }}</p>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<script>
+// Export resolution: the on-screen card is CSS-sized (comfortable to preview),
+// MapLibre's pixelRatio renders the underlying canvas at this multiple, so the
+// downloaded PNG is print resolution without the DOM card itself being huge.
+// A custom pixelRatio much above typical retina density (2) pushes MapLibre's
+// label/glyph rendering into territory it isn't well exercised at, which reads
+// as pixelated text — 2x plus a bigger CSS canvas gets similar export
+// resolution without that.
+const POSTER_PIXEL_RATIO = 2;
+// w/h here are the TOTAL card size (header + map + footer — "shoulders"
+// included), not just the map area; resizeCardToOrientation derives the map
+// area's own height by subtracting the header/footer's actual rendered
+// height, so e.g. 'square' really is a square card, not a square map with
+// a title bar and legend hanging off the bottom of it.
+const ORIENTATIONS = {
+    portrait:  { w: 900, h: 1350 },
+    square:    { w: 1000, h: 1000 },
+    landscape: { w: 1350, h: 900 }
+};
+
+// Hidden power-user escape hatch: ?w=1234&h=5678 in the URL overrides
+// whichever orientation preset is selected with exact pixel dimensions —
+// deliberately not exposed in the UI, just reachable for anyone who needs a
+// precise size (e.g. a specific print-shop spec) that doesn't match a preset.
+function getPosterDims() {
+    const params = new URLSearchParams(window.location.search);
+    const w = parseInt(params.get('w'), 10);
+    const h = parseInt(params.get('h'), 10);
+    if (w > 0 && h > 0) return { w, h };
+    return ORIENTATIONS[orientation] || ORIENTATIONS.square;
+}
+
+// A WebGL canvas can't grow past the GPU/browser's max texture size (commonly
+// 8192px, sometimes 4096px on older/weaker hardware) — request more than
+// that and the browser doesn't error, it just silently clamps or falls back
+// to a lower-quality render, which is indistinguishable from "pixelated" at
+// a glance. Scaling pixelRatio down instead keeps the request inside that
+// ceiling, so a large card size still renders as sharp as the hardware
+// allows rather than exceeding it and degrading unpredictably.
+const MAX_CANVAS_DIMENSION = 8192;
+function effectivePixelRatio() {
+    const dims = getPosterDims();
+    const longestSide = Math.max(dims.w, dims.h);
+    return Math.min(POSTER_PIXEL_RATIO, MAX_CANVAS_DIMENSION / longestSide);
+}
+
+// Mat margin around the map, in CSS px. Proportional rather than fixed: a
+// flat 24px is only ~2% of a 1000px card, thin enough to read as a seam
+// rather than a deliberate border, and it wouldn't hold its proportions
+// across the orientation presets or a custom ?w=&h=. Driven from JS (which
+// also writes the matching header/footer padding) so there's one source of
+// truth instead of a CSS literal to keep in sync.
+function posterMat() {
+    const dims = getPosterDims();
+    return Math.round(Math.min(dims.w, dims.h) * 0.045);
+}
+
+// The credit chip scales with the card for the same reason the mat does: at a
+// fixed size it shrinks into insignificance on a large print and dominates a
+// small one. 1000px — the square preset's shorter side — is the reference at
+// which it draws at its natural size. Clamped so an extreme custom ?w=&h=
+// can't produce a comically large or vanishing chip.
+function posterCreditScale() {
+    const dims = getPosterDims();
+    return Math.min(2, Math.max(0.7, Math.min(dims.w, dims.h) / 1000));
+}
+
+// Sizes the map area so the WHOLE card (header + map + footer) comes out to
+// the requested total dimensions. Header/footer height depends on their text
+// content wrapping at the current card WIDTH, so width and padding are set
+// first and the header/footer are measured live (offsetHeight forces the
+// browser to flush the layout from those changes) rather than assumed.
+function resizeCardToOrientation() {
+    const dims = getPosterDims();
+    const mat = posterMat();
+    const wrap = document.getElementById('posterCardWrap');
+    const outer = document.getElementById('posterMapOuter');
+    const header = document.querySelector('.posterHeader');
+    const footer = document.querySelector('.posterFooter');
+    const countries = document.getElementById('posterCountries');
+    // Pin the card itself rather than letting it shrink-wrap the map: a long
+    // title would otherwise widen the card past the requested dimensions
+    // instead of wrapping, and the export assumes exactly dims.w.
+    wrap.style.width = dims.w + 'px';
+    outer.style.margin = '0 ' + mat + 'px';
+    outer.style.width = (dims.w - mat * 2) + 'px';
+    // The mat's top/bottom edges — must be set before measuring below, since
+    // they change the header/footer heights we're about to read.
+    // Optically, not mathematically, equal to the side mat: the subtitle's own
+    // line box already carries ~15px of empty descent under its glyphs, so a full
+    // mat here reads as a wider gap than the map's left/right margins.
+    header.style.paddingBottom = Math.round(mat * 0.6) + 'px';
+    countries.style.padding = Math.round(mat * 0.6) + 'px ' + mat + 'px 0';
+    // 0 when the strip is switched off (display:none), so the map simply keeps
+    // the whole height it had before.
+    const countriesH = countries.offsetHeight;
+    // The legend sits closer under the countries strip than it does under the
+    // map: a full mat between two text rows reads as a hole, where the same gap
+    // against the map's hard edge reads as margin.
+    footer.style.paddingTop = (countriesH ? Math.round(mat * 0.45) : mat) + 'px';
+    const headerH = header.offsetHeight;
+    const footerH = footer.offsetHeight;
+    outer.style.height = Math.max(200, dims.h - headerH - footerH - countriesH) + 'px';
+
+    // Scale the whole chip as one unit rather than restyling each part.
+    // transform-origin bottom-right pins it to the map's corner, and scaling
+    // the offsets too keeps its inset gap proportional rather than fixed.
+    const credit = document.querySelector('.posterCredit');
+    const cs = posterCreditScale();
+    credit.style.transformOrigin = 'bottom right';
+    credit.style.transform = 'scale(' + cs + ')';
+    credit.style.right = (14 * cs) + 'px';
+    credit.style.bottom = (14 * cs) + 'px';
+
+    applyPreviewScale();
+}
+
+// Fits the export-sized card into whatever width the viewport actually offers.
+// Measured from the card's own laid-out box (offsetWidth/Height ignore transforms)
+// rather than from the requested dims, so the reserved space always matches what
+// is actually on screen — the footer legend is built after the first layout pass
+// and makes the card taller than dims.h until the next resize call catches up.
+// A CSS transform doesn't move anything below it, hence the explicit stage height.
+function applyPreviewScale() {
+    const stage = document.getElementById('posterStage');
+    const wrap = document.getElementById('posterCardWrap');
+    wrap.style.transform = '';
+    const cardW = wrap.offsetWidth;
+    const cardH = wrap.offsetHeight;
+    const scale = Math.min(1, stage.clientWidth / cardW);
+    if (scale < 1) wrap.style.transform = 'scale(' + scale + ')';
+    stage.style.height = Math.ceil(cardH * scale) + 'px';
+}
+
+// Title editing. A longer title can wrap to a second line, which changes the header
+// height and so the map area — re-fit only when it actually did, so typing doesn't
+// re-frame the map on every keystroke.
+(function wireTitleEditing() {
+    const titleEl = document.getElementById('posterTitle');
+    let headerH = 0;
+    let refitTimer = null;
+
+    // Firefox before 136 has no plaintext-only mode: it falls back to rich text,
+    // where a paste can drop markup into the title. Insert the plain text instead.
+    titleEl.addEventListener('paste', (e) => {
+        e.preventDefault();
+        const text = (e.clipboardData || window.clipboardData).getData('text').replace(/\s+/g, ' ');
+        document.execCommand('insertText', false, text);
+    });
+
+    // The title is one line by definition — the export draws it with a single
+    // fillText — so Enter finishes the edit rather than starting a paragraph.
+    titleEl.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); }
+    });
+
+    titleEl.addEventListener('focus', () => {
+        headerH = document.querySelector('.posterHeader').offsetHeight;
+    });
+
+    titleEl.addEventListener('input', () => {
+        titleEdited = true;
+        clearTimeout(refitTimer);
+        refitTimer = setTimeout(() => {
+            const header = document.querySelector('.posterHeader');
+            if (header.offsetHeight === headerH) return;
+            headerH = header.offsetHeight;
+            resizeCardToOrientation();
+            refreshBack();
+            if (map) { map.resize(); refit(); }
+        }, 250);
+    });
+
+    // An emptied title falls back to the generated one rather than exporting blank.
+    titleEl.addEventListener('blur', () => {
+        if (titleEl.textContent.trim()) return;
+        titleEdited = false;
+        if (posterTrips) buildTitle(posterTrips);
+        resizeCardToOrientation();
+        if (map) { map.resize(); refit(); }
+    });
+})();
+
+// Rotating a phone changes the available width, and so the preview scale — but
+// not the card's own layout, so only the scale needs recomputing here.
+let previewScaleTimer = null;
+window.addEventListener('resize', function () {
+    clearTimeout(previewScaleTimer);
+    previewScaleTimer = setTimeout(applyPreviewScale, 120);
+});
+
+// Curated subset of the tileservers maplibre-utils.js already knows how to load
+// (see MapConfig.vectorStylePaths), named to match the app's own tileserver
+// picker (templates/includes/tileserver_picker.html) so the names mean the
+// same thing here as everywhere else in Trainlog. `applyLabelLevel` covers
+// both this schema (OpenMapTiles, light/colorful) and dark-train's own (a
+// separate Trainlog-authored style with different layer ids).
+const BASEMAPS = {
+    light:    { tileserver: 'ofm-positron' },
+    colorful: { tileserver: 'ofm-liberty' },
+    bright:   { tileserver: 'ofm-bright' },
+    dark:     { tileserver: 'dark-train', isDark: true }
+};
+
+// Remember the last choice per control (js-cookie, same convention as
+// delayDateMode elsewhere in the app) — falls back to the default if unset
+// or if it names an option that no longer exists.
+function cookieOrDefault(name, validValues, fallback) {
+    const v = (typeof Cookies !== 'undefined') ? Cookies.get(name) : undefined;
+    return validValues.includes(v) ? v : fallback;
+}
+function rememberChoice(name, value) {
+    if (typeof Cookies !== 'undefined') Cookies.set(name, value, { expires: 365 });
+}
+
+let orientation = cookieOrDefault('posterOrientation', Object.keys(ORIENTATIONS), 'square');
+let basemapId = cookieOrDefault('posterBasemap', Object.keys(BASEMAPS), 'bright');
+let labelLevel = cookieOrDefault('posterLabelLevel', ['default', 'current', 'countries', 'none'], 'current');
+let mapLangMode = cookieOrDefault('posterMapLang', ['auto', 'intl'], 'auto');
+// Defaults to excluded: a poster is often meant to be shared/printed, and a
+// trip logged as private was presumably marked that way on purpose — opting
+// it back in should be a deliberate choice, not a silent default.
+let includePrivate = cookieOrDefault('posterIncludePrivate', ['true', 'false'], 'false') === 'true';
+// Export-only: leaves the mount unpainted so the PNG carries alpha there,
+// for printing onto a garment/surface that supplies its own background.
+let transparentBg = cookieOrDefault('posterTransparentBg', ['true', 'false'], 'false') === 'true';
+let countriesMode = cookieOrDefault('posterCountriesMode', ['none', 'chrono', 'distance', 'duration'], 'chrono');
+
+let map = null;
+let posterTrips = null;
+// The trip set the poster is currently drawn from (posterTrips minus private
+// legs unless they were opted in) — what the countries strip counts.
+let posterVisibleTrips = null;
+let posterFeatures = null;
+const tripIds = {{ tripIds|tojson }};
+// `langId` is already declared globally by layout.html — reuse it.
+
+const transportTypeText = {
+    "air": "{{air}}", "train": "{{train}}", "tram": "{{tram}}", "metro": "{{metro}}",
+    "bus": "{{bus}}", "ferry": "{{ferry}}", "car": "{{car}}", "cycle": "{{cycle}}",
+    "walk": "{{walk}}", "aerialway": "{{aerialway}}", "scooter": "{{scooter}}",
+    "funicular": "{{funicular}}", "rail": "{{rail}}", "ski": "{{ski}}"
+};
+
+// Export is dead while the poster is still drawing: a click then would either
+// hand over a half-rendered map or silently block on `map.once('idle')` with
+// no feedback. Both buttons therefore follow the spinner, and an export in
+// flight greys out the other button as well.
+let posterDrawing = true;
+let exportRunning = false;
+
+function syncExportButtons() {
+    const off = posterDrawing || exportRunning;
+    document.getElementById('posterDownloadBtn').disabled = off;
+    document.getElementById('posterCopyBtn').disabled = off;
+}
+
+function setSpinner(on) {
+    document.getElementById('posterSpinner').style.display = on ? 'flex' : 'none';
+    posterDrawing = on;
+    syncExportButtons();
+}
+
+function applyOrientation(name) {
+    orientation = name;
+    rememberChoice('posterOrientation', name);
+    document.getElementById('posterOrientationSelect').value = name;
+    resizeCardToOrientation();
+    refreshBack();
+    if (map) {
+        setSpinner(true);
+        map.resize();
+        refit();
+    }
+}
+
+function refit() {
+    if (!map || !posterFeatures) return;
+    const filters = { viewMode: 'all', years: [], transportTypes: new Set(MapLibreUtils.MapConfig.transportTypes.map(t => t.id)) };
+    MapLibreUtils.fitBoundsToVisibleFeatures(map, posterFeatures, filters).then(() => {
+        map.once('idle', () => setSpinner(false));
+    });
+}
+
+// Real station names on the map instead of sidebar-dependent pin numbers.
+// MapLibre's own label-collision handling (text-allow-overlap:false + a sort
+// key that favours start/end) resolves the "labels cut by the path" problem
+// without hand-rolled placement logic.
+// MapLibre's label collision system only avoids symbol-vs-symbol overlap — it
+// has no idea a label is sitting on top of a route line, since that's a
+// separate 'line' layer. So instead of letting MapLibre auto-pick an anchor
+// (which can and does place text right along a line running through the
+// point), pick a single anchor ourselves, offset perpendicular to the local
+// direction of the line through that station — sideways for a roughly N-S
+// line, up/down for a roughly E-W one — which keeps the text off the line
+// it sits on regardless of which way MapLibre would have guessed.
+// MapLibre's text-anchor names the edge of the text box that sits AT the
+// point, so the text itself appears on the opposite side: anchor 'left' puts
+// text to the point's right, 'top' puts text below it, etc. (confirmed
+// against the style spec — https://maplibre.org/maplibre-style-spec/layers/#layout-symbol-text-anchor).
+// dLon/dLat here is the direction we want the text pushed toward (outward
+// from the route's centroid, see buildLabelPoints), so each case below picks
+// the anchor whose text ends up on that side.
+function pickAnchor(dLon, dLat) {
+    if (Math.abs(dLat) > Math.abs(dLon)) return dLat >= 0 ? 'bottom' : 'top'; // push north -> text above; push south -> text below
+    return dLon >= 0 ? 'left' : 'right'; // push east -> text to the right; push west -> text to the left
+}
+
+// The gap between point and text, in ems of the label's own text-size. The
+// direction must match text-anchor's convention (the text sits on the OPPOSITE
+// side from the named edge — anchor 'left' already puts text to the point's
+// right, so a further positive-x nudge adds gap in that same direction).
+// 1.1em clears the route line's width and the point marker's halo (radius
+// 5-7px) at these text sizes without pushing the label noticeably far from its
+// own station. Dragging a label edits these numbers.
+const ANCHOR_OFFSETS = { left: [1.1, 0], right: [-1.1, 0], top: [0, 1.1], bottom: [0, -1.1] };
+
+// Same normalisation as the label dedup, so a hand-placed offset keeps matching
+// its station across basemap rebuilds.
+function labelKey(name) { return String(name).trim().toLowerCase(); }
+
+function buildLabelPoints(trips) {
+    const byKey = new Map();
+    function addPoint(latlon, name, kind) {
+        if (!latlon || !name) return;
+        // Keyed on the station name alone (not name+coord): the same station
+        // logged as one trip's destination and the next trip's origin can carry
+        // slightly different coordinates, which would otherwise defeat dedup and
+        // print the same label twice right next to each other.
+        const key = labelKey(name);
+        const existing = byKey.get(key);
+        if (existing) {
+            if (kind === 'start' || kind === 'end') existing.kind = kind;
+            return;
+        }
+        byKey.set(key, { key: key, coord: [latlon[1], latlon[0]], name: name, kind: kind });
+    }
+    trips.forEach((trip, i) => {
+        if (!trip.path || trip.path.length < 2) return;
+        const n = trip.path.length;
+        addPoint(trip.path[0], trip.trip.origin_station, i === 0 ? 'start' : 'stop');
+        addPoint(trip.path[n - 1], trip.trip.destination_station, i === trips.length - 1 ? 'end' : 'stop');
+    });
+
+    const points = Array.from(byKey.values());
+
+    // Push each label outward from the route's overall centre rather than
+    // reacting to just the one line segment passing through it: stations tend
+    // to be busiest (multiple lines/points close together) near the middle of
+    // a trip's extent and clearest near its edges, so aiming labels away from
+    // the middle reliably lands them in the open space — e.g. the far corners
+    // of a journey (a round-trip's shared start/end, a southern terminus, an
+    // eastern hub) each get pushed further toward their own corner.
+    if (points.length) {
+        const lons = points.map(p => p.coord[0]), lats = points.map(p => p.coord[1]);
+        const centerLon = (Math.min(...lons) + Math.max(...lons)) / 2;
+        const centerLat = (Math.min(...lats) + Math.max(...lats)) / 2;
+        points.forEach(p => {
+            const dLon = p.coord[0] - centerLon, dLat = p.coord[1] - centerLat;
+            p.anchor = pickAnchor(dLon, dLat);
+            // A label dragged by hand keeps its position through basemap
+            // switches and private/transparent rebuilds, which each rebuild the
+            // points from scratch — same reasoning as hiddenLabelNames.
+            const moved = movedLabelOffsets.get(p.key);
+            p.offset = moved ? moved.slice() : ANCHOR_OFFSETS[p.anchor].slice();
+            p.pinned = !!moved;
+        });
+    }
+    return points;
+}
+
+// Same treatment for our labels and for promoted basemap ones, so a poster
+// reads as one set of labels whichever basemap is under it.
+function labelPaint() {
+    return BASEMAPS[basemapId].isDark
+        ? { 'text-color': '#f5f5f5', 'text-halo-color': '#111111', 'text-halo-width': 1.6 }
+        : { 'text-color': '#1a1a1a', 'text-halo-color': '#ffffff', 'text-halo-width': 1.6 };
+}
+
+// The mode colours are chosen against a light map, and the darkest of them —
+// ferry #1e1e7c, metro #004595, cycle #6e211a — disappear into a dark poster's
+// background. Lifting lightness while keeping hue and saturation keeps each
+// mode recognisably itself instead of washing it out towards white, and the
+// lift is driven by measured contrast rather than a lightness threshold: a
+// saturated blue still reads as dark at the lightness a yellow is bright at.
+const POSTER_MIN_CONTRAST = 4;
+
+function hexToRgb(color) {
+    const match = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(String(color).trim());
+    if (!match) return null;
+    let hex = match[1];
+    if (hex.length === 3) hex = hex[0] + hex[0] + hex[1] + hex[1] + hex[2] + hex[2];
+    return [0, 2, 4].map(i => parseInt(hex.substr(i, 2), 16) / 255);
+}
+
+// WCAG relative luminance, the only measure that puts a saturated blue and a
+// yellow of the same nominal lightness where the eye actually sees them.
+function contrastRatio(a, b) {
+    const luminance = (rgb) => {
+        const [r, g, bl] = rgb.map(c => c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
+        return 0.2126 * r + 0.7152 * g + 0.0722 * bl;
+    };
+    const light = Math.max(luminance(a), luminance(b));
+    const dark = Math.min(luminance(a), luminance(b));
+    return (light + 0.05) / (dark + 0.05);
+}
+
+function rgbToHsl(rgb) {
+    const max = Math.max.apply(null, rgb), min = Math.min.apply(null, rgb);
+    const lightness = (max + min) / 2;
+    const delta = max - min;
+    if (!delta) return { h: 0, s: 0, l: lightness };
+    let hue;
+    if (max === rgb[0]) hue = ((rgb[1] - rgb[2]) / delta) % 6;
+    else if (max === rgb[1]) hue = (rgb[2] - rgb[0]) / delta + 2;
+    else hue = (rgb[0] - rgb[1]) / delta + 4;
+    return { h: hue, s: delta / (1 - Math.abs(2 * lightness - 1)), l: lightness };
+}
+
+function hslToRgb(h, s, l) {
+    const chroma = (1 - Math.abs(2 * l - 1)) * s;
+    const second = chroma * (1 - Math.abs((h % 2 + 2) % 2 - 1));
+    const base = [[chroma, second, 0], [second, chroma, 0], [0, chroma, second],
+                  [0, second, chroma], [second, 0, chroma], [chroma, 0, second]][((Math.floor(h) % 6) + 6) % 6];
+    const offset = l - chroma / 2;
+    return base.map(c => c + offset);
+}
+
+function rgbToHex(rgb) {
+    return '#' + rgb.map(c => Math.round(Math.min(1, Math.max(0, c)) * 255).toString(16).padStart(2, '0')).join('');
+}
+
+function posterModeColor(color) {
+    if (!BASEMAPS[basemapId].isDark) return color;
+    const rgb = hexToRgb(color);
+    const background = hexToRgb(posterTheme.shoulder);
+    if (!rgb || !background) return color;
+    if (contrastRatio(rgb, background) >= POSTER_MIN_CONTRAST) return color;
+
+    const hsl = rgbToHsl(rgb);
+    // Stop at 0.9: past that every hue turns into the same pale tint.
+    for (let l = hsl.l + 0.02; l <= 0.9; l += 0.02) {
+        const lifted = hslToRgb(hsl.h, hsl.s, l);
+        if (contrastRatio(lifted, background) >= POSTER_MIN_CONTRAST) return rgbToHex(lifted);
+    }
+    return rgbToHex(hslToRgb(hsl.h, hsl.s, 0.9));
+}
+
+function labelCollection(points) {
+    return { type: 'FeatureCollection', features: points.map(p => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: p.coord },
+        properties: { name: p.name, kind: p.kind, anchor: p.anchor, offset: p.offset, pinned: p.pinned }
+    })) };
+}
+
+function refreshLabelSource(map) {
+    const source = map.getSource('poster-points');
+    if (source) source.setData(labelCollection(map._posterLabelPoints || []));
+}
+
+// A promoted basemap label carries its own type face and size (read off the
+// layer it came from), so it keeps looking like the basemap's own label rather
+// than turning into a station label the moment it is touched.
+function cloneCollection(clones) {
+    return { type: 'FeatureCollection', features: clones.map(c => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: c.coord },
+        properties: {
+            key: c.key, name: c.name, offset: c.offset,
+            size: c.size, face: c.face, color: c.color, halo: c.halo, haloWidth: c.haloWidth
+        }
+    })) };
+}
+
+function refreshCloneSource(map) {
+    const source = map.getSource('poster-clones');
+    if (source) source.setData(cloneCollection(map._posterClonePoints || []));
+}
+
+function addPosterLayers(map, trips) {
+    // Route lines: same per-mode colours as the interactive map, thickened for print.
+    const features = MapLibreUtils.buildTripLayers(map, trips, MapLibreUtils.MapConfig.transportTypes, { showShadows: false });
+    const allTypes = new Set(MapLibreUtils.MapConfig.transportTypes.map(t => t.id));
+    MapLibreUtils.updateLayerVisibility(map, MapLibreUtils.MapConfig.transportTypes, { viewMode: 'all', years: [], transportTypes: allTypes });
+    MapLibreUtils.MapConfig.transportTypes.forEach(type => {
+        ['past', 'future', 'planned-base', 'planned-overlay'].forEach(suffix => {
+            const id = `${type.id}-${suffix}`;
+            if (!map.getLayer(id)) return;
+            map.setPaintProperty(id, 'line-width', type.id === 'air' ? 2 : 5);
+            // Not the overlay: that one is the white dashes drawn over a
+            // planned trip's base line, and it has no mode colour to lift.
+            if (suffix !== 'planned-overlay') map.setPaintProperty(id, 'line-color', posterModeColor(type.color));
+        });
+    });
+
+    const points = buildLabelPoints(trips);
+    suppressCapitalsNearStations(map, points, trips);
+    map._posterLabelPoints = points;
+    map.addSource('poster-points', { type: 'geojson', data: labelCollection(points) });
+
+    map.addLayer({
+        id: 'poster-point-halo',
+        type: 'circle',
+        source: 'poster-points',
+        paint: {
+            'circle-radius': ['case', ['==', ['get', 'kind'], 'stop'], 5, 7],
+            'circle-color': '#ffffff',
+            'circle-stroke-width': 0
+        }
+    });
+    map.addLayer({
+        id: 'poster-points-layer',
+        type: 'circle',
+        source: 'poster-points',
+        paint: {
+            'circle-radius': ['case', ['==', ['get', 'kind'], 'stop'], 3.5, 5.5],
+            'circle-color': ['match', ['get', 'kind'], 'start', '#2e7d32', 'end', '#c62828', '#3887be'],
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 1.5
+        }
+    });
+
+    // Reuse whatever font the base style already ships glyphs for, so labels
+    // don't silently disappear because of a missing font stack.
+    let labelFont = ['Noto Sans Regular'];
+    const styleLayers = map.getStyle().layers || [];
+    for (const l of styleLayers) {
+        if (l.type !== 'symbol' || !l.layout || !Array.isArray(l.layout['text-font'])) continue;
+        // Not simply the first one: in trainlog-dark that is housenum-label,
+        // whose face is Noto Sans Italic — which is why every station label on
+        // the dark poster came out italic. Take the first upright face instead.
+        if (fontFace(l.layout['text-font']) !== 'regular') continue;
+        labelFont = l.layout['text-font'];
+        break;
+    }
+
+    map.addLayer({
+        id: 'poster-labels',
+        type: 'symbol',
+        source: 'poster-points',
+        layout: {
+            'text-field': ['get', 'name'],
+            'text-font': labelFont,
+            'text-size': ['case', ['==', ['get', 'kind'], 'stop'], 12, 15],
+            // A fixed per-feature anchor (picked in buildLabelPoints, perpendicular
+            // to the line running through that station) rather than MapLibre's
+            // automatic text-variable-anchor search, which only avoids other
+            // labels — it has no notion of "don't sit on top of the route line".
+            'text-anchor': ['get', 'anchor'],
+            // Per-feature so a drag can rewrite just the one label's gap; see
+            // ANCHOR_OFFSETS for what the untouched value means.
+            'text-offset': ['array', 'number', 2, ['get', 'offset']],
+            'text-justify': 'auto',
+            'text-allow-overlap': false,
+            'text-optional': true,
+            // Extra collision margin so two nearby labels are more likely to
+            // hide one of them outright than to render almost touching.
+            'text-padding': 6,
+            // A hand-placed label is placed first so it wins any collision it
+            // is put into — text-allow-overlap can't say this per feature.
+            'symbol-sort-key': ['case',
+                ['get', 'pinned'], -1,
+                ['==', ['get', 'kind'], 'stop'], 1,
+                0]
+        },
+        paint: labelPaint()
+    });
+
+    clonedLabels.forEach(c => Object.assign(c, cloneStyle(map, c.layerId)));
+    map._posterClonePoints = clonedLabels;
+    map.addSource('poster-clones', { type: 'geojson', data: cloneCollection(clonedLabels) });
+    map.addLayer({
+        id: 'poster-clone-labels',
+        type: 'symbol',
+        source: 'poster-clones',
+        layout: {
+            'text-field': ['get', 'name'],
+            // MapLibre collects the glyph ranges to download by enumerating a
+            // text-font expression's possible outputs, so the faces have to be
+            // written out as literals — a ['get'] has none to enumerate and the
+            // label ends up with no glyphs at all, i.e. invisible. All four
+            // basemaps ship the same three Noto faces, so matching on a face
+            // name captured at promotion time covers every label.
+            'text-font': ['match', ['get', 'face'],
+                'italic', ['literal', ['Noto Sans Italic']],
+                'bold', ['literal', ['Noto Sans Bold']],
+                ['literal', labelFont]
+            ],
+            'text-size': ['get', 'size'],
+            'text-anchor': 'center',
+            'text-offset': ['array', 'number', 2, ['get', 'offset']],
+            // Hand-placed by definition: it goes exactly where it was dropped,
+            // and it doesn't push the basemap's remaining labels around.
+            'text-allow-overlap': true,
+            'text-ignore-placement': true
+        },
+        // Its own layer's paint, not ours: a promoted label has to sit among
+        // the basemap's remaining labels without announcing itself.
+        paint: {
+            'text-color': ['get', 'color'],
+            'text-halo-color': ['get', 'halo'],
+            'text-halo-width': ['get', 'haloWidth']
+        }
+    });
+
+    return features;
+}
+
+function buildFooterLegend(trips) {
+    const seen = new Set();
+    trips.forEach(trip => {
+        let type = trip.trip.type;
+        if (["accommodation", "restaurant", "poi"].includes(type)) return;
+        if (type === 'helicopter') type = 'air';
+        seen.add(type);
+    });
+    const footer = document.getElementById('posterFooter');
+    footer.innerHTML = '';
+    MapLibreUtils.MapConfig.transportTypes.forEach(t => {
+        if (!seen.has(t.id)) return;
+        const item = document.createElement('div');
+        item.className = 'posterLegendItem';
+        item.innerHTML = `<span class="posterLegendSwatch" style="background:${posterModeColor(t.color)}"></span><span>${transportTypeText[t.id] || t.id}</span>`;
+        footer.appendChild(item);
+    });
+}
+
+// Countries visited. `trips.countries` maps a country code to the metres covered
+// in it (either a number, or an object of sub-distances to add up).
+const FLAG_HEIGHT = 13;
+const FLAG_DIR = "{{ url_for('static', filename='images/flags') }}";
+
+// The flag assets carry a viewBox but no width/height, so they have no intrinsic
+// size and Firefox refuses to draw them onto a canvas. Stamp the viewBox's size
+// on as real attributes and load that copy instead — the same image then serves
+// both the preview and the export.
+const flagImages = new Map();
+function loadFlagImage(code) {
+    if (!flagImages.has(code)) {
+        flagImages.set(code, fetch(FLAG_DIR + '/' + code.toLowerCase() + '.svg')
+            .then(res => res.ok ? res.text() : Promise.reject())
+            .then(svg => {
+                const box = (svg.match(/viewBox="([^"]+)"/) || [])[1];
+                const parts = box ? box.trim().split(/[\s,]+/).map(Number) : [];
+                if (parts.length === 4) svg = svg.replace('<svg', `<svg width="${parts[2]}" height="${parts[3]}"`);
+                return loadImage('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg));
+            })
+            .catch(() => null));
+    }
+    return flagImages.get(code);
+}
+
+function countryMeters(value) {
+    if (typeof value === 'number') return value;
+    if (value && typeof value === 'object') return Object.values(value).reduce((a, b) => a + (b || 0), 0);
+    return 0;
+}
+
+function countryTotals(trips) {
+    const byCode = new Map();
+    trips.forEach((t, index) => {
+        let distances;
+        try { distances = JSON.parse(t.trip.countries); } catch (e) { return; }
+        if (!distances) return;
+        const length = t.trip.trip_length || 0;
+        const duration = Array.isArray(t.trip.trip_duration) && typeof t.trip.trip_duration[1] === 'number'
+            ? t.trip.trip_duration[1] : 0;
+        Object.keys(distances).forEach(code => {
+            // "UN" is the international-waters bucket, not a country visited.
+            if (code === 'UN') return;
+            const meters = countryMeters(distances[code]);
+            let entry = byCode.get(code);
+            if (!entry) { entry = { code: code, meters: 0, seconds: 0, order: index }; byCode.set(code, entry); }
+            entry.meters += meters;
+            // Nothing finer-grained than the per-country distance exists to split
+            // a leg's duration by, so time follows distance within each leg.
+            if (length > 0) entry.seconds += duration * (meters / length);
+        });
+    });
+    return Array.from(byCode.values());
+}
+
+// A mode switch can land while the previous render is still fetching flags.
+let countriesGeneration = 0;
+
+async function renderCountries(trips) {
+    const generation = ++countriesGeneration;
+    const el = document.getElementById('posterCountries');
+    el.innerHTML = '';
+    el.style.display = countriesMode === 'none' ? 'none' : 'flex';
+    if (countriesMode === 'none') return;
+
+    const entries = countryTotals(trips);
+    if (countriesMode === 'distance') entries.sort((a, b) => b.meters - a.meters);
+    else if (countriesMode === 'duration') entries.sort((a, b) => b.seconds - a.seconds);
+    else entries.sort((a, b) => a.order - b.order || b.meters - a.meters);
+
+    const images = await Promise.all(entries.map(e => loadFlagImage(e.code)));
+    if (generation !== countriesGeneration) return;
+
+    entries.forEach((entry, i) => {
+        const item = document.createElement('div');
+        item.className = 'posterCountryItem';
+        item.dataset.cc = entry.code;
+        const image = images[i];
+        if (image) {
+            const flag = document.createElement('img');
+            flag.src = image.src;
+            // Sized from the flag's own ratio rather than a fixed box: they range
+            // from 1:1 to 2:1, and neither cropping nor letterboxing them looks
+            // like a printed flag.
+            flag.style.height = FLAG_HEIGHT + 'px';
+            flag.style.width = (FLAG_HEIGHT * (image.naturalWidth / image.naturalHeight)) + 'px';
+            item.appendChild(flag);
+        }
+        const name = document.createElement('span');
+        // A code the browser doesn't know (Intl.DisplayNames throws on some) still
+        // deserves a row — its own code reads better than a missing entry.
+        let label = entry.code;
+        try { label = regionNames.of(entry.code) || entry.code; } catch (e) {}
+        name.textContent = label;
+        item.appendChild(name);
+        const metricText = countriesMode === 'distance' ? mToKm(entry.meters) + ' km'
+            : (countriesMode === 'duration' && entry.seconds >= 60) ? secondsToDhm(Math.round(entry.seconds), langId)
+            : '';
+        if (metricText) {
+            const metric = document.createElement('span');
+            metric.className = 'posterCountryMetric';
+            metric.textContent = metricText;
+            item.appendChild(metric);
+        }
+        el.appendChild(item);
+    });
+}
+
+// The strip's height comes out of the map's, so anything that changes it has to
+// re-fit the map as an orientation change would.
+function refreshCountries() {
+    return renderCountries(posterVisibleTrips || []).then(() => {
+        resizeCardToOrientation();
+        if (map) { setSpinner(true); map.resize(); refit(); }
+    });
+}
+
+const sameStation = (a, b) => (a || '').trim().toLowerCase() === (b || '').trim().toLowerCase();
+
+// Where the journey actually went: the stop with the longest stay, measured from
+// one leg's arrival to the next leg's departure. This beats "farthest from home"
+// for a trip like London-SFO-Phoenix and back, where the connection airport is
+// marginally the farther point but the fortnight was spent in Phoenix.
+// Needs times on every leg, so it returns null for undated trips.
+function longestStayStop(trips, home) {
+    let best = { seconds: 0, name: null };
+    for (let i = 0; i < trips.length - 1; i++) {
+        const t = trips[i], next = trips[i + 1];
+        const stop = t.trip.destination_station;
+        if (sameStation(stop, home)) continue;
+        const arrival = tripEndTime(t), departure = tripStartTime(next);
+        if (arrival === null || departure === null) return null;
+        const stay = (departure - arrival) / 1000;
+        if (stay > best.seconds) best = { seconds: stay, name: stop };
+    }
+    return best.name;
+}
+
+function tripStartTime(t) {
+    const dt = t.trip.utc_filtered_start_datetime;
+    if (typeof dt !== 'string') return null;
+    const ts = new Date(dt.replace(' ', 'T') + 'Z').getTime();
+    return isNaN(ts) ? null : ts;
+}
+
+function tripEndTime(t) {
+    const start = tripStartTime(t);
+    const duration = Array.isArray(t.trip.trip_duration) ? t.trip.trip_duration[1] : null;
+    if (start === null || typeof duration !== 'number') return null;
+    return start + duration * 1000;
+}
+
+// Fallback for an undated round trip: the leg endpoint farthest from home.
+// Equirectangular approximation — only the ranking matters, and a journey's legs
+// are never far enough apart in latitude for the distortion to reorder them.
+function farthestStop(trips, home) {
+    const start = (trips[0].path || [])[0];
+    if (!start) return null;
+    return trips.reduce((best, t) => {
+        const path = t.path || [];
+        const stop = path[path.length - 1];
+        if (!stop || sameStation(t.trip.destination_station, home)) return best;
+        const dLat = stop[0] - start[0];
+        const dLon = (stop[1] - start[1]) * Math.cos(start[0] * Math.PI / 180);
+        const d = dLat * dLat + dLon * dLon;
+        return d > best.d ? { d: d, name: t.trip.destination_station } : best;
+    }, { d: -1, name: null }).name;
+}
+
+// "A → A" for a return journey reads as a mistake rather than as a round trip.
+// When the journey ends where it started, name the turnaround point instead and
+// join the two with a two-way arrow.
+function journeyTitle(trips) {
+    const home = trips[0].trip.origin_station;
+    const end = trips[trips.length - 1].trip.destination_station;
+    if (!sameStation(home, end)) return home + ' → ' + end;
+
+    const turnaround = longestStayStop(trips, home) || farthestStop(trips, home);
+    // A single loop leg (leaves and returns with nothing named in between) has no
+    // turnaround to show — its own name is the whole story.
+    return turnaround ? home + ' ⇄ ' + turnaround : home;
+}
+
+// Set once the viewer types their own title, so nothing that rebuilds the poster
+// (a basemap switch, a language change, toggling private trips) overwrites it.
+let titleEdited = false;
+
+function buildTitle(trips) {
+    const explicitTitle = {{ (tag_description or '') | tojson }};
+    const titleEl = document.getElementById('posterTitle');
+    const subtitleEl = document.getElementById('posterSubtitle');
+    if (titleEdited) {
+        // fall through to the subtitle, which stays generated
+    } else if (explicitTitle) {
+        titleEl.textContent = explicitTitle;
+    } else if (trips.length) {
+        titleEl.textContent = journeyTitle(trips);
+    } else {
+        titleEl.textContent = 'Trainlog';
+    }
+    const dated = trips.filter(t => typeof t.trip.utc_filtered_start_datetime === 'string');
+    if (dated.length) {
+        const firstStr = dated[0].trip.utc_filtered_start_datetime;
+        const lastStr = dated[dated.length - 1].trip.utc_filtered_start_datetime;
+        // Follows the same "My language" / "International" choice as the map
+        // labels (mapLangMode) — someone picking English map labels almost
+        // certainly wants English-formatted dates too, not a mix of the two.
+        const dateLocale = mapLangMode === 'intl' ? 'en' : langId;
+        const fmt = new Intl.DateTimeFormat(dateLocale, { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'UTC' });
+        const parseUTC = (s) => new Date(s.replace(' ', 'T') + 'Z');
+        if (firstStr.substring(0, 10) === lastStr.substring(0, 10)) {
+            subtitleEl.textContent = fmt.format(parseUTC(firstStr));
+        } else if (typeof fmt.formatRange === 'function') {
+            subtitleEl.textContent = fmt.formatRange(parseUTC(firstStr), parseUTC(lastStr));
+        } else {
+            subtitleEl.textContent = fmt.format(parseUTC(firstStr)) + ' – ' + fmt.format(parseUTC(lastStr));
+        }
+    }
+}
+
+// (Re)creates the map for the currently selected basemap. Switching basemaps
+// tears down and rebuilds rather than calling MapLibre's setStyle(), since
+// setStyle replaces the whole layer list and doesn't carry over the layers we
+// add on top (route, labels, points) — a fresh instance re-running the same
+// build steps is simpler than reconciling that.
+// A generation token: two rapid basemap switches both create a map instance
+// via the async initializeMapLibre() call below, and without this guard the
+// first call's `finish` can still fire (its 'load' event lands late) after
+// the second has already taken over — re-adding the same sources/layers onto
+// what by then is the current map and throwing "Source already exists".
+let buildGeneration = 0;
+
+async function buildMap() {
+    if (!posterTrips) return;
+    const myGeneration = ++buildGeneration;
+    if (map) { map.remove(); map = null; }
+    setSpinner(true);
+
+    const trips = includePrivate ? posterTrips : posterTrips.filter(t => t.trip.visibility !== 'private');
+    posterVisibleTrips = trips;
+    const firstCoord = (trips.length && trips[0].path && trips[0].path.length)
+        ? [trips[0].path[0][1], trips[0].path[0][0]]
+        : [10, 30];
+
+    const newMap = await MapLibreUtils.initializeMapLibre({
+        container: 'posterMap',
+        tileserver: BASEMAPS[basemapId].tileserver,
+        useGlobe: false,
+        // The one special case left: "International" asks for English labels
+        // rather than the viewer's own language.
+        userLanguage: mapLangMode === 'intl' ? 'en' : langId,
+        center: firstCoord,
+        zoom: 5,
+        preserveDrawingBuffer: true,
+        pixelRatio: effectivePixelRatio()
+    });
+    if (myGeneration !== buildGeneration) { newMap.remove(); return; }
+    map = newMap;
+    // No interactive chrome on a poster preview.
+    map.dragRotate.disable();
+    map.touchZoomRotate.disableRotation();
+
+    // MapLibre auto-adds its own required attribution control (bottom-right
+    // by default). Keep one around — it's what correctly computes which
+    // sources need crediting for whichever basemap is active — but it's kept
+    // out of the map's corners entirely (CSS: display:none) and its text is
+    // mirrored into the static .posterAttribution line below the card
+    // instead (syncAttributionText), so nothing sits on top of the map.
+    const existingAttrib = newMap._controls.find(c => c instanceof maplibregl.AttributionControl);
+    if (existingAttrib) newMap.removeControl(existingAttrib);
+    newMap.addControl(new maplibregl.AttributionControl(), 'bottom-left');
+
+    const finish = () => {
+        if (myGeneration !== buildGeneration) return;
+        applyCardTheme();
+        captureLabelBaseFilters(newMap);
+        applyLabelLevel(newMap, labelLevel);
+        posterFeatures = addPosterLayers(newMap, trips);
+        wireLabelClickToHide(newMap);
+        wireLabelDrag(newMap);
+        applyHiddenLabelFilters(newMap);
+        buildFooterLegend(trips);
+        buildTitle(trips);
+        syncAttributionText();
+        // Header/footer content (title, legend) is only known once trips are
+        // loaded — resize now that it can be measured for real, not just on
+        // the empty placeholder shell resizeCardToOrientation saw at the
+        // very first applyOrientation() call in init().
+        resizeCardToOrientation();
+        // After the resize, so the itinerary side reads the header height the
+        // title it was just given actually needs.
+        refreshBack();
+        newMap.resize();
+        refit();
+        // Flags load asynchronously, so the strip settles (and the map is re-fit
+        // to whatever height it leaves) a moment after the rest of the card.
+        renderCountries(trips).then(() => {
+            if (myGeneration !== buildGeneration) return;
+            resizeCardToOrientation();
+            newMap.resize();
+            refit();
+        });
+    };
+    if (newMap.isStyleLoaded()) finish(); else newMap.once('load', finish);
+}
+
+// The mount is a neutral surface, not the map's sea colour: matching the sea
+// only blended where the map's edge happened to be water, and cut abruptly
+// wherever a landmass reached the edge. A neutral mat makes the map read as a
+// deliberately framed print instead.
+// Kept in sync with the CSS custom properties so the PNG export can draw the
+// same colours without re-reading the DOM.
+let posterTheme = { shoulder: '#ffffff', title: '#1a1a1a', subtitle: '#5a5a5a', legend: '#3a3a3a' };
+
+function applyCardTheme() {
+    const wrap = document.getElementById('posterCardWrap');
+    const dark = !!BASEMAPS[basemapId].isDark;
+    // Also drives the credit chip, the pre-tile-load placeholder and the map's
+    // hairline edge, which all sit on the map rather than on the mount.
+    wrap.classList.toggle('dark', dark);
+    wrap.classList.toggle('transparentBg', transparentBg);
+
+    posterTheme = dark
+        ? { shoulder: '#0b0c0e', title: '#f2f2f2', subtitle: '#a0a0a0', legend: '#cfcfcf' }
+        : { shoulder: '#ffffff', title: '#1a1a1a', subtitle: '#5a5a5a', legend: '#3a3a3a' };
+
+    wrap.style.setProperty('--poster-shoulder', posterTheme.shoulder);
+    wrap.style.setProperty('--poster-title', posterTheme.title);
+    wrap.style.setProperty('--poster-subtitle', posterTheme.subtitle);
+    wrap.style.setProperty('--poster-legend', posterTheme.legend);
+}
+
+// Copies the (hidden) AttributionControl's computed HTML — correct per the
+// active basemap's actual sources — into the static line below the card.
+function syncAttributionText() {
+    const inner = document.querySelector('.maplibregl-ctrl-bottom-left .maplibregl-ctrl-attrib-inner');
+    const target = document.getElementById('posterAttribution');
+    if (inner && target) target.innerHTML = inner.innerHTML;
+}
+
+function applyBasemap(id) {
+    if (id === basemapId) return;
+    basemapId = id;
+    rememberChoice('posterBasemap', id);
+    buildMap();
+}
+
+async function init() {
+    document.getElementById('posterBasemapSelect').value = basemapId;
+    document.getElementById('posterLabelLevelSelect').value = labelLevel;
+    document.getElementById('posterMapLangSelect').value = mapLangMode;
+    document.getElementById('posterCountriesSelect').value = countriesMode;
+    document.getElementById('posterTransparentCheckbox').checked = transparentBg;
+    applyOrientation(orientation);
+
+    const response = await $.post({
+        url: '{{ url_for("getPublicTrips") }}',
+        contentType: 'application/json',
+        data: JSON.stringify({ tripIds: tripIds })
+    });
+    let trips = response[0];
+    trips.reverse();
+    trips.sort(function(a, b) {
+        function key(t) {
+            try {
+                const dt = t.trip.utc_filtered_start_datetime;
+                const ts = new Date(String(dt).replace(' ', 'T') + 'Z').getTime();
+                return isNaN(ts) ? 0 : ts;
+            } catch (e) { return 0; }
+        }
+        return key(a) - key(b);
+    });
+    posterTrips = trips;
+
+    // Only shown when relevant: a viewer other than the trip owner never even
+    // receives private trips from getPublicTrips in the first place (the
+    // backend already screens those out), so the toggle would just be dead
+    // UI for them.
+    if (trips.some(t => t.trip.visibility === 'private')) {
+        document.getElementById('posterPrivateToggle').style.display = 'flex';
+        document.getElementById('posterPrivateCheckbox').checked = includePrivate;
+    }
+
+    await buildMap();
+}
+
+// Rather than hiding capital-city labels outright (losing useful context like
+// "Oslo" on a route that passes near it without stopping there), only drop a
+// capital's label when it's actually close to one of our own station points
+// — where it would otherwise sit right on top of (or right next to) our own
+// label for the same place. Uses MapLibre's `distance` expression to filter
+// by real geographic proximity rather than fragile name-matching (a station
+// like "Copenhagen Kastrup Airport (CPH)" doesn't equal the basemap's plain
+// "Copenhagen", but is very much the same place).
+function suppressCapitalsNearStations(map, points, trips) {
+    if (!points.length) return;
+    const thresholdMeters = 5000;
+
+    // A station itself can be well outside the threshold of its own city's
+    // capital marker (Copenhagen's Kastrup airport is ~8km from central
+    // Copenhagen) even though the drawn route line runs right past/through
+    // the city on its way there — so check distance to the route lines
+    // themselves too, not just to our station points.
+    const farConditions = [
+        ['>', ['distance', { type: 'MultiPoint', coordinates: points.map(p => p.coord) }], thresholdMeters]
+    ];
+    const lineCoords = trips
+        .filter(t => t.path && t.path.length >= 2)
+        .map(t => t.path.map(c => [c[1], c[0]])); // stored [lat,lon] -> geometry [lon,lat]
+    if (lineCoords.length) {
+        farConditions.push(['>', ['distance', { type: 'MultiLineString', coordinates: lineCoords }], thresholdMeters]);
+    }
+    const farEnough = farConditions.length > 1 ? ['all', ...farConditions] : farConditions[0];
+
+    // Fold into the recorded base filter (captureLabelBaseFilters) rather than
+    // replacing it, so manual click-to-hide (applyHiddenLabelFilters) composes
+    // on top of both the style's own filter and this distance condition.
+    if (!map._posterLabelBaseFilters) map._posterLabelBaseFilters = {};
+    ['label_city_capital', 'place-capital'].forEach(id => {
+        if (!map.getLayer(id)) return;
+        const existing = map._posterLabelBaseFilters[id];
+        const base = existing ? ['all', existing, farEnough] : farEnough;
+        map._posterLabelBaseFilters[id] = base;
+        map.setFilter(id, base);
+    });
+}
+
+// Manual click-to-hide: the automatic dedup/decluttering above catches most
+// cases, but which point a vector tile source picks to represent a city (or
+// how far a station's real-world coordinates are from that point) varies by
+// source — Dark Train's own "Copenhagen" point sits close enough to pass the
+// distance check, OpenFreeMap's doesn't, and no single threshold covers both.
+// Rather than chase every such mismatch, let the label itself be clicked away
+// — it survives basemap switches (kept by name, not by map instance) and a
+// "Reset labels" button clears it.
+let hiddenLabelNames = new Set();
+// Kept apart from the basemap's names: hiding (or promoting) the basemap's
+// "Bergen" must not take our own station label of the same name with it — that
+// pairing is the whole point of suppressCapitalsNearStations.
+let hiddenStationNames = new Set();
+// Basemap labels lifted into our own draggable layer (see promoteBasemapLabel).
+let clonedLabels = [];
+// Station name -> hand-placed text-offset, in ems (see ANCHOR_OFFSETS).
+let movedLabelOffsets = new Map();
+// A drag ends with a click on the same label, which would otherwise hide it.
+let suppressLabelClick = false;
+
+function applyHiddenLabelFilters(map) {
+    // Match every field the label could have been rendered from, not just
+    // `name`: applyStyleLanguage rewrites text-field to a coalesce over
+    // name:<lang> / name:latin / name, so a label showing "Breivikon" out of
+    // name:latin is not matched by a filter that only ever reads `name` — the
+    // click looked like it did nothing at all.
+    const names = ['literal', Array.from(hiddenLabelNames)];
+    const exclude = hiddenLabelNames.size
+        ? ['!', ['any'].concat(nameFields().map(f => ['in', ['coalesce', ['get', f], ''], names]))]
+        : null;
+
+    if (map.getLayer('poster-labels')) {
+        map.setFilter('poster-labels', hiddenStationNames.size
+            ? ['!', ['in', ['get', 'name'], ['literal', Array.from(hiddenStationNames)]]]
+            : null);
+    }
+    const baseFilters = map._posterLabelBaseFilters || {};
+    Object.keys(baseFilters).forEach(id => {
+        if (!map.getLayer(id)) return;
+        const base = baseFilters[id];
+        map.setFilter(id, exclude ? (base ? ['all', base, exclude] : exclude) : base);
+    });
+}
+
+// The name fields a label can be rendered from, in the order text-field
+// coalesces them. Empty-string coalesce keeps `in` off a null needle.
+function nameFields() {
+    const code = mapLangMode === 'intl' ? 'en' : (langId === 'gsw' ? 'de' : String(langId).split('-')[0]);
+    return ['name', 'name:latin', 'name:' + code];
+}
+
+// What the label actually reads on screen, and every field that could hide it.
+function displayedName(props) {
+    const fields = nameFields();
+    return props[fields[2]] || props[fields[1]] || props[fields[0]] || '';
+}
+
+function nameVariants(props) {
+    return nameFields().map(f => props[f]).filter(Boolean);
+}
+
+function wireLabelClickToHide(map) {
+    // Every basemap label layer, not just capitals — clicking works whichever
+    // one a given label happens to render on, hidden layers simply have
+    // nothing to click so registering all of them unconditionally is safe
+    // regardless of the current label level.
+    const layerIds = ['poster-labels', 'poster-clone-labels'].concat(basemapLabelLayers(map));
+
+    layerIds.forEach(id => {
+        if (!map.getLayer(id)) return;
+        map.on('mouseenter', id, () => { map.getCanvas().style.cursor = 'pointer'; });
+        map.on('mouseleave', id, () => { map.getCanvas().style.cursor = ''; });
+        map.on('click', id, (e) => {
+            e.originalEvent.stopPropagation();
+            if (suppressLabelClick) { suppressLabelClick = false; return; }
+            const props = (e.features[0] && e.features[0].properties) || {};
+            // A promoted label is ours, so it goes away by dropping the clone —
+            // its original is already hidden by name.
+            if (id === 'poster-clone-labels') {
+                clonedLabels = clonedLabels.filter(c => c.key !== props.key);
+                map._posterClonePoints = clonedLabels;
+                refreshCloneSource(map);
+                return;
+            }
+            if (id === 'poster-labels') {
+                if (!props.name) return;
+                hiddenStationNames.add(props.name);
+                applyHiddenLabelFilters(map);
+                return;
+            }
+            const variants = nameVariants(props);
+            if (!variants.length) return;
+            variants.forEach(n => hiddenLabelNames.add(n));
+            applyHiddenLabelFilters(map);
+        });
+    });
+}
+
+function basemapLabelLayers(map) {
+    return allBasemapLabelLayerIds().filter(id => map.getLayer(id));
+}
+
+// text-size in these styles is either a plain number or an
+// ["interpolate", ["linear"], ["zoom"], z, size, ...] ramp, so reading the
+// size a label renders at right now is a short evaluation rather than a reason
+// to reach for MapLibre internals. Anything else (a nested step, a property
+// function) falls back to the default rather than guessing.
+function sizeAtZoom(value, zoom, fallback) {
+    if (typeof value === 'number') return value;
+    if (!Array.isArray(value) || value[0] !== 'interpolate') return fallback;
+    const stops = [];
+    for (let i = 3; i + 1 < value.length; i += 2) {
+        if (typeof value[i] === 'number' && typeof value[i + 1] === 'number') stops.push([value[i], value[i + 1]]);
+    }
+    if (!stops.length) return fallback;
+    if (zoom <= stops[0][0]) return stops[0][1];
+    for (let i = 0; i + 1 < stops.length; i++) {
+        const [z0, s0] = stops[i], [z1, s1] = stops[i + 1];
+        if (zoom <= z1) return s0 + (s1 - s0) * (zoom - z0) / (z1 - z0);
+    }
+    return stops[stops.length - 1][1];
+}
+
+// Which of the three faces the source layer draws in, as a name the clone
+// layer's text-font can match on.
+function fontFace(font) {
+    const stack = Array.isArray(font) ? font.join(' ') : '';
+    if (/Italic/i.test(stack)) return 'italic';
+    if (/Bold/i.test(stack)) return 'bold';
+    return 'regular';
+}
+
+// Everything a clone needs to render like the layer it was lifted from. Read
+// from the live style rather than stored once, so switching basemap restyles
+// the labels already promoted. Anything expression-driven (poi-label's colour
+// is a match on class) falls back to the poster's own label paint.
+function cloneStyle(map, layerId) {
+    // Switching basemap renames the layers — dark-train's place-village is
+    // label_village on the OpenFreeMap styles — so the layer a label was
+    // promoted from usually no longer exists. Fall back to any of the new
+    // style's label layers for the colours (within one style they are all but
+    // identical) and keep the size and face captured at promotion.
+    const origin = map.getLayer(layerId) ? layerId
+        : basemapLabelLayers(map).find(id => typeof map.getPaintProperty(id, 'text-color') === 'string');
+    if (!origin) return {};
+
+    const paint = labelPaint();
+    const color = map.getPaintProperty(origin, 'text-color');
+    const halo = map.getPaintProperty(origin, 'text-halo-color');
+    const haloWidth = map.getPaintProperty(origin, 'text-halo-width');
+    const style = {
+        color: typeof color === 'string' ? color : paint['text-color'],
+        halo: typeof halo === 'string' ? halo : paint['text-halo-color'],
+        // Unset means the style draws no halo at all, which is worth copying.
+        haloWidth: typeof haloWidth === 'number' ? haloWidth : 0
+    };
+    if (origin === layerId) {
+        style.size = sizeAtZoom(map.getLayoutProperty(origin, 'text-size'), map.getZoom(), 12);
+        style.face = fontFace(map.getLayoutProperty(origin, 'text-font'));
+    }
+    return style;
+}
+
+// The basemap's labels can't be moved where they are — their geometry is baked
+// into the vector tiles and MapLibre offers no per-feature placement override.
+// Dragging one therefore lifts it out: a copy goes into our own source (which
+// we can place freely, and which draws above the route), and the original is
+// hidden by name, exactly as a click would have hidden it. The copy keeps the
+// font and the size the original was rendering at, so the swap is invisible.
+function promoteBasemapLabel(map, layerId, feature, lngLat) {
+    const props = feature.properties || {};
+    const name = displayedName(props);
+    if (!name) return null;
+    const key = layerId + ':' + labelKey(name);
+    const existing = (map._posterClonePoints || []).find(c => c.key === key);
+    if (existing) return existing;
+
+    const clone = Object.assign({
+        key: key,
+        name: name,
+        layerId: layerId,
+        // A line-placed label (a river, a road) has no single point to inherit,
+        // so it starts where it was grabbed.
+        coord: feature.geometry && feature.geometry.type === 'Point'
+            ? feature.geometry.coordinates.slice()
+            : [lngLat.lng, lngLat.lat],
+        offset: [0, 0]
+    }, cloneStyle(map, layerId));
+    clonedLabels.push(clone);
+    map._posterClonePoints = clonedLabels;
+    refreshCloneSource(map);
+    nameVariants(props).forEach(n => hiddenLabelNames.add(n));
+    applyHiddenLabelFilters(map);
+    return clone;
+}
+
+// Our own station labels can also be dragged: the basemap's labels live inside
+// the vector tiles and can only be hidden, but ours come from a source we own,
+// so a drag is just an edit to that feature's text-offset. Kept by name (like
+// hiddenLabelNames) so a basemap switch doesn't throw the placement away.
+function wireLabelDrag(map) {
+    let drag = null;
+
+    const end = (cursor) => {
+        if (!drag) return;
+        if (drag.dragged) {
+            if (!drag.clone) movedLabelOffsets.set(drag.point.key, drag.point.offset.slice());
+            suppressLabelClick = true;
+        }
+        drag = null;
+        map.getCanvas().style.cursor = cursor;
+    };
+
+    const start = (point, e, clone) => {
+        drag = {
+            point: point,
+            clone: clone,
+            from: e.point,
+            offset: point.offset.slice(),
+            // text-offset is in ems, so pixels have to be divided by the size
+            // this label actually renders at.
+            size: clone ? point.size : (point.kind === 'stop' ? 12 : 15),
+            dragged: false
+        };
+        map.getCanvas().style.cursor = 'grabbing';
+    };
+
+    map.on('mousedown', 'poster-labels', (e) => {
+        const feature = e.features && e.features[0];
+        if (!feature) return;
+        const point = (map._posterLabelPoints || []).find(p => p.key === labelKey(feature.properties.name));
+        if (!point) return;
+        // Keeps the gesture from panning the map underneath the label.
+        e.preventDefault();
+        start(point, e, false);
+    });
+
+    map.on('mousedown', 'poster-clone-labels', (e) => {
+        const feature = e.features && e.features[0];
+        if (!feature) return;
+        const point = (map._posterClonePoints || []).find(c => c.key === feature.properties.key);
+        if (!point) return;
+        e.preventDefault();
+        start(point, e, true);
+    });
+
+    // A basemap label becomes one of ours only once the gesture turns out to be
+    // a drag: promoting on mousedown would put a clone under the pointer in
+    // time for the trailing click to delete it again, so a press-and-release
+    // (or a slow click) made the label vanish. Until the threshold it is just a
+    // click, which hides the label the way it always did.
+    basemapLabelLayers(map).forEach(id => {
+        map.on('mousedown', id, (e) => {
+            const feature = e.features && e.features[0];
+            if (!feature || drag) return;
+            e.preventDefault();
+            drag = { pending: { layerId: id, feature: feature, lngLat: e.lngLat }, from: e.point, dragged: false };
+        });
+    });
+
+    map.on('mousemove', (e) => {
+        if (!drag) return;
+        const dx = e.point.x - drag.from.x, dy = e.point.y - drag.from.y;
+        // Below the threshold the gesture is still a click, which hides.
+        if (!drag.dragged && Math.hypot(dx, dy) < 3) return;
+        if (drag.pending) {
+            const p = drag.pending;
+            const clone = promoteBasemapLabel(map, p.layerId, p.feature, p.lngLat);
+            if (!clone) { drag = null; return; }
+            const from = drag.from;
+            start(clone, { point: from }, true);
+            drag.from = from;
+        }
+        drag.dragged = true;
+        drag.point.offset = [drag.offset[0] + dx / drag.size, drag.offset[1] + dy / drag.size];
+        if (drag.clone) {
+            refreshCloneSource(map);
+        } else {
+            drag.point.pinned = true;
+            refreshLabelSource(map);
+        }
+    });
+
+    // Still over the label it just dropped, hence the hover cursor back.
+    map.on('mouseup', () => end('pointer'));
+    // Releasing the button off the canvas never reaches map 'mouseup'.
+    map.on('mouseout', () => end(''));
+}
+
+function resetHiddenLabels() {
+    hiddenLabelNames.clear();
+    hiddenStationNames.clear();
+    movedLabelOffsets.clear();
+    clonedLabels = [];
+    if (!map) return;
+    map._posterClonePoints = clonedLabels;
+    refreshCloneSource(map);
+    (map._posterLabelPoints || []).forEach(p => {
+        p.offset = ANCHOR_OFFSETS[p.anchor].slice();
+        p.pinned = false;
+    });
+    refreshLabelSource(map);
+    applyHiddenLabelFilters(map);
+}
+
+// The basemap labels its own cities/towns/villages/airports/roads/POIs, which
+// duplicates (and visually collides with) our own station labels — e.g. its
+// `airport` layer independently labels the exact airport our own origin/
+// destination point already names. Grouped by tier so applyLabelLevel can
+// show progressively less of it; ids cover both OpenMapTiles-schema basemaps
+// (ofm-positron / ofm-liberty / ofm-bright) and dark-train's own schema.
+const LABEL_LAYER_GROUPS = {
+    // Roads, POIs, house numbers, villages/towns/cities — place-specific noise
+    // that either duplicates our own stations or just clutters a print poster.
+    clutter: [
+        'airport',
+        'label_other', 'label_village', 'label_town', 'label_city', 'label_state',
+        'highway-name-path', 'highway-name-minor', 'highway-name-major',
+        'highway-shield-non-us', 'highway-shield-us-interstate', 'road_shield_us',
+        'poi_r20', 'poi_r7', 'poi_r1', 'poi_transit', 'road_oneway', 'road_oneway_opposite',
+        'poi-label', 'housenum-label',
+        'place-suburbs', 'place-village', 'place-town', 'place-city-sm', 'place-city-lg',
+        'road-label-small', 'road-label-medium', 'road-label-large', 'public-transport-label',
+        'tunnel-oneway', 'road-oneway', 'bridge-oneway', 'mountain_peak'
+    ],
+    water: [
+        'waterway_line_label', 'water_name_point_label', 'water_name_line_label',
+        'waterway-label', 'waterarea-label', 'marine-label-point', 'marine-label-line'
+    ],
+    // Useful context for a trip passing near one without stopping there (e.g.
+    // Oslo on a Trondheim-Stockholm route) — only suppressed near one of our
+    // own stations (suppressCapitalsNearStations) or by manual click, not
+    // hidden outright, except at the 'countries'/'none' label levels.
+    capitals: ['label_city_capital', 'place-capital'],
+    countries: ['label_country_1', 'label_country_2', 'label_country_3', 'country-label-sm', 'country-label-md', 'country-label-lg']
+};
+
+function allBasemapLabelLayerIds() {
+    return [].concat(...Object.values(LABEL_LAYER_GROUPS));
+}
+
+// Records each basemap label layer's own filter (as shipped by the style)
+// before we touch anything, so suppressCapitalsNearStations and manual
+// click-to-hide (applyHiddenLabelFilters) can each layer their own condition
+// on top via ['all', base, ...] without stepping on one another or on
+// whatever the style itself already filtered that layer by.
+function captureLabelBaseFilters(map) {
+    map._posterLabelBaseFilters = {};
+    allBasemapLabelLayerIds().forEach(id => {
+        if (!map.getLayer(id)) return;
+        map._posterLabelBaseFilters[id] = toExpressionFilter(map.getFilter(id)) || null;
+    });
+}
+
+// These styles mix both filter syntaxes — place-town is
+// ["==", ["get","class"], "town"] while place-village is still the legacy
+// ["in", "class", "village", "hamlet"]. The two cannot be combined: given
+// ['all', legacyFilter, ourExpression] MapLibre decides the whole filter is
+// legacy and then throws on the expression inside it, so the click that was
+// meant to hide a village label failed — and took the rest of the layer loop
+// with it. Converting the legacy forms up front keeps every composition we
+// build (this one, suppressCapitalsNearStations) purely expression-based.
+function toExpressionFilter(filter) {
+    if (!Array.isArray(filter) || !filter.length) return filter;
+    const op = filter[0];
+    const args = filter.slice(1);
+    const property = (key) => key === '$type' ? ['geometry-type'] : key === '$id' ? ['id'] : ['get', key];
+    const legacyKey = typeof filter[1] === 'string';
+
+    switch (op) {
+        case 'all':
+        case 'any':
+            return [op].concat(args.map(toExpressionFilter));
+        case 'none':
+            return ['!', ['any'].concat(args.map(toExpressionFilter))];
+        case 'has':
+            return legacyKey ? ['has', filter[1]] : filter;
+        case '!has':
+            return ['!', ['has', filter[1]]];
+        case 'in':
+        case '!in': {
+            // Modern form already: ["in", <expression>, ["literal", [...]]].
+            if (!legacyKey || Array.isArray(filter[2])) return filter;
+            const values = args.slice(1);
+            // A missing property reads as null, which `in` refuses as a needle.
+            const needle = values.every(v => typeof v === 'string')
+                ? ['coalesce', property(filter[1]), '']
+                : property(filter[1]);
+            const test = ['in', needle, ['literal', values]];
+            return op === 'in' ? test : ['!', test];
+        }
+        case '==':
+        case '!=':
+        case '<':
+        case '<=':
+        case '>':
+        case '>=':
+            return legacyKey ? [op, property(filter[1]), filter[2]] : filter;
+        default:
+            return filter;
+    }
+}
+
+// Four label-density tiers, applied directly to the current map (no rebuild
+// needed — just layer visibility toggles):
+//  - 'default':   whatever the raw basemap style ships, untouched
+//  - 'current':   clutter hidden, country names + capitals kept (the original behaviour)
+//  - 'countries': clutter + capitals + water names hidden, country names only
+//  - 'none':      every basemap text label hidden — just geometry/colour
+function applyLabelLevel(map, level) {
+    const setVisible = (ids, visible) => ids.forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+    });
+
+    if (level === 'default') {
+        Object.values(LABEL_LAYER_GROUPS).forEach(ids => setVisible(ids, true));
+        return;
+    }
+    setVisible(LABEL_LAYER_GROUPS.clutter, false);
+    setVisible(LABEL_LAYER_GROUPS.water, level === 'current');
+    setVisible(LABEL_LAYER_GROUPS.capitals, level === 'current');
+    setVisible(LABEL_LAYER_GROUPS.countries, level !== 'none');
+}
+
+document.getElementById('posterOrientationSelect').addEventListener('change', (e) => applyOrientation(e.target.value));
+document.getElementById('posterBasemapSelect').addEventListener('change', (e) => applyBasemap(e.target.value));
+document.getElementById('posterLabelLevelSelect').addEventListener('change', (e) => {
+    labelLevel = e.target.value;
+    rememberChoice('posterLabelLevel', labelLevel);
+    if (map) applyLabelLevel(map, labelLevel);
+});
+document.getElementById('posterMapLangSelect').addEventListener('change', (e) => {
+    mapLangMode = e.target.value;
+    rememberChoice('posterMapLang', mapLangMode);
+    // Labels are localised when the style loads, so this rebuilds the map the
+    // same way a basemap switch does; finish() then redoes the title and the
+    // re-fit a locale swap needs anyway (a longer date subtitle can wrap to a
+    // taller header).
+    buildMap();
+});
+document.getElementById('posterCountriesSelect').addEventListener('change', (e) => {
+    countriesMode = e.target.value;
+    rememberChoice('posterCountriesMode', countriesMode);
+    refreshCountries();
+});
+document.getElementById('posterPrivateCheckbox').addEventListener('change', (e) => {
+    includePrivate = e.target.checked;
+    rememberChoice('posterIncludePrivate', String(includePrivate));
+    // The trip set itself changes (route lines, points, bounds, title/legend
+    // all derive from it) — same magnitude of change as a basemap switch, so
+    // it needs the same full rebuild, not just a filter/visibility toggle.
+    buildMap();
+});
+document.getElementById('posterTransparentCheckbox').addEventListener('change', (e) => {
+    transparentBg = e.target.checked;
+    rememberChoice('posterTransparentBg', String(transparentBg));
+    // Preview-only class; the export reads `transparentBg` directly.
+    document.getElementById('posterCardWrap').classList.toggle('transparentBg', transparentBg);
+    refreshBack();
+});
+document.getElementById('posterResetLabelsBtn').addEventListener('click', resetHiddenLabels);
+
+// Settings modal: opened from the top bar, closed by its own button, a click on
+// the backdrop, or Escape. Every control inside keeps working the moment it is
+// changed — there is no apply step, so the poster updates behind the panel.
+(function wireSettingsModal() {
+    const modal = document.getElementById('posterSettingsModal');
+    const open = () => { modal.hidden = false; };
+    const close = () => { modal.hidden = true; };
+    document.getElementById('posterSettingsBtn').addEventListener('click', open);
+    document.getElementById('posterSettingsClose').addEventListener('click', close);
+    modal.addEventListener('click', (e) => { if (e.target === modal) close(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !modal.hidden) close(); });
+})();
+
+document.getElementById('posterDownloadBtn').addEventListener('click', async () => {
+    exportRunning = true;
+    syncExportButtons();
+    try {
+        await downloadPoster('download');
+    } catch (e) {
+        console.error(e);
+        alert("{{wrapped_download_error}}");
+    } finally {
+        exportRunning = false;
+        syncExportButtons();
+    }
+});
+
+// Copying an image needs both the async Clipboard API and ClipboardItem; on
+// browsers without them (or on insecure origins, where navigator.clipboard is
+// undefined) the button stays hidden and download remains the only route.
+const posterCopyBtn = document.getElementById('posterCopyBtn');
+if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+    posterCopyBtn.style.display = 'inline-flex';
+    posterCopyBtn.addEventListener('click', async () => {
+        const label = document.getElementById('posterCopyBtnLabel');
+        const original = label.textContent;
+        exportRunning = true;
+        syncExportButtons();
+        try {
+            await downloadPoster('copy');
+            label.textContent = "{{ posterCopied }}";
+            setTimeout(() => { label.textContent = original; }, 2000);
+        } catch (e) {
+            console.error(e);
+            alert("{{ posterCopyError }}");
+        } finally {
+            exportRunning = false;
+            syncExportButtons();
+        }
+    });
+}
+
+// Station names can carry a flag emoji (Trainlog prefixes some station
+// display names with one), which makes for a poor filename — strip emoji and
+// collapse everything else that isn't a letter/number (arrows, punctuation,
+// whitespace) into single hyphens, keeping accented letters (e.g.
+// "København" stays "københavn" rather than being mangled by an ASCII-only
+// word-character filter).
+function filenameForTrip(titleText, suffix) {
+    const slug = (titleText || '')
+        .replace(/[\u{1F1E6}-\u{1F1FF}\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu, '')
+        .replace(/[^\p{L}\p{N}]+/gu, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase();
+    return (slug || 'trainlog-trip') + (suffix || '') + '.png';
+}
+
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+    });
+}
+
+// mode: 'download' saves the rendered poster as a PNG file, 'copy' puts it on
+// the clipboard. Everything up to the finished canvas is identical.
+async function downloadPoster(mode) {
+    // The back side is its own image: whichever face is on screen is what the
+    // download/copy button hands over.
+    if (posterSide === 'back') {
+        const canvas = await renderBack();
+        await saveCanvas(canvas, filenameForTrip(document.getElementById('posterTitle').textContent, '-itinerary'), mode);
+        return;
+    }
+    if (!map) return;
+    await new Promise(resolve => {
+        if (map.loaded() && !map.isMoving()) resolve();
+        else map.once('idle', resolve);
+    });
+
+    const pr = effectivePixelRatio(); // must match whatever buildMap() actually rendered the map canvas at
+    const dims = getPosterDims(); // total card size
+    // Real measured height, matching whatever resizeCardToOrientation already
+    // fit the on-screen card to — not a guess, so the export is a faithful
+    // copy of the preview regardless of how long the title/legend text is.
+    const headerH = document.querySelector('.posterHeader').offsetHeight;
+    const footerH = document.querySelector('.posterFooter').offsetHeight;
+    const countriesEl = document.getElementById('posterCountries');
+    const countriesH = countriesEl.offsetHeight;
+    const mapH = dims.h - headerH - footerH - countriesH;
+    // Map rectangle in device pixels, inset by the mat — mirrors
+    // .posterMapOuter's margins on screen.
+    const mat = posterMat();
+    const mapX = mat * pr;
+    const mapY = headerH * pr;
+    const mapW = (dims.w - mat * 2) * pr;
+    const mapHpx = mapH * pr;
+    const mapRadius = 6 * pr;
+    const out = document.createElement('canvas');
+    out.width = dims.w * pr;
+    out.height = dims.h * pr;
+    const ctx = out.getContext('2d');
+
+    // Shoulders + text reuse the exact colours applyCardTheme derived from
+    // the basemap's sea colour, so the export matches the preview for any
+    // basemap without duplicating the luminance logic here. isDarkTheme is
+    // still used further down for the credit chip, which sits on the map.
+    const isDarkTheme = !!BASEMAPS[basemapId].isDark;
+    // Skipped entirely when transparentBg is on: the canvas starts fully
+    // transparent, and PNG keeps the alpha. Only the mount is affected — the
+    // map itself is an opaque raster and stays that way.
+    if (!transparentBg) {
+        ctx.fillStyle = posterTheme.shoulder;
+        ctx.fillRect(0, 0, out.width, out.height);
+    }
+
+    // Title
+    const titleText = document.getElementById('posterTitle').textContent || '';
+    const subtitleText = document.getElementById('posterSubtitle').textContent || '';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = posterTheme.title;
+    ctx.font = `700 ${22 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillText(titleText, out.width / 2, 34 * pr, out.width - 40 * pr);
+    if (subtitleText) {
+        ctx.fillStyle = posterTheme.subtitle;
+        ctx.font = `${13 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+        ctx.fillText(subtitleText, out.width / 2, 56 * pr, out.width - 40 * pr);
+    }
+
+    // Preload the logo before touching the WebGL canvas below: nothing async
+    // may happen between forcing a fresh paint and reading its pixels, or
+    // some browsers silently hand back a blank buffer even with
+    // preserveDrawingBuffer set (a known MapLibre/Chrome timing quirk —
+    // https://github.com/maplibre/maplibre-gl-js/discussions/3900).
+    const logo = await loadImage("{{ url_for('static', filename='images/logo_square.png') }}");
+    // Already cached from the preview, but awaited here for the same reason as the
+    // logo: nothing may go async between the map's repaint and reading its pixels.
+    const countryItems = Array.from(countriesEl.querySelectorAll('.posterCountryItem'));
+    const countryFlags = await Promise.all(countryItems.map(item => loadFlagImage(item.dataset.cc)));
+
+    // Force one more paint and read the canvas synchronously inside that
+    // render callback, rather than trusting whatever the canvas already
+    // holds from the last (possibly stale/cleared) frame.
+    await new Promise(resolve => {
+        map.once('render', () => {
+            // Clip to the mat's rounded rectangle so the exported map has the
+            // same rounded corners as the on-screen .posterMapOuter.
+            ctx.save();
+            roundRect(ctx, mapX, mapY, mapW, mapHpx, mapRadius);
+            ctx.clip();
+            ctx.drawImage(map.getCanvas(), mapX, mapY, mapW, mapHpx);
+            ctx.restore();
+            resolve();
+        });
+        map.triggerRepaint();
+    });
+
+    // Hairline edge around the mounted map (matches .posterMapOuter's 1px
+    // box-shadow ring). Offset by half a line width so the stroke lands on the
+    // pixel boundary rather than straddling it.
+    ctx.save();
+    ctx.strokeStyle = isDarkTheme ? 'rgba(255,255,255,0.22)' : 'rgba(0,0,0,0.12)';
+    ctx.lineWidth = pr;
+    roundRect(ctx, mapX + pr / 2, mapY + pr / 2, mapW - pr, mapHpx - pr, mapRadius);
+    ctx.stroke();
+    ctx.restore();
+
+    // Credit chip baked into the map area, bottom-right — survives a footer
+    // crop. Reproduces the logo's icon+wordmark composition in real canvas
+    // text (matching .posterCredit) rather than the raster logo.png, which
+    // would need a second "trainlog.me" caption repeating the brand name —
+    // and folds the domain into the name itself, since "Trainlog" alone
+    // doesn't reliably surface the site in a search engine.
+    // `cs` mirrors the CSS transform:scale() applied to .posterCredit on
+    // screen, so every dimension below scales with the card exactly as the
+    // preview does. `u` is the combined device-pixel + scale unit.
+    const cs = posterCreditScale();
+    const u = pr * cs;
+    const nameSize = 17 * u, taglineSize = 9.5 * u;
+    const padLeft = 8 * u, padRight = 14 * u, padY = 8 * u, iconGap = 8 * u;
+    const iconSize = 34 * u;
+    ctx.font = `800 ${nameSize}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    const nameWidth = ctx.measureText('Trainlog.me').width;
+    ctx.font = `italic ${taglineSize}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    const taglineWidth = ctx.measureText('Your online train diary').width;
+    const textW = Math.max(nameWidth, taglineWidth);
+    const textH = nameSize * 1.15 + 1 * u + taglineSize; // name line-height + tagline margin + tagline size
+    const chipW = padLeft + iconSize + iconGap + textW + padRight;
+    const chipH = padY * 2 + Math.max(iconSize, textH);
+    // Positioned against the map's own inset rectangle, not the card edge, so
+    // it stays inside the mounted map exactly as .posterCredit does.
+    const chipX = mapX + mapW - chipW - 14 * u;
+    const chipY = mapY + mapHpx - chipH - 14 * u;
+    ctx.save();
+    ctx.shadowColor = isDarkTheme ? 'rgba(0,0,0,0.5)' : 'rgba(0,0,0,0.22)';
+    ctx.shadowBlur = 10 * u;
+    ctx.shadowOffsetY = 2 * u;
+    ctx.fillStyle = isDarkTheme ? 'rgba(30,32,38,0.9)' : 'rgba(255,255,255,0.92)';
+    roundRect(ctx, chipX, chipY, chipW, chipH, 12 * u);
+    ctx.fill();
+    ctx.restore();
+
+    const contentH = Math.max(iconSize, textH);
+    const iconY = chipY + padY + (contentH - iconSize) / 2;
+    // Matches the CSS filter:invert(1) on .posterCredit img — flips the
+    // plain black-on-transparent icon white for the dark theme with no
+    // separate asset needed.
+    if (isDarkTheme) ctx.filter = 'invert(1)';
+    ctx.drawImage(logo, chipX + padLeft, iconY, iconSize, iconSize);
+    if (isDarkTheme) ctx.filter = 'none';
+
+    ctx.textAlign = 'left';
+    const textX = chipX + padLeft + iconSize + iconGap;
+    const textTop = chipY + padY + (contentH - textH) / 2;
+    ctx.font = `800 ${nameSize}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillStyle = isDarkTheme ? '#f2f2f2' : '#1a1a1a';
+    ctx.fillText('Trainlog', textX, textTop + nameSize * 0.85);
+    // Measure "Trainlog" while its own (800-weight) font is still active —
+    // measuring after switching to the .me font below under-measures it
+    // (700 is narrower than 800), which shifted ".me" left far enough to
+    // overlap/hide the dot behind "Trainlog"'s g.
+    const trainlogWidth = ctx.measureText('Trainlog').width;
+    ctx.fillStyle = isDarkTheme ? '#aaaaaa' : '#666666';
+    ctx.font = `700 ${nameSize}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillText('.me', textX + trainlogWidth, textTop + nameSize * 0.85);
+    ctx.font = `italic ${taglineSize}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    ctx.fillStyle = isDarkTheme ? '#999999' : '#8a8a8a';
+    ctx.fillText('Your online train diary', textX, textTop + nameSize * 1.15 + 1 * u + taglineSize * 0.85);
+
+    // Countries strip. Each piece is drawn at the offset the browser already laid
+    // it out at, so a row that wrapped on screen wraps identically in the PNG
+    // rather than being re-flowed here from canvas text metrics.
+    if (countryItems.length) {
+        const stripTop = countriesEl.offsetTop - document.getElementById('posterCard').offsetTop;
+        ctx.textAlign = 'left';
+        // The page's own font, not the canvas default stack: the text is placed at
+        // the offsets the DOM laid out with that font, so a wider glyph set here
+        // would run the metric into the country name.
+        const itemStyle = getComputedStyle(countryItems[0]);
+        ctx.font = `${parseFloat(itemStyle.fontSize) * pr}px ${itemStyle.fontFamily}`;
+        countryItems.forEach((item, i) => {
+            Array.from(item.children).forEach(child => {
+                const x = (child.offsetLeft - countriesEl.offsetLeft) * pr;
+                const y = (stripTop + child.offsetTop - countriesEl.offsetTop) * pr;
+                if (child.tagName === 'IMG') {
+                    if (!countryFlags[i]) return;
+                    const w = child.offsetWidth * pr, h = child.offsetHeight * pr;
+                    ctx.save();
+                    roundRect(ctx, x, y, w, h, 2 * pr);
+                    ctx.clip();
+                    ctx.drawImage(countryFlags[i], x, y, w, h);
+                    ctx.restore();
+                    // Matches the hairline the CSS box-shadow draws around the flag.
+                    ctx.strokeStyle = 'rgba(0,0,0,0.15)';
+                    ctx.lineWidth = pr;
+                    roundRect(ctx, x + pr / 2, y + pr / 2, w - pr, h - pr, 2 * pr);
+                    ctx.stroke();
+                    return;
+                }
+                ctx.fillStyle = child.classList.contains('posterCountryMetric') ? posterTheme.subtitle : posterTheme.legend;
+                // 13/18 of the item's line box puts the baseline where the DOM has it.
+                ctx.fillText(child.textContent, x, y + child.offsetHeight * pr * (13 / 18));
+            });
+        });
+    }
+
+    // Legend footer
+    const legendItems = Array.from(document.querySelectorAll('#posterFooter .posterLegendItem')).map(el => ({
+        color: el.querySelector('.posterLegendSwatch').style.background,
+        label: el.querySelector('span:last-child').textContent
+    }));
+    ctx.font = `${12 * pr}px system-ui, -apple-system, "Segoe UI", Arial, sans-serif`;
+    const gap = 18 * pr, swatchW = 16 * pr, swatchGap = 6 * pr;
+    const widths = legendItems.map(it => swatchW + swatchGap + ctx.measureText(it.label).width);
+    const totalWidth = widths.reduce((a, b) => a + b, 0) + gap * Math.max(0, legendItems.length - 1);
+    let x = (out.width - totalWidth) / 2;
+    const legendY = (headerH + mapH + countriesH) * pr + footerH * pr / 2;
+    ctx.textAlign = 'left';
+    legendItems.forEach((it, i) => {
+        ctx.fillStyle = it.color;
+        roundRect(ctx, x, legendY - 2 * pr, swatchW, 4 * pr, 2 * pr);
+        ctx.fill();
+        ctx.fillStyle = posterTheme.legend;
+        ctx.fillText(it.label, x + swatchW + swatchGap, legendY + 4 * pr);
+        x += widths[i] + gap;
+    });
+
+    await saveCanvas(out, filenameForTrip(titleText), mode);
+}
+
+async function saveCanvas(canvas, filename, mode) {
+    const blobPromise = new Promise((resolve, reject) => {
+        canvas.toBlob(blob => blob ? resolve(blob) : reject(new Error('toBlob returned null')), 'image/png');
+    });
+
+    if (mode === 'copy') {
+        // Safari only accepts a ClipboardItem whose data is still a pending
+        // promise, so hand it the promise rather than awaiting the blob first.
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': blobPromise })]);
+        return;
+    }
+
+    const blob = await blobPromise;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+// ── The poster's back side: the itinerary ────────────────────────────────────
+// A second, standalone image in the same frame as the map side: stops threaded
+// on a coloured rail, a totals line, and a QR code back to the interactive trip
+// page. Unlike the front (a DOM card the export re-draws onto a canvas), the
+// back is drawn on canvas only — it is a list, and a text layout is far shorter
+// to write once in canvas than to write in CSS and then mirror in canvas. The
+// preview element IS the export canvas, so what is on screen is the PNG.
+let posterSide = 'front';
+const FONT_STACK = 'system-ui, -apple-system, "Segoe UI", Arial, sans-serif';
+// Stays/visits have no journey between two stations, so they are no part of an
+// itinerary — same exclusions as the footer legend.
+const ITINERARY_SKIP_TYPES = ['accommodation', 'restaurant', 'poi'];
+
+function showSide(side) {
+    posterSide = side;
+    document.getElementById('posterCardWrap').classList.toggle('showBack', side === 'back');
+    document.querySelectorAll('.posterSideTab').forEach(b => b.classList.toggle('active', b.dataset.side === side));
+    document.querySelector('.posterHint').style.display = side === 'back' ? 'none' : '';
+    if (side === 'back') renderBack(); else applyPreviewScale();
+}
+
+function refreshBack() {
+    if (posterSide === 'back') renderBack();
+}
+
+function transportColor(type) {
+    if (type === 'helicopter') type = 'air';
+    const t = MapLibreUtils.MapConfig.transportTypes.find(t => t.id === type);
+    return posterModeColor(t ? t.color : '#888888');
+}
+
+function itineraryLegs(trips) {
+    return (trips || []).filter(t => !ITINERARY_SKIP_TYPES.includes(t.trip.type));
+}
+
+// Same "My language" / "International" choice as the map labels and the subtitle.
+function itineraryDate(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr + 'T00:00:00Z');
+    if (isNaN(d.getTime())) return '';
+    const locale = mapLangMode === 'intl' ? 'en' : langId;
+    return new Intl.DateTimeFormat(locale, { weekday: 'short', day: 'numeric', month: 'long', timeZone: 'UTC' }).format(d);
+}
+
+// Rows of the itinerary, in drawing order. A leg that starts on the same day
+// where the previous one ended shares its stop (arrival and departure times on
+// the one row) so the rail runs unbroken. A leg starting somewhere else opens a
+// new chain after a dashed gap; a leg starting on a later day opens a new day
+// section, repeating the stop under its date — two times on one row would
+// otherwise read as a connection when they are a night apart.
+function buildItineraryRows(trips) {
+    const legs = itineraryLegs(trips);
+    const rows = [];
+    let lastDate = null;
+    legs.forEach((t, i) => {
+        const trip = t.trip;
+        const prev = i ? legs[i - 1].trip : null;
+        const sameStop = prev && sameStation(prev.destination_station, trip.origin_station);
+        const newDay = trip.start_date && trip.start_date !== lastDate;
+        if (sameStop && !newDay) {
+            const last = rows[rows.length - 1];
+            if (last && last.kind === 'stop' && trip.start_time) last.time2 = trip.start_time;
+        } else {
+            if (prev && !sameStop) rows.push({ kind: 'gap', h: 18 });
+            if (newDay) {
+                lastDate = trip.start_date;
+                rows.push({ kind: 'date', text: itineraryDate(trip.start_date), h: 28 });
+            }
+            rows.push({ kind: 'stop', name: trip.origin_station, time: trip.start_time, h: 30 });
+        }
+        const meta = [];
+        if (trip.trip_length) meta.push(mToKm(trip.trip_length) + ' km');
+        const seconds = Array.isArray(trip.trip_duration) ? trip.trip_duration[1] : null;
+        if (typeof seconds === 'number' && seconds >= 60) meta.push(secondsToDhm(Math.round(seconds), langId));
+        if (trip.operator) meta.push(String(trip.operator).split(',')[0].trim());
+        rows.push({
+            kind: 'leg',
+            color: transportColor(trip.type),
+            label: transportTypeText[trip.type === 'helicopter' ? 'air' : trip.type] || trip.type,
+            meta: meta.join(' · '),
+            h: 34
+        });
+        rows.push({ kind: 'stop', name: trip.destination_station, time: trip.end_time, h: 30 });
+    });
+    return rows;
+}
+
+// "6 trajets", "5 podróży": one form per plural category, picked between by
+// util.js's pluralize — Slavic languages need three forms where English needs
+// two, and no amount of putting a number in front of one fixed word gets those
+// right.
+const POSTER_TRIP_COUNT = {{ posterTripCount | tojson }};
+
+// The mode's own icon as a canvas glyph. Rather than keeping a copy of every
+// Font Awesome / Bootstrap Icons codepoint here (a table that silently rots the
+// next time the icon set moves), ask the browser what the icon class actually
+// renders: the ::before rule the stylesheet already carries names both the
+// character and the font to draw it in.
+// Same icons the trip page puts on a leg's own distance and duration
+// (new_trip.html's leg meta row), plus an hourglass for the span, so the two
+// clock-like numbers aren't told apart by their labels alone.
+const STAT_ICONS = {
+    distance: { id: 'stat-distance', icon: 'fa-arrows-left-right' },
+    duration: { id: 'stat-duration', icon: 'fa-clock', iconClass: 'fa-regular' },
+    total: { id: 'stat-total', icon: 'fa-hourglass-half' }
+};
+
+const iconGlyphs = new Map();
+function iconGlyph(type) {
+    if (!iconGlyphs.has(type.id)) {
+        const probe = document.createElement('i');
+        probe.className = (type.iconClass || 'fa-solid') + ' ' + type.icon;
+        probe.style.cssText = 'position:absolute;left:-9999px;visibility:hidden';
+        document.body.appendChild(probe);
+        const style = getComputedStyle(probe, '::before');
+        const character = (style.content || '').replace(/^["']|["']$/g, '');
+        const glyph = (character && character !== 'none' && character.length <= 2)
+            ? { character: character, family: style.fontFamily, weight: style.fontWeight }
+            : null;
+        probe.remove();
+        iconGlyphs.set(type.id, glyph);
+    }
+    return iconGlyphs.get(type.id);
+}
+
+// An icon font draws as blank boxes (or not at all) on a canvas until the font
+// file itself is loaded — the stylesheet alone isn't enough.
+function loadIconFonts() {
+    if (!document.fonts) return Promise.resolve();
+    const specs = new Set();
+    MapLibreUtils.MapConfig.transportTypes.concat(Object.values(STAT_ICONS)).forEach(type => {
+        const glyph = iconGlyph(type);
+        if (glyph) specs.add(`${glyph.weight} 16px ${glyph.family}`);
+    });
+    return Promise.all(Array.from(specs).map(spec => document.fonts.load(spec).catch(() => {})));
+}
+
+// Distance and time per mode: the summary's totals say how far and how long,
+// this says how the journey was actually made. Same order as the front's footer
+// legend, so the two sides list the modes alike.
+function modeStats(trips) {
+    const byType = new Map();
+    itineraryLegs(trips).forEach(t => {
+        const type = t.trip.type === 'helicopter' ? 'air' : t.trip.type;
+        const seconds = Array.isArray(t.trip.trip_duration) ? t.trip.trip_duration[1] : null;
+        const entry = byType.get(type) || { meters: 0, seconds: 0 };
+        entry.meters += t.trip.trip_length || 0;
+        if (typeof seconds === 'number') entry.seconds += seconds;
+        byType.set(type, entry);
+    });
+    return MapLibreUtils.MapConfig.transportTypes
+        .filter(type => byType.has(type.id))
+        .map(type => {
+            const entry = byType.get(type.id);
+            const detail = [];
+            if (entry.meters) detail.push(mToKm(entry.meters) + ' km');
+            if (entry.seconds >= 60) detail.push(secondsToDhm(Math.round(entry.seconds), langId));
+            return {
+                color: posterModeColor(type.color),
+                glyph: iconGlyph(type),
+                label: transportTypeText[type.id] || type.id,
+                detail: detail.join(' · ')
+            };
+        });
+}
+
+// First departure to last arrival, wall-clock: the whole journey including the
+// nights and the waiting, which is a different (usually much larger) number
+// from the moving time. Needs a start time on the first leg and a duration on
+// the last, so it is simply left out when the trips aren't dated.
+function itinerarySpan(trips) {
+    const legs = itineraryLegs(trips);
+    if (!legs.length) return null;
+    const first = legs[0], last = legs[legs.length - 1];
+    const start = tripStartTime(first), end = tripEndTime(last);
+    if (start === null || end === null || end <= start) return null;
+    // One leg straight through: the span is the moving time already on the
+    // totals line, and printing the same duration twice says nothing.
+    let moving = 0;
+    legs.forEach(t => {
+        const seconds = Array.isArray(t.trip.trip_duration) ? t.trip.trip_duration[1] : null;
+        if (typeof seconds === 'number') moving += seconds;
+    });
+    const elapsed = (end - start) / 1000;
+    if (elapsed - moving < 60) return null;
+    const from = localDateTimeText(first.trip.start_datetime);
+    const to = localDateTimeText(last.trip.end_datetime);
+    if (!from || !to) return null;
+    return { seconds: elapsed, text: from + ' → ' + to };
+}
+
+// The times as logged (local to each end of the journey), not converted to one
+// zone: a departure reads as the time the clock showed on the platform.
+function localDateTimeText(datetime) {
+    if (typeof datetime !== 'string') return '';
+    const date = new Date(datetime.replace(' ', 'T') + 'Z');
+    if (isNaN(date.getTime())) return '';
+    const locale = mapLangMode === 'intl' ? 'en' : langId;
+    const day = new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(date);
+    return day + ' ' + datetime.substring(11, 16);
+}
+
+// The big numbers of the journey, each with its own label — "6h 51min" alone
+// invites the question the labels answer: time on board, against the whole span
+// from first departure to last arrival.
+function summaryStats(trips) {
+    const legs = itineraryLegs(trips);
+    let meters = 0, seconds = 0;
+    legs.forEach(t => {
+        meters += t.trip.trip_length || 0;
+        const duration = Array.isArray(t.trip.trip_duration) ? t.trip.trip_duration[1] : null;
+        if (typeof duration === 'number') seconds += duration;
+    });
+    const tiles = [];
+    if (meters) tiles.push({ value: mToKm(meters) + ' km', label: "{{ sortDistance }}", icon: STAT_ICONS.distance });
+    if (seconds >= 60) tiles.push({ value: secondsToDhm(Math.round(seconds), langId), label: "{{ posterStatTravel }}", icon: STAT_ICONS.duration });
+    const span = itinerarySpan(trips);
+    if (span) tiles.push({ value: secondsToDhm(Math.round(span.seconds), langId), label: "{{ posterStatTotal }}", icon: STAT_ICONS.total });
+    return tiles;
+}
+
+// Under the numbers: how many legs they cover, and between which two moments.
+function summaryCaption(trips) {
+    const parts = [pluralize(POSTER_TRIP_COUNT, itineraryLegs(trips).length)];
+    const span = itinerarySpan(trips);
+    if (span) parts.push(span.text);
+    return parts.join('  ·  ');
+}
+
+function rowsHeight(rows, scale) {
+    return rows.reduce((sum, row) => sum + row.h * scale, 0);
+}
+
+// Splits the itinerary into balanced columns, breaking at a leg so the break
+// falls between a stop and its next leg — and repeats that stop at the top of
+// the next column, the way a printed timetable continues a route across a page.
+function splitRows(rows, parts) {
+    const total = rowsHeight(rows, 1);
+    const breaks = [];
+    for (let part = 1; part < parts; part++) {
+        const target = total * part / parts;
+        let best = null;
+        rows.forEach((row, i) => {
+            if (row.kind !== 'leg' || breaks.indexOf(i) !== -1) return;
+            const diff = Math.abs(rowsHeight(rows.slice(0, i), 1) - target);
+            if (!best || diff < best.diff) best = { i: i, diff: diff };
+        });
+        // Too few legs to break that many times — fewer columns it is.
+        if (!best) return null;
+        breaks.push(best.i);
+    }
+    breaks.sort((a, b) => a - b);
+
+    const columns = [];
+    let start = 0;
+    breaks.concat([rows.length]).forEach(end => {
+        const column = rows.slice(start, end);
+        columns.push(start > 0 ? [Object.assign({}, rows[start - 1], { time2: null })].concat(column) : column);
+        start = end;
+    });
+    return columns;
+}
+
+// Below this a column truncates station names into uselessness, whatever the
+// scale says — the point of a third column is fitting more, not fitting worse.
+const MIN_COLUMN_WIDTH = 240;
+
+// The smallest the itinerary is allowed to be drawn. Past it the text stops
+// being readable on a print, and a poster of 154 legs squeezed onto a fixed
+// card is no use to anyone — so the back of the card grows taller instead
+// (see renderBack), which is the one dimension a poster can afford to give.
+const MIN_ITINERARY_SCALE = 0.62;
+
+// One column at full size where it fits; otherwise shrink, and once shrinking
+// would make the text too small to read on a print, add columns instead — up to
+// four, and only while each extra one buys a bigger scale than the last and
+// still leaves the columns wide enough to read.
+function fitItinerary(rows, width, availableHeight, forcedColumns) {
+    const gap = 34;
+    // Second pass on a card grown to fit: the column count is already settled,
+    // and re-deciding it against the new height would undo the split and hand
+    // back one enormous column.
+    if (forcedColumns > 1) {
+        const split = splitRows(rows, forcedColumns);
+        if (split) {
+            const tallest = Math.max.apply(null, split.map(column => rowsHeight(column, 1)));
+            return {
+                columns: split,
+                scale: Math.min(1, availableHeight / tallest),
+                width: (width - gap * (forcedColumns - 1)) / forcedColumns,
+                gap: gap
+            };
+        }
+    }
+    const need = rowsHeight(rows, 1);
+    if (need <= availableHeight) return { columns: [rows], scale: 1, width: width, gap: gap };
+    const scale = availableHeight / need;
+    if (scale >= MIN_ITINERARY_SCALE) return { columns: [rows], scale: scale, width: width, gap: gap };
+
+    let best = { columns: [rows], scale: scale, width: width, gap: gap };
+    for (let parts = 2; parts <= 4; parts++) {
+        const columnWidth = (width - gap * (parts - 1)) / parts;
+        if (columnWidth < MIN_COLUMN_WIDTH) break;
+        const split = splitRows(rows, parts);
+        if (!split) continue;
+        const tallest = Math.max.apply(null, split.map(column => rowsHeight(column, 1)));
+        const columnScale = Math.min(1, availableHeight / tallest);
+        if (columnScale > best.scale) best = { columns: split, scale: columnScale, width: columnWidth, gap: gap };
+    }
+    return best;
+}
+
+function fitText(ctx, text, maxWidth) {
+    text = text || '';
+    if (maxWidth <= 0 || ctx.measureText(text).width <= maxWidth) return text;
+    let cut = text;
+    while (cut.length > 1 && ctx.measureText(cut + '…').width > maxWidth) cut = cut.slice(0, -1);
+    return cut + '…';
+}
+
+function drawItineraryColumn(ctx, rows, x, y, width, scale) {
+    const isDark = !!BASEMAPS[basemapId].isDark;
+    const hairline = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)';
+    const railX = x + 7 * scale;
+    const textX = x + 22 * scale;
+    const radius = 4.5 * scale;
+    let cursor = y;
+    rows.forEach(row => { row._y = cursor + row.h * scale / 2; cursor += row.h * scale; });
+
+    // The rail first, so the stop markers sit on top of the segments they join.
+    rows.forEach((row, i) => {
+        if (row.kind === 'leg') {
+            ctx.strokeStyle = row.color;
+            ctx.lineWidth = 3 * scale;
+            ctx.beginPath();
+            ctx.moveTo(railX, rows[i - 1]._y + radius);
+            ctx.lineTo(railX, rows[i + 1]._y - radius);
+            ctx.stroke();
+        } else if (row.kind === 'gap') {
+            ctx.strokeStyle = hairline;
+            ctx.lineWidth = 2 * scale;
+            ctx.setLineDash([2 * scale, 4 * scale]);
+            ctx.beginPath();
+            ctx.moveTo(railX, row._y - row.h * scale / 2);
+            ctx.lineTo(railX, row._y + row.h * scale / 2);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+    });
+
+    rows.forEach(row => {
+        if (row.kind === 'date') {
+            ctx.textAlign = 'left';
+            ctx.font = `600 ${11 * scale}px ${FONT_STACK}`;
+            ctx.fillStyle = posterTheme.subtitle;
+            const text = row.text.toUpperCase();
+            ctx.fillText(text, x, row._y + 4 * scale);
+            const textWidth = ctx.measureText(text).width;
+            ctx.strokeStyle = hairline;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(x + textWidth + 10 * scale, row._y);
+            ctx.lineTo(x + width, row._y);
+            ctx.stroke();
+        } else if (row.kind === 'stop') {
+            ctx.font = `${11.5 * scale}px ${FONT_STACK}`;
+            const time = (row.time && row.time2) ? row.time + ' – ' + row.time2 : (row.time || row.time2 || '');
+            let timeWidth = 0;
+            if (time) {
+                ctx.textAlign = 'right';
+                ctx.fillStyle = posterTheme.subtitle;
+                ctx.fillText(time, x + width, row._y + 4 * scale);
+                timeWidth = ctx.measureText(time).width + 10 * scale;
+            }
+            ctx.beginPath();
+            ctx.arc(railX, row._y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = posterTheme.shoulder;
+            ctx.fill();
+            ctx.strokeStyle = posterTheme.legend;
+            ctx.lineWidth = 2 * scale;
+            ctx.stroke();
+            ctx.textAlign = 'left';
+            ctx.font = `600 ${14 * scale}px ${FONT_STACK}`;
+            ctx.fillStyle = posterTheme.title;
+            ctx.fillText(fitText(ctx, row.name, width - (textX - x) - timeWidth), textX, row._y + 5 * scale);
+        } else if (row.kind === 'leg') {
+            ctx.textAlign = 'left';
+            ctx.font = `600 ${11.5 * scale}px ${FONT_STACK}`;
+            ctx.fillStyle = row.color;
+            ctx.fillText(row.label, textX, row._y + 4 * scale);
+            if (row.meta) {
+                const labelWidth = ctx.measureText(row.label).width;
+                ctx.font = `${11.5 * scale}px ${FONT_STACK}`;
+                ctx.fillStyle = posterTheme.subtitle;
+                const meta = '  ·  ' + row.meta;
+                ctx.fillText(fitText(ctx, meta, width - (textX - x) - labelWidth), textX + labelWidth, row._y + 4 * scale);
+            }
+        }
+    });
+}
+
+// One centred row of chips, one per mode: the mode's own icon in its map colour,
+// its name, then its share of the distance and time. Shrunk to fit rather than
+// wrapped — a second line would shift the itinerary above it every time a mode
+// is added or dropped.
+// Measured before anything is drawn, because the panel has to know how tall the
+// chips are before it can place them: with enough modes (nine of them on a long
+// multi-country trip) they no longer fit one line even at the smallest size, so
+// they wrap rather than run off both edges of the panel.
+function layoutModeChips(ctx, modes, maxWidth, cs) {
+    const gap = 20 * cs, iconGap = 6 * cs, detailGap = 5 * cs;
+    let size = 12 * cs, widths, total;
+    const measure = () => {
+        widths = modes.map(mode => {
+            ctx.font = `600 ${size}px ${FONT_STACK}`;
+            let width = ctx.measureText(mode.label).width + iconGap + size * 1.2;
+            if (mode.detail) {
+                ctx.font = `${size}px ${FONT_STACK}`;
+                width += detailGap + ctx.measureText(mode.detail).width;
+            }
+            return width;
+        });
+        total = widths.reduce((a, b) => a + b, 0) + gap * (modes.length - 1);
+    };
+    for (measure(); total > maxWidth && size > 8 * cs; size -= 0.5 * cs) measure();
+
+    // The fewest rows the chips fit in, split evenly rather than filled to the
+    // brim: eight modes read as 4 + 4, nine as 5 + 4, instead of a packed line
+    // with a short remainder hanging under it.
+    let rows = null;
+    for (let count = 1; count <= modes.length && !rows; count++) {
+        rows = balancedChipRows(modes, widths, gap, maxWidth, count);
+    }
+    // A single chip wider than the panel: nothing to balance, just stack them.
+    if (!rows) rows = modes.map((mode, i) => ({ items: [{ mode: mode, width: widths[i] }], width: widths[i] }));
+    return { size: size, gap: gap, iconGap: iconGap, detailGap: detailGap, rows: rows };
+}
+
+// Contiguous groups of as equal a size as the count allows, the extra chips
+// going to the upper rows. Null when any row comes out too wide to draw.
+function balancedChipRows(modes, widths, gap, maxWidth, count) {
+    const base = Math.floor(modes.length / count);
+    if (!base) return null;
+    const extra = modes.length % count;
+    const rows = [];
+    let i = 0;
+    for (let r = 0; r < count; r++) {
+        const row = { items: [], width: 0 };
+        for (let taken = base + (r < extra ? 1 : 0); taken > 0; taken--, i++) {
+            row.width += (row.items.length ? gap : 0) + widths[i];
+            row.items.push({ mode: modes[i], width: widths[i] });
+        }
+        if (row.width > maxWidth) return null;
+        rows.push(row);
+    }
+    return rows;
+}
+
+function drawModeChips(ctx, layout, centerX, baselineY, cs) {
+    const { size, gap, iconGap, detailGap } = layout;
+    ctx.textAlign = 'left';
+    layout.rows.forEach((row, r) => {
+        const y = baselineY + r * 20 * cs;
+        let x = centerX - row.width / 2;
+        row.items.forEach(item => {
+            const mode = item.mode;
+            ctx.fillStyle = mode.color;
+            if (mode.glyph) {
+                ctx.font = `${mode.glyph.weight} ${size}px ${mode.glyph.family}`;
+                ctx.fillText(mode.glyph.character, x, y);
+            } else {
+                // No icon resolved (an icon set that moved, a font that never
+                // loaded): the footer legend's swatch says the same thing.
+                roundRect(ctx, x, y - 4 * cs, size, 3.5 * cs, 2 * cs);
+                ctx.fill();
+            }
+            let textX = x + size * 1.2 + iconGap;
+            ctx.font = `600 ${size}px ${FONT_STACK}`;
+            ctx.fillText(mode.label, textX, y);
+            if (mode.detail) {
+                textX += ctx.measureText(mode.label).width + detailGap;
+                ctx.font = `${size}px ${FONT_STACK}`;
+                ctx.fillStyle = posterTheme.subtitle;
+                ctx.fillText(mode.detail, textX, y);
+            }
+            x += item.width + gap;
+        });
+    });
+    ctx.textAlign = 'center';
+}
+
+// The headline numbers, each under its own icon and label — a label hanging
+// below a number reads as a stray caption, above it as the thing being counted.
+function drawStatTiles(ctx, tiles, centerX, top, maxWidth, cs) {
+    const gap = 44 * cs, iconGap = 5 * cs;
+    let valueSize = 20 * cs, labelSize = 9.5 * cs, heads, widths, total;
+    const measure = () => {
+        ctx.font = `700 ${valueSize}px ${FONT_STACK}`;
+        const values = tiles.map(tile => ctx.measureText(tile.value).width);
+        ctx.font = `${labelSize}px ${FONT_STACK}`;
+        heads = tiles.map(tile => {
+            const glyph = iconGlyph(tile.icon);
+            const label = tile.label.toUpperCase();
+            return {
+                glyph: glyph,
+                label: label,
+                width: ctx.measureText(label).width + (glyph ? labelSize * 1.1 + iconGap : 0)
+            };
+        });
+        widths = tiles.map((tile, i) => Math.max(values[i], heads[i].width));
+        total = widths.reduce((a, b) => a + b, 0) + gap * (tiles.length - 1);
+    };
+    for (measure(); total > maxWidth && valueSize > 12 * cs; valueSize -= 0.5 * cs) {
+        labelSize -= 0.2 * cs;
+        measure();
+    }
+
+    let x = centerX - total / 2;
+    tiles.forEach((tile, i) => {
+        const tileCenter = x + widths[i] / 2;
+        const head = heads[i];
+        ctx.fillStyle = posterTheme.subtitle;
+        let headX = tileCenter - head.width / 2;
+        ctx.textAlign = 'left';
+        if (head.glyph) {
+            ctx.font = `${head.glyph.weight} ${labelSize * 1.1}px ${head.glyph.family}`;
+            ctx.fillText(head.glyph.character, headX, top + labelSize);
+            headX += labelSize * 1.1 + iconGap;
+        }
+        ctx.font = `${labelSize}px ${FONT_STACK}`;
+        ctx.fillText(head.label, headX, top + labelSize);
+        ctx.textAlign = 'center';
+        ctx.font = `700 ${valueSize}px ${FONT_STACK}`;
+        ctx.fillStyle = posterTheme.title;
+        ctx.fillText(tile.value, tileCenter, top + labelSize + 8 * cs + valueSize);
+        x += widths[i] + gap;
+    });
+}
+
+// The interactive page this poster was made from — the poster URL is that page's
+// with /poster on the end, so nothing here needs to know which of trip/tag/ticket
+// it came from.
+function posterPublicUrl() {
+    return location.origin + location.pathname.replace(/\/poster\/?$/, '');
+}
+
+// Always black on white, whatever the poster's theme: a code inverted for a dark
+// poster is refused by some phone cameras, and a white patch reads as a label.
+function drawQr(ctx, text, x, y, size) {
+    if (typeof qrcode !== 'function') return;
+    const qr = qrcode(0, 'M');
+    qr.addData(text);
+    qr.make();
+    const count = qr.getModuleCount();
+    const quiet = size * 0.07;
+    ctx.fillStyle = '#ffffff';
+    roundRect(ctx, x, y, size, size, 4);
+    ctx.fill();
+    const cell = (size - quiet * 2) / count;
+    ctx.fillStyle = '#000000';
+    for (let r = 0; r < count; r++) {
+        for (let c = 0; c < count; c++) {
+            // Cells are drawn a hair wider than they measure: at a fractional cell
+            // size, exact rects leave hairline seams between neighbouring modules.
+            if (qr.isDark(r, c)) ctx.fillRect(x + quiet + c * cell, y + quiet + r * cell, cell + 0.5, cell + 0.5);
+        }
+    }
+}
+
+function drawBackPoster(ctx, dims, forcedColumns) {
+    const mat = posterMat();
+    const cs = posterCreditScale();
+    const isDark = !!BASEMAPS[basemapId].isDark;
+    const hairline = isDark ? 'rgba(255,255,255,0.16)' : 'rgba(0,0,0,0.10)';
+    if (!transparentBg) {
+        ctx.fillStyle = posterTheme.shoulder;
+        ctx.fillRect(0, 0, dims.w, dims.h);
+    }
+
+    // Same title, same offsets as the front, so the two faces line up when the
+    // pair is printed back to back.
+    const titleText = document.getElementById('posterTitle').textContent || '';
+    const subtitleText = document.getElementById('posterSubtitle').textContent || '';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = posterTheme.title;
+    ctx.font = `700 22px ${FONT_STACK}`;
+    ctx.fillText(titleText, dims.w / 2, 34, dims.w - 40);
+    if (subtitleText) {
+        ctx.fillStyle = posterTheme.subtitle;
+        ctx.font = `13px ${FONT_STACK}`;
+        ctx.fillText(subtitleText, dims.w / 2, 56, dims.w - 40);
+    }
+
+    // Bottom of the card, laid out upward from its edge: the credit row (QR
+    // code, logo, wordmark), then the summary panel above it.
+    const qrSize = Math.round(84 * cs);
+    const qrY = dims.h - mat - qrSize;
+    const qrX = dims.w - mat - qrSize;
+    drawQr(ctx, posterPublicUrl(), qrX, qrY, qrSize);
+
+    // Brand at one end, code at the other, the invitation to scan between them:
+    // the row reads across the whole card instead of bunching up on the left.
+    const logoSize = 34 * cs;
+    const middleY = qrY + qrSize / 2;
+    let textX = mat;
+    if (posterLogo) {
+        // Matches the CSS filter:invert(1) the front's credit chip uses — flips
+        // the black-on-transparent icon white for the dark theme, no second asset.
+        if (isDark) ctx.filter = 'invert(1)';
+        ctx.drawImage(posterLogo, textX, middleY - logoSize / 2, logoSize, logoSize);
+        if (isDark) ctx.filter = 'none';
+        textX += logoSize + 10 * cs;
+    }
+    ctx.textAlign = 'left';
+    ctx.font = `800 ${18 * cs}px ${FONT_STACK}`;
+    ctx.fillStyle = posterTheme.title;
+    ctx.fillText('Trainlog', textX, middleY - 1 * cs);
+    const brandWidth = ctx.measureText('Trainlog').width;
+    ctx.font = `700 ${18 * cs}px ${FONT_STACK}`;
+    ctx.fillStyle = posterTheme.subtitle;
+    ctx.fillText('.me', textX + brandWidth, middleY - 1 * cs);
+    const nameWidth = brandWidth + ctx.measureText('.me').width;
+    ctx.font = `italic ${10 * cs}px ${FONT_STACK}`;
+    ctx.fillText('Your online train diary', textX, middleY + 13 * cs);
+    const brandRight = textX + Math.max(nameWidth, ctx.measureText('Your online train diary').width);
+
+    ctx.textAlign = 'right';
+    ctx.font = `${11.5 * cs}px ${FONT_STACK}`;
+    ctx.fillStyle = posterTheme.legend;
+    ctx.fillText(fitText(ctx, "{{ posterQrHint }}", qrX - 16 * cs - brandRight), qrX - 16 * cs, middleY + 4 * cs);
+
+    // Summary panel. Each part earns its place or is left out entirely: the mode
+    // chips only once there is more than one mode to compare, the whole panel
+    // only when there are numbers to put in it.
+    const tiles = summaryStats(posterVisibleTrips);
+    const modes = modeStats(posterVisibleTrips);
+    const chips = modes.length > 1 ? modes : [];
+    let panelBottom = qrY - 20 * cs;
+    if (tiles.length) {
+        const padding = 15 * cs;
+        const chipsLayout = chips.length
+            ? layoutModeChips(ctx, chips, dims.w - mat * 2 - padding * 2, cs)
+            : null;
+        const chipsHeight = chipsLayout ? 30 * cs + (chipsLayout.rows.length - 1) * 20 * cs : 0;
+        // Clears the values' descenders before the caption starts — the tiles are
+        // the tallest thing in the panel and a tight caption reads as a collision.
+        const tilesHeight = 47 * cs;
+        const captionHeight = 17 * cs;
+        const panelHeight = padding * 2 + chipsHeight + tilesHeight + captionHeight;
+        const panelTop = panelBottom - panelHeight;
+        // A faint tint rather than a box with a border: it groups the numbers as
+        // one block without drawing a second frame inside the poster's own mat.
+        ctx.fillStyle = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.035)';
+        roundRect(ctx, mat, panelTop, dims.w - mat * 2, panelHeight, 10 * cs);
+        ctx.fill();
+
+        let y = panelTop + padding;
+        if (chipsLayout) {
+            drawModeChips(ctx, chipsLayout, dims.w / 2, y + 12 * cs, cs);
+            y += chipsHeight;
+            ctx.strokeStyle = hairline;
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(mat + padding * 2, y - 8 * cs);
+            ctx.lineTo(dims.w - mat - padding * 2, y - 8 * cs);
+            ctx.stroke();
+        }
+        drawStatTiles(ctx, tiles, dims.w / 2, y, dims.w - mat * 2 - padding * 2, cs);
+        y += tilesHeight;
+        ctx.textAlign = 'center';
+        ctx.font = `${11 * cs}px ${FONT_STACK}`;
+        ctx.fillStyle = posterTheme.subtitle;
+        ctx.fillText(summaryCaption(posterVisibleTrips), dims.w / 2, y + 10 * cs);
+        panelBottom = panelTop;
+    }
+
+    const rows = buildItineraryRows(posterVisibleTrips);
+    if (!rows.length) return null;
+    const top = document.querySelector('.posterHeader').offsetHeight;
+    const available = (panelBottom - 20 * cs) - top;
+    const layout = fitItinerary(rows, dims.w - mat * 2, available, forcedColumns);
+    // Everything under the itinerary — panel, credits, QR — is laid out upward
+    // from the bottom edge, so a taller card gives the itinerary exactly the
+    // height it is short of. Report it and let the caller redraw at that size.
+    if (!forcedColumns && layout.scale < MIN_ITINERARY_SCALE) {
+        const tallest = Math.max.apply(null, layout.columns.map(column => rowsHeight(column, 1)));
+        return { overflow: Math.ceil(tallest * MIN_ITINERARY_SCALE - available), columns: layout.columns.length };
+    }
+    layout.columns.forEach((column, i) => {
+        // A short itinerary is centred in the space rather than left hanging under
+        // the title with the whole page empty below it.
+        const y = top + Math.max(0, (available - rowsHeight(column, layout.scale)) / 2);
+        drawItineraryColumn(ctx, column, mat + i * (layout.width + layout.gap), y, layout.width, layout.scale);
+    });
+    return null;
+}
+
+// The logo and the icon fonts are loaded once, before any drawing: canvas text
+// and images draw synchronously from whatever is already loaded, so anything
+// not there yet simply doesn't appear.
+let posterLogo = null;
+
+async function renderBack() {
+    if (!posterLogo) {
+        posterLogo = await loadImage("{{ url_for('static', filename='images/logo_square.png') }}").catch(() => null);
+    }
+    await loadIconFonts();
+    const canvas = document.getElementById('posterBackCanvas');
+    const pr = effectivePixelRatio();
+    const ctx = canvas.getContext('2d');
+    const size = (dims) => {
+        canvas.width = Math.round(dims.w * pr);
+        canvas.height = Math.round(dims.h * pr);
+        canvas.style.width = dims.w + 'px';
+        canvas.style.height = dims.h + 'px';
+        // Everything below draws in CSS pixels; the device-pixel scale-up for
+        // the export lives here alone.
+        ctx.setTransform(pr, 0, 0, pr, 0, 0);
+        ctx.clearRect(0, 0, dims.w, dims.h);
+    };
+
+    let dims = getPosterDims();
+    size(dims);
+    // A long enough itinerary doesn't fit the chosen card at a readable size,
+    // however many columns it is split into. Rather than shrink it to nothing,
+    // the back of the card grows by exactly what it was short of — the front
+    // keeps the requested proportions, the back becomes a longer sheet.
+    const short = drawBackPoster(ctx, dims);
+    if (short && short.overflow > 0) {
+        // The canvas ceiling still applies: past it the browser silently gives
+        // back a blank or downscaled bitmap, so a truly enormous itinerary goes
+        // back to being scaled down rather than losing the poster altogether.
+        dims = { w: dims.w, h: Math.min(dims.h + short.overflow, MAX_CANVAS_DIMENSION / pr) };
+        size(dims);
+        drawBackPoster(ctx, dims, short.columns);
+    }
+    applyPreviewScale();
+    return canvas;
+}
+
+(function wireSideTabs() {
+    document.querySelectorAll('.posterSideTab').forEach(button => {
+        button.addEventListener('click', () => showSide(button.dataset.side));
+    });
+})();
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+}
+
+// The trip page's own Back is history.back(), so following this link would push a
+// second trip entry and leave the two pages toggling. Step back instead when the
+// trip page is where we came from, and keep the href for every other entry point.
+document.getElementById('posterBackLink').addEventListener('click', function (e) {
+    if (!document.referrer) return;
+    var ref = new URL(document.referrer);
+    if (ref.origin === location.origin && /^\/public\/(trip|tag|ticket)\//.test(ref.pathname)) {
+        e.preventDefault();
+        history.back();
+    }
+});
+
+init();
+</script>
+{% endblock %}

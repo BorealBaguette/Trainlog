@@ -278,8 +278,11 @@ def get_wrapped_data(username, year, trip_type="combined"):
         else:
             wrapped["border_crossings"] = 0
     
-    # Use existing fetch_stats for operators, routes, material
-    stats = fetch_stats(username, trip_type, year)
+    # Use existing fetch_stats for operators, routes, material — ask for those
+    # three only, each unused dataset is another full pass over the trips.
+    stats = fetch_stats(
+        username, trip_type, year, datasets=("operators", "routes", "material")
+    )
     
     # Top 5 operators
     operators = stats.get("operators", [])

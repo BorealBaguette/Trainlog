@@ -4,6 +4,8 @@
 {% include nav%}
 
 <script src="https://cdn.jsdelivr.net/npm/echarts/dist/echarts.min.js"></script>
+<script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
+<script src="{{ url_for('static', filename='js/wagon_img.js') }}"></script>
 
 <!-- Loading screen -->
 <div id="loadingScreen" style="position: fixed; width: 100%; height: 100%; top: 0; left: 0; background: rgba(255, 255, 255, 0.8); z-index: 9999; display: flex; justify-content: center; align-items: center;">
@@ -38,6 +40,13 @@
     </select>
     
     <div id="metricSelectorWrapper" class="mr-2"></div>
+
+    <!-- statsSelect for the same 10px margin as the selects it sits beside -->
+    <button type="button" id="chartSettingsButton" class="btn btn-light border statsSelect"
+            data-bs-toggle="modal" data-bs-target="#chartSettingsModal"
+            title="{{statsChartSettings}}" aria-label="{{statsChartSettings}}">
+        <i class="fa-solid fa-gear"></i>
+    </button>
 </div>
 
 <div class="noDataDiv" style='display:none;'>
@@ -45,68 +54,212 @@
 </div>
 
 <div class="container" style="max-width:95%">
-    <div class="row">
-        <div class="col-md">
-            <div class="chart-container position-relative">
-                <button class="btn btn-light btn-sm expand-button position-absolute top-0 end-0 m-2" onclick="expandChart('chart-countries')" style="z-index: 1000;">
-                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
-                </button>
-                <div id="chart-countries" style="width: 100%; height: 400px;"></div>
+    <!-- Populated from the CHARTS registry: which charts exist depends on the
+         trip type, on which of them came back with data, and on the user's
+         visibility choices (gear button above). -->
+    <div class="row row-cols-1 row-cols-md-2 row-cols-xxl-3 g-4" id="chartGrid"></div>
+</div>
+
+<div class="modal fade" id="chartSettingsModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{statsChartSettingsTitle}}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{close}}"></button>
             </div>
-        </div>
-        <div class="col-md">
-            <div class="chart-container position-relative">
-                <button class="btn btn-light btn-sm expand-button position-absolute top-0 end-0 m-2" onclick="expandChart('chart-operators')" style="z-index: 1000;">
-                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
-                </button>
-                <div id="chart-operators" style="width: 100%; height: 400px;"></div>
+            <div class="modal-body">
+                <div id="chartSettingsOptions" class="mb-3"></div>
+                <hr class="my-3">
+                <p class="text-muted small">{{statsChartSettingsHelp}}</p>
+                <div id="chartSettingsList"></div>
             </div>
-        </div>
-        <div class="col-md">
-            <div class="chart-container position-relative">
-                <button class="btn btn-light btn-sm expand-button position-absolute top-0 end-0 m-2" onclick="expandChart('chart-timeseries')" style="z-index: 1000;">
-                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
-                </button>
-                <div id="chart-timeseries" style="width: 100%; height: 400px;"></div>
-            </div>
-        </div>
-    </div>
-    <div class="row mt-5">
-        <div class="col-md">
-            <div class="chart-container position-relative">
-                <button class="btn btn-light btn-sm expand-button position-absolute top-0 end-0 m-2" onclick="expandChart('chart-material')" style="z-index: 1000;">
-                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
-                </button>
-                <div id="chart-material" style="width: 100%; height: 400px;"></div>
-            </div>
-        </div>
-        <div class="col-md">
-            <div class="chart-container position-relative">
-                <button class="btn btn-light btn-sm expand-button position-absolute top-0 end-0 m-2" onclick="expandChart('chart-routes')" style="z-index: 1000;">
-                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
-                </button>
-                <div id="chart-routes" style="width: 100%; height: 400px;"></div>
-            </div>
-        </div>
-        <div class="col-md">
-            <div class="chart-container position-relative">
-                <button class="btn btn-light btn-sm expand-button position-absolute top-0 end-0 m-2" onclick="expandChart('chart-stations')" style="z-index: 1000;">
-                    <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
-                </button>
-                <div id="chart-stations" style="width: 100%; height: 400px;"></div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-outline-secondary" id="chartSettingsReset">{{statsChartSettingsReset}}</button>
+                <button type="button" class="btn btn-primary" data-bs-dismiss="modal">{{close}}</button>
             </div>
         </div>
     </div>
 </div>
 
-<div id="fullscreenContainer" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(255, 255, 255, 0.85); z-index: 10000;">
+<div id="fullscreenContainer" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #fff; z-index: 10000; overscroll-behavior: contain; touch-action: none;">
     <button id="closeFullscreenButton" class="btn btn-danger position-absolute top-0 end-0 m-2" style="z-index: 10001;">
         <i class="fa-solid fa-xmark"></i>
     </button>
-    <div id="fullscreenChart" style="width: 100%; height: 100%; background: rgba(255, 255, 255, 0.75);"></div>
+    <div id="fullscreenChart" style="width: 100%; height: 100%; background: #fff;"></div>
 </div>
 
 <div style="height: 100px;"></div>
+
+<style>
+/* Toolbar.
+   The selects carry `margin: 10px` from .statsSelect while the gear sits in a
+   wrapper of its own, so the gaps between neighbours were not all built the
+   same way. One `gap` on the flex row, and no horizontal margins inside it,
+   makes every control equidistant regardless of how it is nested. */
+#statsSelectWrapper { gap: 20px; }
+#statsSelectWrapper .statsSelect,
+#statsSelectWrapper > * { margin-left: 0; margin-right: 0; }
+
+/* Chart tooltips.
+   The media box is a FIXED size in every state — silhouette, loading, photo.
+   Letting it size to its content made the tooltip jump when a planespotters
+   photo replaced the silhouette, which is the flicker this avoids. */
+.statsTip { min-width: 180px; }
+
+.statsTip .statsTipMedia {
+    position: relative;
+    width: 248px;
+    height: 140px;
+    margin: -2px -2px 8px -2px;   /* bleed to the tooltip's rounded edge */
+    background: #f2f4f6;
+    border-radius: 6px 6px 0 0;
+    overflow: hidden;
+}
+
+.statsTip .statsTipMedia img {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.statsTip .statsTipMedia.hasPhoto { background: transparent; }
+
+/* Silhouettes are transparent artwork on no background: show them whole and
+   centred. Photographs fill the frame instead. */
+.statsTip .statsTipMedia img.art { object-fit: contain; padding: 10px; }
+.statsTip .statsTipMedia img.photo { object-fit: cover; }
+
+/* Deliberately no fade-in. The tooltip's markup is rebuilt on pointer movement
+   within a row, so an entry animation restarts every time and strobes the
+   backdrop through the half-transparent frames. */
+
+/* Indeterminate sweep while a photo of the real aircraft is being fetched.
+   The silhouette stays visible underneath, dimmed, so there is always
+   something to look at and nothing moves when the photo lands. */
+.statsTip .statsTipMedia.loading img.art { opacity: .45; }
+
+.statsTip .statsTipMedia.loading::after {
+    content: '';
+    position: absolute;
+    left: 0; bottom: 0;
+    height: 3px; width: 40%;
+    background: linear-gradient(90deg, transparent, #52b0fe, transparent);
+    animation: statsTipSweep 1.1s ease-in-out infinite;
+}
+
+@keyframes statsTipSweep {
+    from { transform: translateX(-100%); }
+    to   { transform: translateX(350%); }
+}
+
+.statsTip .statsTipCredit {
+    position: absolute;
+    right: 0; bottom: 0;
+    padding: 2px 5px;
+    font-size: 11px;
+    color: #fff;
+    background: rgba(0, 0, 0, .45);
+    text-decoration: none;
+}
+.statsTip .statsTipCredit:hover { color: #fff; text-decoration: underline; }
+
+.statsTip .statsTipTitle {
+    font-weight: 600;
+    margin-bottom: 3px;
+}
+
+/* A line reads as "[operator mark] Line: 12" on one row — the logo illustrates
+   who runs it without spelling the name out, and the number stays the subject.
+   The space before the colon is non-breaking: French sets one there, and it
+   must not be what a line wraps on.
+
+   Three things of three different heights sit on this row, so nothing is left
+   to inherited layout: the logo centres against the text block, and inside it
+   the label and the number sit on a shared BASELINE. Centring those two against
+   each other instead is what made it look askew — a 12px word centred on an
+   18px one floats above the number's feet. line-height 1 on both keeps the row
+   from gaining leading it doesn't need. */
+.statsTip .statsTipLineHead {
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
+    gap: 10px;
+    margin: 0 0 8px;
+}
+
+.statsTip .statsTipLineLogo {
+    flex: 0 0 auto;
+    height: 26px;
+    width: auto;
+    /* Unpadded originals vary wildly in shape — some are wordmarks, some are
+       near-square crests — so cap the width and let tall-thin ones shrink to
+       fit rather than blowing the row out. */
+    max-width: 96px;
+    object-fit: contain;
+}
+
+.statsTip .statsTipLineText {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    min-width: 0;
+}
+
+.statsTip .statsTipKicker {
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 1;
+    color: #6b7680;
+    white-space: nowrap;
+}
+
+.statsTip .statsTipHeadline {
+    font-size: 18px;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.statsTip .statsTipRow { white-space: nowrap; }
+.statsTip .statsTipGroup { font-weight: 600; margin-top: 4px; }
+.statsTip .statsTipSub { padding-left: 10px; }
+
+/* A consist is wide and shallow, and nothing swaps in asynchronously here, so
+   this one sizes to its content instead of holding a fixed frame.
+
+   The rake is cut into rows by bakeStrip rather than by `flex-wrap`, because
+   the browser's greedy wrap leaves the tail of a long set stranded alone on
+   the last row. Each row is its own element, so nothing here may re-wrap. */
+.statsTip .statsTipMedia.strip {
+    width: auto;
+    max-width: 760px;
+    row-gap: 4px;
+    height: auto;
+    min-height: 34px;
+    padding: 8px 6px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #f7f8f9;
+}
+
+.statsTip .statsTipMedia.strip .statsTipStripRow {
+    display: flex;
+    align-items: flex-end;   /* the cars sit on a rail */
+    justify-content: center;
+}
+
+.statsTip .statsTipMedia.strip img {
+    /* Both dimensions are written onto each car by bakeStrip, so the panel
+       measures its final size before a single image has resolved. */
+    flex: 0 0 auto;
+}
+
+@media (max-width: 750px) {
+    .statsTip .statsTipMedia { width: 190px; height: 107px; }
+    .statsTip .statsTipMedia.strip { max-width: calc(100vw - 40px); height: auto; }
+}
+</style>
 
 <script type="text/javascript">
     // ============================================
@@ -142,6 +295,24 @@
             label: '{{CO2}}',
             suffix: 'CO2',
             formatValue: (value) => formatCarbonFootprint(value, LANG),
+            enabled: true
+        },
+        // Delay on arrival, in seconds. Only trips where a delay was
+        // actually recorded contribute, so this is "delay I logged", not an
+        // average across everything.
+        delay: {
+            label: '{{statsDelay}}',
+            suffix: 'Delay',
+            formatValue: (value) => secondsToDhm(value, LANG, "long"),
+            enabled: true
+        },
+        // Delay accumulated during the trip: arrival_delay - departure_delay.
+        // Positive values mean the delay increased en route; negative means time
+        // was made up. Measured in seconds.
+        delayAccumulated: {
+            label: '{{statsDelayAccumulated}}',
+            suffix: 'DelayAccumulated',
+            formatValue: (value) => secondsToDhm(value, LANG, "long"),
             enabled: true
         }
     };
@@ -184,15 +355,464 @@
 
     var isCombinedMode = tripType === 'combined';
     
-    var currentMetric = 'trips';
+    // Year, trip type and metric are the three dimensions of this page and they
+    // are equally important, so all three live in the path, in that order. "all"
+    // is the year that means every year: a real segment rather than an omitted
+    // one, which is what keeps the form unambiguous.
+    //
+    // Built by substitution rather than by string concatenation so the shape of
+    // the URL stays Flask's business — the three route families sit at different
+    // prefixes and only one of them carries a username.
+    const STATS_URL_TEMPLATE =
+        {% if admin %}"{{ url_for('admin_stats', year='__YEAR__', tripType='__TYPE__', metric='__METRIC__') }}"
+        {% elif is_public %}"{{ url_for('public_stats', username=username, year='__YEAR__', tripType='__TYPE__', metric='__METRIC__') }}"
+        {% else %}"{{ url_for('stats', username=username, year='__YEAR__', tripType='__TYPE__', metric='__METRIC__') }}"
+        {% endif %};
+
+    function statsPageUrl(year, type, metric) {
+        return STATS_URL_TEMPLATE
+            .replace('__YEAR__', encodeURIComponent(year || 'all'))
+            .replace('__TYPE__', encodeURIComponent(type))
+            .replace('__METRIC__', encodeURIComponent(metric));
+    }
+
+    var currentMetric = "{{statMetric if statMetric else 'trips'}}";
     var statsData = null;
     var combinedStatsData = null;
+    // Airport code -> city, sent alongside the air payloads (see
+    // get_airport_cities): what the station labels are shortened to.
+    var airportCities = {};
     var chartsInstances = {};
     var currentChart = null;
     var expandedMode = false;
+    // Wheel-to-scroll on the fullscreen overlay, and the page's own overflow to
+    // put back when it closes. See attachWheelScroll().
+    var fullscreenWheelHandler = null;
+    var bodyOverflowBeforeFullscreen = '';
 
     var operatorImages = {{logosList | safe}};
     var staticLink = "{{ url_for('resize_image', max_width=240, target_height=40, image_path='')}}";
+
+    // Which time bucket the time-series chart plots: months once a year is
+    // picked, years otherwise.
+    var TIME_SERIES_KEY = yearDefined == "true" ? "months" : "years";
+
+    // Row fields that carry a picture rather than a number, kept through metric
+    // extraction and combined-mode merging so charts can still draw them.
+    var DECORATION_FIELDS = ['operator', 'image_code', 'image', 'country', 'units', 'label'];
+
+    // The axis draws pictures into a fixed box, so the box has to match the
+    // artwork or it stretches. Logos come out of the resizer at 240x40; the
+    // airframe silhouettes are 500x200. Feeding both the same box was what
+    // squashed the aircraft flat.
+    var LOGO_ASPECT = 240 / 40;
+    var AIRLINER_ASPECT = 500 / 200;
+    var WAGON_ASPECT = 218 / 41;      // measured median of the wagon artwork
+    var PLACEHOLDER_ASPECT = 176 / 44;  // the outline SVGs' own viewBox
+
+    var WAGON_BASE = "{{ url_for('static', filename='images/wagons') }}";
+
+    // The lead vehicle stands in for the whole consist on the axis, exactly as a
+    // silhouette stands in for an aircraft type. A six-car rake would need some
+    // 400px at this artwork's proportions; the axis gutter has 110. The full
+    // strip is on hover instead.
+    function trainsetLeadImage(item) {
+        const units = item.units || [];
+        if (!units.length) return null;
+
+        // The first car that has artwork, not simply the first car: a set whose
+        // leading vehicle is unknown still deserves a picture on the axis.
+        const drawn = units.find(unit => unit.image);
+        if (drawn) return wagonImgSrc(WAGON_BASE, drawn);
+
+        // Nothing in the set is drawn. An outline still marks the row as a
+        // train, which beats a blank gutter beside a labelled bar.
+        return placeholderSrc(units[0], true, units.length === 1);
+    }
+
+    // The "not found" outlines the trip pages use. Which one depends on where
+    // the car sits, so an unknown set still reads as a train and not as a row
+    // of identical boxes.
+    function placeholderSrc(unit, isFirst, isLast) {
+        const suffix = unit._phType
+            || (isFirst && isLast ? 'loco_both' : isFirst ? 'loco_l' : isLast ? 'loco_r' : 'mid');
+        return `${WAGON_BASE}/placeholder_${suffix}.svg`;
+    }
+
+    // Operator logos: the resizer for the axis (small, cached, uniform height),
+    // the original file on hover where there is room to show it properly.
+    function operatorLogoUrl(name) {
+        const logo = name && operatorImages[name];
+        return logo ? encodeURI(staticLink + logo.replace('&', '%26')) : null;
+    }
+
+    function operatorLogoFullUrl(name) {
+        const logo = name && operatorImages[name];
+        return logo ? encodeURI('/static/' + logo) : null;
+    }
+
+    // Airframe artwork, keyed by ICAO type code. A miss is normal — roughly a
+    // hundred types are drawn and the rest are hand-typed — so callers must
+    // cope with null.
+    function airlinerImageUrl(code) {
+        return code ? `/static/images/airliners/${encodeURIComponent(code)}.png` : null;
+    }
+
+    // Aircraft registration prefix -> country, from the shared table the trip
+    // pages already use. Loaded once before the first render, then a sync
+    // lookup. Ferries don't need it: their ensign comes from the vessel record.
+    var REGISTRATIONS_URL = "{{ url_for('static', filename='data/registrations.json') }}";
+    var registrations = {};
+
+    // Does this row describe an aircraft? Per trip type that is just the type;
+    // in combined mode a row is merged from several, so ask what fed it.
+    function isAirRow(item) {
+        if (!isCombinedMode) return isAirType(tripType);
+        return Object.keys((item && item.tripTypes) || {}).some(isAirType);
+    }
+
+    function vehicleCountry(item) {
+        // A vessel's ensign comes from the server; it is real data.
+        if (item.country) return item.country;
+
+        // A tail number's prefix is a nationality mark — but ONLY on an
+        // aircraft. Run over anything else it still matches, and confidently:
+        // "CITROËN C-ZERO" begins with C and comes back Canadian, "HL371"
+        // Korean, "DS15540" German. Combined mode was the only view that loaded
+        // the table for non-air rows, so that is where it showed.
+        return isAirRow(item) ? (regCountry(item.vehicle, registrations) || '') : '';
+    }
+
+    function withFlag(item, label) {
+        const country = vehicleCountry(item);
+        return country ? `${getFlagEmoji(country)} ${label}` : label;
+    }
+
+    // A photo of the actual airframe, fetched from planespotters.net only when
+    // the user hovers a bar — never during a render.
+    //
+    // Results are kept here as well as inside vehicle_display.js because the
+    // tooltip needs a SYNCHRONOUS answer: a resolved promise still settles a
+    // microtask later, which is long enough to paint a loading state and then
+    // replace it. Re-hovering a bar must not flicker, so a known result is
+    // rendered outright.
+    var photoResults = {};
+
+    function aircraftPhotoKey(item) {
+        return item && item.vehicle && isAirRow(item) ? item.vehicle : null;
+    }
+
+    function requestAircraftPhoto(key) {
+        return fetchAircraftPhoto(key).then(photo => {
+            photoResults[key] = photo && photo.thumb ? photo : null;
+            // Decode it once now. Every later rebuild of the tooltip creates a
+            // fresh <img> for the same URL; warmed, that paints in the same
+            // frame instead of showing an empty box first.
+            if (photoResults[key]) new Image().src = photoResults[key].thumb;
+            return photoResults[key];
+        });
+    }
+
+    function isAirType(type) {
+        return type === 'air' || type === 'helicopter';
+    }
+
+    // ============================================
+    // CHART REGISTRY
+    // ============================================
+    // One entry per chart. Everything downstream iterates this list — the grid,
+    // the settings modal, metric extraction, combined-mode merging, the
+    // fullscreen view — so adding a chart is one entry here plus a dataset on
+    // the API side, not an edit in six places.
+    //
+    //   dataset      key of the array in the stats payload
+    //   idKey        field on a row holding the category identifier
+    //   title        chart heading
+    //   appliesTo    trip types the chart means something for (null = all)
+    //   category     row -> the string shown on the category axis
+    //   mergeKey     row -> what makes two rows the same row in combined mode.
+    //                Only needed where idKey alone isn't the identity (lines,
+    //                which are only unique within an operator).
+    //   inlineLabel  category -> bar label. Set means the category rides on the
+    //                bar itself and the axis gutter collapses, which is what
+    //                makes long free-text labels (lines, stations) usable.
+    //   axisLabel    () -> ECharts axisLabel config for the category axis
+    //   vertical     true to put categories on the X axis (the time series)
+    var CHARTS = [
+        {
+            key: 'countries',
+            dataset: 'countries',
+            idKey: 'country',
+            title: "{{crossedCountries}}",
+            category: item => item.country === "{{others}}"
+                ? item.country
+                : `${regionNames.of(item.country)} ${getFlagEmoji(item.country)}`,
+            axisLabel: () => ({
+                hideOverlap: true,
+                formatter: function (value) {
+                    if (!isMobile()) return value;
+                    // Narrow screens keep just the flag plus the alpha-2 code:
+                    // full country names never fit. Taking the last five
+                    // characters happened to leave one for a country, but the
+                    // "others" row has no flag to leave — it arrived as
+                    // "utres". Match the flag instead of counting characters.
+                    const flag = value.match(/[\u{1F1E6}-\u{1F1FF}]{2}/u);
+                    if (!flag) return value;
+                    // Regional indicators are the alpha-2 letters offset into
+                    // their own block, so the code comes back out of the flag.
+                    const code = [...flag[0]]
+                        .map(c => String.fromCharCode(c.codePointAt(0) - 0x1F1E6 + 65))
+                        .join('');
+                    // Flag last: the labels are right-aligned against the axis,
+                    // so trailing flags line up. Leading ones don't — flag
+                    // glyphs vary in width and the codes end up ragged.
+                    return `${code} ${flag[0]}`;
+                }
+            })
+        },
+        {
+            key: 'operators',
+            dataset: 'operators',
+            idKey: 'operator',
+            title: "{{operator}}",
+            image: item => operatorLogoUrl(item.operator),
+            tooltipImage: item => operatorLogoFullUrl(item.operator),
+            axisImage: true,
+            imageAspect: LOGO_ASPECT
+        },
+        {
+            key: 'timeseries',
+            dataset: TIME_SERIES_KEY,
+            idKey: TIME_SERIES_KEY === 'months' ? 'month' : 'year',
+            title: TIME_SERIES_KEY === 'months' ? "{{month}}" : "{{year}}",
+            vertical: true,
+            category: item => TIME_SERIES_KEY === 'months'
+                ? formatMonthLabel(item.month) : item.year
+        },
+        {
+            key: 'material',
+            dataset: 'material',
+            idKey: 'material',
+            title: "{{material_type}}",
+            // For flights the axis carries the airframe silhouette while the
+            // readable name stays on the bar. Other types have no artwork, so
+            // the chart falls back to the plain inline label.
+            image: item => airlinerImageUrl(item.image_code),
+            axisImage: true,
+            imageAspect: AIRLINER_ASPECT,
+            inlineLabel: value => value
+        },
+        {
+            // Trains get their consist as well as their vehicle: the lead car on
+            // the axis, the whole rake on hover. It sits before the vehicles
+            // chart because on rail the consist is the more meaningful reading —
+            // but both are shown, since a fleet number is still the only thing
+            // that identifies the individual unit.
+            key: 'trainsets',
+            dataset: 'trainsets',
+            idKey: 'trainset',
+            title: "{{statsTrainsets}}",
+            // Every rail type: trams and metros are logged with consists too,
+            // and funicular is here so it works the day someone logs one.
+            appliesTo: ['train', 'tram', 'metro', 'rail', 'funicular'],
+            // Never the stored value: for an ad-hoc consist that is a page of
+            // JSON. The server always sends a readable label; an em dash is the
+            // last resort for a row it could make no sense of at all.
+            category: item => item.label || '—',
+            image: trainsetLeadImage,
+            media: mediaStrip,
+            prepare: prepareStrip,
+            axisImage: true,
+            imageAspect: WAGON_ASPECT,
+            inlineLabel: value => value
+        },
+        {
+            // Free text, so the values are as clean as users typed them. Worth
+            // charting anyway: line_name is the best-populated field on the
+            // trips table by a wide margin.
+            key: 'lines',
+            dataset: 'lines',
+            idKey: 'line',
+            title: "{{statsLines}}",
+            // A line name is only unique within a network — tram 1 exists in
+            // half the cities in Europe — so the operator is part of the row's
+            // identity, not decoration on it. The server groups by both; here
+            // that has to reach the category, because ECharts keys its axis on
+            // the category string and two bars called "1" would collapse.
+            //
+            // Spelled out on the bar rather than left to the axis logo alone:
+            // the logo distinguishes them for anyone who recognises it, and an
+            // operator with no logo has nothing to distinguish it at all.
+            // Operator first: it is what the axis logo beside the label already
+            // says, so the two agree left-to-right instead of crossing over.
+            category: item => item.operator ? `${item.operator} · ${item.line}` : item.line,
+            // Combined mode re-merges rows across trip types by identifier, and
+            // the identifier here is the pair. Without this a line run by a bus
+            // company and a tram company would fold back into one row.
+            mergeKey: item => item.line + '\u0000' + (item.operator || ''),
+            // A line almost always runs under one operator, so its logo says
+            // more at a glance than the bare line code does.
+            image: item => operatorLogoUrl(item.operator),
+            // No big logo on hover. A line is identified by its number, and a
+            // full-width operator logo above it read as though the logo were the
+            // subject; it belongs beside the name, at the size of a credit.
+            // Returning null explicitly: leaving this out falls back to `image`,
+            // which is exactly the logo we are trying not to show.
+            tooltipImage: () => null,
+            axisImage: true,
+            imageAspect: LOGO_ASPECT,
+            inlineLabel: value => value,
+            // The bare line name, not the category: the operator is already in
+            // the header as its logo, and repeating it in the headline made the
+            // tooltip read "390 · RATP" beside the RATP mark.
+            tooltipHeader: item => `
+                <div class="statsTipLineHead">
+                    ${operatorMark(item.operator)}
+                    <div class="statsTipLineText"><span
+                        class="statsTipKicker">{{lineName}}&nbsp;:</span><span
+                        class="statsTipHeadline">${escapeHtml(item.line)}</span></div>
+                </div>
+            `
+        },
+        {
+            // `reg` holds whatever identifies the individual vehicle for the
+            // type: a ship's name, an aircraft's tail number, a bus fleet
+            // number. Same data, so the title carries the meaning.
+            key: 'vehicles',
+            dataset: 'vehicles',
+            idKey: 'vehicle',
+            title: ({
+                'ferry': "{{statsVessels}}",
+                'air': "{{statsAircraft}}",
+                'helicopter': "{{statsAircraft}}"
+            })[tripType] || "{{statsVehicles}}",
+            // A cached vessel photo for ferries, the airframe silhouette for
+            // flights. Tooltip only: these are full pictures, far too big to
+            // stack down a category axis.
+            image: item => item.image || airlinerImageUrl(item.image_code),
+            photoKey: aircraftPhotoKey,
+            category: item => withFlag(item, item.vehicle),
+            inlineLabel: value => value
+        },
+        {
+            key: 'routes',
+            dataset: 'routes',
+            idKey: 'route',
+            title: '{{routes}}',
+            category: item => {
+                try { return JSON.parse(item.route).join(' - '); }
+                catch (e) { return item.route; }
+            },
+            inlineLabel: formatRouteLabel
+        },
+        {
+            key: 'stations',
+            dataset: 'stations',
+            idKey: 'station',
+            // These are a trip's endpoints, and what those are called depends
+            // entirely on the type: "Gares fréquentées" is simply wrong over a
+            // list of airports. The trip forms already name them per type
+            // (originAirport, originFerryTerminal, originBusStation); this is
+            // the same idea for the chart heading.
+            //
+            // The fallback covers everything without scheduled stops — car,
+            // walk, cycle — and combined mode, where the rows are a mix.
+            title: ({
+                'air': "{{statsAirportsVisited}}",
+                'helicopter': "{{statsAirportsVisited}}",
+                'ferry': "{{statsTerminalsVisited}}",
+                'bus': "{{statsStopsVisited}}",
+                'train': '{{stations}}',
+                'metro': '{{stations}}',
+                'tram': '{{stations}}',
+                'rail': '{{stations}}',
+                'funicular': '{{stations}}',
+                'aerialway': '{{stations}}'
+            })[tripType] || "{{statsPlacesVisited}}",
+            inlineLabel: extractStationCode
+        }
+    ];
+
+    function chartApplies(spec, type) {
+        return !spec.appliesTo || spec.appliesTo.includes(type);
+    }
+
+    // Charts the current trip type can show at all. In combined mode a chart
+    // survives if any of the merged types would show it.
+    function applicableCharts() {
+        return CHARTS.filter(spec => isCombinedMode
+            ? AVAILABLE_TRIP_TYPES.some(type => chartApplies(spec, type))
+            : chartApplies(spec, tripType));
+    }
+
+    // Which trip types may contribute rows to a dataset, so combined mode
+    // doesn't quietly merge back in what the restriction just excluded.
+    function datasetApplies(dataset, type) {
+        const spec = chartByDataset(dataset);
+        return !spec || chartApplies(spec, type);
+    }
+
+    function chartByDataset(dataset) {
+        return CHARTS.find(spec => spec.dataset === dataset);
+    }
+
+    function chartByKey(key) {
+        return CHARTS.find(spec => spec.key === key);
+    }
+
+    // Every dataset the registry can consume, and the identifier field of each.
+    function datasetIdKeys() {
+        var keys = {};
+        CHARTS.forEach(spec => { keys[spec.dataset] = spec.idKey; });
+        // The time series has both buckets in the payload; the registry only
+        // names the one currently plotted.
+        keys.years = 'year';
+        keys.months = 'month';
+        return keys;
+    }
+
+    // ============================================
+    // CHART VISIBILITY (gear button)
+    // ============================================
+    var HIDDEN_CHARTS_STORAGE_KEY = 'trainlog.stats.hiddenCharts';
+
+    function loadHiddenCharts() {
+        try {
+            var raw = localStorage.getItem(HIDDEN_CHARTS_STORAGE_KEY);
+            return new Set(raw ? JSON.parse(raw) : []);
+        } catch (e) {
+            return new Set();
+        }
+    }
+
+    function saveHiddenCharts(hidden) {
+        try {
+            localStorage.setItem(HIDDEN_CHARTS_STORAGE_KEY, JSON.stringify([...hidden]));
+        } catch (e) {
+            /* storage unavailable (private mode) — the choice just won't persist */
+        }
+    }
+
+    var hiddenCharts = loadHiddenCharts();
+
+    // Cutting oversized bars is a reading aid, not a fact about the data, so it
+    // is the user's call. On by default: the charts it fires on are unreadable
+    // without it.
+    //
+    // A cookie rather than localStorage, matching how the trip forms keep their
+    // preferences (see delayDateMode). js-cookie comes from the shared layout.
+    var AXIS_BREAK_COOKIE = 'statsCutOversizedBars';
+
+    function loadAxisBreakEnabled() {
+        // Absent means never set, which is the default: on.
+        return Cookies.get(AXIS_BREAK_COOKIE) !== 'false';
+    }
+
+    function saveAxisBreakEnabled(enabled) {
+        Cookies.set(AXIS_BREAK_COOKIE, enabled ? 'true' : 'false', { expires: 365 });
+    }
+
+    var axisBreakEnabled = loadAxisBreakEnabled();
 
     function getScreenSize() {
         return window.innerWidth || document.documentElement.clientWidth || document.body.clientWidth;
@@ -200,6 +820,16 @@
 
     function isMobile() {
         return getScreenSize() < 750;
+    }
+
+    // Tooltips are placed differently where there is no hover: see
+    // rowAnchoredPosition. Touch-capable laptops keep the pointer behaviour —
+    // what matters is that the pointer CAN hover, not that a screen can be
+    // touched — so a coarse-only pointer is the test, with the narrow-screen
+    // case folded in for phones reporting themselves as fine-pointered.
+    function isTouchTooltip() {
+        return isMobile()
+            || (window.matchMedia && window.matchMedia('(hover: none) and (pointer: coarse)').matches);
     }
 
     function formatMonthLabel(monthNumber) {
@@ -213,21 +843,75 @@
         );
     }
 
+    // Drop floating-point dust without forcing decimals on round numbers.
+    function trimNumber(value) {
+        return Number(value.toPrecision(6)).toString();
+    }
+
     function truncateLabel(label) {
         return label.length > 15 ? label.slice(0, 12) + '...' : label;
     }
 
-    // Station/airport names are stored as "🇫🇷 Name (CODE)" — show just the
-    // trailing code to keep labels short, full name stays available via the
-    // tooltip (which reads the untouched category value).
+    // Cut a bar label to the width it actually has. Inline labels are drawn
+    // inside the plot with nothing to clip them, so an unbounded one (a consist
+    // spelt out car by car runs to hundreds of characters) paints straight
+    // across the chart and into its neighbour. Measured rather than counted,
+    // because the font is proportional; binary search keeps it to ~log2(n)
+    // measurements per label.
+    function fitLabel(text, maxWidth) {
+        if (!text || maxWidth <= 0) return '';
+        if (measureLabelWidth(text) <= maxWidth) return text;
+
+        var low = 0;
+        var high = text.length;
+        while (low < high) {
+            var mid = Math.ceil((low + high) / 2);
+            if (measureLabelWidth(text.slice(0, mid) + '…') <= maxWidth) {
+                low = mid;
+            } else {
+                high = mid - 1;
+            }
+        }
+        return low > 0 ? text.slice(0, low).trimEnd() + '…' : '';
+    }
+
+    // What an inline label may occupy: the plotting area, which is the element
+    // minus the category gutter and the right inset, less a little air so it
+    // never touches an edge.
+    function labelBudget(element, gutterPx, axisBreak, maxValue) {
+        const plot = Math.max(60, (element.clientWidth || 400) - gutterPx - 40);
+        if (!axisBreak) return plot;
+
+        // With a cut, only the stretch before it is usable. The axis splits its
+        // width between the two kept ranges, so the readable part is the lower
+        // range's share of them — truncate to that, or the text is trimmed to
+        // fit a width it will never be given.
+        const lower = axisBreak.start;
+        const upper = Math.max(0, maxValue - axisBreak.end);
+        return Math.max(60, plot * (lower / (lower + upper)) - 10);
+    }
+
+    // Airports are stored as "🇫🇷 Charles de Gaulle International Airport
+    // (CDG)" — shorten to the city plus the code; the full name stays
+    // available via the tooltip (which reads the untouched category value).
+    //
+    // The city comes from the server's airportCities map, so the shortening
+    // only fires on codes that really are airports. A trailing parenthetical is
+    // one nowhere else: on a station it is part of the name ("Paris (Gare de
+    // Lyon)"), and cutting to it drops the station and keeps the city.
     function extractStationCode(value) {
         if (value === '{{others}}') return value;
         var match = value.match(/\(([^()]+)\)\s*$/);
-        if (match) {
-            var flag = value.match(/^[\u{1F1E6}-\u{1F1FF}]{2}/u);
-            return (flag ? flag[0] + ' ' : '') + match[1];
-        }
-        return value;
+        if (!match) return value;
+
+        var city = airportCities[match[1]];
+        // No city known: on an air chart the bare code still beats an airport
+        // name too long to draw, which is what this did before cities existed.
+        if (!city && !isAirType(tripType)) return value;
+
+        var flag = value.match(/^[\u{1F1E6}-\u{1F1FF}]{2}/u);
+        return [flag ? flag[0] : '', city || '', city ? '(' + match[1] + ')' : match[1]]
+            .filter(Boolean).join(' ');
     }
 
     function formatRouteLabel(value) {
@@ -251,124 +935,262 @@
 
     var labelMeasureContext = document.createElement('canvas').getContext('2d');
 
+    // A flag is a pair of regional-indicator letters. The measuring canvas has
+    // no emoji font, so it sizes them as two unrenderable glyphs — far narrower
+    // than the colour flag the chart actually paints. Every station and route
+    // label starts with one, so the whole placement was working from a width
+    // that was tens of pixels short: labels ran off the left of the axis and
+    // through the axis break.
+    var FLAG_PAIR = /[\u{1F1E6}-\u{1F1FF}]{2}/gu;
+    var FLAG_WIDTH = 16;   // measured against a 12px emoji glyph
+
     // Approximates the rendered width of a bar label (ECharts defaults: 12px
     // sans-serif) so we can tell whether it fits next to the bar.
     function measureLabelWidth(text) {
         labelMeasureContext.font = '12px sans-serif';
-        return labelMeasureContext.measureText(text).width;
+        const flags = (text.match(FLAG_PAIR) || []).length;
+        if (!flags) return labelMeasureContext.measureText(text).width;
+        return labelMeasureContext.measureText(text.replace(FLAG_PAIR, '')).width
+            + flags * FLAG_WIDTH;
     }
 
-    function getDurationAxisConfig(maxSeconds, lang) {
-    // Define time units in seconds
+    // Time units in seconds.
     const YEAR_S = 31557600;   // 365.25 * 24 * 3600
     const MONTH_S = 2629800;    // 30.4375 * 24 * 3600
     const WEEK_S = 604800;      // 7 * 24 * 3600
     const DAY_S = 86400;
     const HOUR_S = 3600;
     const MINUTE_S = 60;
-    
-    let unit = 'second';
-    let divisor = 1;
-    let interval;
-    
-    // Helper function to find the best interval with nice multiples
+
+    // Smallest first: the only thing that walks this is the step-up in
+    // brokenDurationScale.
+    const DURATION_UNITS = [
+        { unit: 'second', seconds: 1 },
+        { unit: 'minute', seconds: MINUTE_S },
+        { unit: 'hour', seconds: HOUR_S },
+        { unit: 'day', seconds: DAY_S },
+        { unit: 'week', seconds: WEEK_S },
+        { unit: 'month', seconds: MONTH_S },
+        { unit: 'year', seconds: YEAR_S }
+    ];
+
+    // Aim for about five ticks, landing on a round multiple of the unit.
     function findNiceInterval(maxValue, baseUnit, niceMultiples) {
-        const targetTicks = 5; // Aim for around 5-10 ticks
-        const targetInterval = maxValue / targetTicks;
-        
-        // Find the closest nice multiple
-        let bestInterval = niceMultiples[0] * baseUnit;
+        const target = maxValue / 5;
+        let best = niceMultiples[0] * baseUnit;
         for (const multiple of niceMultiples) {
-            const candidateInterval = multiple * baseUnit;
-            if (candidateInterval >= targetInterval) {
-                bestInterval = candidateInterval;
-                break;
-            }
+            const candidate = multiple * baseUnit;
+            if (candidate >= target) { best = candidate; break; }
         }
-        return bestInterval;
+        return best;
     }
-    
-    // Determine the Scale and Interval
-    if (maxSeconds >= 2 * YEAR_S) {
-        unit = 'year';
-        divisor = YEAR_S;
-        interval = findNiceInterval(maxSeconds, YEAR_S, [1, 2, 5, 10, 20, 50, 100]);
-    } else if (maxSeconds >= 2 * MONTH_S) {
-        unit = 'month';
-        divisor = MONTH_S;
-        interval = findNiceInterval(maxSeconds, MONTH_S, [1, 2, 3, 6, 12]);
-    } else if (maxSeconds >= 2 * WEEK_S) {
-        unit = 'week';
-        divisor = WEEK_S;
-        interval = findNiceInterval(maxSeconds, WEEK_S, [1, 2, 4, 8, 12]);
-    } else if (maxSeconds >= 2 * DAY_S) {
-        unit = 'day';
-        divisor = DAY_S;
-        interval = findNiceInterval(maxSeconds, DAY_S, [1, 2, 3, 7, 14, 30]);
-    } else if (maxSeconds >= 2 * HOUR_S) {
-        unit = 'hour';
-        divisor = HOUR_S;
-        interval = findNiceInterval(maxSeconds, HOUR_S, [1, 2, 3, 6, 12, 24]);
-    } else if (maxSeconds >= 2 * MINUTE_S) {
-        unit = 'minute';
-        divisor = MINUTE_S;
-        interval = findNiceInterval(maxSeconds, MINUTE_S, [1, 2, 5, 10, 15, 30, 60]);
-    } else {
-        // For seconds, use nice intervals
-        const niceIntervals = [1, 2, 5, 10, 15, 30, 60];
-        const targetInterval = maxSeconds / 5;
-        interval = niceIntervals.find(i => i >= targetInterval) || 1;
+
+    // The unit a duration scale should be read in, and how far apart its ticks
+    // sit. Both come out of the largest value the scale has to carry: two days
+    // of travel is read in hours, two years of it in months.
+    function durationScale(maxSeconds) {
+        if (maxSeconds >= 2 * YEAR_S)
+            return { unit: 'year', divisor: YEAR_S, interval: findNiceInterval(maxSeconds, YEAR_S, [1, 2, 5, 10, 20, 50, 100]) };
+        if (maxSeconds >= 2 * MONTH_S)
+            return { unit: 'month', divisor: MONTH_S, interval: findNiceInterval(maxSeconds, MONTH_S, [1, 2, 3, 6, 12]) };
+        if (maxSeconds >= 2 * WEEK_S)
+            return { unit: 'week', divisor: WEEK_S, interval: findNiceInterval(maxSeconds, WEEK_S, [1, 2, 4, 8, 12]) };
+        if (maxSeconds >= 2 * DAY_S)
+            return { unit: 'day', divisor: DAY_S, interval: findNiceInterval(maxSeconds, DAY_S, [1, 2, 3, 7, 14, 30]) };
+        if (maxSeconds >= 2 * HOUR_S)
+            return { unit: 'hour', divisor: HOUR_S, interval: findNiceInterval(maxSeconds, HOUR_S, [1, 2, 3, 6, 12, 24]) };
+        if (maxSeconds >= 2 * MINUTE_S)
+            return { unit: 'minute', divisor: MINUTE_S, interval: findNiceInterval(maxSeconds, MINUTE_S, [1, 2, 5, 10, 15, 30, 60]) };
+        const nice = [1, 2, 5, 10, 15, 30, 60];
+        return { unit: 'second', divisor: 1, interval: nice.find(i => i >= maxSeconds / 5) || 1 };
     }
-    
-    const axisMax = Math.ceil(maxSeconds / interval) * interval;
-    
-    return {
-        type: 'value',
-        min: 0,
-        max: axisMax,
-        interval: interval,
-        axisLabel: {
-            hideOverlap: true,
-            formatter: function (value) {
-                const displayValue = value / divisor;
-                return new Intl.NumberFormat(lang, {
-                    style: 'unit',
-                    unit: unit,
-                    unitDisplay: 'short',
-                    maximumFractionDigits: 0
-                }).format(displayValue);
-            }
+
+    // The scale for an axis with a break in it — one scale carrying two
+    // magnitudes at once.
+    //
+    // Taken from the readable part BELOW the cut, and used for the whole axis.
+    // Sizing it off the axis maximum instead is the original bug: a chart topped
+    // by six weeks of "others" labelled every tick under it "0 sem.".
+    //
+    // A second, coarser unit above the cut — "6 sem." where this says "42 j" —
+    // was tried and dropped. ECharts puts at most two ticks past the cut, at
+    // values fixed by the tear and the axis end, and a coarse unit can only label
+    // those without lying when they happen to land on a whole one of it. Measured
+    // over 541 broken axes that was 6% of the time, and four fifths of those read
+    // as a mixed pair — "41 j" beside "6 sem.", a day apart in different units.
+    // The geometry is against it: a break exists because the top segment is a
+    // thin stub, and a thin stub does not span a whole week.
+    function brokenDurationScale(belowCut, maxSeconds) {
+        let scale = durationScale(belowCut);
+        // A four-digit label ("13 885 h") is worse than a coarser unit.
+        while (maxSeconds / scale.divisor >= 1000) {
+            const next = DURATION_UNITS.find(entry => entry.seconds > scale.divisor);
+            if (!next) break;
+            scale = {
+                unit: next.unit,
+                divisor: next.seconds,
+                interval: Math.max(scale.interval, next.seconds)
+            };
         }
-    };
-}
+        return {
+            unit: scale.unit,
+            divisor: scale.divisor,
+            // A tick can only be a whole number of units if the spacing is one.
+            interval: Math.max(scale.divisor, Math.round(scale.interval / scale.divisor) * scale.divisor)
+        };
+    }
 
-    // ECharts rich-text keys only accept [a-zA-Z0-9_], so operator names can't be
-    // used directly: non-latin ones (\u4eac\u90fd\u5e02\u4ea4) would normalize to an empty key and
-    // render as a literal "{}", and names differing only by punctuation would
-    // collide and share a logo. Index-based keys are safe for any name.
-    var operatorRichKeys = Object.keys(operatorImages).reduce(function (keys, operator, index) {
-        keys[operator] = 'operator_' + index;
-        return keys;
-    }, {});
+    // What the far side of a break reads in: whatever unit the value is a
+    // sensible number of, to one decimal.
+    //
+    // The near side is a real scale — evenly spaced ticks you measure bars
+    // against — so it stays whole units of one size. The far side is not: it is
+    // one or two ticks marking where a single dominant bar ends, and the tear
+    // between them says the scale is not continuous anyway. Holding it to the
+    // near side's unit for the sake of whole numbers is what produced "857 h",
+    // which nobody reads as five weeks.
+    function coarseDurationLabel(seconds, lang) {
+        const ladder = DURATION_UNITS.slice().reverse();
+        const scale = ladder.find(entry => Math.abs(seconds) >= entry.seconds) || ladder[ladder.length - 1];
+        return new Intl.NumberFormat(lang, {
+            style: 'unit',
+            unit: scale.unit,
+            unitDisplay: 'short',
+            maximumFractionDigits: 1
+        }).format(seconds / scale.seconds);
+    }
 
-    function operatorAxisLabelConfig() {
+    function formatDurationIn(seconds, scale, lang) {
+        return new Intl.NumberFormat(lang, {
+            style: 'unit',
+            unit: scale.unit,
+            unitDisplay: 'short',
+            maximumFractionDigits: 0
+        }).format(seconds / scale.divisor);
+    }
+
+    function getDurationAxisConfig(maxSeconds, lang, axisBreak) {
+        if (!axisBreak) {
+            const scale = durationScale(maxSeconds);
+            return {
+                type: 'value',
+                min: 0,
+                max: Math.ceil(maxSeconds / scale.interval) * scale.interval,
+                interval: scale.interval,
+                axisLabel: {
+                    hideOverlap: true,
+                    formatter: value => formatDurationIn(value, scale, lang)
+                }
+            };
+        }
+
+        const scale = brokenDurationScale(axisBreak.start, maxSeconds);
+        const nearEdgeLabel = coarseDurationLabel(axisBreak.end, lang);
+        return {
+            type: 'value',
+            min: 0,
+            // Tight to the data, in units of the tick spacing. Rounding the axis
+            // up to a whole coarse unit is what wrecked the layout once: ECharts
+            // divides the width between the two segments in proportion to the
+            // span each covers, so a max rounded up to the next whole week handed
+            // most of the chart to a stretch of scale with nothing in it and
+            // squeezed every bar into the left tenth.
+            max: snap(Math.ceil(maxSeconds / scale.interval) * scale.interval),
+            interval: scale.interval,
+            axisLabel: {
+                hideOverlap: true,
+                formatter: function (value) {
+                    if (value <= axisBreak.start) return formatDurationIn(value, scale, lang);
+                    const label = coarseDurationLabel(value, lang);
+                    // The far edge of the tear and the end of the axis sit one
+                    // tick apart, which at this resolution is usually the same
+                    // text twice. Keep the edge — that is the tick ECharts
+                    // always places, where the axis end is offered only
+                    // sometimes — and drop the repeat.
+                    if (value > axisBreak.end + scale.interval * 1e-6 && label === nearEdgeLabel) {
+                        return '';
+                    }
+                    return label;
+                }
+            }
+        };
+    }
+
+    // ECharts rich-text keys only accept [a-zA-Z0-9_], so a category value can't
+    // be used as one: non-latin names (京都市交) would normalize to an empty key
+    // and render as a literal "{}", and names differing only by punctuation would
+    // collide and share a picture. Index-based keys are safe for any name.
+    //
+    // Only the rows actually on screen get an entry, so the option stays small
+    // whatever the size of the logo map.
+    // Fit the artwork's aspect ratio inside the space a row can spare. Bounded
+    // by width for wide-and-short logos and by height for the chunkier airframe
+    // silhouettes, so neither ends up stretched and neither pushes the rows
+    // apart. Falls back to the logo shape when a spec doesn't say.
+    function axisImageBox(aspect) {
+        const ratio = aspect || LOGO_ASPECT;
+        const maxWidth = isMobile() ? 50 : 110;
+        const maxHeight = isMobile() ? 16 : 28;
+        const width = Math.min(maxWidth, maxHeight * ratio);
+        return { width: Math.round(width), height: Math.round(width / ratio) };
+    }
+
+    // Widest an axis label may get when it stands in for a missing picture.
+    // About the width of the pictures beside it, so one nameless row can't
+    // stretch the gutter past what the images already claim.
+    var AXIS_LABEL_MAX_WIDTH = 170;
+
+    function imageAxisLabelConfig(spec, rows) {
+        const byCategory = {};
+        rows.forEach(function (item, index) {
+            const url = spec.image ? spec.image(item) : null;
+            if (url) byCategory[categoryOf(spec, item)] = { key: 'img_' + index, url: url };
+        });
+
         return {
             formatter: function (value) {
-                const richKey = operatorRichKeys[value];
-                return richKey ? `{${richKey}|}` : value;
+                const entry = byCategory[value];
+                if (entry) return `{${entry.key}|}`;
+
+                // No picture for this row. When the name is already drawn on
+                // the bar there is nothing to say here, and saying it is
+                // actively harmful: the fullscreen grid sets containLabel, so
+                // one long name in the gutter widens it until the plot is
+                // squeezed off to the right — which is what a consist spelt out
+                // car by car did. Charts without an inline label still need a
+                // name, but a bounded one — roughly the width of the pictures
+                // it sits among, so the gutter stays the size it looks.
+                return spec.inlineLabel ? '' : fitLabel(value, AXIS_LABEL_MAX_WIDTH);
             },
-            rich: Object.keys(operatorImages).reduce(function (rich, operator) {
-                rich[operatorRichKeys[operator]] = {
-                    width: isMobile() ? 50 : 110,
-                    height: isMobile() ? 10 : 20,
-                    backgroundColor: {
-                        image: encodeURI(staticLink + operatorImages[operator].replace('&', '%26'))
-                    }
-                };
+            rich: Object.values(byCategory).reduce(function (rich, entry) {
+                // The box is drawn to a fixed size, so it has to match the art
+                // in it. A placeholder outline is squarer than a real wagon and
+                // would be stretched by a third in the wagon-shaped box.
+                const aspect = /\.svg$/.test(entry.url)
+                    ? PLACEHOLDER_ASPECT
+                    : spec.imageAspect;
+                rich[entry.key] = Object.assign(
+                    { backgroundColor: { image: entry.url } },
+                    axisImageBox(aspect));
                 return rich;
             }, {})
         };
     }
+
+    // Category -> picture URL, for the tooltip and for the loading placeholder.
+    function tooltipImages(spec, rows) {
+        const images = {};
+        const pick = spec && (spec.tooltipImage || spec.image);
+        if (pick) {
+            rows.forEach(item => {
+                const url = pick(item);
+                if (url) images[categoryOf(spec, item)] = url;
+            });
+        }
+        return images;
+    }
+
+
 
     function showLoading() {
         document.getElementById('loadingScreen').style.display = 'flex';
@@ -381,6 +1203,8 @@
     window.addEventListener('resize', function() {
         Object.keys(chartsInstances).forEach(key => resizeChart(chartsInstances[key]));
         if (currentChart) resizeChart(currentChart);
+        // Consist strips are cut to a width, so they are re-cut with the charts.
+        if (typeof restripForWidth === 'function') restripForWidth();
     });
 
     // ============================================
@@ -409,203 +1233,88 @@
     // ============================================
     // DATA EXTRACTION
     // ============================================
+    // Reduce every dataset to {identifier, past, plannedFuture} for one metric,
+    // so the charts never have to know which metric they are drawing.
     function extractDataForMetric(data, metric) {
-        const config = METRICS_CONFIG[metric];
-        const suffix = config.suffix;
-        
-        function convertItem(item) {
-            const converted = {};
-            
-            // Copy identifier fields
-            if (item.country) converted.country = item.country;
-            if (item.operator) converted.operator = item.operator;
-            if (item.material) converted.material = item.material;
-            if (item.route) converted.route = item.route;
-            if (item.station) converted.station = item.station;
-            if (item.year !== undefined) converted.year = item.year;
-            if (item.month !== undefined) converted.month = item.month;
-            if (item.tripType) converted.tripType = item.tripType;
-            
-            // Extract metric values (store raw numbers only)
-            if (item['past' + suffix] !== undefined) {
-                converted.past = item['past' + suffix] || 0;
-                converted.plannedFuture = item['plannedFuture' + suffix] || 0;
-                if (item['future' + suffix] !== undefined) {
-                    converted.future = item['future' + suffix] || 0;
-                }
-            } else if (item.pastKm !== undefined && suffix === 'Km') {
-                converted.past = item.pastKm || 0;
-                converted.plannedFuture = item.plannedFutureKm || 0;
-                if (item.futureKm !== undefined) {
-                    converted.future = item.futureKm || 0;
-                }
-            } else {
-                converted.past = item.past || 0;
-                converted.plannedFuture = item.plannedFuture || 0;
-                if (item.future !== undefined) {
-                    converted.future = item.future || 0;
-                }
-            }
-            
-            return converted;
-        }
-        
-        function sortByTotal(arr) {
-            return arr.map(convertItem).sort((a, b) => 
-                (b.past + b.plannedFuture) - (a.past + a.plannedFuture)
-            );
-        }
-        
-        return {
-            countries: sortByTotal(data.countries || []),
-            operators: sortByTotal(data.operators || []),
-            material: sortByTotal(data.material || []),
-            routes: (data.routes || []).map(convertItem).sort((a, b) => 
-                (b.past + b.plannedFuture + (b.future || 0)) - (a.past + a.plannedFuture + (a.future || 0))
-            ),
-            stations: (data.stations || []).map(convertItem).sort((a, b) => 
-                (b.past + b.plannedFuture + (b.future || 0)) - (a.past + a.plannedFuture + (a.future || 0))
-            ),
-            years: (data.years || []).map(convertItem),
-            months: (data.months || []).map(convertItem)
-        };
+        const suffix = METRICS_CONFIG[metric].suffix;
+        const idKeys = datasetIdKeys();
+        const extracted = {};
+
+        Object.keys(idKeys).forEach(dataset => {
+            const idKey = idKeys[dataset];
+            const rows = (data[dataset] || []).map(item => {
+                const converted = {
+                    past: item['past' + suffix] || 0,
+                    plannedFuture: item['plannedFuture' + suffix] || 0
+                };
+                if (item[idKey] !== undefined) converted[idKey] = item[idKey];
+                if (item.tripType) converted.tripType = item.tripType;
+                DECORATION_FIELDS.forEach(field => {
+                    if (item[field] !== undefined) converted[field] = item[field];
+                });
+                return converted;
+            });
+            // The time series keeps chronological order; everything else is
+            // ranked, biggest first.
+            extracted[dataset] = (dataset === 'years' || dataset === 'months')
+                ? rows
+                : rows.sort((a, b) => (b.past + b.plannedFuture) - (a.past + a.plannedFuture));
+        });
+
+        return extracted;
     }
 
     // ============================================
     // COMBINED MODE DATA MERGING
     // ============================================
+    // Fold the per-trip-type payloads into one set of rows, each keeping a
+    // per-type breakdown so the bars can stay stacked by trip type.
     function mergeCombinedData(allTypeData) {
-        const merged = {
-            countries: {},
-            operators: {},
-            material: {},
-            routes: {},
-            stations: {},
-            years: {},
-            months: {}
-        };
+        const idKeys = datasetIdKeys();
+        const merged = {};
+        Object.keys(idKeys).forEach(dataset => { merged[dataset] = {}; });
 
-        // Merge data from all trip types
         Object.keys(allTypeData).forEach(tripType => {
-            const data = allTypeData[tripType];
-            
-            // Merge countries
-            (data.countries || []).forEach(item => {
-                const key = item.country;
-                if (!merged.countries[key]) {
-                    merged.countries[key] = { country: key, tripTypes: {} };
-                }
-                if (!merged.countries[key].tripTypes[tripType]) {
-                    merged.countries[key].tripTypes[tripType] = { past: 0, plannedFuture: 0, future: 0 };
-                }
-                merged.countries[key].tripTypes[tripType].past += item.past || 0;
-                merged.countries[key].tripTypes[tripType].plannedFuture += item.plannedFuture || 0;
-                merged.countries[key].tripTypes[tripType].future += item.future || 0;
-            });
-
-            // Merge operators
-            (data.operators || []).forEach(item => {
-                const key = item.operator;
-                if (!merged.operators[key]) {
-                    merged.operators[key] = { operator: key, tripTypes: {} };
-                }
-                if (!merged.operators[key].tripTypes[tripType]) {
-                    merged.operators[key].tripTypes[tripType] = { past: 0, plannedFuture: 0, future: 0 };
-                }
-                merged.operators[key].tripTypes[tripType].past += item.past || 0;
-                merged.operators[key].tripTypes[tripType].plannedFuture += item.plannedFuture || 0;
-                merged.operators[key].tripTypes[tripType].future += item.future || 0;
-            });
-
-            // Merge material
-            (data.material || []).forEach(item => {
-                const key = item.material;
-                if (!merged.material[key]) {
-                    merged.material[key] = { material: key, tripTypes: {} };
-                }
-                if (!merged.material[key].tripTypes[tripType]) {
-                    merged.material[key].tripTypes[tripType] = { past: 0, plannedFuture: 0, future: 0 };
-                }
-                merged.material[key].tripTypes[tripType].past += item.past || 0;
-                merged.material[key].tripTypes[tripType].plannedFuture += item.plannedFuture || 0;
-                merged.material[key].tripTypes[tripType].future += item.future || 0;
-            });
-
-            // Merge routes
-            (data.routes || []).forEach(item => {
-                const key = item.route;
-                if (!merged.routes[key]) {
-                    merged.routes[key] = { route: key, tripTypes: {} };
-                }
-                if (!merged.routes[key].tripTypes[tripType]) {
-                    merged.routes[key].tripTypes[tripType] = { past: 0, plannedFuture: 0, future: 0 };
-                }
-                merged.routes[key].tripTypes[tripType].past += item.past || 0;
-                merged.routes[key].tripTypes[tripType].plannedFuture += item.plannedFuture || 0;
-                merged.routes[key].tripTypes[tripType].future += item.future || 0;
-            });
-
-            // Merge stations
-            (data.stations || []).forEach(item => {
-                const key = item.station;
-                if (!merged.stations[key]) {
-                    merged.stations[key] = { station: key, tripTypes: {} };
-                }
-                if (!merged.stations[key].tripTypes[tripType]) {
-                    merged.stations[key].tripTypes[tripType] = { past: 0, plannedFuture: 0, future: 0 };
-                }
-                merged.stations[key].tripTypes[tripType].past += item.past || 0;
-                merged.stations[key].tripTypes[tripType].plannedFuture += item.plannedFuture || 0;
-                merged.stations[key].tripTypes[tripType].future += item.future || 0;
-            });
-
-            // Merge years
-            (data.years || []).forEach(item => {
-                const key = item.year;
-                if (!merged.years[key]) {
-                    merged.years[key] = { year: key, tripTypes: {} };
-                }
-                if (!merged.years[key].tripTypes[tripType]) {
-                    merged.years[key].tripTypes[tripType] = { past: 0, plannedFuture: 0, future: 0 };
-                }
-                merged.years[key].tripTypes[tripType].past += item.past || 0;
-                merged.years[key].tripTypes[tripType].plannedFuture += item.plannedFuture || 0;
-                merged.years[key].tripTypes[tripType].future += item.future || 0;
-            });
-
-            // Merge months
-            (data.months || []).forEach(item => {
-                const key = item.month;
-                if (!merged.months[key]) {
-                    merged.months[key] = { month: key, tripTypes: {} };
-                }
-                if (!merged.months[key].tripTypes[tripType]) {
-                    merged.months[key].tripTypes[tripType] = { past: 0, plannedFuture: 0, future: 0 };
-                }
-                merged.months[key].tripTypes[tripType].past += item.past || 0;
-                merged.months[key].tripTypes[tripType].plannedFuture += item.plannedFuture || 0;
-                merged.months[key].tripTypes[tripType].future += item.future || 0;
+            Object.keys(idKeys).forEach(dataset => {
+                if (!datasetApplies(dataset, tripType)) return;
+                const idKey = idKeys[dataset];
+                // Usually the identifier is the whole identity. Where it isn't —
+                // a line, which is only itself within one operator — the spec
+                // says what the pair is. The seeded row still takes its
+                // identifier from the item, never from the key, so a composite
+                // key never ends up in the field the charts read.
+                const spec = chartByDataset(dataset);
+                const identity = spec && spec.mergeKey;
+                (allTypeData[tripType][dataset] || []).forEach(item => {
+                    if (item[idKey] === undefined) return;
+                    const key = identity ? identity(item) : item[idKey];
+                    const row = merged[dataset][key]
+                        || (merged[dataset][key] = { [idKey]: item[idKey], tripTypes: {} });
+                    // Keep whatever decoration the first contributing type
+                    // carried (operator logo, vessel photo), so merged rows can
+                    // still show an image.
+                    DECORATION_FIELDS.forEach(field => {
+                        if (row[field] === undefined && item[field] !== undefined) {
+                            row[field] = item[field];
+                        }
+                    });
+                    const bucket = row.tripTypes[tripType]
+                        || (row.tripTypes[tripType] = { past: 0, plannedFuture: 0 });
+                    bucket.past += item.past || 0;
+                    bucket.plannedFuture += item.plannedFuture || 0;
+                });
             });
         });
 
-        // Convert objects to sorted arrays
-        function sortMergedData(obj, sortKey) {
-            return Object.values(obj).sort((a, b) => {
-                const aTotal = Object.values(a.tripTypes).reduce((sum, t) => sum + t.past + t.plannedFuture, 0);
-                const bTotal = Object.values(b.tripTypes).reduce((sum, t) => sum + t.past + t.plannedFuture, 0);
-                return bTotal - aTotal;
-            });
-        }
-
-        return {
-            countries: sortMergedData(merged.countries),
-            operators: sortMergedData(merged.operators),
-            material: sortMergedData(merged.material),
-            routes: sortMergedData(merged.routes),
-            stations: sortMergedData(merged.stations),
-            years: Object.values(merged.years).sort((a, b) => a.year - b.year),
-            months: Object.values(merged.months).sort((a, b) => a.month - b.month)
-        };
+        const result = {};
+        Object.keys(idKeys).forEach(dataset => {
+            const rows = Object.values(merged[dataset]);
+            const idKey = idKeys[dataset];
+            result[dataset] = (dataset === 'years' || dataset === 'months')
+                ? rows.sort((a, b) => a[idKey] - b[idKey])
+                : rows.sort((a, b) => itemTotal(b) - itemTotal(a));
+        });
+        return result;
     }
 
     function groupData(data, key) {
@@ -619,11 +1328,10 @@
             var others = data.slice(10).reduce((acc, item) => {
                 Object.keys(item.tripTypes || {}).forEach(tripType => {
                     if (!acc.tripTypes[tripType]) {
-                        acc.tripTypes[tripType] = { past: 0, plannedFuture: 0, future: 0 };
+                        acc.tripTypes[tripType] = { past: 0, plannedFuture: 0 };
                     }
                     acc.tripTypes[tripType].past += item.tripTypes[tripType].past || 0;
                     acc.tripTypes[tripType].plannedFuture += item.tripTypes[tripType].plannedFuture || 0;
-                    acc.tripTypes[tripType].future += item.tripTypes[tripType].future || 0;
                 });
                 return acc;
             }, { [key]: '{{others}}', tripTypes: {} });
@@ -643,7 +1351,14 @@
     // ============================================
     // CHART STYLING
     // ============================================
+    // One canvas per colour, not one per bar. This is called from inside the
+    // per-item map in createSeries, so an uncached version built a canvas for
+    // every row of every series on every render — thousands of them per frame
+    // once a fullscreen chart was being scrolled.
+    var patternCache = {};
     function createPattern(color) {
+        if (patternCache[color]) return patternCache[color];
+
         var canvas = document.createElement('canvas');
         canvas.width = 4;
         canvas.height = 4;
@@ -655,11 +1370,12 @@
         ctx.lineTo(0, 4);
         ctx.stroke();
         
-        return {
+        patternCache[color] = {
             type: 'pattern',
             image: canvas,
             repeat: 'repeat'
         };
+        return patternCache[color];
     }
 
     function getColor(type) {
@@ -742,9 +1458,9 @@
     // inside positions (the series default is 'insideLeft').
     function insideLabel(labelFormatter, placement, index) {
         if (!labelFormatter) return undefined;
-        const actual = placement ? placement[index] : 'insideStart';
-        if (actual === 'insideStart') return { label: { show: true } };
-        if (actual === 'insideEnd' && insideEndAnchorsOnPast()) {
+        const mode = placement ? placement[index].mode : 'insideStart';
+        if (mode === 'insideStart') return { label: { show: true } };
+        if (mode === 'insideEnd' && insideEndAnchorsOnPast()) {
             return { label: { show: true, position: 'insideRight' } };
         }
         return { label: { show: false } };
@@ -754,17 +1470,40 @@
     // default, and in combined mode it also takes 'insideEnd'.
     function barEndLabel(labelFormatter, placement, index) {
         if (!labelFormatter) return undefined;
-        const actual = placement ? placement[index] : 'insideStart';
-        if (actual === 'outside') return { label: { show: true } };
-        if (actual === 'insideEnd' && !insideEndAnchorsOnPast()) {
+        const spot = placement ? placement[index] : { mode: 'insideStart' };
+        if (spot.mode === 'outside') return { label: { show: true } };
+        // Too long for either side: keep it hanging off the bar end, pulled back
+        // just far enough to stay in the plot. They then all finish flush at the
+        // right edge instead of each starting at the axis and running out to a
+        // different place.
+        if (spot.mode === 'clampRight') {
+            return { label: Object.assign(
+                { show: true, offset: [spot.dx, 0] }, INSIDE_LABEL_PILL) };
+        }
+        if (spot.mode === 'insideEnd' && !insideEndAnchorsOnPast()) {
             return { label: Object.assign({ show: true, position: 'insideRight' }, INSIDE_LABEL_PILL) };
         }
         return { label: { show: false } };
     }
 
-    function createSeries(data, color, labelFormatter, placement) {
+    // With one or two categories ECharts gives each its own band across the
+    // whole plot and the bar becomes a slab. Cap the thickness at what a bar
+    // would have if the chart held six of them.
+    var BAR_REFERENCE_COUNT = 6;
+    var BAR_BAND_FILL = 0.6;      // ECharts' default bar width within its band
+
+    function barThicknessCap(element, vertical) {
+        const extent = vertical
+            ? (element.clientWidth || 400)
+            : (element.clientHeight || 400);
+        // Title, axis and the grid's own insets are not plotting area.
+        const usable = Math.max(120, extent - 70);
+        return Math.round(usable / BAR_REFERENCE_COUNT * BAR_BAND_FILL);
+    }
+
+    function createSeries(data, color, labelFormatter, placement, barMaxWidth) {
         if (isCombinedMode) {
-            return createCombinedSeries(data, labelFormatter, placement);
+            return createCombinedSeries(data, labelFormatter, placement, barMaxWidth);
         }
 
         return [
@@ -772,6 +1511,7 @@
                 name: '{{past}}',
                 type: 'bar',
                 stack: 'Total',
+                barMaxWidth: barMaxWidth,
                 label: insideLabelConfig(labelFormatter),
                 data: data.map((item, i) => ({
                     value: item.past,
@@ -785,6 +1525,7 @@
                 name: '{{plannedFuture}}',
                 type: 'bar',
                 stack: 'Total',
+                barMaxWidth: barMaxWidth,
                 label: barEndLabelConfig(labelFormatter),
                 data: data.map((item, i) => ({
                     value: item.plannedFuture,
@@ -795,7 +1536,7 @@
         ];
     }
 
-    function createCombinedSeries(data, labelFormatter, placement) {
+    function createCombinedSeries(data, labelFormatter, placement, barMaxWidth) {
         const series = [];
         const lastIndex = AVAILABLE_TRIP_TYPES.length - 1;
 
@@ -811,6 +1552,7 @@
                 name: `${label} ({{past}})`,
                 type: 'bar',
                 stack: 'Total',  // Changed from 'Past' to 'Total'
+                barMaxWidth: barMaxWidth,
                 label: isFirst ? insideLabelConfig(labelFormatter) : undefined,
                 data: data.map((item, i) => {
                     const tripTypeData = item.tripTypes && item.tripTypes[tripType];
@@ -827,6 +1569,7 @@
                 name: `${label} ({{plannedFuture}})`,
                 type: 'bar',
                 stack: 'Total',  // Changed from 'Future' to 'Total'
+                barMaxWidth: barMaxWidth,
                 label: isLast ? barEndLabelConfig(labelFormatter) : undefined,
                 data: data.map((item, i) => {
                     const tripTypeData = item.tripTypes && item.tripTypes[tripType];
@@ -855,37 +1598,95 @@
         }
     }
 
-    function computeLabelPlacement(chart, data, labelFormatter) {
-        var yAxis = chart.getOption().yAxis || [];
-        var categories = (yAxis[0] && yAxis[0].data) || [];
+    // Which rows are on screen, from the window the caller keeps up to date on
+    // the instance. Padded, because the exact edge only matters for rows that
+    // are drawn and a couple of spare ones cost nothing.
+    //
+    // Deliberately not read from getOption(): that deep-clones the entire
+    // option, series data and all, which on a several-thousand-row chart is
+    // more expensive than everything else here put together.
+    function visibleRowRange(chart, count) {
+        var zoomWindow = chart.__zoomWindow;
+        if (!zoomWindow) return { from: 0, to: count - 1 };
+        return {
+            from: Math.max(0, zoomWindow.start - 5),
+            to: Math.min(count - 1, zoomWindow.end + 5)
+        };
+    }
+
+    function computeLabelPlacement(chart, data, labelFormatter, axisBreak, categories) {
+        categories = categories || [];
         var rightEdge = plotAreaRight(chart, 20);
+        var visible = visibleRowRange(chart, data.length);
+
+        // A break makes the plot look far roomier than it reads: the axis runs
+        // on past the cut, so labels were being placed "outside" into space that
+        // is on the other side of the tear, and every one of them crossed it.
+        // Treat the cut as the edge of the usable area.
+        if (axisBreak) {
+            var cutAt = chart.convertToPixel({ xAxisIndex: 0 }, axisBreak.start);
+            // The tear is drawn above everything — it has to be, or it could not
+            // erase the bar it cuts — so a label can never sit over it. Keep a
+            // clear margin rather than relying on them just touching.
+            if (isFinite(cutAt)) rightEdge = Math.min(rightEdge, cutAt - 14);
+        }
 
         var barStart = chart.convertToPixel({ xAxisIndex: 0 }, 0);
 
+        // A cut bar runs past the axis, so its value converts to a pixel outside
+        // the plot. Clamping to the edge makes the fit decision reason about the
+        // bar as drawn, instead of parking its label off-screen.
+        function barPixel(value) {
+            return Math.min(chart.convertToPixel({ xAxisIndex: 0 }, value), rightEdge);
+        }
+
         return data.map(function (item, i) {
-            var barEnd = chart.convertToPixel({ xAxisIndex: 0 }, itemTotal(item));
+            // Off-screen rows are not drawn, so where their label would sit is
+            // a question nobody asks. Skipping them keeps the work per scroll
+            // step proportional to the window, not to the whole ranking.
+            if (i < visible.from || i > visible.to) return { mode: 'outside' };
+
+            // The cut bar keeps its name at the start. Anywhere else it anchors
+            // to the bar's end, which now lies beyond the tear — in combined
+            // mode that dropped the label right on top of the cut, detached
+            // from the stack it belongs to.
+            if (axisBreak && itemTotal(item) > axisBreak.start) return { mode: 'insideStart' };
+
+            var barEnd = barPixel(itemTotal(item));
             // What an inside label has to fit in: the past segment it clings to.
             var insideEnd = insideEndAnchorsOnPast()
-                ? chart.convertToPixel({ xAxisIndex: 0 }, item.past || 0)
+                ? barPixel(item.past || 0)
                 : barEnd;
             var text = labelFormatter({ name: categories[i] });
             // 10px label padding + a little breathing room from the bar/edge.
             var needed = measureLabelWidth(text) + 18;
-            if ((rightEdge - barEnd) >= needed) return 'outside';
-            if ((insideEnd - barStart) >= needed) return 'insideEnd';
-            return 'insideStart';
+            if ((rightEdge - barEnd) >= needed) return { mode: 'outside' };
+            if ((insideEnd - barStart) >= needed) return { mode: 'insideEnd' };
+            // Fits nowhere. Rather than starting it at the axis and letting it
+            // trail off across the bar's end, clamp it to the right — but never
+            // so far that it starts left of the axis, which is how Manchester
+            // ended up with its flag hanging outside the chart.
+            var dx = Math.min(0, rightEdge - (barEnd + needed));
+            return { mode: 'clampRight', dx: Math.max(dx, barStart - barEnd) };
         });
     }
 
     // Second render pass: now that the bars have real pixel positions, re-emit
     // the series with each label shown on the anchor that fits. Stored on the
     // instance so a resize can redo the decision.
-    function applyInlineLabels(chart, data, color, labelFormatter) {
+    function applyInlineLabels(chart, data, color, labelFormatter, barMaxWidth, axisBreak) {
         if (!labelFormatter) return;
+        // Read the categories once, here, rather than on every relayout — see
+        // the note in visibleRowRange about what getOption() costs. They only
+        // change when the chart is rebuilt, which comes back through this
+        // function anyway.
+        var yAxis = chart.getOption().yAxis || [];
+        var categories = (yAxis[0] && yAxis[0].data) || [];
         chart.relayoutLabels = function () {
             chart.setOption({
                 series: createSeries(data, color, labelFormatter,
-                    computeLabelPlacement(chart, data, labelFormatter))
+                    computeLabelPlacement(chart, data, labelFormatter, axisBreak, categories),
+                    barMaxWidth)
             });
         };
         chart.relayoutLabels();
@@ -900,9 +1701,454 @@
     // ============================================
     // CHART RENDERING
     // ============================================
-    function commonTooltipFormatter(params) {
+    function escapeHtml(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+
+    // The three states of a tooltip's picture, all the same size on screen so
+    // that swapping between them never moves anything.
+    //
+    // onerror because the artwork set is partial — roughly a hundred aircraft
+    // types are drawn, the rest are hand-typed — so a miss is expected rather
+    // than exceptional, and a broken-image icon would be worse than nothing.
+    function mediaArt(url, loading) {
+        if (!url) return loading ? '<div class="statsTipMedia loading"></div>' : '';
+        return `<div class="statsTipMedia${loading ? ' loading' : ''}">`
+            + `<img class="art" src="${escapeHtml(url)}" alt=""`
+            + ` onerror="this.style.visibility='hidden'"></div>`;
+    }
+
+    // ── consist strips ──────────────────────────────────────────────────────
+    // Sizing a rake correctly is normalizeStrip's job: it puts every wagon on
+    // one absolute metres-per-pixel scale from `data-ppm`, so a short coach and
+    // a long one keep their real proportions. It needs live DOM and image load
+    // events to do that, which a tooltip rebuilt on every mousemove cannot give
+    // it. So each strip is sized ONCE in a hidden container, and the result —
+    // heights already baked into the markup — is cached as a plain string.
+    // Outer width of the strip, its horizontal padding, and what that leaves to
+    // lay cars out in. Scaling to the OUTER width is what made a rake that
+    // computed to exactly the limit wrap anyway: the flex line only ever gets
+    // the content box, and 2px of slack keeps sub-pixel rounding from tipping a
+    // full line over.
+    var STRIP_MAX_WIDTH = 760;
+    var STRIP_PADDING_X = 12;
+    // The strip's own margin from the viewport edge, matching the `calc(100vw -
+    // 40px)` the narrow-screen rule caps it at. On a phone that cap, not the
+    // 760, is what the rake has to be laid out in — computing rows against the
+    // desktop width is what pushed the cars out past the tooltip's edge.
+    var STRIP_VIEWPORT_MARGIN = 40;
+
+    function stripContentWidth() {
+        const viewport = window.innerWidth || STRIP_MAX_WIDTH;
+        const outer = Math.min(STRIP_MAX_WIDTH, viewport - STRIP_VIEWPORT_MARGIN);
+        // Nothing sensible can be laid out below this, and a floor keeps the
+        // arithmetic from going negative on a very narrow viewport.
+        return Math.max(160, outer - STRIP_PADDING_X - 2);
+    }
+
+    // Below this a car stops reading as a vehicle. A rake too long to fit at
+    // this height wraps onto another row rather than shrinking further — the
+    // trip pages solve the same problem by scrolling (.compo-container), which
+    // a tooltip can't do because the pointer can never reach it. At 20px a
+    // seven-car set still fits on one line, which covers most multiple units.
+    var STRIP_MIN_CAR_HEIGHT = 20;
+    var stripCache = {};
+    // Row breaks are baked into the cached markup, so they are only valid for
+    // the width they were computed at. A rotation or a resized window has to
+    // throw the lot away rather than serve a desktop layout to a phone.
+    var stripCacheWidth = 0;
+    // The units each cached strip was built from, so a resize can bake them
+    // again without waiting for the charts to be rebuilt.
+    var stripUnits = {};
+    var stripOven = null;
+
+    function ovenElement() {
+        if (!stripOven) {
+            stripOven = document.createElement('div');
+            // visibility:hidden rather than display:none — the boxes still have
+            // to be laid out for their measured widths to mean anything.
+            stripOven.style.cssText =
+                'position:absolute;left:-10000px;top:0;visibility:hidden;';
+            document.body.appendChild(stripOven);
+        }
+        return stripOven;
+    }
+
+    // Cut a rake into rows the way the browser would: fill a row, start a new
+    // one when the next car no longer fits. Cars keep their order, so this is
+    // also the FEWEST rows the rake can occupy at that scale.
+    function greedyRows(widths, limit) {
+        const rows = [];
+        let row = [], width = 0;
+        widths.forEach((w, i) => {
+            if (row.length && width + w > limit) { rows.push(row); row = []; width = 0; }
+            row.push(i);
+            width += w;
+        });
+        if (row.length) rows.push(row);
+        return rows;
+    }
+
+    // The same cut, but with the rows made as even as they can be. Greedy
+    // filling is what strands a single car under a full-width rake; cutting a
+    // twelve-car set as 6+6 instead of 11+1 reads as one train seen twice
+    // rather than as a train and an afterthought.
+    //
+    // Cars can't be reordered, so the only freedom is where the breaks go:
+    // a small dynamic program over (start car, rows left), scoring each row by
+    // how far its length strays from the average row. Squared, so one very
+    // short row costs more than two slightly short ones. Rakes are a dozen
+    // cars at most, so the table is tiny.
+    //
+    // Rows rarely come out exactly even, and a train that gets shorter as it
+    // goes down looks deliberate where one that grows looks like it overflowed.
+    // TOP_HEAVY breaks near-ties towards the wider row on top: weighting each
+    // row's width by how many rows are left puts the width early. It has to
+    // stay far below the cost of an actually worse split — a couple of pixels
+    // of imbalance, not a car's worth.
+    var TOP_HEAVY = 1e-3;
+
+    // Used only for rakes too long to search exhaustively; chooseLayout below
+    // is what normally decides the breaks.
+    function balancedRows(widths, rowCount, limit) {
+        const n = widths.length;
+        const prefix = [0];
+        widths.forEach((w, i) => prefix.push(prefix[i] + w));
+        const average = prefix[n] / rowCount;
+
+        // cost[j][i] — best score for cars i.. laid out in j rows, and the car
+        // that starts the row after the first of them.
+        const cost = [[]], next = [[]];
+        for (let i = 0; i <= n; i++) cost[0][i] = (i === n ? 0 : Infinity);
+
+        for (let j = 1; j <= rowCount; j++) {
+            cost[j] = []; next[j] = [];
+            for (let i = n; i >= 0; i--) {
+                let best = Infinity, bestEnd = -1;
+                for (let end = i + 1; end <= n; end++) {
+                    const width = prefix[end] - prefix[i];
+                    if (width > limit) break;          // and only wider from here
+                    const rest = cost[j - 1][end];
+                    if (rest === Infinity) continue;
+                    const score = rest + Math.pow(width - average, 2)
+                        - TOP_HEAVY * j * width;
+                    if (score < best) { best = score; bestEnd = end; }
+                }
+                cost[j][i] = best; next[j][i] = bestEnd;
+            }
+        }
+
+        if (cost[rowCount][0] === Infinity) return greedyRows(widths, limit);
+
+        const rows = [];
+        let start = 0;
+        for (let j = rowCount; j > 0; j--) {
+            const end = next[j][start];
+            rows.push(Array.from({ length: end - start }, (_, k) => start + k));
+            start = end;
+        }
+        return rows;
+    }
+
+    // Where the breaks go and how much the rake shrinks are the same decision,
+    // not two: a locomotive is half the length of the coaches behind it, so
+    // splitting a sixteen-car set down the middle gives a top row a coach-width
+    // shorter than the bottom one — even by count, small-headed to look at.
+    // Pulling one more car up fixes that, and costs a few percent of scale.
+    //
+    // So every split is priced with the scale it would need (a row can never be
+    // wider than the strip, so the widest row sets it), and the three things
+    // that make a rake look wrong trade off against each other:
+    //
+    //   spread  — how far the longest and shortest rows are apart
+    //   ascend  — how much of that is a row LONGER than the one above it, which
+    //             is the part that reads as a mistake rather than as tapering
+    //   shrink  — how far below their natural size the cars ended up
+    //
+    // Weights are in fractions of the strip width. ASCEND above 1 is what lets
+    // a car move up: it makes a bottom-heavy split cost more than the extra
+    // unevenness of the top-heavy one, while a rake that already splits evenly
+    // (spread and ascend both nil) still beats anything bought with shrinking.
+    var LAYOUT_ASCEND = 6;
+    var LAYOUT_SHRINK = 1.5;
+    // Enumerating every split is C(cars-1, rows-1): fine for a dozen cars in two
+    // or three rows, hopeless for a doubled TGV set on a phone, which is twenty
+    // cars over eight rows and fifty thousand splits. Past this many the search
+    // is restricted to cuts within LAYOUT_WINDOW cars of where an exactly even
+    // split would put them, which is where every layout worth having lives —
+    // the top-heavy one is a single car's shift off the even one — and turns the
+    // search back into a few thousand nodes.
+    var LAYOUT_FULL_SEARCH = 4000;
+    var LAYOUT_WINDOW = 1;
+    // Backstop for the case the window still can't tame; balancedRows takes over.
+    var LAYOUT_BUDGET = 60000;
+
+    // How many splits a full enumeration would visit, given up on as soon as it
+    // is clearly over the limit — these numbers overflow fast.
+    function splitCount(cars, rows) {
+        let count = 1;
+        for (let i = 1; i <= rows - 1; i++) {
+            count = count * (cars - 1 - (rows - 1) + i) / i;
+            if (count > LAYOUT_FULL_SEARCH) return Infinity;
+        }
+        return count;
+    }
+
+    // The best (scale, breaks) pair for a given number of rows, or null if none
+    // of them leaves the cars legible.
+    function chooseLayout(widths, rowCount, limit, natural, legible) {
+        const n = widths.length;
+        if (rowCount > n) return null;
+
+        const prefix = [0];
+        widths.forEach((w, i) => prefix.push(prefix[i] + w));
+
+        // Where an even-by-width split would cut, for the windowed search. Cuts
+        // are counted in cars, so the window follows the artwork: a row of long
+        // coaches and a row of short vans both get one car of slack either way.
+        const ideal = [];
+        if (splitCount(n, rowCount) === Infinity) {
+            let car = 0;
+            for (let j = 1; j < rowCount; j++) {
+                const target = prefix[n] * j / rowCount;
+                while (car < n && prefix[car] < target) car++;
+                ideal.push(car);
+            }
+        }
+
+        let best = null, budget = LAYOUT_BUDGET;
+
+        // Walk the cut positions: `cuts` holds the car each closed row ended on.
+        (function place(start, rowsLeft, cuts) {
+            if (budget-- < 0) return;
+            if (rowsLeft === 0) {
+                if (start !== n) return;
+
+                let from = 0;
+                const rows = cuts.map(end => {
+                    const width = prefix[end] - prefix[from];
+                    from = end;
+                    return width;
+                });
+                const scale = Math.min(natural, limit / Math.max.apply(null, rows));
+                if (!legible(scale)) return;
+
+                let ascend = 0;
+                for (let i = 1; i < rows.length; i++) {
+                    ascend += Math.max(0, (rows[i] - rows[i - 1]) * scale);
+                }
+                const spread = (Math.max.apply(null, rows)
+                    - Math.min.apply(null, rows)) * scale;
+                const cost = (spread + LAYOUT_ASCEND * ascend) / limit
+                    + LAYOUT_SHRINK * (natural - scale) / natural;
+                if (!best || cost < best.cost) best = { cost, scale, cuts: cuts.slice() };
+                return;
+            }
+
+            // Leave at least one car for each row still to come, and — when the
+            // search is windowed — stay near where the even split would cut.
+            let first = start + 1, last = n - rowsLeft + 1;
+            if (ideal.length) {
+                // The last row has no choice: it ends on the last car.
+                const around = rowsLeft === 1 ? n : ideal[rowCount - rowsLeft];
+                first = Math.max(first, around - LAYOUT_WINDOW);
+                last = Math.min(last, around + LAYOUT_WINDOW);
+            }
+            for (let end = first; end <= last; end++) {
+                cuts.push(end);
+                place(end, rowsLeft - 1, cuts);
+                cuts.pop();
+            }
+        })(0, rowCount, []);
+
+        if (!best) return null;
+
+        let start = 0;
+        const rows = best.cuts.map(end => {
+            const row = Array.from({ length: end - start }, (_, k) => start + k);
+            start = end;
+            return row;
+        });
+        return { scale: best.scale, rows };
+    }
+
+    // Re-emit the sized strip as markup. Scaling every car by the same factor
+    // keeps the proportions normalizeStrip just worked out, so the only two
+    // decisions left are how much to shrink the whole rake and where to break
+    // it. Fewer rows always wins — a set that misses one row by half a car is
+    // squeezed onto it rather than spilling over — but only as far as
+    // STRIP_MIN_CAR_HEIGHT, below which a car stops reading as a vehicle.
+    function bakeStrip(strip) {
+        const cars = Array.from(strip.querySelectorAll('img'))
+            .filter(img => img.naturalHeight || img.getBoundingClientRect().height);
+        if (!cars.length) return '';
+
+        const boxes = cars.map(img => img.getBoundingClientRect());
+        const heights = boxes.map(box => box.height);
+        const widths = boxes.map(box => box.width);
+        const shortest = Math.min.apply(null, heights);
+        const widest = Math.max.apply(null, widths);
+        // Whatever the strip has to fit into RIGHT NOW — a phone in portrait
+        // gives a third of the desktop width, and every decision below is
+        // relative to it.
+        const limit = stripContentWidth();
+
+        // A double-deck coach drawn wider than the whole tooltip has to come
+        // down whatever the height rule says — it has no row to spill onto.
+        const natural = Math.min(1, limit / widest);
+        // Shrinking below the natural size is what needs justifying; the size
+        // normalizeStrip chose is always allowed, even for stubby artwork that
+        // is already under the minimum.
+        const legible = s => s >= natural || s * shortest >= STRIP_MIN_CAR_HEIGHT;
+
+        // Fewest rows first, so a rake that misses one row by half a car is
+        // squeezed onto it instead of spilling. Only once a row count proves
+        // impossible to render legibly does the next one get a look.
+        const most = greedyRows(widths.map(w => w * natural), limit).length;
+        let scale = natural, rows = null;
+
+        for (let k = 1; k <= most && !rows; k++) {
+            const layout = chooseLayout(widths, k, limit, natural, legible);
+            if (layout) { scale = layout.scale; rows = layout.rows; }
+        }
+
+        // A rake long enough to blow the search budget, or one whose artwork is
+        // already below the legible height: fall back to the even split at the
+        // natural size, wrapped greedily if even that can't be cut.
+        if (!rows) {
+            const sized = widths.map(w => w * natural);
+            const fallback = greedyRows(sized, limit);
+            rows = balancedRows(sized, fallback.length, limit);
+        }
+
+        // Widths are written out alongside the heights, and the strip is given
+        // the width of its longest row, so the panel measures the same on its
+        // first layout as on its last. Left to `width:auto` a car has no width
+        // until its image resolves, so the tooltip was measured narrow, placed
+        // to the right of the cursor, and then thrown back against the left
+        // edge a frame later when the rake finally took up its real space.
+        const rowWidths = rows.map(row =>
+            row.reduce((sum, i) => sum + widths[i] * scale, 0));
+
+        return `<div class="statsTipMedia strip" style="width:${
+            Math.max.apply(null, rowWidths).toFixed(1)}px">` + rows.map(row =>
+            '<div class="statsTipStripRow">' + row.map(i => {
+                return `<img src="${escapeHtml(cars[i].src)}" alt=""`
+                    + ` style="width:${(widths[i] * scale).toFixed(1)}px`
+                    + `;height:${(heights[i] * scale).toFixed(1)}px"`
+                    + ` onerror="this.style.display='none'">`;
+            }).join('') + '</div>'
+        ).join('') + '</div>';
+    }
+
+    // The width the cached markup was cut for is no longer the width on screen
+    // — a rotation, a resized window. Everything baked at the old width is
+    // wrong, and the oven goes with it so the rebuilt strips start clean.
+    //
+    // Rebuilding immediately rather than just emptying the cache: `prepare`
+    // only runs when a chart's formatter is built, so a strip dropped now and
+    // not replaced would leave the tooltip picture-less until the next render.
+    function restripForWidth() {
+        const width = stripContentWidth();
+        if (width === stripCacheWidth) return;
+        stripCacheWidth = width;
+
+        const known = stripUnits;
+        stripUnits = {};
+        stripCache = {};
+        if (stripOven) stripOven.innerHTML = '';
+        Object.keys(known).forEach(key => ensureStrip(key, known[key]));
+    }
+
+    function ensureStrip(key, units) {
+        restripForWidth();      // width is settled first; no recursion after
+        if (key in stripCache || !units || !units.length) return;
+        stripUnits[key] = units;
+        stripCache[key] = '';   // claim it, so a second pass doesn't rebuild
+
+        const strip = document.createElement('div');
+        strip.style.cssText = 'display:flex;align-items:flex-end;';
+        units.forEach((unit, index) => {
+            const img = document.createElement('img');
+            if (unit.image) {
+                img.src = wagonImgSrc(WAGON_BASE, unit);
+                if (unit.px_per_meter) img.setAttribute('data-ppm', unit.px_per_meter);
+            } else {
+                // normalizeStrip knows this class and scales the outline to sit
+                // at the same real-world scale as the drawn cars beside it.
+                img.className = 'wagon-placeholder-img';
+                img.src = placeholderSrc(unit, index === 0, index === units.length - 1);
+            }
+            strip.appendChild(img);
+        });
+        ovenElement().appendChild(strip);
+
+        // onApply fires again as each image finishes loading, so the cache
+        // converges on the fully-sized version. An image that lands after a
+        // resize belongs to the discarded build and must not overwrite the
+        // strip that has since been cut for the new width.
+        const builtFor = stripCacheWidth;
+        normalizeStrip(strip, {
+            target: 40, min: 18, max: 70,
+            onApply: function () {
+                if (builtFor !== stripCacheWidth) return;
+                stripCache[key] = bakeStrip(strip);
+            }
+        });
+    }
+
+    // The operator's mark, standing to the left of the line it runs. Purely an
+    // illustration — the name is not spelled out, so it stays on the `title` for
+    // anyone who needs it. Nothing is emitted when there is no logo, rather than
+    // an empty box holding the row open.
+    function operatorMark(operator) {
+        // The ORIGINAL file, not the resized one. resize_image pastes every logo
+        // onto a fixed 240x40 transparent canvas, right-aligned — all 356 of
+        // them are that exact size. In the axis gutter that is invisible and
+        // even useful: the box has the same 6:1 ratio and the padding pushes
+        // each logo flush against the axis. As a flex item it is not invisible
+        // at all, because the box includes the transparent margin, so a narrow
+        // mark floated right and a wide one didn't, and no two rows lined up.
+        const logo = operator && operatorLogoFullUrl(operator);
+        if (!logo) return '';
+        return `<img class="statsTipLineLogo" src="${escapeHtml(logo)}"`
+            + ` alt="${escapeHtml(operator)}" title="${escapeHtml(operator)}"`
+            + ` onerror="this.style.display='none'">`;
+    }
+
+    function categoryKey(item) {
+        return item.label || item.trainset;
+    }
+
+    function mediaStrip(item) {
+        return stripCache[categoryKey(item)] || '';
+    }
+
+    function prepareStrip(item) {
+        ensureStrip(categoryKey(item), item.units);
+    }
+
+    function mediaPhoto(photo) {
+        const credit = photo.link
+            ? `<a class="statsTipCredit" href="${escapeHtml(photo.link)}" target="_blank"`
+              + ` rel="noopener">${escapeHtml(photo.attr)}</a>`
+            : '';
+        return `<div class="statsTipMedia hasPhoto"><img class="photo" src="${escapeHtml(photo.thumb)}" alt="">`
+            + `${credit}</div>`;
+    }
+
+    function commonTooltipFormatter(params, images, mediaHtml) {
         const config = METRICS_CONFIG[currentMetric];
-        let result = params[0].name + '<br/>';
+        const name = params[0].name;
+        const media = mediaHtml !== undefined
+            ? mediaHtml
+            : (customMediaHtml || mediaArt(images && images[name], false));
+        // A spec may supply its own heading — the lines chart labels its number
+        // and credits the operator under it — otherwise it is just the name.
+        let result = `<div class="statsTip">${media}`
+            + (customHeaderHtml || `<div class="statsTipTitle">${escapeHtml(name)}</div>`);
 
         if (isCombinedMode) {
             // Group by trip type
@@ -936,24 +2182,24 @@
             // Display grouped by trip type
             Object.keys(byTripType).forEach(tripTypeLabel => {
                 const data = byTripType[tripTypeLabel];
-                result += `<strong>${tripTypeLabel}</strong><br/>`;
-                
+                result += `<div class="statsTipGroup">${tripTypeLabel}</div>`;
+
                 if (data.past > 0) {
-                    result += `&nbsp;&nbsp;{{past}}: ${config.formatValue(data.past)}<br/>`;
+                    result += `<div class="statsTipRow statsTipSub">{{past}}: ${config.formatValue(data.past)}</div>`;
                 }
                 if (data.future > 0) {
-                    result += `&nbsp;&nbsp;{{plannedFuture}}: ${config.formatValue(data.future)}<br/>`;
+                    result += `<div class="statsTipRow statsTipSub">{{plannedFuture}}: ${config.formatValue(data.future)}</div>`;
                 }
             });
             
             // Add totals
             if (totalPast > 0 || totalFuture > 0) {
-                result += '<br/><strong>Total</strong><br/>';
+                result += '<div class="statsTipGroup">Total</div>';
                 if (totalPast > 0) {
-                    result += `&nbsp;&nbsp;{{past}}: ${config.formatValue(totalPast)}<br/>`;
+                    result += `<div class="statsTipRow statsTipSub">{{past}}: ${config.formatValue(totalPast)}</div>`;
                 }
                 if (totalFuture > 0) {
-                    result += `&nbsp;&nbsp;{{plannedFuture}}: ${config.formatValue(totalFuture)}<br/>`;
+                    result += `<div class="statsTipRow statsTipSub">{{plannedFuture}}: ${config.formatValue(totalFuture)}</div>`;
                 }
             }
         } else {
@@ -967,259 +2213,519 @@
                     } else {
                         marker = item.marker;
                     }
-                    result += `${marker} ${item.seriesName}: ${config.formatValue(item.value)}<br/>`;
+                    result += `<div class="statsTipRow">${marker} ${item.seriesName}: ${config.formatValue(item.value)}</div>`;
                 }
             });
         }
 
-        return result;
+        return result + '</div>';
     }
 
-    function renderCharts(data) {
-        var hGridConfig = {
-            bottom: '28px',
-            left: isMobile() ? '60px' : '120px'
-        };
-        // Material/Routes/Stations carry their category name as an inline bar
-        // label instead of an axis label, so the axis gutter can shrink down.
-        var inlineLabelGridConfig = {
-            bottom: '28px',
-            left: '10px',
-            right: '20px'
-        };
-        var yGridConfig = {
-            bottom: '28px',
-            left: '28px'
-        };
-        var commonTooltipConfig = {
-            trigger: 'axis',
-            axisPointer: { type: 'shadow' },
-            formatter: commonTooltipFormatter,
-            confine: true,  // ADD THIS - keeps tooltip within chart container
-            appendToBody: true,  // ADD THIS - appends to body for better positioning
-            position: function (point, params, dom, rect, size) {
-                // Custom position to prevent overflow
-                var x = point[0];
-                var y = point[1];
-                var viewWidth = size.viewSize[0];
-                var viewHeight = size.viewSize[1];
-                var boxWidth = size.contentSize[0];
-                var boxHeight = size.contentSize[1];
-                
-                // Adjust horizontal position
-                if (x + boxWidth > viewWidth) {
-                    x = viewWidth - boxWidth - 10;
-                }
-                
-                // Adjust vertical position
-                if (y + boxHeight > viewHeight) {
-                    y = viewHeight - boxHeight - 10;
-                }
-                
-                return [x, y];
-            }
-        };
+    // One gutter for every horizontal category chart, whether it fills it with
+    // country names, operator logos, wagons — or nothing at all.
+    //
+    // Sizing each chart to its own content was tidier per chart and worse as a
+    // page: the plots started at a different offset in every card, so the grid
+    // read as ragged. Reserving the same strip everywhere lines the bars up
+    // across all nine, at the cost of some plotting width on the charts that
+    // put their names on the bars instead.
+    function categoryGutter() {
+        return isMobile() ? 60 : 120;
+    }
 
-        var dataToUse = expandedMode ? data : {
-            countries: groupData(data.countries, 'country'),
-            operators: groupData(data.operators, 'operator'),
-            routes: groupData(data.routes, 'route'),
-            stations: groupData(data.stations, 'station'),
-            material: groupData(data.material, 'material'),
-            years: data.years,
-            months: data.months
-        };
+    function hGridConfig(gutterPx) {
+        return { bottom: '28px', left: gutterPx + 'px', right: '20px' };
+    }
 
-        var commonCatAxisOptions = {
-            type: 'category',
-            axisLabel: {
-                rotate: 40,
-                hideOverlap: true,
-                formatter: function(value) {
-                    return expandedMode ? value : truncateLabel(value);
-                }
-            }
-        };
+    function yGridConfig() {
+        return { bottom: '28px', left: '28px' };
+    }
 
-        var commonCatYAxisOptions = {
-            type: 'category',
-            inverse: true,
-            axisLabel: { show: false }
-        };
+    // Metrics measured in seconds get the time-aware axis.
+    function isDurationLike(metric) {
+        return metric === 'duration' || metric === 'delay' || metric === 'delayAccumulated';
+    }
 
-        var commonValAxisOptions = {
+    function valueAxisConfig(maxValue, axisBreak) {
+        // The duration axis sizes its unit and tick spacing from the values, and
+        // a break changes which values matter — so it needs telling. Everything
+        // else keeps ECharts' own tick choice either way.
+        const config = isDurationLike(currentMetric)
+            ? getDurationAxisConfig(maxValue, LANG, axisBreak)
+            : commonValAxisOptions();
+
+        if (axisBreak) {
+            config.breaks = [{ start: axisBreak.start, end: axisBreak.end, gap: '3%' }];
+            config.breakArea = { expandOnClick: true };
+        }
+        return config;
+    }
+
+    function commonValAxisOptions() {
+        return {
             type: 'value',
             min: undefined,
             max: undefined,
             interval: undefined,
+            // Trips are whole things. On a chart whose bars are 1 and 2, ECharts
+            // otherwise offers 0.5 and 1.5, which are not a number of trips.
+            // Distances, durations and emissions are continuous, so they keep
+            // their fractional ticks.
+            minInterval: currentMetric === 'trips' ? 1 : undefined,
             axisLabel: {
                 hideOverlap: true,
                 formatter: function (value) {
-                    if(currentMetric === 'km'){
+                    if (currentMetric === 'km') {
                         return mToKm(value) + ' km';
                     }
-                    else if (currentMetric === 'carbon'){
+                    else if (currentMetric === 'carbon') {
                         return value >= 1e9 ? (value / 1e9) + ' Mt' : value >= 1e6 ? (value / 1e6) + ' kt' : value >= 1e3 ? (value / 1e3) + ' t' : value + ' kg';
                     }
-                    return value >= 1000 ? (value / 1000) + 'k' : value;
+                    // Trimmed rather than printed raw: a break edge lands on
+                    // values like 6.720000000000001 otherwise.
+                    return value >= 1000
+                        ? trimNumber(value / 1000) + 'k'
+                        : trimNumber(value);
                 }
             }
         };
-        
-        // Countries Chart
-        var countriesMax = calculateMaxValue(dataToUse.countries);
-        var countriesValueAxisOptions = (currentMetric === 'duration')
-            ? getDurationAxisConfig(countriesMax, LANG)
-            : commonValAxisOptions;
+    }
 
-        var countriesChart = echarts.init(document.getElementById('chart-countries'));
-        chartsInstances['countries'] = countriesChart;
-        countriesChart.setOption({
-            title: { text: "{{crossedCountries}}" },
-            tooltip: commonTooltipConfig,
-            yAxis: {
-                type: 'category',
-                inverse: true,
-                axisLabel: {
-                    hideOverlap: true,
-                    formatter: function (value) {
-                        return !isMobile() ? value : value.slice(-5);
-                    }
-                },
-                data: dataToUse.countries.map(item => {
-                    return item.country === "{{others}}" ? item.country : `${regionNames.of(item.country)} ${getFlagEmoji(item.country)}`;
-                })
-            },
-            xAxis: countriesValueAxisOptions,
-            grid: hGridConfig,
-            series: createSeries(dataToUse.countries, getColor(tripType))
-        });
+    function commonCatAxisOptions() {
+        return {
+            type: 'category',
+            axisLabel: {
+                rotate: 40,
+                hideOverlap: true,
+                formatter: function (value) {
+                    return expandedMode ? value : truncateLabel(value);
+                }
+            }
+        };
+    }
 
-        // Operators Chart
-        var operatorsMax = calculateMaxValue(dataToUse.operators);
-        var operatorsValueAxisOptions = (currentMetric === 'duration')
-            ? getDurationAxisConfig(operatorsMax, LANG)
-            : commonValAxisOptions;
+    // Tooltips render synchronously from what we already have — the airframe
+    // silhouette — and upgrade in place if a photo of the actual aircraft comes
+    // back. ECharts' three-argument formatter exists exactly for this: return
+    // now, call back later. Nothing is fetched until a bar is hovered, and a
+    // failed or absent photo just leaves the silhouette showing.
+    // Set for the duration of a formatter call so commonTooltipFormatter can
+    // reach it without threading another argument through every caller.
+    var customMediaHtml = '';
+    var customHeaderHtml = '';
 
-        var operatorsChart = echarts.init(document.getElementById('chart-operators'));
-        chartsInstances['operators'] = operatorsChart;
-        if (dataToUse.operators.length == 0) {
-            $("#chart-operators").parent().parent().hide();
-        } else {
-            $("#chart-operators").parent().parent().show();
-        }
-        operatorsChart.setOption({
-            title: { text: "{{operator}}" },
-            tooltip: commonTooltipConfig,
-            yAxis: {
-                type: 'category',
-                inverse: true,
-                axisLabel: operatorAxisLabelConfig(),
-                data: dataToUse.operators.map(item => item.operator)
-            },
-            xAxis: operatorsValueAxisOptions,
-            grid: hGridConfig,
-            series: createSeries(dataToUse.operators, getColor(tripType))
-        });
+    function asyncPhotoFormatter(spec, rows, images) {
+        const byCategory = {};
+        rows.forEach(item => { byCategory[categoryOf(spec, item)] = item; });
+        // Anything the spec wants ready before the first hover (a consist strip
+        // has to be measured off-screen first).
+        if (spec.prepare) rows.forEach(spec.prepare);
 
-        var timeSeriesKey = yearDefined == "true" ? "months" : "years";
-        var timeSeriesData = dataToUse[timeSeriesKey] || [];
-        var timeSeriesMax = calculateMaxValue(timeSeriesData);
-        var timeSeriesValueAxisOptions = (currentMetric === 'duration')
-            ? getDurationAxisConfig(timeSeriesMax, LANG)
-            : commonValAxisOptions;
+        // Rendered cards, by category. ECharts re-runs the formatter as the
+        // pointer moves inside a row; handing back the identical string lets it
+        // skip work, and costs one entry per hovered bar.
+        const cards = {};
 
-        var timeSeriesChart = echarts.init(document.getElementById('chart-timeseries'));
-        chartsInstances[timeSeriesKey] = timeSeriesChart;
-        timeSeriesChart.setOption({
-            title: { text: timeSeriesKey === "months" ? "{{month}}" : "{{year}}" },
-            tooltip: commonTooltipConfig,
-            xAxis: {
-                ...commonCatAxisOptions,
-                data: timeSeriesData.map(item => timeSeriesKey === "months" ? formatMonthLabel(item.month) : item.year)
-            },
-            yAxis: timeSeriesValueAxisOptions,
-            grid: yGridConfig,
-            series: createSeries(timeSeriesData, getColor(tripType))
-        });
+        return function (params, ticket, callback) {
+            const name = params[0].name;
+            const art = images && images[name];
+            const key = spec.photoKey && spec.photoKey(byCategory[name]);
+            // Resolved per hover, not per render: a strip is only sized once its
+            // images have loaded, which is after the chart is drawn.
+            customMediaHtml = spec.media && byCategory[name]
+                ? (spec.media(byCategory[name]) || '') : '';
+            customHeaderHtml = spec.tooltipHeader && byCategory[name]
+                ? (spec.tooltipHeader(byCategory[name], name) || '') : '';
 
+            const card = photo => commonTooltipFormatter(params, images,
+                photo ? mediaPhoto(photo) : mediaArt(art, false));
 
-        var materialLabel = params => params.name;
-        var routeLabel = params => formatRouteLabel(params.name);
-        var stationLabel = params => extractStationCode(params.name);
+            // Nothing to look up: draw the silhouette and be done.
+            if (!key) return commonTooltipFormatter(params, images);
 
-        var materialMax = calculateMaxValue(dataToUse.material);
-        var materialValueAxisOptions = (currentMetric === 'duration')
-            ? getDurationAxisConfig(materialMax, LANG)
-            : commonValAxisOptions;
-        // Material Chart
-        var materialChart = echarts.init(document.getElementById('chart-material'));
-        chartsInstances['material'] = materialChart;
-        if (dataToUse.material.length == 0) {
-            $("#chart-material").parent().parent().hide();
-        } else {
-            $("#chart-material").parent().parent().show();
-            materialChart.setOption({
-                title: { text: "{{material_type}}" },
-                tooltip: commonTooltipConfig,
-                yAxis: {
-                    ...commonCatYAxisOptions,
-                    data: dataToUse.material.map(item => item.material)
-                },
-                xAxis: materialValueAxisOptions,
-                grid: inlineLabelGridConfig,
-                series: createSeries(dataToUse.material, getColor(tripType), materialLabel)
+            // Looked up before — render the answer with no loading state.
+            if (key in photoResults) {
+                if (!(name in cards)) cards[name] = card(photoResults[key]);
+                return cards[name];
+            }
+
+            // Always call back, photo or not: on a miss this is what clears the
+            // loading sweep, which would otherwise run forever.
+            requestAircraftPhoto(key).then(photo => {
+                cards[name] = card(photo);
+                callback(ticket, cards[name]);
             });
-            applyInlineLabels(materialChart, dataToUse.material, getColor(tripType), materialLabel);
+
+            return commonTooltipFormatter(params, images, mediaArt(art, true));
+        };
+    }
+
+    // Keep the panel still while the pointer stays on one bar.
+    //
+    // The default is to re-place the tooltip from the raw pointer position on
+    // every mousemove, which for a panel carrying a photo or a whole rake reads
+    // as the thing sliding around under the cursor. Instead the anchor is taken
+    // once, when the hovered row changes, and held for as long as the pointer
+    // stays on that row: moving along a bar leaves it perfectly still, and
+    // moving between bars steps it once.
+    //
+    // Anchoring on the pointer rather than converting the axis to pixels keeps
+    // this correct under `appendToBody`, where tooltip and chart coordinates do
+    // not share an origin.
+    function rowAnchoredPosition(spec) {
+        let anchoredIndex = null;
+        let acrossBars = null;   // set once, when the chart is first hovered
+        let alongBars = null;    // reset whenever the hovered bar changes
+        let widestBox = 0;
+        let tallestBox = 0;
+        let placed = null;       // the coordinates handed back for that bar
+        let placedFor = '';
+
+        return function (point, params, dom, rect, size) {
+            const index = params && params[0] ? params[0].dataIndex : null;
+
+            // One bar, one position. ECharts asks again on every mousemove and
+            // hands back a contentSize measured from the panel as it currently
+            // stands, which for a consist strip settles over a frame or two as
+            // the rows take their heights; re-deriving the placement from that
+            // had the panel twitching for as long as the pointer sat still.
+            //
+            // Held rather than cached outright, and the test is whether the
+            // panel still FITS where it was put, not whether the arithmetic
+            // came out the same. A box that grew as it rendered gives a
+            // different answer every frame while remaining perfectly well
+            // placed; only a box that no longer fits inside the chart has
+            // actually earned a move.
+            const stamp = index + '@' + size.viewSize.join('x');
+            const settle = candidate => {
+                const [viewW, viewH] = size.viewSize;
+                const [boxW, boxH] = size.contentSize;
+                const fits = placed && stamp === placedFor
+                    && placed[0] + boxW <= viewW - 5 && placed[1] + boxH <= viewH - 5;
+                if (!fits) placed = candidate;
+                placedFor = stamp;
+                return placed;
+            };
+
+            // Without hover there is no "the pointer is still on this row", so
+            // none of the anchoring below applies. A tap is a single event at an
+            // arbitrary spot, and the latched anchor — taken from whichever bar
+            // happened to be tapped first — would place every later panel from a
+            // position the finger left long ago.
+            //
+            // So on touch the panel is parked, not anchored: centred across the
+            // chart and pinned to whichever half the tap did NOT land in, so it
+            // never covers the bar it describes. Measured live rather than from
+            // the high-water box, because a phone-width chart is easily narrower
+            // than the widest panel it can produce and clamping to that would
+            // push every panel to the same corner.
+            //
+            // A narrow window on a desktop lands here too — the test folds in
+            // screen width — so this branch does get a live pointer moving
+            // across it, and it has to hold still under one just like the
+            // hover branch does. Which half the panel parks in is decided from
+            // the pointer's first position on the bar, not its latest: deciding
+            // it live flipped the panel top-to-bottom as the cursor crossed the
+            // middle of the chart.
+            if (isTouchTooltip()) {
+                const [viewW, viewH] = size.viewSize;
+                const [boxW, boxH] = size.contentSize;
+                if (index !== anchoredIndex) {
+                    anchoredIndex = index;
+                    alongBars = point[1];
+                }
+                const x = Math.max(6, Math.min((viewW - boxW) / 2, viewW - boxW - 6));
+                const y = alongBars > viewH / 2 ? 6 : Math.max(6, viewH - boxH - 6);
+                return settle([x, y]);
+            }
+
+            if (acrossBars === null) {
+                acrossBars = spec && spec.vertical ? point[1] : point[0];
+            }
+            if (index !== anchoredIndex) {
+                anchoredIndex = index;
+                alongBars = spec && spec.vertical ? point[0] : point[1];
+            }
+
+            const [viewWidth, viewHeight] = size.viewSize;
+            // Clamp against the largest panel this chart has produced, not the
+            // one on screen. Row panels differ in size — a ten-car rake is far
+            // wider than a single railcar — and clamping to each in turn walks
+            // the panel back and forth as you move down the list. Taking the
+            // high-water mark makes it settle: it steps aside once for the
+            // widest row and then holds still.
+            widestBox = Math.max(widestBox, size.contentSize[0]);
+            tallestBox = Math.max(tallestBox, size.contentSize[1]);
+            const boxWidth = widestBox;
+            const boxHeight = tallestBox;
+
+            // Neither coordinate tracks the pointer. Following the axis the
+            // bars run along looked harmless — that axis carries no row
+            // information — but the pointer never travels down a list in a
+            // straight line, so every step sideways slid the panel. It moves
+            // once per bar, and only across them.
+            let x = spec && spec.vertical ? alongBars : acrossBars;
+            let y = spec && spec.vertical ? acrossBars : alongBars;
+
+            // Offset off the cursor so the panel never sits under it.
+            x += 16;
+            y += 16;
+
+            x = Math.max(6, Math.min(x, viewWidth - boxWidth - 6));
+            y = Math.max(6, Math.min(y, viewHeight - boxHeight - 6));
+            return settle([x, y]);
+        };
+    }
+
+    function commonTooltipConfig(spec, rows) {
+        const images = tooltipImages(spec, rows);
+        return {
+            trigger: 'axis',
+            axisPointer: { type: 'shadow' },
+            extraCssText: 'border-radius:8px;padding:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);', borderWidth: 0,
+            formatter: asyncPhotoFormatter(spec, rows, images),
+            confine: true,   // keep the panel inside the chart box
+            // Positions returned by `position` are chart-relative either way,
+            // but under appendToBody ECharts converts them to page coordinates
+            // against document.body. That conversion is taken once, when the
+            // panel is placed, so anything that moves the chart afterwards —
+            // scrolling on a phone, a URL bar collapsing and reflowing the page —
+            // leaves the panel behind at the old page position. Kept off touch,
+            // where the panel then lives in the chart container and moves with it.
+            appendToBody: !isTouchTooltip(),
+            position: rowAnchoredPosition(spec)
+        };
+    }
+
+    // ============================================
+    // BROKEN VALUE AXIS
+    // ============================================
+    // Scattered data leaves one bar — usually "others" — dozens of times the
+    // runner-up, which flattens every other bar to a hairline. Measured on real
+    // accounts the ratio is routinely 20-90x.
+    //
+    // ECharts 6 draws this natively: `breaks` collapses a stretch of the scale
+    // and `breakArea` renders the torn-paper zigzag across both the bar and the
+    // axis, with click-to-expand to restore the true ratio. That replaced a
+    // hand-drawn version of the same idea — clipping the axis and painting the
+    // cut with `graphic` elements — which had to recompute pixel geometry on
+    // every resize and could not be expanded.
+    var AXIS_BREAK_RATIO = 6;       // dominant bar must be this many times #2
+    var AXIS_BREAK_HEADROOM = 1.12; // air above #2 before the scale is cut
+    var AXIS_BREAK_TAIL = 0.1;      // how much scale the cut bar keeps past the cut
+
+    function computeAxisBreak(values) {
+        if (!axisBreakEnabled) return null;
+        // Two bars can't be "one outlier and the rest"; there is no rest.
+        if (values.length < 3) return null;
+
+        const ranked = values.slice().sort((a, b) => b - a);
+        const [top, runnerUp] = ranked;
+        if (!(runnerUp > 0) || top < runnerUp * AXIS_BREAK_RATIO) return null;
+
+        // Everything below the cut keeps its resolution; beyond it the dominant
+        // bar gets a short stub, so it still reads as running off the scale
+        // rather than stopping there.
+        //
+        // Both edges become axis ticks, so they are snapped to round numbers —
+        // straight off the ratio they read as 6.720000000000001 and 286.328.
+        //
+        // One step for both, taken from the magnitude of the LOWER edge: that is
+        // the end of the scale the small bars live on, so it sets how fine the
+        // reading has to be, and using it for both keeps the two edges on the
+        // same footing as each other and as the ticks around them. 6720 and
+        // 130593 become 7000 and 130000, not 6800 and 130000.
+        //
+        // A duration is not read in powers of ten — 500000 seconds is not a
+        // round anything — so there the step is the unit the near side of the cut
+        // is labelled in, which puts both edges on whole days or whole hours like
+        // every other tick.
+        //
+        // The far edge takes the same small step, not the coarse unit the top
+        // segment is labelled in: the step is how much scale is left beyond the
+        // cut, and the width the segment is given follows that span directly. A
+        // week-wide stub takes most of the chart with it.
+        const from = runnerUp * AXIS_BREAK_HEADROOM;
+        const to = top - from * AXIS_BREAK_TAIL;
+        const step = isDurationLike(currentMetric)
+            ? brokenDurationScale(from, top).divisor
+            : Math.pow(10, Math.floor(Math.log10(from)));
+
+        const start = snap(Math.ceil(from / step) * step);
+        // Nearest, not down: flooring turned 130593 into 129000 when 130000 is
+        // the tick everyone expects.
+        //
+        // Held a whole step below the dominant bar, so there is always a stub of
+        // it left beyond the cut. Rounding to the top itself left none — the
+        // tear ended up pinned to the right edge with nothing after it, which
+        // reads as a rendering fault rather than a bar running off the scale.
+        const end = snap(Math.min(
+            Math.round(to / step) * step,
+            (Math.ceil(top / step) - 1) * step));
+        return end > start ? { start: start, end: end } : null;
+    }
+
+    // Multiplying back up by a fractional step reintroduces the dust the
+    // rounding was there to remove (68 * 0.1 = 6.800000000000001).
+    function snap(value) {
+        return Number(value.toPrecision(12));
+    }
+
+    // ============================================
+    // CHART GRID
+    // ============================================
+    // A chart earns a slot when its trip type can show it, its dataset came back
+    // with something, and the user hasn't switched it off in the gear modal.
+    function visibleCharts(data) {
+        return applicableCharts().filter(spec =>
+            !hiddenCharts.has(spec.key) && (data[spec.dataset] || []).length > 0);
+    }
+
+    function buildChartGrid(specs) {
+        const grid = document.getElementById('chartGrid');
+        // ECharts keeps internal state tied to the DOM node it was initialised
+        // on, so instances have to be disposed before the nodes go away.
+        Object.values(chartsInstances).forEach(chart => chart.dispose());
+        chartsInstances = {};
+
+        grid.innerHTML = specs.map(spec => `
+            <div class="col">
+                <div class="chart-container position-relative">
+                    <button class="btn btn-light btn-sm expand-button position-absolute top-0 end-0 m-2"
+                            data-chart-key="${spec.key}" style="z-index: 1000;">
+                        <i class="fa-solid fa-up-right-and-down-left-from-center"></i>
+                    </button>
+                    <div id="chart-${spec.key}" style="width: 100%; height: 400px;"></div>
+                </div>
+            </div>
+        `).join('');
+
+        grid.querySelectorAll('.expand-button').forEach(button => {
+            button.addEventListener('click', () => expandChart(button.dataset.chartKey));
+        });
+    }
+
+    function categoryOf(spec, item) {
+        return spec.category ? spec.category(item) : item[spec.idKey];
+    }
+
+    // Pictures on the category axis win over an inline label: on the material
+    // chart for flights the axis carries the airframe silhouette while the name
+    // still rides on the bar. When there is no artwork for these rows the chart
+    // degrades to whatever it would have shown anyway.
+    function usesAxisImages(spec, rows) {
+        return Boolean(spec.axisImage && spec.image && rows.some(item => spec.image(item)));
+    }
+
+    // Share of a chart's rows whose name must fit the gutter before the gutter
+    // is used for names at all. Not all of them: one long outlier shouldn't
+    // push a whole chart's labels onto its bars.
+    var AXIS_NAME_FIT_RATIO = 0.8;
+    var INLINE_GUTTER_PX = 10;
+    var FULLSCREEN_GUTTER_PX = 300;
+    // How many rows a fullscreen ranked chart shows at once. Fixed, and scrolled
+    // through — see the dataZoom in expandChart().
+    var FULLSCREEN_WINDOW_ROWS = 21;
+
+    // What the category axis carries, and how much room to keep for it.
+    //
+    // Reserving the full gutter everywhere lined the bars up but left a blank
+    // strip on any chart with nothing to put there. Sizing it per chart avoided
+    // the blank but made the grid ragged. So: a chart with no pictures puts its
+    // names in the gutter when they FIT there — material types and power types
+    // are short, and then they read exactly like the country chart — and only
+    // falls back to labels-on-bars, with the gutter given up, when they don't.
+    // Routes and stations never fit; nearly everything else does.
+    function categoryAxisPlan(spec, rows, categories, gutterPx) {
+        if (usesAxisImages(spec, rows)) return { mode: 'images', gutter: gutterPx };
+        if (!spec.inlineLabel) return { mode: 'axis', gutter: gutterPx };
+
+        const budget = gutterPx - 12;
+        const fits = categories.filter(name => measureLabelWidth(name) <= budget).length;
+        if (categories.length && fits / categories.length >= AXIS_NAME_FIT_RATIO) {
+            return { mode: 'names', gutter: gutterPx, budget: budget };
+        }
+        return { mode: 'inline', gutter: INLINE_GUTTER_PX };
+    }
+
+    function categoryAxisLabel(spec, rows, plan) {
+        if (plan.mode === 'images') return imageAxisLabelConfig(spec, rows);
+        if (plan.mode === 'names') {
+            return { hideOverlap: true, formatter: value => fitLabel(value, plan.budget) };
+        }
+        // Labels ride on the bars, so the axis itself stays blank.
+        if (plan.mode === 'inline') return { show: false };
+        return spec.axisLabel ? spec.axisLabel() : { hideOverlap: true };
+    }
+
+    function renderChart(spec, rows) {
+        const element = document.getElementById('chart-' + spec.key);
+        if (!element) return;
+
+        const chart = echarts.init(element);
+        chartsInstances[spec.key] = chart;
+
+        const color = getColor(tripType);
+        const categories = rows.map(item => categoryOf(spec, item));
+        const axisBreak = computeAxisBreak(rows.map(itemTotal));
+        const valueAxis = valueAxisConfig(calculateMaxValue(rows), axisBreak);
+        const barMaxWidth = barThicknessCap(element, spec.vertical);
+        const plan = categoryAxisPlan(spec, rows, categories, categoryGutter());
+        const labelBudgetPx = labelBudget(element, plan.gutter, axisBreak, calculateMaxValue(rows));
+        // Names go on the bars unless the axis is already showing them. With
+        // pictures in the gutter both belong: the silhouette says what kind of
+        // thing it is, the bar says which one. Tying this to the 'inline' mode
+        // alone silently stripped the names off every picture chart.
+        const labelFormatter = spec.inlineLabel && plan.mode !== 'names'
+            ? (params => fitLabel(spec.inlineLabel(params.name), labelBudgetPx))
+            : undefined;
+
+        if (spec.vertical) {
+            chart.setOption({
+                title: { text: spec.title },
+                tooltip: commonTooltipConfig(spec, rows),
+                xAxis: { ...commonCatAxisOptions(), data: categories },
+                yAxis: valueAxis,
+                grid: yGridConfig(),
+                series: createSeries(rows, color, undefined, undefined, barMaxWidth)
+            });
+            return;
         }
 
-        // Routes Chart
-        var routesMax = calculateMaxValue(dataToUse.routes);
-        var routesValueAxisOptions = (currentMetric === 'duration')
-            ? getDurationAxisConfig(routesMax, LANG)
-            : commonValAxisOptions;
-        var routesChart = echarts.init(document.getElementById('chart-routes'));
-        chartsInstances['routes'] = routesChart;
-        routesChart.setOption({
-            title: { text: '{{routes}}' },
-            tooltip: commonTooltipConfig,
+        chart.setOption({
+            title: { text: spec.title },
+            tooltip: commonTooltipConfig(spec, rows),
             yAxis: {
-                ...commonCatYAxisOptions,
-                data: dataToUse.routes.map(item => {
-                    try {
-                        return JSON.parse(item.route).join(' - ');
-                    } catch(e) {
-                        return item.route;
-                    }
-                })
+                type: 'category',
+                inverse: true,
+                axisLabel: categoryAxisLabel(spec, rows, plan),
+                data: categories
             },
-            xAxis: routesValueAxisOptions,
-            grid: inlineLabelGridConfig,
-            series: createSeries(dataToUse.routes, getColor(tripType), routeLabel)
+            xAxis: valueAxis,
+            grid: hGridConfig(plan.gutter),
+            series: createSeries(rows, color, labelFormatter, undefined, barMaxWidth)
         });
-        applyInlineLabels(routesChart, dataToUse.routes, getColor(tripType), routeLabel);
 
-        // Stations Chart
-        var stationsMax = calculateMaxValue(dataToUse.stations);
-        var stationsValueAxisOptions = (currentMetric === 'duration')
-            ? getDurationAxisConfig(stationsMax, LANG)
-            : commonValAxisOptions;
-        var stationsChart = echarts.init(document.getElementById('chart-stations'));
-        chartsInstances['stations'] = stationsChart;
-        stationsChart.setOption({
-            title: { text: '{{stations}}' },
-            tooltip: commonTooltipConfig,
-            yAxis: {
-                ...commonCatYAxisOptions,
-                data: dataToUse.stations.map(item => item.station)
-            },
-            xAxis: stationsValueAxisOptions,
-            grid: inlineLabelGridConfig,
-            series: createSeries(dataToUse.stations, getColor(tripType), stationLabel)
+        if (labelFormatter) applyInlineLabels(chart, rows, color, labelFormatter, barMaxWidth, axisBreak);
+    }
+
+    function renderCharts(data) {
+        const specs = visibleCharts(data);
+        buildChartGrid(specs);
+
+        document.querySelector('.noDataDiv').style.display = specs.length ? 'none' : '';
+
+        specs.forEach(spec => {
+            const rows = data[spec.dataset] || [];
+            // The time series shows every bucket; ranked charts collapse their
+            // tail into a single "others" row unless we are in fullscreen.
+            const display = (spec.vertical || expandedMode)
+                ? rows
+                : groupData(rows, spec.idKey);
+            renderChart(spec, display);
         });
-        applyInlineLabels(stationsChart, dataToUse.stations, getColor(tripType), stationLabel);
 
-        // Resize all charts after show/hide changes column widths
+        // Resize once the grid has settled into its final column widths.
         setTimeout(() => {
             Object.values(chartsInstances).forEach(resizeChart);
         }, 50);
@@ -1228,22 +2734,19 @@
     // ============================================
     // DATA FETCHING
     // ============================================
+    var IS_ADMIN = "{{ 'true' if admin else 'false' }}" === "true";
+
+    // The JSON endpoint, which is a different thing from the page URL that
+    // statsPageUrl builds — these two were both called statsUrl once, and since
+    // function declarations hoist, the address bar ended up pointing at the API.
+    function statsApiUrl(type) {
+        const base = IS_ADMIN ? '/admin/getStats' : `/u/${username}/getStats`;
+        return statYear ? `${base}/${statYear}/${type}` : `${base}/${type}`;
+    }
+
     async function fetchStatsData() {
-        var isAdmin = "{{ 'true' if admin else 'false' }}";
-        
-        var urlPath;
-        if (isAdmin === "true") {
-            urlPath = statYear 
-                ? `/admin/getStats/${statYear}/${tripType}`
-                : `/admin/getStats/${tripType}`;
-        } else {
-            urlPath = statYear 
-                ? `/u/${username}/getStats/${statYear}/${tripType}`
-                : `/u/${username}/getStats/${tripType}`;
-        }
-            
         try {
-            const response = await fetch(urlPath);
+            const response = await fetch(statsApiUrl(tripType));
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -1254,62 +2757,67 @@
         }
     }
 
+    // One request per trip type, several in flight at once. In sequence a user
+    // with a dozen trip types waited on a dozen round trips end to end, each
+    // running a full set of stats queries.
+    //
+    // Bounded rather than all-at-once, though: every request is a handful of
+    // aggregates over the trips table, and on the all-users admin view that is
+    // a full scan apiece. Releasing twenty of those simultaneously trades one
+    // slow page for a database everyone else is waiting behind.
+    var COMBINED_FETCH_CONCURRENCY = 4;
+
     async function fetchCombinedStatsData() {
-        const allTypeData = {};
-        
-        for (const type of AVAILABLE_TRIP_TYPES) {
-            var isAdmin = "{{ 'true' if admin else 'false' }}";
-            
-            var urlPath;
-            if (isAdmin === "true") {
-                urlPath = statYear 
-                    ? `/admin/getStats/${statYear}/${type}`
-                    : `/admin/getStats/${type}`;
-            } else {
-                urlPath = statYear 
-                    ? `/u/${username}/getStats/${statYear}/${type}`
-                    : `/u/${username}/getStats/${type}`;
-            }
-            
-            try {
-                const response = await fetch(urlPath);
-                if (response.ok) {
-                    allTypeData[type] = await response.json();
+        const queue = AVAILABLE_TRIP_TYPES.slice();
+        const collected = {};
+
+        async function worker() {
+            while (queue.length) {
+                const type = queue.shift();
+                try {
+                    const response = await fetch(statsApiUrl(type));
+                    if (response.ok) collected[type] = await response.json();
+                } catch (error) {
+                    console.error(`Error fetching stats for ${type}:`, error);
                 }
-            } catch (error) {
-                console.error(`Error fetching stats for ${type}:`, error);
             }
         }
-        
-        return allTypeData;
+
+        await Promise.all(
+            Array.from({ length: Math.min(COMBINED_FETCH_CONCURRENCY, queue.length) }, worker)
+        );
+        return collected;
+    }
+
+    // The rows to draw right now: the cached payload reduced to the selected
+    // metric, and folded across trip types when showing everything at once.
+    function currentDisplayData() {
+        if (isCombinedMode) {
+            if (!combinedStatsData) return {};
+            const extractedByType = {};
+            Object.keys(combinedStatsData).forEach(type => {
+                extractedByType[type] = extractDataForMetric(combinedStatsData[type], currentMetric);
+            });
+            return mergeCombinedData(extractedByType);
+        }
+        return statsData ? extractDataForMetric(statsData, currentMetric) : {};
     }
 
     async function fetchDataAndRenderCharts() {
         showLoading();
         try {
             if (isCombinedMode) {
-                const allTypeData = await fetchCombinedStatsData();
-                
-                // Extract data for current metric from each type
-                const extractedByType = {};
-                Object.keys(allTypeData).forEach(type => {
-                    extractedByType[type] = extractDataForMetric(allTypeData[type], currentMetric);
-                });
-                
-                // Merge all types together
-                combinedStatsData = allTypeData;
-                var mergedData = mergeCombinedData(extractedByType);
-                renderCharts(mergedData);
+                combinedStatsData = await fetchCombinedStatsData();
+                // Codes are unique across the air payloads, so one flat map
+                // serves every type that contributed airports.
+                airportCities = Object.assign({}, ...Object.values(combinedStatsData)
+                    .map(data => data.airportCities || {}));
             } else {
                 statsData = await fetchStatsData();
-                
-                if (statsData) {
-                    var displayData = extractDataForMetric(statsData, currentMetric);
-                    renderCharts(displayData);
-                } else {
-                    console.error('No data available');
-                }
+                if (!statsData) console.error('No data available');
+                airportCities = (statsData && statsData.airportCities) || {};
             }
+            renderCharts(currentDisplayData());
         } catch (error) {
             console.error('Error processing data:', error);
         } finally {
@@ -1322,262 +2830,352 @@
     // ============================================
     async function switchMetric(newMetric) {
         if (!METRICS_CONFIG[newMetric]?.enabled) return;
-        
+
         currentMetric = newMetric;
-        
-        if (isCombinedMode) {
-            if (!combinedStatsData) return;
-            
-            // Re-extract data for new metric from cached combined data
-            const extractedByType = {};
-            Object.keys(combinedStatsData).forEach(type => {
-                extractedByType[type] = extractDataForMetric(combinedStatsData[type], currentMetric);
-            });
-            
-            var mergedData = mergeCombinedData(extractedByType);
-            renderCharts(mergedData);
-        } else {
-            if (!statsData) return;
-            var displayData = extractDataForMetric(statsData, currentMetric);
-            renderCharts(displayData);
-        }
+        // The address follows, but the page does not reload: every metric is in
+        // the payload already, so switching is a re-render. Replace rather than
+        // push — the metric is a way of looking at the page, not a page of its
+        // own, and a back button that walks through every metric you tried is a
+        // nuisance.
+        history.replaceState(null, '', statsPageUrl(statYear, tripType, currentMetric));
+        renderCharts(currentDisplayData());
     }
 
     // ============================================
     // FULLSCREEN
     // ============================================
-    function expandChart(chartId) {
+    // Re-render one chart, alone, filling the window. Uses the same registry
+    // entry as the small version — only the layout, the scroll slider and the
+    // full (ungrouped) row set differ.
+    function expandChart(chartKey) {
+        const spec = chartByKey(chartKey);
+        if (!spec) return;
+
         expandedMode = true;
-        var fullscreenContainer = document.getElementById('fullscreenContainer');
-        var fullscreenChart = document.getElementById('fullscreenChart');
+        const fullscreenContainer = document.getElementById('fullscreenContainer');
+        const fullscreenChart = document.getElementById('fullscreenChart');
+        // The overlay is fixed, not a scroll container, so without this the
+        // page carries on scrolling underneath it.
+        bodyOverflowBeforeFullscreen = document.body.style.overflow;
+        document.body.style.overflow = 'hidden';
         fullscreenContainer.style.display = 'block';
         fullscreenChart.innerHTML = '';
 
-        var chartInstance = echarts.init(fullscreenChart);
-        var dataKeyMap = {
-            'chart-countries': 'countries',
-            'chart-operators': 'operators',
-            'chart-routes': 'routes',
-            'chart-stations': 'stations',
-            'chart-material': 'material',
-            'chart-timeseries': yearDefined == "true" ? 'months' : 'years'
-        };
-        var dataKey = dataKeyMap[chartId];
-        
-        var displayData;
-        if (isCombinedMode) {
-            const extractedByType = {};
-            Object.keys(combinedStatsData).forEach(type => {
-                extractedByType[type] = extractDataForMetric(combinedStatsData[type], currentMetric);
-            });
-            displayData = mergeCombinedData(extractedByType);
-        } else {
-            displayData = extractDataForMetric(statsData, currentMetric);
-        }
-        
-        var dataToUse = displayData[dataKey];
-        var config = METRICS_CONFIG[currentMetric];
-
-        var maxValue = calculateMaxValue(dataToUse);
-        var valueAxisOptions = (currentMetric === 'duration')
-            ? getDurationAxisConfig(maxValue, LANG)
-            : { // Recreate the simple formatter for other metrics
-                type: 'value',
-                axisLabel: {
-                    hideOverlap: true,
-                    formatter: function (value) {
-                        if(currentMetric === 'km') return mToKm(value) + ' km';
-                        else if (currentMetric === 'carbon') return value >= 1e9 ? (value / 1e9) + ' Mt' : value >= 1e6 ? (value / 1e6) + ' kt' : value >= 1e3 ? (value / 1e3) + ' t' : value + ' kg';
-                        return value >= 1000 ? (value / 1000) + 'k' : value;
-                    }
-                }
-            };
-
-        var labelFormatter = dataKey === 'material' ? params => params.name
-            : dataKey === 'routes' ? params => formatRouteLabel(params.name)
-            : dataKey === 'stations' ? params => extractStationCode(params.name)
+        const chartInstance = echarts.init(fullscreenChart);
+        const rows = currentDisplayData()[spec.dataset] || [];
+        const color = getColor(tripType);
+        const categories = rows.map(item => categoryOf(spec, item));
+        const axisBreak = computeAxisBreak(rows.map(itemTotal));
+        const valueAxis = valueAxisConfig(calculateMaxValue(rows), axisBreak);
+        // Fullscreen has the whole window, so far more names fit the gutter; and
+        // a dataZoom scrollbar parked on the right that a label must not run under.
+        const plan = categoryAxisPlan(spec, rows, categories, FULLSCREEN_GUTTER_PX);
+        const labelBudgetPx = labelBudget(fullscreenChart, plan.gutter, axisBreak, calculateMaxValue(rows)) - 30;
+        const barMaxWidth = barThicknessCap(fullscreenChart, spec.vertical);
+        const labelFormatter = spec.inlineLabel && plan.mode !== 'names'
+            ? (params => fitLabel(spec.inlineLabel(params.name), labelBudgetPx))
             : undefined;
+        const fullscreenImages = tooltipImages(spec, rows);
 
-        var option = {
-            title: {
-                text: chartsInstances[dataKey.replace('chart-', '')]?.getOption()?.title?.[0]?.text || ''
-            },
+        const option = {
+            title: { text: spec.title },
             tooltip: {
                 trigger: 'axis',
                 axisPointer: { type: 'shadow' },
-                formatter: commonTooltipFormatter 
+                extraCssText: 'border-radius:8px;padding:8px;box-shadow:0 4px 16px rgba(0,0,0,.18);', borderWidth: 0,
+                confine: true,
+                position: rowAnchoredPosition(spec),
+                formatter: asyncPhotoFormatter(spec, rows, fullscreenImages)
             },
             // containLabel still grows the gutter to fit real axis-label content
             // (country names, operator logos) — this just removes the default
             // ~10% padding that was reserved on top of that.
-            grid: { containLabel: true, left: '10px', width: '80%', height: '85%', bottom: '10%', top: '10%' },
-            series: createSeries(dataToUse, getColor(tripType), labelFormatter)
+            grid: { containLabel: true, left: '10px', right: '40px', height: '85%', bottom: '10%', top: '10%' },
+            series: createSeries(rows, color, labelFormatter, undefined, barMaxWidth)
         };
 
-        // Configure axes based on chart type
-        if (['countries', 'operators', 'material', 'routes', 'stations'].includes(dataKey)) {
-            // Material/Routes/Stations carry their name as an inline bar label
-            // instead of an axis label (see categoryLabelConfig).
-            option.yAxis = {
-                type: 'category',
-                inverse: true,
-                axisLabel: dataKey === 'operators' ? operatorAxisLabelConfig()
-                    : dataKey === 'countries' ? {
-                        hideOverlap: true,
-                        formatter: function (value) {
-                            return !isMobile() ? value : value.slice(-5);
-                        }
-                    } : { show: false },
-                data: dataToUse.map(item => {
-                    if (dataKey === 'countries') {
-                        return item.country === "{{others}}" ? item.country : `${regionNames.of(item.country)} ${getFlagEmoji(item.country)}`;
-                    }
-                    if (dataKey === 'operators') return item.operator;
-                    if (dataKey === 'material') return item.material;
-                    if (dataKey === 'routes') {
-                        try { return JSON.parse(item.route).join(' - '); }
-                        catch(e) { return item.route; }
-                    }
-                    return item.station;
-                })
-            };
-            option.xAxis = valueAxisOptions;
-
-            // Add vertical slider
-            option.dataZoom = [
-                {
-                    type: 'slider',
-                    yAxisIndex: 0,
-                    top: '70px',
-                    right: '20px',
-                    startValue: 0,
-                    endValue: 20
-                }
-            ];
-        } else {
+        if (spec.vertical) {
             option.xAxis = {
                 type: 'category',
                 axisLabel: { rotate: 45, hideOverlap: true },
-                data: dataToUse.map(item => {
-                    if (dataKey === 'years') return item.year;
-                    if (dataKey === 'months') return formatMonthLabel(item.month);
-                    return item.station;
-                })
+                data: categories
             };
-            option.yAxis = valueAxisOptions;
-
-            // Add horizontal slider for other charts
-            if (!['years', 'months'].includes(dataKey)) {
+            option.yAxis = valueAxis;
+        } else {
+            option.yAxis = {
+                type: 'category',
+                inverse: true,
+                axisLabel: categoryAxisLabel(spec, rows, plan),
+                data: categories
+            };
+            option.xAxis = valueAxis;
+            // Ranked charts can be thousands of rows long. Only ever draw a
+            // window of them — drawing the lot is what used to choke the
+            // browser once axis labels carry images.
+            //
+            // The window is a fixed size and cannot be resized: the old slider
+            // handles let you stretch it over hundreds of rows, which was
+            // fiddly with a mouse, near-impossible with a thumb, and stuttered
+            // badly while every logo in the new range loaded. Scrolling (wheel,
+            // trackpad or touch drag) moves the window instead, and the slim
+            // slider on the right is left in as a scrollbar — position and
+            // drag-to-jump, no resize handles.
+            if (rows.length > FULLSCREEN_WINDOW_ROWS) {
+                const endValue = FULLSCREEN_WINDOW_ROWS - 1;
                 option.dataZoom = [
                     {
-                        type: 'slider',
-                        xAxisIndex: 0,
-                        bottom: '10px',
-                        left: '25px',
-                        right: '25px',
+                        type: 'inside',
+                        yAxisIndex: 0,
                         startValue: 0,
-                        endValue: 20
+                        endValue: endValue,
+                        zoomLock: true,
+                        // The wheel is checked against zoom first and only
+                        // falls through to move if zooming is off — and with
+                        // zoomLock the zoom is a no-op, so leaving the default
+                        // on means the wheel does nothing at all.
+                        zoomOnMouseWheel: false,
+                        moveOnMouseWheel: true,
+                        moveOnMouseMove: true,
+                        preventDefaultMouseMove: true,
+                        // Coalesce a fast scroll into a few re-renders rather
+                        // than one per wheel tick.
+                        throttle: 100
+                    },
+                    {
+                        type: 'slider',
+                        yAxisIndex: 0,
+                        startValue: 0,
+                        endValue: endValue,
+                        zoomLock: true,
+                        brushSelect: false,
+                        showDetail: false,
+                        showDataShadow: false,
+                        handleSize: 0,
+                        width: 12,
+                        right: '10px',
+                        top: '70px',
+                        throttle: 100
                     }
                 ];
             }
         }
 
         chartInstance.setOption(option);
-        applyInlineLabels(chartInstance, dataToUse, getColor(tripType), labelFormatter);
-        // Scrolling the slider rescales the value axis, so the fit decision has
-        // to be made again for the rows now on screen.
-        var relayoutting = false;
-        chartInstance.on('dataZoom', function () {
-            if (relayoutting || !chartInstance.relayoutLabels) return;
-            relayoutting = true;
-            chartInstance.relayoutLabels();
-            relayoutting = false;
+        // Before the first label pass, so it only sizes up the rows on screen.
+        chartInstance.__zoomWindow = {
+            start: 0,
+            end: Math.min(FULLSCREEN_WINDOW_ROWS, rows.length) - 1
+        };
+        applyInlineLabels(chartInstance, rows, color, labelFormatter, barMaxWidth, axisBreak);
+        // Scrolling rescales the value axis, so the fit decision has to be made
+        // again for the rows now on screen — but at most once a frame, however
+        // many zoom events a fast scroll or a slider drag produces.
+        var relayoutPending = false;
+        chartInstance.on('dataZoom', function (params) {
+            syncZoomWindow(chartInstance, rows.length,
+                (params && params.batch && params.batch[0]) || params);
+            if (relayoutPending || !chartInstance.relayoutLabels) return;
+            relayoutPending = true;
+            requestAnimationFrame(function () {
+                relayoutPending = false;
+                if (!chartInstance.isDisposed()) chartInstance.relayoutLabels();
+            });
         });
+        attachWheelScroll(chartInstance, rows.length, !spec.vertical);
         currentChart = chartInstance;
+    }
+
+    // ECharts' own wheel handling only fires while the pointer is inside the
+    // grid rect, which in a fullscreen ranked chart leaves the whole label
+    // gutter and the margins dead — and a wheel it doesn't handle keeps its
+    // default, so the page behind the overlay scrolls instead. Drive the pan
+    // from the container: every wheel over the overlay is ours, wherever the
+    // pointer is, and none of them reach the document.
+    function attachWheelScroll(chartInstance, rowCount, scrollable) {
+        const container = document.getElementById('fullscreenContainer');
+        if (fullscreenWheelHandler) {
+            container.removeEventListener('wheel', fullscreenWheelHandler);
+            fullscreenWheelHandler = null;
+        }
+        if (!scrollable || rowCount <= FULLSCREEN_WINDOW_ROWS) return;
+
+        const maxStart = rowCount - FULLSCREEN_WINDOW_ROWS;
+        let pending = false;
+        // Rows asked for but not yet moved, fraction included. Devices with a
+        // high-resolution wheel send a burst of small deltas per notch, so
+        // rounding each event on its own — with a floor of one row, as this
+        // did — makes the speed depend on how many events the hardware happens
+        // to emit rather than on how far you actually scrolled. Summing first
+        // and converting once keeps a notch worth the same everywhere, and
+        // carrying the remainder means a slow trackpad drag still creeps along
+        // instead of being rounded away to nothing.
+        let rowsOwed = 0;
+
+        fullscreenWheelHandler = function (event) {
+            event.preventDefault();
+            rowsOwed += wheelRows(event);
+            if (pending) return;
+            pending = true;
+            // A wheel can fire far faster than the chart redraws: settle up
+            // once a frame.
+            requestAnimationFrame(function () {
+                pending = false;
+                if (chartInstance.isDisposed()) return;
+
+                const step = Math.trunc(rowsOwed);
+                if (!step) return;
+                rowsOwed -= step;
+
+                // __zoomWindow is the shared truth about where the window is,
+                // so a slider drag and the wheel can't disagree.
+                const from = (chartInstance.__zoomWindow || { start: 0 }).start;
+                const next = Math.min(maxStart, Math.max(0, from + step));
+                if (next === from) return;
+                chartInstance.__zoomWindow = { start: next, end: next + FULLSCREEN_WINDOW_ROWS - 1 };
+                chartInstance.dispatchAction({
+                    type: 'dataZoom',
+                    startValue: next,
+                    endValue: next + FULLSCREEN_WINDOW_ROWS - 1
+                });
+            });
+        };
+        container.addEventListener('wheel', fullscreenWheelHandler, { passive: false });
+    }
+
+    // One wheel event in rows, fractions kept. The three deltaModes report in
+    // different units and browsers disagree about which they use, so normalise
+    // before doing any arithmetic on them.
+    //
+    // WHEEL_PX_PER_ROW is the knob for scroll speed: a classic mouse notch is
+    // ~100px, so 40 puts it at two and a half rows. Higher is slower.
+    var WHEEL_PX_PER_ROW = 40;
+    function wheelRows(event) {
+        if (event.deltaMode === 1) return event.deltaY;                          // lines
+        if (event.deltaMode === 2) return event.deltaY * FULLSCREEN_WINDOW_ROWS; // pages
+        return event.deltaY / WHEEL_PX_PER_ROW;                                  // pixels
+    }
+
+    // Keep __zoomWindow in step with a zoom the chart made itself (a slider
+    // drag, a touch pan). The payload carries indices for a value-based zoom
+    // and percentages otherwise.
+    function syncZoomWindow(chart, count, payload) {
+        if (!payload) return;
+        let start = payload.startValue;
+        let end = payload.endValue;
+        if (typeof start !== 'number' && typeof payload.start === 'number') {
+            start = Math.floor(payload.start / 100 * (count - 1));
+            end = Math.ceil(payload.end / 100 * (count - 1));
+        }
+        if (typeof start !== 'number' || typeof end !== 'number') return;
+        chart.__zoomWindow = { start: start, end: end };
     }
 
     document.getElementById('closeFullscreenButton').addEventListener('click', function() {
         expandedMode = false;
-        document.getElementById('fullscreenContainer').style.display = 'none';
+        const container = document.getElementById('fullscreenContainer');
+        container.style.display = 'none';
+        if (fullscreenWheelHandler) {
+            container.removeEventListener('wheel', fullscreenWheelHandler);
+            fullscreenWheelHandler = null;
+        }
+        document.body.style.overflow = bodyOverflowBeforeFullscreen;
         if (currentChart) {
             currentChart.dispose();
             currentChart = null;
         }
-        
-        if (isCombinedMode) {
-            const extractedByType = {};
-            Object.keys(combinedStatsData).forEach(type => {
-                extractedByType[type] = extractDataForMetric(combinedStatsData[type], currentMetric);
+
+        renderCharts(currentDisplayData());
+    });
+
+    // ============================================
+    // CHART SETTINGS MODAL
+    // ============================================
+    // Lists every chart this trip type can show, whether or not it currently
+    // has data, so a chart that is empty this year is still findable.
+    function buildChartSettings() {
+        const list = document.getElementById('chartSettingsList');
+        const options = document.getElementById('chartSettingsOptions');
+
+        options.innerHTML = `
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="axisBreakToggle"
+                       ${axisBreakEnabled ? 'checked' : ''}>
+                <label class="form-check-label" for="axisBreakToggle">{{statsAxisBreak}}</label>
+                <div class="text-muted small">{{statsAxisBreakHelp}}</div>
+            </div>
+        `;
+        options.querySelector('#axisBreakToggle').addEventListener('change', function () {
+            axisBreakEnabled = this.checked;
+            saveAxisBreakEnabled(axisBreakEnabled);
+            renderCharts(currentDisplayData());
+        });
+
+        list.innerHTML = applicableCharts().map(spec => `
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="${spec.key}"
+                       id="chartToggle-${spec.key}" ${hiddenCharts.has(spec.key) ? '' : 'checked'}>
+                <label class="form-check-label" for="chartToggle-${spec.key}">${spec.title}</label>
+            </div>
+        `).join('');
+
+        list.querySelectorAll('input[type="checkbox"]').forEach(input => {
+            input.addEventListener('change', function () {
+                if (this.checked) {
+                    hiddenCharts.delete(this.value);
+                } else {
+                    hiddenCharts.add(this.value);
+                }
+                saveHiddenCharts(hiddenCharts);
+                renderCharts(currentDisplayData());
             });
-            var mergedData = mergeCombinedData(extractedByType);
-            renderCharts(mergedData);
-        } else {
-            var displayData = extractDataForMetric(statsData, currentMetric);
-            renderCharts(displayData);
-        }
+        });
+    }
+
+    document.getElementById('chartSettingsReset').addEventListener('click', function () {
+        hiddenCharts = new Set();
+        saveHiddenCharts(hiddenCharts);
+        axisBreakEnabled = true;
+        saveAxisBreakEnabled(axisBreakEnabled);
+        buildChartSettings();
+        renderCharts(currentDisplayData());
     });
 
     // ============================================
     // EVENT HANDLERS
     // ============================================
-    $("#statsSelectYear").change(function() {
-        var selectedYear = $(this).val();
-        var isPublic = "{{ 'true' if is_public else 'false' }}";
-        var isAdmin = "{{ 'true' if admin else 'false' }}";
-        var currentTripType = tripType;
-
-        var redirectUrl;
-        if (isAdmin == "true") {
-            redirectUrl = selectedYear === "all" ? 
-                '{{ url_for("admin_stats", tripType="TRIPTYPE") }}'.replace("TRIPTYPE", currentTripType) :
-                '{{ url_for("admin_stats", year="YEAR", tripType="TRIPTYPE") }}'.replace("YEAR", selectedYear).replace("TRIPTYPE", currentTripType);
-        } else if (isPublic == "true") {
-            redirectUrl = selectedYear === "all" ?
-                '{{ url_for("public_stats", username=username, tripType="TRIPTYPE") }}'.replace("TRIPTYPE", currentTripType) :
-                '{{ url_for("public_stats", username=username, year="YEAR", tripType="TRIPTYPE") }}'.replace("YEAR", selectedYear).replace("TRIPTYPE", currentTripType);
-        } else {
-            redirectUrl = selectedYear === "all" ?
-                '{{ url_for("stats", username=username, tripType="TRIPTYPE") }}'.replace("TRIPTYPE", currentTripType) :
-                '{{ url_for("stats", username=username, year="YEAR", tripType="TRIPTYPE") }}'.replace("YEAR", selectedYear).replace("TRIPTYPE", currentTripType);
-        }
-
-        window.location.href = redirectUrl;
+    // Both selectors navigate: the payload is per year and per trip type, so
+    // there is nothing to re-render from. The metric rides along untouched,
+    // which is the whole point of it being in the path.
+    $("#statsSelectYear").change(function () {
+        window.location.href = statsPageUrl($(this).val(), tripType, currentMetric);
     });
 
-    $("#statsSelectTripType").change(function() {
-        var newTripType = $(this).val();
-        var isPublic = "{{ 'true' if is_public else 'false' }}";
-        var isAdmin = "{{ 'true' if admin else 'false' }}";
-        
-        var redirectUrl;
-        if (isAdmin == "true") {
-            redirectUrl = yearDefined == "true" ?
-                '{{ url_for("admin_stats", year=statYear, tripType="") }}' + newTripType :
-                '{{ url_for("admin_stats", tripType="") }}' + newTripType;
-        } else if (isPublic == "true") {
-            redirectUrl = yearDefined == "true" ?
-                '{{ url_for("public_stats", username=username, year=statYear, tripType="") }}' + newTripType :
-                '{{ url_for("public_stats", username=username, tripType="") }}' + newTripType;
-        } else {
-            redirectUrl = yearDefined == "true" ?
-                '{{ url_for("stats", username=username, year=statYear, tripType="") }}' + newTripType :
-                '{{ url_for("stats", username=username, tripType="") }}' + newTripType;
-        }
-
-        window.location.href = redirectUrl;
+    $("#statsSelectTripType").change(function () {
+        window.location.href = statsPageUrl(statYear, $(this).val(), currentMetric);
     });
 
     // ============================================
     // INITIALIZATION
     // ============================================
     async function initializeStats() {
+        // The shorter routes still serve this page, and links to them carry two
+        // of the three dimensions or fewer. Rewrite the address to the full form
+        // so what is in the URL always matches what is on screen.
+        history.replaceState(null, '', statsPageUrl(statYear, tripType, currentMetric));
+
         const wrapper = document.getElementById('metricSelectorWrapper');
         if (wrapper) {
             wrapper.innerHTML = createMetricSelector();
             attachMetricSelectorListener();
         }
-        
-        await fetchDataAndRenderCharts();
+
+        buildChartSettings();
+        // In parallel with the stats request: the flag lookup is sync at render
+        // time, so the table has to be there before the first draw.
+        const registrationsReady = isAirType(tripType) || isCombinedMode
+            ? loadRegistrations(REGISTRATIONS_URL).then(table => { registrations = table; })
+            : Promise.resolve();
+        await Promise.all([registrationsReady, fetchDataAndRenderCharts()]);
     }
 
     initializeStats();

@@ -36,12 +36,6 @@ live_tracks_blueprint = Blueprint("live_tracks", __name__)
 # so an in-process guard would let every worker poll independently.
 LIVE_POLL_INTERVAL = timedelta(minutes=5)
 
-# Slower retry for a trip FR24 currently has no record of. Not "never again": a delayed
-# departure is unknown to FR24 at its scheduled time and only appears once it is airborne,
-# so giving up permanently would mean delayed flights are the ones never tracked. Slow
-# enough that a genuinely untrackable trip (wrong number, private charter) stays cheap.
-UNRESOLVED_RETRY_INTERVAL = timedelta(minutes=30)
-
 # Polling window, expressed relative to the trip's own times rather than as a poll count so
 # that a long-haul leg is never cut off mid-flight. The grace period is generous because
 # delays are normal and the real cost bound is the hard ceiling below, which exists to
@@ -349,16 +343,18 @@ def _claim_due_trips(pg, trips):
         UPDATE live_flight_tracks
         SET last_polled = NOW(), poll_count = poll_count + 1
         WHERE trip_id = ANY(CAST(:ids AS integer[]))
-          -- A flight FR24 has no record of backs off to a slow retry rather than being
-          -- abandoned, so a delayed departure is picked up once it actually takes off.
-          AND NOW() - last_polled >= (CASE WHEN status = 'unresolved'
-                                           THEN :slow_interval ELSE :interval END)
+          -- One interval for every trip, including the ones FR24 currently has no record
+          -- of. Being unresolved is the NORMAL state just after scheduled departure —
+          -- FR24's live endpoint only knows airborne aircraft, and a trip becomes eligible
+          -- while it is still at the gate — so treating that first miss as evidence of a
+          -- bad flight number and backing off meant the aircraft took off during the
+          -- back-off and the entire climb went unseen.
+          AND NOW() - last_polled >= :interval
         RETURNING trip_id, fr24_id
         """,
         {
             "ids": list(by_id),
             "interval": LIVE_POLL_INTERVAL,
-            "slow_interval": UNRESOLVED_RETRY_INTERVAL,
         },
     ).fetchall()
     claimed = []

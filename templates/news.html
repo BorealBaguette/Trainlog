@@ -64,7 +64,7 @@
     border-radius: 18px;
     padding: 1.6rem 1.75rem 1.4rem;
     box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 10px 28px rgba(16, 24, 40, 0.08);
-    transition: transform 0.18s ease, box-shadow 0.18s ease;
+    transition: box-shadow 0.18s ease;
     overflow: hidden;
 }
 .news-card::before {
@@ -76,7 +76,6 @@
     opacity: 0.9;
 }
 .news-card:hover {
-    transform: translateY(-2px);
     box-shadow: 0 2px 4px rgba(16, 24, 40, 0.05), 0 16px 40px rgba(16, 24, 40, 0.10);
 }
 .news-card .news-title {
@@ -133,7 +132,7 @@
 }
 .news-meta .news-author i { color: #e6a419; }
 .news-meta .news-date { display: inline-flex; align-items: center; gap: 0.35rem; }
-.news-meta .news-edited { font-style: italic; opacity: 0.85; }
+.news-meta .news-views { display: inline-flex; align-items: center; gap: 0.35rem; }
 
 /* --- Owner actions --- */
 .news-actions .btn {
@@ -199,6 +198,40 @@
     transition: color 0.12s ease, border-color 0.12s ease;
 }
 .news-reactions .reaction-add:hover { color: var(--news-accent-strong); border-color: var(--news-accent); }
+.news-reactions .reaction-who {
+    border: none;
+    background: transparent;
+    color: var(--news-muted);
+    padding: 0.22rem 0.4rem;
+    cursor: pointer;
+}
+.news-reactions .reaction-who:hover { color: var(--news-accent-strong); }
+
+.reaction-who-list { display: flex; flex-direction: column; gap: 0.15rem; }
+.reaction-who-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: 0.45rem 0.2rem;
+    border-bottom: 1px solid var(--news-line);
+}
+.reaction-who-row:last-child { border-bottom: none; }
+.reaction-who-name { font-weight: 600; color: var(--news-ink); }
+.reaction-who-emojis { font-size: 1.15rem; letter-spacing: 0.15rem; }
+
+.news-load-more {
+    border: 1px solid var(--news-line);
+    background: #fff;
+    border-radius: 999px;
+    padding: 0.5rem 1.4rem;
+    font-weight: 600;
+    color: var(--news-body);
+    cursor: pointer;
+    transition: border-color 0.12s ease, color 0.12s ease;
+}
+.news-load-more:hover { color: var(--news-accent-strong); border-color: var(--news-accent); }
+.news-load-more[disabled] { opacity: 0.6; cursor: default; }
 
 /* --- Empty state --- */
 .news-empty {
@@ -225,7 +258,10 @@
             {% if news_list and news_list[0].created %}
             <p class="news-subtitle">
                 <i class="fa-regular fa-clock"></i>
-                {{ news_last_updated or "Last updated" }} {{ news_list[0].created.strftime('%d %b %Y') }}
+                {% set last_update = news_list[0].last_modified or news_list[0].created %}
+                {{ news_last_updated or "Last updated" }}
+                <time class="news-datetime" data-style="date"
+                      datetime="{{ last_update.isoformat() }}">{{ last_update.strftime('%d %b %Y') }}</time>
             </p>
             {% endif %}
         </div>
@@ -237,77 +273,10 @@
     </div>
 
     <!-- News Items -->
-    <div class="d-flex flex-column gap-4">
+    <div class="d-flex flex-column gap-4" id="newsList">
         {% if news_list %}
             {% for item in news_list %}
-            <article class="news-card">
-                <div class="d-flex justify-content-between align-items-start gap-3">
-                    <div class="flex-grow-1">
-                        <h2 class="news-title">{{ item.title }}</h2>
-                        <div class="news-content">
-                            {{ item.content_html|safe }}
-                        </div>
-                        <div class="news-meta">
-                            <span class="news-author">
-                                <i class="fa-solid fa-crown"></i> {{ item.author_display }}
-                            </span>
-                            <span class="news-date">
-                                <i class="fa-regular fa-calendar"></i>
-                                {{ item.created.strftime('%Y-%m-%d %H:%M') if item.created else (news_unknown or "Unknown") }}
-                            </span>
-                            {% if item.last_modified and item.last_modified != item.created %}
-                            <span class="news-edited">
-                                ({{ news_edited or "Edited" }}: {{ item.last_modified.strftime('%Y-%m-%d %H:%M') }})
-                            </span>
-                            {% endif %}
-                        </div>
-                    </div>
-
-                    <!-- Edit/Delete Buttons (Owner Only) -->
-                    {% if is_owner %}
-                    <div class="news-actions d-flex gap-2 flex-shrink-0">
-                        <button type="button" class="btn"
-                                data-news-id="{{ item.id }}"
-                                data-news-title="{{ item.title }}"
-                                data-news-content="{{ item.content }}"
-                                onclick="editNewsFromData(this)">
-                            <i class="fa-solid fa-edit"></i>
-                        </button>
-                        <button type="button" class="btn btn-del"
-                                data-news-id="{{ item.id }}"
-                                data-news-title="{{ item.title }}"
-                                onclick="deleteNewsFromData(this)">
-                            <i class="fa-solid fa-trash"></i>
-                        </button>
-                    </div>
-                    {% endif %}
-                </div>
-
-                <!-- Emoji Reactions -->
-                {% if item.reactions or (username and username != 'public') %}
-                <div class="news-reactions" data-news-id="{{ item.id }}">
-                    {% for r in item.reactions %}
-                    <button type="button"
-                            class="reaction-chip{{ ' reacted' if r.reacted else '' }}"
-                            data-emoji="{{ r.emoji }}"
-                            {% if r.users is defined and r.users %}
-                            data-bs-toggle="tooltip" data-bs-placement="top"
-                            title="{{ r.users | join(', ') }}"
-                            {% endif %}>
-                        <span class="reaction-emoji">{{ r.emoji }}</span>
-                        <span class="reaction-count">{{ r.count }}</span>
-                    </button>
-                    {% endfor %}
-                    {% if username and username != 'public' %}
-                    <button type="button" class="reaction-add"
-                            title="{{ news_react_add or 'Add reaction' }}"
-                            aria-label="{{ news_react_add or 'Add reaction' }}">
-                        <i class="fa-regular fa-face-smile"></i>
-                    </button>
-                    {% endif %}
-                </div>
-                {% endif %}
-            </article>
+            {% include "includes/news_card.html" %}
             {% endfor %}
         {% else %}
         <div>
@@ -317,7 +286,33 @@
         </div>
         {% endif %}
     </div>
+
+    {% if news_has_more %}
+    <div class="text-center mt-4">
+        <button type="button" id="newsLoadMore" class="news-load-more"
+                data-offset="{{ news_page_size }}">
+            {{ news_load_more or "Load older news" }}
+        </button>
+    </div>
+    {% endif %}
 </div>
+
+<!-- Who reacted (logged-in users) -->
+{% if username and username != 'public' %}
+<div class="modal fade" id="reactionWhoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">{{ news_react_who or "Who reacted" }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ news_close or "Close" }}"></button>
+            </div>
+            <div class="modal-body">
+                <div class="reaction-who-list" id="reactionWhoList"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Add News Modal (Owner Only) -->
 {% if is_owner %}
@@ -455,23 +450,11 @@ document.getElementById('editNewsModal').addEventListener('hidden.bs.modal', fun
     let picker = null;
     let activeBar = null;
 
-    function initTooltip(el) {
-        if (window.bootstrap && el.getAttribute('data-bs-toggle') === 'tooltip') {
-            new bootstrap.Tooltip(el);
-        }
-    }
-
     function buildChip(r) {
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.className = 'reaction-chip' + (r.reacted ? ' reacted' : '');
         btn.dataset.emoji = r.emoji;
-        // "who reacted" tooltip is admin-only: r.users is only present for owners
-        if (r.users && r.users.length) {
-            btn.setAttribute('data-bs-toggle', 'tooltip');
-            btn.setAttribute('data-bs-placement', 'top');
-            btn.setAttribute('title', r.users.join(', '));
-        }
         const e = document.createElement('span');
         e.className = 'reaction-emoji';
         e.textContent = r.emoji;
@@ -484,16 +467,41 @@ document.getElementById('editNewsModal').addEventListener('hidden.bs.modal', fun
 
     function renderReactions(bar, reactions) {
         const addBtn = bar.querySelector('.reaction-add');
-        bar.querySelectorAll('.reaction-chip').forEach(function (c) {
-            const tip = window.bootstrap && bootstrap.Tooltip.getInstance(c);
-            if (tip) tip.dispose();
-            c.remove();
-        });
+        bar.querySelectorAll('.reaction-chip').forEach(function (c) { c.remove(); });
         reactions.forEach(function (r) {
-            const chip = buildChip(r);
-            bar.insertBefore(chip, addBtn);
-            initTooltip(chip);
+            bar.insertBefore(buildChip(r), addBtn);
         });
+        bar.dataset.reactions = JSON.stringify(reactions);
+        const whoBtn = bar.querySelector('.reaction-who');
+        if (whoBtn) whoBtn.classList.toggle('d-none', reactions.length === 0);
+    }
+
+    // One row per person, listing every emoji they picked
+    function showWho(bar) {
+        let reactions = [];
+        try { reactions = JSON.parse(bar.dataset.reactions || '[]'); } catch (e) {}
+        const byUser = new Map();
+        reactions.forEach(function (r) {
+            (r.users || []).forEach(function (u) {
+                if (!byUser.has(u)) byUser.set(u, []);
+                byUser.get(u).push(r.emoji);
+            });
+        });
+        const list = document.getElementById('reactionWhoList');
+        list.textContent = '';
+        Array.from(byUser.keys()).sort().forEach(function (user) {
+            const row = document.createElement('div');
+            row.className = 'reaction-who-row';
+            const name = document.createElement('span');
+            name.className = 'reaction-who-name';
+            name.textContent = user;
+            const emojis = document.createElement('span');
+            emojis.className = 'reaction-who-emojis';
+            emojis.textContent = byUser.get(user).join(' ');
+            row.append(name, emojis);
+            list.appendChild(row);
+        });
+        new bootstrap.Modal(document.getElementById('reactionWhoModal')).show();
     }
 
     function react(bar, emoji) {
@@ -549,22 +557,92 @@ document.getElementById('editNewsModal').addEventListener('hidden.bs.modal', fun
         activeBar = null;
     }
 
-    document.querySelectorAll('.news-reactions').forEach(function (bar) {
-        bar.addEventListener('click', function (event) {
-            const chip = event.target.closest('.reaction-chip');
-            if (chip) { react(bar, chip.dataset.emoji); return; }
-            const add = event.target.closest('.reaction-add');
-            if (add) openPicker(add, bar);
-        });
-    });
-
-    // Init tooltips on the server-rendered chips once Bootstrap has loaded
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('.news-reactions [data-bs-toggle="tooltip"]')
-            .forEach(initTooltip);
+    document.getElementById('newsList').addEventListener('click', function (event) {
+        const bar = event.target.closest('.news-reactions');
+        if (!bar) return;
+        const chip = event.target.closest('.reaction-chip');
+        if (chip) { react(bar, chip.dataset.emoji); return; }
+        const add = event.target.closest('.reaction-add');
+        if (add) { openPicker(add, bar); return; }
+        if (event.target.closest('.reaction-who')) showWho(bar);
     });
 })();
 </script>
 {% endif %}
+
+<script>
+(function () {
+    const list = document.getElementById('newsList');
+
+    const dateLocale = '{{ langId or "en" }}';
+    const dateFmt = new Intl.DateTimeFormat(dateLocale, { dateStyle: 'long' });
+    const dateTimeFmt = new Intl.DateTimeFormat(dateLocale, {
+        dateStyle: 'medium', timeStyle: 'short'
+    });
+
+    // Timestamps are rendered naive so the browser shows them as sent, not shifted
+    function formatDates() {
+        document.querySelectorAll('time.news-datetime:not([data-formatted])')
+            .forEach(function (el) {
+                const value = new Date(el.getAttribute('datetime'));
+                if (isNaN(value)) return;
+                el.textContent =
+                    (el.dataset.style === 'date' ? dateFmt : dateTimeFmt).format(value);
+                el.dataset.formatted = '1';
+            });
+    }
+
+    formatDates();
+
+{% if username and username != 'public' %}
+    // A view is only recorded once the reader has stayed on the page, so
+    // opening the news just to clear the notification badge does not count
+    const viewDelay = {{ news_view_delay or 5 }} * 1000;
+    const sentViews = new Set();
+
+    function scheduleViews() {
+        setTimeout(function () {
+            const ids = [];
+            list.querySelectorAll('.news-card').forEach(function (card) {
+                const id = parseInt(card.dataset.newsId, 10);
+                if (id && !sentViews.has(id)) { sentViews.add(id); ids.push(id); }
+            });
+            if (!ids.length) return;
+            fetch('/api/news/views', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids: ids })
+            }).catch(function () {});
+        }, viewDelay);
+    }
+
+    scheduleViews();
+{% else %}
+    function scheduleViews() {}
+{% endif %}
+
+    const moreBtn = document.getElementById('newsLoadMore');
+    if (moreBtn) {
+        moreBtn.addEventListener('click', function () {
+            moreBtn.disabled = true;
+            fetch('/api/news/more?offset=' + moreBtn.dataset.offset)
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                    list.insertAdjacentHTML('beforeend', data.html);
+                    moreBtn.dataset.offset =
+                        String(list.querySelectorAll('.news-card').length);
+                    if (data.has_more) {
+                        moreBtn.disabled = false;
+                    } else {
+                        moreBtn.remove();
+                    }
+                    formatDates();
+                    scheduleViews();
+                })
+                .catch(function () { moreBtn.disabled = false; });
+        });
+    }
+})();
+</script>
 
 {% endblock %}

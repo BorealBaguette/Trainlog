@@ -393,6 +393,19 @@ def _dup_name_error(name, is_admin_set):
 
 
 
+def _join_set_names(names):
+    """Join coupled trainset names for display, collapsing runs of the same name into
+    "2x NAME" - two identical sets coupled read as one set doubled, not the name twice.
+    Runs only, so A + B + A is left as written."""
+    out = []
+    for name in names:
+        if out and out[-1][0] == name:
+            out[-1][1] += 1
+        else:
+            out.append([name, 1])
+    return ' + '.join(f'{n}\u00d7 {name}' if n > 1 else name for name, n in out)
+
+
 def public_trainset_info(pg, value, owner_username):
     """Resolve a trip's material_type_advanced for public display, using the
     trip owner's trainset visibility (public pages may be viewed logged out).
@@ -412,7 +425,7 @@ def public_trainset_info(pg, value, owner_username):
         units = _enrich_units(pg, _slim_units(parsed))
     elif isinstance(parsed, dict) and isinstance(parsed.get('trainsets'), list):
         names = parsed['trainsets']
-        label = ' + '.join(names)
+        label = _join_set_names(names)
         for name in names:
             units.extend(_units_by_name(pg, name, owner_username))
     else:
