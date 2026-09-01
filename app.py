@@ -4860,6 +4860,11 @@ def render_public_trip_page(
     except Exception:
         abort(500)
 
+    # Playing an animation of a single trip is pointless, so the button only
+    # makes sense once at least two trips are actually visible on the page.
+    if len(trip_list_sorted) < 2:
+        multitrip_url = None
+
     # Open Graph info
     og = {}
     if tag_name:
@@ -4905,6 +4910,7 @@ def render_public_trip_page(
         title=lang[session["userinfo"]["lang"]]["sharedLink"],
         collection_voyage=tag_type,
         tag_description=tag_name,
+        tag_uuid=tagId,
         multitrip_url=multitrip_url,
         special_og=True,
         tileserver=tileserver,
