@@ -107,6 +107,22 @@
         "iso": "BR",
         "country": "Brazil"
     },
+    "PR": {
+        "iso": "BR",
+        "country": "Brazil"
+    },
+    "PS": {
+        "iso": "BR",
+        "country": "Brazil"
+    },
+    "PT": {
+        "iso": "BR",
+        "country": "Brazil"
+    },
+    "PU": {
+        "iso": "BR",
+        "country": "Brazil"
+    },
     "VP-L": {
         "iso": "VG",
         "country": "British Virgin Islands"
@@ -588,7 +604,7 @@
         "country": "Nicaragua"
     },
     "5U": {
-        "iso": "NG",
+        "iso": "NE",
         "country": "Niger"
     },
     "5N": {
@@ -854,10 +870,6 @@
     "VN": {
         "iso": "VN",
         "country": "Vietnam"
-    },
-    "NP": {
-        "iso": "VG",
-        "country": "Virgin Islands, US"
     },
     "7O": {
         "iso": "YE",
