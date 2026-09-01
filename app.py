@@ -7103,15 +7103,8 @@ def router_status_single():
 
 @app.route("/status/trip_counter")
 def status_trip_counter():
-    """Highest trip_id ever assigned, for the live counter on /status. Deliberately
-    just the MAX: trip_id is the SERIAL primary key, so this is a backwards index
-    scan that stops at the first row and stays cheap enough to poll every second.
-    The trips/min rate is derived client-side from successive values."""
-    with pg_session() as pg:
-        max_id = pg.execute(
-            "SELECT COALESCE(MAX(trip_id), 0) FROM trips"
-        ).scalar()
-    response = jsonify({"max_trip_id": max_id})
+    """Feeds the live counter on /status."""
+    response = jsonify(get_trip_activity())
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -13446,29 +13439,49 @@ def user_bounds(username, year=None):
     )
 
 
-SEED_RATE_WINDOW_MIN = 5
+# Trips/min is measured over a long window on purpose: with a short one the
+# reading sags between events and spikes on each new trip, which reads as noise
+# rather than activity. Counting rows by `created` (rather than watching trip_id
+# climb) means the figure only moves when trips are actually logged.
+TRIP_RATE_WINDOW_MIN = 10
+_TRIP_RATE_TTL = timedelta(seconds=15)
+_trip_rate_cache = {"computed_at": None, "rate": 0.0}
 
 
-def get_trip_activity_seed():
-    """Highest trip_id plus the recent creation rate, so /status can render the
-    odometer and speedometer already populated instead of spending the first
-    minute measuring. `created` is written as a naive local datetime.now()
-    (not PG now()), so the cutoff is computed on the same clock.
+def get_trip_rate():
+    """Trips created per minute over the last TRIP_RATE_WINDOW_MIN minutes.
+
+    `trips.created` carries no index, so the count is memoised for a few seconds
+    and shared by every poller rather than run once per second per viewer. It is
+    also written as a naive local datetime.now() (not PG now()), so the cutoff is
+    computed on that same clock.
     """
-    cutoff = datetime.now() - timedelta(minutes=SEED_RATE_WINDOW_MIN)
+    now = datetime.now()
+    computed_at = _trip_rate_cache["computed_at"]
+    if computed_at is not None and now - computed_at < _TRIP_RATE_TTL:
+        return _trip_rate_cache["rate"]
+
+    cutoff = now - timedelta(minutes=TRIP_RATE_WINDOW_MIN)
     with pg_session() as pg:
-        row = pg.execute(
-            """
-            SELECT COALESCE(MAX(trip_id), 0) AS max_id,
-                   COUNT(*) FILTER (WHERE created >= :cutoff) AS recent
-            FROM trips
-            """,
+        recent = pg.execute(
+            "SELECT COUNT(*) FROM trips WHERE created >= :cutoff",
             {"cutoff": cutoff},
-        ).fetchone()
+        ).scalar()
+    rate = round(recent / TRIP_RATE_WINDOW_MIN, 2)
+    _trip_rate_cache.update(computed_at=now, rate=rate)
+    return rate
+
+
+def get_trip_activity():
+    """Highest trip_id (fresh every call, it is a primary-key lookup) with the
+    memoised creation rate. Used both to seed the page and to poll it.
+    """
+    with pg_session() as pg:
+        max_id = pg.execute("SELECT COALESCE(MAX(trip_id), 0) FROM trips").scalar()
     return {
-        "max_trip_id": row.max_id,
-        "seed_rate": round(row.recent / SEED_RATE_WINDOW_MIN, 2),
-        "seed_window_min": SEED_RATE_WINDOW_MIN,
+        "max_trip_id": max_id,
+        "rate": get_trip_rate(),
+        "window_min": TRIP_RATE_WINDOW_MIN,
     }
 
 
@@ -13478,7 +13491,7 @@ def router_status():
     latest_commit_dt = latest_commit.committed_datetime
 
     try:
-        trip_seed = get_trip_activity_seed()
+        trip_seed = get_trip_activity()
     except Exception:
         # A gimmick must never take the status page down with it.
         trip_seed = None

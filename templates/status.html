@@ -76,7 +76,6 @@
                          role="img" aria-label="Trips per minute">
                         <!-- dial, ticks, labels and needle injected by JS -->
                     </svg>
-                    <div id="trip-rate-window" class="odometer-window"></div>
                 </div>
             </div>
         </div>
@@ -123,13 +122,12 @@ function renderPhotonStatus() {
 renderPhotonStatus();
 
 // Silly gimmick: a rolling odometer of the highest trip ID plus an analog
-// speedometer of trips/min. The endpoint is a bare MAX() on the SERIAL primary
-// key, so a 1s poll is cheap; the rate is derived here from the id deltas
-// rather than asked of the DB.
+// speedometer of trips/min. Both come straight from the server: the id is a
+// primary-key lookup on every poll, the rate a memoised count over a long
+// window. Deriving the rate here from id deltas instead made it sag between
+// trips and jump on each one, which read as noise rather than activity.
 (function () {
   const POLL_MS = 1000;
-  const WINDOW_MS = 60000;   // sliding window the rate is measured over
-  const MIN_SPAN_MS = 8000;  // don't show a rate until we have this much history
 
   // Gauge geometry: a 240-degree sweep, needle straight up at half scale.
   const CX = 130, CY = 132, R = 88;
@@ -137,13 +135,11 @@ renderPhotonStatus();
 
   const box = document.getElementById("trip-odometer");
   const tickEl = document.getElementById("trip-odometer-tick");
-  const windowEl = document.getElementById("trip-rate-window");
   const svg = document.getElementById("trip-speedo");
 
   let current = null;
   let pending = null;   // target we are counting up towards
   let stepping = false; // guards against overlapping count-up chains
-  let samples = [];     // [{t, id}] over the last WINDOW_MS
   let scaleMax = null;  // current full-scale reading
   let needle = null, readout = null, valueArc = null;
   let lastFrac = 0, arcTween = null;
@@ -152,10 +148,10 @@ renderPhotonStatus();
   // computed from `created`, so the dial opens on a real reading.
   const seed = {{ trip_seed | tojson }};
 
-  // Full-scale values the gauge picks between. Trainlog idles near zero but a
-  // bulk import can push hundreds a minute, so the dial re-ranges rather than
-  // pinning the needle.
-  const SCALES = [5, 10, 25, 50, 100, 250, 500, 1000, 2500];
+  // Full-scale values the gauge picks between. Trainlog idles under a trip a
+  // minute but a bulk import can push hundreds, so the dial re-ranges rather
+  // than pinning the needle. Each divides by five into round tick labels.
+  const SCALES = [1, 2.5, 5, 10, 25, 50, 100, 250, 500, 1000, 2500];
 
   function polar(r, angle) {
     const a = (angle * Math.PI) / 180;
@@ -358,26 +354,12 @@ renderPhotonStatus();
     step();
   }
 
-  function updateRate(now, id) {
-    samples.push({ t: now, id: id });
-    samples = samples.filter(s => now - s.t <= WINDOW_MS);
-    const oldest = samples[0];
-    const span = now - oldest.t;
-    if (span < MIN_SPAN_MS) {
-      windowEl.textContent = "measuring…";
-      return;
-    }
-    setRate(((id - oldest.id) / span) * 60000);
-    windowEl.textContent = `over the last ${Math.round(span / 1000)}s`;
-  }
-
   function poll() {
     fetch("/status/trip_counter", { cache: "no-store" })
       .then(r => r.json())
       .then(data => {
-        const id = data.max_trip_id;
-        countTo(id);
-        updateRate(Date.now(), id);
+        countTo(data.max_trip_id);
+        setRate(data.rate);
         tickEl.textContent = "●";
         restartAnimation(tickEl, "odometer-blink");
       })
@@ -389,33 +371,19 @@ renderPhotonStatus();
   if (seed) {
     current = seed.max_trip_id;
     renderDigits(current);
-    drawFace(pickScale(seed.seed_rate));
-    setRate(seed.seed_rate);
-    windowEl.textContent = `over the last ${seed.seed_window_min} min`;
-    // Seed the sliding window too, so the first live readings blend with the
-    // server figure instead of restarting from nothing. The synthetic sample is
-    // placed inside WINDOW_MS (or the very next poll would filter it straight
-    // out) and carries the seed rate pro-rata; it ages out ~15s in, by which
-    // point there is enough real history to stand on its own.
-    const bridgeMs = WINDOW_MS - 15000;
-    samples.push({
-      t: Date.now() - bridgeMs,
-      id: seed.max_trip_id - Math.round(seed.seed_rate * (bridgeMs / 60000))
-    });
+    drawFace(pickScale(seed.rate));
+    setRate(seed.rate);
   } else {
     drawFace(SCALES[0]);
   }
   poll();
   let timer = setInterval(poll, POLL_MS);
 
-  // Don't hammer the endpoint from a tab nobody is looking at; the samples are
-  // stale on return, so the window restarts rather than reporting a fake lull.
+  // Don't hammer the endpoint from a tab nobody is looking at.
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       clearInterval(timer);
     } else {
-      samples = [];
-      windowEl.textContent = "measuring…";
       poll();
       timer = setInterval(poll, POLL_MS);
     }
@@ -695,13 +663,6 @@ document.addEventListener("DOMContentLoaded", function() {
 
 .odometer-blink {
     animation: odometer-blink 1.2s ease-out;
-}
-
-.odometer-window {
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    color: #adb5bd;
-    margin-top: -0.75rem;
 }
 
 .speedo {
