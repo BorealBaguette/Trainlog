@@ -7103,8 +7103,23 @@ def router_status_single():
 
 @app.route("/status/trip_counter")
 def status_trip_counter():
-    """Feeds the live counter on /status."""
-    response = jsonify(get_trip_activity())
+    """Highest trip_id, for the odometer on /status. A backwards index scan on
+    the SERIAL primary key that stops at the first row, so it is cheap enough
+    for the page to poll every second."""
+    with pg_session() as pg:
+        max_id = pg.execute("SELECT COALESCE(MAX(trip_id), 0) FROM trips").scalar()
+    response = jsonify({"max_trip_id": max_id})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/status/trip_rate")
+def status_trip_rate():
+    """Trips created per minute, for the speedometer on /status. Polled far
+    less often than the odometer: this one has to scan."""
+    response = jsonify(
+        {"rate": get_trip_rate(), "window_min": TRIP_RATE_WINDOW_MIN}
+    )
     response.headers["Cache-Control"] = "no-store"
     return response
 
@@ -13444,37 +13459,42 @@ def user_bounds(username, year=None):
 # rather than activity. Counting rows by `created` (rather than watching trip_id
 # climb) means the figure only moves when trips are actually logged.
 TRIP_RATE_WINDOW_MIN = 10
-_TRIP_RATE_TTL = timedelta(seconds=15)
-_trip_rate_cache = {"computed_at": None, "rate": 0.0}
+
+# The window is snapped to a fixed grid rather than measured back from "now", so
+# that every worker derives the same cutoff and returns the same count. With a
+# per-request window, a burst of trips sitting near the edge fell inside one
+# worker's window and outside another's, and consecutive polls answered by
+# different workers flapped between two readings. The grid matches the interval
+# the page asks at, so a fresh query still lands on a fresh bucket.
+TRIP_RATE_BUCKET = timedelta(seconds=10)
+_TRIP_RATE_EPOCH = datetime(1970, 1, 1)
 
 
 def get_trip_rate():
     """Trips created per minute over the last TRIP_RATE_WINDOW_MIN minutes.
 
-    `trips.created` carries no index, so the count is memoised for a few seconds
-    and shared by every poller rather than run once per second per viewer. It is
-    also written as a naive local datetime.now() (not PG now()), so the cutoff is
-    computed on that same clock.
+    Queried fresh each time: `trips.created` carries no index, so this is a
+    sequential scan, which is why the page asks for it every ten seconds rather
+    than alongside the once-a-second id poll. `created` is written as a naive
+    local datetime.now() (not PG now()), so the cutoff uses that same clock.
     """
     now = datetime.now()
-    computed_at = _trip_rate_cache["computed_at"]
-    if computed_at is not None and now - computed_at < _TRIP_RATE_TTL:
-        return _trip_rate_cache["rate"]
-
-    cutoff = now - timedelta(minutes=TRIP_RATE_WINDOW_MIN)
+    bucket = _TRIP_RATE_EPOCH + (
+        (now - _TRIP_RATE_EPOCH) // TRIP_RATE_BUCKET
+    ) * TRIP_RATE_BUCKET
+    cutoff = bucket - timedelta(minutes=TRIP_RATE_WINDOW_MIN)
     with pg_session() as pg:
         recent = pg.execute(
             "SELECT COUNT(*) FROM trips WHERE created >= :cutoff",
             {"cutoff": cutoff},
         ).scalar()
-    rate = round(recent / TRIP_RATE_WINDOW_MIN, 2)
-    _trip_rate_cache.update(computed_at=now, rate=rate)
-    return rate
+    return round(recent / TRIP_RATE_WINDOW_MIN, 2)
 
 
 def get_trip_activity():
-    """Highest trip_id (fresh every call, it is a primary-key lookup) with the
-    memoised creation rate. Used both to seed the page and to poll it.
+    """Highest trip_id with the current creation rate, to seed the status page.
+    The page then polls the two apart: the id every second (a primary-key
+    lookup), the rate every ten (a scan).
     """
     with pg_session() as pg:
         max_id = pg.execute("SELECT COALESCE(MAX(trip_id), 0) FROM trips").scalar()

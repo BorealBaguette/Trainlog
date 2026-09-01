@@ -122,12 +122,14 @@ function renderPhotonStatus() {
 renderPhotonStatus();
 
 // Silly gimmick: a rolling odometer of the highest trip ID plus an analog
-// speedometer of trips/min. Both come straight from the server: the id is a
-// primary-key lookup on every poll, the rate a memoised count over a long
-// window. Deriving the rate here from id deltas instead made it sag between
-// trips and jump on each one, which read as noise rather than activity.
+// speedometer of trips/min. Both come straight from the server, on separate
+// intervals: the id is a primary-key lookup asked for every second, the rate a
+// count over a long window asked for every ten. Deriving the rate here from id
+// deltas instead made it sag between trips and jump on each one, which read as
+// noise rather than activity.
 (function () {
-  const POLL_MS = 1000;
+  const POLL_MS = 1000;       // the id: a primary-key lookup, cheap
+  const RATE_POLL_MS = 10000; // the rate: a scan, so asked for far less often
 
   // Gauge geometry: a 240-degree sweep, needle straight up at half scale.
   const CX = 130, CY = 132, R = 88;
@@ -359,13 +361,19 @@ renderPhotonStatus();
       .then(r => r.json())
       .then(data => {
         countTo(data.max_trip_id);
-        setRate(data.rate);
         tickEl.textContent = "●";
         restartAnimation(tickEl, "odometer-blink");
       })
       .catch(() => {
         if (current === null) box.textContent = "—";
       });
+  }
+
+  function pollRate() {
+    fetch("/status/trip_rate", { cache: "no-store" })
+      .then(r => r.json())
+      .then(data => setRate(data.rate))
+      .catch(() => { /* keep the last good reading on the dial */ });
   }
 
   if (seed) {
@@ -378,14 +386,18 @@ renderPhotonStatus();
   }
   poll();
   let timer = setInterval(poll, POLL_MS);
+  let rateTimer = setInterval(pollRate, RATE_POLL_MS);
 
   // Don't hammer the endpoint from a tab nobody is looking at.
   document.addEventListener("visibilitychange", () => {
     if (document.hidden) {
       clearInterval(timer);
+      clearInterval(rateTimer);
     } else {
       poll();
+      pollRate();
       timer = setInterval(poll, POLL_MS);
+      rateTimer = setInterval(pollRate, RATE_POLL_MS);
     }
   });
 })();
