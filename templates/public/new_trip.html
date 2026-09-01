@@ -1194,7 +1194,7 @@ async function initializeMapAndTrips() {
     var trips = response[0];
     var prices = response[1];
     // Trips from getPublicTrips (and thus from processPublicTrips) already come sorted by actual_departure_time (i.e. departure_time + departure_delay).
-    // Therefor, no need to sort them here.
+    // Therefore, no need to sort them here.
 
     // Keep a reference for itinerary<->map linking, and number the transfer points.
     currentTrips = trips;
