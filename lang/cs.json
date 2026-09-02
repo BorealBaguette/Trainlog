@@ -1292,5 +1292,7 @@
     "leaderboardWagonsUses": "Cesty",
     "leaderboardWagonsUsers": "Uživatelé",
     "leaderboardWagonsHallOfFame": "Síň slávy — sbírka, na které stojí všechno ostatní",
-    "leaderboardWagonsSortBy": "Seřadit podle"
+    "leaderboardWagonsSortBy": "Seřadit podle",
+    "discordAutopostSetting": "Zveřejňovat mé cesty na Discordu při odjezdu",
+    "discordAutopostHint": "Zveřejňují se pouze veřejné cesty."
 }

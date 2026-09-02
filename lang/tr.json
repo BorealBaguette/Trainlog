@@ -1284,5 +1284,7 @@
     "leaderboardWagonsUses": "Seyahatler",
     "leaderboardWagonsUsers": "Kullanıcılar",
     "leaderboardWagonsHallOfFame": "Şöhret salonu — diğer her şeyin üzerine kurulduğu koleksiyon",
-    "leaderboardWagonsSortBy": "Sırala"
+    "leaderboardWagonsSortBy": "Sırala",
+    "discordAutopostSetting": "Yolculuklarımı kalkışta Discord'da paylaş",
+    "discordAutopostHint": "Yalnızca herkese açık yolculuklar paylaşılır."
 }

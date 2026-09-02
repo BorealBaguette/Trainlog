@@ -417,6 +417,21 @@
               <a class="btn btn-primary btn-sm" href="{{ url_for('discord_oauth.connect') }}">{{ connectDiscordButton }}</a>
               {% endif %}
             </div>
+
+            {# Only offered once Discord is linked: the announcer needs the id. #}
+            {% if discord_id %}
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" id="discord_autopost" name="discord_autopost" form="settingsForm" {{ discord_autopost_checked }}>
+              <label class="form-check-label" for="discord_autopost">
+                <i class="fa-brands fa-discord me-1"></i> {{ discordAutopostSetting }}
+              </label>
+              <div class="settings2-hint">{{ discordAutopostHint }}</div>
+            </div>
+
+            <div class="settings2-save">
+              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
+            </div>
+            {% endif %}
           </div>
         </div>
 

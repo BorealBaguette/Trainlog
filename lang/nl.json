@@ -1288,5 +1288,7 @@
     "leaderboardWagonsUses": "Reizen",
     "leaderboardWagonsUsers": "Gebruikers",
     "leaderboardWagonsHallOfFame": "Hall of fame — de collectie waarop al het andere is gebouwd",
-    "leaderboardWagonsSortBy": "Sorteren op"
+    "leaderboardWagonsSortBy": "Sorteren op",
+    "discordAutopostSetting": "Mijn ritten bij vertrek op Discord plaatsen",
+    "discordAutopostHint": "Alleen openbare ritten worden geplaatst."
 }

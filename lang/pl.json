@@ -1292,5 +1292,7 @@
     "leaderboardWagonsUses": "Podróże",
     "leaderboardWagonsUsers": "Użytkownicy",
     "leaderboardWagonsHallOfFame": "Galeria sław — kolekcja, na której opiera się wszystko inne",
-    "leaderboardWagonsSortBy": "Sortuj według"
+    "leaderboardWagonsSortBy": "Sortuj według",
+    "discordAutopostSetting": "Publikuj moje podróże na Discordzie w chwili odjazdu",
+    "discordAutopostHint": "Publikowane są tylko podróże publiczne."
 }

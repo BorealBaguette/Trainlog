@@ -1286,5 +1286,7 @@
     "leaderboardWagonsUses": "Matkat",
     "leaderboardWagonsUsers": "Käyttäjät",
     "leaderboardWagonsHallOfFame": "Kunniagalleria — kokoelma, jonka varaan kaikki muu rakentuu",
-    "leaderboardWagonsSortBy": "Järjestä"
+    "leaderboardWagonsSortBy": "Järjestä",
+    "discordAutopostSetting": "Julkaise matkani Discordissa lähtöhetkellä",
+    "discordAutopostHint": "Vain julkiset matkat julkaistaan."
 }

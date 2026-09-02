@@ -1285,5 +1285,7 @@
     "leaderboardWagonsUses": "Trips",
     "leaderboardWagonsUsers": "Users",
     "leaderboardWagonsHallOfFame": "Hall of fame — the collection everything else is built on",
-    "leaderboardWagonsSortBy": "Sort by"
+    "leaderboardWagonsSortBy": "Sort by",
+    "discordAutopostSetting": "Post my trips to Discord as they depart",
+    "discordAutopostHint": "Only public trips are posted."
 }

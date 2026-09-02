@@ -1285,5 +1285,7 @@
     "leaderboardWagonsUses": "Voyages",
     "leaderboardWagonsUsers": "Utilisateurs",
     "leaderboardWagonsHallOfFame": "Panthéon — la collection sur laquelle repose tout le reste",
-    "leaderboardWagonsSortBy": "Trier par"
+    "leaderboardWagonsSortBy": "Trier par",
+    "discordAutopostSetting": "Publier mes trajets sur Discord au moment du départ",
+    "discordAutopostHint": "Seuls les trajets publics sont publiés."
 }

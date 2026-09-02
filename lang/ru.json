@@ -1292,5 +1292,7 @@
     "leaderboardWagonsUses": "Поездки",
     "leaderboardWagonsUsers": "Пользователи",
     "leaderboardWagonsHallOfFame": "Зал славы — коллекция, на которой держится всё остальное",
-    "leaderboardWagonsSortBy": "Сортировать по"
+    "leaderboardWagonsSortBy": "Сортировать по",
+    "discordAutopostSetting": "Публиковать мои поездки в Discord при отправлении",
+    "discordAutopostHint": "Публикуются только публичные поездки."
 }

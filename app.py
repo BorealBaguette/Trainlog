@@ -9334,6 +9334,11 @@ def user_settings(username):
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
         params["live_tracking"] = ("live_tracking" in request.form) and bool(user.premium)
+        # Gated on a linked Discord account rather than premium: without one
+        # there is nobody to post as, and the announcer skips the user anyway.
+        params["discord_autopost"] = (
+            "discord_autopost" in request.form
+        ) and bool(user.discord_id)
 
         for param in params:
             if getattr(user, param) != params[param]:
@@ -9352,6 +9357,7 @@ def user_settings(username):
     colorblind_checked = "checked" if user.colorblind else ""
     flight_3d_checked = "checked" if user.flight_3d else ""
     live_tracking_checked = "checked" if user.live_tracking else ""
+    discord_autopost_checked = "checked" if user.discord_autopost else ""
 
     return render_template(
         "user_settings.html",
@@ -9366,6 +9372,7 @@ def user_settings(username):
         colorblind_checked=colorblind_checked,
         flight_3d_checked=flight_3d_checked,
         live_tracking_checked=live_tracking_checked,
+        discord_autopost_checked=discord_autopost_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,

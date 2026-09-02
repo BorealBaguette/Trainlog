@@ -1288,5 +1288,7 @@
     "leaderboardWagonsUses": "Viajes",
     "leaderboardWagonsUsers": "Usuarios",
     "leaderboardWagonsHallOfFame": "Salón de la fama: la colección sobre la que se construye todo lo demás",
-    "leaderboardWagonsSortBy": "Ordenar por"
+    "leaderboardWagonsSortBy": "Ordenar por",
+    "discordAutopostSetting": "Publicar mis viajes en Discord al momento de salir",
+    "discordAutopostHint": "Solo se publican los viajes públicos."
 }
