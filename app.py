@@ -131,6 +131,8 @@ from src.transit_routing import (
     convert_here_response_to_trips,
 )
 from py.gps_cleaner import clean_gps_route
+from src.trip_periods import parse_period, period_label, period_trip_ids
+from src.trip_selections import parse_trip_ids, store_trip_ids
 from src.update_currency import run_currency_update
 from py.utils import (
     get_all_countries,
@@ -272,6 +274,7 @@ from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
+from src.trip_announcer import start_trip_announcer
 from src.photon import photonInstances, photonRequest, photonRequestSingle
 from src.routing import forward_routing_core
 from src.gpx_import import (
@@ -287,6 +290,7 @@ from src.error_reporter import report_error
 
 app = Flask(__name__)
 start_email_listener(app)
+start_trip_announcer(app)
 
 app.config['DEBUG'] = True
 Compress(app)
@@ -4696,6 +4700,7 @@ def render_public_trip_page(
     ticketId=None,
     template="public/public_trip.html",
     owner_only=False,
+    period=None,
 ):
     
     user_obj = None
@@ -4709,9 +4714,28 @@ def render_public_trip_page(
     tag_name = None
     countries = []
     length = 0
+    # The segment this page was reached by: a share key stays a share key
+    # across the poster and back links instead of expanding to a full id list.
+    tripIdsParam = tripIds
 
     # this needs to be done before changing the tripIds variable
-    multitrip_url = url_for("multi_trip", tripIds=tripIds, tagId=tagId, ticketId=ticketId)
+    if period is not None:
+        multitrip_url = url_for("multi_trip_period", **period)
+    else:
+        multitrip_url = url_for(
+            "multi_trip", tripIds=tripIds, tagId=tagId, ticketId=ticketId
+        )
+
+    if tripIds is None and period is not None:
+        # A year/month/week pseudo-tag: resolved on every request, so a trip
+        # logged later simply appears on the page for its period.
+        try:
+            start, end = parse_period(period["kind"], period["period"])
+        except ValueError:
+            abort(404)
+        ids = period_trip_ids(get_user_id(period["username"]), start, end)
+        tripIds = ",".join(str(trip_id) for trip_id in ids) or None
+        tag_name = period_label(period["kind"], period["period"])
 
     if tripIds is None and tagId is not None:
         with pg_session() as pg:
@@ -4764,7 +4788,10 @@ def render_public_trip_page(
     # The page shell only needs visibility screening, per-trip countries/length
     # for the OG tags and the sorted id list — fetch just that in one set-based
     # query instead of the full get_trip_pg machinery once per trip.
-    requested_ids = [int(t) for t in tripIds.split(",")]
+    try:
+        requested_ids = parse_trip_ids(tripIds)
+    except ValueError:
+        abort(410)
     with pg_session() as pg:
         rows = pg.execute(
             """
@@ -4908,6 +4935,9 @@ def render_public_trip_page(
         own_trips=own_trips,
         logosList=listOperatorsLogos(),
         tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
+        tripIdsParam=tripIdsParam
+        or ",".join(str(trip["uid"]) for trip in trip_list_sorted),
+        period_args=period,
         title=lang[session["userinfo"]["lang"]]["sharedLink"],
         collection_voyage=tag_type,
         tag_description=tag_name,
@@ -4970,13 +5000,130 @@ def public_trip_poster(tripIds=None, tagId=None, ticketId=None):
     )
 
 
+# Pseudo-tags: every trip in a year, month or ISO week, matched on local
+# departure time. Nothing is stored — the list is rebuilt on each request, so
+# these pages stay current without cluttering the tag list.
+@app.route("/public/<username>/<any(year, month, week):kind>/<period>")
+@public_required
+def public_trip_period(username, kind, period):
+    return render_public_trip_page(
+        template="public/new_trip.html",
+        period={"username": username, "kind": kind, "period": period},
+    )
+
+
+@app.route("/public/<username>/<any(year, month, week):kind>/<period>/poster")
+@public_required
+def public_trip_period_poster(username, kind, period):
+    return render_public_trip_page(
+        template="public/trip_poster.html",
+        owner_only=True,
+        period={"username": username, "kind": kind, "period": period},
+    )
+
+
+@app.route("/public/multiTrip/<username>/<any(year, month, week):kind>/<period>")
+@public_required
+def multi_trip_period(username, kind, period):
+    return multi_trip(period={"username": username, "kind": kind, "period": period})
+
+
+@app.route("/admin/trip_card/<int:trip_id>.png")
+@owner_required
+def admin_trip_card(trip_id):
+    """Render a trip's Discord card and return it, without posting anything.
+
+    For eyeballing the layout against real trips — long station names, missing
+    logos, odd durations — which is the only way to find out how it copes.
+    """
+    from src.trip_card import _martin, render_trip_card
+
+    # Say which of the three failures it was: "404" alone sent me looking for a
+    # missing trip when the answer was an unreachable renderer.
+    with pg_session() as pg:
+        row = pg.execute(
+            """
+            SELECT t.trip_id, p.trip_id IS NOT NULL AS has_route
+            FROM trips t LEFT JOIN paths p ON p.trip_id = t.trip_id
+            WHERE t.trip_id = :trip_id
+            """,
+            {"trip_id": trip_id},
+        ).fetchone()
+    if row is None:
+        return make_response((f"no trip {trip_id} in this database", 404))
+    if not row["has_route"]:
+        return make_response((f"trip {trip_id} has no route to draw", 404))
+    base_url, style = _martin()
+    if not (base_url and style):
+        return make_response(("martin.url / martin.style not in config.yaml", 503))
+
+    png = render_trip_card(trip_id)
+    if png is None:
+        return make_response(
+            (f"renderer failed — is martin reachable at {base_url}?", 503)
+        )
+    response = make_response(png)
+    response.headers["Content-Type"] = "image/png"
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/admin/trip_card/<int:trip_id>/message")
+@owner_required
+def admin_trip_message(trip_id):
+    """The announcement text for a trip, exactly as Discord would receive it."""
+    from src.trip_announcer import format_announcement
+
+    with pg_session() as pg:
+        trip = pg.execute(
+            """
+            SELECT trip_id, operator, line_name, trip_type, origin_station,
+                   destination_station, start_datetime, end_datetime,
+                   departure_delay, arrival_delay
+            FROM trips WHERE trip_id = :trip_id
+            """,
+            {"trip_id": trip_id},
+        ).fetchone()
+    if trip is None:
+        abort(404)
+    response = make_response(format_announcement(trip))
+    response.headers["Content-Type"] = "text/plain; charset=utf-8"
+    return response
+
+
+@app.route("/public/share", methods=["POST"])
+def create_trip_share():
+    """Store a trip selection and redirect to its short link.
+
+    Reached by a real form submit from the trips table, so the browser treats
+    the new tab as user-initiated (a fetch + window.open would be popup-blocked)
+    and the address bar ends up on the short URL rather than the long one.
+    """
+    try:
+        ids = [int(part) for part in request.form.get("trips", "").split(",") if part]
+        key = store_trip_ids(ids)
+    except ValueError:
+        abort(400)
+
+    target = "multi_trip" if request.form.get("view") == "multiTrip" else "public_trip"
+    return redirect(url_for(target, tripIds=key), code=303)
+
+
 @app.route("/public/multiTrip/<tripIds>")
 @app.route("/public/multiTrip/tag/<tagId>")
 @app.route("/public/multiTrip/ticket/<ticketId>")
-def multi_trip(tripIds=None, tagId=None, ticketId=None):
+def multi_trip(tripIds=None, tagId=None, ticketId=None, period=None):
     tag_name = None
     if not tripIds:
-        if tagId:
+        if period:
+            try:
+                start, end = parse_period(period["kind"], period["period"])
+            except ValueError:
+                abort(404)
+            ids = period_trip_ids(get_user_id(period["username"]), start, end)
+            tripIds = ",".join(str(trip_id) for trip_id in ids) or None
+            tag_name = period_label(period["kind"], period["period"])
+        elif tagId:
             with pg_session() as pg:
                 result = pg.execute(
                     """
@@ -5012,7 +5159,10 @@ def multi_trip(tripIds=None, tagId=None, ticketId=None):
     # Same batched screening as the tag page: one set-based query, private/
     # friends trips drop out of the embedded id list (getMultiTrips would filter
     # them anyway), owner-level sharing checked once per owner of a visible trip.
-    requested_ids = [int(t) for t in tripIds.split(",")]
+    try:
+        requested_ids = parse_trip_ids(tripIds)
+    except ValueError:
+        abort(410)
     with pg_session() as pg:
         rows = pg.execute(
             "SELECT trip_id, user_id, visibility FROM trips WHERE trip_id = ANY(:ids)",
@@ -13975,6 +14125,13 @@ def ensure_auth_db_columns():
     if "discord_username" not in existing:
         authDb.session.execute(
             sqlalchemy.text("ALTER TABLE user ADD COLUMN discord_username VARCHAR(50)")
+        )
+        authDb.session.commit()
+    if "discord_autopost" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN discord_autopost BOOLEAN NOT NULL DEFAULT 0"
+            )
         )
         authDb.session.commit()
     if "pending_email" not in existing:

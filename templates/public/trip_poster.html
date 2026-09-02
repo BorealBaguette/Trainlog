@@ -507,7 +507,7 @@ body { background: #e9e9ec; }
 
 <div class="posterPage">
     <div class="posterTopBar">
-        <a class="posterBackBtn" id="posterBackLink" href="{{ url_for('public_trip', tripIds=tripIds) }}"><i class="fas fa-chevron-left"></i> {{back}}</a>
+        <a class="posterBackBtn" id="posterBackLink" href="{{ url_for('public_trip_period', **period_args) if period_args else url_for('public_trip', tripIds=tripIdsParam) }}"><i class="fas fa-chevron-left"></i> {{back}}</a>
         <div class="posterControls">
             <div class="posterSideTabs">
                 <button type="button" class="posterSideTab active" data-side="front"><i class="fas fa-map"></i> {{ map }}</button>

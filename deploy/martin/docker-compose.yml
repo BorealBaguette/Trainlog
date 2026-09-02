@@ -1,0 +1,63 @@
+# Server-side map rendering for Discord trip cards.
+#
+# Runs alongside the Trainlog app on the primary host, on the reverse_proxy
+# network, so trainlog_prod and trainlog_dev reach it at http://martin:3000.
+#
+# It is NOT published to the internet: traefik.toml sets exposedByDefault =
+# false, so a container with no traefik router labels is never routed, and the
+# explicit traefik.enable=false below says so out loud. That matters here —
+# Martin's rendering is uncached, non-concurrent and unauthenticated, so a
+# public endpoint would be a free CPU sink.
+#
+# cpuset is the memory control that matters: Martin sizes its two render pools
+# from the visible CPU count, and each worker holds a MapLibre Native context.
+# Measured on one card: 16 cores -> 1 969 MB resident; 1 core -> 27 MB idle,
+# ~390 MB warm, and no slower (1.9 s either way, since a single render is
+# single-threaded). Announcements are a handful an hour, so one worker is
+# plenty. Use cpuset, not `cpus:` — the latter caps CFS quota without changing
+# the core count Martin counts.
+services:
+  # Martin needs the style as a file on disk, and the copy in the repo carries
+  # the {{mapPinUrl}} placeholder that the app fills in per request. Rather
+  # than commit a resolved duplicate that silently goes stale, fetch the
+  # already-resolved style the site itself serves, on every start.
+  style-init:
+    image: curlimages/curl:8.11.1
+    # As root: the image's own user (uid 100) cannot create a file in a fresh
+    # named volume, which is root-owned — curl exits 23, "write error". The
+    # file it writes is world-readable, which is all Martin needs.
+    user: "0:0"
+    command: >
+      -fsS --retry 3 --retry-delay 2
+      -o /styles/dark.json
+      https://trainlog.me/getVectorStyle/en/trainlog-dark.json
+    volumes:
+      - styles:/styles
+    restart: "no"
+
+  martin:
+    image: ghcr.io/maplibre/martin:1.15.0
+    container_name: martin
+    command: ["-c", "/config/martin.yaml"]
+    volumes:
+      - ./martin.yaml:/config/martin.yaml:ro
+      - styles:/styles:ro
+    depends_on:
+      style-init:
+        condition: service_completed_successfully
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=false"
+    cpuset: "0"
+    mem_limit: 512m
+    networks:
+      - default
+
+volumes:
+  styles:
+
+networks:
+  # The network Traefik and the app containers already share.
+  default:
+    name: reverse_proxy
+    external: true

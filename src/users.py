@@ -66,6 +66,10 @@ class User(authDb.Model):
     # Discord's @username at the time of linking (display only — not re-synced,
     # so it can go stale if they rename on Discord; discord_id is the real key).
     discord_username = authDb.Column(authDb.String(50), nullable=True)
+    # Post this user's public trips to the Discord channel as they depart (see
+    # src/trip_announcer.py). Off by default: it broadcasts where someone is,
+    # which is a different disclosure from a trip sitting on their profile.
+    discord_autopost = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Email change requested but not yet confirmed. `email` itself only updates
     # once the user clicks the link sent to `pending_email` (see
     # /u/<username>/change_email), so a user can't take over an inbox they don't
@@ -99,6 +103,7 @@ class User(authDb.Model):
             "live_tracking": self.live_tracking,
             "discord_id": self.discord_id,
             "discord_username": self.discord_username,
+            "discord_autopost": self.discord_autopost,
             "pending_email": self.pending_email,
         }
 

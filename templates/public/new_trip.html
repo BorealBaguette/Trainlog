@@ -662,7 +662,7 @@ body.markers-hidden .marker-red-green {
     <button class="control-button" onclick="copyURL()" title="{{copy}}"><i class="fas fa-clipboard"></i></button>
     <button class="control-button" id="markersToggle" onclick="toggleMarkers()" title="{{hideMarkers}}"><i class="fas fa-map-pin"></i></button>
   {# The poster is served only to the owner of every trip on the page (401 otherwise). #}
-  {% set poster_url = (url_for('public_trip_poster', tagId=tag_uuid) if tag_uuid else (url_for('public_trip_poster', tripIds=tripIds) if tripIds else None)) if own_trips else None %}
+  {% set poster_url = (url_for('public_trip_period_poster', **period_args) if period_args else (url_for('public_trip_poster', tagId=tag_uuid) if tag_uuid else (url_for('public_trip_poster', tripIds=tripIdsParam) if tripIds else None))) if own_trips else None %}
   {% if poster_url or show_ride_along or multitrip_url or plan_copy_url %}
     <div class="tripActions" id="tripActions">
       <button type="button" class="control-button" onclick="toggleTripActions(event)" title="{{ actions }}" aria-label="{{ actions }}">
