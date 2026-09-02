@@ -32,8 +32,12 @@ from functools import lru_cache
 
 import cairosvg
 import requests
-from fontTools.ttLib import TTFont
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
+
+try:
+    from fontTools.ttLib import TTFont
+except ImportError:  # optional: without it there is no fallback, only Latin
+    TTFont = None
 from shapely.geometry import LineString
 
 from py.utils import load_config
@@ -578,6 +582,8 @@ def _fit(draw, text, size, max_width, min_size=None):
 @lru_cache(maxsize=None)
 def _coverage(path):
     """The codepoints a font file actually has glyphs for."""
+    if TTFont is None:
+        return frozenset()
     try:
         return frozenset(TTFont(path, fontNumber=0, lazy=True).getBestCmap())
     except Exception as e:
@@ -587,7 +593,15 @@ def _coverage(path):
 
 @lru_cache(maxsize=None)
 def _font_chain():
-    """Montserrat first, then whichever fallbacks exist on this machine."""
+    """Montserrat first, then whichever fallbacks exist on this machine.
+
+    Only Montserrat when fontTools is missing: without a cmap to read there is
+    no way to tell which font has a glyph, so falling back would be guesswork.
+    Non-Latin names come out as boxes, which is how it behaved before — a
+    cosmetic loss, not a reason to fail.
+    """
+    if TTFont is None:
+        return (FONT_FILE,)
     return tuple(
         path for path in [FONT_FILE, *FALLBACK_FONTS] if os.path.exists(path)
     )
