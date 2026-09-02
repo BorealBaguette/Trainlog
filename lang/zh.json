@@ -1215,6 +1215,8 @@
     "noCost": "无共享费用",
     "confirmDeleteCost": "删除此共享费用？",
     "importTrips": "将行程移入此计划",
+    "selectPlan": "选择计划",
+    "moveToPlan": "移动到计划",
     "importTripsHint": "行程ID，逗号分隔（例如 1042, 1043）",
     "importTripsBtn": "移入",
     "confirmImportTrips": "将这些行程移入计划？它们将从您的行程中删除。",

@@ -1216,6 +1216,8 @@
     "noCost": "Kei gmeinsami Choschte",
     "confirmDeleteCost": "Die gmeinsame Choschte lösche?",
     "importTrips": "Reise in die Planig verschiebe",
+    "selectPlan": "E Planig uuswähle",
+    "moveToPlan": "In e Planig verschiebe",
     "importTripsHint": "Reis-IDs, kommagetrennt (z. B. 1042, 1043)",
     "importTripsBtn": "Iiverschiebe",
     "confirmImportTrips": "Die Reise in d'Planig verschiebe? Si wärde us dine Reise entfernt.",

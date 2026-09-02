@@ -1001,6 +1001,7 @@
             <li class="dropdown-item" onclick="exportSelected();"><i class="fa-solid fa-file-export"></i>  {{export}}</li>
             {% if not isPublic %}
             <li class="dropdown-item" onclick="$('#ticketSearchModal').modal('show');"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</li>
+            <li class="dropdown-item" onclick="$('#planSearchModal').modal('show');"><i class="fa-solid fa-map-location-dot"></i>  {{ moveToPlan|default('Move to a plan') }}</li>
             <li class="dropdown-item tagSearchLink" style="display:none;" onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags"></i>  {{manage_tags}}</li>
             {% endif %}
             <li class="dropdown-item" onclick="exportGpx();"><i class="fa-solid fa-route"></i>  {{exportGpx}}</li>
@@ -1068,6 +1069,26 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-primary" onclick="attachSelectedTrips($('#ticketSearchInput').val())">{{submit}}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="planSearchModal" tabindex="-1" role="dialog" aria-labelledby="planSearchModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="planSearchModalLabel">{{ moveToPlan|default('Move to a plan') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="planSearchInput" class="form-label">{{ selectPlan|default('Select a plan') }}</label>
+          <select id="planSearchInput" class="form-select"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="moveSelectedToPlan($('#planSearchInput').val())">{{submit}}</button>
       </div>
     </div>
   </div>
@@ -3683,6 +3704,21 @@ function attachSelectedTrips(ticket_id){
     window.open(`${url}?${urlParams.toString()}`);
 }
 
+function moveSelectedToPlan(plan_uuid){
+    if (!plan_uuid || !confirm("{{ confirmImportTrips|default('Move these trips into the plan? They will be removed from your trips.') }}")) return;
+
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `{{ url_for('import_trips_to_plan_route', username=username, plan_uuid='PLAN_UUID') }}`.replace('PLAN_UUID', plan_uuid);
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'trip_ids';
+    input.value = checkedTrips;
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+}
+
 function bulkChangeVisibility(visibility){
     url=`{{ url_for('bulkChangeVisibility', username=username)}}`;
 
@@ -3721,6 +3757,22 @@ if ("{{privateButtons}}" == "True"){
 }
 
 
+
+const planSearchModal = document.getElementById('planSearchModal');
+if (planSearchModal) {
+    planSearchModal.addEventListener('show.bs.modal', () => {
+        fetch(`{{ url_for("plans_api.list_user_plans", username=username) }}`)
+            .then(response => response.json())
+            .then(plans => {
+                const select = $('#planSearchInput');
+                select.empty();
+                for (const plan of plans) {
+                    select.append($('<option>').val(plan.uuid).text(plan.archived ? `${plan.name} (${"{{ archived|default('Archived') }}"})` : plan.name));
+                }
+            })
+            .catch(error => console.error('Failed to fetch plans:', error));
+    });
+}
 
 const ticketSearchModal = document.getElementById('ticketSearchModal');
 ticketSearchModal.addEventListener('show.bs.modal', fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}"));

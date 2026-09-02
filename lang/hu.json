@@ -1215,6 +1215,8 @@
     "noCost": "Nincs megosztott költség",
     "confirmDeleteCost": "Törli ezt a megosztott költséget?",
     "importTrips": "Utazások áthelyezése ebbe a tervbe",
+    "selectPlan": "Válassz tervet",
+    "moveToPlan": "Áthelyezés tervbe",
     "importTripsHint": "Utazás azonosítók, vesszővel elválasztva (pl. 1042, 1043)",
     "importTripsBtn": "Áthelyezés",
     "confirmImportTrips": "Áthelyezed ezeket az utazásokat a tervbe? Az utazásaidból el lesznek távolítva.",

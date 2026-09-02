@@ -172,8 +172,13 @@ def _time(value, delay_seconds) -> str:
     return text
 
 
-def format_announcement(trip) -> str:
-    """The message body, in the shape the channel already writes by hand."""
+def format_announcement(trip, has_card=False) -> str:
+    """The message body, in the shape the channel already writes by hand.
+
+    With a card attached the link is wrapped in <> so Discord does not unfurl
+    it: since trip pages carry a map as their og:image, the same picture would
+    otherwise appear twice in one message.
+    """
     emoji = TYPE_EMOJI.get(trip["trip_type"], "🚆")
     header = " ".join(
         part for part in (trip["operator"], trip["line_name"]) if part
@@ -189,7 +194,8 @@ def format_announcement(trip) -> str:
     lines.append(
         f"{_time(trip['end_datetime'], trip['arrival_delay'])} {trip['destination_station']}".strip()
     )
-    lines.append(f"{SITE_URL}/public/trip/{trip['trip_id']}")
+    url = f"{SITE_URL}/public/trip/{trip['trip_id']}"
+    lines.append(f"<{url}>" if has_card else url)
     return "\n".join(lines)
 
 
@@ -219,11 +225,12 @@ def announce_due_trips(webhook_url, now=None) -> int:
         if not _claim(trip["trip_id"]):
             continue  # another worker got there first
         username, _ = users[trip["user_id"]]
+        card = _card(trip["trip_id"])
         message_id = post_webhook_message(
             webhook_url,
-            format_announcement(trip),
+            format_announcement(trip, has_card=card is not None),
             username=username,
-            file=_card(trip["trip_id"]),
+            file=card,
         )
         if message_id:
             _record_message(trip["trip_id"], message_id)

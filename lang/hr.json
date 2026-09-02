@@ -1221,6 +1221,8 @@
     "noCost": "Nema zajedničkih troškova",
     "confirmDeleteCost": "Izbrisati ovaj zajednički trošak?",
     "importTrips": "Premjesti putovanja u ovaj plan",
+    "selectPlan": "Odaberi plan",
+    "moveToPlan": "Premjesti u plan",
     "importTripsHint": "ID-ovi putovanja odvojeni zarezima (npr. 1042, 1043)",
     "importTripsBtn": "Premjesti",
     "confirmImportTrips": "Premjestiti ova putovanja u plan? Bit će uklonjena iz vaših putovanja.",

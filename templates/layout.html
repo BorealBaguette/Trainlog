@@ -42,15 +42,27 @@
   </script>
   <script src="{{ static_autoversion(filename='js/routing.js') }}"></script>
 
-  {% if not special_og %}
-    <meta content="Trainlog" property="og:title" />
-    <meta content="Your online travel diary" property="og:description" />
-  {% else %}
+  {% set og_image = (og|default({}, true)).get('image') %}
+  {# The per-trip title and description are what a card already prints across
+     its own caption bar, so beside one they say everything twice. Drop back to
+     the site's own pair there rather than omitting the tags: an unfurl with no
+     og:title at all is an error to most validators, and some readers show only
+     the bare URL. Pages with no card keep the specific text — it is all their
+     preview has. #}
+  {% if special_og and not og_image %}
     <meta content="{{og['title']}}" property="og:title" />
     <meta content="{{og['description']}}" property="og:description" />
+  {% else %}
+    <meta content="Trainlog" property="og:title" />
+    <meta content="Your online travel diary" property="og:description" />
   {% endif %}
     <meta content="{{request.url_root}}" property="og:url" />
-    <meta content="{{ url_for('static',filename='images/logo_og.png', _external=True) }}" property="og:image" />
+    <meta content="{{ og_image or url_for('static',filename='images/logo_og.png', _external=True) }}" property="og:image" />
+  {% if og_image %}
+    <meta content="1200" property="og:image:width" />
+    <meta content="630" property="og:image:height" />
+    <meta content="summary_large_image" name="twitter:card" />
+  {% endif %}
   
   <script>
     const langId = '{{langId}}' ? '{{langId}}' : 'en';

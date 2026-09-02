@@ -1218,6 +1218,8 @@
     "noCost": "Sem custo compartilhado",
     "confirmDeleteCost": "Excluir este custo compartilhado?",
     "importTrips": "Mover viagens para este plano",
+    "selectPlan": "Escolha um plano",
+    "moveToPlan": "Mover para um plano",
     "importTripsHint": "IDs de viagem, separados por vírgula (ex.: 1042, 1043)",
     "importTripsBtn": "Mover para cá",
     "confirmImportTrips": "Mover estas viagens para o plano? Elas serão removidas das suas viagens.",

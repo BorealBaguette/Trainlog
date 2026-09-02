@@ -1215,6 +1215,8 @@
     "noCost": "Ühiskulusid pole",
     "confirmDeleteCost": "Kustuta see ühiskulu?",
     "importTrips": "Vii reisid sellesse plaani",
+    "selectPlan": "Vali plaan",
+    "moveToPlan": "Vii plaani",
     "importTripsHint": "Reiside ID-d komadega eraldatult (nt 1042, 1043)",
     "importTripsBtn": "Vii sisse",
     "confirmImportTrips": "Viia need reisid plaani? Need eemaldatakse sinu reisidest.",
