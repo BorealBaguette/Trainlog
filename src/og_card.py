@@ -196,9 +196,11 @@ def _title_lines(draw, title, width, scale):
         # MIN_SIZE, is ellipsized by the caller.
         return [title], _fit(draw, title, size, width, min_size=MIN_SIZE * scale)
 
-    # The arrow leads the second line, where it reads as "...to here" rather
-    # than as a dangling character at the end of the first.
-    lines = [origin.strip(), f"→ {destination.strip()}"]
+    # The arrow goes with it. On one line it sits between the two names and
+    # balances; carried onto the second it hangs off one end only, and reads as
+    # a mark against the arrival rather than as the join between the pair.
+    # Stacked, the order says the same thing.
+    lines = [origin.strip(), destination.strip()]
     return lines, min(
         _fit(draw, line, TITLE_WRAP_SIZE * scale, width, min_size=MIN_SIZE * scale)
         for line in lines
