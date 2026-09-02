@@ -3206,6 +3206,28 @@ $('.deleteButton').off('click').on('click', function() {
     updateMetaWrap();
 }
 
+// A selection of a few hundred trips used to be spelled out id by id in the
+// share URL. POSTing the list to /public/share stores it once and redirects to
+// an 8-character key, so the shared link is short whatever the selection size.
+// A real form submit (rather than fetch + window.open) keeps the new tab
+// user-initiated, so popup blockers leave it alone.
+function openTripShare(openInNewTab) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = "{{ url_for('create_trip_share') }}";
+    form.target = openInNewTab ? '_blank' : '_self';
+
+    const trips = document.createElement('input');
+    trips.type = 'hidden';
+    trips.name = 'trips';
+    trips.value = checkedTrips.join(',');
+    form.appendChild(trips);
+
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+}
+
 // True only when viewing your own trips (you may change their visibility).
 // The public/friend view sets isPublic=True; the owner's own page sets it False.
 const ownsTrips = "{{ isPublic }}" != "True";
@@ -3213,7 +3235,7 @@ const ownsTrips = "{{ isPublic }}" != "True";
 function shareTrips(openInNewTab) {
     const isAllPublic = Object.values(checkedTripData).every(trip => trip.visibility === 'public');
     if(isAllPublic || !ownsTrips) {
-        window.open("{{ url_for('public_trip', tripIds='') }}" + checkedTrips, openInNewTab ? '_blank' : '_self', 'noopener')
+        openTripShare(openInNewTab)
         return;
     }
 
@@ -3223,7 +3245,7 @@ function shareTrips(openInNewTab) {
 
 function shareTripsLeaveAsIs() {
     const openInNewTab = document.getElementById('shareTripsMakePublicModal').getAttribute('data-new-tab') === 'true';
-    window.open("{{ url_for('public_trip', tripIds='') }}" + checkedTrips, openInNewTab ? '_blank' : '_self', 'noopener')
+    openTripShare(openInNewTab)
     $('#shareTripsMakePublicModal').modal('hide');
 }
 
@@ -3241,7 +3263,7 @@ function shareTripsMakePublic() {
 
     fetch(`${changeVisibilityUrl}?${urlParams.toString()}`).finally(() => {
         tableObject.ajax.reload();
-        window.open("{{ url_for('public_trip', tripIds='') }}" + checkedTrips, openInNewTab ? '_blank' : '_self', 'noopener')
+        openTripShare(openInNewTab)
         for (let trip of Object.values(checkedTripData)) {
             trip.visibility = 'public';
         }

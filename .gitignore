@@ -8,6 +8,8 @@
 !databases/data.db
 .flask_secret
 config.yaml
+# any local copy of it too (config.yaml2, config.yaml.prod, …)
+config.yaml*
 .python-version
 .env
 .venv/

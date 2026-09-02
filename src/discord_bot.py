@@ -5,6 +5,7 @@ app, and the only capability needed is granting/revoking guild roles, which
 the Discord REST API supports directly via bot-token auth.
 """
 
+import json
 import logging
 
 import requests
@@ -82,3 +83,64 @@ def sync_discord_tier(user, tier: str | None) -> None:
             logger.warning("Discord sync: no role id configured for %s, skipping", key)
             continue
         _set_role(user.discord_id, role_id, grant=(key == target_key))
+
+
+def post_webhook_message(
+    webhook_url: str, content: str, username: str = None, file=None
+):
+    """Post a plain-text message through a channel webhook.
+
+    Webhooks are used rather than the bot token because they are bound to their
+    channel and need no guild membership or channel permission — the same
+    reason the BMC and feature-request notifications use them. ``username``
+    overrides the displayed author per message, so a trip can be posted under
+    the name of whoever took it.
+
+    Returns the message id on success, ``False`` when Discord answered with an
+    error (nothing was posted, so retrying is safe), and ``None`` when we never
+    got an answer — a timeout may well have posted it, and retrying on None
+    risks posting twice.
+
+    Never raises: a Discord outage must not take down whatever asked for the
+    post (the trip announcer polls in a loop and tries again next tick).
+    """
+    if not webhook_url:
+        logger.warning("No trips webhook configured; skipping message")
+        return False
+
+    # flags 1<<2 is SUPPRESS_EMBEDS: the trip link would otherwise unfurl into
+    # a link preview underneath, which says less than the card already attached.
+    payload = {
+        "content": content,
+        "allowed_mentions": {"parse": []},
+        "flags": 4,
+    }
+    if username:
+        payload["username"] = username
+
+    if file:
+        # An attachment has to go as multipart, with the rest of the message
+        # riding along in payload_json.
+        kwargs = {
+            "data": {"payload_json": json.dumps(payload)},
+            "files": {"files[0]": (file[0], file[1], "image/png")},
+        }
+    else:
+        kwargs = {"json": payload}
+
+    try:
+        # wait=true makes Discord return the created message instead of 204,
+        # which is the only way to learn its id.
+        response = requests.post(
+            webhook_url, params={"wait": "true"}, timeout=20, **kwargs
+        )
+        if response.status_code in (200, 201):
+            return response.json().get("id")
+        logger.warning(
+            "Discord webhook message failed: %s %s",
+            response.status_code, response.text,
+        )
+        return False
+    except requests.RequestException as e:
+        logger.warning("Discord API error while posting via webhook: %s", e)
+    return None
