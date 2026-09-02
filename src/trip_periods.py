@@ -29,7 +29,7 @@ _MONTH_RE = re.compile(r"^(\d{4})-(\d{2})$")
 _WEEK_RE = re.compile(r"^(\d{4})-[Ww](\d{2})$")
 
 # Trips are logged well before and after today, but not in the year 3000.
-_MIN_YEAR, _MAX_YEAR = 1800, 2999
+MIN_YEAR, MAX_YEAR = 1800, 2999
 
 
 def parse_period(kind: str, value: str):
@@ -73,7 +73,7 @@ def parse_period(kind: str, value: str):
 
 
 def _check_year(year: int) -> int:
-    if not _MIN_YEAR <= year <= _MAX_YEAR:
+    if not MIN_YEAR <= year <= MAX_YEAR:
         raise ValueError(f"year out of range: {year}")
     return year
 
