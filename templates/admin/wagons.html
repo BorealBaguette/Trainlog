@@ -167,8 +167,14 @@
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Scale (px/m)</label>
-              <input type="number" step="any" min="0" class="form-control" name="px_per_meter"
+              <input type="number" step="any" min="0" class="form-control" name="px_per_meter" id="addPxPerMeter"
                      placeholder="auto" title="Pixels per real metre. Blank = auto-scale by strip median.">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Length (m)</label>
+              <input type="number" step="any" min="0" class="form-control" id="addLength"
+                     placeholder="e.g. 26.4" title="Real length of what the picture shows — sets the scale beside it.">
+              <div class="form-text" id="addScaleHint"></div>
             </div>
           </div>
           <div class="row g-2 mb-2">
@@ -308,8 +314,14 @@
             </div>
             <div class="col-md-2">
               <label class="form-label fw-semibold">Scale (px/m)</label>
-              <input type="number" step="any" min="0" class="form-control" name="px_per_meter"
+              <input type="number" step="any" min="0" class="form-control" name="px_per_meter" id="editPxPerMeter"
                      placeholder="auto" title="Pixels per real metre. Blank = auto-scale by strip median.">
+            </div>
+            <div class="col-md-3">
+              <label class="form-label fw-semibold">Length (m)</label>
+              <input type="number" step="any" min="0" class="form-control" id="editLength"
+                     placeholder="e.g. 26.4" title="Real length of what the picture shows — sets the scale beside it.">
+              <div class="form-text" id="editScaleHint"></div>
             </div>
           </div>
           <div class="row g-2 mb-2">
@@ -585,6 +597,55 @@ document.getElementById('addImageType').addEventListener('change', function () {
 });
 renderAddUpload('sides');
 
+/* ── Scale: px/m, or the real length it comes from ────────────────────
+   px_per_meter is what gets stored, but a length in metres is what is actually
+   known about a vehicle. The drawing's width in pixels IS its length in pixels,
+   so once that width is known the two convert into each other:
+       px_per_meter = image width / real length
+   Either box fills the other; only the px/m one is submitted. On a cut strip the
+   width is the whole strip's, so the length asked for is the whole unit's. */
+function bindScalePair(prefix) {
+  const scale = document.getElementById(prefix + 'PxPerMeter');
+  const len   = document.getElementById(prefix + 'Length');
+  const hint  = document.getElementById(prefix + 'ScaleHint');
+  let width = null;
+
+  const round = (v, d) => Math.round(v * 10 ** d) / 10 ** d;
+
+  const paint = () => {
+    len.disabled = !width;
+    hint.textContent = width ? `Image is ${width} px wide.`
+                             : 'Needs an image to convert from.';
+  };
+  const fromScale = () => {
+    const v = parseFloat(scale.value);
+    len.value = (width && v > 0) ? round(width / v, 2) : '';
+  };
+  const fromLength = () => {
+    const v = parseFloat(len.value);
+    scale.value = (width && v > 0) ? round(width / v, 3) : '';
+  };
+
+  scale.addEventListener('input', fromScale);
+  len.addEventListener('input', fromLength);
+  paint();
+
+  /* Called whenever the picture behind the scale changes (null = none yet) */
+  return { setWidth(w) { width = w || null; paint(); fromScale(); } };
+}
+const addScale  = bindScalePair('add');
+const editScale = bindScalePair('edit');
+
+/* The width of an already-saved wagon's drawing is only known once it loads */
+function measureWagonImage(row, cb) {
+  const src = imgSrc(row.image, row.image_type, row.image_ext);
+  if (!src) { cb(null); return; }
+  const probe = new Image();
+  probe.onload  = () => cb(probe.naturalWidth || null);
+  probe.onerror = () => cb(null);
+  probe.src = src;
+}
+
 /* ── Cut editor ───────────────────────────────────────────────────────
    A single drawing often holds a whole multi-car unit. The admin can cut it here
    into one wagon per car: the picture is sliced server-side at these positions and
@@ -626,6 +687,8 @@ function loadCutStrips() {
   cutMain = cutSide = null;
   cutMirrorR = picked.mirror;
 
+  addScale.setWidth(null);
+
   if (!picked.main) { section.classList.add('d-none'); return; }
   section.classList.remove('d-none');
 
@@ -633,6 +696,7 @@ function loadCutStrips() {
   const img = document.getElementById('cutImg');
   img.onload = () => {
     cutMain = { file: picked.main, url, width: img.naturalWidth };
+    addScale.setWidth(cutMain.width);
     document.getElementById('cutInner').style.width = cutMain.width + 'px';
     img.width = cutMain.width; img.height = img.naturalHeight;
     renderCuts();
@@ -960,6 +1024,8 @@ function openEditModal(wname) {
     el.value = r[field] != null ? r[field] : '';
   });
   editLicense.set(r.license);
+  editScale.setWidth(null);
+  measureWagonImage(r, w => { if (_editWagon === r) editScale.setWidth(w); });
   countriesSet('editCountries', r.countries);
   $('#editModal').modal('show');
 }
