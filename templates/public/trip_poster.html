@@ -37,6 +37,15 @@ body { background: #e9e9ec; }
     padding-bottom: 2px; /* keeps a horizontal scrollbar (narrow screens) off the buttons */
 }
 
+/* Holds the text the Discord button copies, off-screen rather than hidden:
+   display:none would make it unreadable to the clipboard bridge. */
+#periodStatsExport {
+    position: absolute;
+    left: -9999px;
+    width: 1px;
+    height: 1px;
+}
+
 .posterBackBtn {
     display: inline-flex;
     align-items: center;
@@ -519,6 +528,15 @@ body { background: #e9e9ec; }
             <button type="button" class="posterBackBtn" id="posterCopyBtn" style="border:none;cursor:pointer;display:none;" disabled>
                 <i class="fas fa-copy"></i> <span id="posterCopyBtnLabel">{{ posterCopyImage }}</span>
             </button>
+            {% if period_stats_export %}
+            <button type="button" class="posterBackBtn" id="posterDiscordBtn" style="border:none;cursor:pointer;">
+                <i class="fa-brands fa-discord"></i> <span id="posterDiscordBtnLabel">{{ copy }}</span>
+            </button>
+            {# Off-screen rather than a JS string: the export is multi-line text
+               with quotes in it, and a textarea is what the Android clipboard
+               bridge can read back too. #}
+            <textarea id="periodStatsExport" readonly aria-hidden="true">{{ period_stats_export }}</textarea>
+            {% endif %}
             <button type="button" class="posterDownloadBtn" id="posterDownloadBtn" disabled>
                 <i class="fas fa-download"></i> {{wrapped_download_image}}
             </button>
@@ -2185,6 +2203,25 @@ if (window.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
             exportRunning = false;
             syncExportButtons();
         }
+    });
+}
+
+// The period's figures as a Discord message (src/trip_stats.py), on the same
+// confirm-in-the-label idiom as the image copy above. Absent unless the poster
+// is a period's, so the button is only bound when the markup put one there.
+const posterDiscordBtn = document.getElementById('posterDiscordBtn');
+if (posterDiscordBtn) {
+    posterDiscordBtn.addEventListener('click', () => {
+        const text = document.getElementById('periodStatsExport').value;
+        if (window.AndroidFunction) {
+            AndroidFunction.copyTextToClipboard(text);
+        } else {
+            navigator.clipboard.writeText(text);
+        }
+        const label = document.getElementById('posterDiscordBtnLabel');
+        const original = label.textContent;
+        label.textContent = "{{ posterCopied }}";
+        setTimeout(() => { label.textContent = original; }, 2000);
     });
 }
 
