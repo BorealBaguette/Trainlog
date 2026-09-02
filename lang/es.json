@@ -1198,6 +1198,8 @@
     "noCost": "Sin coste compartido",
     "confirmDeleteCost": "¿Eliminar este coste compartido?",
     "importTrips": "Mover viajes a este plan",
+    "selectPlan": "Elige un plan",
+    "moveToPlan": "Mover a un plan",
     "importTripsHint": "IDs de viajes separados por comas (p. ej. 1042, 1043)",
     "importTripsBtn": "Mover",
     "confirmImportTrips": "¿Mover estos viajes al plan? Se eliminarán de tus viajes.",

@@ -1221,6 +1221,8 @@
     "noCost": "Brak wspólnych kosztów",
     "confirmDeleteCost": "Usunąć te wspólne koszty?",
     "importTrips": "Przenieś podróże do tego planu",
+    "selectPlan": "Wybierz plan",
+    "moveToPlan": "Przenieś do planu",
     "importTripsHint": "Identyfikatory podróży oddzielone przecinkami (np. 1042, 1043)",
     "importTripsBtn": "Przenieś",
     "confirmImportTrips": "Przenieść te podróże do planu? Zostaną usunięte z Twoich podróży.",

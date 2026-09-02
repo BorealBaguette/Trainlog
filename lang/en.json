@@ -1210,6 +1210,8 @@
     "noCost": "No shared cost",
     "confirmDeleteCost": "Delete this shared cost?",
     "importTrips": "Move trips into this plan",
+    "selectPlan": "Select a plan",
+    "moveToPlan": "Move to a plan",
     "importTripsHint": "Trip ids, comma-separated (e.g. 1042, 1043)",
     "importTripsBtn": "Move in",
     "confirmImportTrips": "Move these trips into the plan? They will be removed from your trips.",

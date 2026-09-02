@@ -139,6 +139,7 @@ from src.trip_periods import (
 )
 from src.trip_periods import parse_period, period_label, period_trip_ids
 from src.trip_selections import parse_trip_ids, store_trip_ids
+from src.trip_stats import discord_summary, trip_stats
 from src.update_currency import run_currency_update
 from py.utils import (
     get_all_countries,
@@ -172,6 +173,7 @@ from src.api.feature_requests import feature_requests_blueprint
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
+from src.api.og import og_blueprint, og_image_url
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
@@ -185,6 +187,7 @@ from src.api.trainset import public_trainset_info, trainset_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src import visualisations as viz_module
+from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
 from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
@@ -315,6 +318,7 @@ app.register_blueprint(finance_blueprint)
 app.register_blueprint(bmc_blueprint)
 app.register_blueprint(discord_oauth_blueprint)
 app.register_blueprint(news_blueprint)
+app.register_blueprint(og_blueprint)
 app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
 app.register_blueprint(wrapped_blueprint)
@@ -324,6 +328,7 @@ app.register_blueprint(trainset_blueprint)
 app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
 app.register_blueprint(trips_blueprint)
+app.register_blueprint(plans_api_blueprint)
 app.register_blueprint(live_tracks_blueprint)
 app.register_blueprint(wagon_leaderboard_blueprint)
 
@@ -4899,6 +4904,19 @@ def render_public_trip_page(
     if len(trip_list_sorted) < 2:
         multitrip_url = None
 
+    # Feature request #68: the period's figures, and the Discord block that
+    # exports them. Computed from the trips the page actually shows, so the
+    # summary cannot disagree with the list above it.
+    period_stats = period_stats_export = None
+    if period is not None:
+        period_stats = trip_stats(
+            [trip["uid"] for trip in trip_list_sorted],
+            lang[session["userinfo"]["lang"]],
+        )
+        period_stats_export = discord_summary(
+            tag_name, period_stats, external_url("public_trip_period", **period)
+        )
+
     # Open Graph info
     og = {}
     if tag_name:
@@ -4917,6 +4935,17 @@ def render_public_trip_page(
         og["description"] = (
             f"From {trip_list_sorted[0]['origin_station']} to {trip_list_sorted[-1]['destination_station']}"
         )
+
+    # The link preview: a map of these trips rather than the site's logo.
+    og_trip_ids = tripIdsParam or ",".join(
+        str(trip["uid"]) for trip in trip_list_sorted
+    )
+    og["image"] = og_image_url(
+        period=period,
+        tag_uuid=tagId,
+        trip_ids_param=tripIdsParam,
+        trip_ids=[trip["uid"] for trip in trip_list_sorted],
+    )
 
     user = User.query.filter_by(username=getUser()).first()
     if user is None:
@@ -4941,8 +4970,7 @@ def render_public_trip_page(
         own_trips=own_trips,
         logosList=listOperatorsLogos(),
         tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
-        tripIdsParam=tripIdsParam
-        or ",".join(str(trip["uid"]) for trip in trip_list_sorted),
+        tripIdsParam=og_trip_ids,
         period_args=period,
         title=lang[session["userinfo"]["lang"]]["sharedLink"],
         collection_voyage=tag_type,
@@ -4950,6 +4978,8 @@ def render_public_trip_page(
         tag_uuid=tagId,
         multitrip_url=multitrip_url,
         special_og=True,
+        period_stats=period_stats,
+        period_stats_export=period_stats_export,
         tileserver=tileserver,
         globe=globe,
         og=og,

@@ -1218,6 +1218,8 @@
     "noCost": "Geen gedeelde kosten",
     "confirmDeleteCost": "Deze gedeelde kosten verwijderen?",
     "importTrips": "Ritten naar dit plan verplaatsen",
+    "selectPlan": "Kies een plan",
+    "moveToPlan": "Naar een plan verplaatsen",
     "importTripsHint": "Rit-id's, kommagescheiden (bijv. 1042, 1043)",
     "importTripsBtn": "Verplaatsen",
     "confirmImportTrips": "Deze ritten naar het plan verplaatsen? Ze worden verwijderd uit je ritten.",

@@ -1215,6 +1215,8 @@
     "noCost": "Paylaşılan maliyet yok",
     "confirmDeleteCost": "Bu paylaşılan maliyet silinsin mi?",
     "importTrips": "Seyahatleri bu plana taşı",
+    "selectPlan": "Bir plan seçin",
+    "moveToPlan": "Bir plana taşı",
     "importTripsHint": "Seyahat id'leri, virgülle ayrılmış (örn. 1042, 1043)",
     "importTripsBtn": "İçe taşı",
     "confirmImportTrips": "Bu seyahatler plana taşınsın mı? Seyahatlerinizden kaldırılacaklar.",

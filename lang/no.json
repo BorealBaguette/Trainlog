@@ -1218,6 +1218,8 @@
     "noCost": "Ingen delte kostnader",
     "confirmDeleteCost": "Slette denne delte kostnaden?",
     "importTrips": "Flytt reiser inn i denne planen",
+    "selectPlan": "Velg en plan",
+    "moveToPlan": "Flytt til en plan",
     "importTripsHint": "Reise-id-er, kommaseparerte (f.eks. 1042, 1043)",
     "importTripsBtn": "Flytt inn",
     "confirmImportTrips": "Flytte disse reisene inn i planen? De fjernes fra reisene dine.",

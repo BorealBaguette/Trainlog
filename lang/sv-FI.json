@@ -1218,6 +1218,8 @@
     "noCost": "Ingen delad kostnad",
     "confirmDeleteCost": "Ta bort denna delade kostnad?",
     "importTrips": "Flytta resor till denna plan",
+    "selectPlan": "Välj en plan",
+    "moveToPlan": "Flytta till en plan",
     "importTripsHint": "Rese-id:n, kommaseparerade (t.ex. 1042, 1043)",
     "importTripsBtn": "Flytta in",
     "confirmImportTrips": "Flytta dessa resor till planen? De tas bort från dina resor.",

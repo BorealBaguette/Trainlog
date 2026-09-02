@@ -1221,6 +1221,8 @@
     "noCost": "Žádné sdílené náklady",
     "confirmDeleteCost": "Smazat tyto sdílené náklady?",
     "importTrips": "Přesunout cesty do tohoto plánu",
+    "selectPlan": "Vyberte plán",
+    "moveToPlan": "Přesunout do plánu",
     "importTripsHint": "ID cest oddělená čárkou (např. 1042, 1043)",
     "importTripsBtn": "Přesunout",
     "confirmImportTrips": "Přesunout tyto cesty do plánu? Budou odebrány z vašich cest.",

@@ -1198,6 +1198,8 @@
     "noCost": "Keine gemeinsamen Kosten",
     "confirmDeleteCost": "Diese gemeinsamen Kosten löschen?",
     "importTrips": "Reisen in diese Planung verschieben",
+    "selectPlan": "Planung auswählen",
+    "moveToPlan": "In eine Planung verschieben",
     "importTripsHint": "Reise-IDs, kommagetrennt (z. B. 1042, 1043)",
     "importTripsBtn": "Einverschieben",
     "confirmImportTrips": "Diese Reisen in die Planung verschieben? Sie werden aus deinen Reisen entfernt.",

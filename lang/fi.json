@@ -1216,6 +1216,8 @@
     "noCost": "Ei yhteisiä kustannuksia",
     "confirmDeleteCost": "Poistetaanko tämä yhteinen kustannus?",
     "importTrips": "Siirrä matkat tähän suunnitelmaan",
+    "selectPlan": "Valitse suunnitelma",
+    "moveToPlan": "Siirrä suunnitelmaan",
     "importTripsHint": "Matkojen tunnukset pilkuilla erotettuna (esim. 1042, 1043)",
     "importTripsBtn": "Siirrä sisään",
     "confirmImportTrips": "Siirretäänkö nämä matkat suunnitelmaan? Ne poistetaan matkoistasi.",

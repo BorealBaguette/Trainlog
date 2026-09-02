@@ -1215,6 +1215,8 @@
     "noCost": "공유 비용 없음",
     "confirmDeleteCost": "이 공유 비용을 삭제하시겠습니까?",
     "importTrips": "여정을 이 계획으로 이동",
+    "selectPlan": "계획 선택",
+    "moveToPlan": "계획으로 이동",
     "importTripsHint": "여정 ID, 쉼표로 구분 (예: 1042, 1043)",
     "importTripsBtn": "이동",
     "confirmImportTrips": "이 여정들을 계획으로 이동하시겠습니까? 여행 기록에서 제거됩니다.",
