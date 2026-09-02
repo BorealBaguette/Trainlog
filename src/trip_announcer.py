@@ -77,6 +77,9 @@ def _opted_in():
 def _due_trips(user_ids, now):
     """Public, non-project trips of those users departing inside the window.
 
+    Departure means the *actual* one: a train logged as +20 is announced when
+    it really left, not when it was timetabled to.
+
     The LEFT JOIN skips trips already announced. It is only an optimisation —
     the claim in _claim() is what actually guarantees one post per trip.
     """
@@ -92,10 +95,13 @@ def _due_trips(user_ids, now):
             WHERE t.user_id = ANY(:user_ids)
               AND t.visibility = 'public'
               AND NOT COALESCE(t.is_project, FALSE)
-              AND t.utc_start_datetime >= :window_start
-              AND t.utc_start_datetime <= :window_end
+              AND t.utc_start_datetime
+                  + make_interval(secs => COALESCE(t.departure_delay, 0)) >= :window_start
+              AND t.utc_start_datetime
+                  + make_interval(secs => COALESCE(t.departure_delay, 0)) <= :window_end
               AND a.trip_id IS NULL
             ORDER BY t.utc_start_datetime
+                     + make_interval(secs => COALESCE(t.departure_delay, 0))
             """,
             {
                 "user_ids": list(user_ids),

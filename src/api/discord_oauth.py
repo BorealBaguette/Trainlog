@@ -141,6 +141,10 @@ def unlink():
         sync_discord_tier(user, None)
         user.discord_id = None
         user.discord_username = None
+        # Announcing trips needs an id to post under, so unlinking withdraws
+        # consent to it as well — otherwise the flag lingers and quietly
+        # resumes if the account is ever relinked.
+        user.discord_autopost = False
         authDb.session.commit()
 
     return redirect(url_for("user_settings", username=user.username))

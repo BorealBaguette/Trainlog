@@ -1288,5 +1288,7 @@
     "leaderboardWagonsUses": "Rejser",
     "leaderboardWagonsUsers": "Brugere",
     "leaderboardWagonsHallOfFame": "Hall of fame — samlingen, som alt andet bygger på",
-    "leaderboardWagonsSortBy": "Sortér efter"
+    "leaderboardWagonsSortBy": "Sortér efter",
+    "discordAutopostSetting": "Slå mine ture op på Discord ved afgang",
+    "discordAutopostHint": "Kun offentlige ture bliver slået op."
 }

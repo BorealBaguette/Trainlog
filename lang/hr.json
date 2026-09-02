@@ -1292,5 +1292,7 @@
     "leaderboardWagonsUses": "Putovanja",
     "leaderboardWagonsUsers": "Korisnici",
     "leaderboardWagonsHallOfFame": "Kuća slavnih — zbirka na kojoj počiva sve ostalo",
-    "leaderboardWagonsSortBy": "Poredaj po"
+    "leaderboardWagonsSortBy": "Poredaj po",
+    "discordAutopostSetting": "Objavi moja putovanja na Discordu pri polasku",
+    "discordAutopostHint": "Objavljuju se samo javna putovanja."
 }

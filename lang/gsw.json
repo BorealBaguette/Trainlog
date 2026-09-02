@@ -1286,5 +1286,7 @@
     "leaderboardWagonsUses": "Fahrte",
     "leaderboardWagonsUsers": "Benutzer",
     "leaderboardWagonsHallOfFame": "Ruehmeshalle — d Sammlig, wo alles andere druf ufbaut",
-    "leaderboardWagonsSortBy": "Sortiere nach"
+    "leaderboardWagonsSortBy": "Sortiere nach",
+    "discordAutopostSetting": "Mini Fahrte bim Abfahre uf Discord poste",
+    "discordAutopostHint": "Es wärde nur öffentlichi Fahrte gposchtet."
 }

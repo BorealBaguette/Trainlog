@@ -1288,5 +1288,7 @@
     "leaderboardWagonsUses": "Reiser",
     "leaderboardWagonsUsers": "Brukere",
     "leaderboardWagonsHallOfFame": "Hall of fame — samlingen alt annet bygger på",
-    "leaderboardWagonsSortBy": "Sorter etter"
+    "leaderboardWagonsSortBy": "Sorter etter",
+    "discordAutopostSetting": "Legg ut turene mine på Discord ved avgang",
+    "discordAutopostHint": "Bare offentlige turer legges ut."
 }

@@ -1284,5 +1284,7 @@
     "leaderboardWagonsUses": "Utazások",
     "leaderboardWagonsUsers": "Felhasználók",
     "leaderboardWagonsHallOfFame": "Hírességek csarnoka — a gyűjtemény, amelyre minden más épül",
-    "leaderboardWagonsSortBy": "Rendezés"
+    "leaderboardWagonsSortBy": "Rendezés",
+    "discordAutopostSetting": "Utazásaim közzététele a Discordon induláskor",
+    "discordAutopostHint": "Csak a nyilvános utazások kerülnek közzétételre."
 }

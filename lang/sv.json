@@ -1288,5 +1288,7 @@
     "leaderboardWagonsUses": "Resor",
     "leaderboardWagonsUsers": "Användare",
     "leaderboardWagonsHallOfFame": "Hall of fame — samlingen som allt annat bygger på",
-    "leaderboardWagonsSortBy": "Sortera efter"
+    "leaderboardWagonsSortBy": "Sortera efter",
+    "discordAutopostSetting": "Publicera mina resor på Discord vid avgång",
+    "discordAutopostHint": "Endast offentliga resor publiceras."
 }

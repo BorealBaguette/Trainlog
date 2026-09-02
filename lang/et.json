@@ -1285,5 +1285,7 @@
     "leaderboardWagonsUses": "Reisid",
     "leaderboardWagonsUsers": "Kasutajad",
     "leaderboardWagonsHallOfFame": "Kuulsuste hall — kogu, millele kõik muu tugineb",
-    "leaderboardWagonsSortBy": "Sorteeri"
+    "leaderboardWagonsSortBy": "Sorteeri",
+    "discordAutopostSetting": "Postita mu reisid Discordi väljumise hetkel",
+    "discordAutopostHint": "Postitatakse ainult avalikud reisid."
 }

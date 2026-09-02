@@ -1288,5 +1288,7 @@
     "leaderboardWagonsUses": "Fahrten",
     "leaderboardWagonsUsers": "Nutzer",
     "leaderboardWagonsHallOfFame": "Ruhmeshalle — die Sammlung, auf der alles andere aufbaut",
-    "leaderboardWagonsSortBy": "Sortieren nach"
+    "leaderboardWagonsSortBy": "Sortieren nach",
+    "discordAutopostSetting": "Meine Fahrten bei der Abfahrt auf Discord veröffentlichen",
+    "discordAutopostHint": "Es werden nur öffentliche Fahrten veröffentlicht."
 }
