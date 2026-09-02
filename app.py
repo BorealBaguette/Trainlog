@@ -131,6 +131,12 @@ from src.transit_routing import (
     convert_here_response_to_trips,
 )
 from py.gps_cleaner import clean_gps_route
+from src.trip_periods import (
+    MAX_YEAR as MAX_PERIOD_YEAR,
+)
+from src.trip_periods import (
+    MIN_YEAR as MIN_PERIOD_YEAR,
+)
 from src.trip_periods import parse_period, period_label, period_trip_ids
 from src.trip_selections import parse_trip_ids, store_trip_ids
 from src.update_currency import run_currency_update
@@ -12303,8 +12309,35 @@ def handle_error(e):
     )
 
 
+def _own_period_redirect(kind, period):
+    """Send a bare period URL to the logged-in user's own period page."""
+    try:
+        parse_period(kind, period)
+    except ValueError:
+        abort(404)
+    user = getUser()
+    if user == "public":
+        return redirect(
+            url_for("login") + "?" + urllib.parse.urlencode({"next": request.path}), 302
+        )
+    return redirect(
+        url_for("public_trip_period", username=user, kind=kind, period=period)
+    )
+
+
+# Typing just a period at the root is a shortcut to your own trips for it:
+# /2026, /year/2026, /month/2026-10, /week/2026-W40.
+@app.route("/<any(year, month, week):kind>/<period>")
+def own_trip_period(kind, period):
+    return _own_period_redirect(kind, period)
+
+
 @app.route("/<int:error_code>")
 def error_route(error_code):
+    # A four-digit number at the root reads as a year, not as an HTTP status —
+    # nobody asks for error 2026.
+    if MIN_PERIOD_YEAR <= error_code <= MAX_PERIOD_YEAR:
+        return _own_period_redirect("year", str(error_code))
     # Create a new HTTPException instance with the captured error code
     exception = HTTPException()
     exception.code = error_code
