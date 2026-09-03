@@ -5897,6 +5897,36 @@ def _render_plan_view(plan, username, controls):
     (not the site owner, which `owner` means everywhere else in this module)."""
     user = User.query.filter_by(username=username).first() if username else None
     author_username = get_username(plan["user_id"])
+
+    # The page shell only needs per-leg countries/length for the OG tags — the
+    # legs themselves are fetched by the client from planDataUrl.
+    with pg_session() as pg:
+        rows = pg.execute(
+            """
+            SELECT countries, trip_length
+            FROM plan_trips
+            WHERE plan_id = :plan_id
+            ORDER BY sort_order, uid
+            """,
+            {"plan_id": plan["uid"]},
+        ).fetchall()
+    countries = []
+    length = 0
+    for row in rows:
+        row_countries = row["countries"]
+        if isinstance(row_countries, str):
+            row_countries = json.loads(row_countries)
+        for country in (row_countries or {}).keys():
+            if country not in countries:
+                countries.append(country)
+        length += row["trip_length"] or 0
+
+    # Open Graph info
+    og = {}
+    displayCountries = " ".join([get_flag_emoji(c) for c in countries])
+    og["title"] = plan["name"]
+    og["description"] = f"{round(length / 1000)} km in {displayCountries}"
+    # TODO: og["image"] — og_image_url/og_card only draw trips+paths rows, not plan_trips.
     data_url = (
         url_for("get_plan_trips_json", username=author_username, plan_uuid=plan["uuid"])
         if controls
@@ -5918,10 +5948,10 @@ def _render_plan_view(plan, username, controls):
         title=plan["name"],
         collection_voyage="voyage",
         tag_description=plan["name"],
-        special_og=False,
+        special_og=True,
         tileserver=user.tileserver if user else "default",
         globe=user.globe if user else False,
-        og={},
+        og=og,
         num_hidden_trips=0,
         colorblind=getattr(user, "colorblind", False) if user else False,
         planDataUrl=data_url,
