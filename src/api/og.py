@@ -9,7 +9,7 @@ import logging
 
 from flask import Blueprint, Response, redirect, url_for
 
-from src.og_card import render_og_card
+from src.og_card import render_og_card, render_plan_og_card
 from src.pg import pg_session
 from src.trip_periods import parse_period, period_trip_ids
 from src.trip_selections import is_selection_key, parse_trip_ids, store_trip_ids
@@ -41,21 +41,21 @@ def og_image_url(period=None, tag_uuid=None, trip_ids_param=None, trip_ids=()):
     trips would otherwise spell every id out in the tag.
     """
     if period is not None:
-        return external_url("og.period_image", **period)
+        return external_url("og.period_image", ext="jpg", **period)
     if tag_uuid is not None:
-        return external_url("og.tag_image", uuid=tag_uuid)
+        return external_url("og.tag_image", ext="jpg", uuid=tag_uuid)
     if is_selection_key(trip_ids_param or ""):
-        return external_url("og.trip_image", trip_ids=trip_ids_param)
+        return external_url("og.trip_image", ext="jpg", trip_ids=trip_ids_param)
     if not trip_ids:
         return None
     if len(trip_ids) <= INLINE_IDS:
         ids = ",".join(str(trip_id) for trip_id in trip_ids)
-        return external_url("og.trip_image", trip_ids=ids)
+        return external_url("og.trip_image", ext="jpg", trip_ids=ids)
     try:
         key = store_trip_ids(trip_ids)
     except ValueError:
         return None
-    return external_url("og.trip_image", trip_ids=key)
+    return external_url("og.trip_image", ext="jpg", trip_ids=key)
 
 
 def _public_ids(trip_ids):
@@ -128,11 +128,11 @@ def _serve(name, trip_ids, title=None):
     png = render_og_card(name, ids, title or auto_title, subtitle, countries)
     if png is None:
         return _logo()
-    return Response(png, mimetype="image/png", headers={"Cache-Control": CACHE_CONTROL})
+    return Response(png, mimetype="image/jpeg", headers={"Cache-Control": CACHE_CONTROL})
 
 
-@og_blueprint.route("/og/trip/<trip_ids>.png")
-def trip_image(trip_ids):
+@og_blueprint.route("/og/trip/<trip_ids>.<any(png, jpg):ext>")
+def trip_image(trip_ids, ext):
     try:
         ids = parse_trip_ids(trip_ids)
     except ValueError:
@@ -140,8 +140,8 @@ def trip_image(trip_ids):
     return _serve(trip_ids, ids)
 
 
-@og_blueprint.route("/og/tag/<uuid>.png")
-def tag_image(uuid):
+@og_blueprint.route("/og/tag/<uuid>.<any(png, jpg):ext>")
+def tag_image(uuid, ext):
     """A tag's own picture, captioned with the tag's name rather than its ends."""
     with pg_session() as pg:
         row = pg.execute(
@@ -160,8 +160,8 @@ def tag_image(uuid):
     return _serve(f"tag-{uuid}", row["trip_ids"], title=row["name"])
 
 
-@og_blueprint.route("/og/<username>/<any(year, month, week):kind>/<period>.png")
-def period_image(username, kind, period):
+@og_blueprint.route("/og/<username>/<any(year, month, week):kind>/<period>.<any(png, jpg):ext>")
+def period_image(username, kind, period, ext):
     try:
         start, end = parse_period(kind, period)
     except ValueError:
@@ -181,3 +181,73 @@ def period_image(username, kind, period):
         period_trip_ids(user_id, start, end),
         title=period,
     )
+
+
+@og_blueprint.route("/og/plan/<uuid>.<any(png, jpg):ext>")
+def plan_image(uuid, ext):
+    """A plan's own picture: its legs, captioned with the plan's name.
+
+    Plan legs have no per-trip visibility, so the gate is the one the shared
+    plan page itself applies to a stranger — the owner's profile must be
+    public. A logged-in owner sharing a private plan gets the logo here, as the
+    crawler fetching this has no session either way.
+    """
+    with pg_session() as pg:
+        plan = pg.execute(
+            """
+            SELECT p.uid, p.name, p.user_id,
+                   GREATEST(
+                       COALESCE(p.last_modified, p.created),
+                       COALESCE(MAX(pt.last_modified), MAX(pt.created))
+                   ) AS version,
+                   COUNT(pt.uid) AS trips,
+                   COALESCE(SUM(pt.trip_length), 0) AS distance
+            FROM plans p
+            LEFT JOIN plan_trips pt ON pt.plan_id = p.uid
+            WHERE p.uuid = :uuid
+            GROUP BY p.uid
+            """,
+            {"uuid": uuid},
+        ).fetchone()
+        if plan is None:
+            return _logo()
+        countries = pg.execute(
+            """
+            SELECT key AS code,
+                   SUM(CASE
+                       WHEN jsonb_typeof(value) = 'number' THEN value::numeric
+                       ELSE (value->>'elec')::numeric
+                            + COALESCE((value->>'nonelec')::numeric, 0)
+                   END) AS km
+            FROM plan_trips pt, LATERAL jsonb_each(pt.countries::jsonb)
+            -- LIKE, not just NOT NULL: a leg whose countries were never
+            -- computed stores '', and ''::jsonb is an error, not an empty map.
+            WHERE pt.plan_id = :plan_id AND pt.countries LIKE '{%' AND key != 'UN'
+            GROUP BY key
+            ORDER BY km DESC
+            """,
+            {"plan_id": plan["uid"]},
+        ).fetchall()
+
+    owner = User.query.filter_by(uid=plan["user_id"]).first()
+    if owner is None or not owner.is_public_trips():
+        return _logo()
+
+    subtitle = " · ".join(
+        part
+        for part in (
+            f"{plan['trips']} trips" if plan["trips"] > 1 else "",
+            f"{round((plan['distance'] or 0) / 1000):,} km".replace(",", " "),
+        )
+        if part
+    )
+    png = render_plan_og_card(
+        uuid,
+        plan["name"],
+        subtitle,
+        [row["code"] for row in countries],
+        version=str(plan["version"]),
+    )
+    if png is None:
+        return _logo()
+    return Response(png, mimetype="image/jpeg", headers={"Cache-Control": CACHE_CONTROL})

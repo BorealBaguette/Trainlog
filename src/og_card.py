@@ -277,7 +277,7 @@ def _draw_bar(card, title, subtitle, countries, scale):
 
 
 def _cache_path(name, contents) -> str:
-    """databases/cache/og/<what the URL asked for>-<what it resolved to>.png
+    """databases/cache/og/<what the URL asked for>-<what it resolved to>.jpg
 
     The name is the URL's own segment — a share key, a period, a tag uuid — so
     a file on disk can be traced straight back to the link that made it. The
@@ -287,22 +287,46 @@ def _cache_path(name, contents) -> str:
     """
     safe = "".join(char if char.isalnum() or char in "-_" else "_" for char in name)
     fingerprint = hashlib.sha256(contents.encode()).hexdigest()[:8]
-    return os.path.join(CACHE_DIR, f"{safe[:64]}-{fingerprint}.png")
+    return os.path.join(CACHE_DIR, f"{safe[:64]}-{fingerprint}.jpg")
 
 
-def render_og_card(name, trip_ids, title, subtitle="", countries=()):
-    """PNG bytes for these trips, from cache when it has been drawn before.
+def _fetch_plan(plan_uuid):
+    """(trip_type, route GeoJSON) for the legs of a plan.
 
-    None when nothing is drawable — no public trip with a route, or no
-    renderer — and the caller falls back to the static logo.
+    Plans live in their own tables — a plan leg carries its path inline rather
+    than in `paths` — so they cannot go through _fetch. Visibility is the
+    plan's, checked by the caller against the owner's profile: a plan leg has
+    no per-trip visibility of its own.
     """
-    ids = sorted(set(trip_ids))
-    path = _cache_path(name, f"{ids}|{title}|{subtitle}|{list(countries)}")
+    with pg_session() as pg:
+        return pg.execute(
+            """
+            SELECT pt.trip_type,
+                   ST_AsGeoJSON(
+                       ST_Segmentize(pt.geom::geography, :segment)::geometry
+                   ) AS route
+            FROM plan_trips pt
+            JOIN plans p ON p.uid = pt.plan_id
+            WHERE p.uuid = :uuid AND pt.geom IS NOT NULL
+            ORDER BY pt.trip_length DESC NULLS LAST
+            LIMIT :limit
+            """,
+            {"uuid": plan_uuid, "segment": SEGMENT_METRES, "limit": MAX_TRIPS},
+        ).fetchall()
+
+
+def _card(name, key, fetch, title, subtitle, countries):
+    """PNG bytes for whatever `fetch` returns, from cache when already drawn.
+
+    None when nothing is drawable — no route to draw, or no renderer — and the
+    caller falls back to the static logo.
+    """
+    path = _cache_path(name, key)
     if os.path.exists(path):
         with open(path, "rb") as handle:
             return handle.read()
 
-    rows = _fetch(ids)
+    rows = fetch()
     if not rows:
         return None
     map_image = _render_map(rows)
@@ -314,8 +338,13 @@ def render_og_card(name, trip_ids, title, subtitle="", countries=()):
     card.paste(map_image, (0, 0))
     _draw_bar(card, title, subtitle, list(countries), scale)
 
+    # JPEG, not PNG: past roughly 600KB WhatsApp stops unfurling a card at all
+    # and falls back to a small square thumbnail, and a 2x map is 600KB as PNG
+    # but 260KB at q90. Kept at the full 2x rather than resampled down to the
+    # 1200x630 of the tags — the clients that were working keep the detail they
+    # had, and the size problem was the format.
     out = io.BytesIO()
-    card.convert("RGB").save(out, format="PNG", optimize=True)
+    card.convert("RGB").save(out, format="JPEG", quality=90, optimize=True, progressive=True)
     png = out.getvalue()
 
     os.makedirs(CACHE_DIR, exist_ok=True)
@@ -324,3 +353,32 @@ def render_og_card(name, trip_ids, title, subtitle="", countries=()):
         handle.write(png)
     os.replace(tmp, path)
     return png
+
+
+def render_og_card(name, trip_ids, title, subtitle="", countries=()):
+    """PNG bytes for these trips, from cache when it has been drawn before."""
+    ids = sorted(set(trip_ids))
+    return _card(
+        name,
+        f"{ids}|{title}|{subtitle}|{list(countries)}",
+        lambda: _fetch(ids),
+        title,
+        subtitle,
+        countries,
+    )
+
+
+def render_plan_og_card(plan_uuid, title, subtitle="", countries=(), version=""):
+    """PNG bytes for a plan's legs.
+
+    `version` is what the plan currently is (its latest edit) — a plan gains and
+    loses legs, so the uuid alone would serve the first render of it forever.
+    """
+    return _card(
+        f"plan-{plan_uuid}",
+        f"{plan_uuid}|{version}|{title}|{subtitle}|{list(countries)}",
+        lambda: _fetch_plan(plan_uuid),
+        title,
+        subtitle,
+        countries,
+    )
