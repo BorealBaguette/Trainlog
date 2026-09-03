@@ -1288,5 +1288,5 @@
     "leaderboardWagonsHallOfFame": "殿堂 — 他のすべての土台となるコレクション",
     "leaderboardWagonsSortBy": "並び替え",
     "discordAutopostSetting": "出発時に旅程を Discord に投稿する",
-    "discordAutopostHint": "公開されている旅程のみが投稿されます。"
+    "discordAutopostHint": "公開されている旅程のみが投稿されます。旅程が非公開になるか削除されると投稿も削除されますが、それまでに他の人が見ている可能性があります。"
 }

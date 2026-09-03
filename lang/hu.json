@@ -1288,5 +1288,5 @@
     "leaderboardWagonsHallOfFame": "Hírességek csarnoka — a gyűjtemény, amelyre minden más épül",
     "leaderboardWagonsSortBy": "Rendezés",
     "discordAutopostSetting": "Utazásaim közzététele a Discordon induláskor",
-    "discordAutopostHint": "Csak a nyilvános utazások kerülnek közzétételre."
+    "discordAutopostHint": "Csak a nyilvános utazások kerülnek közzétételre. A bejegyzés törlődik, ha az utazás már nem nyilvános vagy törlik, de mások időközben már láthatták."
 }

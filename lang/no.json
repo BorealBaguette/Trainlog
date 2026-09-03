@@ -1292,5 +1292,5 @@
     "leaderboardWagonsHallOfFame": "Hall of fame — samlingen alt annet bygger på",
     "leaderboardWagonsSortBy": "Sorter etter",
     "discordAutopostSetting": "Legg ut turene mine på Discord ved avgang",
-    "discordAutopostHint": "Bare offentlige turer legges ut."
+    "discordAutopostHint": "Bare offentlige turer legges ut. Innlegget slettes igjen hvis turen gjøres ikke-offentlig eller slettes, men andre kan ha sett det i mellomtiden."
 }

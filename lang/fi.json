@@ -1290,5 +1290,5 @@
     "leaderboardWagonsHallOfFame": "Kunniagalleria — kokoelma, jonka varaan kaikki muu rakentuu",
     "leaderboardWagonsSortBy": "Järjestä",
     "discordAutopostSetting": "Julkaise matkani Discordissa lähtöhetkellä",
-    "discordAutopostHint": "Vain julkiset matkat julkaistaan."
+    "discordAutopostHint": "Vain julkiset matkat julkaistaan. Julkaisu poistetaan, jos matka muutetaan ei-julkiseksi tai poistetaan, mutta muut ovat voineet nähdä sen sitä ennen."
 }

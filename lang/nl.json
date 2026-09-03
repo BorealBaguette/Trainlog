@@ -1292,5 +1292,5 @@
     "leaderboardWagonsHallOfFame": "Hall of fame — de collectie waarop al het andere is gebouwd",
     "leaderboardWagonsSortBy": "Sorteren op",
     "discordAutopostSetting": "Mijn ritten bij vertrek op Discord plaatsen",
-    "discordAutopostHint": "Alleen openbare ritten worden geplaatst."
+    "discordAutopostHint": "Alleen openbare ritten worden geplaatst. Het bericht wordt weer verwijderd als de rit niet-openbaar wordt gemaakt of verwijderd wordt, maar anderen kunnen het intussen al gezien hebben."
 }

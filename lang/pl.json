@@ -1296,5 +1296,5 @@
     "leaderboardWagonsHallOfFame": "Galeria sław — kolekcja, na której opiera się wszystko inne",
     "leaderboardWagonsSortBy": "Sortuj według",
     "discordAutopostSetting": "Publikuj moje podróże na Discordzie w chwili odjazdu",
-    "discordAutopostHint": "Publikowane są tylko podróże publiczne."
+    "discordAutopostHint": "Publikowane są tylko podróże publiczne. Wpis zostaje ponownie usunięty, jeśli podróż przestanie być publiczna lub zostanie usunięta, ale inni mogli go w międzyczasie zobaczyć."
 }

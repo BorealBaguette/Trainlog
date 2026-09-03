@@ -1296,5 +1296,5 @@
     "leaderboardWagonsHallOfFame": "Síň slávy — sbírka, na které stojí všechno ostatní",
     "leaderboardWagonsSortBy": "Seřadit podle",
     "discordAutopostSetting": "Zveřejňovat mé cesty na Discordu při odjezdu",
-    "discordAutopostHint": "Zveřejňují se pouze veřejné cesty."
+    "discordAutopostHint": "Zveřejňují se pouze veřejné cesty. Pokud cesta přestane být veřejná nebo je smazána, příspěvek se znovu smaže, ale ostatní ho mezitím mohli vidět."
 }

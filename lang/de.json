@@ -1292,5 +1292,5 @@
     "leaderboardWagonsHallOfFame": "Ruhmeshalle — die Sammlung, auf der alles andere aufbaut",
     "leaderboardWagonsSortBy": "Sortieren nach",
     "discordAutopostSetting": "Meine Fahrten bei der Abfahrt auf Discord veröffentlichen",
-    "discordAutopostHint": "Es werden nur öffentliche Fahrten veröffentlicht."
+    "discordAutopostHint": "Es werden nur öffentliche Fahrten veröffentlicht. Der Beitrag wird wieder gelöscht, wenn die Fahrt nicht mehr öffentlich ist oder gelöscht wird, andere könnten ihn in der Zwischenzeit aber schon gesehen haben."
 }

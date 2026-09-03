@@ -1296,5 +1296,5 @@
     "leaderboardWagonsHallOfFame": "Kuća slavnih — zbirka na kojoj počiva sve ostalo",
     "leaderboardWagonsSortBy": "Poredaj po",
     "discordAutopostSetting": "Objavi moja putovanja na Discordu pri polasku",
-    "discordAutopostHint": "Objavljuju se samo javna putovanja."
+    "discordAutopostHint": "Objavljuju se samo javna putovanja. Objava se ponovno briše ako putovanje prestane biti javno ili se izbriše, no drugi su je u međuvremenu možda već vidjeli."
 }

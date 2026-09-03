@@ -1292,5 +1292,5 @@
     "leaderboardWagonsHallOfFame": "Albo d'oro — la collezione su cui si basa tutto il resto",
     "leaderboardWagonsSortBy": "Ordina per",
     "discordAutopostSetting": "Pubblicare i miei viaggi su Discord alla partenza",
-    "discordAutopostHint": "Vengono pubblicati solo i viaggi pubblici."
+    "discordAutopostHint": "Vengono pubblicati solo i viaggi pubblici. Il post viene eliminato di nuovo se il viaggio diventa non pubblico o viene eliminato, ma nel frattempo altri potrebbero averlo visto."
 }

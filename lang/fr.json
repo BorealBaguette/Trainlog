@@ -1289,5 +1289,5 @@
     "leaderboardWagonsHallOfFame": "Panthéon — la collection sur laquelle repose tout le reste",
     "leaderboardWagonsSortBy": "Trier par",
     "discordAutopostSetting": "Publier mes trajets sur Discord au moment du départ",
-    "discordAutopostHint": "Seuls les trajets publics sont publiés."
+    "discordAutopostHint": "Seuls les trajets publics sont publiés. La publication est supprimée si le trajet devient non public ou est supprimé, mais d'autres personnes ont pu la voir entre-temps."
 }

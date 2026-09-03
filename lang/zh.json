@@ -1288,5 +1288,5 @@
     "leaderboardWagonsHallOfFame": "名人堂 — 其他一切的基础收藏",
     "leaderboardWagonsSortBy": "排序方式",
     "discordAutopostSetting": "出发时将我的行程发布到 Discord",
-    "discordAutopostHint": "仅发布公开的行程。"
+    "discordAutopostHint": "仅发布公开的行程。如果行程被设为非公开或被删除，该帖子也会被删除，但在此之前可能已有人看到。"
 }

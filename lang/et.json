@@ -1289,5 +1289,5 @@
     "leaderboardWagonsHallOfFame": "Kuulsuste hall — kogu, millele kõik muu tugineb",
     "leaderboardWagonsSortBy": "Sorteeri",
     "discordAutopostSetting": "Postita mu reisid Discordi väljumise hetkel",
-    "discordAutopostHint": "Postitatakse ainult avalikud reisid."
+    "discordAutopostHint": "Postitatakse ainult avalikud reisid. Postitus kustutatakse uuesti, kui reis muudetakse mitteavalikuks või kustutatakse, kuid teised võivad seda vahepeal juba näinud olla."
 }

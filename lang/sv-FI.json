@@ -1292,5 +1292,5 @@
     "leaderboardWagonsHallOfFame": "Hall of fame — samlingen som allt annat bygger på",
     "leaderboardWagonsSortBy": "Sortera efter",
     "discordAutopostSetting": "Publicera mina resor på Discord vid avgång",
-    "discordAutopostHint": "Endast offentliga resor publiceras."
+    "discordAutopostHint": "Endast offentliga resor publiceras. Inlägget tas bort igen om resan görs icke-offentlig eller tas bort, men andra kan ha hunnit se det under tiden."
 }
