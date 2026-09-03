@@ -14,6 +14,7 @@ SELECT
     carbon,
     arrival_delay,
     departure_delay,
+    COALESCE(arrival_delay, 0) - COALESCE(departure_delay, 0) AS added_duration,
     is_past AS "past",
     is_planned_future AS "plannedFuture"
 FROM time_categories
