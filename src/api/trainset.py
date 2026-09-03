@@ -353,8 +353,9 @@ def resolve_material_type_advanced():
                 return jsonify(_enrich_units(pg, slim))
             if isinstance(parsed, dict) and isinstance(parsed.get('trainsets'), list):
                 units = []
-                for name in parsed['trainsets']:
-                    units.extend(_units_by_name(pg, name, username))
+                for name, rev in composite_refs(parsed):
+                    found = _units_by_name(pg, name, username)
+                    units.extend(reverse_units(found) if rev else found)
                 return jsonify(units)
         except (json.JSONDecodeError, TypeError):
             pass
@@ -393,6 +394,50 @@ def _dup_name_error(name, is_admin_set):
 
 
 
+def composite_refs(parsed):
+    """(name, reversed) pairs of a composite {"trainsets": [names], "reversed": [bools]}.
+
+    "reversed" is optional and index-aligned with "trainsets": a set whose flag is
+    missing (or the whole key, as every value written before the flag existed) is
+    not reversed. Keeping the names a plain string list means everything that only
+    cares which sets a trip used — labels, usage counts, renames — reads either shape
+    unchanged; only the code that lays out the wagons needs the flag.
+    """
+    names = parsed.get('trainsets') or []
+    flags = parsed.get('reversed')
+    if not isinstance(flags, list):
+        flags = []
+    return [(name, bool(flags[i]) if i < len(flags) else False) for i, name in enumerate(names)]
+
+
+_PH_MIRROR = {'loco_l': 'loco_r', 'loco_r': 'loco_l'}
+
+
+def reverse_wagon_unit(u):
+    """Turn one car to face the other way, in place (and return it). Python port of
+    reverseWagonUnit() in static/js/wagon_img.js: a two-sided drawing swaps its L/R
+    side, a directional placeholder swaps loco_l/loco_r.
+
+    One difference: slim stored units carry no image info yet, so a unit with no
+    image_type gets its side flipped AND one with no image gets its placeholder
+    mirrored — two independent checks where the JS has an either/or. That is
+    harmless — the side is only read for two-sided drawings and the placeholder only
+    for cars without a drawing — and it means the same call works on a unit before
+    or after it is joined with the wagons table."""
+    if u.get('image_type') in (None, 'sides'):
+        u['_side'] = 'L' if u.get('_side') == 'R' else 'R'
+    if not u.get('image') and u.get('_phType') in _PH_MIRROR:
+        u['_phType'] = _PH_MIRROR[u['_phType']]
+    return u
+
+
+def reverse_units(units):
+    """A trainset seen from the other side of the track: mirrored order, every car put
+    through reverse_wagon_unit. Port of reverseTrainsetUnits() in wagon_img.js; like
+    it, returns new dicts and leaves the input alone."""
+    return [reverse_wagon_unit(dict(u)) for u in reversed(units)]
+
+
 def _join_set_names(names):
     """Join coupled trainset names for display, collapsing runs of the same name into
     "2x NAME" - two identical sets coupled read as one set doubled, not the name twice.
@@ -424,10 +469,10 @@ def public_trainset_info(pg, value, owner_username):
     if isinstance(parsed, list):
         units = _enrich_units(pg, _slim_units(parsed))
     elif isinstance(parsed, dict) and isinstance(parsed.get('trainsets'), list):
-        names = parsed['trainsets']
-        label = _join_set_names(names)
-        for name in names:
-            units.extend(_units_by_name(pg, name, owner_username))
+        label = _join_set_names(parsed['trainsets'])
+        for name, rev in composite_refs(parsed):
+            found = _units_by_name(pg, name, owner_username)
+            units.extend(reverse_units(found) if rev else found)
     else:
         label = value
         units = _units_by_name(pg, value, owner_username)
