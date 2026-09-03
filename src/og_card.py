@@ -338,11 +338,10 @@ def _card(name, key, fetch, title, subtitle, countries):
     card.paste(map_image, (0, 0))
     _draw_bar(card, title, subtitle, list(countries), scale)
 
-    # JPEG, not PNG: past roughly 600KB WhatsApp stops unfurling a card at all
-    # and falls back to a small square thumbnail, and a 2x map is 600KB as PNG
-    # but 260KB at q90. Kept at the full 2x rather than resampled down to the
-    # 1200x630 of the tags — the clients that were working keep the detail they
-    # had, and the size problem was the format.
+    # JPEG rather than PNG: a map at 2x is 600KB as PNG and 350KB at q90, with
+    # nothing visible lost, so every crawler fetch is faster. Served at the
+    # full 2x — the size is what the og:image:width/height tags below the map
+    # declare, and the clients that render a large card keep the detail.
     out = io.BytesIO()
     card.convert("RGB").save(out, format="JPEG", quality=90, optimize=True, progressive=True)
     png = out.getvalue()
