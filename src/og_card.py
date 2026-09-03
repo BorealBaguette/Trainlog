@@ -290,19 +290,43 @@ def _cache_path(name, contents) -> str:
     return os.path.join(CACHE_DIR, f"{safe[:64]}-{fingerprint}.png")
 
 
-def render_og_card(name, trip_ids, title, subtitle="", countries=()):
-    """PNG bytes for these trips, from cache when it has been drawn before.
+def _fetch_plan(plan_uuid):
+    """(trip_type, route GeoJSON) for the legs of a plan.
 
-    None when nothing is drawable — no public trip with a route, or no
-    renderer — and the caller falls back to the static logo.
+    Plans live in their own tables — a plan leg carries its path inline rather
+    than in `paths` — so they cannot go through _fetch. Visibility is the
+    plan's, checked by the caller against the owner's profile: a plan leg has
+    no per-trip visibility of its own.
     """
-    ids = sorted(set(trip_ids))
-    path = _cache_path(name, f"{ids}|{title}|{subtitle}|{list(countries)}")
+    with pg_session() as pg:
+        return pg.execute(
+            """
+            SELECT pt.trip_type,
+                   ST_AsGeoJSON(
+                       ST_Segmentize(pt.geom::geography, :segment)::geometry
+                   ) AS route
+            FROM plan_trips pt
+            JOIN plans p ON p.uid = pt.plan_id
+            WHERE p.uuid = :uuid AND pt.geom IS NOT NULL
+            ORDER BY pt.trip_length DESC NULLS LAST
+            LIMIT :limit
+            """,
+            {"uuid": plan_uuid, "segment": SEGMENT_METRES, "limit": MAX_TRIPS},
+        ).fetchall()
+
+
+def _card(name, key, fetch, title, subtitle, countries):
+    """PNG bytes for whatever `fetch` returns, from cache when already drawn.
+
+    None when nothing is drawable — no route to draw, or no renderer — and the
+    caller falls back to the static logo.
+    """
+    path = _cache_path(name, key)
     if os.path.exists(path):
         with open(path, "rb") as handle:
             return handle.read()
 
-    rows = _fetch(ids)
+    rows = fetch()
     if not rows:
         return None
     map_image = _render_map(rows)
@@ -324,3 +348,32 @@ def render_og_card(name, trip_ids, title, subtitle="", countries=()):
         handle.write(png)
     os.replace(tmp, path)
     return png
+
+
+def render_og_card(name, trip_ids, title, subtitle="", countries=()):
+    """PNG bytes for these trips, from cache when it has been drawn before."""
+    ids = sorted(set(trip_ids))
+    return _card(
+        name,
+        f"{ids}|{title}|{subtitle}|{list(countries)}",
+        lambda: _fetch(ids),
+        title,
+        subtitle,
+        countries,
+    )
+
+
+def render_plan_og_card(plan_uuid, title, subtitle="", countries=(), version=""):
+    """PNG bytes for a plan's legs.
+
+    `version` is what the plan currently is (its latest edit) — a plan gains and
+    loses legs, so the uuid alone would serve the first render of it forever.
+    """
+    return _card(
+        f"plan-{plan_uuid}",
+        f"{plan_uuid}|{version}|{title}|{subtitle}|{list(countries)}",
+        lambda: _fetch_plan(plan_uuid),
+        title,
+        subtitle,
+        countries,
+    )
