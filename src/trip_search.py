@@ -36,6 +36,7 @@ FILTER_FIELDS = {
 # either: a comparison would read a hidden value out one answer at a time.
 PUBLIC_HIDDEN_FIELDS = {"price"}
 
+
 # Station names are stored with the country flag in front of them ("🇳🇴 Oslo S"), which
 # a substring match never notices but an exact or anchored one would fail on. Both are
 # compared against the name alone, the same way the ordering sorts on it.
@@ -46,13 +47,24 @@ def _unflagged(column):
     )
 
 
+def country_code_pattern(term, exact=False):
+    """The LIKE pattern finding `term` among the codes of the countries column.
+
+    The column is JSON text keyed by country code, {"NO": 24497.5} or
+    {"NO": {"elec": 0, "nonelec": 24497.5}}, so a code always sits between double
+    quotes and in upper case, while the keys of a value are lower case. Matching the
+    quotes and the case, on the raw text, keeps "NO" out of "nonelec"; the match must
+    therefore stay case-sensitive.
+    """
+    return '%"' + like_pattern(term.upper(), exact=exact) + '"%'
+
+
 # Fields matched as plain text, with the expression each one matches against. The
 # COALESCE ones are nullable; a bare column never is.
 _TEXT_FIELDS = {
     "type": "type",
     "origin_station": _unflagged("origin_station"),
     "destination_station": _unflagged("destination_station"),
-    "countries": "countries",
     "visibility": "visibility",
     "line_name": "COALESCE(line_name, '')",
     "reg": "COALESCE(reg, '')",
@@ -124,6 +136,11 @@ def _value_predicate(field, value, exact, param):
                 return "visibility IS NULL", {}
             return f"LOWER({expression}) = LOWER(:{param})", params
         return _like(expression, param), params
+
+    if field == "countries":
+        # One of the codes, not the list as a whole: `country:\`NO\`` is "crosses
+        # Norway", and matches a trip that also crosses Sweden.
+        return f"countries LIKE :{param}", {param: country_code_pattern(value, exact)}
 
     if field == "start_datetime":
         column = "COALESCE(to_char(start_datetime, 'YYYY-MM-DD'), '')"
