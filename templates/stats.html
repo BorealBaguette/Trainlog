@@ -317,19 +317,26 @@
         }
     };
 
-    // Trip type labels for combined mode
+    // Trip type labels for combined mode. distinctTypes only lists types the
+    // user has trips of (and is empty for a logged-out public viewer), so
+    // fall back to the lang key rather than the raw code.
     const TRIP_TYPE_LABELS = {
-        'air': '{{distinctTypes.air.label if distinctTypes.air else "Air"}}',
-        'helicopter': '{{distinctTypes.helicopter.label if distinctTypes.helicopter else "Helicopter"}}',
-        'train': '{{distinctTypes.train.label if distinctTypes.train else "Train"}}',
-        'tram': '{{distinctTypes.tram.label if distinctTypes.tram else "Tram"}}',
-        'metro': '{{distinctTypes.metro.label if distinctTypes.metro else "Metro"}}',
-        'bus': '{{distinctTypes.bus.label if distinctTypes.bus else "Bus"}}',
-        'ferry': '{{distinctTypes.ferry.label if distinctTypes.ferry else "Ferry"}}',
-        'car': '{{distinctTypes.car.label if distinctTypes.car else "Car"}}',
-        'cycle': '{{distinctTypes.cycle.label if distinctTypes.cycle else "Cycle"}}',
-        'walk': '{{distinctTypes.walk.label if distinctTypes.walk else "Walk"}}',
-        'aerialway': '{{distinctTypes.aerialway.label if distinctTypes.aerialway else "Aerialway"}}'
+        'train': '{{distinctTypes.train.label if distinctTypes.train else train}}',
+        'tram': '{{distinctTypes.tram.label if distinctTypes.tram else tram}}',
+        'metro': '{{distinctTypes.metro.label if distinctTypes.metro else metro}}',
+        'funicular': '{{distinctTypes.funicular.label if distinctTypes.funicular else funicular}}',
+        'rail': '{{distinctTypes.rail.label if distinctTypes.rail else rail}}',
+        'air': '{{distinctTypes.air.label if distinctTypes.air else air}}',
+        'bus': '{{distinctTypes.bus.label if distinctTypes.bus else bus}}',
+        'ferry': '{{distinctTypes.ferry.label if distinctTypes.ferry else ferry}}',
+        'helicopter': '{{distinctTypes.helicopter.label if distinctTypes.helicopter else helicopter}}',
+        'aerialway': '{{distinctTypes.aerialway.label if distinctTypes.aerialway else aerialway}}',
+        'walk': '{{distinctTypes.walk.label if distinctTypes.walk else walk}}',
+        'cycle': '{{distinctTypes.cycle.label if distinctTypes.cycle else cycle}}',
+        'ski': '{{distinctTypes.ski.label if distinctTypes.ski else ski}}',
+        'scooter': '{{distinctTypes.scooter.label if distinctTypes.scooter else scooter}}',
+        'car': '{{distinctTypes.car.label if distinctTypes.car else car}}',
+        'other': '{{distinctTypes.other.label if distinctTypes.other else other}}'
     };
 
     // Available trip types from backend
