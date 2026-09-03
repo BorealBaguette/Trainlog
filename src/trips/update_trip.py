@@ -6,6 +6,7 @@ from src.operators import sync_trip_operators
 from src.paths import coords_to_ewkt
 from src.pg import pg_session
 from src.sql.trips import update_trip_query
+from src.trip_announcer import retract_announcement
 from src.utils import get_username, owner
 
 from .trip import Trip
@@ -101,5 +102,12 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
                     " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom",
                     {"trip_id": trip_id, "ewkt": ewkt},
                 )
+
+    # A trip that is no longer public must not stay announced on Discord.
+    # Checked on every edit rather than on a change of visibility: retracting
+    # a trip that was never posted is a no-op, and this way nothing depends on
+    # knowing what the visibility was before.
+    if trip.visibility != "public":
+        retract_announcement(trip_id)
 
     logger.info(f"Successfully updated trip {trip_id}")

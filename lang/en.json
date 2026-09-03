@@ -1289,5 +1289,5 @@
     "leaderboardWagonsHallOfFame": "Hall of fame — the collection everything else is built on",
     "leaderboardWagonsSortBy": "Sort by",
     "discordAutopostSetting": "Post my trips to Discord as they depart",
-    "discordAutopostHint": "Only public trips are posted."
+    "discordAutopostHint": "Only public trips are posted. A post is deleted again if the trip is made non-public or deleted, though people may have seen it in the meantime."
 }

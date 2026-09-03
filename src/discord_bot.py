@@ -144,3 +144,33 @@ def post_webhook_message(
     except requests.RequestException as e:
         logger.warning("Discord API error while posting via webhook: %s", e)
     return None
+
+
+def delete_webhook_message(webhook_url: str, message_id: str) -> bool:
+    """Delete a message this webhook posted.
+
+    A webhook may delete its own messages with nothing but its URL, which is
+    what lets a trip announcement be taken down again without a bot token or
+    any channel permission. A message that is already gone counts as deleted:
+    what matters is that it is not in the channel, not who removed it.
+
+    Never raises. Returns False whenever the message may still be up, so the
+    caller keeps its record of it and can try again.
+    """
+    if not webhook_url:
+        logger.warning(
+            "No trips webhook configured; cannot delete message %s", message_id
+        )
+        return False
+
+    try:
+        response = requests.delete(f"{webhook_url}/messages/{message_id}", timeout=20)
+        if response.status_code in (204, 404):
+            return True
+        logger.warning(
+            "Discord webhook message delete failed: %s %s",
+            response.status_code, response.text,
+        )
+    except requests.RequestException as e:
+        logger.warning("Discord API error while deleting webhook message: %s", e)
+    return False

@@ -20,6 +20,14 @@ where the thread runs in *every* worker:
 The window is matched on ``utc_start_datetime``, the only comparable clock
 across users in different time zones; what gets *printed* is the trip's local
 time, which is what the traveller would have typed themselves.
+
+Taking a post down again
+------------------------
+A trip that was public by mistake says where somebody is. So a post is deleted
+again when its trip stops being public — edited, bulk-edited or switched from
+the trips table — or is deleted outright (``retract_announcement``,
+``delete_announcement``). The claim row stays, marked ``retracted``: a trip that
+was taken down once is not announced a second time if it is made public again.
 """
 
 import json
@@ -31,7 +39,7 @@ from datetime import datetime, timedelta, timezone
 
 from py.utils import get_flag_emoji
 from src.consts import Env
-from src.discord_bot import post_webhook_message
+from src.discord_bot import delete_webhook_message, post_webhook_message
 from src.pg import pg_session
 from src.trip_card import render_trip_card
 from src.users import User
@@ -134,12 +142,82 @@ def _release(trip_id):
         )
 
 
-def _record_message(trip_id, message_id):
+def _record_message(trip_id, message_id) -> bool:
+    """Store the posted message's id.
+
+    Returns whether the trip was retracted while the post was on its way: the
+    claim exists from before the Discord call, so a visibility change in that
+    gap finds a row with no id to delete by and can only flag it. The caller
+    now has the id, and deletes.
+    """
+    with pg_session() as pg:
+        row = pg.execute(
+            """
+            UPDATE trip_announcements SET message_id = :message_id
+            WHERE trip_id = :trip_id
+            RETURNING retracted
+            """,
+            {"trip_id": trip_id, "message_id": message_id},
+        ).fetchone()
+    return row is not None and row["retracted"] is not None
+
+
+def _mark_retracted(trip_id):
     with pg_session() as pg:
         pg.execute(
-            "UPDATE trip_announcements SET message_id = :message_id WHERE trip_id = :trip_id",
-            {"trip_id": trip_id, "message_id": message_id},
+            "UPDATE trip_announcements SET retracted = now() WHERE trip_id = :trip_id",
+            {"trip_id": trip_id},
         )
+
+
+def delete_announcement(trip_id, message_id) -> bool:
+    """Delete a trip's post from the channel. True once it is gone.
+
+    Only Discord: for a trip being deleted, the announcement row has already
+    cascaded away with it, so there is nothing left to mark.
+    """
+    webhook_url, reason = _webhook_url()
+    if not webhook_url:
+        logger.warning("Announcement of trip %s left in place (%s)", trip_id, reason)
+        return False
+    if delete_webhook_message(webhook_url, message_id):
+        logger.info("Trip %s announcement deleted", trip_id)
+        return True
+    logger.warning("Trip %s announcement could not be deleted", trip_id)
+    return False
+
+
+def retract_announcement(trip_id) -> bool:
+    """Take a trip's post down because the trip is no longer public.
+
+    Safe to call for any trip: one that was never announced, or was already
+    taken down, is left alone. Returns True when nothing of the trip remains
+    in the channel. Must not be called inside a pg_session.
+    """
+    with pg_session() as pg:
+        row = pg.execute(
+            "SELECT message_id, retracted FROM trip_announcements WHERE trip_id = :trip_id",
+            {"trip_id": trip_id},
+        ).fetchone()
+
+    if row is None or row["retracted"] is not None:
+        return True
+
+    if row["message_id"] is None:
+        # Claimed, but no id yet. Either the post is in flight this very tick —
+        # then announce_due_trips sees the flag once it has the id, and deletes
+        # — or it timed out and the id was never learned, and there is nothing
+        # to delete by.
+        _mark_retracted(trip_id)
+        logger.warning(
+            "Trip %s retracted before its announcement was confirmed", trip_id
+        )
+        return False
+
+    if not delete_announcement(trip_id, row["message_id"]):
+        return False
+    _mark_retracted(trip_id)
+    return True
 
 
 def _flags(countries) -> str:
@@ -233,8 +311,11 @@ def announce_due_trips(webhook_url, now=None) -> int:
             file=card,
         )
         if message_id:
-            _record_message(trip["trip_id"], message_id)
-            posted += 1
+            if _record_message(trip["trip_id"], message_id):
+                # Made non-public while the post was on its way.
+                delete_announcement(trip["trip_id"], message_id)
+            else:
+                posted += 1
         elif message_id is False:
             # Discord answered with an error, so nothing was posted: drop the
             # claim and let the next tick try again. The window bounds that at
@@ -261,23 +342,33 @@ def _loop(app, webhook_url):
             logger.error("Trip announcer error: %s", e)
 
 
-def start_trip_announcer(app):
-    """Start the announcer thread, unless this is not production."""
+def _webhook_url():
+    """The channel webhook as (url, None), or (None, why not).
+
+    dev runs against a copy of the same trips, with the same users opted in,
+    so a dev instance sharing prod's webhook would post everything twice.
+    Leaving trips_activity out of dev's config is enough on its own; the
+    environment check is the belt to that pair of braces, for the day someone
+    copies a config. Deleting goes through the same gate as posting: where
+    nothing is posted, there is nothing to delete.
+    """
     from py.utils import load_config
 
-    # dev runs against a copy of the same trips, with the same users opted in,
-    # so a dev instance sharing prod's webhook would post everything twice.
-    # Leaving trips_activity out of dev's config is enough on its own; this is
-    # the belt to that pair of braces, for the day someone copies a config.
     environment = os.environ.get("ENVIRONMENT")
     if environment != Env.PROD.value:
-        logger.info("Trip announcer disabled (ENVIRONMENT=%s, not production)",
-                    environment)
-        return
+        return None, f"ENVIRONMENT={environment}, not production"
 
     webhook_url = load_config().get("discord", {}).get("trips_activity")
     if not webhook_url:
-        logger.info("Trip announcer disabled (no discord.trips_activity webhook)")
+        return None, "no discord.trips_activity webhook"
+    return webhook_url, None
+
+
+def start_trip_announcer(app):
+    """Start the announcer thread, unless this is not production."""
+    webhook_url, reason = _webhook_url()
+    if not webhook_url:
+        logger.info("Trip announcer disabled (%s)", reason)
         return
 
     threading.Thread(target=_loop, args=(app, webhook_url), daemon=True).start()

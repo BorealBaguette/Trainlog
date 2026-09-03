@@ -14,6 +14,7 @@ from src.sql.trips import (
     update_ticket_null_query,
     update_trip_type_query,
 )
+from src.trip_announcer import retract_announcement
 from src.utils import get_user_id
 
 from .trip import _strip_tags
@@ -99,6 +100,11 @@ def change_trips_visibility(username, visibility, trip_ids):
                         "last_modified": last_modified,
                     },
                 )
+        # Outside the session: retraction opens its own, and pg_session does
+        # not nest.
+        if visibility != "public":
+            for trip_id in trip_ids:
+                retract_announcement(trip_id)
         return True, None
     except Exception as e:
         return False, str(e)
@@ -166,6 +172,12 @@ def bulk_edit_trips(
 
             if "operator" in safe_fields:
                 sync_trip_operators(trip_ids, pg_session_=pg)
+
+        # Trips that just stopped being public come off Discord too. Outside
+        # the session: retraction opens its own, and pg_session does not nest.
+        if "visibility" in safe_fields and safe_fields["visibility"] != "public":
+            for trip_id in trip_ids:
+                retract_announcement(int(trip_id))
 
         return True, None
     except Exception as e:
