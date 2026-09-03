@@ -951,7 +951,7 @@ function addUnit(wagon) {
 function flipUnit(uid) {
   const u = currentTs.units.find(u => u._uid === uid);
   if (!u) return;
-  u._side = (u._side === 'R') ? 'L' : 'R';
+  reverseWagonUnit(u);
   renderStrip();
 }
 
