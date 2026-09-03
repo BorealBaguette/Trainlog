@@ -5928,7 +5928,7 @@ def _render_plan_view(plan, username, controls):
         og={
             "title": plan["name"],
             "description": plan["description"] or "Trainlog plan",
-            "image": external_url("og.plan_image", uuid=plan["uuid"]),
+            "image": external_url("og.plan_image", uuid=plan["uuid"], ext="jpg"),
         },
         num_hidden_trips=0,
         colorblind=getattr(user, "colorblind", False) if user else False,

@@ -41,21 +41,21 @@ def og_image_url(period=None, tag_uuid=None, trip_ids_param=None, trip_ids=()):
     trips would otherwise spell every id out in the tag.
     """
     if period is not None:
-        return external_url("og.period_image", **period)
+        return external_url("og.period_image", ext="jpg", **period)
     if tag_uuid is not None:
-        return external_url("og.tag_image", uuid=tag_uuid)
+        return external_url("og.tag_image", ext="jpg", uuid=tag_uuid)
     if is_selection_key(trip_ids_param or ""):
-        return external_url("og.trip_image", trip_ids=trip_ids_param)
+        return external_url("og.trip_image", ext="jpg", trip_ids=trip_ids_param)
     if not trip_ids:
         return None
     if len(trip_ids) <= INLINE_IDS:
         ids = ",".join(str(trip_id) for trip_id in trip_ids)
-        return external_url("og.trip_image", trip_ids=ids)
+        return external_url("og.trip_image", ext="jpg", trip_ids=ids)
     try:
         key = store_trip_ids(trip_ids)
     except ValueError:
         return None
-    return external_url("og.trip_image", trip_ids=key)
+    return external_url("og.trip_image", ext="jpg", trip_ids=key)
 
 
 def _public_ids(trip_ids):
@@ -128,11 +128,11 @@ def _serve(name, trip_ids, title=None):
     png = render_og_card(name, ids, title or auto_title, subtitle, countries)
     if png is None:
         return _logo()
-    return Response(png, mimetype="image/png", headers={"Cache-Control": CACHE_CONTROL})
+    return Response(png, mimetype="image/jpeg", headers={"Cache-Control": CACHE_CONTROL})
 
 
-@og_blueprint.route("/og/trip/<trip_ids>.png")
-def trip_image(trip_ids):
+@og_blueprint.route("/og/trip/<trip_ids>.<any(png, jpg):ext>")
+def trip_image(trip_ids, ext):
     try:
         ids = parse_trip_ids(trip_ids)
     except ValueError:
@@ -140,8 +140,8 @@ def trip_image(trip_ids):
     return _serve(trip_ids, ids)
 
 
-@og_blueprint.route("/og/tag/<uuid>.png")
-def tag_image(uuid):
+@og_blueprint.route("/og/tag/<uuid>.<any(png, jpg):ext>")
+def tag_image(uuid, ext):
     """A tag's own picture, captioned with the tag's name rather than its ends."""
     with pg_session() as pg:
         row = pg.execute(
@@ -160,8 +160,8 @@ def tag_image(uuid):
     return _serve(f"tag-{uuid}", row["trip_ids"], title=row["name"])
 
 
-@og_blueprint.route("/og/<username>/<any(year, month, week):kind>/<period>.png")
-def period_image(username, kind, period):
+@og_blueprint.route("/og/<username>/<any(year, month, week):kind>/<period>.<any(png, jpg):ext>")
+def period_image(username, kind, period, ext):
     try:
         start, end = parse_period(kind, period)
     except ValueError:
@@ -183,8 +183,8 @@ def period_image(username, kind, period):
     )
 
 
-@og_blueprint.route("/og/plan/<uuid>.png")
-def plan_image(uuid):
+@og_blueprint.route("/og/plan/<uuid>.<any(png, jpg):ext>")
+def plan_image(uuid, ext):
     """A plan's own picture: its legs, captioned with the plan's name.
 
     Plan legs have no per-trip visibility, so the gate is the one the shared
@@ -250,4 +250,4 @@ def plan_image(uuid):
     )
     if png is None:
         return _logo()
-    return Response(png, mimetype="image/png", headers={"Cache-Control": CACHE_CONTROL})
+    return Response(png, mimetype="image/jpeg", headers={"Cache-Control": CACHE_CONTROL})
