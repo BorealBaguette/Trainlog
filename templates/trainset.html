@@ -635,6 +635,7 @@ body {
       <div class="ts-public-notice" id="publicNotice">{{ tsPublicSet }}</div>
       <div class="spacer"></div>
       <button class="btn" id="btnClone" title="{{ tsCloneTip }}">{{ tsCloneUnits }}</button>
+      <button class="btn" id="btnReverse" title="{{ tsReverseTip }}">{{ tsReverseBtn }}</button>
       <button class="btn" id="btnClear">{{ tsClearBtn }}</button>
       <button class="btn" id="btnSaveAs">{{ tsSaveAsBtn }}</button>
       <button class="btn primary" id="btnSave">{{ tsSaveBtn }}</button>
@@ -721,6 +722,7 @@ const i18n = {
   unit:                  {{ tsUnit            | tojson }},
   units:                 {{ tsUnits           | tojson }},
   flipSide:              {{ tsFlipSide        | tojson }},
+  reversed:              {{ tsReversed        | tojson }},
   info:                  {{ tsInfo            | tojson }},
   copySuffix:            {{ tsCopySuffix      | tojson }},
   defaultCopyName:       {{ tsDefaultCopyName | tojson }},
@@ -953,6 +955,17 @@ function flipUnit(uid) {
   if (!u) return;
   reverseWagonUnit(u);
   renderStrip();
+}
+
+// Whole-train turnaround: mirrored order, every car put through the same flip as the
+// per-car button above — so a saved "A→B" set becomes its "B→A" return working in one
+// click. _uids are kept, so nothing else (drag state, detail panel) needs to re-resolve
+// its car.
+function reverseTrainset() {
+  if (!currentTs || !currentTs.units.length) return;
+  currentTs.units = reverseTrainsetUnits(currentTs.units);
+  renderStrip();
+  setStatus(i18n.reversed);
 }
 
 const _phTypes = [null, 'loco_l', 'loco_both', 'loco_r', 'mid'];
@@ -1271,6 +1284,7 @@ function openSaveAsModal() {
 
 document.getElementById('btnSave').addEventListener('click', saveTrainset);
 document.getElementById('btnClone').addEventListener('click', cloneUnits);
+document.getElementById('btnReverse').addEventListener('click', reverseTrainset);
 document.getElementById('btnSaveAs').addEventListener('click', () => {
   if (!currentTs) { setStatus(i18n.nothingToSave, true); return; }
   openSaveAsModal();
@@ -1318,7 +1332,7 @@ function setStatus(msg, err = false) {
 // ── READ-ONLY (admin view-as debug) ──
 function applyReadonly() {
   if (!READONLY) return;
-  ['btnSave', 'btnSaveAs', 'btnClone', 'btnClear'].forEach(id => {
+  ['btnSave', 'btnSaveAs', 'btnClone', 'btnReverse', 'btnClear'].forEach(id => {
     const b = document.getElementById(id);
     if (b) { b.disabled = true; b.style.display = 'none'; }
   });
