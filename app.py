@@ -5918,10 +5918,18 @@ def _render_plan_view(plan, username, controls):
         title=plan["name"],
         collection_voyage="voyage",
         tag_description=plan["name"],
-        special_og=False,
+        # The link preview: a map of the plan's legs, captioned with its name.
+        # As on a trip page the card prints that caption itself, so the tags
+        # beside it stay the site's own pair — the name is only used if the
+        # picture ever stops being served.
+        special_og=True,
         tileserver=user.tileserver if user else "default",
         globe=user.globe if user else False,
-        og={},
+        og={
+            "title": plan["name"],
+            "description": plan["description"] or "Trainlog plan",
+            "image": external_url("og.plan_image", uuid=plan["uuid"]),
+        },
         num_hidden_trips=0,
         colorblind=getattr(user, "colorblind", False) if user else False,
         planDataUrl=data_url,
