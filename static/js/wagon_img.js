@@ -43,6 +43,11 @@
  *   One-sided drawings ('sides_L' / 'sides_R' / plain) and symmetric placeholders
  *   have no other face and are left as they are. Backs the per-car flip button in
  *   both builders.
+ *
+ * reverseTrainsetUnits(units)
+ *   Turn a whole train around: returns a NEW array with the cars in mirrored order,
+ *   each one flipped with reverseWagonUnit — exactly what the original looks like seen
+ *   from the other side of the track. The unit objects are copied, not mutated.
  */
 (function () {
   /* Sentinel stored in wagons.license for drawings licensed directly to Trainlog.
@@ -164,8 +169,15 @@
     return u;
   }
 
+  function reverseTrainsetUnits(units) {
+    return (units || []).slice().reverse().map(function (u) {
+      return reverseWagonUnit(Object.assign({}, u));
+    });
+  }
+
   window.wagonImgSrc = wagonImgSrc;
   window.normalizeStrip = normalizeStrip;
   window.reverseWagonUnit = reverseWagonUnit;
+  window.reverseTrainsetUnits = reverseTrainsetUnits;
   window.TRAINLOG_LICENSE = TRAINLOG_LICENSE;
 })();
