@@ -1040,6 +1040,8 @@
     "tsReverseBtn": "Yönü değiştir",
     "tsReverseTip": "Bu trenin yönünü değiştir: sırayı aynala ve her birimi ters çevir",
     "tsReversed": "Tren yönü değiştirildi",
+    "tsbReverseAllBtn": "Tümünü ters çevir",
+    "tsbReverseAllTip": "Tüm trenin yönünü değiştir: tren setlerinin sırasını ve her birinin yönünü tersine çevir",
     "tsInfo": "Bilgi",
     "tsCopySuffix": "(kopya)",
     "tsDefaultCopyName": "Kopyala",

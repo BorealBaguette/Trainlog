@@ -1041,6 +1041,8 @@
     "tsReverseBtn": "Käännä",
     "tsReverseTip": "Käännä tämä junayhdistelmä: peilaa järjestys ja käännä jokainen yksikkö",
     "tsReversed": "Junayhdistelmä käännetty",
+    "tsbReverseAllBtn": "Käännä kaikki",
+    "tsbReverseAllTip": "Käännä koko juna: käännä junayhdistelmien järjestys ja jokainen yhdistelmä",
     "tsInfo": "Tiedot",
     "tsCopySuffix": "(kopio)",
     "tsDefaultCopyName": "Kopioi",

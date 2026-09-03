@@ -1040,6 +1040,8 @@
     "tsReverseBtn": "整列反向",
     "tsReverseTip": "反转此列车：镜像顺序并翻转每节车辆",
     "tsReversed": "列车已反向",
+    "tsbReverseAllBtn": "全部反向",
+    "tsbReverseAllTip": "反转整列车：颠倒编组顺序并翻转每个编组的方向",
     "tsInfo": "信息",
     "tsCopySuffix": "（副本）",
     "tsDefaultCopyName": "复制",

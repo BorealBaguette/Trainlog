@@ -1055,6 +1055,8 @@
     "tsReverseBtn": "Inverser",
     "tsReverseTip": "Retourner cette rame : inverser l'ordre et retourner chaque unité",
     "tsReversed": "Rame inversée",
+    "tsbReverseAllBtn": "Tout inverser",
+    "tsbReverseAllTip": "Retourner tout le train : inverser l'ordre des rames et le sens de chacune",
     "tsInfo": "Infos",
     "tsCopySuffix": "(copie)",
     "tsDefaultCopyName": "Copier",

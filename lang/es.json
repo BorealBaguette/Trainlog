@@ -1043,6 +1043,8 @@
     "tsReverseBtn": "Invertir",
     "tsReverseTip": "Dar la vuelta a este tren: invertir el orden y voltear cada unidad",
     "tsReversed": "Tren invertido",
+    "tsbReverseAllBtn": "Invertir todo",
+    "tsbReverseAllTip": "Dar la vuelta a todo el tren: invertir el orden de los trenes y el sentido de cada uno",
     "tsInfo": "Información",
     "tsCopySuffix": "(copia)",
     "tsDefaultCopyName": "Copiar",

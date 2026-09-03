@@ -1040,6 +1040,8 @@
     "tsReverseBtn": "Pööra ümber",
     "tsReverseTip": "Pööra see rongikoosseis ümber: peegelda järjekord ja keera iga üksus ümber",
     "tsReversed": "Rongikoosseis ümber pööratud",
+    "tsbReverseAllBtn": "Pööra kõik ümber",
+    "tsbReverseAllTip": "Pööra kogu rong ümber: pööra koosseisude järjekord ja iga koosseis",
     "tsInfo": "Teave",
     "tsCopySuffix": "(koopia)",
     "tsDefaultCopyName": "Kopeeri",

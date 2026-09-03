@@ -40,6 +40,11 @@
         <div id="tsb-strip" class="d-flex flex-wrap align-items-end gap-2 py-1" style="min-height:60px">
           <span id="tsb-empty" class="text-muted fst-italic small m-auto">{{tsEmptyHint}}</span>
         </div>
+        <div class="d-flex justify-content-end">
+          <button type="button" class="btn btn-outline-secondary btn-sm py-0" id="tsb-reverse-all-btn"
+                  onclick="tsbReverseAll()" title="{{tsbReverseAllTip}}" disabled
+                  style="font-size:.72rem">⇄ {{tsbReverseAllBtn}}</button>
+        </div>
       </div>
       <div class="modal-footer flex-wrap gap-2 py-2">
         <!-- Save name row, hidden until "Save & apply" is clicked -->
@@ -373,6 +378,21 @@
     _render();
   };
 
+  // Turn the whole composition around. With references kept, that is the trainsets in
+  // mirrored order, each running the other way: their flags flip and their segment
+  // numbers count from the far end. Loose cars just mirror as one train.
+  window.tsbReverseAll = function () {
+    if (!_units.length) return;
+    if (_refNames !== null) {
+      var last = _refNames.length - 1;
+      _refNames.reverse();
+      _refReversed = _refNames.map(function (_, i) { return !_refReversed[last - i]; });
+      _units.forEach(function (u) { u._seg = last - u._seg; });
+    }
+    _units = reverseTrainsetUnits(_units);
+    _render();
+  };
+
   window.tsbCyclePh = function (uid) {
     var u = _units.find(function (u) { return u._uid === uid; });
     if (!u) return;
@@ -574,6 +594,7 @@
 
     var any = _units.length > 0;
     document.getElementById('tsb-use-btn').disabled  = !any;
+    document.getElementById('tsb-reverse-all-btn').disabled = !any;
     document.getElementById('tsb-save-btn').disabled = !any;
   }
 

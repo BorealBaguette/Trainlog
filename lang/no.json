@@ -1043,6 +1043,8 @@
     "tsReverseBtn": "Snu",
     "tsReverseTip": "Snu dette togsettet: speil rekkefølgen og snu hver enhet",
     "tsReversed": "Togsett snudd",
+    "tsbReverseAllBtn": "Snu alle",
+    "tsbReverseAllTip": "Snu hele toget: snu rekkefølgen på togsettene og hvert togsett",
     "tsInfo": "Info",
     "tsCopySuffix": "(kopi)",
     "tsDefaultCopyName": "Kopier",

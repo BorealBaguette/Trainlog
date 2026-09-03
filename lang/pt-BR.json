@@ -1043,6 +1043,8 @@
     "tsReverseBtn": "Inverter",
     "tsReverseTip": "Virar este trem: inverter a ordem e virar cada unidade",
     "tsReversed": "Trem invertido",
+    "tsbReverseAllBtn": "Inverter tudo",
+    "tsbReverseAllTip": "Virar todo o trem: inverter a ordem das composições e o sentido de cada uma",
     "tsInfo": "Informações",
     "tsCopySuffix": "(cópia)",
     "tsDefaultCopyName": "Copiar",

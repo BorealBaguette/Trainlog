@@ -1046,6 +1046,8 @@
     "tsReverseBtn": "Odwróć",
     "tsReverseTip": "Odwróć ten skład: odbij kolejność i odwróć każdą jednostkę",
     "tsReversed": "Skład odwrócony",
+    "tsbReverseAllBtn": "Odwróć wszystko",
+    "tsbReverseAllTip": "Odwróć cały pociąg: odwróć kolejność składów i każdy z nich",
     "tsInfo": "Informacje",
     "tsCopySuffix": "(kopia)",
     "tsDefaultCopyName": "Kopiuj",
