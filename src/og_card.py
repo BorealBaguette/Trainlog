@@ -277,7 +277,7 @@ def _draw_bar(card, title, subtitle, countries, scale):
 
 
 def _cache_path(name, contents) -> str:
-    """databases/cache/og/<what the URL asked for>-<what it resolved to>.png
+    """databases/cache/og/<what the URL asked for>-<what it resolved to>.jpg
 
     The name is the URL's own segment — a share key, a period, a tag uuid — so
     a file on disk can be traced straight back to the link that made it. The
@@ -287,7 +287,7 @@ def _cache_path(name, contents) -> str:
     """
     safe = "".join(char if char.isalnum() or char in "-_" else "_" for char in name)
     fingerprint = hashlib.sha256(contents.encode()).hexdigest()[:8]
-    return os.path.join(CACHE_DIR, f"{safe[:64]}-{fingerprint}.png")
+    return os.path.join(CACHE_DIR, f"{safe[:64]}-{fingerprint}.jpg")
 
 
 def _fetch_plan(plan_uuid):
@@ -338,8 +338,13 @@ def _card(name, key, fetch, title, subtitle, countries):
     card.paste(map_image, (0, 0))
     _draw_bar(card, title, subtitle, list(countries), scale)
 
+    # JPEG, not PNG: past roughly 600KB WhatsApp stops unfurling a card at all
+    # and falls back to a small square thumbnail, and a 2x map is 600KB as PNG
+    # but 260KB at q90. Kept at the full 2x rather than resampled down to the
+    # 1200x630 of the tags — the clients that were working keep the detail they
+    # had, and the size problem was the format.
     out = io.BytesIO()
-    card.convert("RGB").save(out, format="PNG", optimize=True)
+    card.convert("RGB").save(out, format="JPEG", quality=90, optimize=True, progressive=True)
     png = out.getvalue()
 
     os.makedirs(CACHE_DIR, exist_ok=True)
