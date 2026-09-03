@@ -335,7 +335,7 @@
 
   window.tsbFlip = function (uid) {
     var u = _units.find(function (u) { return u._uid === uid; });
-    if (u) { _refNames = null; u._side = u._side === 'L' ? 'R' : 'L'; _render(); }
+    if (u) { _refNames = null; reverseWagonUnit(u); _render(); }
   };
 
   window.tsbCyclePh = function (uid) {
