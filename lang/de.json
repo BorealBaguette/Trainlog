@@ -1043,6 +1043,8 @@
     "tsReverseBtn": "Wenden",
     "tsReverseTip": "Dieses Zugset wenden: Reihenfolge spiegeln und jede Einheit umdrehen",
     "tsReversed": "Zugset gewendet",
+    "tsbReverseAllBtn": "Alle wenden",
+    "tsbReverseAllTip": "Ganzen Zug wenden: Reihenfolge der Zugsets umkehren und jedes wenden",
     "tsInfo": "Info",
     "tsCopySuffix": "(Kopie)",
     "tsDefaultCopyName": "Kopieren",

@@ -1043,6 +1043,8 @@
     "tsReverseBtn": "Vänd",
     "tsReverseTip": "Vänd detta tågset: spegla ordningen och vänd varje enhet",
     "tsReversed": "Tågset vänt",
+    "tsbReverseAllBtn": "Vänd alla",
+    "tsbReverseAllTip": "Vänd hela tåget: vänd tågsetens ordning och varje tågset",
     "tsInfo": "Info",
     "tsCopySuffix": "(kopia)",
     "tsDefaultCopyName": "Kopiera",

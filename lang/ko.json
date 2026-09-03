@@ -1040,6 +1040,8 @@
     "tsReverseBtn": "방향 반전",
     "tsReverseTip": "이 편성 반전: 순서를 뒤집고 각 차량의 방향을 바꿉니다",
     "tsReversed": "편성이 반전되었습니다",
+    "tsbReverseAllBtn": "전체 반전",
+    "tsbReverseAllTip": "열차 전체 반전: 편성 순서를 뒤집고 각 편성의 방향을 바꿉니다",
     "tsInfo": "정보",
     "tsCopySuffix": "(복사본)",
     "tsDefaultCopyName": "복사",
