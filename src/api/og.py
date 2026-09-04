@@ -7,10 +7,11 @@ the ids in SQL) and the caption built beside it.
 
 import logging
 
-from flask import Blueprint, Response, redirect, url_for
+from flask import Blueprint, Response, abort, redirect, url_for
 
 from src.og_card import render_og_card, render_plan_og_card
 from src.pg import pg_session
+from src.trip_card import render_trip_card
 from src.trip_periods import parse_period, period_trip_ids
 from src.trip_selections import is_selection_key, parse_trip_ids, store_trip_ids
 from src.trip_stats import trip_stats
@@ -138,6 +139,35 @@ def trip_image(trip_ids, ext):
     except ValueError:
         return _logo()
     return _serve(trip_ids, ids)
+
+
+@og_blueprint.route("/card/trip/<trip_ids>.png")
+def trip_card(trip_ids):
+    """The map card a trip's Discord announcement carries, for anyone with the link.
+
+    Addressed the same way every other public trip URL is, so a share key works
+    and the "1,2,3" links handed out before them still do — a trip id is no
+    longer something the interface shows anybody. One trip only: this is the
+    single-trip card, and a selection of several has an OG picture of its own
+    (og.trip_image) that draws them together.
+
+    Unlike the og routes this answers 404 rather than the logo. Nothing caches
+    an og:image failure here — the picture is asked for by a person following a
+    link, and a placeholder logo would tell them less than a missing image.
+    """
+    try:
+        ids = parse_trip_ids(trip_ids)
+    except ValueError:
+        abort(404)
+    ids = _public_ids(ids)
+    if len(ids) != 1:
+        abort(404)
+
+    png, reason = render_trip_card(ids[0])
+    if png is None:
+        logger.info("No card for trip %s (%s)", ids[0], reason)
+        abort(404)
+    return Response(png, mimetype="image/png", headers={"Cache-Control": CACHE_CONTROL})
 
 
 @og_blueprint.route("/og/tag/<uuid>.<any(png, jpg):ext>")
