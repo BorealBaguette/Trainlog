@@ -1296,5 +1296,11 @@
     "leaderboardWagonsHallOfFame": "Síň slávy — sbírka, na které stojí všechno ostatní",
     "leaderboardWagonsSortBy": "Seřadit podle",
     "discordAutopostSetting": "Zveřejňovat mé cesty na Discordu při odjezdu",
-    "discordAutopostHint": "Zveřejňují se pouze veřejné cesty."
+    "discordAutopostHint": "Zveřejňují se pouze veřejné cesty.",
+    "removeDiscordPost": "Odstranit příspěvek z Discordu",
+    "confirmRemoveDiscordPost": "Smazat oznámení této cesty z Discordu? Tuto akci nelze vrátit zpět.",
+    "removeDiscordPostFailed": "Příspěvek na Discordu se nepodařilo odstranit. Zkuste to prosím znovu.",
+    "postToDiscord": "Zveřejnit na Discordu",
+    "confirmPostToDiscord": "Zveřejnit tuto cestu na Discordu?",
+    "postToDiscordFailed": "Cestu se nepodařilo zveřejnit na Discordu. Zkuste to prosím znovu."
 }

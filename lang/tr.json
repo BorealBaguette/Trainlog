@@ -1288,5 +1288,11 @@
     "leaderboardWagonsHallOfFame": "Şöhret salonu — diğer her şeyin üzerine kurulduğu koleksiyon",
     "leaderboardWagonsSortBy": "Sırala",
     "discordAutopostSetting": "Yolculuklarımı kalkışta Discord'da paylaş",
-    "discordAutopostHint": "Yalnızca herkese açık yolculuklar paylaşılır."
+    "discordAutopostHint": "Yalnızca herkese açık yolculuklar paylaşılır.",
+    "removeDiscordPost": "Discord gönderisini kaldır",
+    "confirmRemoveDiscordPost": "Bu yolculuğun duyurusu Discord'dan silinsin mi? Bu işlem geri alınamaz.",
+    "removeDiscordPostFailed": "Discord gönderisi kaldırılamadı. Lütfen tekrar deneyin.",
+    "postToDiscord": "Discord'da paylaş",
+    "confirmPostToDiscord": "Bu yolculuk şimdi Discord'da paylaşılsın mı?",
+    "postToDiscordFailed": "Yolculuk Discord'da paylaşılamadı. Lütfen tekrar deneyin."
 }

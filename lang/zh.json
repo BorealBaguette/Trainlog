@@ -1288,5 +1288,11 @@
     "leaderboardWagonsHallOfFame": "名人堂 — 其他一切的基础收藏",
     "leaderboardWagonsSortBy": "排序方式",
     "discordAutopostSetting": "出发时将我的行程发布到 Discord",
-    "discordAutopostHint": "仅发布公开的行程。"
+    "discordAutopostHint": "仅发布公开的行程。",
+    "removeDiscordPost": "删除 Discord 帖子",
+    "confirmRemoveDiscordPost": "要从 Discord 删除这次行程的公告吗？此操作无法撤销。",
+    "removeDiscordPostFailed": "无法删除 Discord 帖子，请重试。",
+    "postToDiscord": "发布到 Discord",
+    "confirmPostToDiscord": "现在把这次行程发布到 Discord 吗？",
+    "postToDiscordFailed": "无法发布到 Discord，请重试。"
 }

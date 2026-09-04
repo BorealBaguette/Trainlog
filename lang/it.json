@@ -1292,5 +1292,11 @@
     "leaderboardWagonsHallOfFame": "Albo d'oro — la collezione su cui si basa tutto il resto",
     "leaderboardWagonsSortBy": "Ordina per",
     "discordAutopostSetting": "Pubblicare i miei viaggi su Discord alla partenza",
-    "discordAutopostHint": "Vengono pubblicati solo i viaggi pubblici."
+    "discordAutopostHint": "Vengono pubblicati solo i viaggi pubblici.",
+    "removeDiscordPost": "Rimuovi il post su Discord",
+    "confirmRemoveDiscordPost": "Eliminare l'annuncio di questo viaggio da Discord? L'operazione non può essere annullata.",
+    "removeDiscordPostFailed": "Non è stato possibile rimuovere il post su Discord. Riprova.",
+    "postToDiscord": "Pubblica su Discord",
+    "confirmPostToDiscord": "Pubblicare questo viaggio su Discord adesso?",
+    "postToDiscordFailed": "Non è stato possibile pubblicare il viaggio su Discord. Riprova."
 }

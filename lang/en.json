@@ -1289,5 +1289,11 @@
     "leaderboardWagonsHallOfFame": "Hall of fame — the collection everything else is built on",
     "leaderboardWagonsSortBy": "Sort by",
     "discordAutopostSetting": "Post my trips to Discord as they depart",
-    "discordAutopostHint": "Only public trips are posted."
+    "discordAutopostHint": "Only public trips are posted.",
+    "removeDiscordPost": "Remove Discord post",
+    "confirmRemoveDiscordPost": "Delete this trip's announcement from Discord? This cannot be undone.",
+    "removeDiscordPostFailed": "The Discord post could not be removed. Please try again.",
+    "postToDiscord": "Post to Discord",
+    "confirmPostToDiscord": "Post this trip to Discord now?",
+    "postToDiscordFailed": "The trip could not be posted to Discord. Please try again."
 }

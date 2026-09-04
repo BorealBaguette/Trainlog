@@ -1296,5 +1296,11 @@
     "leaderboardWagonsHallOfFame": "Kuća slavnih — zbirka na kojoj počiva sve ostalo",
     "leaderboardWagonsSortBy": "Poredaj po",
     "discordAutopostSetting": "Objavi moja putovanja na Discordu pri polasku",
-    "discordAutopostHint": "Objavljuju se samo javna putovanja."
+    "discordAutopostHint": "Objavljuju se samo javna putovanja.",
+    "removeDiscordPost": "Ukloni objavu s Discorda",
+    "confirmRemoveDiscordPost": "Izbrisati objavu ovog putovanja s Discorda? Ovo se ne može poništiti.",
+    "removeDiscordPostFailed": "Objavu na Discordu nije bilo moguće ukloniti. Pokušajte ponovno.",
+    "postToDiscord": "Objavi na Discordu",
+    "confirmPostToDiscord": "Objaviti ovo putovanje na Discordu sada?",
+    "postToDiscordFailed": "Putovanje nije bilo moguće objaviti na Discordu. Pokušajte ponovno."
 }
