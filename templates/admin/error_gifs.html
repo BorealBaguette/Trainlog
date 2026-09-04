@@ -1,0 +1,280 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+
+<style>
+    .gif-bucket { margin-bottom: 36px; }
+    .gif-bucket > h2 {
+        font-size: 1.25rem;
+        border-bottom: 1px solid #dee2e6;
+        padding-bottom: 6px;
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+    }
+    .gif-bucket .bucket-meta { font-size: 0.85rem; color: #6c757d; font-weight: 400; }
+    .gif-card .card-img-top {
+        height: 170px;
+        object-fit: contain;
+        background: #f4f4f4;
+    }
+    .gif-card .gif-meta { font-size: 0.72rem; color: #6c757d; word-break: break-all; }
+    .gif-empty { color: #adb5bd; font-style: italic; }
+    #searchResults .gif-card .card-img-top { height: 130px; }
+    .verified-badge { color: #0d6efd; }
+</style>
+
+<div class="container" style="margin-top: 20px; margin-bottom: 60px;">
+    <h1>Error page GIFs</h1>
+    <p class="text-muted">
+        One bucket per HTTP status code, drawn at random on that error page;
+        <code>default</code> covers codes with an empty bucket. GIPHY entries are stored as ids in
+        <code>base_data/error_gifs.json</code> and served from GIPHY's CDN, never rehosted; files
+        dropped in <code>static/images/errors/gifs/&lt;code&gt;/</code> are served by us and appear
+        here as <span class="badge bg-success">local</span>.
+    </p>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h2 class="h5">Find a GIF on GIPHY</h2>
+            <div class="row g-2 align-items-center">
+                <div class="col-sm">
+                    <input type="text" id="searchTerms" class="form-control" placeholder="you shall not pass">
+                </div>
+                <div class="col-sm-auto">
+                    <select id="searchBucket" class="form-select">
+                        {% for code in bucket_codes %}
+                            <option value="{{ code }}">to {{ code }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="col-sm-auto">
+                    <button id="searchBtn" class="btn btn-primary">
+                        <i class="fa-solid fa-magnifying-glass me-1"></i> Search
+                    </button>
+                </div>
+            </div>
+            <p class="text-muted mt-2 mb-0" style="font-size: 0.85rem;">
+                Prefer results from a <span class="verified-badge"><i class="fa-solid fa-circle-check"></i> verified</span>
+                channel: those are uploaded by the studio or network itself, for embedding.
+            </p>
+            <div id="searchStatus" class="mt-2"></div>
+            <div id="searchResults" class="row row-cols-2 row-cols-md-4 row-cols-lg-6 g-2 mt-1"></div>
+        </div>
+    </div>
+
+    {% for bucket in buckets %}
+        <div class="gif-bucket" data-code="{{ bucket.code }}">
+            <h2>
+                {{ bucket.code }}
+                <span class="bucket-meta">
+                    <span class="bucket-count">{{ bucket.gifs | length }}</span> GIF(s)
+                    {% if bucket.title %}&middot; {{ bucket.title }}{% endif %}
+                </span>
+            </h2>
+
+            <p class="gif-empty bucket-empty" {% if bucket.gifs %}style="display: none;"{% endif %}>
+                Empty{% if bucket.code != "default" %} &mdash; falls back to <code>default</code>{% endif %}.
+            </p>
+
+            <div class="row row-cols-1 row-cols-sm-2 row-cols-md-3 row-cols-lg-4 g-3 bucket-grid">
+                {% for gif in bucket.gifs %}
+                    <div class="col gif-card" data-ref="{{ gif.ref }}" data-provider="{{ gif.provider }}">
+                        <div class="card h-100">
+                            <img class="card-img-top" src="{{ gif.src }}" alt="" referrerpolicy="no-referrer" loading="lazy">
+                            <div class="card-body p-2">
+                                {% if gif.provider == "giphy" %}
+                                    <div class="input-group input-group-sm mb-1">
+                                        <select class="form-select form-select-sm caption-lang" style="max-width: 5.5rem;">
+                                            <option value="">all</option>
+                                            {% for code in langs %}
+                                                <option value="{{ code }}">{{ code }}</option>
+                                            {% endfor %}
+                                        </select>
+                                        <input type="text" class="form-control caption-input" placeholder="caption"
+                                               value="{{ gif.captions if gif.captions is string else '' }}">
+                                        <button class="btn btn-outline-secondary caption-save" title="Save caption">
+                                            <i class="fa-solid fa-check"></i>
+                                        </button>
+                                    </div>
+                                {% elif gif.caption %}
+                                    <p class="fst-italic mb-1" style="font-size: 0.85rem;">{{ gif.caption }}</p>
+                                {% endif %}
+
+                                <p class="gif-meta mb-1">
+                                    <span class="badge bg-{{ 'secondary' if gif.provider == 'giphy' else 'success' }}">{{ gif.provider }}</span>
+                                    {% if gif.credit_url %}
+                                        <a href="{{ gif.credit_url }}" target="_blank" rel="noopener noreferrer">{{ gif.credit or gif.credit_url }}</a>
+                                    {% elif gif.credit %}
+                                        {{ gif.credit }}
+                                    {% else %}
+                                        <span class="gif-empty">no credit recorded</span>
+                                    {% endif %}
+                                    <br>{{ gif.ref }}
+                                </p>
+
+                                {% if gif.provider == "giphy" %}
+                                    <button class="btn btn-outline-danger btn-sm remove-gif">
+                                        <i class="fa-solid fa-trash me-1"></i> Remove
+                                    </button>
+                                {% else %}
+                                    <span class="gif-meta">delete the file to remove</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% endfor %}
+</div>
+
+<script>
+    const gifCardTemplate = function (gif, code, langs) {
+        const options = ['<option value="">all</option>']
+            .concat(langs.map(l => `<option value="${l}">${l}</option>`)).join('');
+        return $(`
+            <div class="col gif-card" data-ref="${gif.id}" data-provider="giphy">
+                <div class="card h-100">
+                    <img class="card-img-top" src="${gif.src}" alt="" referrerpolicy="no-referrer" loading="lazy">
+                    <div class="card-body p-2">
+                        <div class="input-group input-group-sm mb-1">
+                            <select class="form-select form-select-sm caption-lang" style="max-width: 5.5rem;">${options}</select>
+                            <input type="text" class="form-control caption-input" placeholder="caption">
+                            <button class="btn btn-outline-secondary caption-save" title="Save caption"><i class="fa-solid fa-check"></i></button>
+                        </div>
+                        <p class="gif-meta mb-1">
+                            <span class="badge bg-secondary">giphy</span>
+                            <a href="${gif.url}" target="_blank" rel="noopener noreferrer"></a>
+                            <br>${gif.id}
+                        </p>
+                        <button class="btn btn-outline-danger btn-sm remove-gif"><i class="fa-solid fa-trash me-1"></i> Remove</button>
+                    </div>
+                </div>
+            </div>`).find('a').text(gif.title || gif.url).end();
+    };
+
+    const langs = {{ langs | tojson }};
+
+    function bucketUrl(code, gifId) {
+        return "{{ url_for('admin_error_gifs_edit', code='CODE', gif_id='GIFID') }}"
+            .replace('CODE', encodeURIComponent(code)).replace('GIFID', encodeURIComponent(gifId));
+    }
+
+    function refreshCount($bucket) {
+        const count = $bucket.find('.bucket-grid .gif-card').length;
+        $bucket.find('.bucket-count').text(count);
+        $bucket.find('.bucket-empty').toggle(count === 0);
+    }
+
+    function flash($el, ok, message) {
+        $el.removeClass('text-danger text-success').addClass(ok ? 'text-success' : 'text-danger').text(message);
+    }
+
+    $('#searchBtn').on('click', function () {
+        const terms = $('#searchTerms').val().trim();
+        if (!terms) { return; }
+        const $status = $('#searchStatus');
+        $status.removeClass('text-danger text-success').text('Searching GIPHY...');
+        $('#searchResults').empty();
+
+        $.getJSON("{{ url_for('admin_error_gifs_search') }}", { q: terms })
+            .done(function (data) {
+                $status.text(`${data.results.length} result(s) - click one to add it.`);
+                data.results.forEach(function (gif) {
+                    const $col = $('<div class="col gif-card"></div>');
+                    const $card = $('<div class="card h-100"></div>');
+                    const $img = $('<img class="card-img-top" alt="" referrerpolicy="no-referrer" loading="lazy">').attr('src', gif.src);
+                    const $body = $('<div class="card-body p-2"></div>');
+                    const $title = $('<p class="gif-meta mb-1"></p>').text(gif.title || gif.id);
+                    if (gif.channel) {
+                        const $chan = $('<span class="gif-meta d-block"></span>').text(gif.channel);
+                        if (gif.verified) {
+                            $chan.prepend('<i class="fa-solid fa-circle-check verified-badge me-1"></i>');
+                        }
+                        $title.append($chan);
+                    }
+                    const $add = $('<button class="btn btn-outline-primary btn-sm add-gif"><i class="fa-solid fa-plus me-1"></i> Add</button>')
+                        .data('gif', gif);
+                    $body.append($title, $add);
+                    $card.append($img, $body);
+                    $col.append($card);
+                    $('#searchResults').append($col);
+                });
+            })
+            .fail(function (xhr) {
+                flash($status, false, (xhr.responseJSON || {}).error || 'GIPHY search failed');
+            });
+    });
+
+    $('#searchTerms').on('keydown', function (e) {
+        if (e.key === 'Enter') { $('#searchBtn').click(); }
+    });
+
+    $('#searchResults').on('click', '.add-gif', function () {
+        const $btn = $(this);
+        const gif = $btn.data('gif');
+        const code = $('#searchBucket').val();
+        $btn.prop('disabled', true);
+
+        $.ajax({ url: bucketUrl(code, gif.id), method: 'POST' })
+            .done(function () {
+                const $bucket = $(`.gif-bucket[data-code="${code}"]`);
+                $bucket.find('.bucket-grid').append(gifCardTemplate(gif, code, langs));
+                refreshCount($bucket);
+                $btn.removeClass('btn-outline-primary').addClass('btn-success')
+                    .html('<i class="fa-solid fa-check me-1"></i> Added to ' + code);
+            })
+            .fail(function (xhr) {
+                $btn.prop('disabled', false);
+                flash($('#searchStatus'), false, (xhr.responseJSON || {}).error || 'Could not add that GIF');
+            });
+    });
+
+    $('.container').on('click', '.remove-gif', function () {
+        const $card = $(this).closest('.gif-card');
+        const $bucket = $card.closest('.gif-bucket');
+        $.ajax({ url: bucketUrl($bucket.data('code'), $card.data('ref')), method: 'DELETE' })
+            .done(function () { $card.remove(); refreshCount($bucket); })
+            .fail(function (xhr) { alert((xhr.responseJSON || {}).error || 'Could not remove that GIF'); });
+    });
+
+    $('.container').on('click', '.caption-save', function () {
+        const $group = $(this).closest('.input-group');
+        const $card = $group.closest('.gif-card');
+        const $bucket = $card.closest('.gif-bucket');
+        const $btn = $(this);
+
+        $.ajax({
+            url: bucketUrl($bucket.data('code'), $card.data('ref')),
+            method: 'POST',
+            contentType: 'application/json',
+            data: JSON.stringify({
+                caption: $group.find('.caption-input').val(),
+                lang: $group.find('.caption-lang').val()
+            })
+        })
+            .done(function () {
+                $btn.removeClass('btn-outline-secondary').addClass('btn-success');
+                setTimeout(() => $btn.removeClass('btn-success').addClass('btn-outline-secondary'), 900);
+            })
+            .fail(function (xhr) { alert((xhr.responseJSON || {}).error || 'Could not save that caption'); });
+    });
+
+    // Switching language shows what is stored for it, so editing fr does not
+    // overwrite en by accident.
+    $('.container').on('change', '.caption-lang', function () {
+        const $group = $(this).closest('.input-group');
+        const $card = $group.closest('.gif-card');
+        const captions = $card.data('captions') || {};
+        const lang = $(this).val();
+        $group.find('.caption-input').val(lang ? (captions[lang] || '') : (typeof captions === 'string' ? captions : ''));
+    });
+
+    {% for bucket in buckets %}{% for gif in bucket.gifs %}{% if gif.provider == "giphy" and gif.captions %}
+    $('.gif-bucket[data-code="{{ bucket.code }}"] .gif-card[data-ref="{{ gif.ref }}"]').data('captions', {{ gif.captions | tojson }});
+    {% endif %}{% endfor %}{% endfor %}
+</script>
+
+{% endblock %}

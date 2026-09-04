@@ -1,49 +1,162 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
 
-{% include nav%}
+{% include nav %}
 
- 
-    <style>
-        #error {
-            text-align: center;
-            margin : 20px;
-        }
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-        }
-        h1 {
-            color: #ff6347;
-        }
-        .img-container {
-            max-width: 500px;
-            display: inline-block;
-            background: #f4f4f4; /* this should match the page background */
-            border-radius: 50px; /* round the corners of the container */
-            box-shadow: 0 0 8px 16px rgba(0, 0, 0, 0.2); /* increased blur radius and added transparency */
-            margin: 30px; /* this adds some space around the container */
-        }
+<style>
+    .error-page {
+        max-width: 620px;
+        margin: 48px auto 64px;
+        padding: 0 16px;
+        text-align: center;
+    }
+    .error-card {
+        background: #fff;
+        border-radius: 18px;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06), 0 12px 32px rgba(0, 0, 0, 0.08);
+        padding: 32px 28px 28px;
+    }
+    .error-page .error-logo {
+        width: 170px;
+        max-width: 55%;
+        margin-bottom: 18px;
+    }
+    .error-page .error-code {
+        font-size: clamp(3.5rem, 17vw, 5.5rem);
+        font-weight: 800;
+        line-height: 1;
+        letter-spacing: 2px;
+        margin: 0;
+        /* Client errors are the visitor's side of the fence, server errors
+           ours: colour them apart rather than shouting red at both. */
+        color: {% if errorCode >= 500 %}#e8553f{% else %}var(--train, #52b0fe){% endif %};
+    }
+    .error-page h1 {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin: 10px 0 10px;
+        /* Even out the ragged edge instead of filling the line and orphaning
+           the tail: everything here is centred. */
+        text-wrap: balance;
+    }
+    .error-page .error-body {
+        font-size: 1.02rem;
+        line-height: 1.55;
+        color: #495057;
+        max-width: 30em;
+        margin: 0 auto;
+        text-wrap: balance;
+    }
+    .error-page .error-figure {
+        margin: 26px 0 0;
+    }
+    .error-page .error-gif-wrap {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+        max-width: 400px;
+        line-height: 0;
+    }
+    .error-page .error-gif {
+        display: block;
+        width: 100%;
+        border-radius: 12px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18);
+    }
+    /* Subtitle burned over the picture, the way a captioned GIF carries its
+       own line - for clips that have no text of their own. */
+    .error-page .error-caption {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        padding: 34px 12px 12px;
+        border-radius: 0 0 12px 12px;
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0));
+        color: #fff;
+        font-size: clamp(0.95rem, 4.4vw, 1.15rem);
+        font-weight: 700;
+        line-height: 1.25;
+        text-align: center;
+        text-wrap: balance;
+        text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 6px rgba(0, 0, 0, 0.6);
+    }
+    .error-page .error-credit {
+        font-size: 0.72rem;
+        color: #adb5bd;
+        margin: 8px 0 0;
+    }
+    .error-page .error-credit a {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px dotted #ced4da;
+    }
+    .error-page .error-credit a:hover {
+        color: #6c757d;
+    }
+    .error-page .error-actions {
+        margin-top: 26px;
+    }
+    .error-page .error-support {
+        font-size: 0.85rem;
+        color: #6c757d;
+        max-width: 32em;
+        margin: 22px auto 0;
+        text-wrap: pretty;
+    }
+</style>
 
-        .img-container img {
-            display: block;
-            border-radius: 50px; /* this rounds the corners of the image itself */
-            width: 100%; /* ensure the image fills the container */
-            height: auto; /* maintain the image aspect ratio */
-        }
-    </style>
+<div class="error-page">
+    <div class="error-card">
+        <a href="{{ url_for('landing') }}">
+            <img class="error-logo" src="{{ url_for('static', filename='images/logo.png') }}" alt="Trainlog">
+        </a>
 
-    <br>
-    <br>
-    <br>
-    <div id="error">
+        <p class="error-code">{{ errorCode }}</p>
         <h1>{{ errorHeader }}</h1>
-        <p>{{ errorBody }}</p>
-        <div class="img-container">
-            <img src="{{ errorImagePath }}">
-        </div>
-        <p>{{ errorDiscordMail | replace("{supportEmail}", "<a href='mailto:admin@trainlog.me'>admin@trainlog.me</a>") | replace("{discordLink}", "<a href='https://discord.com/invite/2FhrFTQKvU'>Discord</a>") | safe }}</p>
+        <p class="error-body">{{ errorBody }}</p>
 
+        {% if errorGif %}
+            <figure class="error-figure">
+                <div class="error-gif-wrap">
+                    <img class="error-gif" src="{{ errorGif.src }}" alt="" referrerpolicy="no-referrer">
+                    {% if errorGif.caption %}
+                        <figcaption class="error-caption">{{ errorGif.caption }}</figcaption>
+                    {% endif %}
+                </div>
+                <figcaption class="error-credit">
+                    {% if errorGif.credit_url %}
+                        <a href="{{ errorGif.credit_url }}" rel="noopener noreferrer" target="_blank">{{ errorGif.credit or errorGif.credit_url }}</a>
+                    {% elif errorGif.credit %}
+                        {{ errorGif.credit }}
+                    {% endif %}
+                    {% if errorGif.provider == "giphy" %}
+                        &middot; <a href="https://giphy.com/" rel="noopener noreferrer" target="_blank">Powered by GIPHY</a>
+                    {% endif %}
+                </figcaption>
+            </figure>
+        {% endif %}
+
+        <div class="error-actions">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="errorBackBtn">
+                <i class="fa-solid fa-arrow-left me-1"></i> {{ back }}
+            </button>
+        </div>
     </div>
+
+    <p class="error-support">{{ errorDiscordMail | replace("{supportEmail}", "<a href='mailto:admin@trainlog.me'>admin@trainlog.me</a>") | replace("{discordLink}", "<a href='https://discord.com/invite/2FhrFTQKvU'>Discord</a>") | safe }}</p>
+</div>
+
+<script>
+    // Straight home when there is nothing to go back to (opened from a link,
+    // or the previous page is the one that just errored).
+    document.getElementById("errorBackBtn").addEventListener("click", function () {
+        if (window.history.length > 1) {
+            window.history.back();
+        } else {
+            window.location.href = "{{ url_for('landing') }}";
+        }
+    });
+</script>
 
 {% endblock %}

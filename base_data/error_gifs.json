@@ -1,0 +1,131 @@
+{
+    "_comment": "Curated GIPHY GIFs per HTTP status code, served from GIPHY's CDN (we do not rehost them). Add entries with: python3 py/giphy_curate.py search <code> \"<terms>\". Buckets: 401, 404, 410, 416, 500, default.",
+    "401": [
+        {
+            "id": "xT5LMF66b0Bgdcsb4s",
+            "title": "Frustrated Lisa Simpson GIF by The Simpsons",
+            "url": "https://giphy.com/gifs/season-8-the-simpsons-8x17-xT5LMF66b0Bgdcsb4s"
+        },
+        {
+            "id": "ac7MA7r5IMYda",
+            "title": "Go Away GIF",
+            "url": "https://giphy.com/gifs/ac7MA7r5IMYda"
+        },
+        {
+            "id": "JJfkt7QEKRvMY6JwDL",
+            "title": "Good Night Goodbye GIF by CBC",
+            "url": "https://giphy.com/gifs/cbc-kims-convenience-closing-time-ok-see-you-JJfkt7QEKRvMY6JwDL"
+        },
+        {
+            "id": "Z890hxb6fSrbG",
+            "title": "I Forbid It Downton Abbey GIF",
+            "url": "https://giphy.com/gifs/no-downton-abbey-maggie-smith-Z890hxb6fSrbG"
+        },
+        {
+            "id": "njYrp176NQsHS",
+            "title": "You Shall Not Pass Lord Of The Rings GIF",
+            "url": "https://giphy.com/gifs/lotr-gandalf-lord-of-the-rings-njYrp176NQsHS"
+        },
+        {
+            "id": "xyalr6LBFVobe",
+            "title": "You Shall Not Pass Lord Of The Rings GIF",
+            "url": "https://giphy.com/gifs/meme-train-xyalr6LBFVobe",
+            "caption": "You shall not pass !"
+        },
+        {
+            "id": "tDtInK73CBOfBZE31b",
+            "title": "Animation No GIF by Nouns Movie",
+            "url": "https://giphy.com/gifs/nounsmovie-nouns-the-rise-of-blus-a-movie-tDtInK73CBOfBZE31b"
+        },
+        {
+            "id": "R39qy1pexYN44r1QYJ",
+            "title": "Rejected No Way GIF by Ovation TV",
+            "url": "https://giphy.com/gifs/Ovationtv-no-i-dont-think-so-R39qy1pexYN44r1QYJ"
+        }
+    ],
+    "404": [
+        {
+            "id": "6uGhT1O4sxpi8",
+            "title": "Confused Pulp Fiction GIF",
+            "url": "https://giphy.com/gifs/awkward-pulp-fiction-john-travolta-6uGhT1O4sxpi8"
+        },
+        {
+            "id": "cjbfyJrICOaKIXBWyG",
+            "title": "Kermit The Frog Map GIF by Muppet Wiki",
+            "url": "https://giphy.com/gifs/muppets-cjbfyJrICOaKIXBWyG"
+        },
+        {
+            "id": "mPytjcsG3XS4o",
+            "title": "confused disney animation GIF",
+            "url": "https://giphy.com/gifs/confused-lost-disney-mPytjcsG3XS4o"
+        },
+        {
+            "id": "3o6Mb71ujuZnIyfa5W",
+            "title": "Season 19 Episode 13 GIF by The Simpsons",
+            "url": "https://giphy.com/gifs/thesimpsons-3o6Mb71ujuZnIyfa5W"
+        },
+        {
+            "id": "l2JdVmUzv5MgXayvm",
+            "title": "Lisa Simpson Episode 6 GIF by The Simpsons",
+            "url": "https://giphy.com/gifs/season-7-the-simpsons-7x6-l2JdVmUzv5MgXayvm"
+        }
+    ],
+    "410": [
+        {
+            "id": "Az1CJ2MEjmsp2",
+            "title": "Lonely Ghost Town GIF",
+            "url": "https://giphy.com/gifs/bare-barren-Az1CJ2MEjmsp2"
+        },
+        {
+            "id": "SwboLIcoYDxIeFrLf4",
+            "title": "Vacation Im Not Here GIF by Paramount+",
+            "url": "https://giphy.com/gifs/paramountplus-paramount-frasier-plus-SwboLIcoYDxIeFrLf4"
+        }
+    ],
+    "416": [
+        {
+            "id": "4QX6y0fQT7yVO",
+            "title": "blog university GIF",
+            "url": "https://giphy.com/gifs/blog-clock-universityrunning-4QX6y0fQT7yVO"
+        },
+        {
+            "id": "OBnwDJW77acLK",
+            "title": "alice in wonderland time GIF",
+            "url": "https://giphy.com/gifs/time-alice-in-wonderland-clock-OBnwDJW77acLK"
+        }
+    ],
+    "500": [
+        {
+            "id": "GM9N9t8gOneFOpnh0F",
+            "title": "Explosion Train GIF by Back to the Future Trilogy",
+            "url": "https://giphy.com/gifs/BTTF-GM9N9t8gOneFOpnh0F"
+        },
+        {
+            "id": "fTv8pWgkdLZG8",
+            "title": "top gear parody GIF by UNILAD",
+            "url": "https://giphy.com/gifs/unilad-test-top-gear-parody-unilad-fTv8pWgkdLZG8"
+        },
+        {
+            "id": "1hMhlrWWfXU77iYnBB",
+            "title": "trainwreck GIF",
+            "url": "https://giphy.com/gifs/brid-1hMhlrWWfXU77iYnBB"
+        },
+        {
+            "id": "JYEEdjzlsb280",
+            "title": "train trainwreck GIF",
+            "url": "https://giphy.com/gifs/train-trainwreck-wreck-JYEEdjzlsb280"
+        }
+    ],
+    "default": [
+        {
+            "id": "NGSbD5vI6lUvC",
+            "title": "Loop Train GIF",
+            "url": "https://giphy.com/gifs/train-buster-keaton-NGSbD5vI6lUvC"
+        },
+        {
+            "id": "JWutWiJzFMmbe",
+            "title": "School Bus Train GIF",
+            "url": "https://giphy.com/gifs/train-crashes-JWutWiJzFMmbe"
+        }
+    ]
+}

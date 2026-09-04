@@ -207,6 +207,16 @@ from src.suspicious_activity import (
     log_denied_login,
     log_suspicious_activity,
 )
+from src.error_gifs import (
+    BUCKETS as ERROR_GIF_BUCKETS,
+    GiphyError,
+    add_gif,
+    error_gif_buckets,
+    giphy_search,
+    random_error_gif,
+    remove_gif,
+    set_caption,
+)
 from src.utils import (
     getNameFromPath,
     processDates,
@@ -9365,6 +9375,70 @@ def admin():
     )
 
 
+@app.route("/admin/error_gifs")
+@owner_required
+def admin_error_gifs():
+    """Curate the GIFs the error pages serve, per status code."""
+    lang_code = session["userinfo"]["lang"]
+    buckets = error_gif_buckets(lang_code)
+    for bucket in buckets:
+        bucket["title"] = lang[lang_code].get(f"error{bucket['code']}Title")
+        for gif in bucket["gifs"]:
+            if gif["provider"] == "local":
+                gif["src"] = url_for("static", filename=gif["path"])
+
+    return render_template(
+        "admin/error_gifs.html",
+        title="Error GIFs",
+        username=getUser(),
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id()),
+        buckets=buckets,
+        bucket_codes=ERROR_GIF_BUCKETS,
+        langs=sorted(readLang().keys()),
+        **lang[lang_code],
+        **session["userinfo"],
+    )
+
+
+@app.route("/admin/error_gifs/search")
+@owner_required
+def admin_error_gifs_search():
+    """Search GIPHY for candidates to add to a bucket."""
+    terms = (request.args.get("q") or "").strip()
+    if not terms:
+        return jsonify({"error": "Nothing to search for"}), 400
+    try:
+        return jsonify({"results": giphy_search(terms)})
+    except GiphyError as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/admin/error_gifs/<code>/<gif_id>", methods=["POST", "DELETE"])
+@owner_required
+def admin_error_gifs_edit(code, gif_id):
+    """Add, caption or remove one GIPHY entry."""
+    if code not in ERROR_GIF_BUCKETS:
+        abort(404)
+
+    try:
+        if request.method == "DELETE":
+            remove_gif(code, gif_id)
+            return jsonify({"ok": True})
+
+        data = request.get_json(silent=True) or {}
+        if "caption" in data:
+            caption = set_caption(
+                code, gif_id, (data.get("caption") or "").strip(), data.get("lang")
+            )
+            return jsonify({"ok": True, "caption": caption})
+        return jsonify({"ok": True, "entry": add_gif(code, gif_id)})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409
+    except GiphyError as e:
+        return jsonify({"error": str(e)}), 502
+
+
 @app.route("/admin/getLastCurrencyDate")
 @owner_required
 def getLastCurrencyDate():
@@ -12407,10 +12481,16 @@ def handle_error(e):
     title_key = f"error{error_code}Title"
     body_key  = f"error{error_code}Body"
 
+    gif = random_error_gif(error_code, lang_code)
+    if gif and gif["provider"] == "local":
+        gif = {**gif, "src": url_for("static", filename=gif["path"])}
+
     template_data = {
+        "title":       lang_dict.get(title_key, "Error"),
         "errorTitle":  lang_dict.get(title_key, "Error"),
         "errorHeader": lang_dict.get(title_key, "Error"),
-        "errorImagePath": url_for("static", filename=f"images/errors/{error_code}.png"),
+        "errorCode":   error_code,
+        "errorGif":    gif,
         "errorBody":   lang_dict.get(body_key, "An error occurred."),
     }
 
