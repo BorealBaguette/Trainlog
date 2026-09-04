@@ -1289,5 +1289,11 @@
     "leaderboardWagonsHallOfFame": "Panthéon — la collection sur laquelle repose tout le reste",
     "leaderboardWagonsSortBy": "Trier par",
     "discordAutopostSetting": "Publier mes trajets sur Discord au moment du départ",
-    "discordAutopostHint": "Seuls les trajets publics sont publiés."
+    "discordAutopostHint": "Seuls les trajets publics sont publiés.",
+    "removeDiscordPost": "Supprimer la publication Discord",
+    "confirmRemoveDiscordPost": "Supprimer l'annonce de ce trajet sur Discord ? Cette action est irréversible.",
+    "removeDiscordPostFailed": "La publication Discord n'a pas pu être supprimée. Veuillez réessayer.",
+    "postToDiscord": "Publier sur Discord",
+    "confirmPostToDiscord": "Publier ce trajet sur Discord maintenant ?",
+    "postToDiscordFailed": "Le trajet n'a pas pu être publié sur Discord. Veuillez réessayer."
 }

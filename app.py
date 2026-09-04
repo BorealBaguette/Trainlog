@@ -283,7 +283,14 @@ from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
-from src.trip_announcer import start_trip_announcer
+from src.trip_announcer import (
+    announced_trip_ids,
+    is_postable,
+    post_trip_now,
+    postable_trip_ids,
+    retract_announcement,
+    start_trip_announcer,
+)
 from src.photon import photonInstances, photonRequest, photonRequestSingle
 from src.routing import forward_routing_core
 from src.gpx_import import (
@@ -6890,6 +6897,70 @@ def deleteTrip(username):
     return ""
 
 
+def _discord_linked(username):
+    """Whether this user has linked a Discord account, and so may post trips."""
+    user = User.query.filter_by(username=username).first()
+    return bool(user and user.discord_id)
+
+
+@app.route("/u/<username>/postTripAnnouncement", methods=["POST"])
+@login_required
+def post_trip_announcement(username):
+    """Post one trip to the Discord channel now, at its owner's request.
+
+    The announcer only posts in a short window at departure, so a trip logged
+    from the platform, or one that fell in an outage, would otherwise never
+    make it out. Only while the trip is being travelled (post_trip_now), and
+    only for someone who has linked their Discord account.
+    """
+    trip_id = request.form.get("tripId", type=int)
+    if trip_id is None:
+        abort(400)
+
+    check_current_user_owns_trip(trip_id)
+    user = User.query.filter_by(username=username).first()
+    if user is None or not user.discord_id:
+        abort(403)
+
+    posted, reason = post_trip_now(
+        trip_id, user.uid, user.username, user.discord_id
+    )
+    # The row's new state, so the page can swap the buttons over without
+    # reloading itself.
+    return jsonify(
+        {
+            "ok": posted,
+            "reason": reason,
+            "announced": posted,
+            "postable": not posted and is_postable(trip_id, user.uid),
+        }
+    )
+
+
+@app.route("/u/<username>/deleteTripAnnouncement", methods=["POST"])
+@login_required
+def delete_trip_announcement(username):
+    """Take a trip's Discord post out of the channel, at its owner's request.
+
+    A trip announced while it was public by mistake says where somebody is, and
+    until this there was no way to take the post back.
+    """
+    trip_id = request.form.get("tripId", type=int)
+    if trip_id is None:
+        abort(400)
+
+    check_current_user_owns_trip(trip_id)
+    removed = retract_announcement(trip_id)
+
+    # A trip whose post is gone may be posted again, for as long as it is still
+    # being travelled — so the page is told, and offers it or does not.
+    user = User.query.filter_by(username=username).first()
+    postable = bool(
+        removed and user and user.discord_id and is_postable(trip_id, user.uid)
+    )
+    return jsonify({"ok": removed, "announced": not removed, "postable": postable})
+
+
 @app.route("/u/<username>/updateTrip", methods=["GET", "POST"])
 @login_required
 def updateTrip(username):
@@ -9658,6 +9729,17 @@ def dynamic_trips(username, time=None):
         projects=projects,
         trip_column_names=trip_column_names,
         country_list=get_all_countries(),
+        # Which rows offer to take their Discord post down, and which offer to
+        # post themselves. Read here rather than joined into the trips API: the
+        # table is paged server-side, and both lists are short enough to send
+        # whole (the postable one is a trip someone is on, so nearly always
+        # empty or one row).
+        discordAnnouncedIds=json.dumps(announced_trip_ids(get_user_id(username))),
+        discordPostableIds=json.dumps(
+            postable_trip_ids(get_user_id(username))
+            if _discord_linked(username)
+            else []
+        ),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

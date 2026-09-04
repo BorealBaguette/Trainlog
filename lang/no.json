@@ -1292,5 +1292,11 @@
     "leaderboardWagonsHallOfFame": "Hall of fame — samlingen alt annet bygger på",
     "leaderboardWagonsSortBy": "Sorter etter",
     "discordAutopostSetting": "Legg ut turene mine på Discord ved avgang",
-    "discordAutopostHint": "Bare offentlige turer legges ut."
+    "discordAutopostHint": "Bare offentlige turer legges ut.",
+    "removeDiscordPost": "Fjern Discord-innlegg",
+    "confirmRemoveDiscordPost": "Slette kunngjøringen av denne turen fra Discord? Dette kan ikke angres.",
+    "removeDiscordPostFailed": "Discord-innlegget kunne ikke fjernes. Prøv igjen.",
+    "postToDiscord": "Legg ut på Discord",
+    "confirmPostToDiscord": "Legge ut denne turen på Discord nå?",
+    "postToDiscordFailed": "Turen kunne ikke legges ut på Discord. Prøv igjen."
 }

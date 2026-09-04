@@ -1292,5 +1292,11 @@
     "leaderboardWagonsHallOfFame": "Hall of fame — de collectie waarop al het andere is gebouwd",
     "leaderboardWagonsSortBy": "Sorteren op",
     "discordAutopostSetting": "Mijn ritten bij vertrek op Discord plaatsen",
-    "discordAutopostHint": "Alleen openbare ritten worden geplaatst."
+    "discordAutopostHint": "Alleen openbare ritten worden geplaatst.",
+    "removeDiscordPost": "Discord-bericht verwijderen",
+    "confirmRemoveDiscordPost": "Het bericht van deze rit uit Discord verwijderen? Dit kan niet ongedaan worden gemaakt.",
+    "removeDiscordPostFailed": "Het Discord-bericht kon niet worden verwijderd. Probeer het opnieuw.",
+    "postToDiscord": "Op Discord plaatsen",
+    "confirmPostToDiscord": "Deze rit nu op Discord plaatsen?",
+    "postToDiscordFailed": "De rit kon niet op Discord worden geplaatst. Probeer het opnieuw."
 }

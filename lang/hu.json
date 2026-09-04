@@ -1288,5 +1288,11 @@
     "leaderboardWagonsHallOfFame": "Hírességek csarnoka — a gyűjtemény, amelyre minden más épül",
     "leaderboardWagonsSortBy": "Rendezés",
     "discordAutopostSetting": "Utazásaim közzététele a Discordon induláskor",
-    "discordAutopostHint": "Csak a nyilvános utazások kerülnek közzétételre."
+    "discordAutopostHint": "Csak a nyilvános utazások kerülnek közzétételre.",
+    "removeDiscordPost": "Discord-bejegyzés eltávolítása",
+    "confirmRemoveDiscordPost": "Törlöd az utazás bejelentését a Discordról? Ez nem vonható vissza.",
+    "removeDiscordPostFailed": "A Discord-bejegyzést nem sikerült eltávolítani. Kérlek, próbáld újra.",
+    "postToDiscord": "Közzététel a Discordon",
+    "confirmPostToDiscord": "Közzéteszed most ezt az utazást a Discordon?",
+    "postToDiscordFailed": "Az utazást nem sikerült közzétenni a Discordon. Kérlek, próbáld újra."
 }

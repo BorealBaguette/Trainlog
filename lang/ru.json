@@ -1296,5 +1296,11 @@
     "leaderboardWagonsHallOfFame": "Зал славы — коллекция, на которой держится всё остальное",
     "leaderboardWagonsSortBy": "Сортировать по",
     "discordAutopostSetting": "Публиковать мои поездки в Discord при отправлении",
-    "discordAutopostHint": "Публикуются только публичные поездки."
+    "discordAutopostHint": "Публикуются только публичные поездки.",
+    "removeDiscordPost": "Удалить публикацию в Discord",
+    "confirmRemoveDiscordPost": "Удалить объявление об этой поездке из Discord? Это действие нельзя отменить.",
+    "removeDiscordPostFailed": "Не удалось удалить публикацию в Discord. Попробуйте ещё раз.",
+    "postToDiscord": "Опубликовать в Discord",
+    "confirmPostToDiscord": "Опубликовать эту поездку в Discord сейчас?",
+    "postToDiscordFailed": "Не удалось опубликовать поездку в Discord. Попробуйте ещё раз."
 }

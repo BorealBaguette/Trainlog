@@ -1292,5 +1292,11 @@
     "leaderboardWagonsHallOfFame": "Hall of fame — samlingen som allt annat bygger på",
     "leaderboardWagonsSortBy": "Sortera efter",
     "discordAutopostSetting": "Publicera mina resor på Discord vid avgång",
-    "discordAutopostHint": "Endast offentliga resor publiceras."
+    "discordAutopostHint": "Endast offentliga resor publiceras.",
+    "removeDiscordPost": "Ta bort Discord-inlägg",
+    "confirmRemoveDiscordPost": "Radera den här resans inlägg från Discord? Detta kan inte ångras.",
+    "removeDiscordPostFailed": "Discord-inlägget kunde inte tas bort. Försök igen.",
+    "postToDiscord": "Lägg upp på Discord",
+    "confirmPostToDiscord": "Lägga upp den här resan på Discord nu?",
+    "postToDiscordFailed": "Resan kunde inte läggas upp på Discord. Försök igen."
 }

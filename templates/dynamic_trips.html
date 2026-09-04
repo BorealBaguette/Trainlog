@@ -885,6 +885,104 @@
         }
     }
 
+    /* The row actions modal, on every screen — so it must sit outside the
+       card-mode media query above. The buttons used to size themselves to
+       their labels and wrap ragged, which reads as a pile rather than a menu;
+       a two-up grid gives every action the same weight whatever a row offers,
+       and an odd one out takes the full width instead of leaving a hole.
+       .btn-label is a strip pinned down the left (style2.css shifts it into
+       the button's padding), so the label text can stay centred. */
+    .actionModalBody {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+    .actionModalBody .btn {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        margin-bottom: 0;
+        padding: 0.5rem 0.75rem 0.5rem 3rem;
+        white-space: nowrap;
+    }
+    .actionModalBody .btn .btn-label {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        padding: 0 0.75rem;
+        border-top-left-radius: inherit;
+        border-bottom-left-radius: inherit;
+    }
+    .actionModalBody .btn:last-child:nth-child(odd) {
+        grid-column: 1 / -1;
+    }
+    /* The two Discord actions carry Discord's own blurple, so they read as one
+       pair and as nothing else on the row. What tells them apart is the sign
+       on the logo: the post is being added, or taken back. */
+    .btn-discord,
+    .btn-discord:disabled {
+        background-color: #5865F2;
+        border-color: #5865F2;
+        color: #fff;
+    }
+    .btn-discord:hover,
+    .btn-discord:focus,
+    .btn-discord:active {
+        background-color: #4752C4;
+        border-color: #4752C4;
+        color: #fff;
+    }
+    /* Every action icon gets the same box, so the darker .btn-label strip is
+       one width down the modal and the icon-only buttons in a card's detail
+       row are one size. 1.25em is Font Awesome's own fixed-width measure. */
+    .actionModalBody .btn .btn-label > i,
+    .actionModalBody .btn .btn-label > .discordIcon,
+    .rowActionsCell .btn > i,
+    .rowActionsCell .btn > .discordIcon {
+        width: 1.25em;
+        text-align: center;
+    }
+
+    /* The Discord pair has to read as one icon, so it lives in one of those
+       boxes: the logo sits left in it, a size down, and the sign is taken out
+       of the flow and set on its shoulder. Nothing here adds width — and the
+       sign has to be positioned rather than aligned, since .btn-label is a
+       flex row and flex children do not honour vertical-align. */
+    .discordIcon {
+        position: relative;
+        display: inline-block;
+        text-align: left;
+    }
+
+    /* The detail row's actions wrap on a narrow screen, and inline-block plus
+       a left margin wraps them ragged — the stragglers sit under the wrong
+       button with no spacing above. A wrapping flex row keeps every button on
+       a shared grid whatever fits, with one gap doing both directions. */
+    .rowActionsCell {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+    }
+    .rowActionsCell .btn {
+        margin-left: 0;
+    }
+    .discordLogo {
+        font-size: 0.85em;
+    }
+    /* Top right, but sitting on the logo's shoulder rather than floating above
+       it: the inline box reaches higher than the glyph's ink does. */
+    .discordSign {
+        position: absolute;
+        right: -0.1em;
+        top: 0.1em;
+        font-size: 0.5em;
+        line-height: 1;
+    }
 </style>
 
 {% include "includes/trainset_display.html" %}
@@ -1885,12 +1983,15 @@ function processHiddenData(rowIdx, columns){
             '</tr>' :
             '';
         }
-        else if (cardMode ? cardCols.indexOf(col.columnIndex) === -1 : col.hidden) {
+        // An open card shows its actions inline in the detail row as well as
+        // behind the kebab: col-actions is a card column, so the card-mode test
+        // above would otherwise drop the row that carries them.
+        else if (cardMode || col.hidden) {
             var id = $(col.data).attr("data-tripId");
             return `
                 <tr data-dt-row="${col.rowIndex}" data-dt-column="${col.columnIndex}">
                     <td><strong>Actions</strong></td>
-                    <td>
+                    <td class="rowActionsCell" data-trip="${id}">
                         <a class="btn btn-primary linkButton" href="{{ url_for('public_trip', tripIds='') }}${id}">
                             <i class="fa-regular fa-share-from-square"></i>
                         </a>
@@ -1904,6 +2005,7 @@ function processHiddenData(rowIdx, columns){
                         <button class="btn btn-danger deleteButton ms-1" id="${id}">
                             <i class="fa-regular fa-trash-can"></i>
                         </button>
+                        ${discordButtonsHtml(id, false)}
                         {% endif %}
                     </td>
                 </tr>
@@ -2081,6 +2183,61 @@ const TRANSLATIONS = {
     car: "{{ car }}"
 }
 
+// Trips whose Discord announcement is still up, so only those rows offer to
+// take it down. Sent whole with the page: the list is short, and the trips API
+// is paged server-side.
+const DISCORD_ANNOUNCED = new Set({% if not isPublic %}{{ discordAnnouncedIds|safe }}{% else %}[]{% endif %});
+
+// Trips their owner may post by hand right now: public, not yet announced, and
+// being travelled. Empty for anyone who has not linked a Discord account.
+const DISCORD_POSTABLE = new Set({% if not isPublic %}{{ discordPostableIds|safe }}{% else %}[]{% endif %});
+
+// The Discord buttons in one place: the actions modal, the card's detail row
+// and the swap that follows a post or a removal all build them from here, so
+// the three can never drift apart. `labeled` picks the modal's wide form over
+// the icon-only one the detail row uses.
+function discordButtonsHtml(tripId, labeled){
+    var id = Number(tripId), html = '';
+    if (DISCORD_POSTABLE.has(id)) {
+        html += labeled
+            ? `<button class="btn btn-labeled btn-discord discordPostButton" data-trip="${id}" onclick="postToDiscord(${id})">
+                   <span class="btn-label"><span class="discordIcon"><i class="fa-brands fa-discord discordLogo"></i><i class="fa-solid fa-plus discordSign"></i></span></span>{{postToDiscord}}
+               </button>`
+            : `<button class="btn btn-discord discordPostButton ms-1" data-trip="${id}" title="{{postToDiscord}}" onclick="postToDiscord(${id})">
+                   <span class="discordIcon"><i class="fa-brands fa-discord discordLogo"></i><i class="fa-solid fa-plus discordSign"></i></span>
+               </button>`;
+    }
+    if (DISCORD_ANNOUNCED.has(id)) {
+        html += labeled
+            ? `<button class="btn btn-labeled btn-discord discordRemoveButton" data-trip="${id}" onclick="removeDiscordPost(${id})">
+                   <span class="btn-label"><span class="discordIcon"><i class="fa-brands fa-discord discordLogo"></i><i class="fa-solid fa-minus discordSign"></i></span></span>{{removeDiscordPost}}
+               </button>`
+            : `<button class="btn btn-discord discordRemoveButton ms-1" data-trip="${id}" title="{{removeDiscordPost}}" onclick="removeDiscordPost(${id})">
+                   <span class="discordIcon"><i class="fa-brands fa-discord discordLogo"></i><i class="fa-solid fa-minus discordSign"></i></span>
+               </button>`;
+    }
+    return html;
+}
+
+// Swap a row's Discord buttons for the ones its new state calls for, wherever
+// that row is on screen: the modal that was just clicked, any stale copy of it
+// (renderButton appends a fresh modal per draw), and the open card's detail
+// row. Cheaper and less jarring than reloading the page for one changed row.
+function refreshDiscordButtons(tripId, state){
+    var id = Number(tripId);
+    DISCORD_ANNOUNCED[state.announced ? 'add' : 'delete'](id);
+    DISCORD_POSTABLE[state.postable ? 'add' : 'delete'](id);
+
+    $('#actionModal' + id).find('.modal-body').each(function(){
+        $(this).find('.discordPostButton, .discordRemoveButton').remove();
+        $(this).append(discordButtonsHtml(id, true));
+    });
+    $('.rowActionsCell[data-trip="' + id + '"]').each(function(){
+        $(this).find('.discordPostButton, .discordRemoveButton').remove();
+        $(this).append(discordButtonsHtml(id, false));
+    });
+}
+
 function renderButton(data, type, row){
   var modalId = `actionModal${data.uid}`;
   var button = $('<button>').attr('class', "btn btn-link link-dark modalButton")
@@ -2097,7 +2254,7 @@ function renderButton(data, type, row){
                         <h5 class="modal-title" id="${modalId}Label">${sanitize(data.origin_station || '')} - ${sanitize(data.destination_station || '')}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                    <div class="modal-body">
+                    <div class="modal-body actionModalBody">
                         <a class="btn btn-labeled btn-primary linkButton"
                            href="{{ url_for('public_trip', tripIds='') }}${data.uid}">
                             <span class="btn-label"><i class="fa-regular fa-share-from-square"></i></span>{{shareTrip}}
@@ -2114,6 +2271,7 @@ function renderButton(data, type, row){
                         <button class="btn btn-labeled btn-danger deleteButton" id="${data.uid}">
                             <span class="btn-label"><i class="fa-regular fa-trash-can"></i></span>{{delete}}
                         </button>
+                        ${discordButtonsHtml(data.uid, true)}
                         {% endif %}
                     </div>
                 </div>
@@ -3322,6 +3480,52 @@ function processDelete(id){
                 alert( "error" );
             }
         });
+}
+
+function postToDiscord(tripId){
+    if (!confirm({{ confirmPostToDiscord|tojson }})) return;
+    // The server turns a second click away, but disabling the buttons keeps
+    // the modal from looking like nothing happened while Discord answers.
+    $('.discordPostButton[data-trip="' + tripId + '"]').prop('disabled', true);
+    $.post({
+        url: '{{url_for("post_trip_announcement", username=username)}}',
+        data: { tripId: tripId },
+        success: function(res){
+            $('.discordPostButton[data-trip="' + tripId + '"]').prop('disabled', false);
+            if (res && res.ok) {
+                refreshDiscordButtons(tripId, res);
+            } else {
+                alert({{ postToDiscordFailed|tojson }});
+            }
+        },
+        error: function(){
+            $('.discordPostButton[data-trip="' + tripId + '"]').prop('disabled', false);
+            alert({{ postToDiscordFailed|tojson }});
+        }
+    });
+}
+
+function removeDiscordPost(tripId){
+    if (!confirm({{ confirmRemoveDiscordPost|tojson }})) return;
+    // The server turns a second click away, but disabling the buttons keeps
+    // the modal from looking like nothing happened while Discord answers.
+    $('.discordRemoveButton[data-trip="' + tripId + '"]').prop('disabled', true);
+    $.post({
+        url: '{{url_for("delete_trip_announcement", username=username)}}',
+        data: { tripId: tripId },
+        success: function(res){
+            $('.discordRemoveButton[data-trip="' + tripId + '"]').prop('disabled', false);
+            if (res && res.ok) {
+                refreshDiscordButtons(tripId, res);
+            } else {
+                alert({{ removeDiscordPostFailed|tojson }});
+            }
+        },
+        error: function(){
+            $('.discordRemoveButton[data-trip="' + tripId + '"]').prop('disabled', false);
+            alert({{ removeDiscordPostFailed|tojson }});
+        }
+    });
 }
 
 function deleteTrip(tripId){

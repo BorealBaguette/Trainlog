@@ -7,6 +7,7 @@ the Discord REST API supports directly via bot-token auth.
 
 import json
 import logging
+import time
 
 import requests
 
@@ -85,16 +86,82 @@ def sync_discord_tier(user, tier: str | None) -> None:
         _set_role(user.discord_id, role_id, grant=(key == target_key))
 
 
+# Guild display names, cached so a tick that posts several trips does not ask
+# Discord for the same member again. Keyed by discord_id -> (expires, name,
+# avatar_url). Per-process, so every gunicorn worker keeps its own; the point is
+# to avoid a burst of identical calls, not to be a shared cache.
+_MEMBER_CACHE = {}
+_MEMBER_TTL = 3600
+
+
+def guild_display_name(discord_id: str):
+    """(display name, avatar url) for a member of the Trainlog guild.
+
+    What people know each other by in the server is the nickname they set
+    there, which is often nothing like the account's username — so a post made
+    on someone's behalf should carry the nickname, falling back to the account
+    display name and then the username, the same order Discord itself shows.
+
+    Returns (None, None) when the member cannot be looked up (bot not
+    configured, member left the guild, Discord unreachable); the caller then
+    posts under whatever name it already had. Never raises.
+    """
+    cached = _MEMBER_CACHE.get(discord_id)
+    if cached and cached[0] > time.time():
+        return cached[1], cached[2]
+
+    config = load_config().get("discord", {})
+    bot_token, guild_id = config.get("bot_token"), config.get("guild_id")
+    if not (bot_token and guild_id):
+        return None, None
+
+    try:
+        response = requests.get(
+            f"{DISCORD_API}/guilds/{guild_id}/members/{discord_id}",
+            headers={"Authorization": f"Bot {bot_token}"},
+            timeout=10,
+        )
+        if response.status_code != 200:
+            logger.info(
+                "Discord member lookup for %s: %s %s",
+                discord_id, response.status_code, response.text,
+            )
+            return None, None
+        member = response.json()
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("Discord API error while looking up member %s: %s", discord_id, e)
+        return None, None
+
+    user = member.get("user") or {}
+    name = member.get("nick") or user.get("global_name") or user.get("username")
+
+    # A per-guild avatar overrides the account one, and lives under a different
+    # path. Either may be unset, in which case Discord's default is used.
+    if member.get("avatar"):
+        avatar = (
+            f"https://cdn.discordapp.com/guilds/{guild_id}/users/{discord_id}"
+            f"/avatars/{member['avatar']}.png"
+        )
+    elif user.get("avatar"):
+        avatar = f"https://cdn.discordapp.com/avatars/{discord_id}/{user['avatar']}.png"
+    else:
+        avatar = None
+
+    _MEMBER_CACHE[discord_id] = (time.time() + _MEMBER_TTL, name, avatar)
+    return name, avatar
+
+
 def post_webhook_message(
-    webhook_url: str, content: str, username: str = None, file=None
+    webhook_url: str, content: str, username: str = None, file=None,
+    avatar_url: str = None,
 ):
     """Post a plain-text message through a channel webhook.
 
     Webhooks are used rather than the bot token because they are bound to their
     channel and need no guild membership or channel permission — the same
-    reason the BMC and feature-request notifications use them. ``username``
-    overrides the displayed author per message, so a trip can be posted under
-    the name of whoever took it.
+    reason the BMC and feature-request notifications use them. ``username`` and
+    ``avatar_url`` override the displayed author per message, so a trip can be
+    posted under the name and face of whoever took it.
 
     Returns the message id on success, ``False`` when Discord answered with an
     error (nothing was posted, so retrying is safe), and ``None`` when we never
@@ -117,6 +184,8 @@ def post_webhook_message(
     }
     if username:
         payload["username"] = username
+    if avatar_url:
+        payload["avatar_url"] = avatar_url
 
     if file:
         # An attachment has to go as multipart, with the rest of the message
@@ -144,3 +213,33 @@ def post_webhook_message(
     except requests.RequestException as e:
         logger.warning("Discord API error while posting via webhook: %s", e)
     return None
+
+
+def delete_webhook_message(webhook_url: str, message_id: str) -> bool:
+    """Delete a message this webhook posted.
+
+    A webhook may delete its own messages with nothing but its URL, which is
+    what lets a trip announcement be taken down without a bot token or any
+    channel permission. A message that is already gone counts as deleted: what
+    matters is that it is not in the channel, not who removed it.
+
+    Never raises. Returns False whenever the message may still be up, so the
+    caller can keep its record of it and let the user try again.
+    """
+    if not webhook_url:
+        logger.warning(
+            "No trips webhook configured; cannot delete message %s", message_id
+        )
+        return False
+
+    try:
+        response = requests.delete(f"{webhook_url}/messages/{message_id}", timeout=20)
+        if response.status_code in (204, 404):
+            return True
+        logger.warning(
+            "Discord webhook message delete failed: %s %s",
+            response.status_code, response.text,
+        )
+    except requests.RequestException as e:
+        logger.warning("Discord API error while deleting webhook message: %s", e)
+    return False
