@@ -19,10 +19,13 @@ The style file Martin is given must be a *resolved* copy: the one in the repo
 carries the {{mapPinUrl}} placeholder that vector_style() fills in per request,
 and Martin fetches the sprite itself, so it needs a real URL in the file.
 
-Rendering is Linux-only in Martin, uncached and non-concurrent, which suits the
-handful of announcements an hour this makes — it is not for request handlers.
+Rendering is Linux-only in Martin, uncached and non-concurrent, which suited the
+handful of announcements an hour this began as. Cards are now served to anyone
+with the link too (og.trip_card), so a drawn one is kept under CACHE_DIR and a
+request handler only ever renders a trip nobody has asked for yet.
 """
 
+import hashlib
 import io
 import json
 import logging
@@ -155,6 +158,14 @@ NO_ROUTE = "no_route"
 NOT_CONFIGURED = "not_configured"
 RENDER_FAILED = "render_failed"
 
+# Drawn cards are kept on disk, like the OG ones (src/og_card.py): a render is
+# a Martin round trip, Martin is a single uncached container that has been
+# OOM-killed by this very work, and the same card is now served to anyone with
+# the link rather than drawn once for Discord. The trip's last_modified is part
+# of the file name, so an edited trip draws again instead of serving the old
+# picture for ever.
+CACHE_DIR = "databases/cache/trip"
+
 # Dark panel, tuned against the style's own #343332 background.
 PANEL_BG = (35, 35, 34)
 PANEL_RULE = (74, 73, 71)
@@ -178,7 +189,7 @@ def _fetch(trip_id):
                    t.origin_station, t.destination_station,
                    t.start_datetime, t.end_datetime,
                    t.departure_delay, t.arrival_delay, t.countries,
-                   t.utc_start_datetime, t.utc_end_datetime,
+                   t.utc_start_datetime, t.utc_end_datetime, t.last_modified,
                    ST_AsGeoJSON(
                        ST_Segmentize(p.geom::geography, :segment)::geometry
                    ) AS route
@@ -868,6 +879,14 @@ def _draw_panel(card, trip, logos, scale):
             fx += image.width + 2 * scale
 
 
+def _cache_path(trip):
+    """databases/cache/trip/<trip id>-<what the trip currently is>.png"""
+    fingerprint = hashlib.sha256(
+        f"{trip['last_modified']}".encode()
+    ).hexdigest()[:8]
+    return os.path.join(CACHE_DIR, f"{trip['trip_id']}-{fingerprint}.png")
+
+
 def render_trip_card(trip_id):
     """(PNG bytes, None), or (None, why there is no card).
 
@@ -880,6 +899,12 @@ def render_trip_card(trip_id):
     if trip is None:
         logger.info("Trip %s has no route to draw a card from", trip_id)
         return None, NO_ROUTE
+
+    path = _cache_path(trip)
+    if os.path.exists(path):
+        with open(path, "rb") as handle:
+            return handle.read(), None
+
     rendered, reason = _render_map(trip)
     if rendered is None:
         return None, reason
@@ -893,4 +918,13 @@ def render_trip_card(trip_id):
 
     out = io.BytesIO()
     card.convert("RGB").save(out, format="PNG", optimize=True)
-    return out.getvalue(), None
+    png = out.getvalue()
+
+    # Written through a temporary file: a reader that arrives mid-write must
+    # find either the old card or the new one, never half a PNG.
+    os.makedirs(CACHE_DIR, exist_ok=True)
+    tmp = f"{path}.tmp"
+    with open(tmp, "wb") as handle:
+        handle.write(png)
+    os.replace(tmp, path)
+    return png, None
