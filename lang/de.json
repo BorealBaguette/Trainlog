@@ -1294,7 +1294,7 @@
     "discordAutopostSetting": "Meine Fahrten bei der Abfahrt auf Discord veröffentlichen",
     "discordAutopostHint": "Es werden nur öffentliche Fahrten veröffentlicht.",
     "removeDiscordPost": "Discord-Beitrag entfernen",
-    "confirmRemoveDiscordPost": "Die Ankündigung dieser Fahrt aus Discord löschen? Das lässt sich nicht rückgängig machen.",
+    "confirmRemoveDiscordPost": "Die Ankündigung dieser Fahrt aus Discord löschen?",
     "removeDiscordPostFailed": "Der Discord-Beitrag konnte nicht entfernt werden. Bitte versuche es erneut.",
     "postToDiscord": "Auf Discord posten",
     "confirmPostToDiscord": "Diese Fahrt jetzt auf Discord posten?",

@@ -1294,7 +1294,7 @@
     "discordAutopostSetting": "Publicar mis viajes en Discord al momento de salir",
     "discordAutopostHint": "Solo se publican los viajes públicos.",
     "removeDiscordPost": "Eliminar publicación de Discord",
-    "confirmRemoveDiscordPost": "¿Eliminar el anuncio de este viaje de Discord? Esta acción no se puede deshacer.",
+    "confirmRemoveDiscordPost": "¿Eliminar el anuncio de este viaje de Discord?",
     "removeDiscordPostFailed": "No se pudo eliminar la publicación de Discord. Inténtalo de nuevo.",
     "postToDiscord": "Publicar en Discord",
     "confirmPostToDiscord": "¿Publicar este viaje en Discord ahora?",

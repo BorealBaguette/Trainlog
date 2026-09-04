@@ -1294,7 +1294,7 @@
     "discordAutopostSetting": "Publicar minhas viagens no Discord na partida",
     "discordAutopostHint": "Somente viagens públicas são publicadas.",
     "removeDiscordPost": "Remover publicação do Discord",
-    "confirmRemoveDiscordPost": "Excluir o anúncio desta viagem do Discord? Isso não pode ser desfeito.",
+    "confirmRemoveDiscordPost": "Excluir o anúncio desta viagem do Discord?",
     "removeDiscordPostFailed": "Não foi possível remover a publicação do Discord. Tente novamente.",
     "postToDiscord": "Publicar no Discord",
     "confirmPostToDiscord": "Publicar esta viagem no Discord agora?",

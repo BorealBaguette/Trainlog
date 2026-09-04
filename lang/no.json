@@ -1294,7 +1294,7 @@
     "discordAutopostSetting": "Legg ut turene mine på Discord ved avgang",
     "discordAutopostHint": "Bare offentlige turer legges ut.",
     "removeDiscordPost": "Fjern Discord-innlegg",
-    "confirmRemoveDiscordPost": "Slette kunngjøringen av denne turen fra Discord? Dette kan ikke angres.",
+    "confirmRemoveDiscordPost": "Slette kunngjøringen av denne turen fra Discord?",
     "removeDiscordPostFailed": "Discord-innlegget kunne ikke fjernes. Prøv igjen.",
     "postToDiscord": "Legg ut på Discord",
     "confirmPostToDiscord": "Legge ut denne turen på Discord nå?",

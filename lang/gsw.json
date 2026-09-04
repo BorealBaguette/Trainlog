@@ -1292,7 +1292,7 @@
     "discordAutopostSetting": "Mini Fahrte bim Abfahre uf Discord poste",
     "discordAutopostHint": "Es wärde nur öffentlichi Fahrte gposchtet.",
     "removeDiscordPost": "Discord-Poscht entferne",
-    "confirmRemoveDiscordPost": "D Aachündigung vo däre Fahrt uf Discord lösche? Das cha me nüme rückgängig mache.",
+    "confirmRemoveDiscordPost": "D Aachündigung vo däre Fahrt uf Discord lösche?",
     "removeDiscordPostFailed": "De Discord-Poscht het nöd chöne entfernt werde. Bitte probier's nomol.",
     "postToDiscord": "Uf Discord poschte",
     "confirmPostToDiscord": "Die Fahrt jetz uf Discord poschte?",

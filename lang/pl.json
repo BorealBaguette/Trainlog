@@ -1298,7 +1298,7 @@
     "discordAutopostSetting": "Publikuj moje podróże na Discordzie w chwili odjazdu",
     "discordAutopostHint": "Publikowane są tylko podróże publiczne.",
     "removeDiscordPost": "Usuń wpis z Discorda",
-    "confirmRemoveDiscordPost": "Usunąć ogłoszenie tej podróży z Discorda? Tej operacji nie można cofnąć.",
+    "confirmRemoveDiscordPost": "Usunąć ogłoszenie tej podróży z Discorda?",
     "removeDiscordPostFailed": "Nie udało się usunąć wpisu z Discorda. Spróbuj ponownie.",
     "postToDiscord": "Opublikuj na Discordzie",
     "confirmPostToDiscord": "Opublikować tę podróż na Discordzie teraz?",
