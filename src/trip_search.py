@@ -74,7 +74,10 @@ def parse_filters(raw, is_public=False):
         if not isinstance(entry, dict):
             continue
         field = entry.get("field")
-        values = [str(v) for v in entry.get("values", []) if str(v)]
+        exact = bool(entry.get("exact"))
+        # An exact empty value ("material:``") asks for trips where the field is
+        # not set, so it is kept; a partial one would match everything and is dropped.
+        values = [str(v) for v in entry.get("values", []) if exact or str(v)]
         if field not in FILTER_FIELDS or not values:
             continue
         if is_public and field in PUBLIC_HIDDEN_FIELDS:
@@ -83,7 +86,7 @@ def parse_filters(raw, is_public=False):
             {
                 "field": field,
                 "values": values,
-                "exact": bool(entry.get("exact")),
+                "exact": exact,
                 "negate": bool(entry.get("negate")),
             }
         )
