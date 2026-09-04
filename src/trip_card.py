@@ -146,6 +146,15 @@ META_MIN_SIZE = 22
 ROUTE_FALLBACK = "#52b0fe"
 RENDER_TIMEOUT = 60
 
+# Why a card could not be drawn. NO_ROUTE and NOT_CONFIGURED are settled: asking
+# again changes nothing. RENDER_FAILED is not — Martin has been OOM-killed
+# mid-render and back within half a minute (deploy/martin/docker-compose.yml),
+# which is why the announcer holds the trip and tries the next tick instead of
+# posting a card-less announcement it can never revisit.
+NO_ROUTE = "no_route"
+NOT_CONFIGURED = "not_configured"
+RENDER_FAILED = "render_failed"
+
 # Dark panel, tuned against the style's own #343332 background.
 PANEL_BG = (35, 35, 34)
 PANEL_RULE = (74, 73, 71)
@@ -353,15 +362,16 @@ def _overlay(parts, colour):
 
 
 def _render_map(trip):
-    """(map image, unwrapped parts, camera) or None if Martin can't serve it."""
+    """((map image, unwrapped parts, camera), None), or (None, why not)."""
     base_url, style = _martin()
     if not (base_url and style):
         logger.info("No martin.url/martin.style configured; cards disabled")
-        return None
+        return None, NOT_CONFIGURED
 
     parts = _unwrap(_parts(json.loads(trip["route"])))
     if not parts or not parts[0]:
-        return None
+        logger.info("Trip %s has a route with no drawable parts", trip["trip_id"])
+        return None, NO_ROUTE
 
     colour = TRIP_TYPES.get(trip["trip_type"], {}).get("colour", ROUTE_FALLBACK)
     camera, centre_lon, centre_lat, zoom = _camera(parts)
@@ -375,15 +385,15 @@ def _render_map(trip):
         )
     except requests.RequestException as e:
         logger.warning("Martin unreachable for trip %s: %s", trip["trip_id"], e)
-        return None
+        return None, RENDER_FAILED
     if response.status_code != 200:
         logger.warning(
             "Martin refused trip %s: %s %s",
             trip["trip_id"], response.status_code, response.text[:200],
         )
-        return None
+        return None, RENDER_FAILED
     image = Image.open(io.BytesIO(response.content)).convert("RGB")
-    return image, parts, (centre_lon, centre_lat, zoom)
+    return (image, parts, (centre_lon, centre_lat, zoom)), None
 
 
 def _paste_pin(card, path, x, y, scale, anchor=0.5):
@@ -477,6 +487,20 @@ def _logo_grid(images, max_width, max_height, chip, gap):
     return boxes, sum(column_widths) + gap * (cols - 1)
 
 
+def _country_metres(value):
+    """How far a trip ran through one country, whichever shape the entry has.
+
+    trips.countries is written two ways: {"FR": 100} and, once a trip's
+    electrification is known, {"FR": {"elec": 50, "nonelec": 50}}. Sorting on
+    the raw value compares dict with dict and raises, which is what stopped
+    trip 927427 from drawing a card at all. Same reading as carbon.py and
+    leaderboards.py, which have both formats to handle too.
+    """
+    if isinstance(value, dict):
+        return sum(v or 0 for v in value.values())
+    return value or 0
+
+
 def _flags(countries):
     """Country flags for a trip, widest stretch first, as RGBA images.
 
@@ -490,7 +514,9 @@ def _flags(countries):
             return []
     if not countries:
         return []
-    ordered = sorted(countries.items(), key=lambda item: item[1] or 0, reverse=True)
+    ordered = sorted(
+        countries.items(), key=lambda item: _country_metres(item[1]), reverse=True
+    )
     return [code.lower() for code, _ in ordered[:MAX_FLAGS]]
 
 
@@ -843,13 +869,20 @@ def _draw_panel(card, trip, logos, scale):
 
 
 def render_trip_card(trip_id):
-    """PNG bytes for a trip, or None when it has no route or no renderer."""
+    """(PNG bytes, None), or (None, why there is no card).
+
+    The reason is the point of the pair: a caller that can wait — the announcer,
+    which has a fifteen-minute window and a tick every minute — needs to tell a
+    renderer that is down and will come back (RENDER_FAILED) from a trip that
+    has nothing to draw and never will (NO_ROUTE).
+    """
     trip, logos = _fetch(trip_id)
     if trip is None:
-        return None
-    rendered = _render_map(trip)
+        logger.info("Trip %s has no route to draw a card from", trip_id)
+        return None, NO_ROUTE
+    rendered, reason = _render_map(trip)
     if rendered is None:
-        return None
+        return None, reason
     map_image, parts, camera = rendered
 
     scale = map_image.width // WIDTH or 1
@@ -860,4 +893,4 @@ def render_trip_card(trip_id):
 
     out = io.BytesIO()
     card.convert("RGB").save(out, format="PNG", optimize=True)
-    return out.getvalue()
+    return out.getvalue(), None
