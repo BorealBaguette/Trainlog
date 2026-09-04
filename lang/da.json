@@ -625,7 +625,7 @@
     "use_routing": "Brug ruteplanlægning",
     "routing_tooltip": "Behandl GPX-filen gennem ruteværktøjet ved at bruge hver GPS-aflæsning som et vejpunkt.",
     "appearOnGlobalText": "Vises på <a href='{global_live_map}'>det globale live-kort</a> (kun offentlige rejser)",
-    "router_status": "Routerstatus",
+    "system_status": "Systemstatus",
     "live_map": "Livekort",
     "tilesetLabel": "Flisesæt",
     "tileserver_default": "Standard (OSM)",

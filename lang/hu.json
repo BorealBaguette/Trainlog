@@ -622,7 +622,7 @@
     "use_routing": "Használjon útvonaltervezést",
     "routing_tooltip": "Dolgozza fel a GPX fájlt az útvonaltervező eszközön keresztül, minden GPS-leolvasást útiközi pontként használva.",
     "appearOnGlobalText": "Megjelenés a <a href='{global_live_map}'>globális élő térképen</a> (csak nyilvános utak)",
-    "router_status": "Router állapota",
+    "system_status": "Rendszerállapot",
     "live_map": "Élőtérkép",
     "tilesetLabel": "Csempeset",
     "tileserver_default": "Alapértelmezett (OSM)",

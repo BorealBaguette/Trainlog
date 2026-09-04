@@ -628,7 +628,7 @@
     "use_routing": "Použijte směrování",
     "routing_tooltip": "Zpracujte soubor GPX pomocí nástroje pro směrování a použijte každé čtení GPS jako trasový bod.",
     "appearOnGlobalText": "Zobrazit se na <a href='{global_live_map}'>globální živé mapě</a> (pouze veřejné cesty)",
-    "router_status": "Stav směrovače",
+    "system_status": "Stav systému",
     "live_map": "Živá mapa",
     "tilesetLabel": "Sada dlaždic",
     "tileserver_default": "Výchozí (OSM)",

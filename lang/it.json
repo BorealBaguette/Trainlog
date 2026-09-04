@@ -625,7 +625,7 @@
     "use_routing": "Usa l'itinerario",
     "routing_tooltip": "Elabora il file GPX tramite lo strumento di itinerario, utilizzando ogni rilevamento GPS come punto di riferimento.",
     "appearOnGlobalText": "Apparire sulla <a href='{global_live_map}'>mappa globale in diretta</a> (solo viaggi pubblici)",
-    "router_status": "Stato del router",
+    "system_status": "Stato del sistema",
     "live_map": "Mappa in tempo reale",
     "tilesetLabel": "Set di tessere",
     "tileserver_default": "Predefinito (OSM)",

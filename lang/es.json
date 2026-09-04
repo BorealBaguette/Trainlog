@@ -625,7 +625,7 @@
     "use_routing": "Usar enrutamiento",
     "routing_tooltip": "Procesa el archivo GPX a través de la herramienta de enrutamiento, utilizando cada lectura de GPS como un punto de referencia.",
     "appearOnGlobalText": "Aparecer en el <a href='{global_live_map}'>mapa global en vivo</a> (solo viajes públicos)",
-    "router_status": "Estado del enrutador",
+    "system_status": "Estado del sistema",
     "live_map": "Mapa en Vivo",
     "tilesetLabel": "Conjunto de azulejos",
     "tileserver_default": "Predeterminado (OSM)",

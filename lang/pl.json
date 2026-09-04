@@ -628,7 +628,7 @@
     "use_routing": "Użyj trasowania",
     "routing_tooltip": "Przetwórz plik GPX za pomocą narzędzia trasowania, używając każdego odczytu GPS jako punktu orientacyjnego.",
     "appearOnGlobalText": "Pojaw się na <a href='{global_live_map}'>globalnej mapie na żywo</a> (tylko publiczne podróże)",
-    "router_status": "Status routera",
+    "system_status": "Stan systemu",
     "live_map": "Mapa na żywo",
     "tilesetLabel": "Zestaw płytek",
     "tileserver_default": "Domyślne (OSM)",

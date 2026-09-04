@@ -628,7 +628,7 @@
     "use_routing": "Koristi usmjeravanje",
     "routing_tooltip": "Obradi GPX datoteku pomoću alata za usmjeravanje, koristeći svako GPS očitanje kao točku na ruti.",
     "appearOnGlobalText": "Pojavi se na <a href='{global_live_map}'>globalnoj karti uživo</a> (samo javna putovanja)",
-    "router_status": "Status usmjerivača",
+    "system_status": "Status sustava",
     "live_map": "Karta uživo",
     "tilesetLabel": "Skup pločica",
     "tileserver_default": "Zadano (OSM)",

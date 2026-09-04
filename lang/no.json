@@ -625,7 +625,7 @@
     "use_routing": "Bruk ruting",
     "routing_tooltip": "Behandle GPX-filen gjennom ruteverktøyet, ved å bruke hver GPS-avlesning som et veipunkt.",
     "appearOnGlobalText": "Vises på det <a href='{global_live_map}'>globale livekartet</a> (kun offentlige turer)",
-    "router_status": "Rutertilstand",
+    "system_status": "Systemstatus",
     "live_map": "Live-kart",
     "tilesetLabel": "Flisesett",
     "tileserver_default": "Standard (OSM)",

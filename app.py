@@ -13777,7 +13777,7 @@ def router_status():
 
     return render_template(
         "status.html",
-        title=lang[session["userinfo"]["lang"]]["router_status"],
+        title=lang[session["userinfo"]["lang"]]["system_status"],
         username=getUser(),
         translations=lang[session["userinfo"]["lang"]],
         photon_instances=photonInstances,

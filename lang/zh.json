@@ -622,7 +622,7 @@
     "use_routing": "使用路由",
     "routing_tooltip": "通过路由工具处理GPX文件，使用每个GPS读数作为航点。",
     "appearOnGlobalText": "显示在<a href='{global_live_map}'>全球实时地图</a>上（仅限公开行程）",
-    "router_status": "路由器状态",
+    "system_status": "系统状态",
     "live_map": "实时地图",
     "tilesetLabel": "图块集",
     "tileserver_default": "默认 (OSM)",

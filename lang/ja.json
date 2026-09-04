@@ -622,7 +622,7 @@
     "use_routing": "ルーティングを使用",
     "routing_tooltip": "各GPS読み取りを経路点として使用して、ルーティングツールを介してGPXファイルを処理します。",
     "appearOnGlobalText": "<a href='{global_live_map}'>グローバルライブマップ</a>に表示 (公開旅行のみ)",
-    "router_status": "ルーターのステータス",
+    "system_status": "システムステータス",
     "live_map": "ライブマップ",
     "tilesetLabel": "タイルセット",
     "tileserver_default": "デフォルト (OSM)",
