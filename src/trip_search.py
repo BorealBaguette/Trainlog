@@ -74,7 +74,12 @@ def parse_filters(raw, is_public=False):
         if not isinstance(entry, dict):
             continue
         field = entry.get("field")
-        values = [str(v) for v in entry.get("values", []) if str(v)]
+        exact = bool(entry.get("exact"))
+        values = [str(v) for v in entry.get("values", [])]
+        # An empty value says something only when it was quoted as exact ("material:``"
+        # asks for the trips with no material); anywhere else it filters nothing.
+        if not exact:
+            values = [value for value in values if value]
         if field not in FILTER_FIELDS or not values:
             continue
         if is_public and field in PUBLIC_HIDDEN_FIELDS:
@@ -83,7 +88,7 @@ def parse_filters(raw, is_public=False):
             {
                 "field": field,
                 "values": values,
-                "exact": bool(entry.get("exact")),
+                "exact": exact,
                 "negate": bool(entry.get("negate")),
             }
         )
@@ -97,12 +102,27 @@ def _like(expression, param):
     )
 
 
+def _empty_predicate(field):
+    """`field:``` — the field carries no value, in whichever column holds it."""
+    if field == "material_type":
+        columns = ["material_type", "iata", "manufacturer", "model"]
+    elif field in _TEXT_FIELDS:
+        columns = [_TEXT_FIELDS[field]]
+    else:
+        return f"{field} IS NULL"
+    empty = " AND ".join(f"COALESCE({column}, '') = ''" for column in columns)
+    return f"({empty})"
+
+
 def _value_predicate(field, value, exact, param):
     """One predicate for one typed value, with the parameters it binds.
 
     A wildcard makes the match an anchored LIKE whether or not the value was quoted
     as exact, so `from:\\`Paris*\\`` still means "starts with Paris".
     """
+    if exact and value == "":
+        return _empty_predicate(field), {}
+
     comparison = comparison_condition(field, value, param)
     if comparison:
         return comparison
@@ -119,9 +139,6 @@ def _value_predicate(field, value, exact, param):
     if field in _TEXT_FIELDS:
         expression = _TEXT_FIELDS[field]
         if exact:
-            # An exact empty value is the only way to ask for "no visibility set".
-            if field == "visibility" and value == "":
-                return "visibility IS NULL", {}
             return f"LOWER({expression}) = LOWER(:{param})", params
         return _like(expression, param), params
 
