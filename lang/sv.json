@@ -625,7 +625,7 @@
     "use_routing": "Använd ruttning",
     "routing_tooltip": "Bearbeta GPX-filen genom ruttverktyget, använd varje GPS-avläsning som en vägpunkt.",
     "appearOnGlobalText": "Visa på <a href='{global_live_map}'>den globala livekartan</a> (endast offentliga resor)",
-    "router_status": "Routerstatus",
+    "system_status": "Systemstatus",
     "live_map": "Livekarta",
     "tilesetLabel": "Plattuppsättning",
     "tileserver_default": "Standard (OSM)",

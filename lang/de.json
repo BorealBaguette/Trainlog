@@ -625,7 +625,7 @@
     "use_routing": "Routing verwenden",
     "routing_tooltip": "Verarbeiten Sie die GPX-Datei mit dem Routing-Tool, indem Sie jede GPS-Messung als Wegpunkt verwenden.",
     "appearOnGlobalText": "Auf der <a href='{global_live_map}'>globalen Live-Karte</a> erscheinen (nur öffentliche Fahrten)",
-    "router_status": "Router-Status",
+    "system_status": "Systemstatus",
     "live_map": "Live-Karte",
     "tilesetLabel": "Kachelset",
     "tileserver_default": "Standard (OSM)",

@@ -625,7 +625,7 @@
     "use_routing": "Gebruik routering",
     "routing_tooltip": "Verwerk het GPX-bestand met het routeringshulpmiddel, waarbij elke GPS-lezing als een routepunt wordt gebruikt.",
     "appearOnGlobalText": "Verschijnen op de <a href='{global_live_map}'>globale live-kaart</a> (alleen openbare reizen)",
-    "router_status": "Routerstatus",
+    "system_status": "Systeemstatus",
     "live_map": "Livekaart",
     "tilesetLabel": "Tegelset",
     "tileserver_default": "Standaard (OSM)",

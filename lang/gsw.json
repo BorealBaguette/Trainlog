@@ -623,7 +623,7 @@
     "use_routing": "Router verwende",
     "routing_tooltip": "Verarbeite d GPX-Datei mit em Routing-Tool, idem du jede GPS-Punkt als Wegpunkt verwendisch.",
     "appearOnGlobalText": "Uf de <a href='{global_live_map}'>globale Live-Charte</a> aazeige (nur öffentlichi Reise)",
-    "router_status": "Router-Status",
+    "system_status": "Systemstatus",
     "live_map": "Live-Charte",
     "tilesetLabel": "Plättlisatz",
     "tileserver_default": "Standardmäässig (OSM)",

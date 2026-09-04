@@ -622,7 +622,7 @@
     "use_routing": "Kasuta marsruutimist",
     "routing_tooltip": "Töötle GPX-faili marsruutimistee vahendi kaudu, kasutades iga GPS-i lugemist teetähisena.",
     "appearOnGlobalText": "Kuvatakse <a href='{global_live_map}'>globaalsel reaalajas kaardil</a> (ainult avalikud reisid)",
-    "router_status": "Ruuteri olek",
+    "system_status": "Süsteemi olek",
     "live_map": "Reaalajas kaart",
     "tilesetLabel": "Plaadikogum",
     "tileserver_default": "Vaikimisi (OSM)",

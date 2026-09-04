@@ -623,7 +623,7 @@
     "use_routing": "Käytä reititystä",
     "routing_tooltip": "Käsittele GPX-tiedosto reititystyökalun kautta käyttämällä jokaista GPS-lukemaa reittipisteenä.",
     "appearOnGlobalText": "Näy <a href='{global_live_map}'>julkisessa live-kartassa</a> (vain julkiset matkat)",
-    "router_status": "Reitittimen tila",
+    "system_status": "Järjestelmän tila",
     "live_map": "Live-kartta",
     "tilesetLabel": "Taustakartta",
     "tileserver_default": "Oletus (OSM)",

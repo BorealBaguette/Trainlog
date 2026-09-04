@@ -622,7 +622,7 @@
     "use_routing": "라우팅 사용",
     "routing_tooltip": "각 GPS 읽기를 웨이포인트로 사용하여 라우팅 도구를 통해 GPX 파일을 처리합니다.",
     "appearOnGlobalText": "<a href='{global_live_map}'>글로벌 실시간 지도</a>에 나타나기 (공개 여행만 해당)",
-    "router_status": "라우터 상태",
+    "system_status": "시스템 상태",
     "live_map": "라이브 지도",
     "tilesetLabel": "타일셋",
     "tileserver_default": "기본값 (OSM)",

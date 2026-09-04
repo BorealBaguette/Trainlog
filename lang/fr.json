@@ -622,7 +622,7 @@
     "use_routing": "Utiliser le routing",
     "routing_tooltip": "Traiter le fichier GPX avec l'outil de routage, en utilisant chaque relevé GPS comme point de passage.",
     "appearOnGlobalText": "Apparaître sur la <a href='{global_live_map}'>carte mondiale en direct</a> (voyages publics uniquement)",
-    "router_status": "État du routeur",
+    "system_status": "État du système",
     "live_map": "Carte en direct",
     "tilesetLabel": "Fond de carte",
     "tileserver_default": "Défaut (OSM)",

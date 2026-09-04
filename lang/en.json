@@ -622,7 +622,7 @@
     "use_routing": "Use routing",
     "routing_tooltip": "Process the GPX file through the routing tool, using each GPS reading as a waypoint.",
     "appearOnGlobalText": "Appear on the <a href='{global_live_map}'>global live map</a> (public trips only)",
-    "router_status": "Router Status",
+    "system_status": "System Status",
     "live_map": "Live Map",
     "tilesetLabel": "Tileset",
     "tileserver_default": "Default (OSM)",

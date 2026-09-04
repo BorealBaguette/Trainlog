@@ -625,7 +625,7 @@
     "use_routing": "Calcular itinerário",
     "routing_tooltip": "Processar ficheiro GPX através da ferramente de cálculo de itinerário, utilizando cada leitura GPS como um ponto de passagem.",
     "appearOnGlobalText": "Aparece no <a href='{global_live_map}'>mapa global ao vivo</a> (apenas viagens públicas)",
-    "router_status": "Estado das calculadoras de itinerário",
+    "system_status": "Estado do sistema",
     "live_map": "Mapa ao Vivo",
     "tilesetLabel": "Conjunto de azulejos",
     "tileserver_default": "Padrão (OSM)",

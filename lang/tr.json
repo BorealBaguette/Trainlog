@@ -622,7 +622,7 @@
     "use_routing": "Yönlendirmeyi kullan",
     "routing_tooltip": "GPX dosyasını yönlendirme aracıyla işleyin ve her GPS okumasını bir yol noktası olarak kullanın.",
     "appearOnGlobalText": "<a href='{global_live_map}'>Küresel canlı haritada</a> görün (yalnızca kamuya açık geziler için)",
-    "router_status": "Yönlendirici durumu",
+    "system_status": "Sistem durumu",
     "live_map": "Canlı harita",
     "tilesetLabel": "Harita arkaplanı",
     "tileserver_default": "Varsayılan (OSM)",
