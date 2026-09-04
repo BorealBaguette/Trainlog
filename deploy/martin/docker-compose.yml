@@ -16,6 +16,16 @@
 # single-threaded). Announcements are a handful an hour, so one worker is
 # plenty. Use cpuset, not `cpus:` — the latter caps CFS quota without changing
 # the core count Martin counts.
+#
+# It does not get Martin down to one worker, though: even on a single CPU it
+# starts `workers=2` for each of the tile and static pools, which is what made
+# 512m too tight. The kernel's own account of a kill (Sep 2-4 2026, seven of
+# them, always with render-static-N allocating) is anon 406 MB + file 111 MB +
+# shmem 112 MB, about 630 MB charged to the cgroup — so it lived just under the
+# cap and any render tipped it over. Docker reported OOMKilled=false throughout;
+# `dmesg | grep -i oom` is what says otherwise (constraint=CONSTRAINT_MEMCG).
+# Restarting took ~24 s each time, which is a long silence for a renderer with
+# one shot at a card, so src/trip_card.py retries across it.
 services:
   # Martin needs the style as a file on disk, and the copy in the repo carries
   # the {{mapPinUrl}} placeholder that the app fills in per request. Rather
@@ -49,7 +59,7 @@ services:
     labels:
       - "traefik.enable=false"
     cpuset: "0"
-    mem_limit: 512m
+    mem_limit: 1g
     networks:
       - default
 

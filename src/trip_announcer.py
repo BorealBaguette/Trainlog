@@ -55,7 +55,7 @@ from src.discord_bot import (
     post_webhook_message,
 )
 from src.pg import pg_session
-from src.trip_card import render_trip_card
+from src.trip_card import RENDER_FAILED, render_trip_card
 from src.users import User
 
 logger = logging.getLogger(__name__)
@@ -72,6 +72,14 @@ ANNOUNCE_WINDOW = timedelta(minutes=15)
 # Clocks drift, and a trip logged "for the 08:00" a few seconds early should not
 # have to wait a whole tick.
 FUTURE_GRACE = timedelta(minutes=1)
+
+# How much of the announcing window to keep back for an announcement that has
+# gone without its card. While a trip has more than this left, a renderer that
+# is down buys it another tick instead of a card-less post — Martin has been
+# OOM-killed and back inside half a minute, so a tick or two usually gets the
+# card. Inside the last stretch the trip goes out as it is: late and plain
+# beats never, and the window is about to drop it either way.
+CARDLESS_MARGIN = timedelta(minutes=3)
 
 # How far either side of a trip its owner may still post it by hand. Wide
 # enough for "about to board" and for remembering halfway through a night
@@ -116,7 +124,10 @@ def _due_trips(user_ids, now):
             SELECT t.trip_id, t.user_id, t.operator, t.line_name, t.trip_type,
                    t.origin_station, t.destination_station, t.countries,
                    t.start_datetime, t.end_datetime,
-                   t.departure_delay, t.arrival_delay
+                   t.departure_delay, t.arrival_delay,
+                   t.utc_start_datetime
+                       + make_interval(secs => COALESCE(t.departure_delay, 0))
+                       AS utc_departure
             FROM trips t
             LEFT JOIN trip_announcements a ON a.trip_id = t.trip_id
             WHERE t.user_id = ANY(:user_ids)
@@ -390,6 +401,20 @@ def retract_announcement(trip_id) -> bool:
     return True
 
 
+def _country_metres(value):
+    """How far a trip ran through one country, whichever shape the entry has.
+
+    trips.countries is written two ways: {"FR": 100} and, once a trip's
+    electrification is known, {"FR": {"elec": 50, "nonelec": 50}}. Sorting on
+    the raw value compares dict with dict and raises, which is what stopped
+    trip 927427 from drawing a card at all. Same reading as carbon.py and
+    leaderboards.py, which have both formats to handle too.
+    """
+    if isinstance(value, dict):
+        return sum(v or 0 for v in value.values())
+    return value or 0
+
+
 def _flags(countries) -> str:
     """Flags for the countries a trip runs through, longest stretch first."""
     if not countries:
@@ -399,7 +424,9 @@ def _flags(countries) -> str:
             countries = json.loads(countries)
         except ValueError:
             return ""
-    ordered = sorted(countries.items(), key=lambda item: item[1] or 0, reverse=True)
+    ordered = sorted(
+        countries.items(), key=lambda item: _country_metres(item[1]), reverse=True
+    )
     return "".join(get_flag_emoji(code) for code, _ in ordered)
 
 
@@ -448,17 +475,22 @@ def format_announcement(trip, has_card=False) -> str:
 
 
 def _card(trip_id):
-    """The trip's map card as (filename, png), or None if it cannot be drawn.
+    """The trip's map card as ((filename, png), None), or (None, why not).
 
-    A trip with no routed path — or a renderer that trips over one — should
-    still be announced, just without the picture.
+    A trip with no routed path should still be announced, just without the
+    picture. A renderer that is merely down is a different matter, and says so
+    (RENDER_FAILED) so the caller can wait for it. An exception counts as the
+    renderer failing: it is not the trip's fault either, and the next tick may
+    well succeed.
     """
     try:
-        png = render_trip_card(trip_id)
+        png, reason = render_trip_card(trip_id)
     except Exception as e:
         logger.warning("Trip card for %s failed: %s", trip_id, e)
-        return None
-    return (f"trip_{trip_id}.png", png) if png else None
+        return None, RENDER_FAILED
+    if not png:
+        return None, reason
+    return (f"trip_{trip_id}.png", png), None
 
 
 def _poster(username, discord_id):
@@ -476,13 +508,29 @@ def _poster(username, discord_id):
     return name or username, avatar
 
 
-def _announce(webhook_url, trip, username, discord_id=None, release_on_error=True) -> bool:
+def _worth_waiting(trip, now) -> bool:
+    """Whether this trip can afford to wait a tick for its card.
+
+    Only while enough of the announcing window is left that a card-less post is
+    not the last thing that will happen to it (CARDLESS_MARGIN).
+    """
+    departure = trip["utc_departure"]
+    if departure is None:
+        return False
+    return now < departure + ANNOUNCE_WINDOW - CARDLESS_MARGIN
+
+
+def _announce(webhook_url, trip, username, discord_id=None, release_on_error=True,
+              card=None, body=None) -> bool:
     """Post one already-claimed trip. True if it made it into the channel."""
-    card = _card(trip["trip_id"])
+    if card is None:
+        card, _ = _card(trip["trip_id"])
+    if body is None:
+        body = format_announcement(trip, has_card=card is not None)
     name, avatar = _poster(username, discord_id)
     message_id = post_webhook_message(
         webhook_url,
-        format_announcement(trip, has_card=card is not None),
+        body,
         username=name,
         file=card,
         avatar_url=avatar,
@@ -516,8 +564,38 @@ def announce_due_trips(webhook_url, now=None) -> int:
     for trip in _due_trips(users.keys(), now):
         if not _claim(trip["trip_id"]):
             continue  # another worker got there first
+
+        # Card and message body are both made here, before anything is sent.
+        # They are the two things that read a trip's own data and so the two
+        # that a single odd row can break — countries arriving in a shape
+        # _flags did not expect was enough to raise, and an exception on the
+        # way to the post leaves the trip claimed but silent and takes the rest
+        # of the tick's trips down with it. Prepared first and guarded, one bad
+        # trip costs only itself, and the claim goes back so it can be tried
+        # again once whatever is odd about it is fixed.
+        try:
+            # A renderer that is down costs nothing either: the claim goes back
+            # and the trip returns to the pool, which is the only retry an
+            # announcement gets. Without it a Martin restart of half a minute
+            # costs that trip its card for good, since the message is posted
+            # once and never revisited.
+            card, reason = _card(trip["trip_id"])
+            if reason == RENDER_FAILED and _worth_waiting(trip, now):
+                _release(trip["trip_id"])
+                logger.warning(
+                    "Trip %s held back: no card yet, retrying next tick",
+                    trip["trip_id"],
+                )
+                continue
+            body = format_announcement(trip, has_card=card is not None)
+        except Exception:
+            _release(trip["trip_id"])
+            logger.exception("Trip %s could not be prepared to announce",
+                             trip["trip_id"])
+            continue
+
         username, discord_id = users[trip["user_id"]]
-        if _announce(webhook_url, trip, username, discord_id):
+        if _announce(webhook_url, trip, username, discord_id, card=card, body=body):
             posted += 1
     return posted
 

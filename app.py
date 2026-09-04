@@ -5100,10 +5100,10 @@ def admin_trip_card(trip_id):
     if not (base_url and style):
         return make_response(("martin.url / martin.style not in config.yaml", 503))
 
-    png = render_trip_card(trip_id)
+    png, reason = render_trip_card(trip_id)
     if png is None:
         return make_response(
-            (f"renderer failed — is martin reachable at {base_url}?", 503)
+            (f"no card ({reason}) — is martin reachable at {base_url}?", 503)
         )
     response = make_response(png)
     response.headers["Content-Type"] = "image/png"
