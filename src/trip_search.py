@@ -60,6 +60,18 @@ _TEXT_FIELDS = {
 }
 
 
+# The vehicle is spelled out across several columns; any of them may carry it. The
+# advanced field holds a trainset name, or JSON naming the trainsets it couples, so a
+# substring match finds the name either way.
+_MATERIAL_COLUMNS = [
+    "material_type",
+    "material_type_advanced",
+    "iata",
+    "manufacturer",
+    "model",
+]
+
+
 def parse_filters(raw, is_public=False):
     """The client's JSON filter list, dropping anything malformed or not allowed."""
     try:
@@ -105,7 +117,7 @@ def _like(expression, param):
 def _empty_predicate(field):
     """`field:``` — the field carries no value, in whichever column holds it."""
     if field == "material_type":
-        columns = ["material_type", "iata", "manufacturer", "model"]
+        columns = _MATERIAL_COLUMNS
     elif field in _TEXT_FIELDS:
         columns = [_TEXT_FIELDS[field]]
     else:
@@ -168,12 +180,15 @@ def _value_predicate(field, value, exact, param):
         return match, params
 
     if field == "material_type":
-        # The vehicle is spelled out across several columns; any of them may carry it.
-        columns = ["COALESCE(material_type, '')", "iata", "manufacturer", "model"]
         if exact:
-            terms = [f"LOWER({column}) = LOWER(:{param})" for column in columns]
+            terms = [
+                f"LOWER(COALESCE({column}, '')) = LOWER(:{param})"
+                for column in _MATERIAL_COLUMNS
+            ]
         else:
-            terms = [_like(column, param) for column in columns]
+            terms = [
+                _like(f"COALESCE({column}, '')", param) for column in _MATERIAL_COLUMNS
+            ]
         return "(" + " OR ".join(terms) + ")", params
 
     # Numeric columns that were not a comparison ("price:12,50" typed with a comma):
