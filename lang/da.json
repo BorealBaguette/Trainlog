@@ -1294,7 +1294,7 @@
     "discordAutopostSetting": "Slå mine ture op på Discord ved afgang",
     "discordAutopostHint": "Kun offentlige ture bliver slået op.",
     "removeDiscordPost": "Fjern Discord-opslag",
-    "confirmRemoveDiscordPost": "Slet denne turs opslag fra Discord? Dette kan ikke fortrydes.",
+    "confirmRemoveDiscordPost": "Slet denne turs opslag fra Discord?",
     "removeDiscordPostFailed": "Discord-opslaget kunne ikke fjernes. Prøv venligst igen.",
     "postToDiscord": "Slå op på Discord",
     "confirmPostToDiscord": "Vil du slå denne tur op på Discord nu?",

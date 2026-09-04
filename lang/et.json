@@ -1291,7 +1291,7 @@
     "discordAutopostSetting": "Postita mu reisid Discordi väljumise hetkel",
     "discordAutopostHint": "Postitatakse ainult avalikud reisid.",
     "removeDiscordPost": "Eemalda Discordi postitus",
-    "confirmRemoveDiscordPost": "Kas kustutada selle reisi teade Discordist? Seda ei saa tagasi võtta.",
+    "confirmRemoveDiscordPost": "Kas kustutada selle reisi teade Discordist?",
     "removeDiscordPostFailed": "Discordi postitust ei õnnestunud eemaldada. Palun proovi uuesti.",
     "postToDiscord": "Postita Discordi",
     "confirmPostToDiscord": "Kas postitada see reis kohe Discordi?",

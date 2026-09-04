@@ -1292,7 +1292,7 @@
     "discordAutopostSetting": "Julkaise matkani Discordissa lähtöhetkellä",
     "discordAutopostHint": "Vain julkiset matkat julkaistaan.",
     "removeDiscordPost": "Poista Discord-julkaisu",
-    "confirmRemoveDiscordPost": "Poistetaanko tämän matkan ilmoitus Discordista? Tätä ei voi perua.",
+    "confirmRemoveDiscordPost": "Poistetaanko tämän matkan ilmoitus Discordista?",
     "removeDiscordPostFailed": "Discord-julkaisun poistaminen epäonnistui. Yritä uudelleen.",
     "postToDiscord": "Julkaise Discordissa",
     "confirmPostToDiscord": "Julkaistaanko tämä matka Discordissa nyt?",

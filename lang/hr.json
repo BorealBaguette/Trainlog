@@ -1298,7 +1298,7 @@
     "discordAutopostSetting": "Objavi moja putovanja na Discordu pri polasku",
     "discordAutopostHint": "Objavljuju se samo javna putovanja.",
     "removeDiscordPost": "Ukloni objavu s Discorda",
-    "confirmRemoveDiscordPost": "Izbrisati objavu ovog putovanja s Discorda? Ovo se ne može poništiti.",
+    "confirmRemoveDiscordPost": "Izbrisati objavu ovog putovanja s Discorda?",
     "removeDiscordPostFailed": "Objavu na Discordu nije bilo moguće ukloniti. Pokušajte ponovno.",
     "postToDiscord": "Objavi na Discordu",
     "confirmPostToDiscord": "Objaviti ovo putovanje na Discordu sada?",

@@ -173,9 +173,14 @@ def announced_trip_ids(user_id):
     """The user's trips whose Discord post is still up.
 
     Read once when the trips table is rendered, to decide which rows offer to
-    take their post down. A trip whose post was never confirmed (Discord never
-    answered, so its id was never learned) has no id to delete by and is not
-    listed.
+    take their post down. Unlike posting, this is not bounded by the trip's
+    window: a post can be taken down for as long as it is in the channel, which
+    is what makes it a way out of having posted something by mistake. Nor does
+    visibility come into it — a trip just made private is exactly the one whose
+    post somebody wants gone.
+
+    A trip whose post was never confirmed (Discord never answered, so its id
+    was never learned) has no id to delete by and is not listed.
     """
     with pg_session() as pg:
         rows = pg.execute(
@@ -217,12 +222,14 @@ _POSTABLE = f"""
 """
 
 
-# How soon a trip may be posted again after an attempt. Long enough that a
-# double-click cannot post twice, short enough not to be felt after a failure.
-_REPOST_COOLDOWN = timedelta(seconds=30)
+# How soon a trip may be posted again after an attempt. Only ever meant to
+# catch a double-click, which lands inside a second; long enough to do that,
+# short enough that somebody who deletes a post and thinks better of it is not
+# left staring at a failure.
+_REPOST_COOLDOWN_SECONDS = 5
 
 
-def _claim_for_hand_post(trip_id, now) -> bool:
+def _claim_for_hand_post(trip_id) -> bool:
     """Take responsibility for posting this trip by hand. True in one caller.
 
     Claims a trip that was never announced (the INSERT) and one whose post was
@@ -231,18 +238,27 @@ def _claim_for_hand_post(trip_id, now) -> bool:
     ``announced`` is what makes the claim exclusive — a second click, arriving
     while the first is still talking to Discord, finds the row too fresh and is
     turned away rather than posting the trip twice.
+
+    Both sides of that comparison are the server's ``now()``, and so is what is
+    written. ``announced`` is a bare TIMESTAMP whose default is ``now()``, which
+    Postgres resolves in the *session's* time zone — so a row the announcer
+    wrote is in the database's local terms, and measuring it against a cutoff
+    computed from Python's UTC refuses every claim while the two are apart. On
+    a UTC database they agree and nothing looks wrong; anywhere else the trip
+    cannot be posted again until real time has caught up with the offset.
     """
     with pg_session() as pg:
         row = pg.execute(
             """
             INSERT INTO trip_announcements (trip_id, announced)
-            VALUES (:trip_id, :now)
-            ON CONFLICT (trip_id) DO UPDATE SET announced = :now
+            VALUES (:trip_id, now())
+            ON CONFLICT (trip_id) DO UPDATE SET announced = now()
             WHERE trip_announcements.message_id IS NULL
-              AND trip_announcements.announced < :cutoff
+              AND trip_announcements.announced
+                  < now() - make_interval(secs => :cooldown)
             RETURNING trip_id
             """,
-            {"trip_id": trip_id, "now": now, "cutoff": now - _REPOST_COOLDOWN},
+            {"trip_id": trip_id, "cooldown": _REPOST_COOLDOWN_SECONDS},
         ).fetchone()
     return row is not None
 
@@ -312,7 +328,7 @@ def post_trip_now(trip_id, user_id, username, discord_id=None):
         logger.warning("Trip %s not posted (%s)", trip_id, reason)
         return False, "no_webhook"
 
-    if not _claim_for_hand_post(trip_id, params["now"]):
+    if not _claim_for_hand_post(trip_id):
         # The announcer got there between the check and here, or this is a
         # second click on the same button.
         return False, "not_postable"
@@ -324,6 +340,24 @@ def post_trip_now(trip_id, user_id, username, discord_id=None):
         logger.info("Trip %s posted to Discord at its owner's request", trip_id)
         return True, "ok"
     return False, "discord_error"
+
+
+def drop_announcement(trip_id, message_id) -> bool:
+    """Take one known message out of the channel. True once it is gone.
+
+    Takes the message id rather than reading it, so it can be called for a trip
+    whose announcement row is already gone — which is what deleting a trip does
+    to it (the row is ON DELETE CASCADE). Goes through the same gate as
+    posting: where nothing is posted, there is nothing to delete.
+    """
+    webhook_url, reason = _webhook_url()
+    if not webhook_url:
+        logger.warning("Announcement of trip %s left in place (%s)", trip_id, reason)
+        return False
+    if not delete_webhook_message(webhook_url, message_id):
+        logger.warning("Trip %s announcement could not be deleted", trip_id)
+        return False
+    return True
 
 
 def retract_announcement(trip_id) -> bool:
@@ -340,13 +374,7 @@ def retract_announcement(trip_id) -> bool:
     if row is None or row["message_id"] is None:
         return True
 
-    webhook_url, reason = _webhook_url()
-    if not webhook_url:
-        logger.warning("Announcement of trip %s left in place (%s)", trip_id, reason)
-        return False
-
-    if not delete_webhook_message(webhook_url, row["message_id"]):
-        logger.warning("Trip %s announcement could not be deleted", trip_id)
+    if not drop_announcement(trip_id, row["message_id"]):
         return False
 
     # The row stays, so _due_trips keeps skipping this trip and it is never

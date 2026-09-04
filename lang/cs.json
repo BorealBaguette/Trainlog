@@ -1298,7 +1298,7 @@
     "discordAutopostSetting": "Zveřejňovat mé cesty na Discordu při odjezdu",
     "discordAutopostHint": "Zveřejňují se pouze veřejné cesty.",
     "removeDiscordPost": "Odstranit příspěvek z Discordu",
-    "confirmRemoveDiscordPost": "Smazat oznámení této cesty z Discordu? Tuto akci nelze vrátit zpět.",
+    "confirmRemoveDiscordPost": "Smazat oznámení této cesty z Discordu?",
     "removeDiscordPostFailed": "Příspěvek na Discordu se nepodařilo odstranit. Zkuste to prosím znovu.",
     "postToDiscord": "Zveřejnit na Discordu",
     "confirmPostToDiscord": "Zveřejnit tuto cestu na Discordu?",

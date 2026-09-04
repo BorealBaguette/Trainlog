@@ -1290,7 +1290,7 @@
     "discordAutopostSetting": "출발할 때 내 여정을 Discord에 게시하기",
     "discordAutopostHint": "공개 여정만 게시됩니다.",
     "removeDiscordPost": "Discord 게시물 삭제",
-    "confirmRemoveDiscordPost": "이 여정의 알림을 Discord에서 삭제할까요? 이 작업은 되돌릴 수 없습니다.",
+    "confirmRemoveDiscordPost": "이 여정의 알림을 Discord에서 삭제할까요?",
     "removeDiscordPostFailed": "Discord 게시물을 삭제하지 못했습니다. 다시 시도해 주세요.",
     "postToDiscord": "Discord에 게시",
     "confirmPostToDiscord": "이 여정을 지금 Discord에 게시할까요?",

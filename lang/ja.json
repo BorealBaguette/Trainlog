@@ -1290,7 +1290,7 @@
     "discordAutopostSetting": "出発時に旅程を Discord に投稿する",
     "discordAutopostHint": "公開されている旅程のみが投稿されます。",
     "removeDiscordPost": "Discordの投稿を削除",
-    "confirmRemoveDiscordPost": "この旅程のお知らせをDiscordから削除しますか？この操作は取り消せません。",
+    "confirmRemoveDiscordPost": "この旅程のお知らせをDiscordから削除しますか？",
     "removeDiscordPostFailed": "Discordの投稿を削除できませんでした。もう一度お試しください。",
     "postToDiscord": "Discordに投稿",
     "confirmPostToDiscord": "この旅程を今すぐDiscordに投稿しますか？",

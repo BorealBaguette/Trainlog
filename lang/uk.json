@@ -1298,7 +1298,7 @@
     "discordAutopostSetting": "Публікувати мої поїздки в Discord під час відправлення",
     "discordAutopostHint": "Публікуються лише публічні поїздки.",
     "removeDiscordPost": "Видалити допис у Discord",
-    "confirmRemoveDiscordPost": "Видалити оголошення про цю поїздку з Discord? Цю дію не можна скасувати.",
+    "confirmRemoveDiscordPost": "Видалити оголошення про цю поїздку з Discord?",
     "removeDiscordPostFailed": "Не вдалося видалити допис у Discord. Спробуйте ще раз.",
     "postToDiscord": "Опублікувати в Discord",
     "confirmPostToDiscord": "Опублікувати цю поїздку в Discord зараз?",
