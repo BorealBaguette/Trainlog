@@ -92,8 +92,16 @@ $(function () {
             $(_makePlaceholder(true, true, true, w._phType)).appendTo(art);
         }
         card.append('<div class="wagon-label">' + esc(w.label || w.name) + '</div>');
-        var attr = _attributionHtml([w]);
-        if (attr) card.append('<div class="compo-source">' + attr + '</div>');
+        var names = _authorNames(w.author);
+        if (names.length > 1) {
+            // Co-drawn: name every contributor, this page's artist in bold.
+            card.append('<div class="compo-source">&copy; ' + names.map(function (n) {
+                return n === D.name ? '<strong>' + esc(n) + '</strong>' : esc(n);
+            }).join(', ') + (w.license ? ' (' + esc(_licenseLabel(w.license)) + ')' : '') + '</div>');
+        } else {
+            var attr = _attributionHtml([w]);
+            if (attr) card.append('<div class="compo-source">' + attr + '</div>');
+        }
         card.append('<div class="compo-source">' +
             w.trips.toLocaleString() + ' ' + esc(L.trips) + ' &middot; ' +
             w.trainsets.toLocaleString() + ' ' + esc(L.trainsets) + '</div>');
