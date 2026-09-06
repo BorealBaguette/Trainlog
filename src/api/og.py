@@ -81,22 +81,61 @@ def _public_ids(trip_ids):
     return [row["trip_id"] for row in rows if row["user_id"] in public_owners]
 
 
+def _same_station(a, b):
+    return (a or "").strip().lower() == (b or "").strip().lower()
+
+
+def _journey_title(legs):
+    """origin → destination, or "A ↔ turnaround" when the journey returns home.
+
+    Mirrors the poster's journeyTitle: "A → A" reads as a mistake rather than as
+    a round trip, so when the journey ends where it started it is named by its
+    turnaround point instead — the stop with the longest stay between arriving
+    on one leg and leaving on the next, or, when the legs are undated, the
+    midpoint leg's arrival.
+    """
+    if not legs:
+        return ""
+    home = legs[0]["origin_station"]
+    end = legs[-1]["destination_station"]
+    if not _same_station(home, end):
+        return f"{home} → {end}"
+
+    best_stay, turnaround = -1, None
+    for leg, nxt in zip(legs, legs[1:]):
+        stop = leg["destination_station"]
+        if _same_station(stop, home):
+            continue
+        arrival, departure = leg["arrival"], nxt["departure"]
+        try:
+            stay = (departure - arrival).total_seconds()
+        except TypeError:
+            # One leg dated in UTC, its neighbour only in local time: not
+            # subtractable, so this pair gives no usable stay.
+            continue
+        if stay > best_stay:
+            best_stay, turnaround = stay, stop
+    if turnaround is None and len(legs) > 1:
+        turnaround = legs[(len(legs) - 1) // 2]["destination_station"]
+    return f"{home} ↔ {turnaround}" if turnaround else home
+
+
 def _caption(trip_ids):
     """(title, subtitle, countries) describing a set of trips."""
     stats = trip_stats(trip_ids)
     with pg_session() as pg:
-        ends = pg.execute(
+        legs = pg.execute(
             """
-            SELECT origin_station, destination_station
+            SELECT origin_station, destination_station,
+                   COALESCE(utc_start_datetime, start_datetime) AS departure,
+                   COALESCE(utc_end_datetime, end_datetime) AS arrival
             FROM trips
             WHERE trip_id = ANY(:ids)
             ORDER BY COALESCE(utc_start_datetime, start_datetime) NULLS LAST
             """,
             {"ids": list(trip_ids)},
         ).fetchall()
-    title = ""
-    if ends:
-        title = f"{ends[0]['origin_station']} → {ends[-1]['destination_station']}"
+    title = _journey_title(legs)
     subtitle = " · ".join(
         part
         for part in (
