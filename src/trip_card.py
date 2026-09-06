@@ -93,6 +93,29 @@ PIN_BOTH = "static/images/icons/marker-icon-2x-redGreen.png"
 PIN_HEIGHT = 46             # card px; the assets are 2x for retina
 PIN_MERGE_DISTANCE = 26     # closer than this on screen and one bitmap is used
 
+# Fifth band, drawn below the panel only when the trip carries a trainset: the
+# cars it ran as, nothing else. Same artwork and the same absolute scale the
+# site draws it at (normalizeStrip in static/js/wagon_img.js), so a given car is
+# the same size on a card as on the trip page — until a long rake has to shrink
+# to fit, which it may, because a train cut off mid-formation reads as a fault.
+TRIP_LOGO_DIR = "static/images/icons/trip_logos"
+TYPE_ICON_MAX_RATIO = 2.4   # how wide a type icon may be, in cap heights
+WAGON_ROOT = "static/images/wagons"
+WAGON_TARGET = 46           # card px for a reference car
+WAGON_REF_METRES = 4        # ...which is this tall in the real world
+WAGON_FALLBACK_PPM = 10     # px per metre assumed for uncalibrated artwork
+WAGON_PLACEHOLDER_PX = 44   # art height of the "not found" SVGs
+WAGON_MIN_HEIGHT = 18       # the size a short car is lifted to...
+WAGON_MAX_HEIGHT = 72       # ...and a whole-train drawing brought down to
+WAGON_FIT_MIN_HEIGHT = 12   # how small the whole rake may go to fit the width
+WAGON_GAP = 1
+MAX_CARS = 40               # a rake past this is a shunting yard, not a train
+# The band is only as tall as the train in it: a single tram unit in a band
+# sized for a double TGV sits in a half-empty strip.
+STRIP_PADDING = 14
+STRIP_MIN_HEIGHT = 56
+STRIP_MAX_HEIGHT = 110
+
 TRAINLOG_LOGO = "static/images/logo_white.png"
 TRAINLOG_LOGO_RATIO = 0.92  # of one band
 
@@ -190,6 +213,7 @@ def _fetch(trip_id):
                    t.start_datetime, t.end_datetime,
                    t.departure_delay, t.arrival_delay, t.countries,
                    t.utc_start_datetime, t.utc_end_datetime, t.last_modified,
+                   t.user_id, t.material_type_advanced,
                    ST_AsGeoJSON(
                        ST_Segmentize(p.geom::geography, :segment)::geometry
                    ) AS route
@@ -200,7 +224,7 @@ def _fetch(trip_id):
             {"trip_id": trip_id, "segment": SEGMENT_METRES},
         ).fetchone()
         if trip is None or not trip["route"]:
-            return None, None
+            return None, None, []
 
         # A trip can carry several operators ("DB Fernverkehr, KVB"), and each
         # is matched through its aliases so one logged as CFF finds the SBB
@@ -221,7 +245,29 @@ def _fetch(trip_id):
             ).fetchone()
             if row and os.path.exists(os.path.join(LOGO_ROOT, row["logo_url"])):
                 logos.append(row["logo_url"])
-    return trip, logos
+
+        units = _trainset_units(pg, trip)
+    return trip, logos, units
+
+
+def _trainset_units(pg, trip):
+    """The cars a trip ran as, resolved the way its public page resolves them.
+
+    A trainset may be personal to its owner, so visibility follows the trip's
+    owner rather than a viewer there is none of here.
+    """
+    if not trip["material_type_advanced"]:
+        return []
+    # Imported here: src.api.trainset pulls in the Flask layer, and this module
+    # is imported by the announcer too.
+    from src.api.trainset import public_trainset_info
+    from src.users import User
+
+    owner = User.query.filter(User.uid == trip["user_id"]).first()
+    if owner is None:
+        return []
+    info = public_trainset_info(pg, trip["material_type_advanced"], owner.username)
+    return (info or {}).get("units", [])[:MAX_CARS]
 
 
 def _parts(route):
@@ -681,6 +727,13 @@ def _draw_text(draw, xy, text, size, fill):
         x += draw.textlength(run, font=font)
 
 
+def _cap_height(size):
+    """How tall a capital letter stands at this size — an icon beside the text
+    that matches it reads as part of the line rather than as a picture."""
+    box = _font(FONT_FILE, round(size)).getbbox("H")
+    return box[3] - box[1]
+
+
 def _delay(seconds):
     """"(+35)" in minutes, or "" when a trip ran to time."""
     if not seconds:
@@ -833,16 +886,38 @@ def _draw_panel(card, trip, logos, scale):
     headline = " · ".join(p for p in parts if p)
     if headline:
         x = left
-        if line_only:
-            # The logo says who; this says which service. On its own a line
-            # number reads as a stray character, so it carries the route icon.
-            icon = ImageFont.truetype(ICON_SOLID, round(META_SIZE * scale * 0.78))
-            box = icon.getbbox(GLYPH_LINE)
+        # The logo says who; this says which service. On its own a line number
+        # reads as a stray character, so it carries the trip's own type icon —
+        # which says more than a generic route marker, and keeps that picture
+        # out of the trainset band below, where it would otherwise sit nose to
+        # nose with a drawing of the actual train. The route glyph stands in
+        # for a type with no icon on file.
+        icon = (
+            _type_icon(trip["trip_type"], _cap_height(META_SIZE * scale))
+            if line_only else None
+        )
+        if icon is not None:
+            x += icon.width + 14 * scale
+        elif line_only:
+            font = ImageFont.truetype(ICON_SOLID, round(META_SIZE * scale * 0.78))
+            box = font.getbbox(GLYPH_LINE)
             draw.text((x - box[0], centre(2) - (box[1] + box[3]) / 2),
-                      GLYPH_LINE, font=icon, fill=MUTED)
+                      GLYPH_LINE, font=font, fill=MUTED)
             x += (box[2] - box[0]) + 14 * scale
         headline_size = _fit(draw, headline, META_SIZE * scale, meta_right - x,
                              min_size=META_MIN_SIZE * scale)
+        if icon is not None:
+            # The icon reads as a word in the line, so it stands exactly as
+            # tall as a capital beside it — redrawn if the text had to shrink.
+            if headline_size != META_SIZE * scale:
+                icon = _type_icon(trip["trip_type"], _cap_height(headline_size))
+            font = _font(FONT_FILE, round(headline_size))
+            reference, cap = font.getbbox("Hg"), font.getbbox("H")
+            top = centre(2) - (reference[1] + reference[3]) / 2 + cap[1]
+            # Centred within the capitals, since a wide icon comes out shorter
+            # than them and would otherwise hang from their top edge.
+            top += (cap[3] - cap[1] - icon.height) / 2
+            card.alpha_composite(icon, (round(left), round(top)))
         draw_line(x, 2, _ellipsize(draw, headline, headline_size, meta_right - x),
                   headline_size, MUTED)
 
@@ -879,10 +954,155 @@ def _draw_panel(card, trip, logos, scale):
             fx += image.width + 2 * scale
 
 
+def _wagon_path(unit):
+    """Where a car's artwork lives, mirroring wagonImgSrc in static/js/wagon_img.js."""
+    image = unit.get("image")
+    if not image:
+        return None
+    kind = unit.get("image_type")
+    side = unit.get("_side") or "L"
+    if kind == "sides":
+        image += "_R" if side == "R" else "_L"
+    elif kind in ("sides_L", "sides_R"):
+        image += kind[-2:]
+    return os.path.join(WAGON_ROOT, f"{image}.{unit.get('image_ext') or 'gif'}")
+
+
+@lru_cache(maxsize=8)
+def _placeholder_art(kind):
+    """The "not in the catalogue yet" car, rasterised at a nominal height."""
+    path = os.path.join(WAGON_ROOT, f"placeholder_{kind}.svg")
+    try:
+        png = cairosvg.svg2png(url=path, output_height=200)
+    except Exception as e:
+        logger.warning("Wagon placeholder %s unusable: %s", kind, e)
+        return None
+    return Image.open(io.BytesIO(png)).convert("RGBA")
+
+
+def _wagon_art(unit, first, last):
+    """(artwork, how tall the real car is in metres), or None.
+
+    The metres are what put every car on one absolute scale: the drawings come
+    from several sources at different pixel densities, so a rake sized by its
+    artwork alone has a locomotive shorter than the coach behind it.
+    """
+    path = _wagon_path(unit)
+    if path and os.path.exists(path):
+        try:
+            art = Image.open(path).convert("RGBA")
+            return art, art.height / (unit.get("px_per_meter") or WAGON_FALLBACK_PPM)
+        except OSError as e:
+            logger.warning("Wagon image %s unusable: %s", path, e)
+    kind = unit.get("_phType") or (
+        "loco_both" if first and last
+        else "loco_l" if first
+        else "loco_r" if last
+        else "mid"
+    )
+    art = _placeholder_art(kind)
+    if art is None:
+        return None
+    return art, WAGON_PLACEHOLDER_PX / WAGON_FALLBACK_PPM
+
+
+def _strip_images(units, available, scale):
+    """The cars, sized to stand together and to fit the width they are given."""
+    metres = WAGON_TARGET * scale / WAGON_REF_METRES   # device px per real metre
+    sized = []
+    for index, unit in enumerate(units):
+        art = _wagon_art(unit, index == 0, index == len(units) - 1)
+        if art is None:
+            continue
+        image, real_height = art
+        # Clamped per car, exactly as sizeImg does: some drawings are a whole
+        # unit in one file and would otherwise stand a head above their rake.
+        sized.append((image, min(
+            max(real_height * metres, WAGON_MIN_HEIGHT * scale),
+            WAGON_MAX_HEIGHT * scale,
+        )))
+    if not sized:
+        return []
+
+    # One factor for the whole rake, so the cars keep their sizes relative to
+    # each other. A twenty-car UM TGV simply comes out small.
+    gaps = WAGON_GAP * scale * (len(sized) - 1)
+    widths = sum(image.width * height / image.height for image, height in sized)
+    factor = min(1.0, (available - gaps) / widths) if widths else 1.0
+    factor = max(factor, WAGON_FIT_MIN_HEIGHT * scale / min(h for _, h in sized))
+
+    drawn = []
+    for image, height in sized:
+        height = max(1, round(height * factor))
+        drawn.append(image.resize(
+            (max(1, round(image.width * height / image.height)), height), Image.LANCZOS
+        ))
+    return drawn
+
+
+def _strip_height(images, scale):
+    """How tall the band has to be, in card px, for these cars."""
+    tallest = max(image.height for image in images) / scale
+    return round(min(
+        max(tallest + 2 * STRIP_PADDING, STRIP_MIN_HEIGHT), STRIP_MAX_HEIGHT
+    ))
+
+
+def _draw_strip(card, images, band, scale):
+    """The fifth band: the train the trip ran as, centred under the panel."""
+    draw = ImageDraw.Draw(card)
+    top = HEIGHT * scale
+    draw.rectangle([0, top, WIDTH * scale, (HEIGHT + band) * scale], fill=PANEL_BG)
+    draw.line([0, top, WIDTH * scale, top], fill=PANEL_RULE, width=2 * scale)
+
+    total = sum(image.width for image in images) + WAGON_GAP * scale * (len(images) - 1)
+    x = (WIDTH * scale - total) / 2
+    # Bottom-aligned, like the strip on the site: the cars stand on one floor
+    # and a raised pantograph simply rises above it.
+    floor = top + band * scale - STRIP_PADDING * scale
+    for image in images:
+        card.alpha_composite(image, (round(x), round(floor - image.height)))
+        x += image.width + WAGON_GAP * scale
+
+
+def _type_icon(trip_type, height):
+    """The trip type's own icon, in the muted ink of the row it sits on.
+
+    The files are black line art drawn for a white page, so only the shape is
+    kept — and they are square canvases with the drawing floating in the middle
+    of them, so the transparent air is cropped off first. Without that, matching
+    the icon to the height of the text sizes the *canvas* to it and leaves a
+    train a third that tall.
+    """
+    path = os.path.join(TRIP_LOGO_DIR, f"{trip_type}.png")
+    if not os.path.exists(path):
+        return None
+    try:
+        art = Image.open(path).convert("RGBA")
+    except OSError as e:
+        logger.warning("Trip logo %s unusable: %s", path, e)
+        return None
+    ink = art.getchannel("A").getbbox()
+    if ink is None:
+        return None
+    art = art.crop(ink)
+    # A long, flat drawing (the train is three times as wide as it is tall)
+    # would take a third of the row at the height of the type, so width has the
+    # final say for those.
+    factor = min(height / art.height, height * TYPE_ICON_MAX_RATIO / art.width)
+    art = art.resize(
+        (max(1, round(art.width * factor)), max(1, round(art.height * factor))),
+        Image.LANCZOS,
+    )
+    icon = Image.new("RGBA", art.size, MUTED + (255,))
+    icon.putalpha(art.getchannel("A"))
+    return icon
+
+
 def _cache_path(trip):
     """databases/cache/trip/<trip id>-<what the trip currently is>.png"""
     fingerprint = hashlib.sha256(
-        f"{trip['last_modified']}".encode()
+        f"{trip['last_modified']}|{trip['material_type_advanced']}".encode()
     ).hexdigest()[:8]
     return os.path.join(CACHE_DIR, f"{trip['trip_id']}-{fingerprint}.png")
 
@@ -895,7 +1115,7 @@ def render_trip_card(trip_id):
     renderer that is down and will come back (RENDER_FAILED) from a trip that
     has nothing to draw and never will (NO_ROUTE).
     """
-    trip, logos = _fetch(trip_id)
+    trip, logos, units = _fetch(trip_id)
     if trip is None:
         logger.info("Trip %s has no route to draw a card from", trip_id)
         return None, NO_ROUTE
@@ -911,10 +1131,20 @@ def render_trip_card(trip_id):
     map_image, parts, camera = rendered
 
     scale = map_image.width // WIDTH or 1
-    card = Image.new("RGBA", (WIDTH * scale, HEIGHT * scale), PANEL_BG + (255,))
+    # The trainset band is added below the card rather than taken out of it, so
+    # a trip without one is drawn exactly as it was. Its cars are sized before
+    # the canvas exists, since how tall they come out is what says how tall the
+    # band has to be.
+    images = _strip_images(units, (WIDTH - 44) * scale, scale) if units else []
+    band = _strip_height(images, scale) if images else 0
+    card = Image.new(
+        "RGBA", (WIDTH * scale, (HEIGHT + band) * scale), PANEL_BG + (255,)
+    )
     card.paste(map_image, (0, 0))
     _draw_pins(card, parts, camera, scale)
     _draw_panel(card, trip, logos, scale)
+    if images:
+        _draw_strip(card, images, band, scale)
 
     out = io.BytesIO()
     card.convert("RGB").save(out, format="PNG", optimize=True)
