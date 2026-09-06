@@ -1296,6 +1296,8 @@
     "leaderboardWagonsUsers": "Nutzer",
     "leaderboardWagonsHallOfFame": "Ruhmeshalle — die Sammlung, auf der alles andere aufbaut",
     "leaderboardWagonsSortBy": "Sortieren nach",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Meine Fahrten bei der Abfahrt auf Discord veröffentlichen",
     "discordAutopostHint": "Es werden nur öffentliche Fahrten veröffentlicht.",
     "removeDiscordPost": "Discord-Beitrag entfernen",

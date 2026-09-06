@@ -1294,6 +1294,8 @@
     "leaderboardWagonsUsers": "Benutzer",
     "leaderboardWagonsHallOfFame": "Ruehmeshalle — d Sammlig, wo alles andere druf ufbaut",
     "leaderboardWagonsSortBy": "Sortiere nach",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Mini Fahrte bim Abfahre uf Discord poste",
     "discordAutopostHint": "Es wärde nur öffentlichi Fahrte gposchtet.",
     "removeDiscordPost": "Discord-Poscht entferne",

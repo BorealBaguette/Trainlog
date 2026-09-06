@@ -1292,6 +1292,8 @@
     "leaderboardWagonsUsers": "Felhasználók",
     "leaderboardWagonsHallOfFame": "Hírességek csarnoka — a gyűjtemény, amelyre minden más épül",
     "leaderboardWagonsSortBy": "Rendezés",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Utazásaim közzététele a Discordon induláskor",
     "discordAutopostHint": "Csak a nyilvános utazások kerülnek közzétételre.",
     "removeDiscordPost": "Discord-bejegyzés eltávolítása",

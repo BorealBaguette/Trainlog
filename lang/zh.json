@@ -1292,6 +1292,8 @@
     "leaderboardWagonsUsers": "用户",
     "leaderboardWagonsHallOfFame": "名人堂 — 其他一切的基础收藏",
     "leaderboardWagonsSortBy": "排序方式",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "出发时将我的行程发布到 Discord",
     "discordAutopostHint": "仅发布公开的行程。",
     "removeDiscordPost": "删除 Discord 帖子",

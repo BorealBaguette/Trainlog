@@ -1,0 +1,114 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+{% include nav %}
+{% include "includes/trainset_display.html" %}
+
+<div class="container mt-3">
+    <p class="mb-2">
+        <a href="{{ url_for('leaderboard', type='wagons') }}">&larr; {{ leaderboardWagons }}</a>
+    </p>
+
+    <h1 id="artistName" class="mb-4"></h1>
+
+    <section class="mb-5">
+        <h4 class="mb-3"><span id="wagonCount"></span> {{ leaderboardWagonsDrawings }}</h4>
+        <div id="wagons" class="d-flex flex-wrap gap-3"></div>
+    </section>
+
+    <section>
+        <h4 class="mb-3"><span id="setCount"></span> {{ wagonArtistPublicTrainsets }}</h4>
+        <p id="noSets" class="text-muted" style="display:none">{{ wagonArtistNoTrainsets }}</p>
+        <div id="trainsets" class="d-flex flex-column gap-3"></div>
+    </section>
+</div>
+
+<style>
+.wagon-card {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    width: 240px;
+    padding: 10px;
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 10px;
+}
+.wagon-card .wagon-art {
+    height: 60px;
+    display: flex;
+    align-items: center;
+    margin-bottom: 6px;
+}
+/* max-height + max-width + auto dimensions: a long car scales down whole, never
+   overflows the card, never distorts — no strip, no scrollbar. */
+.wagon-card .wagon-art img {
+    max-height: 60px;
+    max-width: 220px;
+    width: auto;
+    height: auto;
+}
+.wagon-card .wagon-label {
+    font-family: monospace;
+    font-size: .72rem;
+    word-break: break-all;
+}
+.wagon-card .compo-source {
+    text-align: center;
+    padding: 2px 0 0;
+}
+</style>
+
+<script>
+var D = {{ detail | tojson }};
+var L = {
+    trips: {{ leaderboardWagonsUses | tojson }},
+    trainsets: {{ leaderboardWagonsTrainsets | tojson }}
+};
+
+/* Strips are decoration here too — draw them below the editor size. */
+var SET_SCALE = { target: 26, min: 16, max: 40 };
+
+$(function () {
+    var name = esc(D.name);
+    if (D.url) {
+        name += ' <a href="' + esc(D.url) + '" target="_blank" rel="noopener" ' +
+                'class="fs-6"><i class="fa fa-external-link-alt"></i></a>';
+    }
+    $('#artistName').html(name);
+
+    $('#wagonCount').text(D.wagons.length.toLocaleString());
+    $('#setCount').text(D.trainsets.length.toLocaleString());
+
+    var wagons = $('#wagons');
+    D.wagons.forEach(function (w) {
+        if (!w._side) w._side = 'L';
+        var card = $('<div class="wagon-card"></div>').appendTo(wagons);
+        var art = $('<div class="wagon-art"></div>').appendTo(card);
+        if (w.image) {
+            $('<img>').attr({ src: _wagonImgSrc(w), title: w.label || '',
+                'data-toggle': 'tooltip', 'data-placement': 'top' }).appendTo(art);
+        } else {
+            $(_makePlaceholder(true, true, true, w._phType)).appendTo(art);
+        }
+        card.append('<div class="wagon-label">' + esc(w.label || w.name) + '</div>');
+        var attr = _attributionHtml([w]);
+        if (attr) card.append('<div class="compo-source">' + attr + '</div>');
+        card.append('<div class="compo-source">' +
+            w.trips.toLocaleString() + ' ' + esc(L.trips) + ' &middot; ' +
+            w.trainsets.toLocaleString() + ' ' + esc(L.trainsets) + '</div>');
+    });
+    wagons.find('[data-toggle="tooltip"]').tooltip();
+
+    if (!D.trainsets.length) {
+        $('#noSets').show();
+    } else {
+        var list = $('#trainsets');
+        D.trainsets.forEach(function (set) {
+            _renderTrainset($('<div></div>').appendTo(list), set.units, set.name, null,
+                            { scale: SET_SCALE, compact: true, highlightAuthor: D.name });
+        });
+    }
+});
+</script>
+{% endblock %}

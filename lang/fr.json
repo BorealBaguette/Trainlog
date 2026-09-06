@@ -1293,6 +1293,8 @@
     "leaderboardWagonsUsers": "Utilisateurs",
     "leaderboardWagonsHallOfFame": "Panthéon — la collection sur laquelle repose tout le reste",
     "leaderboardWagonsSortBy": "Trier par",
+    "wagonArtistNoTrainsets": "Aucune rame publique n’utilise encore ces wagons.",
+    "wagonArtistPublicTrainsets": "rames publiques",
     "discordAutopostSetting": "Publier mes trajets sur Discord au moment du départ",
     "discordAutopostHint": "Seuls les trajets publics sont publiés.",
     "removeDiscordPost": "Supprimer la publication Discord",

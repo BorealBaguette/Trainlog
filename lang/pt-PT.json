@@ -1296,6 +1296,8 @@
     "leaderboardWagonsUsers": "Utilizadores",
     "leaderboardWagonsHallOfFame": "Hall da fama — a coleção sobre a qual assenta tudo o resto",
     "leaderboardWagonsSortBy": "Ordenar por",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Publicar as minhas viagens no Discord à partida",
     "discordAutopostHint": "Apenas as viagens públicas são publicadas.",
     "removeDiscordPost": "Remover publicação do Discord",

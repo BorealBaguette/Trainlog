@@ -71,7 +71,8 @@ var L = {
     trips: {{ leaderboardWagonsUses | tojson }},
     users: {{ leaderboardWagonsUsers | tojson }},
     sortBy: {{ leaderboardWagonsSortBy | tojson }},
-    hallOfFame: {{ leaderboardWagonsHallOfFame | tojson }}
+    hallOfFame: {{ leaderboardWagonsHallOfFame | tojson }},
+    more: {{ more | tojson }}
 };
 var KEYS = ['drawings', 'trainsets', 'trips', 'users'];
 
@@ -105,13 +106,20 @@ function statsHTML(artist, sortKey) {
    well below the trainset-editor size. */
 var SET_SCALE = { target: 26, min: 16, max: 40 };
 
-/* First set drawn straight away; the rest wait behind a button so a card with
-   four rakes doesn't open as a wall of trains. */
-function setsHTML(card, sets) {
+/* One representative strip per card; the rest live on the artist's own page.
+   `moreHref` omitted (the headline) keeps everything inline behind a button. */
+function setsHTML(card, sets, highlightAuthor, moreHref) {
     if (!sets || !sets.length) return;
     var wrap = $('<div class="artist-sets"></div>').appendTo(card);
-    var opts = { scale: SET_SCALE, compact: true };
+    var opts = { scale: SET_SCALE, compact: true, highlightAuthor: highlightAuthor };
     _renderTrainset($('<div></div>').appendTo(wrap), sets[0].units, sets[0].name, null, opts);
+
+    if (moreHref) {
+        $('<a class="btn btn-more"></a>').attr('href', moreHref)
+            .html('<i class="fa fa-arrow-right"></i> ' + L.more)
+            .appendTo(wrap);
+        return;
+    }
     if (sets.length < 2) return;
 
     var rest = $('<div style="display:none"></div>');
@@ -134,15 +142,17 @@ function setsHTML(card, sets) {
 }
 
 function artistCard(artist, rank, sortKey) {
-    var name = sanitize(artist.name);
-    if (artist.url) name = '<a class="leaderboardLink" href="' + sanitize(artist.url) + '">' + name + '</a>';
+    var page = '{{ url_for("wagon_leaderboard.wagon_artist_page") }}?name=' + encodeURIComponent(artist.name);
+    var name = '<a class="leaderboardLink" href="' + page + '">' + sanitize(artist.name) + '</a>';
+    if (artist.url) name += ' <a href="' + sanitize(artist.url) + '" target="_blank" rel="noopener">' +
+                            '<i class="fa fa-external-link-alt fa-xs"></i></a>';
 
     var card = $('<div class="artist-card"></div>')
         .append('<div class="artist-head"><span class="artist-rank">' + rankIcon(rank) + '</span>' +
                 name + flagsHTML(artist.countries) + '</div>')
         .append(statsHTML(artist, sortKey));
     card.find('.artist-flags [data-toggle="tooltip"]').tooltip();
-    setsHTML(card, artist.trainsets_shown);
+    setsHTML(card, artist.trainsets_shown, artist.name, page);
     return card;
 }
 

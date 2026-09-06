@@ -1300,6 +1300,8 @@
     "leaderboardWagonsUsers": "Користувачі",
     "leaderboardWagonsHallOfFame": "Зала слави — колекція, на якій тримається все інше",
     "leaderboardWagonsSortBy": "Сортувати за",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Публікувати мої поїздки в Discord під час відправлення",
     "discordAutopostHint": "Публікуються лише публічні поїздки.",
     "removeDiscordPost": "Видалити допис у Discord",

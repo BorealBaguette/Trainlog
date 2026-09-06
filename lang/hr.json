@@ -1300,6 +1300,8 @@
     "leaderboardWagonsUsers": "Korisnici",
     "leaderboardWagonsHallOfFame": "Kuća slavnih — zbirka na kojoj počiva sve ostalo",
     "leaderboardWagonsSortBy": "Poredaj po",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Objavi moja putovanja na Discordu pri polasku",
     "discordAutopostHint": "Objavljuju se samo javna putovanja.",
     "removeDiscordPost": "Ukloni objavu s Discorda",

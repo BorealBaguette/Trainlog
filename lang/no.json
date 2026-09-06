@@ -1296,6 +1296,8 @@
     "leaderboardWagonsUsers": "Brukere",
     "leaderboardWagonsHallOfFame": "Hall of fame — samlingen alt annet bygger på",
     "leaderboardWagonsSortBy": "Sorter etter",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Legg ut turene mine på Discord ved avgang",
     "discordAutopostHint": "Bare offentlige turer legges ut.",
     "removeDiscordPost": "Fjern Discord-innlegg",
