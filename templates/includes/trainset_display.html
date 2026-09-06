@@ -245,6 +245,15 @@ function _authorName(a) {
     return _authorLinkName(a) || a;
 }
 
+/* Display names of everyone credited on one wagon. `author` is comma-separated for
+   a co-drawn car — mirror _credit() in src/api/wagon_leaderboard.py, which splits
+   the same way so each contributor is ranked (and gets an artist page). */
+function _authorNames(author) {
+    return (author || '').split(',')
+        .map(function(p) { return _authorName(p.trim().replace(/^\/+|\/+$/g, '')); })
+        .filter(Boolean);
+}
+
 /* Authors grouped under the licence they drew for. A composition often mixes
    stock released under different terms — listing every author then every licence
    side by side leaves the reader guessing which applies to whom. */
@@ -254,7 +263,12 @@ function _attributionGroups(units) {
         if (!u.author && !u.license) return;
         var lic = u.license || '';
         if (!byLicense[lic]) { order.push(lic); byLicense[lic] = []; }
-        if (u.author && byLicense[lic].indexOf(u.author) === -1) byLicense[lic].push(u.author);
+        // `author` is comma-separated for a co-drawn car — credit each contributor
+        // separately so their name links (and matches the ranking's split).
+        (u.author || '').split(',').forEach(function(part) {
+            part = part.trim().replace(/^\/+|\/+$/g, '');
+            if (part && byLicense[lic].indexOf(part) === -1) byLicense[lic].push(part);
+        });
     });
     return order.map(function(lic) { return { license: lic, authors: byLicense[lic] }; });
 }
@@ -347,7 +361,8 @@ function _renderTrainset($modalBody, units, setName, seatInfo, opts) {
         var isFirst = (i === 0), isLast = (i === all.length - 1);
         var wagon = $('<div class="compo-wagon ts-unit"></div>');
         if (opts.highlightAuthor &&
-            (_authorName(u.author || '') === opts.highlightAuthor || u.source === opts.highlightAuthor)) {
+            (u.source === opts.highlightAuthor ||
+             _authorNames(u.author).indexOf(opts.highlightAuthor) !== -1)) {
             wagon.addClass('compo-wagon-mine');
         }
         wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
