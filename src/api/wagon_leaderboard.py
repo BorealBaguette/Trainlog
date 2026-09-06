@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 from flask import Blueprint, abort, jsonify, render_template, request, session
 
+from src.api.admin.trainsets import _trainset_usage
 from src.api.admin.wagons import _wagon_usage
 from src.api.trainset import _slim_units
 from src.pg import pg_session
@@ -83,25 +84,28 @@ def _enrich(units, catalogue):
     return enriched
 
 
-def _representatives(wagons, public_sets, trips):
+def _representatives(wagons, public_sets, wagon_trips, ts_trips):
     """
     What to draw for an artist, as (set name or None, slim units), best first.
 
-    Normally the public trainsets showing off most of `wagons`. Where no public set
-    uses any of them — a tram or a railcar runs as itself, so nobody builds a
-    composition for it — fall back to a strip of the artist's own busiest drawings,
-    unnamed, since it is a sampler rather than a real train.
+    Normally the public trainsets that use this artist's stock, most-travelled
+    first, with a set built entirely from their wagons preferred as the showcase.
+    Where no public set uses any of them — a tram or a railcar runs as itself, so
+    nobody builds a composition for it — fall back to a strip of the artist's own
+    busiest drawings, unnamed, since it is a sampler rather than a real train.
     """
     scored = []
-    for name, units in public_sets:
-        hits = sum(1 for u in units if u.get("name") in wagons)
+    for tid, name, units in public_sets:
+        named = [u for u in units if u.get("name")]
+        hits = sum(1 for u in named if u["name"] in wagons)
         if hits:
-            scored.append((hits, name, units))
+            all_mine = bool(named) and hits == len(named)
+            scored.append((all_mine, ts_trips.get(tid, 0), name, units))
     if scored:
-        scored.sort(key=lambda s: (-s[0], s[1].lower()))
-        return [(name, _slim_units(units)) for _, name, units in scored[:SETS_PER_ARTIST]]
+        scored.sort(key=lambda s: (-s[0], -s[1], s[2].lower()))
+        return [(name, _slim_units(units)) for _, _, name, units in scored[:SETS_PER_ARTIST]]
 
-    solo = sorted(wagons, key=lambda n: (-trips.get(n, 0), n))[:SOLO_WAGONS]
+    solo = sorted(wagons, key=lambda n: (-wagon_trips.get(n, 0), n))[:SOLO_WAGONS]
     return [(None, [{"name": n} for n in solo])] if solo else []
 
 
@@ -138,13 +142,13 @@ def _collect_authors(pg):
 
 
 def _public_sets(pg):
-    """(name, units) for every curated trainset, malformed rows skipped."""
+    """(id, name, units) for every curated trainset, malformed rows skipped."""
     sets = []
     for row in pg.execute(
-        "SELECT name, units_json FROM trainsets WHERE is_admin"
+        "SELECT id, name, units_json FROM trainsets WHERE is_admin"
     ).fetchall():
         try:
-            sets.append((row["name"], json.loads(row["units_json"] or "[]")))
+            sets.append((row["id"], row["name"], json.loads(row["units_json"] or "[]")))
         except ValueError:
             continue
     return sets
@@ -164,6 +168,7 @@ def _catalogue_for(pg, slim_sets):
 
 def wagon_authors():
     trips, *_ = _wagon_usage()
+    ts_trips, _ = _trainset_usage()
 
     with pg_session() as pg:
         headline, authors = _collect_authors(pg)
@@ -171,7 +176,7 @@ def wagon_authors():
         public_sets = _public_sets(pg)
 
         entries = [headline, *ranked]
-        chosen = [_representatives(entry.pop("wagons"), public_sets, trips)
+        chosen = [_representatives(entry.pop("wagons"), public_sets, trips, ts_trips)
                   for entry in entries]
 
         # One lookup for every wagon actually drawn, rather than a query per unit
@@ -202,12 +207,14 @@ def get_wagon_authors():
 
 def wagon_artist(key):
     """Everything one artist drew: all their wagons, and every curated trainset that
-    uses at least one, that artist's cars flagged for the strip renderer.
+    uses at least one, both ordered most-travelled first, that artist's cars flagged
+    for the strip renderer.
 
     Returns None when `key` (a credit name from the ranking) matches nobody. MLG is
     the whole ~18k base — served as an external headline, never as an on-site page.
     """
     trips, _riders, set_counts, _countries = _wagon_usage()
+    ts_trips, _ = _trainset_usage()
 
     with pg_session() as pg:
         _, authors = _collect_authors(pg)
@@ -218,25 +225,26 @@ def wagon_artist(key):
 
         wagons = []
         for r in pg.execute(
-            f"SELECT {_UNIT_COLS} FROM wagons WHERE name = ANY(:names) ORDER BY label, name",
+            f"SELECT {_UNIT_COLS} FROM wagons WHERE name = ANY(:names)",
             {"names": sorted(mine)},
         ).fetchall():
             w = dict(r)
             w["trips"] = trips.get(w["name"], 0)
             w["trainsets"] = set_counts.get(w["name"], 0)
             wagons.append(w)
+        wagons.sort(key=lambda w: (-w["trips"], -w["trainsets"],
+                                   (w["label"] or w["name"]).lower()))
 
         scored = []
-        for name, units in _public_sets(pg):
-            hits = sum(1 for u in units if u.get("name") in mine)
-            if hits:
-                scored.append((hits, name, _slim_units(units)))
+        for tid, name, units in _public_sets(pg):
+            if any(u.get("name") in mine for u in units):
+                scored.append((ts_trips.get(tid, 0), name, _slim_units(units)))
         scored.sort(key=lambda s: (-s[0], s[1].lower()))
 
         catalogue = _catalogue_for(pg, [units for _, _, units in scored])
         trainsets = [
-            {"name": name, "units": _enrich(units, catalogue)}
-            for _, name, units in scored
+            {"name": name, "trips": trip_n, "units": _enrich(units, catalogue)}
+            for trip_n, name, units in scored
         ]
 
     return {

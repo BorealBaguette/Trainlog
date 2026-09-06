@@ -105,8 +105,11 @@ $(function () {
     } else {
         var list = $('#trainsets');
         D.trainsets.forEach(function (set) {
-            _renderTrainset($('<div></div>').appendTo(list), set.units, set.name, null,
+            var cell = $('<div></div>').appendTo(list);
+            _renderTrainset(cell, set.units, set.name, null,
                             { scale: SET_SCALE, compact: true, highlightAuthor: D.name });
+            cell.append('<div class="compo-source">' +
+                set.trips.toLocaleString() + ' ' + esc(L.trips) + '</div>');
         });
     }
 });
