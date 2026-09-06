@@ -445,15 +445,13 @@
         rev.textContent = '⇄';
         rev.onclick = (function(s) { return function() { tsbReverseSeg(s); }; })(seg);
         chip.appendChild(rev);
-        if (_refNames.length > 1) {
-          var x = document.createElement('button');
-          x.type = 'button';
-          x.style.cssText = 'border:0; background:none; cursor:pointer; color:#999; font-size:.85rem; line-height:1; padding:0';
-          x.title = _i18n.remove;
-          x.textContent = '×';
-          x.onclick = (function(s) { return function() { tsbRemoveSeg(s); }; })(seg);
-          chip.appendChild(x);
-        }
+        var x = document.createElement('button');
+        x.type = 'button';
+        x.style.cssText = 'border:0; background:none; cursor:pointer; color:#999; font-size:.85rem; line-height:1; padding:0';
+        x.title = _i18n.remove;
+        x.textContent = '×';
+        x.onclick = (function(s) { return function() { tsbRemoveSeg(s); }; })(seg);
+        chip.appendChild(x);
         nameEl.appendChild(chip);
       });
       badge.style.display = 'flex';
