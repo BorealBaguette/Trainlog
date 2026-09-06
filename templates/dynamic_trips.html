@@ -3735,6 +3735,18 @@ function openMassEdit() {
         powerSection.style.display = 'none';
     }
 
+    // Fetch autocomplete data for material types
+    Promise.all(uniqueTypes.map(function(type) {
+        return $.get(`{{url_for("getManAndOps", username=username, station_type="" )}}` + type);
+    })).then(function(results) {
+        var manAndOps = { materialTypes: {} };
+        results.forEach(function(result) {
+            Object.assign(manAndOps.materialTypes, result.materialTypes || {});
+        });
+
+        materialTypeAutocomplete( $("#massEditMaterialType"), manAndOps);
+    });
+
     $('#massEditModal').modal('show');
 }
 

@@ -1493,7 +1493,7 @@ $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) 
   $('#fr24Date').val(getCurrentDate());
   {% else %}
   stationSearchAutocomplete(".stationSearch", visitedStations, stationSearchUrl, "{{ manual|default('Manual') }}");
-  materialTypeAutocomplete($("#material_type"), manAndOps, vehicle_type);
+  materialTypeAutocomplete($("#material_type"), manAndOps);
   {% endif %}
 });
 
