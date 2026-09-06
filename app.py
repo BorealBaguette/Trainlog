@@ -201,7 +201,12 @@ from src.global_map import (
 from src.operators import find_operator_ids, get_trip_operator_logos
 from src.pg import setup_db, pg_session
 from src.search_terms import like_pattern
-from src.trip_search import base_type_filter, filter_conditions, parse_filters
+from src.trip_search import (
+    base_type_filter,
+    country_code_pattern,
+    filter_conditions,
+    parse_filters,
+)
 from src.suspicious_activity import (
     check_denied_login,
     log_denied_login,
@@ -9081,7 +9086,6 @@ def get_trips_api_internal(username, is_public=False):
             "origin_station",
             "destination_station",
             "COALESCE(operator, '')",
-            "COALESCE(countries, '')",
             "COALESCE(line_name, '')",
             "COALESCE(CAST(start_datetime AS text), '')",
             "COALESCE(CAST(end_datetime AS text), '')",
@@ -9095,6 +9099,9 @@ def get_trips_api_internal(username, is_public=False):
             "COALESCE(model, '')",
         ]
         terms = [like.format(col=col) for col in global_search_columns]
+        # The countries column is JSON keyed by code, matched on the quoted, upper-case
+        # code so that "NO" does not find every trip with a "nonelec" split.
+        terms.append(f"COALESCE(countries, '') LIKE :{param}_country")
         terms.append(
             "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = FilteredTrips.ticket_id"
             f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
@@ -9122,6 +9129,7 @@ def get_trips_api_internal(username, is_public=False):
 
     if search_value:
         search_params["search"] = like_pattern(search_value)
+        search_params["search_country"] = country_code_pattern(search_value)
         global_operator_ids = find_operator_ids(search_value)
         if global_operator_ids:
             search_params["search_operator_ids"] = global_operator_ids
@@ -9138,6 +9146,7 @@ def get_trips_api_internal(username, is_public=False):
     for idx, neg_term in enumerate(global_not_terms):
         neg_param = f"search_not_{idx}"
         search_params[neg_param] = like_pattern(neg_term)
+        search_params[f"{neg_param}_country"] = country_code_pattern(neg_term)
         # Exclude by alias too, so "!SBB" also drops trips logged as CFF — otherwise
         # a negative filter would leave behind the spellings it looks equivalent to.
         neg_operator_ids = find_operator_ids(neg_term)
