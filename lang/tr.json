@@ -1292,6 +1292,8 @@
     "leaderboardWagonsUsers": "Kullanıcılar",
     "leaderboardWagonsHallOfFame": "Şöhret salonu — diğer her şeyin üzerine kurulduğu koleksiyon",
     "leaderboardWagonsSortBy": "Sırala",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Yolculuklarımı kalkışta Discord'da paylaş",
     "discordAutopostHint": "Yalnızca herkese açık yolculuklar paylaşılır.",
     "removeDiscordPost": "Discord gönderisini kaldır",

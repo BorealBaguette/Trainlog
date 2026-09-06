@@ -10,11 +10,12 @@ import re
 from collections import Counter
 from urllib.parse import urlparse
 
-from flask import Blueprint, jsonify
+from flask import Blueprint, abort, jsonify, render_template, request, session
 
 from src.api.admin.wagons import _wagon_usage
 from src.api.trainset import _slim_units
 from src.pg import pg_session
+from src.utils import getUser, lang
 
 wagon_leaderboard_blueprint = Blueprint("wagon_leaderboard", __name__)
 
@@ -104,43 +105,70 @@ def _representatives(wagons, public_sets, trips):
     return [(None, [{"name": n} for n in solo])] if solo else []
 
 
-def wagon_authors():
+def _collect_authors(pg):
+    """(headline entry, {name: entry}), each still carrying its `wagons` name set.
+
+    Shared by the ranking and the per-artist page — the ranking pops `wagons` once
+    it has chosen representatives, the artist page needs the whole set.
+    """
     trips, riders, trainsets, wagon_countries = _wagon_usage()
+    rows = pg.execute(
+        "SELECT name, author, source FROM wagons WHERE image IS NOT NULL"
+    ).fetchall()
+
+    headline = _new_entry({"name": MLG_SOURCE, "url": MLG_URL, "username": None})
+    authors = {}
+    for row in rows:
+        if row["source"] == MLG_SOURCE:
+            credits = [headline]
+        else:
+            credits = []
+            for part in (row["author"] or "").split(","):
+                credit = _credit(part)
+                if credit:
+                    credits.append(authors.setdefault(credit["name"], _new_entry(credit)))
+        for entry in credits:
+            entry["drawings"] += 1
+            entry["trips"] += trips.get(row["name"], 0)
+            entry["trainsets"] += trainsets.get(row["name"], 0)
+            entry["users"] |= riders.get(row["name"], set())
+            entry["wagons"].add(row["name"])
+            entry["countries"].update(wagon_countries.get(row["name"], {}))
+    return headline, authors
+
+
+def _public_sets(pg):
+    """(name, units) for every curated trainset, malformed rows skipped."""
+    sets = []
+    for row in pg.execute(
+        "SELECT name, units_json FROM trainsets WHERE is_admin"
+    ).fetchall():
+        try:
+            sets.append((row["name"], json.loads(row["units_json"] or "[]")))
+        except ValueError:
+            continue
+    return sets
+
+
+def _catalogue_for(pg, slim_sets):
+    """One wagons lookup covering every unit drawn across `slim_sets`."""
+    needed = sorted({u["name"] for units in slim_sets for u in units})
+    return {
+        r["name"]: dict(r)
+        for r in pg.execute(
+            f"SELECT {_UNIT_COLS} FROM wagons WHERE name = ANY(:names)",
+            {"names": needed},
+        ).fetchall()
+    }
+
+
+def wagon_authors():
+    trips, *_ = _wagon_usage()
 
     with pg_session() as pg:
-        rows = pg.execute(
-            "SELECT name, author, source FROM wagons WHERE image IS NOT NULL"
-        ).fetchall()
-
-        headline = _new_entry({"name": MLG_SOURCE, "url": MLG_URL, "username": None})
-        authors = {}
-        for row in rows:
-            if row["source"] == MLG_SOURCE:
-                credits = [headline]
-            else:
-                credits = []
-                for part in (row["author"] or "").split(","):
-                    credit = _credit(part)
-                    if credit:
-                        credits.append(authors.setdefault(credit["name"], _new_entry(credit)))
-            for entry in credits:
-                entry["drawings"] += 1
-                entry["trips"] += trips.get(row["name"], 0)
-                entry["trainsets"] += trainsets.get(row["name"], 0)
-                entry["users"] |= riders.get(row["name"], set())
-                entry["wagons"].add(row["name"])
-                entry["countries"].update(wagon_countries.get(row["name"], {}))
-
+        headline, authors = _collect_authors(pg)
         ranked = sorted(authors.values(), key=lambda a: (-a["drawings"], a["name"].lower()))
-
-        public_sets = []
-        for row in pg.execute(
-            "SELECT name, units_json FROM trainsets WHERE is_admin"
-        ).fetchall():
-            try:
-                public_sets.append((row["name"], json.loads(row["units_json"] or "[]")))
-            except ValueError:
-                continue
+        public_sets = _public_sets(pg)
 
         entries = [headline, *ranked]
         chosen = [_representatives(entry.pop("wagons"), public_sets, trips)
@@ -148,15 +176,7 @@ def wagon_authors():
 
         # One lookup for every wagon actually drawn, rather than a query per unit
         # per set per artist.
-        needed = sorted({u["name"] for sets in chosen for _, units in sets
-                         for u in units})
-        catalogue = {
-            r["name"]: dict(r)
-            for r in pg.execute(
-                f"SELECT {_UNIT_COLS} FROM wagons WHERE name = ANY(:names)",
-                {"names": needed},
-            ).fetchall()
-        }
+        catalogue = _catalogue_for(pg, [units for sets in chosen for _, units in sets])
 
         for entry, sets in zip(entries, chosen):
             entry["trainsets_shown"] = [
@@ -178,3 +198,69 @@ def _new_entry(credit):
 @wagon_leaderboard_blueprint.route("/getWagonAuthors")
 def get_wagon_authors():
     return jsonify(wagon_authors())
+
+
+def wagon_artist(key):
+    """Everything one artist drew: all their wagons, and every curated trainset that
+    uses at least one, that artist's cars flagged for the strip renderer.
+
+    Returns None when `key` (a credit name from the ranking) matches nobody. MLG is
+    the whole ~18k base — served as an external headline, never as an on-site page.
+    """
+    trips, _riders, set_counts, _countries = _wagon_usage()
+
+    with pg_session() as pg:
+        _, authors = _collect_authors(pg)
+        entry = authors.get(key)
+        if entry is None:
+            return None
+        mine = entry["wagons"]
+
+        wagons = []
+        for r in pg.execute(
+            f"SELECT {_UNIT_COLS} FROM wagons WHERE name = ANY(:names) ORDER BY label, name",
+            {"names": sorted(mine)},
+        ).fetchall():
+            w = dict(r)
+            w["trips"] = trips.get(w["name"], 0)
+            w["trainsets"] = set_counts.get(w["name"], 0)
+            wagons.append(w)
+
+        scored = []
+        for name, units in _public_sets(pg):
+            hits = sum(1 for u in units if u.get("name") in mine)
+            if hits:
+                scored.append((hits, name, _slim_units(units)))
+        scored.sort(key=lambda s: (-s[0], s[1].lower()))
+
+        catalogue = _catalogue_for(pg, [units for _, _, units in scored])
+        trainsets = [
+            {"name": name, "units": _enrich(units, catalogue)}
+            for _, name, units in scored
+        ]
+
+    return {
+        "name": entry["name"],
+        "url": entry["url"],
+        "username": entry["username"],
+        "wagons": wagons,
+        "trainsets": trainsets,
+    }
+
+
+@wagon_leaderboard_blueprint.route("/leaderboard/wagons/artist")
+def wagon_artist_page():
+    detail = wagon_artist(request.args.get("name", "").strip())
+    if detail is None:
+        abort(404)
+    strings = lang[session["userinfo"]["lang"]]
+    return render_template(
+        "wagon_artist.html",
+        nav="bootstrap/no_user_nav.html" if getUser() == "public"
+        else "bootstrap/navigation.html",
+        username=getUser(),
+        detail=detail,
+        title=strings["leaderboardWagons"],
+        **strings,
+        **session["userinfo"],
+    )

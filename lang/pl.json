@@ -1300,6 +1300,8 @@
     "leaderboardWagonsUsers": "Użytkownicy",
     "leaderboardWagonsHallOfFame": "Galeria sław — kolekcja, na której opiera się wszystko inne",
     "leaderboardWagonsSortBy": "Sortuj według",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Publikuj moje podróże na Discordzie w chwili odjazdu",
     "discordAutopostHint": "Publikowane są tylko podróże publiczne.",
     "removeDiscordPost": "Usuń wpis z Discorda",

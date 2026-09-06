@@ -1292,6 +1292,8 @@
     "leaderboardWagonsUsers": "ユーザー数",
     "leaderboardWagonsHallOfFame": "殿堂 — 他のすべての土台となるコレクション",
     "leaderboardWagonsSortBy": "並び替え",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "出発時に旅程を Discord に投稿する",
     "discordAutopostHint": "公開されている旅程のみが投稿されます。",
     "removeDiscordPost": "Discordの投稿を削除",

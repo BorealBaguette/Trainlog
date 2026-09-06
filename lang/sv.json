@@ -1296,6 +1296,8 @@
     "leaderboardWagonsUsers": "Användare",
     "leaderboardWagonsHallOfFame": "Hall of fame — samlingen som allt annat bygger på",
     "leaderboardWagonsSortBy": "Sortera efter",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Publicera mina resor på Discord vid avgång",
     "discordAutopostHint": "Endast offentliga resor publiceras.",
     "removeDiscordPost": "Ta bort Discord-inlägg",

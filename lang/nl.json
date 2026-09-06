@@ -1296,6 +1296,8 @@
     "leaderboardWagonsUsers": "Gebruikers",
     "leaderboardWagonsHallOfFame": "Hall of fame — de collectie waarop al het andere is gebouwd",
     "leaderboardWagonsSortBy": "Sorteren op",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Mijn ritten bij vertrek op Discord plaatsen",
     "discordAutopostHint": "Alleen openbare ritten worden geplaatst.",
     "removeDiscordPost": "Discord-bericht verwijderen",

@@ -1293,6 +1293,8 @@
     "leaderboardWagonsUsers": "Users",
     "leaderboardWagonsHallOfFame": "Hall of fame — the collection everything else is built on",
     "leaderboardWagonsSortBy": "Sort by",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Post my trips to Discord as they depart",
     "discordAutopostHint": "Only public trips are posted.",
     "removeDiscordPost": "Remove Discord post",

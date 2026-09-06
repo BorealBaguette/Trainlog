@@ -177,6 +177,11 @@
         white-space: nowrap;
         margin-bottom: 2px;
     }
+
+    /* One artist's cars picked out of a strip drawn from mixed stock (the wagon
+       artist page): the rest fade back, so a rake that is mostly theirs still
+       reads as a train. */
+    .compo-strip.has-highlight .compo-wagon:not(.compo-wagon-mine) { opacity: 0.3; }
 </style>
 
 {# ── JavaScript ───────────────────────────────────────────────────────────── #}
@@ -331,8 +336,9 @@ function _appendSeatMarker(wagon, i, seatInfo) {
 }
 
 /* Render into a modal body element.
-   `opts` (optional): {scale: {target,min,max} for normalizeStrip, compact: bool}
-   — the leaderboard draws many strips at once and wants them smaller. */
+   `opts` (optional): {scale: {target,min,max} for normalizeStrip, compact: bool,
+   highlightAuthor: str} — the leaderboard draws many strips at once and wants them
+   smaller; the wagon artist page picks that artist's cars out of each rake. */
 function _renderTrainset($modalBody, units, setName, seatInfo, opts) {
     opts = opts || {};
     var strip = $('<div class="compo-strip ts-strip"></div>');
@@ -340,6 +346,10 @@ function _renderTrainset($modalBody, units, setName, seatInfo, opts) {
     all.forEach(function(u, i) {
         var isFirst = (i === 0), isLast = (i === all.length - 1);
         var wagon = $('<div class="compo-wagon ts-unit"></div>');
+        if (opts.highlightAuthor &&
+            (_authorName(u.author || '') === opts.highlightAuthor || u.source === opts.highlightAuthor)) {
+            wagon.addClass('compo-wagon-mine');
+        }
         wagon.append('<div class="compo-class-bar" style="height:12px"></div>');
         if (u.image) {
             var img = $('<img>').attr({src: _wagonImgSrc(u), title: u.label || u.nom || '',
@@ -359,6 +369,9 @@ function _renderTrainset($modalBody, units, setName, seatInfo, opts) {
         $modalBody.html('<div class="alert alert-warning">Trainset has no units.</div>');
         return;
     }
+    // Only fade the rest once at least one car is actually the marked artist's —
+    // an author string we can't resolve would otherwise dim the whole rake.
+    if (strip.children('.compo-wagon-mine').length) strip.addClass('has-highlight');
     var container = $('<div class="compo-container"></div>').append(strip);
     if (opts.compact) container.addClass('compo-compact');
     $modalBody.empty().append(container);

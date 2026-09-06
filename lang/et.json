@@ -1293,6 +1293,8 @@
     "leaderboardWagonsUsers": "Kasutajad",
     "leaderboardWagonsHallOfFame": "Kuulsuste hall — kogu, millele kõik muu tugineb",
     "leaderboardWagonsSortBy": "Sorteeri",
+    "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
+    "wagonArtistPublicTrainsets": "public trainsets",
     "discordAutopostSetting": "Postita mu reisid Discordi väljumise hetkel",
     "discordAutopostHint": "Postitatakse ainult avalikud reisid.",
     "removeDiscordPost": "Eemalda Discordi postitus",
