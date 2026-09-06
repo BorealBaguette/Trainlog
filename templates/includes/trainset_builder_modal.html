@@ -40,6 +40,11 @@
         <div id="tsb-strip" class="d-flex flex-wrap align-items-end gap-2 py-1" style="min-height:60px">
           <span id="tsb-empty" class="text-muted fst-italic small m-auto">{{tsEmptyHint}}</span>
         </div>
+        <div class="d-flex justify-content-end">
+          <button type="button" class="btn btn-outline-secondary btn-sm py-0" id="tsb-reverse-all-btn"
+                  onclick="tsbReverseAll()" title="{{tsbReverseAllTip}}" disabled
+                  style="font-size:.72rem">⇄ {{tsbReverseAllBtn}}</button>
+        </div>
       </div>
       <div class="modal-footer flex-wrap gap-2 py-2">
         <!-- Save name row, hidden until "Save & apply" is clicked -->
@@ -67,6 +72,7 @@
     noResults:       '{{tsbNoResults}}',
     flip:            '{{tsFlipSide}}',
     remove:          '{{remove}}',
+    reverse:         '{{tsReverseTip}}',
     saveFailed:      '{{tsSaveFailed}}',
     public:          '{{tsPubBadge}}',
     addUnknown:      '{{addUnknownWagon}}',
@@ -76,6 +82,7 @@
   var _adminSets    = [];
   var _personalSets = [];
   var _refNames     = []; // pure-reference mode: stack of trainset names; null = loose wagons (edited)
+  var _refReversed  = []; // parallel to _refNames: true = that set runs the other way round
   var _dragUid      = null;
   var _phTypes      = [null, 'loco_l', 'loco_both', 'loco_r', 'mid']; // null = auto
   // Which car (by _uid) the trip's seat is in. Only meaningful — and the picker only
@@ -94,16 +101,30 @@
     return null;
   };
 
-  function _loadRefStack(names) {
+  /* The composite's optional "reversed" list — index-aligned with "trainsets", one
+     boolean per set (see composite_refs() in src/api/trainset.py). Missing → none. */
+  function _compositeReversed(val) {
+    try {
+      var parsed = JSON.parse(val);
+      if (parsed && Array.isArray(parsed.reversed)) return parsed.reversed.map(Boolean);
+    } catch(e) {}
+    return [];
+  }
+
+  function _loadRefStack(names, reversedFlags) {
+    reversedFlags = reversedFlags || [];
     // Resolve each name sequentially so segment order is preserved
     var chain = Promise.resolve();
-    names.forEach(function(name) {
+    names.forEach(function(name, i) {
       chain = chain.then(function() {
         return fetch('/api/trainsets/resolve?value=' + encodeURIComponent(name))
           .then(function(r) { return r.json(); })
           .then(function(units) {
             var seg = _refNames.length;
+            var rev = !!reversedFlags[i];
             _refNames.push(name);
+            _refReversed.push(rev);
+            if (rev) units = reverseTrainsetUnits(units);
             units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L', _seg: seg })); });
           });
       });
@@ -123,6 +144,7 @@
   window.openTsbModal = function () {
     _units = [];
     _refNames = [];
+    _refReversed = [];
     _seatUid = null;
     var seatEl = _seatField();
     var savedSeatIdx = (seatEl && seatEl.value !== '') ? parseInt(seatEl.value, 10) : null;
@@ -133,7 +155,7 @@
     var isInlineArray = false;
     try { isInlineArray = Array.isArray(JSON.parse(val)); } catch (e) {}
     if (composite) {
-      _loadRefStack(composite).then(function () { _applySeatIndex(savedSeatIdx); _render(); });
+      _loadRefStack(composite, _compositeReversed(val)).then(function () { _applySeatIndex(savedSeatIdx); _render(); });
     } else if (isInlineArray) {
       // Inline array of units — re-enrich from the catalogue via the API so fields like
       // image_ext are current (fixes e.g. PNG wagons whose stored value predates image_ext).
@@ -177,6 +199,7 @@
           // Pure-reference mode — stack as a new referenced segment
           var seg = _refNames.length;
           _refNames.push(name);
+          _refReversed.push(false);
           units.forEach(function(u) { _units.push(Object.assign({}, u, { _uid: ++_uid, _side: u._side || 'L', _seg: seg })); });
         }
         _render();
@@ -193,6 +216,7 @@
   window.tsbRemoveSeg = function(seg) {
     if (_refNames === null) return;
     _refNames.splice(seg, 1);
+    _refReversed.splice(seg, 1);
     _units = _units.filter(function(u) { return u._seg !== seg; });
     _units.forEach(function(u) { if (u._seg > seg) u._seg--; });
     _render();
@@ -335,7 +359,38 @@
 
   window.tsbFlip = function (uid) {
     var u = _units.find(function (u) { return u._uid === uid; });
-    if (u) { _refNames = null; u._side = u._side === 'L' ? 'R' : 'L'; _render(); }
+    if (u) { _refNames = null; reverseWagonUnit(u); _render(); }
+  };
+
+  // Run one referenced trainset the other way round: its cars are re-laid in mirrored
+  // order, each put through the same flip as tsbFlip. Unlike a per-car edit this keeps
+  // the reference — the trip still records which saved set it was, plus the flag — so
+  // it survives renames and later edits of the set. The seat car is tracked by _uid
+  // and so stays on the same physical car.
+  window.tsbReverseSeg = function (seg) {
+    if (_refNames === null) return;
+    _refReversed[seg] = !_refReversed[seg];
+    var start = _units.findIndex(function (u) { return u._seg === seg; });
+    if (start === -1) { _render(); return; }
+    var count = _units.filter(function (u) { return u._seg === seg; }).length;
+    var turned = reverseTrainsetUnits(_units.slice(start, start + count));
+    _units.splice.apply(_units, [start, count].concat(turned));
+    _render();
+  };
+
+  // Turn the whole composition around. With references kept, that is the trainsets in
+  // mirrored order, each running the other way: their flags flip and their segment
+  // numbers count from the far end. Loose cars just mirror as one train.
+  window.tsbReverseAll = function () {
+    if (!_units.length) return;
+    if (_refNames !== null) {
+      var last = _refNames.length - 1;
+      _refNames.reverse();
+      _refReversed = _refNames.map(function (_, i) { return !_refReversed[last - i]; });
+      _units.forEach(function (u) { u._seg = last - u._seg; });
+    }
+    _units = reverseTrainsetUnits(_units);
+    _render();
   };
 
   window.tsbCyclePh = function (uid) {
@@ -381,6 +436,15 @@
         var lbl = document.createElement('span');
         lbl.textContent = name;
         chip.appendChild(lbl);
+        var rev = document.createElement('button');
+        rev.type = 'button';
+        rev.className = 'tsb-seg-reverse';
+        rev.style.cssText = 'border:0; background:none; cursor:pointer; font-size:.85rem; line-height:1; padding:0;'
+                          + (_refReversed[seg] ? ' color:#0d6efd; font-weight:700' : ' color:#999');
+        rev.title = _i18n.reverse;
+        rev.textContent = '⇄';
+        rev.onclick = (function(s) { return function() { tsbReverseSeg(s); }; })(seg);
+        chip.appendChild(rev);
         if (_refNames.length > 1) {
           var x = document.createElement('button');
           x.type = 'button';
@@ -530,6 +594,7 @@
 
     var any = _units.length > 0;
     document.getElementById('tsb-use-btn').disabled  = !any;
+    document.getElementById('tsb-reverse-all-btn').disabled = !any;
     document.getElementById('tsb-save-btn').disabled = !any;
   }
 
@@ -551,12 +616,17 @@
   }
 
   window.tsbUseOnce = function () {
-    if (_refNames !== null && _refNames.length === 1) {
-      _tsbWriteAndClose(_refNames[0]);
-      return;
-    }
-    if (_refNames !== null && _refNames.length > 1) {
-      _tsbWriteAndClose(JSON.stringify({ trainsets: _refNames }));
+    if (_refNames !== null && _refNames.length) {
+      var anyReversed = _refReversed.some(Boolean);
+      // A single set the right way round is stored as its bare name, as always; a
+      // reversed one needs the composite shape to carry the flag.
+      if (_refNames.length === 1 && !anyReversed) {
+        _tsbWriteAndClose(_refNames[0]);
+        return;
+      }
+      var composite = { trainsets: _refNames };
+      if (anyReversed) composite.reversed = _refNames.map(function (_, i) { return !!_refReversed[i]; });
+      _tsbWriteAndClose(JSON.stringify(composite));
       return;
     }
     var json = JSON.stringify(_units.map(function (u) {

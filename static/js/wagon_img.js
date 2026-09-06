@@ -36,6 +36,18 @@
  *   the "not found" SVGs represent, sized at the same absolute scale as real cars (their own
  *   naturalHeight is unreliable). onApply fires after each (re)size, e.g. to re-fit a container.
  *   In legacy median mode (fallbackPpm:0), placeholders keep their CSS size as before.
+ *
+ * reverseWagonUnit(unit)
+ *   Turn one car to face the other way, in place (and return it): a two-sided drawing
+ *   ('sides') swaps its L/R side, a directional placeholder swaps loco_l/loco_r.
+ *   One-sided drawings ('sides_L' / 'sides_R' / plain) and symmetric placeholders
+ *   have no other face and are left as they are. Backs the per-car flip button in
+ *   both builders.
+ *
+ * reverseTrainsetUnits(units)
+ *   Turn a whole train around: returns a NEW array with the cars in mirrored order,
+ *   each one flipped with reverseWagonUnit — exactly what the original looks like seen
+ *   from the other side of the track. The unit objects are copied, not mutated.
  */
 (function () {
   /* Sentinel stored in wagons.license for drawings licensed directly to Trainlog.
@@ -149,7 +161,23 @@
     apply();
   }
 
+  var PH_MIRROR = { loco_l: 'loco_r', loco_r: 'loco_l' };
+
+  function reverseWagonUnit(u) {
+    if (u.image_type === 'sides') u._side = (u._side === 'R') ? 'L' : 'R';
+    else if (!u.image && PH_MIRROR[u._phType]) u._phType = PH_MIRROR[u._phType];
+    return u;
+  }
+
+  function reverseTrainsetUnits(units) {
+    return (units || []).slice().reverse().map(function (u) {
+      return reverseWagonUnit(Object.assign({}, u));
+    });
+  }
+
   window.wagonImgSrc = wagonImgSrc;
   window.normalizeStrip = normalizeStrip;
+  window.reverseWagonUnit = reverseWagonUnit;
+  window.reverseTrainsetUnits = reverseTrainsetUnits;
   window.TRAINLOG_LICENSE = TRAINLOG_LICENSE;
 })();
