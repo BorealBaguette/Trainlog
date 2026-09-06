@@ -190,7 +190,8 @@ def _title_lines(draw, title, width, scale):
     if _text_length(draw, title, size) <= width:
         return [title], size
 
-    origin, arrow, destination = title.partition("→")
+    separator = next((mark for mark in ("→", "↔") if mark in title), "")
+    origin, arrow, destination = title.partition(separator) if separator else (title, "", "")
     if not arrow:
         # A period or a tag name: nothing to break on, so it shrinks and, past
         # MIN_SIZE, is ellipsized by the caller.

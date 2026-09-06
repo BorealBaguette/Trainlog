@@ -5086,15 +5086,28 @@ def multi_trip_period(username, kind, period):
     return multi_trip(period={"username": username, "kind": kind, "period": period})
 
 
-@app.route("/admin/trip_card/<int:trip_id>.png")
+@app.route("/admin/trip_card/<trip_ids>.png")
 @owner_required
-def admin_trip_card(trip_id):
+def admin_trip_card(trip_ids):
     """Render a trip's Discord card and return it, without posting anything.
 
     For eyeballing the layout against real trips — long station names, missing
     logos, odd durations — which is the only way to find out how it copes.
+
+    Addressed exactly as og.trip_card is, share key included, so a link to the
+    public card can be pasted here to see a trip the public route will not
+    serve — that route screens for a public trip of a public profile, this one
+    draws whatever the owner asks for.
     """
     from src.trip_card import _martin, render_trip_card
+
+    try:
+        ids = parse_trip_ids(trip_ids)
+    except ValueError:
+        return make_response((f"{trip_ids} is not a trip id or a share key", 404))
+    if len(ids) != 1:
+        return make_response(("one trip at a time: this is the single-trip card", 404))
+    trip_id = ids[0]
 
     # Say which of the three failures it was: "404" alone sent me looking for a
     # missing trip when the answer was an unreachable renderer.

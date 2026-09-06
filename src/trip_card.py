@@ -93,9 +93,9 @@ PIN_BOTH = "static/images/icons/marker-icon-2x-redGreen.png"
 PIN_HEIGHT = 46             # card px; the assets are 2x for retina
 PIN_MERGE_DISTANCE = 26     # closer than this on screen and one bitmap is used
 
-# Fifth band, drawn below the panel only when the trip carries a trainset: the
-# cars it ran as, nothing else. Same artwork and the same absolute scale the
-# site draws it at (normalizeStrip in static/js/wagon_img.js), so a given car is
+# Fifth band, drawn below the panel when the trip says what it ran as: the cars
+# of its trainset, or the side view of its aircraft type. Same artwork and the
+# same absolute scale the site draws it at (normalizeStrip in wagon_img.js), so a car is
 # the same size on a card as on the trip page — until a long rake has to shrink
 # to fit, which it may, because a train cut off mid-formation reads as a fault.
 TRIP_LOGO_DIR = "static/images/icons/trip_logos"
@@ -113,6 +113,12 @@ MAX_CARS = 40               # a rake past this is a shunting yard, not a train
 # The band is only as tall as the train in it: a single tram unit in a band
 # sized for a double TGV sits in a half-empty strip.
 STRIP_PADDING = 14
+# An air trip has no rake to draw, but it does have a type: the same side views
+# the trip page puts on a flight (loadAirframe in static/js/vehicle_display.js),
+# keyed by the ICAO code in material_type.
+AIRLINER_DIR = "static/images/airliners"
+AIRFRAME_HEIGHT = 48        # card px; smaller than the trip page draws it
+LABEL_GAP = 24              # between a lone vehicle and the name beside it
 STRIP_MIN_HEIGHT = 56
 STRIP_MAX_HEIGHT = 110
 
@@ -213,7 +219,9 @@ def _fetch(trip_id):
                    t.start_datetime, t.end_datetime,
                    t.departure_delay, t.arrival_delay, t.countries,
                    t.utc_start_datetime, t.utc_end_datetime, t.last_modified,
-                   t.user_id, t.material_type_advanced,
+                   t.user_id, t.material_type, t.material_type_advanced,
+                   (SELECT concat_ws(' ', a.manufacturer, a.model) FROM airliners a
+                     WHERE a.iata = t.material_type LIMIT 1) AS airframe_name,
                    ST_AsGeoJSON(
                        ST_Segmentize(p.geom::geography, :segment)::geometry
                    ) AS route
@@ -1040,6 +1048,42 @@ def _strip_images(units, available, scale):
     return drawn
 
 
+def _airframe(trip, available, scale):
+    """The aircraft's own side view, for a flight that says which type it was.
+
+    Only about a hundred types are drawn, so finding nothing is the normal case
+    rather than a fault.
+    """
+    code = (trip["material_type"] or "").strip()
+    # material_type is free text — a hand-typed "Boeing 737-800" is common — so
+    # anything that is not a bare code is not a file name either.
+    if trip["trip_type"] not in ("air", "helicopter") or not code.isalnum():
+        return None
+    path = os.path.join(AIRLINER_DIR, f"{code}.png")
+    if not os.path.exists(path):
+        return None
+    try:
+        art = Image.open(path).convert("RGBA")
+    except OSError as e:
+        logger.warning("Airframe %s unusable: %s", path, e)
+        return None
+    ink = art.getchannel("A").getbbox()
+    if ink is None:
+        return None
+    art = art.crop(ink)
+    height = min(AIRFRAME_HEIGHT * scale, available * art.height / art.width)
+    return art.resize(
+        (max(1, round(art.width * height / art.height)), max(1, round(height))),
+        Image.LANCZOS,
+    )
+
+
+def _airframe_label(trip):
+    """"Airbus A320" — the readable name where the type is one of the known
+    ones (~95% of logged codes are), the code itself where it is not."""
+    return (trip["airframe_name"] or "").strip() or trip["material_type"].strip()
+
+
 def _strip_height(images, scale):
     """How tall the band has to be, in card px, for these cars."""
     tallest = max(image.height for image in images) / scale
@@ -1048,14 +1092,24 @@ def _strip_height(images, scale):
     ))
 
 
-def _draw_strip(card, images, band, scale):
-    """The fifth band: the train the trip ran as, centred under the panel."""
+def _draw_strip(card, images, band, scale, label=None):
+    """The fifth band: what the trip ran as, centred under the panel.
+
+    A rake fills the width and needs no caption; a single airframe leaves room
+    for one, so it carries its type\'s name beside it.
+    """
     draw = ImageDraw.Draw(card)
     top = HEIGHT * scale
     draw.rectangle([0, top, WIDTH * scale, (HEIGHT + band) * scale], fill=PANEL_BG)
     draw.line([0, top, WIDTH * scale, top], fill=PANEL_RULE, width=2 * scale)
 
     total = sum(image.width for image in images) + WAGON_GAP * scale * (len(images) - 1)
+    if label:
+        room = (WIDTH - 44) * scale - total - LABEL_GAP * scale
+        size = _fit(draw, label, META_SIZE * scale, room,
+                    min_size=META_MIN_SIZE * scale)
+        label = _ellipsize(draw, label, size, room)
+        total += LABEL_GAP * scale + _text_length(draw, label, size)
     x = (WIDTH * scale - total) / 2
     # Bottom-aligned, like the strip on the site: the cars stand on one floor
     # and a raised pantograph simply rises above it.
@@ -1063,6 +1117,13 @@ def _draw_strip(card, images, band, scale):
     for image in images:
         card.alpha_composite(image, (round(x), round(floor - image.height)))
         x += image.width + WAGON_GAP * scale
+
+    if label:
+        reference = _font(FONT_FILE, round(size)).getbbox("Hg")
+        middle = top + band * scale / 2
+        _draw_text(draw, (x - WAGON_GAP * scale + LABEL_GAP * scale,
+                          middle - (reference[1] + reference[3]) / 2),
+                   label, size, MUTED)
 
 
 def _type_icon(trip_type, height):
@@ -1135,7 +1196,13 @@ def render_trip_card(trip_id):
     # a trip without one is drawn exactly as it was. Its cars are sized before
     # the canvas exists, since how tall they come out is what says how tall the
     # band has to be.
-    images = _strip_images(units, (WIDTH - 44) * scale, scale) if units else []
+    available = (WIDTH - 44) * scale
+    images = _strip_images(units, available, scale) if units else []
+    label = None
+    if not images:
+        airframe = _airframe(trip, available, scale)
+        if airframe is not None:
+            images, label = [airframe], _airframe_label(trip)
     band = _strip_height(images, scale) if images else 0
     card = Image.new(
         "RGBA", (WIDTH * scale, (HEIGHT + band) * scale), PANEL_BG + (255,)
@@ -1144,7 +1211,7 @@ def render_trip_card(trip_id):
     _draw_pins(card, parts, camera, scale)
     _draw_panel(card, trip, logos, scale)
     if images:
-        _draw_strip(card, images, band, scale)
+        _draw_strip(card, images, band, scale, label)
 
     out = io.BytesIO()
     card.convert("RGB").save(out, format="PNG", optimize=True)
