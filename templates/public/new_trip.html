@@ -1767,10 +1767,11 @@ function buildCurrentTripFeatures(trips) {
         let splitIndex;
 
         if (isTracked && fullCoords.length >= 2) {
-            // FR24's public track usually begins at the first airborne radar contact,
-            // a few km into the climb-out, so bridge back to the departure airport or
-            // the route appears to start in mid-air beside it. Counts as already
-            // travelled: the aircraft is demonstrably past it.
+            // FR24's public track sometimes begins well into the climb-out rather than
+            // on the runway, so bridge back to the departure airport or the route
+            // appears to start in mid-air beside it. Counts as already travelled: the
+            // aircraft is demonstrably past it. applyLiveTracks leaves liveOrigin null
+            // whenever the track already reaches the airport, so no stub is drawn there.
             if (trip.liveOrigin) {
                 const orig = [trip.liveOrigin[1], trip.liveOrigin[0]];
                 fullCoords = MapLibreUtils.createGeodesicLine(orig, fullCoords[0])

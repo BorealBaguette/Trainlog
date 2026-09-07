@@ -14,7 +14,7 @@ class DbNames(str, Enum):
 
 
 class TripTypes(str, Enum):
-    ACCOMODATION = "accomodation"
+    ACCOMMODATION = "accommodation"
     AERIAL_WAY = "aerialway"
     AIR = "air"
     BUS = "bus"
@@ -41,7 +41,7 @@ class TripTypes(str, Enum):
         Trip types within the same group can be transformed from one to the other.
         """
         groups = [
-            (cls.ACCOMODATION, cls.POI, cls.RESTAURANT),
+            (cls.ACCOMMODATION, cls.POI, cls.RESTAURANT),
             (cls.AERIAL_WAY),
             (cls.AIR, cls.HELICOPTER),
             (cls.BUS, cls.CAR),

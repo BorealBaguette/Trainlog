@@ -86,7 +86,7 @@ STATION_SEARCH_OSM_TAGS = {
     "rail": ["railway:halt", "railway:station"],
     "ferry": ["amenity:ferry_terminal"],
     "helicopter": ["aeroway:helipad", "aeroway:heliport", "aeroway:aerodrome"],
-    "accomodation": [
+    "accommodation": [
         "tourism:alpine_hut", "tourism:apartment", "tourism:chalet",
         "tourism:guest_house", "tourism:hostel", "tourism:hotel",
         "tourism:motel", "tourism:wilderness_hut",

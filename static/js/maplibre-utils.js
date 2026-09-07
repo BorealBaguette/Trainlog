@@ -319,6 +319,30 @@ function normalizePathCoords(coords) {
     return result;
 }
 
+// How far the flown track's first fix has to be from the departure airport before the gap
+// is worth drawing. FR24's public track starts at the first radar contact, which is
+// usually on or beside the runway but is sometimes tens of km into the climb-out. Bridging
+// unconditionally therefore drew a straight stub alongside tracks that already reached the
+// airport; below this threshold the gap is normal coverage jitter, not missing data.
+const LIVE_ORIGIN_BRIDGE_MIN_KM = 5;
+
+// Great-circle distance in km between two [lat, lng] points.
+function _haversineKm(a, b) {
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(b[0] - a[0]), dLng = toRad(b[1] - a[1]);
+    const h = Math.sin(dLat / 2) ** 2
+            + Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLng / 2) ** 2;
+    return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// The departure airport, but only when the live track genuinely fails to reach it — i.e.
+// only when there is missing data to stand in for. Both arguments are [lat, lng]; returns
+// null when no bridge should be drawn, so callers can just test the result.
+function liveOriginBridge(origin, firstFix) {
+    if (!origin || !firstFix) return null;
+    return _haversineKm(origin, firstFix) > LIVE_ORIGIN_BRIDGE_MIN_KM ? origin : null;
+}
+
 // Create geodesic line between two points
 function createGeodesicLine(start, end, numPoints = 100, splitSegments = false) {
     const toRad = deg => deg * Math.PI / 180;
@@ -400,15 +424,16 @@ function applyLiveTracks(trips, liveTracks, features) {
         // the user never logged. Safe to recompute every refresh now that trip.path is
         // never overwritten.
         const destination = original.length ? original[original.length - 1] : null;
-        // The origin, for the same reason plus one of its own: FR24's public track often
-        // starts at the first airborne radar contact rather than at the gate — several km
-        // into the climb-out — so without this the route appears to begin in mid-air near
-        // the airport instead of at it.
+        // The origin, for the same reason plus one of its own: FR24's public track can
+        // start at the first airborne radar contact rather than at the gate — several km
+        // into the climb-out — and without this the route appears to begin in mid-air
+        // near the airport instead of at it. liveOriginBridge decides whether that gap
+        // actually exists on this flight; most of the time it does not.
         const origin = original.length ? original[0] : null;
 
         trip.livePath = live.path;
         trip.liveTracked = true;
-        trip.liveOrigin = origin;
+        trip.liveOrigin = liveOriginBridge(origin, live.path[0]);
         trip.liveDestination = destination;
         trip.liveUpdated = live.updated || null;
         if (live.altitude) trip.altitude = live.altitude;
@@ -423,9 +448,10 @@ function applyLiveTracks(trips, liveTracks, features) {
                 // remaining leg looking detached from the rest of the map. Bridged to
                 // both airports so the line still runs terminal to terminal.
                 let coords = live.path.map(c => [c[1], c[0]]);
-                if (origin) {
-                    coords = createGeodesicLine([origin[1], origin[0]], coords[0])
-                        .concat(coords);
+                if (trip.liveOrigin) {
+                    coords = createGeodesicLine(
+                        [trip.liveOrigin[1], trip.liveOrigin[0]], coords[0]
+                    ).concat(coords);
                 }
                 if (destination) {
                     coords = coords.concat(
@@ -1092,6 +1118,7 @@ window.MapLibreUtils = {
     createRasterStyle,
     getTileServerConfig,
     createGeodesicLine,
+    liveOriginBridge,
     computeTimeStatus,
     applyLiveTracks,
     buildTripLayers,
