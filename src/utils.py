@@ -587,7 +587,10 @@ def current_user_is_friend_with(target_username):
                 .filter(
                     Friendship.user_id == target_user_id,
                     Friendship.friend_id == current_user_id,
-                    Friendship.accepted is not None,
+                    # .isnot(None), not `is not None`: the latter is a Python
+                    # identity test on the Column, which SQLAlchemy renders as a
+                    # constant true — every pending request counted as a friendship.
+                    Friendship.accepted.isnot(None),
                 )
                 .first()
             )

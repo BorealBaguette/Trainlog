@@ -108,9 +108,12 @@
   <div class="plan-head d-flex justify-content-between align-items-center flex-wrap gap-2 mt-1 mb-3">
     <h2 class="mb-0">{{ plan.name }} {% if plan.archived %}<span class="badge bg-secondary align-middle">{{ archived|default('archived') }}</span>{% endif %}</h2>
     <div class="plan-toolbar d-flex gap-2 flex-wrap align-items-center">
-      {# The itinerary and the map are two views of the same plan; this switches to
-         the map (the read-only share view keeps the pair too). #}
-      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=plan.uuid) }}"><i class="bi bi-map"></i> {{ planMapView }}</a>
+      {# The itinerary and the map are two views of the same plan. The map follows the
+         author's trip-sharing setting rather than the plan's own visibility, so a
+         viewer who cannot open it is not offered the switch. #}
+      {% if plan_map_url %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ plan_map_url }}"><i class="bi bi-map"></i> {{ planMapView }}</a>
+      {% endif %}
       {% if plan_copy_url %}
       <form method="post" action="{{ plan_copy_url }}">
         <button class="btn btn-sm btn-outline-primary" type="submit" title="{{ planSaveCopyHint }}"><i class="bi bi-files"></i> {{ planSaveCopy }}</button>
@@ -240,7 +243,9 @@
 
   <!-- stats -->
   <div class="stat-grid mb-3">
-    <div class="stat-tile"><div class="lbl">{{ totalTrips|default('Trips') }}</div><div class="val"><span class="fmt-num" data-n="{{ plan_stats.count }}">{{ plan_stats.count }}</span></div></div>
+    {# Legs this viewer may not see (their own visibility, honoured on the shared
+       views) are counted here rather than silently dropped. #}
+    <div class="stat-tile"><div class="lbl">{{ totalTrips|default('Trips') }}</div><div class="val"><span class="fmt-num" data-n="{{ plan_stats.count }}">{{ plan_stats.count }}</span>{% if num_hidden_trips %}<span class="text-muted" style="font-size:.8rem; font-weight:600;"> +{{ num_hidden_trips }} {{ trip_view_hidden_trips_singular if num_hidden_trips == 1 else trip_view_hidden_trips_plural }}</span>{% endif %}</div></div>
     {% if plan_stats.has_span %}
     <div class="stat-tile" title="{{ planSpanHint|default('From the first departure to the last arrival') }}"><div class="lbl">{{ totalDuration|default('Total duration') }}</div><div class="val"><span class="fmt-dur" data-s="{{ plan_stats.span_seconds }}">{{ plan_stats.span_h }}</span></div></div>
     {% endif %}

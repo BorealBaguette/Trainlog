@@ -295,9 +295,10 @@ def _fetch_plan(plan_uuid):
     """(trip_type, route GeoJSON) for the legs of a plan.
 
     Plans live in their own tables — a plan leg carries its path inline rather
-    than in `paths` — so they cannot go through _fetch. Visibility is the
-    plan's own (plans.visibility), checked by the caller: a plan leg has no
-    per-trip visibility of its own.
+    than in `paths` — so they cannot go through _fetch. Whether the plan gets a
+    card at all is the caller's call (the author's profile — the map's gate);
+    which legs it draws is each leg's own visibility. The card is only ever
+    served to a sessionless crawler, so that means the public ones.
     """
     with pg_session() as pg:
         return pg.execute(
@@ -309,6 +310,7 @@ def _fetch_plan(plan_uuid):
             FROM plan_trips pt
             JOIN plans p ON p.uid = pt.plan_id
             WHERE p.uuid = :uuid AND pt.geom IS NOT NULL
+              AND COALESCE(pt.visibility, 'private') = 'public'
             ORDER BY pt.trip_length DESC NULLS LAST
             LIMIT :limit
             """,
