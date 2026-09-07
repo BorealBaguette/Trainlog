@@ -901,9 +901,9 @@ function _addFlight3DToggleControl(map, onToggle, title) {
 // deck.gl runs in its own canvas stacked on top of the map (interleaved mode shares
 // MapLibre's WebGL context and can blank a raster base map, so it is not an option).
 // Left alone that canvas is added last and paints over everything, including the
-// station pins and the current-position marker. Drop it to its own low layer and lift
-// the markers above it, so the altitude profile floats over the map lines but still
-// passes under the pins.
+// station pins and the current-position marker. Slot it in just above the map's own
+// canvas instead, so the altitude profile floats over the map lines but still passes
+// under the pins and popups.
 // Initial compass bearing between two [lng, lat, ...] points, degrees clockwise from north.
 function _bearingDeg(a, b) {
     const toRad = d => d * Math.PI / 180;
@@ -927,31 +927,39 @@ const _PLANE_SVG = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
     '</svg>'
 );
 
-function _lowerDeckCanvas(map) {
+function _lowerDeckCanvas(map, attempt) {
     const container = map.getContainer();
     // deck.gl's canvas id has moved around between versions, so identify it by
     // elimination instead: any canvas in the container that isn't MapLibre's own.
     const mapCanvas = map.getCanvas();
+    // Markers and popups live in the canvas container, right next to the map's own
+    // canvas. Sliding deck's canvas in there too, directly after the map canvas, puts
+    // it under them by document order alone — z-index tricks are unreliable here,
+    // since it is up to MapLibre's stylesheet whether the containers around them form
+    // stacking contexts of their own. deck positions its wrapper absolutely at
+    // 0,0/100%x100%, so moving it does not change where it draws.
+    const markerParent = map.getCanvasContainer ? map.getCanvasContainer() : mapCanvas.parentElement;
+    let moved = 0;
     container.querySelectorAll('canvas').forEach(canvas => {
         if (canvas === mapCanvas) return;
-        // deck.gl is installed with map.addControl, which drops its canvas inside
-        // MapLibre's control container. That container stacks above the markers on
-        // purpose (controls must stay clickable) and forms its own stacking context,
-        // so restyling the canvas in place cannot bring it below anything. Reparent
-        // deck's wrapper to the map container instead, where its z-index competes with
-        // the markers directly. deck positions the wrapper absolutely at 0,0/100%x100%,
-        // so moving it does not change where it draws.
+        // deck.gl is installed with map.addControl, so its canvas starts out inside
+        // MapLibre's control container (which stacks above the markers on purpose,
+        // controls having to stay clickable). Take deck's own wrapper along, since
+        // that is the element it sizes and positions.
         const wrapper = canvas.parentElement;
-        const node = (wrapper && wrapper !== container) ? wrapper : canvas;
-        if (node.parentElement !== container) container.appendChild(node);
-        node.style.zIndex = '1';
+        const node = (wrapper && wrapper !== container && wrapper !== markerParent) ? wrapper : canvas;
+        if (mapCanvas.nextSibling !== node) {
+            markerParent.insertBefore(node, mapCanvas.nextSibling);
+        }
+        node.style.zIndex = '';
         node.style.pointerEvents = 'none';
+        moved++;
     });
-    if (!document.getElementById('deck-marker-stacking')) {
-        const style = document.createElement('style');
-        style.id = 'deck-marker-stacking';
-        style.textContent = '.maplibregl-marker { z-index: 2; }';
-        document.head.appendChild(style);
+    // deck.gl creates its WebGL device asynchronously, so at addControl time the canvas
+    // usually does not exist yet and there is nothing to move — which is why the canvas
+    // ended up painting over the pins. Keep looking for a couple of seconds of frames.
+    if (!moved && (attempt || 0) < 120) {
+        requestAnimationFrame(() => _lowerDeckCanvas(map, (attempt || 0) + 1));
     }
 }
 
