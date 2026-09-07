@@ -275,6 +275,7 @@ from src.sql.plans import (
     get_plan_query,
     get_user_plans_query,
     update_plan_query,
+    update_plan_visibility_query,
     archive_plan_query,
     delete_plan_query,
     get_plan_trips_query,
@@ -5880,6 +5881,9 @@ def build_plan_trip_list(plan_uuid):
         # Booked = the ticket is actually bought (not just a budget estimate); the
         # plan view flags those legs.
         trip["booked"] = bool(pt["booked"])
+        # Already logged as a real trip (partial validation) -> never logged again,
+        # and the plan view links the leg to the trip it produced.
+        trip["validated_trip_id"] = pt["validated_trip_id"]
         trip["cost_id"] = pt["cost_id"]
         # A leg on a shared cost renders like a ticketed trip (reuse the ticket UI).
         cinfo = cost_by_id.get(pt["cost_id"])
@@ -5949,6 +5953,13 @@ def _render_plan_view(plan, username, controls):
         if not controls and username not in (None, "public") and username != author_username
         else None
     )
+    # The map's twin: the same plan as a leg-by-leg list. Its author gets their own
+    # editable plan page, anyone else the read-only itinerary.
+    itinerary_url = (
+        url_for("plan_view", username=author_username, plan_uuid=plan["uuid"])
+        if username == author_username
+        else url_for("public_plan_itinerary", plan_uuid=plan["uuid"])
+    )
     return render_template(
         "public/new_trip.html",
         logosList=listOperatorsLogos(),
@@ -5976,6 +5987,7 @@ def _render_plan_view(plan, username, controls):
         plan=plan,
         plan_author=author_username,
         plan_copy_url=copy_url,
+        plan_itinerary_url=itinerary_url,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -6169,11 +6181,11 @@ def compute_plan_stats(trip_list, costs=None):
     }
 
 
-@app.route("/u/<username>/plan/<plan_uuid>")
-@login_required
-def plan_view(username, plan_uuid):
-    plan = get_owned_plan(plan_uuid, username)
-    trip_list, _ = build_plan_trip_list(plan_uuid)
+def _plan_itinerary_context(plan):
+    """Everything plans/plan.html needs to draw a plan's leg-by-leg itinerary, shared
+    by the author's editable page (plan_view) and its read-only twin
+    (public_plan_itinerary). The caller adds who may do what."""
+    trip_list, _ = build_plan_trip_list(plan["uuid"])
     # add a per-leg formatted duration for the management list (stays/stops have no
     # travel duration -> leave it blank rather than showing "0m")
     for item in trip_list:
@@ -6191,7 +6203,14 @@ def plan_view(username, plan_uuid):
     # The anchor date / Day-1 prompt only matter when some legs are relative (Day N).
     # A fully precise-dated plan needs neither.
     plan_has_relative = any(
-        item["trip"].get("day_number") is not None for item in trip_list
+        item["trip"].get("day_number") is not None
+        and item["trip"].get("validated_trip_id") is None
+        for item in trip_list
+    )
+    # Legs still to be logged: the "log as trips" control is pointless without one,
+    # and only these carry a tick box.
+    plan_unlogged_count = sum(
+        1 for item in trip_list if item["trip"].get("validated_trip_id") is None
     )
     # Localised vehicle-type names for the add-trip dropdown / breakdown (the lang
     # keys are the type ids themselves: train -> "Train", poi -> "Activity", ...).
@@ -6204,20 +6223,34 @@ def plan_view(username, plan_uuid):
             "accommodation", "poi", "restaurant", "other",
         ]
     }
-    return render_template(
-        "plans/plan.html",
+    return dict(
         title=plan["name"],
-        username=username,
-        nav="bootstrap/navigation.html",
-        isCurrent=has_current_trip(get_user_id(username)),
         plan=plan,
         plan_trips=trip_list,
         plan_stats=stats,
         plan_costs=plan_costs,
         plan_has_relative=plan_has_relative,
+        plan_unlogged_count=plan_unlogged_count,
         type_labels=type_labels,
         currencyOptions=get_available_currencies(),
         user_currency=getLoggedUserCurrency(),
+    )
+
+
+@app.route("/u/<username>/plan/<plan_uuid>")
+@login_required
+def plan_view(username, plan_uuid):
+    plan = get_owned_plan(plan_uuid, username)
+    return render_template(
+        "plans/plan.html",
+        username=username,
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id(username)),
+        # The author's own plan page: every control is live (the same template
+        # renders read-only for a shared plan — see public_plan_itinerary).
+        plan_editable=True,
+        plan_copy_url=None,
+        **_plan_itinerary_context(plan),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -6244,6 +6277,31 @@ def update_plan_route(username, plan_uuid):
                 "name": sanitize_param(request.form.get("name") or plan["name"]),
                 "description": sanitize_param(request.form.get("description")),
                 "anchor_date": request.form.get("anchor_date") or plan["anchor_date"],
+                "last_modified": datetime.now(),
+            },
+        )
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
+
+
+PLAN_VISIBILITIES = ("public", "friends", "private")
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/visibility", methods=["POST"])
+@login_required
+def update_plan_visibility_route(username, plan_uuid):
+    """Who can open this plan's share link (/public/plan/<uuid>) — see
+    _plan_public_or_403. Same three levels as a trip's own visibility."""
+    plan = get_owned_plan(plan_uuid, username)
+    visibility = request.form.get("visibility")
+    if visibility not in PLAN_VISIBILITIES:
+        abort(400)
+    with pg_session() as pg:
+        pg.execute(
+            update_plan_visibility_query(),
+            {
+                "uid": plan["uid"],
+                "user_id": plan["user_id"],
+                "visibility": visibility,
                 "last_modified": datetime.now(),
             },
         )
@@ -6686,7 +6744,11 @@ def validate_plan_route(username, plan_uuid):
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
     else:
         start_date = plan["anchor_date"]
-    tag_uuid = validate_plan(plan, start_date)
+    # Log only the ticked legs (the plan view sends the selection); an absent field
+    # means "everything not logged yet".
+    raw_uids = (request.form.get("trip_uids") or "").strip()
+    plan_trip_uids = [int(x) for x in re.findall(r"\d+", raw_uids)] if raw_uids else None
+    tag_uuid = validate_plan(plan, start_date, plan_trip_uids=plan_trip_uids)
     # Land on the new tag grouping the validated trips; fall back to the plan list
     # for an empty plan (no trips -> no tag).
     if tag_uuid:
@@ -6695,8 +6757,10 @@ def validate_plan_route(username, plan_uuid):
 
 
 def _plan_public_or_403(plan_uuid):
-    """Fetch a plan by uuid for public viewing: owner always; otherwise the owner
-    must have public trips. Returns the plan dict or aborts."""
+    """Fetch a plan by uuid for public viewing. The plan's own visibility decides,
+    mirroring the three trip levels: 'public' opens to anyone holding the link,
+    'friends' to the author's accepted friends, 'private' to the author alone (the
+    site owner always gets through). Returns the plan dict or aborts."""
     with pg_session() as pg:
         row = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
     if row is None:
@@ -6705,13 +6769,14 @@ def _plan_public_or_403(plan_uuid):
     owner_user = User.query.filter_by(uid=plan["user_id"]).first()
     if owner_user is None:
         abort(410)
-    if (
-        not session.get(owner_user.username)
-        and not owner_user.is_public_trips()
-        and not session.get(owner)
-    ):
-        abort(401)
-    return plan
+    if session.get(owner_user.username) or session.get(owner):
+        return plan
+    visibility = plan.get("visibility") or "private"
+    if visibility == "public":
+        return plan
+    if visibility == "friends" and current_user_is_friend_with(owner_user.username):
+        return plan
+    abort(401)
 
 
 @app.route("/public/plan/<plan_uuid>")
@@ -6721,6 +6786,38 @@ def public_plan(plan_uuid):
     # management page, so the map/share view stays an uncluttered visualisation
     # (no controls bar to crowd small screens).
     return _render_plan_view(plan, getUser(), controls=False)
+
+
+@app.route("/public/plan/<plan_uuid>/itinerary")
+def public_plan_itinerary(plan_uuid):
+    """The shared plan as a read-only leg-by-leg itinerary — the twin of the map at
+    /public/plan/<uuid>, and the link the author hands out. Same template as their
+    own plan page, with every control off."""
+    plan = _plan_public_or_403(plan_uuid)
+    viewer = getUser()
+    author_username = get_username(plan["user_id"])
+    # Saving a copy mirrors the map view's action: a logged-in viewer who is not the
+    # author (they already own it).
+    copy_url = (
+        url_for("copy_plan_route", username=viewer, plan_uuid=plan_uuid)
+        if viewer not in (None, "public") and viewer != author_username
+        else None
+    )
+    return render_template(
+        "plans/plan.html",
+        username=viewer,
+        nav=(
+            "bootstrap/no_user_nav.html" if viewer == "public"
+            else "bootstrap/navigation.html"
+        ),
+        isCurrent=False,
+        plan_editable=False,
+        plan_copy_url=copy_url,
+        plan_author=author_username,
+        **_plan_itinerary_context(plan),
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
 
 
 @app.route("/public/plan/<plan_uuid>/getPlanTrips")

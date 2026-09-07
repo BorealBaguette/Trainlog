@@ -257,14 +257,15 @@ def plan_image(uuid, ext):
     """A plan's own picture: its legs, captioned with the plan's name.
 
     Plan legs have no per-trip visibility, so the gate is the one the shared
-    plan page itself applies to a stranger — the owner's profile must be
-    public. A logged-in owner sharing a private plan gets the logo here, as the
-    crawler fetching this has no session either way.
+    plan page itself applies to a stranger: only a plan whose own visibility is
+    'public' gets a card. A crawler fetching this has no session, so a private
+    or friends-only plan — which a stranger could not open anyway — gets the
+    logo, its owner included.
     """
     with pg_session() as pg:
         plan = pg.execute(
             """
-            SELECT p.uid, p.name, p.user_id,
+            SELECT p.uid, p.name, p.user_id, p.visibility,
                    GREATEST(
                        COALESCE(p.last_modified, p.created),
                        COALESCE(MAX(pt.last_modified), MAX(pt.created))
@@ -298,8 +299,7 @@ def plan_image(uuid, ext):
             {"plan_id": plan["uid"]},
         ).fetchall()
 
-    owner = User.query.filter_by(uid=plan["user_id"]).first()
-    if owner is None or not owner.is_public_trips():
+    if plan["visibility"] != "public":
         return _logo()
 
     subtitle = " · ".join(

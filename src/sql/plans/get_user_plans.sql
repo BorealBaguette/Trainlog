@@ -1,7 +1,10 @@
 -- Plans for a user, with a trip count + aggregate stats, ordered active-first then most-recent.
+-- validated_count is the number of legs already logged as real trips (partial validation),
+-- so the list can show how far a plan has been logged.
 SELECT p.uid, p.uuid, p.user_id, p.name, p.description, p.anchor_date,
-       p.archived, p.created, p.last_modified,
+       p.archived, p.visibility, p.validated_tag_uuid, p.created, p.last_modified,
        COUNT(pt.uid) AS trip_count,
+       COUNT(pt.uid) FILTER (WHERE pt.validated_trip_id IS NOT NULL) AS validated_count,
        COALESCE(SUM(pt.trip_length), 0) / 1000.0 AS total_distance_km,
        COALESCE(SUM(COALESCE(pt.manual_trip_duration, pt.estimated_trip_duration)), 0) AS total_duration_s
 FROM plans p

@@ -296,8 +296,8 @@ def _fetch_plan(plan_uuid):
 
     Plans live in their own tables — a plan leg carries its path inline rather
     than in `paths` — so they cannot go through _fetch. Visibility is the
-    plan's, checked by the caller against the owner's profile: a plan leg has
-    no per-trip visibility of its own.
+    plan's own (plans.visibility), checked by the caller: a plan leg has no
+    per-trip visibility of its own.
     """
     with pg_session() as pg:
         return pg.execute(
