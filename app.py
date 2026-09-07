@@ -4761,7 +4761,7 @@ def render_public_trip_page(
         )
 
     if tripIds is None and period is not None:
-        # A year/month/week pseudo-tag: resolved on every request, so a trip
+        # A year/month/week/day pseudo-tag: resolved on every request, so a trip
         # logged later simply appears on the page for its period.
         try:
             start, end = parse_period(period["kind"], period["period"])
@@ -5059,10 +5059,10 @@ def public_trip_poster(tripIds=None, tagId=None, ticketId=None):
     )
 
 
-# Pseudo-tags: every trip in a year, month or ISO week, matched on local
+# Pseudo-tags: every trip in a year, month, ISO week or day, matched on local
 # departure time. Nothing is stored — the list is rebuilt on each request, so
 # these pages stay current without cluttering the tag list.
-@app.route("/public/<username>/<any(year, month, week):kind>/<period>")
+@app.route("/public/<username>/<any(year, month, week, day):kind>/<period>")
 @public_required
 def public_trip_period(username, kind, period):
     return render_public_trip_page(
@@ -5071,7 +5071,7 @@ def public_trip_period(username, kind, period):
     )
 
 
-@app.route("/public/<username>/<any(year, month, week):kind>/<period>/poster")
+@app.route("/public/<username>/<any(year, month, week, day):kind>/<period>/poster")
 @public_required
 def public_trip_period_poster(username, kind, period):
     return render_public_trip_page(
@@ -5081,7 +5081,7 @@ def public_trip_period_poster(username, kind, period):
     )
 
 
-@app.route("/public/multiTrip/<username>/<any(year, month, week):kind>/<period>")
+@app.route("/public/multiTrip/<username>/<any(year, month, week, day):kind>/<period>")
 @public_required
 def multi_trip_period(username, kind, period):
     return multi_trip(period={"username": username, "kind": kind, "period": period})
@@ -12730,8 +12730,8 @@ def _own_period_redirect(kind, period):
 
 
 # Typing just a period at the root is a shortcut to your own trips for it:
-# /2026, /year/2026, /month/2026-10, /week/2026-W40.
-@app.route("/<any(year, month, week):kind>/<period>")
+# /2026, /year/2026, /month/2026-10, /week/2026-W40, /day/2026-10-01.
+@app.route("/<any(year, month, week, day):kind>/<period>")
 def own_trip_period(kind, period):
     return _own_period_redirect(kind, period)
 
