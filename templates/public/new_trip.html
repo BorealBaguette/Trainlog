@@ -344,11 +344,16 @@
     background-color: #ececec;
 }
 
-/* The start/end pins are DOM markers, so they hide with CSS rather than a layer */
+/* The pins are DOM markers, so they hide with CSS rather than a layer */
 body.markers-hidden .marker-green,
 body.markers-hidden .marker-red,
-body.markers-hidden .marker-red-green {
+body.markers-hidden .marker-red-green,
+body.markers-hidden .marker-numbered {
     display: none;
+}
+
+.marker-numbered {
+    cursor: pointer;
 }
 
 .control-button.buttonSmall {
@@ -1141,10 +1146,14 @@ const transportTypeText = {
 // room in the badge. Applied through the image's pixel ratio, so the icon is
 // drawn in Leaflet's own coordinates.
 const PIN_ZOOM = 1.2;
-// Rasterised at exactly the screen's pixel density: MapLibre samples icons with
-// no mipmaps, so an image bigger than its on-screen size comes out aliased.
-// Capped because a canvas beyond that buys nothing.
+// Rasterised at exactly the screen's pixel density, then shown at its CSS size,
+// so the pins stay sharp on a HiDPI screen without being downsampled on a plain
+// one. Capped because a canvas beyond that buys nothing.
 const PIN_SCALE = PIN_ZOOM * Math.min(window.devicePixelRatio || 1, 3);
+// Numbered pin canvas box, in Leaflet's coordinates (see createNumberedIcon).
+const NUMBERED_ICON_W = 56, NUMBERED_ICON_H = 41;
+// The numbered pins currently on the map, so a rebuild can clear them.
+let numberedPinMarkers = [];
 
 // The Leaflet pin bitmaps, reused for the numbered markers so this map matches
 // the Leaflet one. Preloaded because the icons are composited synchronously, and
@@ -1972,7 +1981,7 @@ function placePolylines(trips) {
 // 13,41; 41x41 shadow on the same anchor) on a canvas padded so that the anchor
 // falls on the bottom centre, for icon-anchor:'bottom'.
 function createNumberedIcon(number) {
-    const W = 56, H = 41, X0 = 15;   // canvas box, and the pin's left edge in it
+    const W = NUMBERED_ICON_W, H = NUMBERED_ICON_H, X0 = 15;  // canvas box, and the pin's left edge in it
     const canvas = document.createElement('canvas');
     canvas.width = Math.round(W * PIN_SCALE);
     canvas.height = Math.round(H * PIN_SCALE);
@@ -2093,24 +2102,9 @@ trips.forEach((trip, index) => {
     }
 });
 
-// Create unique icons for each number and add them to the map
+// Draw the numbered pins
 if (numberedMarkers.length > 0) {
-    // First, create and add all unique numbered icons
-    const uniqueNumbers = [...new Set(numberedMarkers.map(m => m.number))];
-    
-    uniqueNumbers.forEach(num => {
-        const iconCanvas = createNumberedIcon(num);
-        const ctx = iconCanvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, iconCanvas.width, iconCanvas.height);
-        
-        map.addImage(`numbered-marker-${num}`, {
-            width: iconCanvas.width,
-            height: iconCanvas.height,
-            data: imageData.data
-        }, { pixelRatio: PIN_SCALE / PIN_ZOOM });
-    });
-    
-    // Create features with icon references
+    // Source for the selection glow below; the pins themselves are DOM markers.
     const features = numberedMarkers.map(marker => ({
         type: 'Feature',
         geometry: {
@@ -2120,7 +2114,6 @@ if (numberedMarkers.length > 0) {
         properties: {
             number: marker.number,
             popupText: marker.popupText,
-            icon: `numbered-marker-${marker.number}`,
             id: marker.tripUid
         }
     }));
@@ -2150,41 +2143,44 @@ if (numberedMarkers.length > 0) {
         }
     });
 
-    // Add symbol layer with the custom pin icons (tip points to the location)
-    map.addLayer({
-        id: 'numbered-markers',
-        type: 'symbol',
-        source: 'numbered-markers',
-        layout: {
-            'icon-image': ['get', 'icon'],
-            'icon-size': 1,
-            'icon-anchor': 'bottom',
-            'icon-allow-overlap': true,
-            'icon-ignore-placement': true
-        }
-    });
+    // The pins are DOM markers rather than a symbol layer: the 3D flight altitude
+    // is drawn by deck.gl on its own canvas over the map's, so anything painted
+    // inside the map canvas ends up buried under the altitude profile. DOM markers
+    // stack above that canvas (see _lowerDeckCanvas in maplibre-utils.js).
+    numberedPinMarkers.forEach(m => m.remove());
+    numberedPinMarkers = [];
+    numberedMarkers.forEach(marker => {
+        const el = document.createElement('div');
+        el.className = 'marker-icon marker-numbered';
+        const canvas = createNumberedIcon(marker.number);
+        // The canvas is rasterised at PIN_SCALE; display it at the icon's own
+        // (Leaflet) size times PIN_ZOOM, so it stays crisp at any pixel density.
+        canvas.style.width = (NUMBERED_ICON_W * PIN_ZOOM) + 'px';
+        canvas.style.height = (NUMBERED_ICON_H * PIN_ZOOM) + 'px';
+        canvas.style.display = 'block';
+        el.appendChild(canvas);
 
-    // Click a marker: popup + highlight its trip and scroll the itinerary to it.
-    map.on('click', 'numbered-markers', (e) => {
-        e.originalEvent.stopPropagation();
-        const properties = e.features[0].properties;
-        if (properties.popupText) {
-            new maplibregl.Popup({ offset: 25 })
-                .setLngLat(e.lngLat)
-                .setText(properties.popupText)
-                .addTo(map);
-        }
-        if (properties.id != null) {
-            highlightTrip(properties.id, { scrollItinerary: true });
-        }
-    });
-    
-    // Change cursor on hover
-    map.on('mouseenter', 'numbered-markers', () => {
-        map.getCanvas().style.cursor = 'pointer';
-    });
-    map.on('mouseleave', 'numbered-markers', () => {
-        map.getCanvas().style.cursor = '';
+        // Click a marker: popup + highlight its trip and scroll the itinerary to it.
+        el.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (marker.popupText) {
+                new maplibregl.Popup({ offset: 25 })
+                    .setLngLat(marker.coordinates)
+                    .setText(marker.popupText)
+                    .addTo(map);
+            }
+            if (marker.tripUid != null) {
+                highlightTrip(marker.tripUid, { scrollItinerary: true });
+            }
+        });
+
+        // The pin tip sits at the bottom centre of the canvas, bar the half pixel
+        // the shadow pushes it off centre by.
+        numberedPinMarkers.push(
+            new maplibregl.Marker({ element: el, anchor: 'bottom', offset: [-0.5 * PIN_ZOOM, 0] })
+                .setLngLat(marker.coordinates)
+                .addTo(map)
+        );
     });
 }
     // Add start marker (green) - first trip's origin
@@ -2223,10 +2219,8 @@ if (numberedMarkers.length > 0) {
                 }
             });
 
-            // Insert below markers so lines don't cover them
-            const beforeMarkersId = map.getLayer('numbered-markers') ? 'numbered-markers' : undefined;
-
-            // Add layers for current trips
+            // Add layers for current trips. No beforeId: the pins are DOM markers
+            // on top of the map canvas, so nothing added here can cover them.
             MapLibreUtils.MapConfig.transportTypes.forEach(type => {
                 const basePaint = {
                     'line-color': type.color,
@@ -2251,7 +2245,7 @@ if (numberedMarkers.length > 0) {
                             'visibility': 'visible'
                         },
                         paint: basePaint
-                    }, beforeMarkersId);
+                    });
 
                     // Add interactions
                     map.on('click', currentPastId, (e) => {
@@ -2283,7 +2277,7 @@ if (numberedMarkers.length > 0) {
                             'visibility': 'visible'
                         },
                         paint: basePaint
-                    }, beforeMarkersId);
+                    });
 
                     // Add interactions
                     map.on('click', currentFutureBaseId, (e) => {
@@ -2319,7 +2313,7 @@ if (numberedMarkers.length > 0) {
                             'line-color': '#ffffff',
                             'line-dasharray': [3, 3]
                         }
-                    }, beforeMarkersId);
+                    });
 
                     // Add interactions
                     map.on('click', currentFutureOverlayId, (e) => {
@@ -2354,14 +2348,14 @@ if (numberedMarkers.length > 0) {
     });
 
     // Itinerary <-> map highlight layers, added last so they sit ABOVE every trip
-    // line (important on busy maps), just below the numbered markers. Two layers:
-    // a white casing for contrast + the trip's own colour on top. Filtered to the
-    // selected uid; nothing shows until a leg/path is selected.
+    // line (important on busy maps); the numbered pins are DOM markers and stay
+    // above them regardless. Two layers: a white casing for contrast + the trip's
+    // own colour on top. Filtered to the selected uid; nothing shows until a
+    // leg/path is selected.
     if (!map.getLayer('trip-highlight-core')) {
         const typeColorMatch = ['match', ['get', 'type']];
         MapLibreUtils.MapConfig.transportTypes.forEach(t => typeColorMatch.push(t.id, t.color));
         typeColorMatch.push('#3887be');  // default
-        const beforeId = map.getLayer('numbered-markers') ? 'numbered-markers' : undefined;
         map.addLayer({
             id: 'trip-highlight-casing',
             type: 'line',
@@ -2369,7 +2363,7 @@ if (numberedMarkers.length > 0) {
             filter: ['==', ['get', 'id'], '__none__'],
             layout: { 'line-join': 'round', 'line-cap': 'round' },
             paint: { 'line-color': '#ffffff', 'line-width': 9, 'line-opacity': 0.9, 'line-blur': 0.4 }
-        }, beforeId);
+        });
         map.addLayer({
             id: 'trip-highlight-core',
             type: 'line',
@@ -2377,7 +2371,7 @@ if (numberedMarkers.length > 0) {
             filter: ['==', ['get', 'id'], '__none__'],
             layout: { 'line-join': 'round', 'line-cap': 'round' },
             paint: { 'line-color': typeColorMatch, 'line-width': 4.5, 'line-opacity': 1 }
-        }, beforeId);
+        });
         // Re-apply any active highlight (e.g. if placePolylines runs again).
         if (highlightedTripUid != null) {
             setHighlightFilter(['==', ['get', 'id'], highlightedTripUid]);
@@ -2514,16 +2508,15 @@ function hideTripCard() {
 }
 
 // Numbered pins and the start/end pins can bury a dense itinerary; hide them
-// without touching the routes. The numbered pins are a symbol layer, the
-// start/end pins are DOM markers hidden through the body class.
+// without touching the routes. All the pins are DOM markers hidden through the
+// body class; only their selection glow is a map layer.
 let markersHidden = false;
 function toggleMarkers() {
     markersHidden = !markersHidden;
-    ['numbered-markers', 'numbered-markers-highlight'].forEach(id => {
-        if (map.getLayer(id)) {
-            map.setLayoutProperty(id, 'visibility', markersHidden ? 'none' : 'visible');
-        }
-    });
+    if (map.getLayer('numbered-markers-highlight')) {
+        map.setLayoutProperty('numbered-markers-highlight', 'visibility',
+            markersHidden ? 'none' : 'visible');
+    }
     document.body.classList.toggle('markers-hidden', markersHidden);
     const btn = document.getElementById('markersToggle');
     btn.classList.toggle('off', markersHidden);
