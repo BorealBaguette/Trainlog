@@ -1,4 +1,4 @@
-"""Date-range pseudo-tags: every trip a user made in a year, month or week.
+"""Date-range pseudo-tags: every trip a user made in a year, month, week or day.
 
 These behave like a tag that nobody has to create and that nobody has to keep
 up to date — the id list is resolved on every request, so a trip logged later
@@ -7,6 +7,7 @@ shows up on the page it belongs to:
     /public/simfr24/year/2026
     /public/simfr24/month/2026-10
     /public/simfr24/week/2026-W40
+    /public/simfr24/day/2026-10-01
 
 The window is matched against ``start_datetime``, which is the trip's local
 departure time, so a 23:30 departure belongs to the day it felt like rather
@@ -22,11 +23,12 @@ from datetime import date, datetime, timedelta
 
 from src.pg import pg_session
 
-KINDS = ("year", "month", "week")
+KINDS = ("year", "month", "week", "day")
 
 _YEAR_RE = re.compile(r"^(\d{4})$")
 _MONTH_RE = re.compile(r"^(\d{4})-(\d{2})$")
 _WEEK_RE = re.compile(r"^(\d{4})-[Ww](\d{2})$")
+_DAY_RE = re.compile(r"^(\d{4})-(\d{2})-(\d{2})$")
 
 # Trips are logged well before and after today, but not in the year 3000.
 MIN_YEAR, MAX_YEAR = 1800, 2999
@@ -69,6 +71,19 @@ def parse_period(kind: str, value: str):
         start = datetime(monday.year, monday.month, monday.day)
         return start, start + timedelta(days=7)
 
+    if kind == "day":
+        match = _DAY_RE.match(value or "")
+        if not match:
+            raise ValueError(f"bad day: {value!r}")
+        year = _check_year(int(match.group(1)))
+        month, day = int(match.group(2)), int(match.group(3))
+        try:
+            # Catches 2026-02-30 and friends, which the regex is happy with.
+            start = datetime(year, month, day)
+        except ValueError as exc:
+            raise ValueError(f"bad day: {value!r}") from exc
+        return start, start + timedelta(days=1)
+
     raise ValueError(f"bad period kind: {kind!r}")
 
 
@@ -79,7 +94,7 @@ def _check_year(year: int) -> int:
 
 
 def period_label(kind: str, value: str) -> str:
-    """Canonical label for the page title — "2026", "2026-10", "2026-W40"."""
+    """Canonical label for the title — "2026", "2026-10", "2026-W40", "2026-10-01"."""
     if kind == "week":
         year, week = _WEEK_RE.match(value).groups()
         return f"{year}-W{week}"
