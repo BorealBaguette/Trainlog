@@ -256,16 +256,15 @@ def period_image(username, kind, period, ext):
 def plan_image(uuid, ext):
     """A plan's own picture: its legs, captioned with the plan's name.
 
-    Plan legs have no per-trip visibility, so the gate is the one the shared
-    plan page itself applies to a stranger: only a plan whose own visibility is
-    'public' gets a card. A crawler fetching this has no session, so a private
-    or friends-only plan — which a stranger could not open anyway — gets the
-    logo, its owner included.
+    This is the map view's card, so it follows the map's gate — the author's
+    trip-sharing setting — not plans.visibility, which governs the itinerary.
+    A logged-in author whose profile is private gets the logo here, as the
+    crawler fetching this has no session either way.
     """
     with pg_session() as pg:
         plan = pg.execute(
             """
-            SELECT p.uid, p.name, p.user_id, p.visibility,
+            SELECT p.uid, p.name, p.user_id,
                    GREATEST(
                        COALESCE(p.last_modified, p.created),
                        COALESCE(MAX(pt.last_modified), MAX(pt.created))
@@ -299,7 +298,8 @@ def plan_image(uuid, ext):
             {"plan_id": plan["uid"]},
         ).fetchall()
 
-    if plan["visibility"] != "public":
+    author = User.query.filter_by(uid=plan["user_id"]).first()
+    if author is None or not author.is_public_trips():
         return _logo()
 
     subtitle = " · ".join(

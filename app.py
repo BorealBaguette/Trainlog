@@ -5776,9 +5776,41 @@ def _plan_display_order(rows):
     return ordered
 
 
-def build_plan_trip_list(plan_uuid):
+def _plan_leg_visibilities_for(author):
+    """Which plan_trips.visibility values this viewer may see. A plan leg carries the
+    visibility its real trip will get once logged, and the shared views honour it the
+    same way the trips themselves do: the author (and the site owner) sees every leg,
+    an accepted friend also sees 'friends' ones, everyone else only 'public'.
+    None means no filtering at all."""
+    if session.get(author.username) or session.get(owner):
+        return None
+    if current_user_is_friend_with(author.username):
+        return ("public", "friends")
+    return ("public",)
+
+
+def plan_hidden_leg_count(plan, author):
+    """How many of the plan's legs this viewer is not allowed to see — shown beside
+    the trip count so the shared views never present a silently trimmed itinerary."""
+    allowed = _plan_leg_visibilities_for(author)
+    if allowed is None:
+        return 0
+    with pg_session() as pg:
+        return pg.execute(
+            "SELECT COUNT(*) FROM plan_trips WHERE plan_id = :plan_id"
+            " AND COALESCE(visibility, 'private') <> ALL(:allowed)",
+            {"plan_id": plan["uid"], "allowed": list(allowed)},
+        ).fetchone()[0]
+
+
+def build_plan_trip_list(plan_uuid, allowed_visibilities=None):
     """(tripList, priceDict) in the SAME shape as processPublicTrips, built from
-    plan_trips so new_trip.html renders a plan unchanged. Reuses formatTrip."""
+    plan_trips so new_trip.html renders a plan unchanged. Reuses formatTrip.
+
+    `allowed_visibilities` (from _plan_leg_visibilities_for) drops the legs a viewer
+    may not see before anything else is derived, so the order, the day separators, the
+    connection warnings and every total describe exactly what is on screen. None — the
+    author's own views — keeps the whole plan."""
     user_currency = getLoggedUserCurrency()
     empty = {"total_price": 0, "user_currency": user_currency, "total_carbon": 0, "total_distance": 0}
     with pg_session() as pg:
@@ -5788,6 +5820,12 @@ def build_plan_trip_list(plan_uuid):
         plan_uid = plan._mapping["uid"]
         rows = pg.execute(get_plan_trips_query(), {"plan_id": plan_uid}).fetchall()
         cost_rows = pg.execute(get_plan_costs_query(), {"plan_id": plan_uid}).fetchall()
+    if allowed_visibilities is not None:
+        rows = [
+            r
+            for r in rows
+            if (r._mapping["visibility"] or "private") in allowed_visibilities
+        ]
 
     # Shared costs -> per-leg "ticket" fields, so a leg on a cost renders with the
     # existing ticket UI (name + per-leg share). Each cost is converted once; the
@@ -5954,12 +5992,19 @@ def _render_plan_view(plan, username, controls):
         else None
     )
     # The map's twin: the same plan as a leg-by-leg list. Its author gets their own
-    # editable plan page, anyone else the read-only itinerary.
-    itinerary_url = (
-        url_for("plan_view", username=author_username, plan_uuid=plan["uuid"])
-        if username == author_username
-        else url_for("public_plan_itinerary", plan_uuid=plan["uuid"])
-    )
+    # editable plan page; anyone else the read-only itinerary, and only when the
+    # plan's visibility lets them in (the map does not imply access to it).
+    author_user = User.query.filter_by(uid=plan["user_id"]).first()
+    if username == author_username:
+        itinerary_url = url_for("plan_view", username=author_username, plan_uuid=plan["uuid"])
+    else:
+        itinerary_url = (
+            url_for("public_plan_itinerary", plan_uuid=plan["uuid"])
+            if author_user is not None and _may_view_plan_itinerary(plan, author_user)
+            else None
+        )
+    # Legs this viewer may not see are left off the map; the count sits by the title.
+    hidden_legs = plan_hidden_leg_count(plan, author_user) if author_user else 0
     return render_template(
         "public/new_trip.html",
         logosList=listOperatorsLogos(),
@@ -5979,7 +6024,7 @@ def _render_plan_view(plan, username, controls):
             "description": plan["description"] or "Trainlog plan",
             "image": external_url("og.plan_image", uuid=plan["uuid"], ext="jpg"),
         },
-        num_hidden_trips=0,
+        num_hidden_trips=hidden_legs,
         colorblind=getattr(user, "colorblind", False) if user else False,
         planDataUrl=data_url,
         planControls=controls,
@@ -6181,11 +6226,12 @@ def compute_plan_stats(trip_list, costs=None):
     }
 
 
-def _plan_itinerary_context(plan):
+def _plan_itinerary_context(plan, allowed_visibilities=None):
     """Everything plans/plan.html needs to draw a plan's leg-by-leg itinerary, shared
     by the author's editable page (plan_view) and its read-only twin
-    (public_plan_itinerary). The caller adds who may do what."""
-    trip_list, _ = build_plan_trip_list(plan["uuid"])
+    (public_plan_itinerary). The caller adds who may do what; `allowed_visibilities`
+    (None on the author's own page) drops the legs the viewer may not see."""
+    trip_list, _ = build_plan_trip_list(plan["uuid"], allowed_visibilities)
     # add a per-leg formatted duration for the management list (stays/stops have no
     # travel duration -> leave it blank rather than showing "0m")
     for item in trip_list:
@@ -6250,6 +6296,8 @@ def plan_view(username, plan_uuid):
         # renders read-only for a shared plan — see public_plan_itinerary).
         plan_editable=True,
         plan_copy_url=None,
+        plan_map_url=url_for("public_plan", plan_uuid=plan_uuid),
+        num_hidden_trips=0,
         **_plan_itinerary_context(plan),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
@@ -6756,27 +6804,47 @@ def validate_plan_route(username, plan_uuid):
     return redirect(url_for("plan_list", username=username))
 
 
-def _plan_public_or_403(plan_uuid):
-    """Fetch a plan by uuid for public viewing. The plan's own visibility decides,
-    mirroring the three trip levels: 'public' opens to anyone holding the link,
-    'friends' to the author's accepted friends, 'private' to the author alone (the
-    site owner always gets through). Returns the plan dict or aborts."""
+def _get_plan_and_author(plan_uuid):
+    """(plan dict, author User) by uuid, 410 if either is gone."""
     with pg_session() as pg:
         row = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
     if row is None:
         abort(410)
     plan = dict(row._mapping)
-    owner_user = User.query.filter_by(uid=plan["user_id"]).first()
-    if owner_user is None:
+    author = User.query.filter_by(uid=plan["user_id"]).first()
+    if author is None:
         abort(410)
-    if session.get(owner_user.username) or session.get(owner):
-        return plan
+    return plan, author
+
+
+def _may_view_plan_map(author):
+    """The map at /public/plan/<uuid> is the plan's picture and predates per-plan
+    visibility: it follows the author's own trip-sharing setting, exactly as it always
+    has. The author and the site owner always get through."""
+    return bool(
+        session.get(author.username) or session.get(owner) or author.is_public_trips()
+    )
+
+
+def _may_view_plan_itinerary(plan, author):
+    """The leg-by-leg itinerary is what plans.visibility governs — the three trip
+    levels: 'public' opens to anyone holding the link, 'friends' to the author's
+    accepted friends, 'private' to the author alone (site owner included)."""
+    if session.get(author.username) or session.get(owner):
+        return True
     visibility = plan.get("visibility") or "private"
     if visibility == "public":
-        return plan
-    if visibility == "friends" and current_user_is_friend_with(owner_user.username):
-        return plan
-    abort(401)
+        return True
+    return visibility == "friends" and current_user_is_friend_with(author.username)
+
+
+def _plan_public_or_403(plan_uuid):
+    """Fetch a plan by uuid for the map view (and the actions reachable from it).
+    Returns the plan dict or aborts."""
+    plan, author = _get_plan_and_author(plan_uuid)
+    if not _may_view_plan_map(author):
+        abort(401)
+    return plan
 
 
 @app.route("/public/plan/<plan_uuid>")
@@ -6793,9 +6861,11 @@ def public_plan_itinerary(plan_uuid):
     """The shared plan as a read-only leg-by-leg itinerary — the twin of the map at
     /public/plan/<uuid>, and the link the author hands out. Same template as their
     own plan page, with every control off."""
-    plan = _plan_public_or_403(plan_uuid)
+    plan, author = _get_plan_and_author(plan_uuid)
+    if not _may_view_plan_itinerary(plan, author):
+        abort(401)
     viewer = getUser()
-    author_username = get_username(plan["user_id"])
+    author_username = author.username
     # Saving a copy mirrors the map view's action: a logged-in viewer who is not the
     # author (they already own it).
     copy_url = (
@@ -6814,7 +6884,15 @@ def public_plan_itinerary(plan_uuid):
         plan_editable=False,
         plan_copy_url=copy_url,
         plan_author=author_username,
-        **_plan_itinerary_context(plan),
+        num_hidden_trips=plan_hidden_leg_count(plan, author),
+        # The map is gated separately (the author's trip-sharing setting), so only
+        # offer the switch when this viewer can actually open it.
+        plan_map_url=(
+            url_for("public_plan", plan_uuid=plan_uuid)
+            if _may_view_plan_map(author)
+            else None
+        ),
+        **_plan_itinerary_context(plan, _plan_leg_visibilities_for(author)),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -6823,7 +6901,11 @@ def public_plan_itinerary(plan_uuid):
 @app.route("/public/plan/<plan_uuid>/getPlanTrips")
 def public_plan_data(plan_uuid):
     _plan_public_or_403(plan_uuid)
-    tripList, priceDict = build_plan_trip_list(plan_uuid)
+    # The map draws only the legs this viewer may see (their count is on the page).
+    plan, author = _get_plan_and_author(plan_uuid)
+    tripList, priceDict = build_plan_trip_list(
+        plan_uuid, _plan_leg_visibilities_for(author)
+    )
     return jsonify([tripList, priceDict])
 
 
