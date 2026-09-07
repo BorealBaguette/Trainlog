@@ -526,11 +526,13 @@ function renderTrips(trips) {
     // interpolating either from the timetable.
     let liveJunction = null;
     if (trip.live_tracked && trip.live_destination && coords.length >= 2) {
-      // FR24's public track usually starts at the first airborne contact rather than on
-      // the runway, so bridge back to the departure airport; already travelled.
-      if (trip.live_origin) {
-        const [origLat, origLng] = trip.live_origin;
-        coords = MapLibreUtils.createGeodesicLine([origLng, origLat], coords[0])
+      // FR24's public track can start at the first airborne contact rather than on the
+      // runway, in which case bridge back to the departure airport; already travelled.
+      // liveOriginBridge returns null when the track already reaches the airport, so no
+      // straight stub is drawn beside a track that needs none.
+      const bridge = MapLibreUtils.liveOriginBridge(trip.live_origin, path[0]);
+      if (bridge) {
+        coords = MapLibreUtils.createGeodesicLine([bridge[1], bridge[0]], coords[0])
           .concat(coords);
       }
       const [destLat, destLng] = trip.live_destination;
