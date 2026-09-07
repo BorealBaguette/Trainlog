@@ -6113,13 +6113,13 @@ def compute_plan_stats(trip_list, costs=None):
         total_price += price
         agg = per_type.setdefault(ty, {"count": 0, "duration": 0.0, "distance": 0.0, "price": 0.0})
         agg["count"] += 1
-        if travels:
-            agg["duration"] += dur
+        agg["duration"] += dur
         agg["distance"] += dist
         agg["price"] += price
     per_type_rows = sorted(
         ({"type": k, **v, "duration_h": (_fmt_dhm(v["duration"]) if v["duration"] else ""),
-          "distance_km": round(v["distance"] / 1000),
+          # A stay/activity has no distance -> leave the cell empty rather than "0 km".
+          "distance_km": (round(v["distance"] / 1000) if v["distance"] else None),
           "price_str": (f"{round(v['price'])} {user_currency}" if v["price"] else "")}
          for k, v in per_type.items()),
         key=lambda r: r["duration"], reverse=True,

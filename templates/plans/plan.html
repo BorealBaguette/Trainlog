@@ -32,6 +32,14 @@
   .plan-leg:hover { box-shadow: 0 2px 10px rgba(0,0,0,.06); border-color: #cbd2db; }
   /* Impossible connection: this leg departs before the previous one arrives. */
   .plan-leg.leg-impossible { border-color: #dc3545; background: rgba(220,53,69,.05); }
+  /* Booked/paid leg: the ticket is actually bought, not just a budget estimate.
+     A green left accent so a glance separates settled legs from open ones; the
+     impossible-connection red still wins on the border. */
+  .plan-leg.leg-booked { border-left: 4px solid #198754; }
+  .booked-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: #146c43;
+                 background: rgba(25,135,84,.12); border-radius: 999px; padding: .05rem .5rem;
+                 margin-left: .35rem; white-space: nowrap; }
+  .booked-pill i { margin-right: .2rem; }
   .leg-warning { font-size: .78rem; font-weight: 600; color: #dc3545; margin-top: .12rem; }
   .leg-warning i { margin-right: .25rem; }
   /* Weekday constraint: with Day 1 = anchor date, this leg lands on a day the
@@ -177,7 +185,7 @@
           <td><img src="{{ url_for('static', filename='images/icons/trip_logos/' + r.type + '.png') }}" onerror="this.style.display='none'" style="height:18px; vertical-align:middle; margin-right:8px;">{{ type_labels.get(r.type, r.type) }}</td>
           <td class="text-end"><span class="fmt-num" data-n="{{ r.count }}">{{ r.count }}</span></td>
           <td class="text-end"><span class="fmt-dur" data-s="{{ r.duration }}">{{ r.duration_h }}</span></td>
-          <td class="text-end"><span class="fmt-num" data-n="{{ r.distance_km }}">{{ r.distance_km }}</span> km</td>
+          <td class="text-end">{% if r.distance_km %}<span class="fmt-num" data-n="{{ r.distance_km }}">{{ r.distance_km }}</span> km{% endif %}</td>
           {% if plan_stats.has_price %}<td class="text-end">{% if r.price %}<span class="fmt-num" data-n="{{ r.price|round|int }}">{{ r.price|round|int }}</span> {{ plan_stats.user_currency }}{% endif %}</td>{% endif %}
         </tr>
         {% endfor %}
@@ -244,10 +252,10 @@
     </li>
     {% set daysep.prev = day_key %}
     {% endif %}
-    <li class="plan-leg{% if item.impossible %} leg-impossible{% endif %}" data-uid="{{ t.uid }}">
+    <li class="plan-leg{% if item.impossible %} leg-impossible{% endif %}{% if t.booked %} leg-booked{% endif %}" data-uid="{{ t.uid }}">
       <div class="leg-icon"><img src="{{ url_for('static', filename='images/icons/trip_logos/' + (t.type or 'other') + '.png') }}" onerror="this.style.display='none'"></div>
       <div class="leg-body">
-        <div class="leg-route text-truncate">{{ t.origin_station }}{% if t.destination_station %} &rarr; {{ t.destination_station }}{% endif %}</div>
+        <div class="leg-route text-truncate">{{ t.origin_station }}{% if t.destination_station %} &rarr; {{ t.destination_station }}{% endif %}{% if t.booked %}<span class="booked-pill"><i class="bi bi-check-circle-fill"></i>{{ bookedLabel|default('Already booked') }}</span>{% endif %}</div>
         {% if item.impossible %}
         <div class="leg-warning"><i class="bi bi-exclamation-triangle-fill"></i> {{ impossibleConnection|default('Departs before the previous leg arrives') }}</div>
         {% endif %}
