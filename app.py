@@ -5877,6 +5877,9 @@ def build_plan_trip_list(plan_uuid):
         trip["day_number"] = pt["start_day"]
         trip["end_day_number"] = pt["end_day"]
         trip["weekdays"] = pt["weekdays"]
+        # Booked = the ticket is actually bought (not just a budget estimate); the
+        # plan view flags those legs.
+        trip["booked"] = bool(pt["booked"])
         trip["cost_id"] = pt["cost_id"]
         # A leg on a shared cost renders like a ticketed trip (reuse the ticket UI).
         cinfo = cost_by_id.get(pt["cost_id"])
