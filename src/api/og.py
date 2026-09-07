@@ -168,7 +168,9 @@ def _serve(name, trip_ids, title=None):
     png = render_og_card(name, ids, title or auto_title, subtitle, countries)
     if png is None:
         return _logo()
-    return Response(png, mimetype="image/jpeg", headers={"Cache-Control": CACHE_CONTROL})
+    return Response(
+        png, mimetype="image/jpeg", headers={"Cache-Control": CACHE_CONTROL}
+    )
 
 
 @og_blueprint.route("/og/trip/<trip_ids>.<any(png, jpg):ext>")
@@ -229,7 +231,9 @@ def tag_image(uuid, ext):
     return _serve(f"tag-{uuid}", row["trip_ids"], title=row["name"])
 
 
-@og_blueprint.route("/og/<username>/<any(year, month, week):kind>/<period>.<any(png, jpg):ext>")
+@og_blueprint.route(
+    "/og/<username>/<any(year, month, week, day):kind>/<period>.<any(png, jpg):ext>"
+)
 def period_image(username, kind, period, ext):
     try:
         start, end = parse_period(kind, period)
@@ -319,4 +323,6 @@ def plan_image(uuid, ext):
     )
     if png is None:
         return _logo()
-    return Response(png, mimetype="image/jpeg", headers={"Cache-Control": CACHE_CONTROL})
+    return Response(
+        png, mimetype="image/jpeg", headers={"Cache-Control": CACHE_CONTROL}
+    )
