@@ -71,15 +71,53 @@
   /* Overnight marker: a moon on the day transition (Day N -> Day N+1), so the
      "runs through the night" fact sits with its cause rather than on a separate row. */
   .ovn-moon { color: #5b60a6; margin: 0 .05rem; }
+  /* Already logged as a real trip (partial validation): the leg is done with, so it
+     greys out, loses its tick box and links to the trip it became. */
+  .plan-leg.leg-logged { opacity: .62; background: #fbfcfd; }
+  .logged-pill { display: inline-block; font-size: .7rem; font-weight: 600; color: #4b5563;
+                 background: rgba(107,114,128,.14); border-radius: 999px; padding: .05rem .5rem;
+                 margin-left: .35rem; white-space: nowrap; text-decoration: none; }
+  .logged-pill:hover { color: #1f2937; background: rgba(107,114,128,.22); }
+  .logged-pill i { margin-right: .2rem; }
+  /* Per-leg selection for "log as trips". Off by default — "log as trips" then logs
+     the whole plan as it always did; the settings panel turns picking on, which is
+     when the tick boxes and the select-all bar appear (nothing ticked to start). */
+  .leg-pick, .plan-pick-bar { display: none; }
+  .plan-picking .leg-pick { flex: 0 0 auto; display: flex; align-items: center; }
+  .leg-pick input { width: 1.05rem; height: 1.05rem; margin: 0; cursor: pointer; }
+  .plan-picking .plan-pick-bar { display: flex; align-items: center; gap: .5rem;
+                   font-size: .82rem; color: #6b7280; margin: 0 .15rem .6rem; }
+  .plan-pick-bar input { width: 1.05rem; height: 1.05rem; margin: 0; cursor: pointer; }
+  /* Toolbar menus size to their longest item ("Copy to user…" used to spill out of
+     the box) rather than to Bootstrap's 10rem default. */
+  .plan-toolbar .dropdown-menu { min-width: max-content; }
+  .plan-toolbar .dropdown-item { white-space: nowrap; }
+  /* Sharing block in the settings panel: the three visibility levels as a segmented
+     control, with the link the chosen level opens for. */
+  .plan-share-levels .btn { border-radius: 8px; }
+  .plan-share-link input { font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                           font-size: .78rem; }
 </style>
 
 <div class="container plan-wrap" style="margin-top:1.5rem;">
 
+  {% if plan_editable %}
   <a href="{{ url_for('plan_list', username=username) }}" class="text-muted small text-decoration-none">&larr; {{ plans|default('Plans') }}</a>
+  {% endif %}
 
   <div class="plan-head d-flex justify-content-between align-items-center flex-wrap gap-2 mt-1 mb-3">
     <h2 class="mb-0">{{ plan.name }} {% if plan.archived %}<span class="badge bg-secondary align-middle">{{ archived|default('archived') }}</span>{% endif %}</h2>
     <div class="plan-toolbar d-flex gap-2 flex-wrap align-items-center">
+      {# The itinerary and the map are two views of the same plan; this switches to
+         the map (the read-only share view keeps the pair too). #}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=plan.uuid) }}"><i class="bi bi-map"></i> {{ planMapView }}</a>
+      {% if plan_copy_url %}
+      <form method="post" action="{{ plan_copy_url }}">
+        <button class="btn btn-sm btn-outline-primary" type="submit" title="{{ planSaveCopyHint }}"><i class="bi bi-files"></i> {{ planSaveCopy }}</button>
+      </form>
+      {% endif %}
+      {% if plan_editable %}
+      <div class="vr d-none d-sm-block"></div>
       <div class="dropdown">
         <button class="btn btn-sm btn-primary dropdown-toggle" data-bs-toggle="dropdown"><i class="bi bi-plus-lg"></i> {{ singularTrip|default('Trip') }}</button>
         <ul class="dropdown-menu" style="max-height:60vh; overflow:auto;">
@@ -89,9 +127,9 @@
           {% endfor %}
         </ul>
       </div>
-      <button class="btn btn-sm btn-success" onclick="planValidate()"><i class="bi bi-journal-check"></i> {{ logAsTrips|default('Log as trips') }}</button>
-      <div class="vr d-none d-sm-block"></div>
-      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=plan.uuid) }}" target="_blank"><i class="bi bi-map"></i> {{ shareTrip|default('Share') }}</a>
+      {% if plan_unlogged_count %}
+      <button class="btn btn-sm btn-success" onclick="planValidate()"><i class="bi bi-journal-check"></i> {{ logAsTrips|default('Log as trips') }}<span class="pick-count ms-1"></span></button>
+      {% endif %}
       <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse" data-bs-target="#planSettings" title="{{ user_settings|default('Settings') }}"><i class="bi bi-gear"></i></button>
       <div class="dropdown">
         <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="dropdown" title="{{ more|default('More') }}"><i class="bi bi-three-dots"></i></button>
@@ -123,10 +161,13 @@
           </li>
         </ul>
       </div>
+      {% endif %}
     </div>
   </div>
 
-  <!-- plan settings (name + description + Day-1 anchor), tucked behind the gear toggle -->
+  {% if plan_editable %}
+  <!-- plan settings (name + description + Day-1 anchor, sharing, what to log),
+       tucked behind the gear toggle -->
   <div class="collapse mb-4" id="planSettings">
     <form method="post" action="{{ url_for('update_plan_route', username=username, plan_uuid=plan.uuid) }}" class="p-3 rounded" style="background:#f7f8fa; border:1px solid #e5e7eb;">
       <div class="d-flex gap-2 align-items-center flex-wrap mb-2">
@@ -146,6 +187,40 @@
       <button class="btn btn-sm btn-outline-primary" type="submit"><i class="bi bi-check-lg"></i> {{ save|default('Save') }}</button>
     </form>
 
+    <!-- Sharing: who the plan's read-only views open for, and the link to hand out.
+         Same three levels as a trip's own visibility (see _plan_public_or_403). -->
+    <div class="p-3 rounded mt-2" style="background:#f7f8fa; border:1px solid #e5e7eb;">
+      <label class="small text-muted mb-1 d-block">{{ visibility }}</label>
+      <div class="plan-share-levels btn-group btn-group-sm" role="group">
+        {% for level, icon, label in [('private', 'bi-lock', visibility_private), ('friends', 'bi-people', visibility_friends), ('public', 'bi-globe2', visibility_public)] %}
+        <form method="post" action="{{ url_for('update_plan_visibility_route', username=username, plan_uuid=plan.uuid) }}">
+          <input type="hidden" name="visibility" value="{{ level }}"/>
+          <button class="btn btn-sm {{ 'btn-primary' if plan.visibility == level else 'btn-outline-secondary' }}" type="submit">
+            <i class="bi {{ icon }}"></i> {{ label }}
+          </button>
+        </form>
+        {% endfor %}
+      </div>
+      <div class="small text-muted mt-1">{{ planVisibilityHint }}</div>
+      {# The link is the itinerary; the map view sits one button away on that page. #}
+      <div class="plan-share-link d-flex gap-2 align-items-center flex-wrap mt-2">
+        <input type="text" class="form-control form-control-sm" id="planShareUrl" readonly style="max-width:380px;"
+               value="{{ url_for('public_plan_itinerary', plan_uuid=plan.uuid, _external=True) }}"/>
+        <button class="btn btn-sm btn-outline-primary" type="button" onclick="planCopyShareUrl(this)"><i class="bi bi-clipboard"></i> {{ copy }}</button>
+      </div>
+    </div>
+
+    {% if plan_unlogged_count %}
+    <!-- Log only part of the plan: turns the per-leg tick boxes on. Off by default,
+         so "log as trips" logs the whole plan as it always did. -->
+    <div class="p-3 rounded mt-2" style="background:#f7f8fa; border:1px solid #e5e7eb;">
+      <label class="small text-muted mb-1 d-block">{{ logAsTrips|default('Log as trips') }}</label>
+      <button class="btn btn-sm btn-outline-primary" type="button" id="planPickToggle" onclick="planTogglePicking()">
+        <i class="bi bi-check2-square"></i> {{ planSelectLegs }}
+      </button>
+    </div>
+    {% endif %}
+
     <!-- Move existing real trips into this plan (by id) -->
     <form method="post" action="{{ url_for('import_trips_to_plan_route', username=username, plan_uuid=plan.uuid) }}"
           class="p-3 rounded mt-2" style="background:#f7f8fa; border:1px solid #e5e7eb;"
@@ -157,6 +232,7 @@
       </div>
     </form>
   </div>
+  {% endif %}
 
   {% if plan.description %}
   <p class="text-muted mb-3" style="white-space:pre-wrap;">{{ plan.description }}</p>
@@ -195,6 +271,7 @@
   {% endif %}
 
   <!-- shared costs (rental car, rail pass, ...) -->
+  {% if plan_editable or plan_costs %}
   <div class="breakdown mb-4">
     <table>
       <thead><tr><th colspan="5">{{ sharedCosts|default('Shared costs') }}</th></tr></thead>
@@ -206,14 +283,17 @@
           <td class="text-end text-muted">{% if c.price_per_leg %}<span class="fmt-num" data-n="{{ c.price_per_leg|round|int }}">{{ c.price_per_leg|round|int }}</span> {{ c.currency }}/{{ costLeg|default('leg') }}{% endif %}</td>
           <td class="text-end"><span class="fmt-num" data-n="{{ c.price|round|int }}">{{ c.price|round|int }}</span> {{ c.currency }}</td>
           <td class="text-end" style="white-space:nowrap;">
+            {% if plan_editable %}
             <button class="btn btn-sm" title="{{ edit|default('Edit') }}"
                     onclick='costEdit({{ {"uid": c.uid, "name": c.name, "price": c.price, "currency": c.currency}|tojson }})'><i class="bi bi-pencil"></i></button>
             <form method="post" class="d-inline" action="{{ url_for('delete_plan_cost_route', username=username, plan_uuid=plan.uuid, cost_uid=c.uid) }}" onsubmit="return confirm('{{ confirmDeleteCost|default('Delete this shared cost?') }}');">
               <button class="btn btn-sm act-del" type="submit" title="{{ delete|default('Delete') }}"><i class="bi bi-trash3"></i></button>
             </form>
+            {% endif %}
           </td>
         </tr>
         {% endfor %}
+        {% if plan_editable %}
         <tr>
           <td colspan="5" style="border-top:1px solid #f0f1f3;">
             <form method="post" action="{{ url_for('submit_plan_cost_route', username=username, plan_uuid=plan.uuid) }}" class="d-flex gap-2 align-items-center flex-wrap py-1">
@@ -226,12 +306,24 @@
             </form>
           </td>
         </tr>
+        {% endif %}
       </tbody>
     </table>
   </div>
+  {% endif %}
 
   <!-- trips -->
   {% if plan_trips %}
+  {% if plan_editable and plan_unlogged_count %}
+  {# Picking mode (turned on in the settings): which legs "log as trips" turns into
+     real trips. Hidden — and nothing ticked — until then. #}
+  <div class="plan-pick-bar">
+    <input type="checkbox" id="plan-pick-all" class="form-check-input"/>
+    <label for="plan-pick-all" class="mb-0" style="cursor:pointer;">{{ planSelectAllLegs }}</label>
+    <span class="pick-count"></span>
+    <button class="btn btn-sm btn-link p-0 ms-1" type="button" onclick="planTogglePicking(false)">{{ cancel }}</button>
+  </div>
+  {% endif %}
   <ul class="plan-list" id="plan-trip-list">
     {% set daysep = namespace(prev=None) %}
     {% for item in plan_trips %}
@@ -252,10 +344,22 @@
     </li>
     {% set daysep.prev = day_key %}
     {% endif %}
-    <li class="plan-leg{% if item.impossible %} leg-impossible{% endif %}{% if t.booked %} leg-booked{% endif %}" data-uid="{{ t.uid }}">
+    <li class="plan-leg{% if item.impossible %} leg-impossible{% endif %}{% if t.booked %} leg-booked{% endif %}{% if t.validated_trip_id %} leg-logged{% endif %}" data-uid="{{ t.uid }}">
+      {% if plan_editable and plan_unlogged_count %}
+      <div class="leg-pick">
+        {% if t.validated_trip_id %}
+        {# Already a real trip — nothing left to log, so no tick box (kept as an empty
+           cell so the rows still line up). #}
+        <span style="display:inline-block; width:1.05rem;"></span>
+        {% else %}
+        <input type="checkbox" class="form-check-input leg-pick-box" value="{{ t.uid }}"
+               title="{{ planLogSelectedHint }}"/>
+        {% endif %}
+      </div>
+      {% endif %}
       <div class="leg-icon"><img src="{{ url_for('static', filename='images/icons/trip_logos/' + (t.type or 'other') + '.png') }}" onerror="this.style.display='none'"></div>
       <div class="leg-body">
-        <div class="leg-route text-truncate">{{ t.origin_station }}{% if t.destination_station %} &rarr; {{ t.destination_station }}{% endif %}{% if t.booked %}<span class="booked-pill"><i class="bi bi-check-circle-fill"></i>{{ bookedLabel|default('Already booked') }}</span>{% endif %}</div>
+        <div class="leg-route text-truncate">{{ t.origin_station }}{% if t.destination_station %} &rarr; {{ t.destination_station }}{% endif %}{% if t.booked %}<span class="booked-pill"><i class="bi bi-check-circle-fill"></i>{{ bookedLabel|default('Already booked') }}</span>{% endif %}{% if t.validated_trip_id %}{% if plan_editable %}<a class="logged-pill" href="{{ url_for('public_trip', tripIds=t.validated_trip_id) }}" target="_blank" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</a>{% else %}<span class="logged-pill" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ planLegLogged }}</span>{% endif %}{% endif %}</div>
         {% if item.impossible %}
         <div class="leg-warning"><i class="bi bi-exclamation-triangle-fill"></i> {{ impossibleConnection|default('Departs before the previous leg arrives') }}</div>
         {% endif %}
@@ -285,7 +389,7 @@
         {% if t.notes %}
         <div class="leg-meta text-truncate" style="font-style:italic;"><i class="bi bi-sticky" style="margin-right:4px;"></i>{{ t.notes }}</div>
         {% endif %}
-        {% if plan_costs %}
+        {% if plan_editable and plan_costs %}
         <div class="leg-meta mt-1">
           <i class="bi bi-tag" style="color:#98a0ab;"></i>
           <select class="leg-cost-select" data-uid="{{ t.uid }}" style="border:1px solid #e5e7eb; border-radius:6px; font-size:.8rem; padding:.05rem .3rem; color:#6b7280;">
@@ -295,6 +399,7 @@
         </div>
         {% endif %}
       </div>
+      {% if plan_editable %}
       <div class="leg-actions d-flex gap-1 align-items-center">
         {# Anchored legs (with a day or a date) are ordered by their chronology, not
            by the arrows — a move would be a no-op, so the arrows are hidden. #}
@@ -304,23 +409,30 @@
         {% if item.can_down %}
         <button class="btn btn-sm plan-move" data-dir="1" title="{{ moveDown|default('Move down') }}"><i class="bi bi-arrow-down"></i></button>
         {% endif %}
+        {# A logged leg is a real trip now: it is edited there, not here. #}
+        {% if not t.validated_trip_id %}
         <a class="btn btn-sm" title="{{ edit|default('Edit') }}"
            href="{{ url_for('plan_trip_editor', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}"><i class="bi bi-pencil"></i></a>
+        {% endif %}
         <form method="post" action="{{ url_for('delete_plan_trip_route', username=username, plan_uuid=plan.uuid, plan_trip_uid=t.uid) }}" onsubmit="return confirm('{{ confirmDeletePlanTrip|default('Delete this trip?') }}');">
           <button class="btn btn-sm act-del" type="submit" title="{{ delete|default('Delete') }}"><i class="bi bi-trash3"></i></button>
         </form>
       </div>
+      {% endif %}
     </li>
     {% endfor %}
   </ul>
   {% else %}
   <div class="text-center text-muted py-5">
     <div style="font-size:2.5rem; line-height:1;">🗺️</div>
+    {% if plan_editable %}
     <p class="mt-2 mb-0">{{ planEmpty|default('No trips yet — add one with') }} <strong>+ {{ singularTrip|default('Trip') }}</strong>.</p>
+    {% endif %}
   </div>
   {% endif %}
 </div>
 
+{% if plan_editable %}
 <!-- Edit modal -->
 <div class="modal fade" id="planEditModal" tabindex="-1">
   <div class="modal-dialog">
@@ -374,7 +486,11 @@
 
 <form id="plan-validate-form" method="post" action="{{ url_for('validate_plan_route', username=username, plan_uuid=plan.uuid) }}" style="display:none;">
   <input type="hidden" name="start_date" id="plan-validate-date"/>
+  <!-- Comma-separated plan_trips.uid of the ticked legs, filled in only while picking;
+       left empty, the whole plan is logged (see validate_plan_route). -->
+  <input type="hidden" name="trip_uids" id="plan-validate-uids"/>
 </form>
+{% endif %}
 
 <script>
 // Locale-aware formatting of all numbers + durations (Intl, user language).
@@ -413,6 +529,7 @@
   });
 })();
 
+{% if plan_editable %}
 {% if is_owner %}
 // Site-owner only: copy this plan into another account (see copy_plan_to_user_route).
 function planCopyToUser() {
@@ -423,7 +540,72 @@ function planCopyToUser() {
 }
 {% endif %}
 
+// Copy the plan's share link (its read-only itinerary; the map is one button away
+// from there).
+function planCopyShareUrl(btn) {
+  var input = document.getElementById('planShareUrl');
+  input.select();
+  var done = function () {
+    var old = btn.innerHTML;
+    btn.innerHTML = '<i class="bi bi-check2"></i> ' + {{ copyLink|tojson }};
+    setTimeout(function () { btn.innerHTML = old; }, 1500);
+  };
+  if (navigator.clipboard) navigator.clipboard.writeText(input.value).then(done, function(){});
+  else { document.execCommand('copy'); done(); }
+}
+
+// Picking mode: off by default, so "log as trips" logs the whole plan the way it
+// always did. Turned on from the settings panel, it reveals a tick box per unlogged
+// leg (none ticked to start) and the button then logs only what is ticked.
+function planPickedUids() {
+  return Array.from(document.querySelectorAll('.leg-pick-box:checked'))
+              .map(function(b){ return b.value; });
+}
+function planPicking() {
+  return document.body.classList.contains('plan-picking');
+}
+function planPickRefresh() {
+  var boxes = document.querySelectorAll('.leg-pick-box');
+  var picked = planPickedUids().length;
+  document.querySelectorAll('.pick-count').forEach(function(el){
+    el.textContent = planPicking() ? '(' + picked + '/' + boxes.length + ')' : '';
+  });
+  var all = document.getElementById('plan-pick-all');
+  if (all) {
+    all.checked = picked === boxes.length && boxes.length > 0;
+    all.indeterminate = picked > 0 && picked < boxes.length;
+  }
+}
+function planTogglePicking(on) {
+  var want = on === undefined ? !planPicking() : on;
+  document.body.classList.toggle('plan-picking', want);
+  if (!want) {
+    // Leaving picking mode clears the selection, so the button goes back to
+    // meaning "log the whole plan".
+    document.querySelectorAll('.leg-pick-box').forEach(function(b){ b.checked = false; });
+  }
+  planPickRefresh();
+  if (want) {
+    var list = document.getElementById('plan-trip-list');
+    if (list) list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+document.querySelectorAll('.leg-pick-box').forEach(function(b){
+  b.addEventListener('change', planPickRefresh);
+});
+(function () {
+  var all = document.getElementById('plan-pick-all');
+  if (!all) return;
+  all.addEventListener('change', function () {
+    document.querySelectorAll('.leg-pick-box').forEach(function(b){ b.checked = all.checked; });
+    planPickRefresh();
+  });
+})();
+
 function planValidate() {
+  // Not picking -> log everything still unlogged (an empty trip_uids means "all").
+  var uids = planPicking() ? planPickedUids() : [];
+  if (planPicking() && !uids.length) { alert({{ planNoLegsSelected|tojson }}); return; }
   {% if plan_has_relative %}
   // Relative (Day N) legs need a real Day-1 date to anchor to.
   var d = prompt("{{ validatePrompt|default('Start date for Day 1 (YYYY-MM-DD):') }}", "{{ plan.anchor_date }}");
@@ -433,6 +615,7 @@ function planValidate() {
   // Fully precise-dated plan: the trips already carry their dates, just log them.
   if (!confirm("{{ confirmLogAsTrips|default('Log this plan as real trips?') }}")) return;
   {% endif %}
+  document.getElementById('plan-validate-uids').value = uids.join(',');
   document.getElementById('plan-validate-form').submit();
 }
 
@@ -490,5 +673,6 @@ document.querySelectorAll('.leg-cost-select').forEach(function(sel){
     }).then(function(){ location.reload(); });
   });
 });
+{% endif %}
 </script>
 {% endblock %}

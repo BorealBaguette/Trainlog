@@ -126,6 +126,12 @@
         {% if p.description %}<div class="pl-desc">{{ p.description }}</div>{% endif %}
         <div class="pl-stats">
           <span class="pl-chip chip-count"><i class="bi bi-signpost-split"></i>{{ p.trip_count }}</span>
+          {# How far the plan has been logged as real trips (partial validation). #}
+          {% if p.validated_count %}
+          <span class="pl-chip" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ p.validated_count }}/{{ p.trip_count }}</span>
+          {% endif %}
+          {# Who the share link opens for — the plan's own visibility. #}
+          <span class="pl-chip" title="{{ {'public': visibility_public, 'friends': visibility_friends, 'private': visibility_private}.get(p.visibility, visibility_private) }}"><i class="bi {{ {'public': 'bi-globe2', 'friends': 'bi-people', 'private': 'bi-lock'}.get(p.visibility, 'bi-lock') }}"></i>{{ {'public': visibility_public, 'friends': visibility_friends, 'private': visibility_private}.get(p.visibility, visibility_private) }}</span>
           {% if p.total_distance_km > 0 %}
           <span class="pl-chip"><i class="bi bi-arrows-expand-vertical"></i><span class="fmt-num" data-n="{{ p.total_distance_km | round | int }}">{{ p.total_distance_km | round | int }}</span> km</span>
           {% endif %}
@@ -135,7 +141,7 @@
         </div>
       </div>
       <div class="pl-actions">
-        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=p.uuid) }}" target="_blank" title="{{ shareTrip|default('Share') }}"><i class="bi bi-link-45deg"></i></a>
+        <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan_itinerary', plan_uuid=p.uuid) }}" target="_blank" title="{{ shareTrip|default('Share') }}"><i class="bi bi-link-45deg"></i></a>
         <form method="post" action="{{ url_for('duplicate_plan_route', username=username, plan_uuid=p.uuid) }}" class="d-contents">
           <button class="btn btn-sm btn-outline-secondary" type="submit" title="{{ duplicate|default('Duplicate') }}"><i class="bi bi-files"></i></button>
         </form>
@@ -177,12 +183,16 @@
           {% if p.description %}<div class="pl-desc">{{ p.description }}</div>{% endif %}
           <div class="pl-stats">
             <span class="pl-chip"><i class="bi bi-signpost-split"></i>{{ p.trip_count }}</span>
+            {% if p.validated_count %}
+            <span class="pl-chip" title="{{ planLegLoggedHint }}"><i class="bi bi-journal-check"></i>{{ p.validated_count }}/{{ p.trip_count }}</span>
+            {% endif %}
+            <span class="pl-chip" title="{{ planVisibilityHint }}"><i class="bi {{ {'public': 'bi-globe2', 'friends': 'bi-people', 'private': 'bi-lock'}.get(p.visibility, 'bi-lock') }}"></i>{{ {'public': visibility_public, 'friends': visibility_friends, 'private': visibility_private}.get(p.visibility, visibility_private) }}</span>
             {% if p.total_distance_km > 0 %}<span class="pl-chip"><i class="bi bi-arrows-expand-vertical"></i>{{ p.total_distance_km | round | int }} km</span>{% endif %}
             {% if p.total_duration_s > 0 %}<span class="pl-chip"><i class="bi bi-clock"></i>{{ (p.total_duration_s // 3600) | int }}h {{ ((p.total_duration_s % 3600) // 60) | int }}m</span>{% endif %}
           </div>
         </div>
         <div class="pl-actions">
-          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan', plan_uuid=p.uuid) }}" target="_blank" title="{{ shareTrip|default('Share') }}"><i class="bi bi-link-45deg"></i></a>
+          <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('public_plan_itinerary', plan_uuid=p.uuid) }}" target="_blank" title="{{ shareTrip|default('Share') }}"><i class="bi bi-link-45deg"></i></a>
           <form method="post" action="{{ url_for('archive_plan_route', username=username, plan_uuid=p.uuid) }}" class="d-contents">
             <input type="hidden" name="archived" value="false"/>
             <button class="btn btn-sm btn-outline-secondary" type="submit" title="{{ unarchive|default('Unarchive') }}"><i class="bi bi-arrow-up-circle"></i></button>

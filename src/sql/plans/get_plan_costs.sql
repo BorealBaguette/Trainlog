@@ -1,5 +1,5 @@
 -- Shared costs for a plan, with how many legs each covers and the per-leg share.
-SELECT c.uid, c.plan_id, c.name, c.price, c.currency, c.notes,
+SELECT c.uid, c.plan_id, c.name, c.price, c.currency, c.notes, c.ticket_id,
        COUNT(pt.uid) AS leg_count,
        c.price / NULLIF(COUNT(pt.uid), 0) AS price_per_leg
 FROM plan_costs c
