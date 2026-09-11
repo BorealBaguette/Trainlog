@@ -4,6 +4,7 @@
 {% if vehicle_type == 'ferry' %}
 <script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
 {% endif %}
+<script src="{{ url_for('static', filename='js/currency_combo.js') }}"></script>
 
 {% include "bootstrap/navigation.html"%}
 
@@ -794,18 +795,14 @@
   });
 {% endif %}
 
-  const currencySelect = document.getElementById('currency');
-  for (let option of currencySelect.options) {
-      const emoji = option.dataset.emoji || getFlagEmoji(option.dataset.country);
-      option.text = `${option.text} ${emoji}`; // Prepend the emoji to the option text
-  }
+  enhanceCurrencySelect('currency');
 
   $('#price').on('input', function() {
       var priceDefined = isNumber($(this).val());
-      
+
       if(priceDefined) {
           // Show currency and purchasing_date if price is defined
-          $('#currency').show();
+          $('#currency-combo-wrap').show();
           $('#currency_label').show();
           $('#purchasing_date').show();
           $('#purchasing_date_label').show();
@@ -815,7 +812,7 @@
           $("#price").css("grid-column-end", "");
       } else {
           // Hide currency and purchasing_date if price is not defined
-          $('#currency').hide();
+          $('#currency-combo-wrap').hide();
           $('#currency_label').hide();
           $('#purchasing_date').hide();
           $('#purchasing_date_label').hide();

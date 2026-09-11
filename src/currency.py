@@ -4,14 +4,9 @@ from src.pg import get_or_create_pg_session
 
 
 def get_available_currencies():
-    # Sourced from Frankfurter's (api.frankfurter.dev) currency list, which blends ~98
-    # central banks rather than the ECB-only feed this used to mirror. BGN is the one
-    # exception: Bulgaria adopted the euro in 2026 so Frankfurter no longer publishes it,
-    # but it stays here so trips already logged in BGN keep resolving. XAU/XAG/XPD/XPT
-    # (gold/silver/palladium/platinum) are precious metal spot prices, not currencies —
-    # included purely because Frankfurter offers them the same way and it's fun. They
-    # have no "country" (a flag would wrongly imply the metal belongs to some nation);
-    # an "emoji" key stands in for the flag instead, wherever a currency picker shows one.
+    # Sourced from Frankfurter (api.frankfurter.dev). BGN stays despite no longer being
+    # published (Bulgaria adopted the euro) so old BGN trips keep resolving. XAU/XAG/XPD/XPT
+    # are precious metals, not currencies — no real "country", so they get an "emoji" instead.
     available_currencies = [
         {"currency": "AED", "country": "AE"},
         {"currency": "AFN", "country": "AF"},

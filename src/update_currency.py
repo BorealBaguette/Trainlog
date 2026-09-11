@@ -9,12 +9,9 @@ from src.pg import pg_session
 
 logger = logging.getLogger(__name__)
 
-# Every currency Frankfurter (api.frankfurter.dev) publishes, minus EUR (the table's
-# implicit base), the IMF SDR pseudo-currency (XDR), the offshore-yuan duplicate of CNY
-# (CNH), and the pre-2018 Mauritanian ouguiya (MRO, superseded by MRU). BGN is
-# deliberately absent: Bulgaria adopted the euro in 2026 and Frankfurter dropped it from
-# the feed, so its column is left to freeze at its last (fixed peg) value via
-# fill_missing_rates.
+# Every currency Frankfurter publishes minus EUR (implicit base), XDR/CNH (pseudo-currency
+# / CNY duplicate), and MRO (superseded by MRU). BGN excluded: Bulgaria adopted the euro,
+# so its column just freezes at its last value via fill_missing_rates.
 SELECTED_CURRENCIES = [
     "AED", "AFN", "ALL", "AMD", "ANG", "AOA",
     "ARS", "AUD", "AWG", "AZN", "BAM", "BBD",
@@ -43,9 +40,7 @@ SELECTED_CURRENCIES = [
     "VES", "VND", "VUV", "WST", "XAF", "XCD",
     "XCG", "XOF", "XPF", "YER", "ZAR", "ZMW",
     "ZWG",
-    # Precious metals, spot price per troy ounce — not currencies, but Frankfurter
-    # publishes them the same way and it's a fun addition.
-    "XAU", "XAG", "XPD", "XPT",
+    "XAU", "XAG", "XPD", "XPT",  # precious metals, not currencies, but fun
 ]
 
 FRANKFURTER_RATES_CSV = "https://api.frankfurter.dev/v2/rates.csv"
@@ -64,14 +59,11 @@ def _rate_columns(pg):
 
 
 def fill_missing_rates(pg, since=None):
-    """Forward-fill NULL exchange rates in date order (PG equivalent of the old
-    ROWID-based fill). Rows are naturally ordered by rate_date (the PK).
+    """Forward-fill NULL exchange rates in date order.
 
-    `since`, when given, restricts the rows being *written* to rate_date >= since —
-    the earlier history is assumed already correct (filled once, at deploy time, from
-    base_data/exchanges.csv) — so a small day-to-day top-up doesn't re-scan and
-    rewrite the entire multi-decade table on every call. The lookback subquery itself
-    is never restricted, so a gap right at the boundary still resolves correctly.
+    `since`, when given, restricts written rows to rate_date >= since — earlier history
+    is assumed already correct, so a daily top-up doesn't rewrite the whole table. The
+    lookback subquery itself isn't restricted, so a gap at the boundary still resolves.
     """
     since_row = " AND t.rate_date >= :since" if since else ""
     since_leading = " AND rate_date >= :since" if since else ""
@@ -181,8 +173,6 @@ def process_currency_combinations_daily(all_rates, all_rates_dates):
                 {"rate_date": rate_date, **rates},
             )
 
-        # Only the rows this call could plausibly have touched: everything earlier is
-        # assumed already hole-free (see fill_missing_rates' `since` docstring).
         fill_missing_rates(pg, since=all_rates_dates[0])
 
         last_registered_date = pg.execute(
@@ -203,14 +193,9 @@ def generate_date_series(start_date_str, end_date_str):
 
 
 def run_currency_update():
-    """
-    Top up whatever's new since the last registered rate. Deliberately does NOT fall
-    back to pulling full history when the table is empty — that's base_data/exchanges.csv's
-    job (loaded once at startup, see src/pg.py's load_exchange_base_data). Refreshing an
-    empty table here would mean synchronously downloading and inserting the entire
-    multi-decade, 150+ currency series row by row, which is exactly what used to hang
-    the app on a fresh/misconfigured database.
-    """
+    """Top up whatever's new since the last registered rate. Never falls back to a full
+    history pull on an empty table — that's base_data/exchanges.csv's job (see
+    src/pg.py's load_exchange_base_data)."""
     with pg_session() as pg:
         last_registered_date = pg.execute(
             "SELECT rate_date FROM exchanges ORDER BY rate_date DESC LIMIT 1"
@@ -218,8 +203,7 @@ def run_currency_update():
 
     if last_registered_date is None:
         logger.error(
-            "exchanges table is empty; refusing to backfill full history here — "
-            "load base_data/exchanges.csv (src.pg.load_exchange_base_data) first"
+            "exchanges table is empty; load base_data/exchanges.csv (src.pg.load_exchange_base_data) first"
         )
         return "exchanges table is empty; load base_data/exchanges.csv first"
 

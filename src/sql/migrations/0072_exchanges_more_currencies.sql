@@ -1,12 +1,6 @@
--- Expand the exchanges table to the full set of currencies Frankfurter (api.frankfurter.dev)
--- publishes, moving off the ECB-only feed which only ever covered ~30 currencies, plus gold,
--- silver, platinum and palladium spot prices (per troy ounce) — not currencies, but Frankfurter
--- publishes them the same way and it's a fun addition. BGN is deliberately NOT added here:
--- Bulgaria adopted the euro in 2026 and Frankfurter dropped it from the feed, so the existing
--- BGN column is left frozen at its last (fixed peg) value.
---
--- New columns are backfilled from base_data/exchanges.csv (see src/pg.py setup_db()) rather
--- than by re-downloading history from Frankfurter on every deploy.
+-- Move off the ECB-only feed (~30 currencies) to Frankfurter's full set, plus gold/silver/
+-- platinum/palladium spot prices. BGN not added: Bulgaria adopted the euro, so that column
+-- just stays frozen at its last value. Backfilled from base_data/exchanges.csv (src/pg.py).
 
 ALTER TABLE exchanges
     ADD COLUMN "AED" FLOAT,
