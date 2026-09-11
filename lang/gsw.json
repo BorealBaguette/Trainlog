@@ -216,6 +216,7 @@
     "about_adv_manual_h": "Manuelli Haltestelle",
     "about_adv_manual_p": "Verwaltet d'Liste vo de Bahnhöf und Haltestelle, wo Sie manuell aaglegt händ: bearbeited jederziit dere Position oder Detail über d'Iistellige.",
     "about_credits_maps": "Charte werded mit <a href='https://maplibre.org/'>MapLibre</a> dargstellt; einigi ältere Siite bruuched no <a href='https://leafletjs.com'>Leaflet</a>.",
+    "about_credits_currency": "Wächselkürs choemed vo <a href='https://frankfurter.dev'>Frankfurter</a>, wo offizielli Kürs vo öppe 100 Zentralbanke zämefüegt.",
     "about_lead": "Trainlog isch Ihres Reisetagebuech für de öffentlich Verkehr: Erfassed und kartiered Ihri Zug-, Bus-, Tram-, U-Bahn-, Fähr- und Flugreise, und bhalted de Überblick über alles, wo Sie scho gseh händ.",
     "about_tab_overview": "Überblick",
     "about_tab_log": "Erfasse",

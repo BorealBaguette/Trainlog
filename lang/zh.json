@@ -216,6 +216,7 @@
     "about_adv_manual_h": "手动创建的车站",
     "about_adv_manual_p": "管理您手动创建的车站和站点列表：随时可在设置中编辑它们的位置或详细信息。",
     "about_credits_maps": "地图使用 <a href='https://maplibre.org/'>MapLibre</a> 显示；部分较旧的页面仍在使用 <a href='https://leafletjs.com'>Leaflet</a>。",
+    "about_credits_currency": "汇率数据来自<a href='https://frankfurter.dev'>Frankfurter</a>，该服务整合了约100家中央银行的官方汇率。",
     "about_lead": "Trainlog 是您的公共交通旅行日记：记录并在地图上标注您的火车、巴士、有轨电车、地铁、渡轮和航班旅程，追踪您去过的每一个地方。",
     "about_tab_overview": "概览",
     "about_tab_log": "记录",

@@ -217,6 +217,7 @@
     "about_adv_manual_h": "Estaciones manuales",
     "about_adv_manual_p": "Gestiona la lista de estaciones y paradas que has creado manualmente: edita su posición o sus datos en cualquier momento desde los ajustes.",
     "about_credits_maps": "Los mapas se muestran con <a href='https://maplibre.org/'>MapLibre</a>; algunas páginas más antiguas todavía usan <a href='https://leafletjs.com'>Leaflet</a>.",
+    "about_credits_currency": "Los tipos de cambio provienen de <a href='https://frankfurter.dev'>Frankfurter</a>, que combina las tasas oficiales de alrededor de 100 bancos centrales.",
     "about_lead": "Trainlog es tu diario de viajes en transporte público: registra y cartografía tus viajes en tren, autobús, tranvía, metro, ferry y avión, y lleva la cuenta de todos los lugares por los que has pasado.",
     "about_tab_overview": "Resumen",
     "about_tab_log": "Registrar",

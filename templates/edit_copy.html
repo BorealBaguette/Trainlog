@@ -384,7 +384,7 @@
             <label for="currency" id="currency_label" class="sr-only">{{currency}}</label>
             <select name="currency" id="currency">
                 {% for currency in currencyOptions %}
-                <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" {% if
+                <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" {% if
                     currency['currency']==tripCurrency %}selected{% endif %}>
                     {{ currency['currency'] }}
                 </option>
@@ -1937,10 +1937,9 @@
 
     const currencySelect = document.getElementById('currency');
     for (let option of currencySelect.options) {
-        if (option.dataset.country) {
+        if (option.dataset.emoji || option.dataset.country) {
 
-            const countryCode = option.dataset.country; // using a data attribute for the country code
-            const emoji = getFlagEmoji(countryCode);
+            const emoji = option.dataset.emoji || getFlagEmoji(option.dataset.country);
             option.text = `${option.text} ${emoji}`; // Prepend the emoji to the option text
 
         }

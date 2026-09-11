@@ -1,0 +1,244 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+
+<style>
+  /* Same searchable combo as user_settings.html's currency picker: flag stays in the
+     left icon box only, the open list shows a flag per row plus a real search box. */
+  .settings2-combo { position: relative; }
+  .settings2-combo-btn { display: flex; align-items: center; cursor: pointer; }
+  .settings2-combo-panel {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 20;
+    min-width: 100%; width: max-content; max-width: 340px;
+    background: #fff; border: 1px solid #dee2e6; border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12); overflow: hidden;
+  }
+  .settings2-combo-panel.show { display: block; }
+  .settings2-combo-search { border: none; border-bottom: 1px solid #e9ecef; border-radius: 0; }
+  .settings2-combo-search:focus { box-shadow: none; border-color: #0d6efd; }
+  .settings2-combo-list { max-height: 260px; overflow-y: auto; padding: 4px; }
+  .settings2-combo-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 8px 10px; border: none; background: none; border-radius: 6px;
+    text-align: left; font-size: 0.9rem; color: #212529; white-space: nowrap;
+  }
+  .settings2-combo-item:hover { background: #f1f3f5; }
+  .settings2-combo-item.active { background: #e7f0ff; color: #0d6efd; font-weight: 600; }
+  /* Emoji flags render soft/compressed at the default ~1em text size; bumping the font
+     size (not just the box width) makes the browser draw them noticeably crisper. */
+  .settings2-combo-flag { width: 1.6em; text-align: center; flex: none; font-size: 1.5em; }
+  .settings2-combo-empty { padding: 10px; color: #6c757d; font-size: 0.85rem; text-align: center; }
+  .settings2-combo-btn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ct-flag-icon { font-size: 1.7rem; line-height: 1; padding: 0.25rem 0.65rem; }
+  .ct-result-flag { font-size: 1.4em; }
+</style>
+
+<div class="container" style="margin-top: 20px; margin-bottom: 60px; max-width: 900px;">
+    <h1>Currency test</h1>
+    <p class="text-muted">
+        Spot-check the exchange rate feed (Frankfurter, blended from ~98 central banks,
+        seeded from <code>base_data/exchanges.csv</code>). Ungated, read-only, no data written.
+    </p>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="mb-3">
+                <label class="form-label" for="ct_amount">Amount</label>
+                <input type="number" step="any" class="form-control" id="ct_amount" value="1">
+            </div>
+
+            <div class="row">
+                <div class="col mb-3">
+                    <label class="form-label" for="ct_from">From</label>
+                    <div class="settings2-combo" data-combo="ct_from">
+                        <div class="input-group">
+                            <label class="input-group-text ct-flag-icon" id="ct_from-icon"></label>
+                            <button type="button" class="form-select text-start settings2-combo-btn" id="ct_from-btn">
+                                <span id="ct_from-label"></span>
+                            </button>
+                        </div>
+                        <input type="hidden" id="ct_from" value="EUR">
+                        <div class="settings2-combo-panel" id="ct_from-panel">
+                            <input type="text" class="form-control settings2-combo-search" id="ct_from-search" autocomplete="off">
+                            <div class="settings2-combo-list" id="ct_from-list">
+                                {% for currency in currencyOptions %}
+                                <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}"></button>
+                                {% endfor %}
+                            </div>
+                            <div class="settings2-combo-empty" id="ct_from-empty" style="display:none;">No results</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col mb-3">
+                    <label class="form-label" for="ct_to">To</label>
+                    <div class="settings2-combo" data-combo="ct_to">
+                        <div class="input-group">
+                            <label class="input-group-text ct-flag-icon" id="ct_to-icon"></label>
+                            <button type="button" class="form-select text-start settings2-combo-btn" id="ct_to-btn">
+                                <span id="ct_to-label"></span>
+                            </button>
+                        </div>
+                        <input type="hidden" id="ct_to" value="USD">
+                        <div class="settings2-combo-panel" id="ct_to-panel">
+                            <input type="text" class="form-control settings2-combo-search" id="ct_to-search" autocomplete="off">
+                            <div class="settings2-combo-list" id="ct_to-list">
+                                {% for currency in currencyOptions %}
+                                <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}"></button>
+                                {% endfor %}
+                            </div>
+                            <div class="settings2-combo-empty" id="ct_to-empty" style="display:none;">No results</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label" for="ct_date">Date</label>
+                <input type="date" class="form-control" id="ct_date" value="{{ todayDate }}" max="{{ todayDate }}">
+            </div>
+
+            <button type="button" class="btn btn-primary" id="ct_convert">Convert</button>
+
+            <div id="ct_result" class="mt-3 fs-5"></div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function () {
+    function normalizeSearch(s) {
+        return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+    }
+
+    // Same combo widget as user_settings.html: flag+button label collapsed, a
+    // filterable flag+name list panel while open.
+    function initCombo(id) {
+        const wrap = document.querySelector(`[data-combo="${id}"]`);
+        const btn = document.getElementById(`${id}-btn`);
+        const label = document.getElementById(`${id}-label`);
+        const icon = document.getElementById(`${id}-icon`);
+        const hidden = document.getElementById(id);
+        const panel = document.getElementById(`${id}-panel`);
+        const search = document.getElementById(`${id}-search`);
+        const empty = document.getElementById(`${id}-empty`);
+        const items = Array.from(document.getElementById(`${id}-list`).children);
+        if (!wrap || !btn || !hidden) return null;
+
+        function apply(item) {
+            if (!item) return;
+            hidden.value = item.dataset.value;
+            label.textContent = item.dataset.label;
+            icon.innerHTML = item.dataset.flag || '';
+            items.forEach(i => i.classList.toggle('active', i === item));
+        }
+
+        function select(item) {
+            apply(item);
+            close();
+        }
+
+        function open() {
+            panel.classList.add('show');
+            search.value = '';
+            filter('');
+            search.focus();
+            document.addEventListener('click', onDocClick);
+        }
+        function close() {
+            panel.classList.remove('show');
+            document.removeEventListener('click', onDocClick);
+        }
+        function onDocClick(e) {
+            if (!wrap.contains(e.target)) close();
+        }
+        function filter(query) {
+            const q = normalizeSearch(query.trim());
+            let anyVisible = false;
+            items.forEach(item => {
+                const match = !q || item.dataset.search.includes(q);
+                item.style.display = match ? '' : 'none';
+                anyVisible = anyVisible || match;
+            });
+            if (empty) empty.style.display = anyVisible ? 'none' : '';
+        }
+
+        btn.addEventListener('click', () => {
+            panel.classList.contains('show') ? close() : open();
+        });
+        search.addEventListener('input', () => filter(search.value));
+        search.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { close(); btn.focus(); }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                select(items.find(i => i.style.display !== 'none'));
+            }
+        });
+        items.forEach(item => item.addEventListener('click', () => select(item)));
+
+        return { apply, items };
+    }
+
+    // Lead with the human-readable name so typing "norwegian" finds NOK, same as settings.
+    let currencyNames = null;
+    try {
+        currencyNames = new Intl.DisplayNames([typeof langId !== 'undefined' ? langId : 'en'], { type: 'currency' });
+    } catch (e) {}
+
+    function setupCurrencyCombo(id, defaultCode) {
+        const combo = initCombo(id);
+        if (!combo) return null;
+        combo.items.forEach(item => {
+            const code = item.dataset.value;
+            let name = currencyNames ? currencyNames.of(code) : null;
+            if (name) name = name.charAt(0).toUpperCase() + name.slice(1);
+            const flag = item.dataset.emoji || getFlagEmoji(item.dataset.country);
+            item.dataset.label = name ? `${name} (${code})` : code;
+            item.dataset.flag = flag;
+            item.dataset.search = normalizeSearch(`${item.dataset.label} ${code}`);
+            item.innerHTML = `<span class="settings2-combo-flag">${flag}</span><span>${item.dataset.label}</span>`;
+        });
+        combo.apply(combo.items.find(i => i.dataset.value === defaultCode) || combo.items[0]);
+        return combo;
+    }
+
+    setupCurrencyCombo('ct_from', 'EUR');
+    setupCurrencyCombo('ct_to', 'USD');
+
+    function convert() {
+        var amount = document.getElementById('ct_amount').value;
+        var from = document.getElementById('ct_from').value;
+        var to = document.getElementById('ct_to').value;
+        var dateVal = document.getElementById('ct_date').value;
+        var result = document.getElementById('ct_result');
+
+        result.textContent = 'Converting…';
+
+        var params = new URLSearchParams({ amount: amount, from: from, to: to, date: dateVal });
+        fetch('/admin/currency_test/convert?' + params.toString())
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (data.error) {
+                    result.innerHTML = '<span class="text-danger">' + data.error + '</span>';
+                    return;
+                }
+                var fromFlag = document.getElementById('ct_from-icon').innerHTML;
+                var toFlag = document.getElementById('ct_to-icon').innerHTML;
+                var flagSpan = function (flag) { return '<span class="ct-result-flag">' + flag + '</span>'; };
+                result.innerHTML =
+                    amount + ' ' + flagSpan(fromFlag) + ' ' + from +
+                    ' = <strong>' + data.result + '</strong> ' + flagSpan(toFlag) + ' ' + to;
+            })
+            .catch(function () {
+                result.innerHTML = '<span class="text-danger">Request failed</span>';
+            });
+    }
+
+    document.getElementById('ct_convert').addEventListener('click', convert);
+    document.getElementById('ct_amount').addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') convert();
+    });
+})();
+</script>
+
+{% endblock %}

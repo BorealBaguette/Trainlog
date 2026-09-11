@@ -217,6 +217,7 @@
     "about_adv_manual_h": "Manuella stationer",
     "about_adv_manual_p": "Hantera listan över stationer och hållplatser du har skapat manuellt: redigera deras position eller detaljer när som helst från inställningarna.",
     "about_credits_maps": "Kartor visas med <a href='https://maplibre.org/'>MapLibre</a>; vissa äldre sidor använder fortfarande <a href='https://leafletjs.com'>Leaflet</a>.",
+    "about_credits_currency": "Växelkurser kommer från <a href='https://frankfurter.dev'>Frankfurter</a>, som slår samman officiella kurser från omkring 100 centralbanker.",
     "about_lead": "Trainlog är din reseloggbok för kollektivtrafik: registrera och kartlägg dina tåg-, buss-, spårvagns-, tunnelbane-, färje- och flygresor, och håll koll på allt du har sett.",
     "about_tab_overview": "Översikt",
     "about_tab_log": "Registrera",

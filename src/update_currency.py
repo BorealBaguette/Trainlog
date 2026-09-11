@@ -1,11 +1,54 @@
 import csv
 import io
-import zipfile
-from datetime import datetime, timedelta
+import logging
+from datetime import date, datetime, timedelta
 
 import requests
 
 from src.pg import pg_session
+
+logger = logging.getLogger(__name__)
+
+# Every currency Frankfurter (api.frankfurter.dev) publishes, minus EUR (the table's
+# implicit base), the IMF SDR pseudo-currency (XDR), the offshore-yuan duplicate of CNY
+# (CNH), and the pre-2018 Mauritanian ouguiya (MRO, superseded by MRU). BGN is
+# deliberately absent: Bulgaria adopted the euro in 2026 and Frankfurter dropped it from
+# the feed, so its column is left to freeze at its last (fixed peg) value via
+# fill_missing_rates.
+SELECTED_CURRENCIES = [
+    "AED", "AFN", "ALL", "AMD", "ANG", "AOA",
+    "ARS", "AUD", "AWG", "AZN", "BAM", "BBD",
+    "BDT", "BHD", "BIF", "BMD", "BND", "BOB",
+    "BRL", "BSD", "BTN", "BWP", "BYN", "BZD",
+    "CAD", "CDF", "CHF", "CLP", "CNY", "COP",
+    "CRC", "CUP", "CVE", "CZK", "DJF", "DKK",
+    "DOP", "DZD", "EGP", "ERN", "ETB", "FJD",
+    "FKP", "GBP", "GEL", "GGP", "GHS", "GIP",
+    "GMD", "GNF", "GTQ", "GYD", "HKD", "HNL",
+    "HTG", "HUF", "IDR", "ILS", "IMP", "INR",
+    "IQD", "IRR", "ISK", "JEP", "JMD", "JOD",
+    "JPY", "KES", "KGS", "KHR", "KMF", "KPW",
+    "KRW", "KWD", "KYD", "KZT", "LAK", "LBP",
+    "LKR", "LRD", "LSL", "LYD", "MAD", "MDL",
+    "MGA", "MKD", "MMK", "MNT", "MOP", "MRU",
+    "MUR", "MVR", "MWK", "MXN", "MYR", "MZN",
+    "NAD", "NGN", "NIO", "NOK", "NPR", "NZD",
+    "OMR", "PAB", "PEN", "PGK", "PHP", "PKR",
+    "PLN", "PYG", "QAR", "RON", "RSD", "RUB",
+    "RWF", "SAR", "SBD", "SCR", "SDG", "SEK",
+    "SGD", "SHP", "SLE", "SOS", "SRD", "SSP",
+    "STN", "SVC", "SYP", "SZL", "THB", "TJS",
+    "TMT", "TND", "TOP", "TRY", "TTD", "TWD",
+    "TZS", "UAH", "UGX", "USD", "UYU", "UZS",
+    "VES", "VND", "VUV", "WST", "XAF", "XCD",
+    "XCG", "XOF", "XPF", "YER", "ZAR", "ZMW",
+    "ZWG",
+    # Precious metals, spot price per troy ounce — not currencies, but Frankfurter
+    # publishes them the same way and it's a fun addition.
+    "XAU", "XAG", "XPD", "XPT",
+]
+
+FRANKFURTER_RATES_CSV = "https://api.frankfurter.dev/v2/rates.csv"
 
 
 def _rate_columns(pg):
@@ -20,9 +63,19 @@ def _rate_columns(pg):
     return [r[0] for r in rows]
 
 
-def fill_missing_rates(pg):
+def fill_missing_rates(pg, since=None):
     """Forward-fill NULL exchange rates in date order (PG equivalent of the old
-    ROWID-based fill). Rows are naturally ordered by rate_date (the PK)."""
+    ROWID-based fill). Rows are naturally ordered by rate_date (the PK).
+
+    `since`, when given, restricts the rows being *written* to rate_date >= since —
+    the earlier history is assumed already correct (filled once, at deploy time, from
+    base_data/exchanges.csv) — so a small day-to-day top-up doesn't re-scan and
+    rewrite the entire multi-decade table on every call. The lookback subquery itself
+    is never restricted, so a gap right at the boundary still resolves correctly.
+    """
+    since_row = " AND t.rate_date >= :since" if since else ""
+    since_leading = " AND rate_date >= :since" if since else ""
+    params = {"since": since} if since else {}
     for col in _rate_columns(pg):
         # Fill each NULL gap with the most recent earlier non-null value.
         pg.execute(
@@ -36,7 +89,9 @@ def fill_missing_rates(pg):
                   SELECT MAX(p.rate_date) FROM exchanges p
                   WHERE p."{col}" IS NOT NULL AND p.rate_date < t.rate_date
               )
-            '''
+              {since_row}
+            ''',
+            params,
         )
 
         # Fill any remaining leading NULLs with the oldest non-null value.
@@ -48,7 +103,9 @@ def fill_missing_rates(pg):
                 WHERE "{col}" IS NOT NULL ORDER BY rate_date ASC LIMIT 1
             )
             WHERE "{col}" IS NULL
-            '''
+            {since_leading}
+            ''',
+            params,
         )
 
 
@@ -61,77 +118,32 @@ def get_complete_days(pg):
     return {r[0].strftime("%Y-%m-%d") for r in results}
 
 
-def download_and_unzip(url):
+def fetch_rates_csv(currencies, start_date, end_date=None):
     """
-    Downloads a ZIP file from a URL and unzips it in memory.
+    Fetch a long-format (date, base, quote, rate) CSV of daily EUR-based rates from
+    Frankfurter for the given currencies and date range.
 
-    Parameters:
-    - url (str): The URL of the ZIP file to download.
-
-    Returns:
-    - file_contents (dict): A dictionary with file names as keys and their contents as values.
+    Returns the CSV content as a string.
     """
-    # Send a GET request to the URL
-    response = requests.get(url)
-
-    # Check if the request was successful
-    if response.status_code == 200:
-        # Use BytesIO to create a file-like object in memory from the downloaded bytes
-        zip_in_memory = io.BytesIO(response.content)
-
-        # Use the zipfile module to read the zip file from the in-memory file-like object
-        with zipfile.ZipFile(zip_in_memory, "r") as zip_ref:
-            # Get the list of file names contained in the ZIP
-            file_names = zip_ref.namelist()
-
-            # Select the first file in the list (or apply any other selection criteria you prefer)
-            if file_names:  # Ensure there is at least one file in the ZIP
-                file_name = file_names[0]
-                file_content = zip_ref.read(file_name).decode("utf-8")
-                return file_content
-            else:
-                raise Exception("The ZIP file is empty.")
-    else:
-        raise Exception(
-            f"Failed to download the ZIP file. HTTP Status Code: {response.status_code}"
-        )
+    params = {"from": start_date, "quotes": ",".join(currencies)}
+    if end_date:
+        params["to"] = end_date
+    response = requests.get(FRANKFURTER_RATES_CSV, params=params)
+    response.raise_for_status()
+    return response.text
 
 
-# Function to generate a complete list of dates between two dates
-def generate_date_series(start_date_str, end_date_str):
-    start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
-    end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
-
-    current_date = start_date
-    while current_date <= end_date:
-        yield current_date
-        current_date += timedelta(days=1)
-
-
-def get_rates_from_bottom_in_memory(csv_content, selected_currencies):
+def parse_long_format_rates(csv_content):
     """
-    Parses CSV content from a string and gets exchange rates for specific currencies
-    from bottom to top.
-
-    Parameters:
-    - csv_content (str): The content of the CSV file as a string.
-    - selected_currencies (list): A list of currency codes to retrieve rates for.
-
-    Returns:
-    - all_rates (dict): A dictionary with dates as keys and another dictionary of currencies
-      and their rates as values.
-    - all_rates_dates (list): A list of dates for which rates are available.
+    Parses Frankfurter's long-format CSV (date,base,quote,rate) into the same shape the
+    rest of the pipeline expects: a dict of date -> {currency: rate} and the list of
+    dates present, oldest first. A currency missing for a given date (e.g. before it
+    existed) is simply absent from that date's dict, same as the old ECB "N/A" handling.
     """
-    all_rates_dates = []
     all_rates = {}
-    file_like_object = io.StringIO(csv_content)
-    csv_reader = list(csv.DictReader(file_like_object))
-    for row in reversed(csv_reader):
-        rates = {}
-        for currency in selected_currencies:
-            rates[currency] = float(row[currency]) if row[currency] != "N/A" else None
-        all_rates_dates.append(row["Date"])
-        all_rates[row["Date"]] = rates
+    for row in csv.DictReader(io.StringIO(csv_content)):
+        all_rates.setdefault(row["date"], {})[row["quote"]] = float(row["rate"])
+    all_rates_dates = sorted(all_rates)
     return all_rates, all_rates_dates
 
 
@@ -140,21 +152,21 @@ def process_currency_combinations_daily(all_rates, all_rates_dates):
         time_series = generate_date_series(all_rates_dates[0], all_rates_dates[-1])
         complete_days = get_complete_days(pg)
         filtered_time_series = [
-            date
-            for date in time_series
-            if datetime.strftime(date, "%Y-%m-%d") not in complete_days
+            d
+            for d in time_series
+            if datetime.strftime(d, "%Y-%m-%d") not in complete_days
         ]
 
-        for date in filtered_time_series:
-            rate_date = datetime.strftime(date, "%Y-%m-%d")
+        for d in filtered_time_series:
+            rate_date = datetime.strftime(d, "%Y-%m-%d")
 
             # Determine which date to use for rates based on availability
             if rate_date in all_rates:
                 use_date = rate_date
-            elif datetime.strftime(date + timedelta(days=-1), "%Y-%m-%d") in all_rates:
-                use_date = datetime.strftime(date + timedelta(days=-1), "%Y-%m-%d")
-            elif datetime.strftime(date + timedelta(days=-2), "%Y-%m-%d") in all_rates:
-                use_date = datetime.strftime(date + timedelta(days=-2), "%Y-%m-%d")
+            elif datetime.strftime(d + timedelta(days=-1), "%Y-%m-%d") in all_rates:
+                use_date = datetime.strftime(d + timedelta(days=-1), "%Y-%m-%d")
+            elif datetime.strftime(d + timedelta(days=-2), "%Y-%m-%d") in all_rates:
+                use_date = datetime.strftime(d + timedelta(days=-2), "%Y-%m-%d")
             else:
                 continue  # Skip this date if no rates are available
 
@@ -169,7 +181,9 @@ def process_currency_combinations_daily(all_rates, all_rates_dates):
                 {"rate_date": rate_date, **rates},
             )
 
-        fill_missing_rates(pg)
+        # Only the rows this call could plausibly have touched: everything earlier is
+        # assumed already hole-free (see fill_missing_rates' `since` docstring).
+        fill_missing_rates(pg, since=all_rates_dates[0])
 
         last_registered_date = pg.execute(
             "SELECT rate_date FROM exchanges ORDER BY rate_date DESC LIMIT 1"
@@ -177,46 +191,48 @@ def process_currency_combinations_daily(all_rates, all_rates_dates):
     return last_registered_date
 
 
-def run_currency_update():
-    # List of selected currencies
-    selected_currencies = [
-        "AUD",
-        "BGN",
-        "BRL",
-        "CAD",
-        "CHF",
-        "CNY",
-        "CZK",
-        "DKK",
-        "GBP",
-        "HKD",
-        "HUF",
-        "IDR",
-        "ILS",
-        "INR",
-        "ISK",
-        "JPY",
-        "KRW",
-        "MXN",
-        "MYR",
-        "NOK",
-        "NZD",
-        "PHP",
-        "PLN",
-        "RON",
-        "SEK",
-        "SGD",
-        "THB",
-        "TRY",
-        "USD",
-        "ZAR",
-    ]
+# Function to generate a complete list of dates between two dates
+def generate_date_series(start_date_str, end_date_str):
+    start = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+    end = datetime.strptime(end_date_str, "%Y-%m-%d").date()
 
-    url = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-hist.zip"
-    unzipped_file = download_and_unzip(url)
-    all_rates, all_rates_dates = get_rates_from_bottom_in_memory(
-        unzipped_file, selected_currencies
-    )
+    current_date = start
+    while current_date <= end:
+        yield current_date
+        current_date += timedelta(days=1)
+
+
+def run_currency_update():
+    """
+    Top up whatever's new since the last registered rate. Deliberately does NOT fall
+    back to pulling full history when the table is empty — that's base_data/exchanges.csv's
+    job (loaded once at startup, see src/pg.py's load_exchange_base_data). Refreshing an
+    empty table here would mean synchronously downloading and inserting the entire
+    multi-decade, 150+ currency series row by row, which is exactly what used to hang
+    the app on a fresh/misconfigured database.
+    """
+    with pg_session() as pg:
+        last_registered_date = pg.execute(
+            "SELECT rate_date FROM exchanges ORDER BY rate_date DESC LIMIT 1"
+        ).scalar()
+
+    if last_registered_date is None:
+        logger.error(
+            "exchanges table is empty; refusing to backfill full history here — "
+            "load base_data/exchanges.csv (src.pg.load_exchange_base_data) first"
+        )
+        return "exchanges table is empty; load base_data/exchanges.csv first"
+
+    start_date = last_registered_date.strftime("%Y-%m-%d")
+    end_date = date.today().strftime("%Y-%m-%d")
+    if start_date >= end_date:
+        return str(last_registered_date)  # already up to date
+
+    csv_content = fetch_rates_csv(SELECTED_CURRENCIES, start_date, end_date)
+    all_rates, all_rates_dates = parse_long_format_rates(csv_content)
+    if not all_rates_dates:
+        return str(last_registered_date)
+
     last_registered_date = process_currency_combinations_daily(
         all_rates, all_rates_dates
     )

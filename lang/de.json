@@ -217,6 +217,7 @@
     "about_adv_manual_h": "Manuelle Haltestellen",
     "about_adv_manual_p": "Verwalten Sie die Liste der von Ihnen manuell angelegten Bahnhöfe und Haltestellen: Bearbeiten Sie jederzeit deren Position oder Details über die Einstellungen.",
     "about_credits_maps": "Karten werden mit <a href='https://maplibre.org/'>MapLibre</a> dargestellt; einige ältere Seiten verwenden noch <a href='https://leafletjs.com'>Leaflet</a>.",
+    "about_credits_currency": "Wechselkurse stammen von <a href='https://frankfurter.dev'>Frankfurter</a>, das offizielle Kurse von rund 100 Zentralbanken zusammenführt.",
     "about_lead": "Trainlog ist Ihr Reisetagebuch für den öffentlichen Verkehr: Erfassen und kartieren Sie Ihre Zug-, Bus-, Straßenbahn-, U-Bahn-, Fähr- und Flugreisen und behalten Sie den Überblick über alles, was Sie schon gesehen haben.",
     "about_tab_overview": "Überblick",
     "about_tab_log": "Erfassen",

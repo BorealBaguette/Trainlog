@@ -216,6 +216,7 @@
     "about_adv_manual_h": "手動作成した駅",
     "about_adv_manual_p": "手動で作成した駅や停留所のリストを管理できます。位置や詳細情報は、設定からいつでも編集できます。",
     "about_credits_maps": "地図の表示には<a href='https://maplibre.org/'>MapLibre</a>を使用しています。一部の古いページでは、引き続き<a href='https://leafletjs.com'>Leaflet</a>が使用されています。",
+    "about_credits_currency": "為替レートは<a href='https://frankfurter.dev'>Frankfurter</a>から取得しており、約100の中央銀行の公式レートを統合しています。",
     "about_lead": "Trainlogは公共交通機関のための旅行日記です。電車、バス、路面電車、地下鉄、フェリー、飛行機の旅を記録・地図化し、これまで訪れたすべての場所を記録しておけます。",
     "about_tab_overview": "概要",
     "about_tab_log": "記録",

@@ -217,6 +217,7 @@
     "about_adv_manual_h": "Manuelle stasjoner",
     "about_adv_manual_p": "Administrer listen over stasjoner og stoppesteder du har opprettet manuelt: rediger posisjonen eller detaljene deres når som helst fra innstillingene.",
     "about_credits_maps": "Kart vises med <a href='https://maplibre.org/'>MapLibre</a>; enkelte eldre sider bruker fortsatt <a href='https://leafletjs.com'>Leaflet</a>.",
+    "about_credits_currency": "Valutakurser kommer fra <a href='https://frankfurter.dev'>Frankfurter</a>, som samler offisielle kurser fra rundt 100 sentralbanker.",
     "about_lead": "Trainlog er reisedagboken din for kollektivtransport: registrer og kartlegg tog-, buss-, trikke-, T-bane-, ferje- og flyreisene dine, og hold oversikt over alt du har vært med på.",
     "about_tab_overview": "Oversikt",
     "about_tab_log": "Registrering",

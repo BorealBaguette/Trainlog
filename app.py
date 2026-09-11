@@ -9657,6 +9657,41 @@ def getLastCurrencyDate():
             return "None"
 
 
+@app.route("/admin/currency_test")
+def admin_currency_test():
+    """Spot-check sandbox for the exchange rate feed. Deliberately ungated: read-only,
+    no user data, just a conversion widget over base_data/exchanges.csv's rates."""
+    return render_template(
+        "admin/currency_test.html",
+        title="Currency test",
+        username=getUser(),
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id()),
+        currencyOptions=get_available_currencies(),
+        todayDate=date.today().isoformat(),
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/admin/currency_test/convert")
+def admin_currency_test_convert():
+    amount = request.args.get("amount")
+    base_currency = (request.args.get("from") or "").upper()
+    target_currency = (request.args.get("to") or "").upper()
+    convert_date = request.args.get("date") or date.today().isoformat()
+
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid amount"}), 400
+
+    result = get_exchange_rate(amount, base_currency, target_currency, convert_date)
+    if result is None:
+        return jsonify({"error": "No rate available for that pair/date"}), 404
+    return jsonify({"result": result})
+
+
 @app.route("/toggle_role/<int:uid>/<role>/<action>", methods=["POST", "GET"])
 @owner_required
 def toggle_role(uid, role, action):

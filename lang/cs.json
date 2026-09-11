@@ -218,6 +218,7 @@
     "about_adv_manual_h": "Ručně vytvořené stanice",
     "about_adv_manual_p": "Spravujte seznam stanic a zastávek, které jste vytvořili ručně: kdykoli upravte jejich polohu nebo detaily v nastavení.",
     "about_credits_maps": "Mapy se zobrazují pomocí <a href='https://maplibre.org/'>MapLibre</a>; některé starší stránky stále používají <a href='https://leafletjs.com'>Leaflet</a>.",
+    "about_credits_currency": "Směnné kurzy pocházejí z <a href='https://frankfurter.dev'>Frankfurter</a>, který kombinuje oficiální kurzy z přibližně 100 centrálních bank.",
     "about_lead": "Trainlog je váš cestovní deník pro veřejnou dopravu: zaznamenávejte a mapujte své cesty vlakem, autobusem, tramvají, metrem, trajektem a letadlem a mějte přehled o všem, co jste už viděli.",
     "about_tab_overview": "Přehled",
     "about_tab_log": "Zaznamenávání",

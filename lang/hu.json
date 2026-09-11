@@ -216,6 +216,7 @@
     "about_adv_manual_h": "Manuálisan létrehozott állomások",
     "about_adv_manual_p": "Kezeld a manuálisan létrehozott állomások és megállók listáját: bármikor szerkesztheted a helyzetüket vagy adataikat a beállításokból.",
     "about_credits_maps": "A térképek megjelenítéséhez <a href='https://maplibre.org/'>MapLibre</a>-t használunk; néhány régebbi oldal még mindig <a href='https://leafletjs.com'>Leaflet</a>-et használ.",
+    "about_credits_currency": "Az árfolyamok a <a href='https://frankfurter.dev'>Frankfurter</a>-től származnak, amely mintegy 100 központi bank hivatalos árfolyamait ötvözi.",
     "about_lead": "A Trainlog a tömegközlekedési útinaplód: rögzítsd és térképezd fel vonat-, busz-, villamos-, metró-, komp- és repülőútjaidat, és tartsd nyilván mindenhol, ahol jártál.",
     "about_tab_overview": "Áttekintés",
     "about_tab_log": "Rögzítés",

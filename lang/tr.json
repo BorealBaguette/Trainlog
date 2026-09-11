@@ -216,6 +216,7 @@
     "about_adv_manual_h": "Manuel İstasyonlar",
     "about_adv_manual_p": "Manuel olarak oluşturduğunuz istasyon ve durakların listesini yönetin: konumlarını veya ayrıntılarını istediğiniz zaman ayarlardan düzenleyin.",
     "about_credits_maps": "Haritalar <a href='https://maplibre.org/'>MapLibre</a> kullanılarak görüntülenir; bazı eski sayfalar hâlâ <a href='https://leafletjs.com'>Leaflet</a> kullanmaktadır.",
+    "about_credits_currency": "Döviz kurları, yaklaşık 100 merkez bankasının resmi kurlarını birleştiren <a href='https://frankfurter.dev'>Frankfurter</a>'dan alınmaktadır.",
     "about_lead": "Trainlog, toplu taşıma seyahat günlüğünüzdür: tren, otobüs, tramvay, metro, feribot ve uçak yolculuklarınızı kaydedin ve haritalayın, gittiğiniz her yerin kaydını tutun.",
     "about_tab_overview": "Genel Bakış",
     "about_tab_log": "Kaydetme",

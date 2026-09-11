@@ -216,6 +216,7 @@
     "about_adv_manual_h": "수동으로 만든 역",
     "about_adv_manual_p": "직접 만든 역과 정류장 목록을 관리하세요: 언제든지 설정에서 위치나 세부 정보를 편집할 수 있습니다.",
     "about_credits_maps": "지도는 <a href='https://maplibre.org/'>MapLibre</a>를 사용하여 표시되며, 일부 오래된 페이지에서는 여전히 <a href='https://leafletjs.com'>Leaflet</a>을 사용합니다.",
+    "about_credits_currency": "환율은 약 100개 중앙은행의 공식 환율을 통합하는 <a href='https://frankfurter.dev'>Frankfurter</a>에서 제공됩니다.",
     "about_lead": "Trainlog은 대중교통을 위한 여행 일지입니다. 기차, 버스, 트램, 지하철, 페리, 항공편 여행을 기록하고 지도로 표시하며, 다녀온 모든 곳을 기록해 보세요.",
     "about_tab_overview": "개요",
     "about_tab_log": "기록",
