@@ -219,15 +219,11 @@ def load_exchange_base_data(pg):
     """
     Seed/refresh the `exchanges` table from base_data/exchanges.csv.
 
-    This can't reuse load_base_data's upsert mode: that does
-    INSERT ... ON CONFLICT (pk) DO NOTHING, which is right for a table where an existing
-    row already has everything the CSV would give it. exchanges instead grows new
-    currency columns over time while rate_date rows already exist for years of history —
-    a plain "skip if the date exists" insert would leave those new columns NULL forever.
-    So this merges instead: every column present in the CSV is written into that date's
-    row (via ON CONFLICT (rate_date) DO UPDATE), whether or not the row already existed.
-    A currency the CSV doesn't carry (e.g. BGN, frozen since Bulgaria adopted the euro)
-    is simply absent from its column list and left untouched.
+    Unlike load_base_data's upsert (INSERT ... ON CONFLICT DO NOTHING), this merges via
+    ON CONFLICT (rate_date) DO UPDATE: exchanges grows new currency columns over time
+    while rate_date rows already exist for years, so a plain "skip existing" insert would
+    leave new columns NULL forever. A currency the CSV doesn't carry (e.g. BGN) is simply
+    absent from the column list and left untouched.
     """
     table_name = "exchanges"
     csv_path = os.path.abspath(f"base_data/{table_name}.csv")
@@ -251,9 +247,8 @@ def load_exchange_base_data(pg):
 
     raw_conn = pg.connection().connection
     with open(csv_path, "r") as f:
-        # Currency codes are quoted, case-sensitive column names (some, like "ALL", are
-        # also SQL reserved words), so every column must be quoted individually here
-        # rather than joining the raw header text like load_base_data does.
+        # Quote each column individually ("ALL" is a SQL reserved word) rather than
+        # joining the raw header text like load_base_data does.
         header = next(f).strip().split(",")
         column_list = ", ".join(f'"{c}"' for c in header)
         update_assignments = ", ".join(

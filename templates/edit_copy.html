@@ -7,6 +7,7 @@
 {% if tripType == 'ferry' %}
 <script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
 {% endif %}
+<script src="{{ url_for('static', filename='js/currency_combo.js') }}"></script>
 
 {% include "bootstrap/navigation.html"%}
 
@@ -1935,15 +1936,7 @@
         initVesselField('#reg', '#regVesselName', "{{ url_for('vesselAutocomplete') }}");
     }
 
-    const currencySelect = document.getElementById('currency');
-    for (let option of currencySelect.options) {
-        if (option.dataset.emoji || option.dataset.country) {
-
-            const emoji = option.dataset.emoji || getFlagEmoji(option.dataset.country);
-            option.text = `${option.text} ${emoji}`; // Prepend the emoji to the option text
-
-        }
-    }
+    enhanceCurrencySelect('currency');
 
     // In plan mode a price is an estimate; the purchase date only applies (and shows)
     // when the ticket is marked as actually booked.
@@ -1951,7 +1944,7 @@
     function updatePriceFields() {
         var priceDefined = isNumber($('#price').val());
         if (priceDefined) {
-            $('#currency, #currency_label').show();
+            $('#currency-combo-wrap, #currency_label').show();
             $("#price").show().css({ "width": "", "grid-column-start": "", "grid-column-end": "" });
             if (isPlanEdit) {
                 $('#bookedWrapper').css('display', 'inline-flex');
@@ -1961,7 +1954,7 @@
                 $('#purchasing_date, #purchasing_date_label').show();
             }
         } else {
-            $('#currency, #currency_label, #purchasing_date, #purchasing_date_label, #bookedWrapper').hide();
+            $('#currency-combo-wrap, #currency_label, #purchasing_date, #purchasing_date_label, #bookedWrapper').hide();
             $("#price").show().css({ "width": "100%", "grid-column-start": "1", "grid-column-end": "-1" });
         }
     }
