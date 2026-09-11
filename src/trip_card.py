@@ -985,7 +985,11 @@ def _placeholder_art(kind):
     except Exception as e:
         logger.warning("Wagon placeholder %s unusable: %s", kind, e)
         return None
-    return Image.open(io.BytesIO(png)).convert("RGBA")
+    art = Image.open(io.BytesIO(png)).convert("RGBA")
+    # The SVGs draw their shape inset within a taller canvas; crop that margin
+    # off so the placeholder sits flush on the floor like real wagon art does.
+    ink = art.getchannel("A").getbbox()
+    return art.crop(ink) if ink else art
 
 
 def _wagon_art(unit, first, last):
