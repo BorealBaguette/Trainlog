@@ -218,6 +218,7 @@
     "about_adv_manual_h": "Ručno dodane stanice",
     "about_adv_manual_p": "Upravljajte popisom stanica i stajališta koje ste ručno stvorili: uredite njihovu poziciju ili detalje u bilo kojem trenutku putem postavki.",
     "about_credits_maps": "Karte se prikazuju pomoću <a href='https://maplibre.org/'>MapLibrea</a>; neke starije stranice i dalje koriste <a href='https://leafletjs.com'>Leaflet</a>.",
+    "about_credits_currency": "Tečajevi valuta dolaze iz <a href='https://frankfurter.dev'>Frankfurter</a>, koji objedinjuje službene tečajeve iz oko 100 središnjih banaka.",
     "about_lead": "Trainlog je vaš putni dnevnik za javni prijevoz: bilježite i kartirajte svoja putovanja vlakom, autobusom, tramvajem, metroom, trajektom i zrakoplovom, te pratite sva mjesta koja ste posjetili.",
     "about_tab_overview": "Pregled",
     "about_tab_log": "Bilježenje",

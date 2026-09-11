@@ -341,7 +341,7 @@
                 <input type="text" class="form-control settings2-combo-search" id="user_currency-search" autocomplete="off">
                 <div class="settings2-combo-list" id="user_currency-list">
                   {% for currency in currencyOptions %}
-                  <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}"></button>
                   {% endfor %}
                 </div>
                 <div class="settings2-combo-empty" id="user_currency-empty" style="display:none;">No results</div>
@@ -566,7 +566,7 @@
       const code = item.dataset.value;
       let name = currencyNames ? currencyNames.of(code) : null;
       if (name) name = name.charAt(0).toUpperCase() + name.slice(1);
-      const flag = getFlagEmoji(item.dataset.country);
+      const flag = item.dataset.emoji || getFlagEmoji(item.dataset.country);
       item.dataset.label = name ? `${name} (${code})` : code;
       item.dataset.flag = flag;
       item.dataset.search = normalizeSearch(`${item.dataset.label} ${code}`);

@@ -216,6 +216,7 @@
     "about_adv_manual_h": "Käsitsi loodud peatused",
     "about_adv_manual_p": "Halda käsitsi loodud jaamade ja peatuste loendit: muuda nende asukohta või andmeid igal ajal seadetest.",
     "about_credits_maps": "Kaardid kuvatakse <a href='https://maplibre.org/'>MapLibre'iga</a>; mõned vanemad lehed kasutavad endiselt <a href='https://leafletjs.com'>Leafletit</a>.",
+    "about_credits_currency": "Vahetuskursid pärinevad teenusest <a href='https://frankfurter.dev'>Frankfurter</a>, mis koondab umbes 100 keskpanga ametlikud kursid.",
     "about_lead": "Trainlog on teie ühistranspordi reisipäevik: salvestage ja kaardistage oma rongi-, bussi-, trammi-, metroo-, praami- ja lennureisid ning pidage arvet kõige üle, kus olete käinud.",
     "about_tab_overview": "Ülevaade",
     "about_tab_log": "Salvestamine",

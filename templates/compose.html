@@ -782,7 +782,7 @@
           <label>{{ currency|default('Currency') }}</label>
           <select name="currency" id="currency" class="form-select">
             {% for cur in currencyOptions %}
-            <option value="{{ cur['currency'] }}" data-country="{{ cur['country'] }}" {% if cur['currency'] == user_currency %}selected{% endif %}>{{ cur['currency'] }}</option>
+            <option value="{{ cur['currency'] }}" data-country="{{ cur['country'] }}" data-emoji="{{ cur.get('emoji', '') }}" {% if cur['currency'] == user_currency %}selected{% endif %}>{{ cur['currency'] }}</option>
             {% endfor %}
           </select>
         </div>
@@ -2253,7 +2253,8 @@ updateTimingPanel();
 
 // ── Currency flags ──
 for (var _opt of document.getElementById('currency').options) {
-  if (_opt.dataset.country) _opt.text = _opt.text + ' ' + getFlagEmoji(_opt.dataset.country);
+  if (_opt.dataset.emoji) _opt.text = _opt.text + ' ' + _opt.dataset.emoji;
+  else if (_opt.dataset.country) _opt.text = _opt.text + ' ' + getFlagEmoji(_opt.dataset.country);
 }
 
 // ── Price: currency and purchase date only once an amount is entered ──

@@ -217,6 +217,7 @@
     "about_adv_manual_h": "Handmatige stations",
     "about_adv_manual_p": "Beheer de lijst met stations en haltes die je handmatig hebt aangemaakt: pas op elk moment hun positie of gegevens aan vanuit de instellingen.",
     "about_credits_maps": "Kaarten worden weergegeven met <a href='https://maplibre.org/'>MapLibre</a>; sommige oudere pagina's gebruiken nog <a href='https://leafletjs.com'>Leaflet</a>.",
+    "about_credits_currency": "Wisselkoersen zijn afkomstig van <a href='https://frankfurter.dev'>Frankfurter</a>, dat officiële koersen van ongeveer 100 centrale banken combineert.",
     "about_lead": "Trainlog is jouw reisdagboek voor het openbaar vervoer: leg je trein-, bus-, tram-, metro-, veerboot- en vliegreizen vast en breng ze in kaart, en houd bij waar je overal bent geweest.",
     "about_tab_overview": "Overzicht",
     "about_tab_log": "Registreren",

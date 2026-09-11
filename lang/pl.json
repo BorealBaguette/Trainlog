@@ -218,6 +218,7 @@
     "about_adv_manual_h": "Ręcznie dodane stacje",
     "about_adv_manual_p": "Zarządzaj listą stacji i przystanków, które utworzyłeś ręcznie: edytuj ich pozycję lub szczegóły w dowolnym momencie z poziomu ustawień.",
     "about_credits_maps": "Mapy są wyświetlane za pomocą <a href='https://maplibre.org/'>MapLibre</a>; niektóre starsze strony wciąż korzystają z <a href='https://leafletjs.com'>Leaflet</a>.",
+    "about_credits_currency": "Kursy walut pochodzą z <a href='https://frankfurter.dev'>Frankfurter</a>, który łączy oficjalne kursy z około 100 banków centralnych.",
     "about_lead": "Trainlog to Twój dziennik podróży komunikacją publiczną: zapisuj i mapuj swoje podróże pociągiem, autobusem, tramwajem, metrem, promem i samolotem oraz śledź wszystkie miejsca, w których byłeś.",
     "about_tab_overview": "Podsumowanie",
     "about_tab_log": "Zapisywanie",

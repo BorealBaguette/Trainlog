@@ -217,6 +217,7 @@
     "about_adv_manual_h": "Manuaaliset asemat",
     "about_adv_manual_p": "Hallinnoi manuaalisesti luomiesi asemien ja pysäkkien luetteloa: muokkaa niiden sijaintia tai tietoja milloin tahansa asetuksista.",
     "about_credits_maps": "Kartat näytetään <a href='https://maplibre.org/'>MapLibrella</a>; jotkin vanhemmat sivut käyttävät edelleen <a href='https://leafletjs.com'>Leafletia</a>.",
+    "about_credits_currency": "Valuuttakurssit tulevat palvelusta <a href='https://frankfurter.dev'>Frankfurter</a>, joka yhdistää noin 100 keskuspankin viralliset kurssit.",
     "about_lead": "Trainlog on matkapäiväkirjasi julkiselle liikenteelle: kirjaa ja kartoita juna-, bussi-, raitiovaunu-, metro-, lautta- ja lentomatkasi, ja pidä kirjaa kaikesta näkemästäsi.",
     "about_tab_overview": "Yleiskatsaus",
     "about_tab_log": "Kirjaaminen",
