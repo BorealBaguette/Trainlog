@@ -57,6 +57,9 @@ var useNewRouter = false;
 // fires routeselected repeatedly, which fully re-creates the sidebar HTML — without
 // this, an unchecked box would silently reset to checked on the next drag/reroute).
 var ferrySplitEnabled = false;
+// Persists the new-router profile select across the same re-renders; seeded from
+// `type` the first time it's needed (see routing()).
+var newRouterProfile = null;
 
 var markergroup = new L.featureGroup(markerIconStart, markerIconEnd);
 
@@ -253,16 +256,20 @@ function handleGpxUpload(event) {
 
 function switchRouter() {
   useNewRouter = document.getElementById('newRouterToggle').checked;
-  
+  var profileSelect = document.getElementById('newRouterProfile');
+  if (profileSelect) {
+    profileSelect.style.display = useNewRouter ? '' : 'none';
+  }
+
   // Show loading indicator
   sidebar.setContent(spinnerContent);
-  
+
   // Clear route details when switching routers to prevent mixing data
   routeDetails = null;
   if (newTrip["details"]) {
     delete newTrip["details"];
   }
-  
+
   // Update the underlying OSRM router (baseRouter) directly — the control's router is
   // a freehand wrapper with no .options of its own.
   var routerUrl = `${window.location.origin}/forwardRouting/${type}/route/v1`;
@@ -274,8 +281,10 @@ function switchRouter() {
   // Update the use_new_router parameter
   if (useNewRouter) {
     currentParams.use_new_router = 'true';
+    currentParams.profile = newRouterProfile;
   } else {
     delete currentParams.use_new_router;
+    delete currentParams.profile;
   }
 
   // Only set requestParameters if there are any parameters to set
@@ -284,8 +293,50 @@ function switchRouter() {
   } else {
     delete window.baseRouter.options.requestParameters;
   }
-  
+
   // Recompute the route with the new router
+  control.route();
+}
+
+function buildNewRouterToggleHtml() {
+  var options = [
+    ["train", texts.train], ["tram", texts.tram], ["metro", texts.metro], ["all", texts.all]
+  ].map(function(p) {
+    var selected = newRouterProfile === p[0] ? 'selected' : '';
+    return `<option value="${p[0]}" ${selected}>${p[1]}</option>`;
+  }).join('');
+
+  return `
+    <div style="margin: 10px 0; padding: 10px; background-color: #f0f0f0; border-radius: 4px;">
+      <label style="display: flex; align-items: center; cursor: pointer;">
+        <input
+          type="checkbox"
+          id="newRouterToggle"
+          onchange="switchRouter()"
+          style="margin-right: 8px;"
+          ${useNewRouter ? 'checked' : ''}
+        >
+        <span>${texts.useNewRouter} ᵦ</span>
+      </label>
+      <select id="newRouterProfile" class="form-select form-select-sm" onchange="switchRouterProfile(this.value)" style="width: auto; margin-top: 8px; ${useNewRouter ? '' : 'display: none;'}">
+        ${options}
+      </select>
+    </div>
+  `;
+}
+
+function switchRouterProfile(value) {
+  if (!useNewRouter) return;
+  newRouterProfile = value;
+  var currentParams = window.baseRouter.options.requestParameters || {};
+  currentParams.profile = newRouterProfile;
+  window.baseRouter.options.requestParameters = currentParams;
+
+  sidebar.setContent(spinnerContent);
+  routeDetails = null;
+  if (newTrip["details"]) {
+    delete newTrip["details"];
+  }
   control.route();
 }
 
@@ -894,6 +945,10 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       var autoPan = false;
     }
 
+    if (newRouterProfile === null) {
+      newRouterProfile = ["train", "tram", "metro"].includes(type) ? type : "train";
+    }
+
     var profile = "train"
     if (type == "bus" ){
       profile = "driving";
@@ -942,20 +997,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
 
       // Add router selector for train, tram, metro
       if(["train", "tram", "metro"].includes(type)){
-        content += `
-          <div style="margin: 10px 0; padding: 10px; background-color: #f0f0f0; border-radius: 4px;">
-            <label style="display: flex; align-items: center; cursor: pointer;">
-              <input 
-                type="checkbox" 
-                id="newRouterToggle" 
-                onchange="switchRouter()"
-                style="margin-right: 8px;"
-                ${useNewRouter ? 'checked' : ''}
-              >
-              <span>${texts.useNewRouter} ᵦ</span>
-            </label>
-          </div>
-        `;
+        content += buildNewRouterToggleHtml();
         // Tuck the "adjust the markers" hint behind a small info icon (rendered inline with distance).
         hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${texts.fineTuneNote}</div></details>`;
       } else if (type === "bus") {
@@ -1048,20 +1090,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       
       // Add router selector for train, tram, metro even on error
       if(["train", "tram", "metro"].includes(type)){
-        errorContentWithToggle = `
-          <div style="margin: 10px 0; padding: 10px; background-color: #f0f0f0; border-radius: 4px;">
-            <label style="display: flex; align-items: center; cursor: pointer;">
-              <input 
-                type="checkbox" 
-                id="newRouterToggle" 
-                onchange="switchRouter()"
-                style="margin-right: 8px;"
-                ${useNewRouter ? 'checked' : ''}
-              >
-              <span>${texts.useNewRouter} ᵦ</span>
-            </label>
-          </div>
-        ` + errorContent;
+        errorContentWithToggle = buildNewRouterToggleHtml() + errorContent;
         flutterBridge.routingError('Routing failed');
         flutterBridge.loading(false);
       }
