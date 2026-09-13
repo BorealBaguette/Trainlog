@@ -708,6 +708,12 @@
                             {{useNewRouter}} <small class="text-muted">ᵦ</small>
                         </label>
                     </div>
+                    <select id="newRouterProfileModal" class="form-select form-select-sm" style="width: auto; display: none;">
+                        <option value="train">{{train}}</option>
+                        <option value="tram">{{tram}}</option>
+                        <option value="metro">{{metro}}</option>
+                        <option value="all">{{all}}</option>
+                    </select>
                     {% endif %}
                     <div id="freehandToggleSlot"></div>
                 </div>
@@ -814,38 +820,69 @@
             // Set up router toggle handler for the modal
             {% if tripType in ['train', 'tram', 'metro'] %}
             const routerToggle = document.getElementById('newRouterToggleModal');
+            const routerProfile = document.getElementById('newRouterProfileModal');
+            if (routerProfile) {
+                routerProfile.value = tripType;
+            }
+
+            function applyNewRouterParams() {
+                if (!window.baseRouter) return;
+                var currentParams = window.baseRouter.options.requestParameters || {};
+
+                if (useNewRouter) {
+                    currentParams.use_new_router = 'true';
+                    currentParams.profile = routerProfile ? routerProfile.value : tripType;
+                } else {
+                    delete currentParams.use_new_router;
+                    delete currentParams.profile;
+                }
+
+                if (Object.keys(currentParams).length > 0) {
+                    window.baseRouter.options.requestParameters = currentParams;
+                } else {
+                    delete window.baseRouter.options.requestParameters;
+                }
+            }
+
             if (routerToggle) {
                 routerToggle.addEventListener('change', function() {
                     useNewRouter = this.checked;
-                    
+                    if (routerProfile) {
+                        routerProfile.style.display = useNewRouter ? '' : 'none';
+                    }
+
                     // Show loading indicator
                     if (window.sidebar) {
                         window.sidebar.setContent(spinnerContent);
                     }
-                    
+
                     // Clear route details when switching routers
                     routeDetails = null;
                     if (newTrip["details"]) {
                         delete newTrip["details"];
                     }
-                    
+
                     // Update the router
                     if (window.control && window.baseRouter) {
-                        var currentParams = window.baseRouter.options.requestParameters || {};
-
-                        if (useNewRouter) {
-                            currentParams.use_new_router = 'true';
-                        } else {
-                            delete currentParams.use_new_router;
-                        }
-
-                        if (Object.keys(currentParams).length > 0) {
-                            window.baseRouter.options.requestParameters = currentParams;
-                        } else {
-                            delete window.baseRouter.options.requestParameters;
-                        }
+                        applyNewRouterParams();
 
                         // Recompute the route
+                        window.control.route();
+                    }
+                });
+            }
+            if (routerProfile) {
+                routerProfile.addEventListener('change', function() {
+                    if (!useNewRouter) return;
+                    if (window.sidebar) {
+                        window.sidebar.setContent(spinnerContent);
+                    }
+                    routeDetails = null;
+                    if (newTrip["details"]) {
+                        delete newTrip["details"];
+                    }
+                    if (window.control && window.baseRouter) {
+                        applyNewRouterParams();
                         window.control.route();
                     }
                 });

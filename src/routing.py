@@ -1,5 +1,6 @@
 # src/routing.py
 import requests
+from urllib.parse import parse_qs
 from flask import make_response
 
 # Import these from wherever they currently live in your project
@@ -9,6 +10,9 @@ from src.graphhopper import convert_graphhopper_to_osrm     # example
 
 
 def forward_routing_core(routingType, path, flask_request, extra_args=None):
+    # GraphHopper profile matching the original (pre-normalization) trip type
+    gh_profile = {"tram": "tram", "metro": "metro"}.get(routingType, "train" if routingType in ("train", "rail", "funicular") else "all")
+
     # Normalize routing type
     if routingType in ("train", "tram", "metro", "funicular", "rail"):
         routingType = "train"
@@ -102,6 +106,12 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
             .replace("use_new_router=true", "")
     ).strip("&")
 
+    # Let the client override the GraphHopper profile (train/tram/metro/all)
+    requested_profile = parse_qs(args).get("profile", [None])[0]
+    if requested_profile:
+        gh_profile = requested_profile
+        args = "&".join(p for p in args.split("&") if not p.startswith("profile="))
+
     def build_url(base_url):
         q = f"?{args}" if args else ""
         full_url = f"{base_url}/{path}{q}"
@@ -119,7 +129,7 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
 
         full_url = (
             f"{base_url}/route?"
-            f"{point_params}&type=json&profile=all&details=electrified&details=distance"
+            f"{point_params}&type=json&profile={gh_profile}&details=electrified&details=distance"
         )
 
         if routingType == "ferry" and radiuses:
