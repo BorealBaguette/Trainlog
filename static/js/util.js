@@ -1200,8 +1200,13 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
     });
 
     // Typing in plain mode edits the submitted value directly — the field can be
-    // left in this mode and submitted without ever switching back.
-    plainInput.on('input.opPills', function () { hiddenInput.val(plainInput.val()); });
+    // left in this mode and submitted without ever switching back. The native
+    // input event is what the mass-edit form listens to for its dirty tracking, so
+    // plain-mode typing marks the operator as edited just as a pill change does.
+    plainInput.on('input.opPills', function () {
+      hiddenInput.val(plainInput.val());
+      hiddenInput[0].dispatchEvent(new Event('input', { bubbles: true }));
+    });
   }
 
   // Clicking anywhere in the field focuses the text input, like a real input would.
