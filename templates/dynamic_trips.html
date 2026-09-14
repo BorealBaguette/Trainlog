@@ -3586,7 +3586,10 @@ function _massEditSetupOperatorPills(trips) {
         $('#massEditOperatorPills .op-pill').remove();
         _massEditOperatorPills = operatorPillsInput(
             hidden, search, $('#massEditOperatorPills'), manAndOps,
-            "{{ url_for('static', filename='') }}", stationType);
+            "{{ url_for('static', filename='') }}", stationType,
+            { plainToggle: true,
+              plainLabel: "{{ operatorPlainText|default('Edit as plain text') }}",
+              pillsLabel: "{{ operatorPillsMode|default('Back to operator list') }}" });
     }
 
     if (_massEditManAndOpsCache[stationType]) {
