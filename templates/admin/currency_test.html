@@ -59,7 +59,7 @@
                             <input type="text" class="form-control settings2-combo-search" id="ct_from-search" autocomplete="off">
                             <div class="settings2-combo-list" id="ct_from-list">
                                 {% for currency in currencyOptions %}
-                                <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}"></button>
+                                <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" data-name="{{ currency.get('name', '') }}"></button>
                                 {% endfor %}
                             </div>
                             <div class="settings2-combo-empty" id="ct_from-empty" style="display:none;">No results</div>
@@ -80,7 +80,7 @@
                             <input type="text" class="form-control settings2-combo-search" id="ct_to-search" autocomplete="off">
                             <div class="settings2-combo-list" id="ct_to-list">
                                 {% for currency in currencyOptions %}
-                                <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}"></button>
+                                <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" data-name="{{ currency.get('name', '') }}"></button>
                                 {% endfor %}
                             </div>
                             <div class="settings2-combo-empty" id="ct_to-empty" style="display:none;">No results</div>
@@ -187,6 +187,7 @@
         combo.items.forEach(item => {
             const code = item.dataset.value;
             let name = currencyNames ? currencyNames.of(code) : null;
+            if (!name || name === code) name = item.dataset.name || name;
             if (name) name = name.charAt(0).toUpperCase() + name.slice(1);
             const flag = item.dataset.emoji || getFlagEmoji(item.dataset.country);
             item.dataset.label = name ? `${name} (${code})` : code;
