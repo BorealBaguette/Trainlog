@@ -385,7 +385,7 @@
             <label for="currency" id="currency_label" class="sr-only">{{currency}}</label>
             <select name="currency" id="currency">
                 {% for currency in currencyOptions %}
-                <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" {% if
+                <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" data-name="{{ currency.get('name', '') }}" {% if
                     currency['currency']==(tripCurrency or user_currency) %}selected{% endif %}>
                     {{ currency['currency'] }}
                 </option>

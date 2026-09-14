@@ -1,9 +1,10 @@
 from flask import g, has_app_context
 
 from src.pg import get_or_create_pg_session
+from src.utils import get_user_id
 
 
-def get_available_currencies():
+def get_available_currencies(username=None):
     # Sourced from Frankfurter (api.frankfurter.dev). BGN stays despite no longer being
     # published (Bulgaria adopted the euro) so old BGN trips keep resolving. XAU/XAG/XPD/XPT
     # are precious metals, not currencies — no real "country", so they get an "emoji" instead.
@@ -55,7 +56,10 @@ def get_available_currencies():
         {"currency": "FKP", "country": "FK"},
         {"currency": "GBP", "country": "GB"},
         {"currency": "GEL", "country": "GE"},
-        {"currency": "GGP", "country": "GG"},
+        # GGP/IMP/JEP are Channel Islands pseudo-currencies pegged 1:1 to GBP, not
+        # real ISO 4217 codes, so Intl.DisplayNames (browser-side) has no name for
+        # them — ship an English fallback name for the picker to use instead.
+        {"currency": "GGP", "country": "GG", "name": "Guernsey Pound"},
         {"currency": "GHS", "country": "GH"},
         {"currency": "GIP", "country": "GI"},
         {"currency": "GMD", "country": "GM"},
@@ -68,12 +72,12 @@ def get_available_currencies():
         {"currency": "HUF", "country": "HU"},
         {"currency": "IDR", "country": "ID"},
         {"currency": "ILS", "country": "IL"},
-        {"currency": "IMP", "country": "IM"},
+        {"currency": "IMP", "country": "IM", "name": "Isle of Man Pound"},
         {"currency": "INR", "country": "IN"},
         {"currency": "IQD", "country": "IQ"},
         {"currency": "IRR", "country": "IR"},
         {"currency": "ISK", "country": "IS"},
-        {"currency": "JEP", "country": "JE"},
+        {"currency": "JEP", "country": "JE", "name": "Jersey Pound"},
         {"currency": "JMD", "country": "JM"},
         {"currency": "JOD", "country": "JO"},
         {"currency": "JPY", "country": "JP"},
@@ -172,7 +176,41 @@ def get_available_currencies():
         {"currency": "ZMW", "country": "ZM"},
         {"currency": "ZWG", "country": "ZW"},
     ]
+
+    usage_counts = _get_currency_usage_counts(username)
+    if usage_counts:
+        available_currencies.sort(
+            key=lambda c: (-usage_counts.get(c["currency"], 0), c["currency"])
+        )
+
     return available_currencies
+
+
+def _get_currency_usage_counts(username):
+    """{currency: trip count} for the given user, used to rank the currency
+    picker by how often each currency actually gets used. Empty (not an error)
+    when no username is given (e.g. a logged-out visitor, or a caller like
+    get_exchange_rate() that just needs the supported-codes set), so the list
+    just stays alphabetical."""
+    if not username or username == "public":
+        return {}
+
+    user_id = get_user_id(username)
+    if user_id is None:
+        return {}
+
+    with get_or_create_pg_session(None) as session:
+        rows = session.execute(
+            """
+            SELECT currency, COUNT(*) AS uses
+            FROM trips
+            WHERE user_id = :user_id AND currency IS NOT NULL
+            GROUP BY currency
+            """,
+            {"user_id": user_id},
+        ).fetchall()
+
+    return {row[0]: row[1] for row in rows}
 
 
 def get_exchange_rate(price, base_currency, target_currency, date, pg=None):

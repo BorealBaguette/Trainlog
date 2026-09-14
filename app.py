@@ -1424,7 +1424,7 @@ def new_auto(username):
         username=username,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(getUser()),
         user_currency=getLoggedUserCurrency(),
     )
 
@@ -1674,7 +1674,7 @@ def new(username, vehicle_type, template="new.html"):
         destinationTerminalName=destination_terminal_name,
         trip_visibility=get_default_trip_visibility(vehicle_type),
         manualOrigin=manual_origin,
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(getUser()),
         user_currency=getLoggedUserCurrency(),
         fr24_calls=fr24_usage(username) if vehicle_type == "air" else None,
         # When building a trip for a plan, this enables the relative day+time mode
@@ -1983,7 +1983,7 @@ def new_ticket(username):
         username=username,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(getUser()),
         user_currency=getLoggedUserCurrency(),
     )
 
@@ -3142,7 +3142,7 @@ def ticket_list(username):
         tickets=result,
         username=username,
         country_list=get_all_countries(),
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(getUser()),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -6278,7 +6278,7 @@ def _plan_itinerary_context(plan, allowed_visibilities=None):
         plan_has_relative=plan_has_relative,
         plan_unlogged_count=plan_unlogged_count,
         type_labels=type_labels,
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(getUser()),
         user_currency=getLoggedUserCurrency(),
     )
 
@@ -6546,7 +6546,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         title=lang[session["userinfo"]["lang"]]["edit"],
         start_datetime=start_str,
         end_datetime=end_str,
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(getUser()),
         user_currency=getLoggedUserCurrency(),
         unknownType=None,
         precision=precision,
@@ -9668,7 +9668,7 @@ def admin_currency_test():
         username=getUser(),
         nav="bootstrap/navigation.html",
         isCurrent=has_current_trip(get_user_id()),
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(getUser()),
         todayDate=date.today().isoformat(),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
@@ -9790,7 +9790,7 @@ def user_settings(username):
 
     return render_template(
         "user_settings.html",
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(getUser()),
         title=lang[session["userinfo"]["lang"]]["user_settings"],
         username=username,
         langs=langs,
@@ -10003,7 +10003,7 @@ def user_settings_app(username):
 
     return jsonify({
         "username": user.username,
-        "currencyOptions": get_available_currencies(),
+        "currencyOptions": get_available_currencies(getUser()),
         "langs": langs,
         "share_level": user.share_level,
         "leaderboard": user.leaderboard,
@@ -10179,7 +10179,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "title": lang[session["userinfo"]["lang"]][edit_copy_type],
         "start_datetime": trip["start_datetime"],
         "end_datetime": trip["end_datetime"],
-        "currencyOptions": get_available_currencies(),
+        "currencyOptions": get_available_currencies(getUser()),
         "user_currency": getLoggedUserCurrency(),
         "unknownType": unknownType,
         "precision": precision,

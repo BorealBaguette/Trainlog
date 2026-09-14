@@ -88,6 +88,7 @@ function enhanceCurrencySelect(selectId) {
   for (const option of select.options) {
     const code = option.value;
     let name = currencyNames ? currencyNames.of(code) : null;
+    if (!name || name === code) name = option.dataset.name || name;
     if (name) name = name.charAt(0).toUpperCase() + name.slice(1);
     const emoji = option.dataset.emoji || (option.dataset.country ? getFlagEmoji(option.dataset.country) : '');
     const labelText = name ? `${name} (${code})` : code;
