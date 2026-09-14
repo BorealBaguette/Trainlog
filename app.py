@@ -1430,7 +1430,7 @@ def new_auto(username):
         username=username,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
-        currencyOptions=get_available_currencies(getUser()),
+        currencyOptions=get_available_currencies(username),
         user_currency=getLoggedUserCurrency(),
     )
 
@@ -1680,7 +1680,7 @@ def new(username, vehicle_type, template="new.html"):
         destinationTerminalName=destination_terminal_name,
         trip_visibility=get_default_trip_visibility(vehicle_type),
         manualOrigin=manual_origin,
-        currencyOptions=get_available_currencies(getUser()),
+        currencyOptions=get_available_currencies(username),
         user_currency=getLoggedUserCurrency(),
         fr24_calls=fr24_usage(username) if vehicle_type == "air" else None,
         # When building a trip for a plan, this enables the relative day+time mode
@@ -1989,7 +1989,7 @@ def new_ticket(username):
         username=username,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
-        currencyOptions=get_available_currencies(getUser()),
+        currencyOptions=get_available_currencies(username),
         user_currency=getLoggedUserCurrency(),
     )
 
@@ -3148,7 +3148,7 @@ def ticket_list(username):
         tickets=result,
         username=username,
         country_list=get_all_countries(),
-        currencyOptions=get_available_currencies(getUser()),
+        currencyOptions=get_available_currencies(username),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -6232,11 +6232,13 @@ def compute_plan_stats(trip_list, costs=None):
     }
 
 
-def _plan_itinerary_context(plan, allowed_visibilities=None):
+def _plan_itinerary_context(plan, username, allowed_visibilities=None):
     """Everything plans/plan.html needs to draw a plan's leg-by-leg itinerary, shared
     by the author's editable page (plan_view) and its read-only twin
     (public_plan_itinerary). The caller adds who may do what; `allowed_visibilities`
-    (None on the author's own page) drops the legs the viewer may not see."""
+    (None on the author's own page) drops the legs the viewer may not see.
+    `username` is the plan's author — whose trip history the currency picker
+    ordering should reflect, not necessarily the current viewer."""
     trip_list, _ = build_plan_trip_list(plan["uuid"], allowed_visibilities)
     # add a per-leg formatted duration for the management list (stays/stops have no
     # travel duration -> leave it blank rather than showing "0m")
@@ -6284,7 +6286,7 @@ def _plan_itinerary_context(plan, allowed_visibilities=None):
         plan_has_relative=plan_has_relative,
         plan_unlogged_count=plan_unlogged_count,
         type_labels=type_labels,
-        currencyOptions=get_available_currencies(getUser()),
+        currencyOptions=get_available_currencies(username),
         user_currency=getLoggedUserCurrency(),
     )
 
@@ -6304,7 +6306,7 @@ def plan_view(username, plan_uuid):
         plan_copy_url=None,
         plan_map_url=url_for("public_plan", plan_uuid=plan_uuid),
         num_hidden_trips=0,
-        **_plan_itinerary_context(plan),
+        **_plan_itinerary_context(plan, username),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -6552,7 +6554,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         title=lang[session["userinfo"]["lang"]]["edit"],
         start_datetime=start_str,
         end_datetime=end_str,
-        currencyOptions=get_available_currencies(getUser()),
+        currencyOptions=get_available_currencies(username),
         user_currency=getLoggedUserCurrency(),
         unknownType=None,
         precision=precision,
@@ -6899,7 +6901,7 @@ def public_plan_itinerary(plan_uuid):
             if _may_view_plan_map(author)
             else None
         ),
-        **_plan_itinerary_context(plan, _plan_leg_visibilities_for(author)),
+        **_plan_itinerary_context(plan, author_username, _plan_leg_visibilities_for(author)),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -9796,7 +9798,7 @@ def user_settings(username):
 
     return render_template(
         "user_settings.html",
-        currencyOptions=get_available_currencies(getUser()),
+        currencyOptions=get_available_currencies(username),
         title=lang[session["userinfo"]["lang"]]["user_settings"],
         username=username,
         langs=langs,
@@ -10009,7 +10011,7 @@ def user_settings_app(username):
 
     return jsonify({
         "username": user.username,
-        "currencyOptions": get_available_currencies(getUser()),
+        "currencyOptions": get_available_currencies(username),
         "langs": langs,
         "share_level": user.share_level,
         "leaderboard": user.leaderboard,
@@ -10185,7 +10187,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "title": lang[session["userinfo"]["lang"]][edit_copy_type],
         "start_datetime": trip["start_datetime"],
         "end_datetime": trip["end_datetime"],
-        "currencyOptions": get_available_currencies(getUser()),
+        "currencyOptions": get_available_currencies(username),
         "user_currency": getLoggedUserCurrency(),
         "unknownType": unknownType,
         "precision": precision,
