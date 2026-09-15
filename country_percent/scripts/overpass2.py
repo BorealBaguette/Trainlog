@@ -63,7 +63,13 @@ def get_overpass_data(iso_spec, iso_code, query_template):
         r = requests.get(OVERPASS_URL, params={"data": query}, headers=OVERPASS_HEADERS)
         match r.status_code:
             case 200:
-                return r.json()
+                data = r.json()
+                # Overpass answers 200 with a "remark" and a truncated
+                # element list when it hits its runtime or memory limit.
+                if "remark" in data:
+                    print(f"Error fetching data: {data['remark']}")
+                    sys.exit(1)
+                return data
             case 504:
                 print(
                     f"Error fetching data: {r.status_code} - {r.reason} (attempt {attempt} of {MAX_OVERPASS_RETRIES})"
