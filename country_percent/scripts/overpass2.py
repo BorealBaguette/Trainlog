@@ -86,6 +86,13 @@ def merge_overlapping_polygons(features):
     start_time = time.time()
 
     for i, polyA in enumerate(polygons):
+        processed_polygons += 1
+        if processed_polygons % 20 == 0 or processed_polygons == total_polygons:
+            progress = 100 * processed_polygons / total_polygons
+            elapsed_time = time.time() - start_time
+            eta = elapsed_time * total_polygons / processed_polygons - elapsed_time
+            print(f"Progress: {progress:.2f}%, ETA: {eta:.2f} seconds", end="\r")
+
         if not to_keep[i]:
             continue  # Skip polygons that are already merged
 
@@ -105,13 +112,6 @@ def merge_overlapping_polygons(features):
         features[i]["geometry"] = mapping(
             merged_polygon
         )  # Update the feature's geometry
-
-        processed_polygons += 1
-        if (processed_polygons) % 20 == 0:
-            progress = 100 * processed_polygons / total_polygons
-            elapsed_time = time.time() - start_time
-            eta = elapsed_time * total_polygons / processed_polygons - elapsed_time
-            print(f"Progress: {progress:.2f}%, ETA: {eta:.2f} seconds", end="\r")
 
     print("\nPolygon merging completed!")
     return [feature for i, feature in enumerate(features) if to_keep[i]]
@@ -154,7 +154,8 @@ def buffer_linestring(line_coords):
     gdf = gdf.to_crs("EPSG:4326")
 
     return gdf.iloc[0].geometry
-    
+
+
 def process_railway_geometry(iso_code, iso_spec):
     print(f"Fetching railway geometry for {iso_code} using ISO 3166-{iso_spec}")
 
