@@ -107,7 +107,9 @@ def merge_overlapping_polygons(features):
 
         overlapping_polygons = [polyA]
         for j, polyB in enumerate(polygons):
-            if i != j and polyA.intersects(polyB):
+            if i == j or not to_keep[j]:
+                continue
+            if polyA.intersects(polyB):
                 intersection_area = polyA.intersection(polyB).area
 
                 # If the overlap is significant, add B to the list of polygons to be merged
