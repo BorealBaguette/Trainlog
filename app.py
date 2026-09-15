@@ -263,7 +263,7 @@ from src.trips import (
     delete_ticket_from_db,
     get_current_trip_id,
 )
-from src.paths import Path, coords_to_ewkt, fetch_path, geom_geojson_to_coords
+from src.paths import Path, coords_to_ewkt, fetch_path, fetch_raw_path, geom_geojson_to_coords
 from src.trips.freehand_transform import (
     apply_to_trip,
     purge_expired_backups,
@@ -801,7 +801,7 @@ def starts_with_flag_emoji(s):
     return bool(re.match(pattern, s))
 
 
-def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, timestamps=None):
+def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, timestamps=None, raw_path=None):
     newPath[0]["lat"] = float(newPath[0]["lat"])
     newPath[0]["lng"] = float(newPath[0]["lng"])
     newPath[-1]["lat"] = float(newPath[-1]["lat"])
@@ -918,6 +918,7 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         altitude=altitude,
         timestamps=timestamps,
         route_source=newTrip.get("route_source") or "router",
+        raw_path=raw_path,
     )
 
     create_trip(trip)
@@ -2071,9 +2072,12 @@ def gps_logger_upload(token=None, trip_type=None, routing=None):
             params = parse_trip_params(request.args)
             rows = parse_gpx_files(cleaned_files, source="gpslogger", username=user.username)
             for row in rows:
-                newTrip, path, altitude, timestamps = build_trip_payload(
+                newTrip, path, altitude, timestamps, raw_waypoints = build_trip_payload(
                     row, trip_type, params, use_routing, request
                 )
+                # Distinct from the manual GPX-upload UI's "gpx"/"gpx_routed" — this is a
+                # direct, unreviewed import (Tasker/GPSLogger hitting the API).
+                newTrip["route_source"] = "routed_gpx_api" if use_routing else "gpx_api"
                 saveTripToDb(
                     username=user.username,
                     newTrip=newTrip,
@@ -2081,6 +2085,7 @@ def gps_logger_upload(token=None, trip_type=None, routing=None):
                     trip_type=trip_type,
                     altitude=altitude,
                     timestamps=timestamps,
+                    raw_path=raw_waypoints,
                 )
             return (f"OK (imported {len(rows)} trip(s))", 200)
         except GpxIngestError as e:
@@ -2315,7 +2320,7 @@ def saveTripFromGPX(username, gpx_id):
 
     row = dict(gpx._mapping)
     raw_count = len(json.loads(row["path"]))
-    newTrip, path, altitude, timestamps = build_trip_payload(
+    newTrip, path, altitude, timestamps, raw_waypoints = build_trip_payload(
         row, trip_type, parse_trip_params(request.args), use_routing, request
     )
 
@@ -2334,6 +2339,7 @@ def saveTripFromGPX(username, gpx_id):
         trip_type=trip_type,
         altitude=altitude,
         timestamps=timestamps,
+        raw_path=raw_waypoints,
     )
 
     return jsonify({
@@ -2407,6 +2413,41 @@ def previewSmartRouting(username, gpx_id, trip_type):
                          raw_waypoints=json.dumps(raw_waypoints),
                          cleaning_result=json.dumps(cleaning_result),
                          success=cleaning_result["success"])
+
+
+@app.route("/u/<username>/simplify_path", methods=["POST"])
+@login_required
+def simplify_path(username):
+    """
+    Reduce an arbitrary dense point list (e.g. a freehand-edited route seeded from
+    a raw GPX trace) down to a small set of router-friendly waypoints, via the same
+    auto-routing/anchor-search used for GPX auto-import (clean_gps_route). Used
+    before switching a freehand session back to router mode, so the router is never
+    handed hundreds of hard waypoints (which OSRM can't route through / times out on).
+    """
+    data = request.get_json() or {}
+    path = data.get("path") or []
+    trip_type = data.get("type", "train")
+
+    if len(path) < 2:
+        return jsonify({"error": "Need at least 2 points"}), 400
+
+    raw_waypoints = [{"lat": p[0], "lng": p[1]} for p in path]
+    cleaning_result = clean_gps_route(
+        raw_waypoints=raw_waypoints,
+        forwardRouting=lambda rpath, routingType, options=None: forward_routing_core(
+            routingType=routingType, path=rpath, flask_request=request, extra_args=options
+        ),
+        trip_type=trip_type,
+        deviation_threshold=800,
+    )
+
+    if not cleaning_result["success"]:
+        return jsonify({"error": cleaning_result.get("error", "routing failed")}), 502
+
+    return jsonify({
+        "waypoints": [[wp["lat"], wp["lng"]] for wp in cleaning_result["waypoints"]],
+    })
 
 
 def parse_maprika_filename(filename):
@@ -6576,6 +6617,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         tripType=pt["trip_type"],
         tripTicketId="",
         wplist=wplist,
+        raw_path=[],
         tripNotes=pt["notes"] or "",
         colorblind=colorblind,
         tripDepartureDelay="",
@@ -10113,6 +10155,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
                 ).fetchone()
             )[1]
         )
+        raw_path = fetch_raw_path(pg, int(tripId))
     user = User.query.filter_by(username=trip["username"]).first()
     if not (session.get(user.username) or session.get(owner)):
         abort(401)
@@ -10209,6 +10252,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripType": tripType,
         "tripTicketId": tripTicketId or "",
         "wplist": wplist,
+        "raw_path": raw_path,
         "route_source": trip.get("route_source") or "router",
         "tripNotes": tripNotes or "",
         "colorblind": colorblind,

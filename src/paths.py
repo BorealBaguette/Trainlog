@@ -33,6 +33,16 @@ def fetch_path(pg, trip_id):
     return geom_geojson_to_coords(row["geojson"]) if row else []
 
 
+def fetch_raw_path(pg, trip_id):
+    """Return [[lat, lng], ...] for a trip's original raw GPS trace (preserved for
+    GPX-derived trips only, see migration 0073). Empty list if none was kept."""
+    row = pg.execute(
+        "SELECT ST_AsGeoJSON(raw_geom) AS geojson FROM paths WHERE trip_id = :trip_id",
+        {"trip_id": trip_id},
+    ).fetchone()
+    return geom_geojson_to_coords(row["geojson"]) if row and row["geojson"] else []
+
+
 def geom_geojson_to_coords(geojson):
     """Convert ST_AsGeoJSON(geom) output back to the app's [[lat, lng], ...] format
     (swapping PostGIS lng/lat order). Accepts the GeoJSON string or parsed dict."""
