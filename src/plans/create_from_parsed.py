@@ -50,13 +50,16 @@ def create_plan_trip_from_parsed(
     timing = process_plan_dates(timing_input, path)
 
     # Routed legs with concrete UTC instants get a precise estimated duration.
-    estimated = None
+    # Otherwise fall back to the router's own duration estimate (from
+    # enrich_parsed_trip), and only to 0 if that's unavailable too — a
+    # plan_trip should always have *some* duration once it becomes a real trip.
+    estimated = int(parsed["_route_duration"]) if parsed.get("_route_duration") else 0
     if timing.get("utc_start_datetime") and timing.get("utc_end_datetime"):
         estimated = int(
             (timing["utc_end_datetime"] - timing["utc_start_datetime"]).total_seconds()
         )
         if estimated < 0:
-            estimated = None
+            estimated = 0
 
     now = datetime.now()
     plan_trip = PlanTrip(
