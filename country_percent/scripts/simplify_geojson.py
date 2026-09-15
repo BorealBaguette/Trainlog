@@ -53,8 +53,11 @@ def truncate_geometry(geometry):
 
 
 def simplify_ring(ring):
+    # Drop a point closer than MIN_POINT_DISTANCE_M to its predecessor,
+    # or one that deviates less than the factor times the chord length
+    # from the chord between its neighbours, for chords up to
+    # MAX_ENDPOINT_DISTANCE_M.
     MIN_POINT_DISTANCE_M = 0.5
-
     MAX_ENDPOINT_DISTANCE_M = 15.0
     MAX_MIDPOINT_DISTANCE_FACTOR = 0.2
 
