@@ -35,13 +35,8 @@ PROPERTIES_TO_KEEP = ["station"]
 MIN_AREA_M2 = 50  # lower once a real polygon this small shows up
 
 
-def round_float(value, decimals=6):
-    factor = 10**decimals
-    return round(value * factor) / factor
-
-
 def round_area(value):
-    return round_float(value, decimals=2)
+    return round(value, 2)
 
 
 def truncate_coords(coords):
@@ -54,7 +49,7 @@ def truncate_coords(coords):
                 if isinstance(item, int):
                     updated.append(item)
                 else:
-                    updated.append(round_float(item))
+                    updated.append(round(item, 6))
             return updated
         return [truncate_coords(item) for item in coords]
     return coords
