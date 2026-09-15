@@ -154,6 +154,8 @@ def clip_to_region(iso_spec, iso_code, processed_path):
 
 
 def buffer_linestring(line_coords):
+    if len(line_coords) < 2:
+        return None  # broken way, a line needs two points
     line = LineString(line_coords)
     gdf = gpd.GeoDataFrame({"geometry": [line]}, crs="EPSG:4326")
 
@@ -220,6 +222,8 @@ def process_railway_geometry(iso_code, iso_spec):
         buffered_geometry = buffer_linestring(
             [(nodes_dict[node_id]) for node_id in way["nodes"]]
         )
+        if buffered_geometry is None:
+            continue
         feature = {
             "type": "Feature",
             "geometry": shape(buffered_geometry).__geo_interface__,
