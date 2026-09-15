@@ -68,22 +68,22 @@ def simplify_ring(ring):
     if len(work) < 3:
         return ring
 
-    i = 0
-    while i < len(work) - 2:
+    def removable(i):
         line_i_i1 = LineString([work[i], work[i + 1]])
         line_i_i2 = LineString([work[i], work[i + 2]])
         point_i1 = Point(work[i + 1])
-
-        if (
+        return (
             line_i_i2.length <= MAX_ENDPOINT_DISTANCE_M
             and point_i1.distance(line_i_i2)
             <= line_i_i2.length * MAX_MIDPOINT_DISTANCE_FACTOR
-        ) or (line_i_i1.length <= MIN_POINT_DISTANCE_M):
+        ) or (line_i_i1.length <= MIN_POINT_DISTANCE_M)
+
+    i = 0
+    while i < len(work) - 2:
+        if removable(i):
             del work[i + 1]
-            if len(work) < 3:
-                break
-            continue
-        i += 1
+        else:
+            i += 1
 
     if closed:
         work.append(work[0])
@@ -252,6 +252,7 @@ def process(country_code):
     with open(path, "w") as file:
         json.dump(data, file)
         print(f"Simplified {path}")
+
 
 if __name__ == "__main__":
     process(sys.argv[1])
