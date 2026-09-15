@@ -3,11 +3,11 @@ Simplify a processed GeoJSON file by:
 1. unpacking features of type GeometryCollection,
 2. deleting features of all types except Polygon and Multipolygon,
 3. removing redundant polygon points,
-4. recomputing polygon areas,
-5. failing on very tiny polygons,
-6. re-assign new IDs,
-7. converting the output to CRS84,
-8. truncating coordinate precision to the cm range.
+4. converting the output to CRS84,
+5. truncating coordinate precision to the cm range,
+6. recomputing polygon areas,
+7. re-assign new IDs,
+8. failing on very tiny polygons.
 
 Usage:
     python simplify_geojson.py <COUNTRY_CODE>
@@ -53,6 +53,11 @@ def truncate_coords(coords):
             return updated
         return [truncate_coords(item) for item in coords]
     return coords
+
+
+def truncate_geometry(geometry):
+    geometry["coordinates"] = truncate_coords(geometry["coordinates"])
+    return geometry
 
 
 def simplify_ring(ring):
@@ -212,17 +217,24 @@ def process(country_code):
             print(f"Simplify progress: {progress:.2f}%", end="\r")
     print("Simplify progress: 100.00%")
 
+    # Transform to output crs
+    gdf = gdf_mercator.to_crs(OUTPUT_CRS)
+
+    # Truncate coordinates to reduce file size. Areas are computed from
+    # the truncated geometry so that re-running the script is a no-op.
+    print("Truncating coordinates...")
+    gdf["geometry"] = gdf["geometry"].apply(
+        lambda geometry: shape(truncate_geometry(mapping(geometry)))
+    )
+
     print("Calculating areas...")
 
     # Compute the area for each geometry
-    gdf_mercator["area_m2"] = gdf_mercator["geometry"].area
+    gdf["area_m2"] = gdf.to_crs(WEB_MERCATOR_CRS).area
 
     # Very tiny polygons are most likely editing mistakes, so report
     # them but keep them for manual inspection.
-    tiny_ids = list(gdf_mercator.index[gdf_mercator["area_m2"] < MIN_AREA_M2])
-
-    # Transform to output crs
-    gdf = gdf_mercator.drop(columns=["area_m2"]).to_crs(OUTPUT_CRS)
+    tiny_ids = list(gdf.index[gdf["area_m2"] < MIN_AREA_M2])
 
     # Update the data with the valid features
     data["features"] = gdf.to_dict("records")
@@ -234,7 +246,7 @@ def process(country_code):
         feature["properties"]["id"] = idx
         # assign polygon area
         feature["properties"]["area_m2"] = round_float(
-            gdf_mercator.iloc[idx]["area_m2"], decimals=2
+            feature.pop("area_m2"), decimals=2
         )
         for prop_key in old_properties:
             if prop_key in PROPERTIES_TO_KEEP:
@@ -248,14 +260,6 @@ def process(country_code):
     data["total_area_m2"] = total_area_m2
 
     set_output_crs(data)
-
-    # Truncate coordinates to reduce file size
-    print("Truncating coordinates...")
-    for feature in data.get("features", []):
-        geometry = feature.get("geometry")
-        if geometry and "coordinates" in geometry:
-            pass
-            geometry["coordinates"] = truncate_coords(geometry["coordinates"])
 
     print("Writing output file...")
     with open(path, "w") as file:
