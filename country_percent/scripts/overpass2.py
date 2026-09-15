@@ -70,11 +70,12 @@ def get_overpass_data(iso_spec, iso_code, query_template):
                     print(f"Error fetching data: {data['remark']}")
                     sys.exit(1)
                 return data
-            case 504:
+            case 429 | 503 | 504:
+                delay = int(r.headers.get("Retry-After", RETRY_DELAY_SECONDS * attempt))
                 print(
-                    f"Error fetching data: {r.status_code} - {r.reason} (attempt {attempt} of {MAX_OVERPASS_RETRIES})"
+                    f"Error fetching data: {r.status_code} - {r.reason} (attempt {attempt} of {MAX_OVERPASS_RETRIES}, retrying in {delay}s)"
                 )
-                time.sleep(RETRY_DELAY_SECONDS * attempt)
+                time.sleep(delay)
                 continue
             case _:
                 print(f"Error fetching data: {r.status_code} - {r.reason}")
