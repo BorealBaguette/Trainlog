@@ -60,33 +60,40 @@ def simplify_ring(ring):
     MAX_ENDPOINT_DISTANCE_M = 15.0
     MAX_MIDPOINT_DISTANCE_FACTOR = 0.2
 
+    assert ring[0] == ring[-1], "polygon ring must be closed"
     if len(ring) < 4:
         return ring
 
-    closed = ring[0] == ring[-1]
-    work = list(ring[:-1]) if closed else list(ring[:])
-    if len(work) < 3:
-        return ring
+    work = list(ring)  # rings from shapely's mapping() are tuples
+    work.pop()
 
     def removable(i):
-        line_i_i1 = LineString([work[i], work[i + 1]])
-        line_i_i2 = LineString([work[i], work[i + 2]])
-        point_i1 = Point(work[i + 1])
+        prev = work[i - 1]
+        curr = work[i]
+        next = work[(i + 1) % len(work)]
+        line_prev_curr = LineString([prev, curr])
+        line_prev_next = LineString([prev, next])
+        point_curr = Point(curr)
         return (
-            line_i_i2.length <= MAX_ENDPOINT_DISTANCE_M
-            and point_i1.distance(line_i_i2)
-            <= line_i_i2.length * MAX_MIDPOINT_DISTANCE_FACTOR
-        ) or (line_i_i1.length <= MIN_POINT_DISTANCE_M)
+            line_prev_next.length <= MAX_ENDPOINT_DISTANCE_M
+            and point_curr.distance(line_prev_next)
+            <= line_prev_next.length * MAX_MIDPOINT_DISTANCE_FACTOR
+        ) or (line_prev_curr.length <= MIN_POINT_DISTANCE_M)
 
-    i = 0
-    while i < len(work) - 2:
-        if removable(i):
-            del work[i + 1]
-        else:
-            i += 1
+    # A closed ring has no first point, so the neighbours wrap around
+    # the end. Repeat until a full pass removes nothing.
+    changed = True
+    while changed and len(work) > 3:
+        changed = False
+        i = 0
+        while i < len(work) and len(work) > 3:
+            if removable(i):
+                del work[i]
+                changed = True
+            else:
+                i += 1
 
-    if closed:
-        work.append(work[0])
+    work.append(work[0])
     return work
 
 
