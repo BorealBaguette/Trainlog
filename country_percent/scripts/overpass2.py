@@ -24,6 +24,7 @@ import geopandas as gpd
 import osm2geojson
 import pycountry
 import requests
+from shapely import STRtree
 from shapely.geometry import LineString, mapping, shape
 from shapely.ops import unary_union
 from simplify_geojson import process as simplify_geojson
@@ -87,8 +88,17 @@ def merge_overlapping_polygons(features):
     print("Starting to merge overlapping polygons...")
     polygons = [shape(feature["geometry"]) for feature in features]
 
-    # This list keeps track of whether a polygon should be kept
-    to_keep = [True for _ in polygons]
+    # Index of the polygon that absorbed this one, None while it is alive
+    absorbed_into = [None for _ in polygons]
+
+    def owner(j):
+        while absorbed_into[j] is not None:
+            j = absorbed_into[j]
+        return j
+
+    # The tree holds the original polygons. A merged polygon intersects A
+    # iff one of its originals does, so candidates map to their owner.
+    tree = STRtree(polygons)
 
     total_polygons = len(polygons)
     processed_polygons = 0
@@ -102,20 +112,20 @@ def merge_overlapping_polygons(features):
             eta = elapsed_time * total_polygons / processed_polygons - elapsed_time
             print(f"Progress: {progress:.2f}%, ETA: {eta:.2f} seconds", end="\r")
 
-        if not to_keep[i]:
+        if absorbed_into[i] is not None:
             continue  # Skip polygons that are already merged
 
         overlapping_polygons = [polyA]
-        for j, polyB in enumerate(polygons):
-            if i == j or not to_keep[j]:
-                continue
-            if polyA.intersects(polyB):
-                intersection_area = polyA.intersection(polyB).area
+        candidates = {owner(j) for j in tree.query(polyA, predicate="intersects")}
+        candidates.discard(i)
+        for j in sorted(candidates):
+            polyB = polygons[j]
+            intersection_area = polyA.intersection(polyB).area
 
-                # If the overlap is significant, add B to the list of polygons to be merged
-                if intersection_area > 0.5 * polyA.area:
-                    overlapping_polygons.append(polyB)
-                    to_keep[j] = False
+            # If the overlap is significant, add B to the list of polygons to be merged
+            if intersection_area > 0.5 * polyA.area:
+                overlapping_polygons.append(polyB)
+                absorbed_into[j] = i
 
         # Merge all overlapping polygons using unary_union
         merged_polygon = unary_union(overlapping_polygons)
@@ -125,7 +135,7 @@ def merge_overlapping_polygons(features):
         )  # Update the feature's geometry
 
     print("\nPolygon merging completed!")
-    return [feature for i, feature in enumerate(features) if to_keep[i]]
+    return [feature for i, feature in enumerate(features) if absorbed_into[i] is None]
 
 
 def get_subdivision_boundary(iso_code, iso_spec):
