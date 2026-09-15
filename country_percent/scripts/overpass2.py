@@ -22,6 +22,7 @@ import time
 
 import geopandas as gpd
 import osm2geojson
+import pycountry
 import requests
 from shapely.geometry import LineString, mapping, shape
 from shapely.ops import unary_union
@@ -32,7 +33,6 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OVERPASS_HEADERS = {
     "User-Agent": "trainlog.me coverage generation",
 }
-ISO3166_URL = "https://iso3166-2-api.vercel.app/api/all"
 SUBDIVISION_QUERY = """
 [out:json];
 relation["ISO3166-{iso_spec}"="{iso_code}"];
@@ -248,14 +248,10 @@ if __name__ == "__main__":
         iso_code = sys.argv[1].upper()
     except IndexError:
         raise ValueError("Invalid ISO3166 code: No code provided")
-    r = requests.get(ISO3166_URL)
-    for country, regions in r.json().items():
-        if iso_code == country:
-            iso_spec = 1
-            break
-        if iso_code in regions:
-            iso_spec = 2
-            break
+    if pycountry.countries.get(alpha_2=iso_code):
+        iso_spec = 1
+    elif pycountry.subdivisions.get(code=iso_code):
+        iso_spec = 2
     else:
         raise ValueError(
             "Invalid ISO3166 code: Please provide a ISO3166-1 or ISO3166-2 code"
