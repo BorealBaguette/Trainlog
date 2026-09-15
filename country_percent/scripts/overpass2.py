@@ -28,7 +28,10 @@ from shapely.ops import unary_union
 from simplify_geojson import process as simplify_geojson
 
 RAIL_WIDTH_BUFFER_M = 50
-OVERPASS_URL = "https://overpass.private.coffee/api/interpreter"
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_HEADERS = {
+    "User-Agent": "trainlog.me coverage generation",
+}
 ISO3166_URL = "https://iso3166-2-api.vercel.app/api/all"
 SUBDIVISION_QUERY = """
 [out:json];
@@ -57,7 +60,7 @@ def get_overpass_data(iso_spec, iso_code, query_template):
 
     attempt = 0
     for attempt in range(MAX_OVERPASS_RETRIES):
-        r = requests.get(OVERPASS_URL, params={"data": query})
+        r = requests.get(OVERPASS_URL, params={"data": query}, headers=OVERPASS_HEADERS)
         match r.status_code:
             case 200:
                 return r.json()
