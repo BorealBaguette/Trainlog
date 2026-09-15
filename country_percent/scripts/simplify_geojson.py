@@ -39,6 +39,10 @@ def round_float(value, decimals=6):
     return round(value * factor) / factor
 
 
+def round_area(value):
+    return round_float(value, decimals=2)
+
+
 def truncate_coords(coords):
     if isinstance(coords, list) or isinstance(coords, tuple):
         if coords and all(isinstance(item, (int, float)) for item in coords):
@@ -245,9 +249,7 @@ def process(country_code):
         # assign new IDs
         feature["properties"]["id"] = idx
         # assign polygon area
-        feature["properties"]["area_m2"] = round_float(
-            feature.pop("area_m2"), decimals=2
-        )
+        feature["properties"]["area_m2"] = round_area(feature.pop("area_m2"))
         for prop_key in old_properties:
             if prop_key in PROPERTIES_TO_KEEP:
                 # keep some whitelist of other properties
@@ -257,7 +259,7 @@ def process(country_code):
     total_area_m2 = sum(
         feature["properties"]["area_m2"] for feature in data["features"]
     )
-    data["total_area_m2"] = total_area_m2
+    data["total_area_m2"] = round_area(total_area_m2)
 
     set_output_crs(data)
 
