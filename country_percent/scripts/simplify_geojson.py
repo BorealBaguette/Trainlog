@@ -4,7 +4,7 @@ Simplify a processed GeoJSON file by:
 2. deleting features of all types except Polygon and Multipolygon,
 3. removing redundant polygon points,
 4. recomputing polygon areas,
-5. deleting very tiny polygons,
+5. failing on very tiny polygons,
 6. re-assign new IDs,
 7. converting the output to CRS84,
 8. truncating coordinate precision to the cm range.
@@ -31,6 +31,7 @@ WEB_MERCATOR_CRS = "EPSG:3857"
 OUTPUT_CRS = "urn:ogc:def:crs:OGC:1.3:CRS84"
 
 PROPERTIES_TO_KEEP = ["station"]
+MIN_AREA_M2 = 50  # lower once a real polygon this small shows up
 
 
 def round_float(value, decimals=6):
@@ -216,8 +217,9 @@ def process(country_code):
     # Compute the area for each geometry
     gdf_mercator["area_m2"] = gdf_mercator["geometry"].area
 
-    # Drop very tiny polygons (less than 1m^2)
-    gdf_mercator = gdf_mercator[gdf_mercator["area_m2"] >= 1].reset_index(drop=True)
+    # Very tiny polygons are most likely editing mistakes, so report
+    # them but keep them for manual inspection.
+    tiny_ids = list(gdf_mercator.index[gdf_mercator["area_m2"] < MIN_AREA_M2])
 
     # Transform to output crs
     gdf = gdf_mercator.drop(columns=["area_m2"]).to_crs(OUTPUT_CRS)
@@ -259,6 +261,9 @@ def process(country_code):
     with open(path, "w") as file:
         json.dump(data, file)
         print(f"Simplified {path}")
+
+    if tiny_ids:
+        sys.exit(f"Polygons smaller than {MIN_AREA_M2} m^2, ids: {tiny_ids}")
 
 
 if __name__ == "__main__":
