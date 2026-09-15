@@ -58,8 +58,7 @@ RETRY_DELAY_SECONDS = 3
 def get_overpass_data(iso_spec, iso_code, query_template):
     query = query_template.format(iso_code=iso_code, iso_spec=iso_spec)
 
-    attempt = 0
-    for attempt in range(MAX_OVERPASS_RETRIES):
+    for attempt in range(1, MAX_OVERPASS_RETRIES + 1):
         r = requests.get(OVERPASS_URL, params={"data": query}, headers=OVERPASS_HEADERS)
         match r.status_code:
             case 200:
