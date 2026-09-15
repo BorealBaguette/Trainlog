@@ -7,7 +7,7 @@ Simplify a processed GeoJSON file by:
 5. truncating coordinate precision to the cm range,
 6. recomputing polygon areas,
 7. re-assign new IDs,
-8. failing on very tiny polygons.
+8. failing on very tiny or invalid polygons.
 
 Usage:
     python simplify_geojson.py <COUNTRY_CODE>
@@ -25,6 +25,7 @@ import sys
 
 import geopandas as gpd
 from shapely.geometry import LineString, Point, mapping, shape
+from shapely.validation import explain_validity
 
 DEFAULT_INPUT_CRS = "urn:ogc:def:crs:OGC:1.3:CRS84"
 WEB_MERCATOR_CRS = "EPSG:3857"
@@ -240,6 +241,14 @@ def process(country_code):
     # them but keep them for manual inspection.
     tiny_ids = list(gdf.index[gdf["area_m2"] < MIN_AREA_M2])
 
+    # Invalid polygons (self-intersections, degenerate rings) come from
+    # manual edits and need fixing in QGIS, so report them too.
+    invalid = {
+        idx: explain_validity(geometry)
+        for idx, geometry in gdf["geometry"].items()
+        if not geometry.is_valid
+    }
+
     # Update the data with the valid features
     data["features"] = gdf.to_dict("records")
     for idx, feature in enumerate(data["features"]):
@@ -268,8 +277,13 @@ def process(country_code):
         json.dump(data, file)
         print(f"Simplified {path}")
 
+    errors = []
     if tiny_ids:
-        sys.exit(f"Polygons smaller than {MIN_AREA_M2} m^2, ids: {tiny_ids}")
+        errors.append(f"Polygons smaller than {MIN_AREA_M2} m^2, ids: {tiny_ids}")
+    for idx, reason in invalid.items():
+        errors.append(f"Invalid polygon, id {idx}: {reason}")
+    if errors:
+        sys.exit("\n".join(errors))
 
 
 if __name__ == "__main__":
