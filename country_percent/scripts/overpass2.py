@@ -188,21 +188,6 @@ def process_railway_geometry(iso_code, iso_spec):
     start_time = time.time()
 
     for way in ways:
-        if (
-            way["tags"]["railway"]
-            not in ["construction", "disused", "abandoned", "proposed"]
-            and way["tags"].get("service") not in ["yard", "spur", "siding"]
-            and way["tags"].get("usage") not in ["industrial"]
-        ):
-            buffered_geometry = buffer_linestring(
-                [(nodes_dict[node_id]) for node_id in way["nodes"]]
-            )
-            feature = {
-                "type": "Feature",
-                "geometry": shape(buffered_geometry).__geo_interface__,
-            }
-            stripped_data["features"].append(feature)
-
         processed_ways += 1
         if processed_ways % 20 == 0 or processed_ways == total_ways:
             progress = 100 * processed_ways / total_ways
@@ -212,6 +197,23 @@ def process_railway_geometry(iso_code, iso_spec):
                 f"ID: {processed_ways}, Progress: {progress:.2f}%, ETA: {eta:.2f} seconds",
                 end="\r",
             )
+
+        tags = way["tags"]
+        if tags["railway"] in ["construction", "disused", "abandoned", "proposed"]:
+            continue
+        if tags.get("service") in ["yard", "spur", "siding"]:
+            continue
+        if tags.get("usage") in ["industrial"]:
+            continue
+
+        buffered_geometry = buffer_linestring(
+            [(nodes_dict[node_id]) for node_id in way["nodes"]]
+        )
+        feature = {
+            "type": "Feature",
+            "geometry": shape(buffered_geometry).__geo_interface__,
+        }
+        stripped_data["features"].append(feature)
     print("\nBuffering completed!")
 
     stripped_data["features"] = merge_overlapping_polygons(stripped_data["features"])
