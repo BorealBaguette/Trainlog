@@ -63,7 +63,7 @@ def get_overpass_data(iso_spec, iso_code, query_template):
                 return r.json()
             case 504:
                 print(
-                    f"Error fetching data: {r.status_code} - {r.reason} (attempt ${attempt} of ${MAX_OVERPASS_RETRIES})"
+                    f"Error fetching data: {r.status_code} - {r.reason} (attempt {attempt} of {MAX_OVERPASS_RETRIES})"
                 )
                 time.sleep(RETRY_DELAY_SECONDS * attempt)
                 continue
