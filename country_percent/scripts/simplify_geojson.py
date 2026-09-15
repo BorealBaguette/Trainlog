@@ -118,20 +118,13 @@ def simplify_multipolygon_coords(coords):
 
 
 def simplify_geometry(geometry):
-    if not geometry:
-        return
-    geom_type = geometry.get("type")
+    geom_type = geometry["type"]
     if geom_type == "Polygon":
-        geometry["coordinates"] = simplify_polygon_coords(
-            geometry.get("coordinates", [])
-        )
+        geometry["coordinates"] = simplify_polygon_coords(geometry["coordinates"])
     elif geom_type == "MultiPolygon":
-        geometry["coordinates"] = simplify_multipolygon_coords(
-            geometry.get("coordinates", [])
-        )
+        geometry["coordinates"] = simplify_multipolygon_coords(geometry["coordinates"])
     else:
-        print(f"Prohibited geometry type: {geom_type}")
-        exit(1)
+        raise ValueError(f"unexpected geometry type {geom_type}")
 
 
 def explode_and_filter_geometries(gdf):
