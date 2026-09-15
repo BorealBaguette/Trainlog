@@ -182,39 +182,37 @@ def process_railway_geometry(iso_code, iso_spec):
 
     print("Buffering linestrings and creating polygons...")
 
-    total_elements = len(data["elements"])
-    processed_elements = 0
+    ways = [element for element in data["elements"] if element["type"] == "way"]
+    total_ways = len(ways)
+    processed_ways = 0
     start_time = time.time()
 
-    for element in data["elements"]:
-        if processed_elements not in []:  # [9013, 9410, 9411]:
-            if (
-                element["type"] == "way"
-                and element["tags"]["railway"]
-                not in ["construction", "disused", "abandoned", "proposed"]
-                and element["tags"].get("service") not in ["yard", "spur", "siding"]
-                and element["tags"].get("usage") not in ["industrial"]
-            ):
-                buffered_geometry = buffer_linestring(
-                    [(nodes_dict[node_id]) for node_id in element["nodes"]]
-                )
-                feature = {
-                    "type": "Feature",
-                    "geometry": shape(buffered_geometry).__geo_interface__,
-                }
-                stripped_data["features"].append(feature)
-        else:
-            print(element)
+    for way in ways:
+        if (
+            way["tags"]["railway"]
+            not in ["construction", "disused", "abandoned", "proposed"]
+            and way["tags"].get("service") not in ["yard", "spur", "siding"]
+            and way["tags"].get("usage") not in ["industrial"]
+        ):
+            buffered_geometry = buffer_linestring(
+                [(nodes_dict[node_id]) for node_id in way["nodes"]]
+            )
+            feature = {
+                "type": "Feature",
+                "geometry": shape(buffered_geometry).__geo_interface__,
+            }
+            stripped_data["features"].append(feature)
 
-        processed_elements += 1
-        if (processed_elements) % 20 == 0 or processed_elements == total_elements:
-            progress = 100 * processed_elements / total_elements
+        processed_ways += 1
+        if processed_ways % 20 == 0 or processed_ways == total_ways:
+            progress = 100 * processed_ways / total_ways
             elapsed_time = time.time() - start_time
-            eta = elapsed_time * total_elements / processed_elements - elapsed_time
+            eta = elapsed_time * total_ways / processed_ways - elapsed_time
             print(
-                f"ID: {processed_elements}, Progress: {progress:.2f}%, ETA: {eta:.2f} seconds",
+                f"ID: {processed_ways}, Progress: {progress:.2f}%, ETA: {eta:.2f} seconds",
                 end="\r",
             )
+    print("\nBuffering completed!")
 
     stripped_data["features"] = merge_overlapping_polygons(stripped_data["features"])
 
