@@ -20,11 +20,12 @@ calculations in EPSG:3857, and always writes output in CRS84.
 """
 
 import json
+import math
 import os
 import sys
 
 import geopandas as gpd
-from shapely.geometry import LineString, Point, mapping, shape
+from shapely.geometry import mapping, shape
 from shapely.validation import explain_validity
 
 DEFAULT_INPUT_CRS = "urn:ogc:def:crs:OGC:1.3:CRS84"
@@ -52,6 +53,20 @@ def truncate_geometry(geometry):
     return geometry
 
 
+def distance(a, b):
+    return math.hypot(a[0] - b[0], a[1] - b[1])
+
+
+def distance_to_segment(p, a, b):
+    ab = (b[0] - a[0], b[1] - a[1])
+    ap = (p[0] - a[0], p[1] - a[1])
+    if ab == (0, 0):
+        return math.hypot(*ap)
+    # clamp the projection of p onto ab to the segment
+    t = max(0.0, min(1.0, (ap[0] * ab[0] + ap[1] * ab[1]) / (ab[0] ** 2 + ab[1] ** 2)))
+    return math.hypot(ap[0] - t * ab[0], ap[1] - t * ab[1])
+
+
 def simplify_ring(ring):
     # Drop a point closer than MIN_POINT_DISTANCE_M to its predecessor,
     # or one that deviates less than the factor times the chord length
@@ -72,14 +87,12 @@ def simplify_ring(ring):
         prev = work[i - 1]
         curr = work[i]
         next = work[(i + 1) % len(work)]
-        line_prev_curr = LineString([prev, curr])
-        line_prev_next = LineString([prev, next])
-        point_curr = Point(curr)
+        length_prev_next = distance(prev, next)
         return (
-            line_prev_next.length <= MAX_ENDPOINT_DISTANCE_M
-            and point_curr.distance(line_prev_next)
-            <= line_prev_next.length * MAX_MIDPOINT_DISTANCE_FACTOR
-        ) or (line_prev_curr.length <= MIN_POINT_DISTANCE_M)
+            length_prev_next <= MAX_ENDPOINT_DISTANCE_M
+            and distance_to_segment(curr, prev, next)
+            <= length_prev_next * MAX_MIDPOINT_DISTANCE_FACTOR
+        ) or (distance(prev, curr) <= MIN_POINT_DISTANCE_M)
 
     # A closed ring has no first point, so the neighbours wrap around
     # the end. Repeat until a full pass removes nothing.
