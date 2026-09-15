@@ -40,19 +40,11 @@ def round_area(value):
 
 
 def truncate_coords(coords):
-    if isinstance(coords, list) or isinstance(coords, tuple):
-        if coords and all(isinstance(item, (int, float)) for item in coords):
-            assert all(e == 0 for e in coords[3:])
-            coords = coords[:2]
-            updated = []
-            for item in coords:
-                if isinstance(item, int):
-                    updated.append(item)
-                else:
-                    updated.append(round(item, 6))
-            return updated
-        return [truncate_coords(item) for item in coords]
-    return coords
+    if coords and all(isinstance(item, (int, float)) for item in coords):
+        # a single position
+        assert all(e == 0 for e in coords[3:])
+        return [round(item, 6) for item in coords[:2]]
+    return [truncate_coords(item) for item in coords]
 
 
 def truncate_geometry(geometry):
