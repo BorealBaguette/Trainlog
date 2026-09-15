@@ -80,16 +80,18 @@ class FakeRequest:
         self.args = {"use_new_router": "false"}
 
 def route_path(origin, destination, trip_type):
+    """Returns (path, duration_seconds). duration_seconds is the router's own
+    estimate (e.g. OSRM `routes[0].duration`), or None if unavailable."""
     routable_types = {"train", "tram", "metro", "ferry", "aerialway", "bus", "car", "walk", "cycle"}
     if trip_type not in routable_types:
-        return None
-    
+        return None, None
+
     routing_type_map = {"tram": "train", "metro": "train"}
     routing_type = routing_type_map.get(trip_type, trip_type)
-    
+
     coords = f"{origin['lng']},{origin['lat']};{destination['lng']},{destination['lat']}"
     path = f"route/v1/{'driving' if routing_type in ('bus', 'car') else routing_type}/{coords}"
-    
+
     try:
         result = forward_routing_core(routing_type, path, FakeRequest())
         if hasattr(result, 'get_json'):
@@ -98,16 +100,18 @@ def route_path(origin, destination, trip_type):
             data = json.loads(result)
         else:
             data = result
-        
+
         if data and "routes" in data and data["routes"]:
-            geometry = data["routes"][0].get("geometry", {})
+            route = data["routes"][0]
+            geometry = route.get("geometry", {})
             coords_list = geometry.get("coordinates", [])
+            duration = route.get("duration")
             if coords_list:
-                return [{"lat": c[1], "lng": c[0]} for c in coords_list]
+                return [{"lat": c[1], "lng": c[0]} for c in coords_list], duration
     except Exception as e:
         logger.warning(f"Routing failed for {trip_type}: {e}")
-    
-    return None
+
+    return None, None
 
 def get_airport_by_iata(iata):
     with pg_session() as pg:
@@ -415,9 +419,10 @@ def enrich_parsed_trip(parsed_trip):
         parsed_trip["_origin_coords"] = {"lat": origin_geo["lat"], "lng": origin_geo["lng"]}
         parsed_trip["_dest_coords"] = {"lat": dest_geo["lat"], "lng": dest_geo["lng"]}
         
-        routed_path = route_path(parsed_trip["_origin_coords"], parsed_trip["_dest_coords"], trip_type)
+        routed_path, routed_duration = route_path(parsed_trip["_origin_coords"], parsed_trip["_dest_coords"], trip_type)
         parsed_trip["_path"] = routed_path if routed_path else [parsed_trip["_origin_coords"], parsed_trip["_dest_coords"]]
-    
+        parsed_trip["_route_duration"] = routed_duration
+
     parsed_trip["_distance"] = getDistance(parsed_trip["_path"][0], parsed_trip["_path"][-1])
     return parsed_trip
 
@@ -504,8 +509,10 @@ def create_trip_from_parsed(user, parsed_trip, purchase_date=None, source="ai"):
         if resolved_path:
             path = resolved_path
         else:
-            routed_path = route_path(origin_point, dest_point, trip_type)
+            routed_path, routed_duration = route_path(origin_point, dest_point, trip_type)
             path = routed_path if routed_path else [origin_point, dest_point]
+            if routed_duration is not None:
+                parsed_trip["_route_duration"] = routed_duration
 
         trip_length = parsed_trip.get("_distance") or getDistance(path[0], path[-1])
         if trip_type in ("air", "helicopter"):
@@ -571,6 +578,11 @@ def create_trip_from_parsed(user, parsed_trip, purchase_date=None, source="ai"):
         estimated_duration = int((utc_end_datetime - utc_start_datetime).total_seconds())
         if estimated_duration < 0:
             estimated_duration = 0
+
+    # No timing info to derive a duration from (e.g. MCP calls without
+    # departure/arrival times) — fall back to the router's own estimate.
+    if not estimated_duration and parsed_trip.get("_route_duration"):
+        estimated_duration = int(parsed_trip["_route_duration"])
     
     trip = Trip(
         username=user.username, user_id=user.uid, origin_station=origin_station, destination_station=dest_station,

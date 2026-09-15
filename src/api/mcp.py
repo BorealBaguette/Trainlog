@@ -1190,8 +1190,13 @@ def _call_tool(name: str, args: dict, user) -> str:
             )}
 
         # Concrete UTC instants give a precise scheduled duration (as in
-        # create_plan_trip_from_parsed); a reroute invalidates the old one.
-        estimated = None if reroute else pt["estimated_trip_duration"]
+        # create_plan_trip_from_parsed); a reroute invalidates the old one, so
+        # fall back to the router's own estimate for the new route, and only
+        # to 0 if that's unavailable too.
+        if reroute:
+            estimated = int(parsed["_route_duration"]) if parsed.get("_route_duration") else 0
+        else:
+            estimated = pt["estimated_trip_duration"] or 0
         if timing.get("utc_start_datetime") and timing.get("utc_end_datetime"):
             diff = int((timing["utc_end_datetime"] - timing["utc_start_datetime"]).total_seconds())
             if diff >= 0:
