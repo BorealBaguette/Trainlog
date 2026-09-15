@@ -48,6 +48,10 @@ google:
 flightaware:
   fa_key: FLIGHTAWARE_API_KEY
 
+# GIPHY API (used only by py/giphy_curate.py to pick the error-page GIFs)
+giphy:
+  key: GIPHY_API_KEY
+
 # Buy Me a Coffee integration (used to show supporter info or accept donations)
 bmc:
   key: BMC_API_KEY

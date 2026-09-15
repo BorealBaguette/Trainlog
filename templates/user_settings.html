@@ -341,7 +341,7 @@
                 <input type="text" class="form-control settings2-combo-search" id="user_currency-search" autocomplete="off">
                 <div class="settings2-combo-list" id="user_currency-list">
                   {% for currency in currencyOptions %}
-                  <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" data-name="{{ currency.get('name', '') }}"></button>
                   {% endfor %}
                 </div>
                 <div class="settings2-combo-empty" id="user_currency-empty" style="display:none;">No results</div>
@@ -417,6 +417,21 @@
               <a class="btn btn-primary btn-sm" href="{{ url_for('discord_oauth.connect') }}">{{ connectDiscordButton }}</a>
               {% endif %}
             </div>
+
+            {# Only offered once Discord is linked: the announcer needs the id. #}
+            {% if discord_id %}
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" id="discord_autopost" name="discord_autopost" form="settingsForm" {{ discord_autopost_checked }}>
+              <label class="form-check-label" for="discord_autopost">
+                <i class="fa-brands fa-discord me-1"></i> {{ discordAutopostSetting }}
+              </label>
+              <div class="settings2-hint">{{ discordAutopostHint }}</div>
+            </div>
+
+            <div class="settings2-save">
+              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
+            </div>
+            {% endif %}
           </div>
         </div>
 
@@ -550,8 +565,9 @@
     currencyCombo.items.forEach(item => {
       const code = item.dataset.value;
       let name = currencyNames ? currencyNames.of(code) : null;
+      if (!name || name === code) name = item.dataset.name || name;
       if (name) name = name.charAt(0).toUpperCase() + name.slice(1);
-      const flag = getFlagEmoji(item.dataset.country);
+      const flag = item.dataset.emoji || getFlagEmoji(item.dataset.country);
       item.dataset.label = name ? `${name} (${code})` : code;
       item.dataset.flag = flag;
       item.dataset.search = normalizeSearch(`${item.dataset.label} ${code}`);

@@ -44,7 +44,9 @@ async function initializeMapLibre(options = {}) {
         userLanguage = 'en',
         center = [10, 50],
         zoom = 5,
-        styleUrl = null
+        styleUrl = null,
+        preserveDrawingBuffer = false,
+        pixelRatio = null
     } = options;
 
     let mapStyle;
@@ -74,6 +76,10 @@ async function initializeMapLibre(options = {}) {
             }
             mapStyle = await response.json();
 
+            if (OFM_SOURCED_STYLES.includes(effectiveTileserver)) {
+                applyStyleLanguage(mapStyle, userLanguage);
+            }
+
             // Add globe projection if requested
             if (useGlobe) {
                 mapStyle.projection = { type: 'globe' };
@@ -89,12 +95,17 @@ async function initializeMapLibre(options = {}) {
     }
 
     // Create map
+    // preserveDrawingBuffer/pixelRatio are only needed to export the canvas as an
+    // image (e.g. the print poster) — left off by default since they cost extra
+    // GPU memory/bandwidth on the normal interactive map.
     const map = new maplibregl.Map({
         container: container,
         style: mapStyle,
         center: center,
         zoom: zoom,
-        doubleClickZoom: false
+        doubleClickZoom: false,
+        preserveDrawingBuffer: preserveDrawingBuffer,
+        ...(pixelRatio ? { pixelRatio } : {})
     });
 
     // Add a sentinel layer that trip layers will sit above
@@ -189,6 +200,20 @@ function isVectorTileServer(tileserver) {
         'ofm-positron'
     ];
     return vectorServers.includes(tileserver);
+}
+
+// Styles served from OpenFreeMap tiles, whose per-language name fields let the
+// labels be localised client-side (Jawg instead gets its language server-side).
+const OFM_SOURCED_STYLES = ['dark-train', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
+
+function applyStyleLanguage(style, userLanguage) {
+    const code = userLanguage === 'gsw' ? 'de' : userLanguage.split('-')[0];
+    for (const layer of style.layers) {
+        if (layer.type !== 'symbol' || !layer.layout || !layer.layout['text-field']) continue;
+        if (!JSON.stringify(layer.layout['text-field']).includes('name')) continue;
+        layer.layout['text-field'] = ['coalesce',
+            ['get', `name:${code}`], ['get', 'name:latin'], ['get', 'name']];
+    }
 }
 
 // Get vector style URL based on tileserver
@@ -294,6 +319,30 @@ function normalizePathCoords(coords) {
     return result;
 }
 
+// How far the flown track's first fix has to be from the departure airport before the gap
+// is worth drawing. FR24's public track starts at the first radar contact, which is
+// usually on or beside the runway but is sometimes tens of km into the climb-out. Bridging
+// unconditionally therefore drew a straight stub alongside tracks that already reached the
+// airport; below this threshold the gap is normal coverage jitter, not missing data.
+const LIVE_ORIGIN_BRIDGE_MIN_KM = 5;
+
+// Great-circle distance in km between two [lat, lng] points.
+function _haversineKm(a, b) {
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(b[0] - a[0]), dLng = toRad(b[1] - a[1]);
+    const h = Math.sin(dLat / 2) ** 2
+            + Math.cos(toRad(a[0])) * Math.cos(toRad(b[0])) * Math.sin(dLng / 2) ** 2;
+    return 6371 * 2 * Math.asin(Math.min(1, Math.sqrt(h)));
+}
+
+// The departure airport, but only when the live track genuinely fails to reach it — i.e.
+// only when there is missing data to stand in for. Both arguments are [lat, lng]; returns
+// null when no bridge should be drawn, so callers can just test the result.
+function liveOriginBridge(origin, firstFix) {
+    if (!origin || !firstFix) return null;
+    return _haversineKm(origin, firstFix) > LIVE_ORIGIN_BRIDGE_MIN_KM ? origin : null;
+}
+
 // Create geodesic line between two points
 function createGeodesicLine(start, end, numPoints = 100, splitSegments = false) {
     const toRad = deg => deg * Math.PI / 180;
@@ -375,15 +424,16 @@ function applyLiveTracks(trips, liveTracks, features) {
         // the user never logged. Safe to recompute every refresh now that trip.path is
         // never overwritten.
         const destination = original.length ? original[original.length - 1] : null;
-        // The origin, for the same reason plus one of its own: FR24's public track often
-        // starts at the first airborne radar contact rather than at the gate — several km
-        // into the climb-out — so without this the route appears to begin in mid-air near
-        // the airport instead of at it.
+        // The origin, for the same reason plus one of its own: FR24's public track can
+        // start at the first airborne radar contact rather than at the gate — several km
+        // into the climb-out — and without this the route appears to begin in mid-air
+        // near the airport instead of at it. liveOriginBridge decides whether that gap
+        // actually exists on this flight; most of the time it does not.
         const origin = original.length ? original[0] : null;
 
         trip.livePath = live.path;
         trip.liveTracked = true;
-        trip.liveOrigin = origin;
+        trip.liveOrigin = liveOriginBridge(origin, live.path[0]);
         trip.liveDestination = destination;
         trip.liveUpdated = live.updated || null;
         if (live.altitude) trip.altitude = live.altitude;
@@ -398,9 +448,10 @@ function applyLiveTracks(trips, liveTracks, features) {
                 // remaining leg looking detached from the rest of the map. Bridged to
                 // both airports so the line still runs terminal to terminal.
                 let coords = live.path.map(c => [c[1], c[0]]);
-                if (origin) {
-                    coords = createGeodesicLine([origin[1], origin[0]], coords[0])
-                        .concat(coords);
+                if (trip.liveOrigin) {
+                    coords = createGeodesicLine(
+                        [trip.liveOrigin[1], trip.liveOrigin[0]], coords[0]
+                    ).concat(coords);
                 }
                 if (destination) {
                     coords = coords.concat(
@@ -850,9 +901,9 @@ function _addFlight3DToggleControl(map, onToggle, title) {
 // deck.gl runs in its own canvas stacked on top of the map (interleaved mode shares
 // MapLibre's WebGL context and can blank a raster base map, so it is not an option).
 // Left alone that canvas is added last and paints over everything, including the
-// station pins and the current-position marker. Drop it to its own low layer and lift
-// the markers above it, so the altitude profile floats over the map lines but still
-// passes under the pins.
+// station pins and the current-position marker. Slot it in just above the map's own
+// canvas instead, so the altitude profile floats over the map lines but still passes
+// under the pins and popups.
 // Initial compass bearing between two [lng, lat, ...] points, degrees clockwise from north.
 function _bearingDeg(a, b) {
     const toRad = d => d * Math.PI / 180;
@@ -876,31 +927,39 @@ const _PLANE_SVG = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(
     '</svg>'
 );
 
-function _lowerDeckCanvas(map) {
+function _lowerDeckCanvas(map, attempt) {
     const container = map.getContainer();
     // deck.gl's canvas id has moved around between versions, so identify it by
     // elimination instead: any canvas in the container that isn't MapLibre's own.
     const mapCanvas = map.getCanvas();
+    // Markers and popups live in the canvas container, right next to the map's own
+    // canvas. Sliding deck's canvas in there too, directly after the map canvas, puts
+    // it under them by document order alone — z-index tricks are unreliable here,
+    // since it is up to MapLibre's stylesheet whether the containers around them form
+    // stacking contexts of their own. deck positions its wrapper absolutely at
+    // 0,0/100%x100%, so moving it does not change where it draws.
+    const markerParent = map.getCanvasContainer ? map.getCanvasContainer() : mapCanvas.parentElement;
+    let moved = 0;
     container.querySelectorAll('canvas').forEach(canvas => {
         if (canvas === mapCanvas) return;
-        // deck.gl is installed with map.addControl, which drops its canvas inside
-        // MapLibre's control container. That container stacks above the markers on
-        // purpose (controls must stay clickable) and forms its own stacking context,
-        // so restyling the canvas in place cannot bring it below anything. Reparent
-        // deck's wrapper to the map container instead, where its z-index competes with
-        // the markers directly. deck positions the wrapper absolutely at 0,0/100%x100%,
-        // so moving it does not change where it draws.
+        // deck.gl is installed with map.addControl, so its canvas starts out inside
+        // MapLibre's control container (which stacks above the markers on purpose,
+        // controls having to stay clickable). Take deck's own wrapper along, since
+        // that is the element it sizes and positions.
         const wrapper = canvas.parentElement;
-        const node = (wrapper && wrapper !== container) ? wrapper : canvas;
-        if (node.parentElement !== container) container.appendChild(node);
-        node.style.zIndex = '1';
+        const node = (wrapper && wrapper !== container && wrapper !== markerParent) ? wrapper : canvas;
+        if (mapCanvas.nextSibling !== node) {
+            markerParent.insertBefore(node, mapCanvas.nextSibling);
+        }
+        node.style.zIndex = '';
         node.style.pointerEvents = 'none';
+        moved++;
     });
-    if (!document.getElementById('deck-marker-stacking')) {
-        const style = document.createElement('style');
-        style.id = 'deck-marker-stacking';
-        style.textContent = '.maplibregl-marker { z-index: 2; }';
-        document.head.appendChild(style);
+    // deck.gl creates its WebGL device asynchronously, so at addControl time the canvas
+    // usually does not exist yet and there is nothing to move — which is why the canvas
+    // ended up painting over the pins. Keep looking for a couple of seconds of frames.
+    if (!moved && (attempt || 0) < 120) {
+        requestAnimationFrame(() => _lowerDeckCanvas(map, (attempt || 0) + 1));
     }
 }
 
@@ -1067,6 +1126,7 @@ window.MapLibreUtils = {
     createRasterStyle,
     getTileServerConfig,
     createGeodesicLine,
+    liveOriginBridge,
     computeTimeStatus,
     applyLiveTracks,
     buildTripLayers,

@@ -75,6 +75,14 @@
     /* Dated future trips shown on the past page via the "show upcoming" toggle */
     tr.upcoming-trip > td { opacity: 0.65; }
 
+    /* Where that same listing crosses the present: the class goes on the first past
+       row below an upcoming one. A hairline and nothing else — the timeline either
+       side of it is continuous, so this is a seam to notice, not a section break.
+       In card layout the cards carry their own borders and this rule is overridden
+       (see the `> td { border: 0 }` card rule below); the line is drawn in the gap
+       above the card instead. */
+    #dataTable tbody tr.now-boundary > td { border-top: 1px dashed #aab4c0; }
+
     /* Expand arrow for the details row. Responsive draws this itself only for
        `details.type: 'inline'`, where the control is whichever column happens to be
        first on screen; this table names the type column as the control instead (see
@@ -165,6 +173,19 @@
             border-radius: 10px;
             background: #fff;
             box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+        }
+
+        /* The now-boundary as a card: the cards are already separated, so the seam is
+           a wider gap with the same hairline drawn across it. Absolute against the
+           card, which is positioned above for the sake of its own gutter items. */
+        .trip-card-host > #dataTable > tbody > tr.now-boundary { margin-top: 22px; }
+        .trip-card-host > #dataTable > tbody > tr.now-boundary::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            right: 0;
+            top: -12px;
+            border-top: 1px dashed #aab4c0;
         }
 
         /* An open detail row is part of the card above it, not a card of its own. */
@@ -864,6 +885,104 @@
         }
     }
 
+    /* The row actions modal, on every screen — so it must sit outside the
+       card-mode media query above. The buttons used to size themselves to
+       their labels and wrap ragged, which reads as a pile rather than a menu;
+       a two-up grid gives every action the same weight whatever a row offers,
+       and an odd one out takes the full width instead of leaving a hole.
+       .btn-label is a strip pinned down the left (style2.css shifts it into
+       the button's padding), so the label text can stay centred. */
+    .actionModalBody {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+    }
+    .actionModalBody .btn {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        margin-bottom: 0;
+        padding: 0.5rem 0.75rem 0.5rem 3rem;
+        white-space: nowrap;
+    }
+    .actionModalBody .btn .btn-label {
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        padding: 0 0.75rem;
+        border-top-left-radius: inherit;
+        border-bottom-left-radius: inherit;
+    }
+    .actionModalBody .btn:last-child:nth-child(odd) {
+        grid-column: 1 / -1;
+    }
+    /* The two Discord actions carry Discord's own blurple, so they read as one
+       pair and as nothing else on the row. What tells them apart is the sign
+       on the logo: the post is being added, or taken back. */
+    .btn-discord,
+    .btn-discord:disabled {
+        background-color: #5865F2;
+        border-color: #5865F2;
+        color: #fff;
+    }
+    .btn-discord:hover,
+    .btn-discord:focus,
+    .btn-discord:active {
+        background-color: #4752C4;
+        border-color: #4752C4;
+        color: #fff;
+    }
+    /* Every action icon gets the same box, so the darker .btn-label strip is
+       one width down the modal and the icon-only buttons in a card's detail
+       row are one size. 1.25em is Font Awesome's own fixed-width measure. */
+    .actionModalBody .btn .btn-label > i,
+    .actionModalBody .btn .btn-label > .discordIcon,
+    .rowActionsCell .btn > i,
+    .rowActionsCell .btn > .discordIcon {
+        width: 1.25em;
+        text-align: center;
+    }
+
+    /* The Discord pair has to read as one icon, so it lives in one of those
+       boxes: the logo sits left in it, a size down, and the sign is taken out
+       of the flow and set on its shoulder. Nothing here adds width — and the
+       sign has to be positioned rather than aligned, since .btn-label is a
+       flex row and flex children do not honour vertical-align. */
+    .discordIcon {
+        position: relative;
+        display: inline-block;
+        text-align: left;
+    }
+
+    /* The detail row's actions wrap on a narrow screen, and inline-block plus
+       a left margin wraps them ragged — the stragglers sit under the wrong
+       button with no spacing above. A wrapping flex row keeps every button on
+       a shared grid whatever fits, with one gap doing both directions. */
+    .rowActionsCell {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.375rem;
+    }
+    .rowActionsCell .btn {
+        margin-left: 0;
+    }
+    .discordLogo {
+        font-size: 0.85em;
+    }
+    /* Top right, but sitting on the logo's shoulder rather than floating above
+       it: the inline box reaches higher than the glyph's ink does. */
+    .discordSign {
+        position: absolute;
+        right: -0.1em;
+        top: 0.1em;
+        font-size: 0.5em;
+        line-height: 1;
+    }
 </style>
 
 {% include "includes/trainset_display.html" %}
@@ -888,6 +1007,12 @@
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>from:</code></span> <span>{{smart_search_from}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>to:</code></span> <span>{{smart_search_to}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>date:</code></span> <span>{{smart_search_date}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>duration:</code></span> <span>{{smart_search_duration}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>distance:</code></span> <span>{{smart_search_distance}}</span></div>
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>speed:</code></span> <span>{{smart_search_speed}}</span></div>
+{%- if not isPublic %}
+                            <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>price:</code></span> <span>{{smart_search_price}}</span></div>
+{%- endif %}
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>operator:</code></span> <span>{{smart_search_operator}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>line:</code></span> <span>{{smart_search_line}}</span></div>
                             <div class="d-flex mb-1"><span style="width: 100px; flex-shrink: 0;"><code>country:</code></span> <span>{{smart_search_country}}</span></div>
@@ -898,7 +1023,7 @@
                         </div>
                     </div>
                     <div class="col-md-5">
-                        <h6 class="fw-bold mb-2">{{smart_search_quotes_title}}</h6>
+                        <h6 class="fw-bold mb-2">{{smart_search_special_chars_title}}</h6>
                         <div class="small">
                             <div class="mb-2">
                                 <strong>"text"</strong> - {{smart_search_double_quotes_desc}}
@@ -906,8 +1031,23 @@
                             <div class="mb-2">
                                 <strong>`text`</strong> - {{smart_search_exact_desc}}
                             </div>
-                            <div>
+                            <div class="mb-2">
                                 <strong>!text</strong> - {{smart_search_negate_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>tex*</strong> - {{smart_search_star_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>te?t</strong> - {{smart_search_question_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>duration&gt;2h</strong> - {{smart_search_compare_desc}}
+                            </div>
+                            <div class="mb-2">
+                                <strong>duration:2h..4h</strong> - {{smart_search_range_desc}}
+                            </div>
+                            <div>
+                                <strong>train|bus</strong> - {{smart_search_or_desc}}
                             </div>
                         </div>
                     </div>
@@ -923,8 +1063,24 @@
                 <div class="search-example">type:train to:!Paris</div>
                 <small class="text-muted d-block mb-2">{{smart_search_example_negate_desc}}</small>
 
+                <div class="search-example">from:Ber* to:*hagen</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_wildcard_desc}}</small>
+
+                <div class="search-example">duration&gt;2h date:2024-01-01..2024-06-30</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_range_desc}}</small>
+
+                <div class="search-example">date:2020 date:!2020-02..2020-03 type:train|bus</div>
+                <small class="text-muted d-block mb-2">{{smart_search_example_and_desc}}</small>
+
                 <div class="search-example">from:Oslo express date:2024-01-15</div>
-                <small class="text-muted d-block">{{smart_search_example_mixed_desc}}</small>
+                <small class="text-muted d-block mb-3">{{smart_search_example_mixed_desc}}</small>
+
+                <h6 class="fw-bold mb-2">{{smart_search_tips_title}}</h6>
+                <ul class="small text-muted mb-0 ps-3">
+                    <li>{{smart_search_global_exact_desc}}</li>
+                    <li>{{smart_search_alias_desc}}</li>
+                    <li>{{smart_search_vessel_desc}}</li>
+                </ul>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{close}}</button>
@@ -943,6 +1099,7 @@
             <li class="dropdown-item" onclick="exportSelected();"><i class="fa-solid fa-file-export"></i>  {{export}}</li>
             {% if not isPublic %}
             <li class="dropdown-item" onclick="$('#ticketSearchModal').modal('show');"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</li>
+            <li class="dropdown-item" onclick="$('#planSearchModal').modal('show');"><i class="fa-solid fa-map-location-dot"></i>  {{ moveToPlan|default('Move to a plan') }}</li>
             <li class="dropdown-item tagSearchLink" style="display:none;" onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags"></i>  {{manage_tags}}</li>
             {% endif %}
             <li class="dropdown-item" onclick="exportGpx();"><i class="fa-solid fa-route"></i>  {{exportGpx}}</li>
@@ -1010,6 +1167,26 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-primary" onclick="attachSelectedTrips($('#ticketSearchInput').val())">{{submit}}</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="planSearchModal" tabindex="-1" role="dialog" aria-labelledby="planSearchModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="planSearchModalLabel">{{ moveToPlan|default('Move to a plan') }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label for="planSearchInput" class="form-label">{{ selectPlan|default('Select a plan') }}</label>
+          <select id="planSearchInput" class="form-select"></select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-primary" onclick="moveSelectedToPlan($('#planSearchInput').val())">{{submit}}</button>
       </div>
     </div>
   </div>
@@ -1335,7 +1512,7 @@ function _advancedHasTrainset(adv) {
     }
 }
 
-function openCompositionModal(trainName, dateStr, materialType) {
+function openCompositionModal(trainName, dateStr, materialType, seatInfo) {
     $('#compositionModalTitle').text(trainName + (dateStr ? ` (${dateStr})` : ''));
     var $modalBody = $('#compositionModal .modal-body');
     $modalBody.html(`
@@ -1348,7 +1525,7 @@ function openCompositionModal(trainName, dateStr, materialType) {
 
     if (materialType) {
         _resolveUnits(materialType, '{{ username }}')
-            .done(function(r) { _renderTrainset($modalBody, r.units, r.name); })
+            .done(function(r) { _renderTrainset($modalBody, r.units, r.name, seatInfo); })
             .fail(function()  { $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>'); });
     } else {
         $modalBody.html('<div class="alert alert-warning">' + {{ tsNoComposition | tojson }} + '</div>');
@@ -1365,6 +1542,11 @@ function toggleTypeFilter() {
 function toggleIncludeFuture() {
     const switchState = document.getElementById('includeFutureSwitch').checked;
     setCookie('includeFutureSwitch', switchState, 7);
+    // Switching it on inserts a whole block of upcoming trips above the listing, so
+    // the page being shown is no longer the page it was: reload() would reset to
+    // offset 0, which is now the furthest-off plan. Anchor on now instead, exactly as
+    // a fresh load does. Switching it off just goes back to the top of the past.
+    _anchorNow = switchState && canAnchorNow();
     tableObject.ajax.reload();
 }
 
@@ -1444,6 +1626,24 @@ function hideCardHeader() {
     $(tableObject.table().header()).find('tr').hide();
 }
 
+/* A hairline above the first past trip on a page that also holds upcoming ones, so
+   the point the list crosses the present is visible rather than inferred from the
+   dates. Nothing is inserted into the table — the line is drawn by the stylesheet off
+   this class — so no row here is anything DataTables did not put there itself. */
+function markNowBoundary() {
+    $('#dataTable tbody tr').removeClass('now-boundary');
+    if (!isPast) return;
+    var rows = tableObject.rows({ page: 'current' });
+    var data = rows.data();
+    var nodes = rows.nodes();
+    for (var i = 1; i < data.length; i++) {
+        if (data[i - 1].plannedFuture == 1 && data[i].plannedFuture != 1) {
+            $(nodes[i]).addClass('now-boundary');
+            break;
+        }
+    }
+}
+
 function columnIndexesWithClass(wanted) {
     // Read off the column definitions rather than the header: DataTables applies
     // columns.className to the body cells only, so the <th> does not carry it.
@@ -1497,7 +1697,7 @@ function processHiddenData(rowIdx, columns){
                 // Shared tags open the animated multiTrip view, not the
                 // single-owner public page
                 var tagHref = tag.is_shared
-                    ? "{{url_for('multi_trip', tagUuid='')}}" + tag.uuid
+                    ? "{{url_for('multi_trip', tagId='')}}" + tag.uuid
                     : "{{url_for('public_trip', tagId='')}}" + tag.uuid;
                 var a = $('<a>')
                     .attr('href', tagHref)
@@ -1687,18 +1887,19 @@ function processHiddenData(rowIdx, columns){
                 }
                 if (isValid) {
                     formatted += `<div id="trainsetInline${rowIdx}"></div>`;
-                    (function(rowId, mat, personal) {
+                    (function(rowId, mat, personal, seatInfo) {
                         setTimeout(function() {
                             var labels = {};
                             if (personal) labels.personal = personal;
                             _resolveUnits(mat, '{{ username }}')
                                 .done(function(r) {
                                     if (r.name && r.name !== labels.personal) labels.saved = r.name;
-                                    _renderTrainsetInline(rowId, r.units, labels);
+                                    _renderTrainsetInline(rowId, r.units, labels, seatInfo);
                                 })
                                 .fail(function() { $('#trainsetInline' + rowId).remove(); });
                         }, 0);
-                    })(rowIdx, primary, rawMat !== primary ? rawMat : null);
+                    })(rowIdx, primary, rawMat !== primary ? rawMat : null,
+                       { car: rowData.seat_car, seat: rowData.seat });
                 }
                 col.data = formatted;
             }
@@ -1782,12 +1983,15 @@ function processHiddenData(rowIdx, columns){
             '</tr>' :
             '';
         }
-        else if (cardMode ? cardCols.indexOf(col.columnIndex) === -1 : col.hidden) {
+        // An open card shows its actions inline in the detail row as well as
+        // behind the kebab: col-actions is a card column, so the card-mode test
+        // above would otherwise drop the row that carries them.
+        else if (cardMode || col.hidden) {
             var id = $(col.data).attr("data-tripId");
             return `
                 <tr data-dt-row="${col.rowIndex}" data-dt-column="${col.columnIndex}">
                     <td><strong>Actions</strong></td>
-                    <td>
+                    <td class="rowActionsCell" data-trip="${id}">
                         <a class="btn btn-primary linkButton" href="{{ url_for('public_trip', tripIds='') }}${id}">
                             <i class="fa-regular fa-share-from-square"></i>
                         </a>
@@ -1801,6 +2005,7 @@ function processHiddenData(rowIdx, columns){
                         <button class="btn btn-danger deleteButton ms-1" id="${id}">
                             <i class="fa-regular fa-trash-can"></i>
                         </button>
+                        ${discordButtonsHtml(id, false)}
                         {% endif %}
                     </td>
                 </tr>
@@ -1885,16 +2090,21 @@ function renderLineName(data, type, row) {
             var dateStr  = row.start_date || '';
             var safeName = (data || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
             var safeMat  = mat.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            var safeSeat = (row.seat || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '&quot;').replace(/</g, '&lt;');
+            var seatCarLit = (row.seat_car === null || row.seat_car === undefined || row.seat_car === '')
+                ? 'null' : parseInt(row.seat_car, 10);
             // Icon only when the advanced field has a resolvable trainset (race-free);
             // fall back to the name cache only for a legacy plain material_type match.
             var btn = (adv ? _advancedHasTrainset(adv) : _isValidMaterial(mat)) ? `
                     <a href="javascript:void(0);"
-                       onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}')"
-                       class="text-decoration-none ms-2"
+                       onclick="openCompositionModal('${safeName}', '${dateStr}', '${safeMat}', {car: ${seatCarLit}, seat: '${safeSeat}'})"
+                       class="text-decoration-none me-2"
                        title="View Composition">
                        <i class="fas fa-train"></i>
                     </a>` : '';
-            if (data || btn) return `<span>${sanitize(data || '')}${btn}</span>`;
+            // Icon first: a long line name would otherwise push it past the column's
+            // visible width and hide it.
+            if (data || btn) return `<span>${btn}${sanitize(data || '')}</span>`;
         }
     }
     return data;
@@ -1973,6 +2183,61 @@ const TRANSLATIONS = {
     car: "{{ car }}"
 }
 
+// Trips whose Discord announcement is still up, so only those rows offer to
+// take it down. Sent whole with the page: the list is short, and the trips API
+// is paged server-side.
+const DISCORD_ANNOUNCED = new Set({% if not isPublic %}{{ discordAnnouncedIds|safe }}{% else %}[]{% endif %});
+
+// Trips their owner may post by hand right now: public, not yet announced, and
+// being travelled. Empty for anyone who has not linked a Discord account.
+const DISCORD_POSTABLE = new Set({% if not isPublic %}{{ discordPostableIds|safe }}{% else %}[]{% endif %});
+
+// The Discord buttons in one place: the actions modal, the card's detail row
+// and the swap that follows a post or a removal all build them from here, so
+// the three can never drift apart. `labeled` picks the modal's wide form over
+// the icon-only one the detail row uses.
+function discordButtonsHtml(tripId, labeled){
+    var id = Number(tripId), html = '';
+    if (DISCORD_POSTABLE.has(id)) {
+        html += labeled
+            ? `<button class="btn btn-labeled btn-discord discordPostButton" data-trip="${id}" onclick="postToDiscord(${id})">
+                   <span class="btn-label"><span class="discordIcon"><i class="fa-brands fa-discord discordLogo"></i><i class="fa-solid fa-plus discordSign"></i></span></span>{{postToDiscord}}
+               </button>`
+            : `<button class="btn btn-discord discordPostButton ms-1" data-trip="${id}" title="{{postToDiscord}}" onclick="postToDiscord(${id})">
+                   <span class="discordIcon"><i class="fa-brands fa-discord discordLogo"></i><i class="fa-solid fa-plus discordSign"></i></span>
+               </button>`;
+    }
+    if (DISCORD_ANNOUNCED.has(id)) {
+        html += labeled
+            ? `<button class="btn btn-labeled btn-discord discordRemoveButton" data-trip="${id}" onclick="removeDiscordPost(${id})">
+                   <span class="btn-label"><span class="discordIcon"><i class="fa-brands fa-discord discordLogo"></i><i class="fa-solid fa-minus discordSign"></i></span></span>{{removeDiscordPost}}
+               </button>`
+            : `<button class="btn btn-discord discordRemoveButton ms-1" data-trip="${id}" title="{{removeDiscordPost}}" onclick="removeDiscordPost(${id})">
+                   <span class="discordIcon"><i class="fa-brands fa-discord discordLogo"></i><i class="fa-solid fa-minus discordSign"></i></span>
+               </button>`;
+    }
+    return html;
+}
+
+// Swap a row's Discord buttons for the ones its new state calls for, wherever
+// that row is on screen: the modal that was just clicked, any stale copy of it
+// (renderButton appends a fresh modal per draw), and the open card's detail
+// row. Cheaper and less jarring than reloading the page for one changed row.
+function refreshDiscordButtons(tripId, state){
+    var id = Number(tripId);
+    DISCORD_ANNOUNCED[state.announced ? 'add' : 'delete'](id);
+    DISCORD_POSTABLE[state.postable ? 'add' : 'delete'](id);
+
+    $('#actionModal' + id).find('.modal-body').each(function(){
+        $(this).find('.discordPostButton, .discordRemoveButton').remove();
+        $(this).append(discordButtonsHtml(id, true));
+    });
+    $('.rowActionsCell[data-trip="' + id + '"]').each(function(){
+        $(this).find('.discordPostButton, .discordRemoveButton').remove();
+        $(this).append(discordButtonsHtml(id, false));
+    });
+}
+
 function renderButton(data, type, row){
   var modalId = `actionModal${data.uid}`;
   var button = $('<button>').attr('class', "btn btn-link link-dark modalButton")
@@ -1989,7 +2254,7 @@ function renderButton(data, type, row){
                         <h5 class="modal-title" id="${modalId}Label">${sanitize(data.origin_station || '')} - ${sanitize(data.destination_station || '')}</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
-                    <div class="modal-body">
+                    <div class="modal-body actionModalBody">
                         <a class="btn btn-labeled btn-primary linkButton"
                            href="{{ url_for('public_trip', tripIds='') }}${data.uid}">
                             <span class="btn-label"><i class="fa-regular fa-share-from-square"></i></span>{{shareTrip}}
@@ -2006,6 +2271,7 @@ function renderButton(data, type, row){
                         <button class="btn btn-labeled btn-danger deleteButton" id="${data.uid}">
                             <span class="btn-label"><i class="fa-regular fa-trash-can"></i></span>{{delete}}
                         </button>
+                        ${discordButtonsHtml(data.uid, true)}
                         {% endif %}
                     </div>
                 </div>
@@ -2053,7 +2319,7 @@ function _formatTrainsetStr(mat) {
     try {
         var units = JSON.parse(mat);
         if (units && !Array.isArray(units) && Array.isArray(units.trainsets)) {
-            return units.trainsets.join(' + ');
+            return tsbJoinNames(units.trainsets);
         }
         if (Array.isArray(units) && units.length > 0) {
             var result = [], i = 0;
@@ -2103,17 +2369,22 @@ function renderMaterialType(data, type, row){
 var table = $('#tripRows');
 
     const SEARCH_PREFIXES = {
-        'type:': {{ trip_column_names.index("type") }},
-        'from:': {{ trip_column_names.index("origin_station") }},
-        'to:': {{ trip_column_names.index("destination_station") }},
-        'date:': {{ trip_column_names.index("start_datetime") }},
-        'operator:': {{ trip_column_names.index("operator") }},
-        'line:': {{ trip_column_names.index("line_name") }},
-        'country:': {{ trip_column_names.index("countries") }},
-        'visibility:': {{ trip_column_names.index("visibility") }},
-        'material:': {{ trip_column_names.index("material_type") }},
-        'reg:': {{ trip_column_names.index("reg") }},
-        'notes:': {{ trip_column_names.index("notes") }}
+        'type': 'type',
+        'from': 'origin_station',
+        'to': 'destination_station',
+        'date': 'start_datetime',
+        'duration': 'trip_duration_seconds',
+        'distance': 'trip_length',
+        'length': 'trip_length',
+        'speed': 'trip_speed',
+        {% if not isPublic %}'price': 'price',{% endif %}
+        'operator': 'operator',
+        'line': 'line_name',
+        'country': 'countries',
+        'visibility': 'visibility',
+        'material': 'material_type',
+        'reg': 'reg',
+        'notes': 'notes'
     };
 
     // Strip a wrapping pair of " (spaces) or ` (exact). Returns {value, isExact}.
@@ -2128,24 +2399,37 @@ var table = $('#tripRows');
     }
 
     function parseSmartSearch(searchValue) {
-        const columnFilters = {};
+        const filters = [];
         let globalSearch = '';
         const globalNot = [];
         // Tokens: bare words, "double-quoted" (spaces) or `backtick-quoted` (exact).
         const terms = searchValue.match(/(?:[^\s"`]+|"[^"]*"|`[^`]*`)+/g) || [];
         terms.forEach(term => {
             let matched = false;
-            for (const [prefix, columnIndex] of Object.entries(SEARCH_PREFIXES)) {
-                if (term.toLowerCase().startsWith(prefix)) {
-                    let value = term.substring(prefix.length);
-                    let negate = false;
-                    if (value.startsWith('!')) { negate = true; value = value.substring(1); }
-                    if (value) {
-                        const { value: cleanValue, isExact } = stripQuotes(value);
-                        columnFilters[columnIndex] = { value: cleanValue, isExact, negate };
-                        matched = true;
-                        break;
-                    }
+            // A field is followed either by ':' or straight by a comparison
+            // operator, so "duration>2h" reads as it would be said out loud. The
+            // operator stays part of the value; the colon does not.
+            const prefixed = term.match(/^([a-zA-Z]+)(:|>=|<=|>|<|=)([\s\S]*)$/);
+            if (prefixed && SEARCH_PREFIXES.hasOwnProperty(prefixed[1].toLowerCase())) {
+                const field = SEARCH_PREFIXES[prefixed[1].toLowerCase()];
+                let value = (prefixed[2] === ':' ? '' : prefixed[2]) + prefixed[3];
+                let negate = false;
+                if (value.startsWith('!')) { negate = true; value = value.substring(1); }
+                if (value) {
+                    // '|' separates alternatives ("type:train|bus"), unless the value
+                    // is quoted — there the bar is part of the text being searched.
+                    const quoted = /^(".*"|`.*`)$/.test(value);
+                    const parts = quoted ? [value] : value.split('|').filter(Boolean);
+                    const values = parts.map(part => stripQuotes(part).value);
+                    // Every term is kept: repeated fields are ANDed, so "date:2020
+                    // date:!2020-02..2020-03" reads as "2020 except February–March".
+                    filters.push({
+                        field,
+                        values,
+                        exact: stripQuotes(parts[0]).isExact,
+                        negate,
+                    });
+                    matched = true;
                 }
             }
             if (!matched) {
@@ -2163,7 +2447,7 @@ var table = $('#tripRows');
                 }
             }
         });
-        return { columnFilters, globalSearch, globalNot };
+        return { filters, globalSearch, globalNot };
     }
 
     var _urlParams = new URLSearchParams(window.location.search);
@@ -2251,10 +2535,24 @@ var table = $('#tripRows');
         ];
     }
     var customSort = { field: 'temporal', dir: isPast ? 'desc' : 'asc', label: '{{tripStartTime}}' };
+    /* With "show upcoming" on, the descending timeline reads [far future … now …
+       oldest past], so its first page is the most distant plan. Ask the backend to
+       centre the first load on now instead — but only that load, and only when the
+       URL did not name a page, since an explicit ?page= is the user's own choice.
+       Any later draw (paging, sorting, searching) leaves the offset alone. */
     if (_urlSortParam) {
         var _sp = _urlSortParam.split(':');
         if (_sp.length === 2) { customSort.field = _sp[0]; customSort.dir = _sp[1]; customSort.label = _sp[0]; }
     }
+    /* Set for the one draw the anchor produced, so it can be kept out of the URL. */
+    var _anchoredDraw = false;
+    /* "Above/below now" only means something in the order that runs on time. */
+    window.canAnchorNow = function() {
+        return isPast && customSort.field === 'temporal' && customSort.dir === 'desc';
+    };
+    var _anchorNow = canAnchorNow()
+        && !_urlParams.get('page')
+        && getCookie('includeFutureSwitch') === 'true';
     var tableObject = $('#dataTable').DataTable({
     processing: true,
     serverSide: true,
@@ -2276,30 +2574,19 @@ var table = $('#tripRows');
         "data": function(d) {
             d.filterTypes = (getCookie('filterTypeSwitch') === 'true') ? 0 : 1;
             d.includeFuture = (isPast && getCookie('includeFutureSwitch') === 'true') ? 1 : 0;
-            
+            if (_anchorNow) d.anchorNow = 1;
+
             // Parse smart search
             const searchValue = d.search.value || '';
-            const { columnFilters, globalSearch, globalNot } = parseSmartSearch(searchValue);
+            const { filters, globalSearch, globalNot } = parseSmartSearch(searchValue);
 
             // Set global search to the non-prefixed terms
             d.search.value = globalSearch;
             // Negative global terms ("!term"): JSON list the backend excludes
             d.search_not = JSON.stringify(globalNot);
-
-            // Add column-specific searches
-            if (d.columns) {
-                d.columns.forEach((column, index) => {
-                    if (columnFilters[index]) {
-                        column.search = {
-                            value: columnFilters[index].value,
-                            regex: false
-                        };
-                        // Add exact / negate flags as separate parameters
-                        d[`columns[${index}][search][exact]`] = columnFilters[index].isExact ? 'true' : 'false';
-                        d[`columns[${index}][search][negate]`] = columnFilters[index].negate ? 'true' : 'false';
-                    }
-                });
-            }
+            // Field filters ("from:Oslo", "duration>2h"): a list, so the same field
+            // can carry several terms.
+            d.filters = JSON.stringify(filters);
             if (customSort.field) {
                 d.sort_field = customSort.field;
                 d.sort_dir = customSort.dir;
@@ -2419,10 +2706,22 @@ var table = $('#tripRows');
             }
         }
     }
+}).on('xhr.dt', function(e, settings, json) {
+    // The anchored draw asked for offset 0 and was answered with the rows around now
+    // instead. `xhr` fires before the table is drawn, so writing the offset the server
+    // actually used here is enough for the pager and the "showing x to y" line to
+    // describe the rows about to appear. One-shot: the flag is cleared either way, so
+    // everything after this — paging, sorting, searching — pages from where it says.
+    if (json && typeof json.start === 'number') {
+        settings._iDisplayStart = json.start;
+        _anchoredDraw = true;
+    }
+    _anchorNow = false;
 }).on('responsive-display', function(e, datatable, row, showHide, update) {
     resetObjects();
 }).on('draw', function() {
     hideCardHeader();
+    markNowBoundary();
     tableObject.rows().every(function(rowIdx, tableLoop, rowLoop) {
         var row = this.node();
         var data = this.data();
@@ -2449,7 +2748,14 @@ var table = $('#tripRows');
         url.searchParams.delete('sort');
     }
     var _pi = tableObject.page.info();
-    if (_pi.page > 0) {
+    if (_anchoredDraw) {
+        // The anchored offset is not a page the user asked for, and it is not one
+        // either: it lands mid-grid, so ?page= could not reproduce it anyway. Leaving
+        // it out of the URL is also what lets a reload anchor again rather than
+        // freeze on whatever page number now happened to fall in today.
+        url.searchParams.delete('page');
+        _anchoredDraw = false;
+    } else if (_pi.page > 0) {
         url.searchParams.set('page', _pi.page + 1);
     } else {
         url.searchParams.delete('page');
@@ -2503,7 +2809,14 @@ tableObject.on('length.dt', function() {
     // Remembered per browser, so this device opens on the same length next time. The
     // custom-value path routes through here too — it sets the length via the API, which
     // fires this — so there is nothing to persist separately.
-    setCookie(ROWS_COOKIE, _autoRowsActive ? 'auto' : String(tableObject.page.len()), 365);
+    //
+    // "All" (-1) is deliberately not persisted: picking it is a one-off "just this once"
+    // action, not a lasting preference. If it were remembered, a page that was small
+    // enough to load whole on day one silently keeps trying to load "all" forever,
+    // including after the trip count has grown large enough to choke on it.
+    var len = tableObject.page.len();
+    if (len === -1) return;
+    setCookie(ROWS_COOKIE, _autoRowsActive ? 'auto' : String(len), 365);
 });
 
 function lengthSelect() {
@@ -3072,6 +3385,28 @@ $('.deleteButton').off('click').on('click', function() {
     updateMetaWrap();
 }
 
+// A selection of a few hundred trips used to be spelled out id by id in the
+// share URL. POSTing the list to /public/share stores it once and redirects to
+// an 8-character key, so the shared link is short whatever the selection size.
+// A real form submit (rather than fetch + window.open) keeps the new tab
+// user-initiated, so popup blockers leave it alone.
+function openTripShare(openInNewTab) {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = "{{ url_for('create_trip_share') }}";
+    form.target = openInNewTab ? '_blank' : '_self';
+
+    const trips = document.createElement('input');
+    trips.type = 'hidden';
+    trips.name = 'trips';
+    trips.value = checkedTrips.join(',');
+    form.appendChild(trips);
+
+    document.body.appendChild(form);
+    form.submit();
+    form.remove();
+}
+
 // True only when viewing your own trips (you may change their visibility).
 // The public/friend view sets isPublic=True; the owner's own page sets it False.
 const ownsTrips = "{{ isPublic }}" != "True";
@@ -3079,7 +3414,7 @@ const ownsTrips = "{{ isPublic }}" != "True";
 function shareTrips(openInNewTab) {
     const isAllPublic = Object.values(checkedTripData).every(trip => trip.visibility === 'public');
     if(isAllPublic || !ownsTrips) {
-        window.open("{{ url_for('public_trip', tripIds='') }}" + checkedTrips, openInNewTab ? '_blank' : '_self', 'noopener')
+        openTripShare(openInNewTab)
         return;
     }
 
@@ -3089,7 +3424,7 @@ function shareTrips(openInNewTab) {
 
 function shareTripsLeaveAsIs() {
     const openInNewTab = document.getElementById('shareTripsMakePublicModal').getAttribute('data-new-tab') === 'true';
-    window.open("{{ url_for('public_trip', tripIds='') }}" + checkedTrips, openInNewTab ? '_blank' : '_self', 'noopener')
+    openTripShare(openInNewTab)
     $('#shareTripsMakePublicModal').modal('hide');
 }
 
@@ -3107,7 +3442,7 @@ function shareTripsMakePublic() {
 
     fetch(`${changeVisibilityUrl}?${urlParams.toString()}`).finally(() => {
         tableObject.ajax.reload();
-        window.open("{{ url_for('public_trip', tripIds='') }}" + checkedTrips, openInNewTab ? '_blank' : '_self', 'noopener')
+        openTripShare(openInNewTab)
         for (let trip of Object.values(checkedTripData)) {
             trip.visibility = 'public';
         }
@@ -3145,6 +3480,52 @@ function processDelete(id){
                 alert( "error" );
             }
         });
+}
+
+function postToDiscord(tripId){
+    if (!confirm({{ confirmPostToDiscord|tojson }})) return;
+    // The server turns a second click away, but disabling the buttons keeps
+    // the modal from looking like nothing happened while Discord answers.
+    $('.discordPostButton[data-trip="' + tripId + '"]').prop('disabled', true);
+    $.post({
+        url: '{{url_for("post_trip_announcement", username=username)}}',
+        data: { tripId: tripId },
+        success: function(res){
+            $('.discordPostButton[data-trip="' + tripId + '"]').prop('disabled', false);
+            if (res && res.ok) {
+                refreshDiscordButtons(tripId, res);
+            } else {
+                alert({{ postToDiscordFailed|tojson }});
+            }
+        },
+        error: function(){
+            $('.discordPostButton[data-trip="' + tripId + '"]').prop('disabled', false);
+            alert({{ postToDiscordFailed|tojson }});
+        }
+    });
+}
+
+function removeDiscordPost(tripId){
+    if (!confirm({{ confirmRemoveDiscordPost|tojson }})) return;
+    // The server turns a second click away, but disabling the buttons keeps
+    // the modal from looking like nothing happened while Discord answers.
+    $('.discordRemoveButton[data-trip="' + tripId + '"]').prop('disabled', true);
+    $.post({
+        url: '{{url_for("delete_trip_announcement", username=username)}}',
+        data: { tripId: tripId },
+        success: function(res){
+            $('.discordRemoveButton[data-trip="' + tripId + '"]').prop('disabled', false);
+            if (res && res.ok) {
+                refreshDiscordButtons(tripId, res);
+            } else {
+                alert({{ removeDiscordPostFailed|tojson }});
+            }
+        },
+        error: function(){
+            $('.discordRemoveButton[data-trip="' + tripId + '"]').prop('disabled', false);
+            alert({{ removeDiscordPostFailed|tojson }});
+        }
+    });
 }
 
 function deleteTrip(tripId){
@@ -3205,7 +3586,10 @@ function _massEditSetupOperatorPills(trips) {
         $('#massEditOperatorPills .op-pill').remove();
         _massEditOperatorPills = operatorPillsInput(
             hidden, search, $('#massEditOperatorPills'), manAndOps,
-            "{{ url_for('static', filename='') }}", stationType);
+            "{{ url_for('static', filename='') }}", stationType,
+            { plainToggle: true,
+              plainLabel: "{{ operatorPlainText|default('Edit as plain text') }}",
+              pillsLabel: "{{ operatorPillsMode|default('Back to operator list') }}" });
     }
 
     if (_massEditManAndOpsCache[stationType]) {
@@ -3282,7 +3666,7 @@ function openMassEdit() {
 
     // Type groups (must match Python TripTypes.can_transform groups)
     const TYPE_GROUPS = [
-        ['accomodation', 'poi', 'restaurant'],
+        ['accommodation', 'poi', 'restaurant'],
         ['air', 'helicopter'],
         ['bus', 'car'],
         ['cycle', 'scooter'],
@@ -3386,7 +3770,7 @@ function openMassEditTsb() {
         try {
             var units = JSON.parse(value);
             if (Array.isArray(units)) label = units.map(function(u) { return u.label || u.nom || u.name; }).join(' + ');
-            else if (units && Array.isArray(units.trainsets)) label = units.trainsets.join(' + ');
+            else if (units && Array.isArray(units.trainsets)) label = tsbJoinNames(units.trainsets);
         } catch (e) {
             label = value;
             _trainsetNames.add(value); // keep cache current so the icon renders after table reload
@@ -3527,6 +3911,21 @@ function attachSelectedTrips(ticket_id){
     window.open(`${url}?${urlParams.toString()}`);
 }
 
+function moveSelectedToPlan(plan_uuid){
+    if (!plan_uuid || !confirm("{{ confirmImportTrips|default('Move these trips into the plan? They will be removed from your trips.') }}")) return;
+
+    const form = document.createElement('form');
+    form.method = 'post';
+    form.action = `{{ url_for('import_trips_to_plan_route', username=username, plan_uuid='PLAN_UUID') }}`.replace('PLAN_UUID', plan_uuid);
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = 'trip_ids';
+    input.value = checkedTrips;
+    form.appendChild(input);
+    document.body.appendChild(form);
+    form.submit();
+}
+
 function bulkChangeVisibility(visibility){
     url=`{{ url_for('bulkChangeVisibility', username=username)}}`;
 
@@ -3565,6 +3964,22 @@ if ("{{privateButtons}}" == "True"){
 }
 
 
+
+const planSearchModal = document.getElementById('planSearchModal');
+if (planSearchModal) {
+    planSearchModal.addEventListener('show.bs.modal', () => {
+        fetch(`{{ url_for("plans_api.list_user_plans", username=username) }}`)
+            .then(response => response.json())
+            .then(plans => {
+                const select = $('#planSearchInput');
+                select.empty();
+                for (const plan of plans) {
+                    select.append($('<option>').val(plan.uuid).text(plan.archived ? `${plan.name} (${"{{ archived|default('Archived') }}"})` : plan.name));
+                }
+            })
+            .catch(error => console.error('Failed to fetch plans:', error));
+    });
+}
 
 const ticketSearchModal = document.getElementById('ticketSearchModal');
 ticketSearchModal.addEventListener('show.bs.modal', fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}"));

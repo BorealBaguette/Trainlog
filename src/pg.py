@@ -155,6 +155,7 @@ def setup_db():
         t = time.monotonic()
         load_base_data(session, "airliners")
         load_base_data(session, "wagons", upsert=True)
+        load_exchange_base_data(session)
         logger.info(f"Base data load took {time.monotonic() - t:.2f}s")
 
     # Dispose the engine used during setup - workers will create their own
@@ -212,6 +213,73 @@ def apply_migration(session, name):
     session.execute(query, {"name": name})
 
     logger.info(f"Successfully applied migration {name}")
+
+
+def load_exchange_base_data(pg):
+    """
+    Seed/refresh the `exchanges` table from base_data/exchanges.csv.
+
+    Unlike load_base_data's upsert (INSERT ... ON CONFLICT DO NOTHING), this merges via
+    ON CONFLICT (rate_date) DO UPDATE: exchanges grows new currency columns over time
+    while rate_date rows already exist for years, so a plain "skip existing" insert would
+    leave new columns NULL forever. A currency the CSV doesn't carry (e.g. BGN) is simply
+    absent from the column list and left untouched.
+    """
+    table_name = "exchanges"
+    csv_path = os.path.abspath(f"base_data/{table_name}.csv")
+
+    if not os.path.exists(csv_path):
+        logger.error(f"Base data file not found: {csv_path}")
+        raise FileNotFoundError(f"Base data file not found: {csv_path}")
+
+    csv_mtime = os.path.getmtime(csv_path)
+
+    stored = pg.execute(
+        "SELECT csv_mtime FROM meta.base_data WHERE table_name = :t",
+        {"t": table_name},
+    ).fetchone()
+
+    if stored is not None and stored[0] >= csv_mtime:
+        logger.info(f"{table_name}: CSV unchanged (mtime match), skipping load")
+        return
+
+    logger.info(f"Loading base data for {table_name} (merge)...")
+
+    raw_conn = pg.connection().connection
+    with open(csv_path, "r") as f:
+        # Quote each column individually ("ALL" is a SQL reserved word) rather than
+        # joining the raw header text like load_base_data does.
+        header = next(f).strip().split(",")
+        column_list = ", ".join(f'"{c}"' for c in header)
+        update_assignments = ", ".join(
+            f'"{c}" = EXCLUDED."{c}"' for c in header if c != "rate_date"
+        )
+        with raw_conn.cursor() as cursor:
+            tmp = f"_load_{table_name}"
+            cursor.execute(f"CREATE TEMP TABLE {tmp} (LIKE {table_name}) ON COMMIT DROP")
+            cursor.copy_expert(
+                f"COPY {tmp} ({column_list}) FROM STDIN WITH (FORMAT CSV, NULL '')",
+                f,
+            )
+            cursor.execute(
+                f"INSERT INTO {table_name} ({column_list})"
+                f" SELECT {column_list} FROM {tmp}"
+                f" ON CONFLICT (rate_date) DO UPDATE SET {update_assignments}"
+            )
+            cursor.execute(f"SELECT COUNT(*) FROM {tmp}")
+            total_in_csv = cursor.fetchone()[0]
+            logger.info(f"Base data for {table_name}: merged {total_in_csv} rows.")
+
+    pg.execute(
+        """
+        INSERT INTO meta.base_data (table_name, csv_mtime, loaded_at)
+        VALUES (:t, :m, NOW())
+        ON CONFLICT (table_name) DO UPDATE
+            SET csv_mtime = EXCLUDED.csv_mtime,
+                loaded_at = EXCLUDED.loaded_at
+        """,
+        {"t": table_name, "m": csv_mtime},
+    )
 
 
 def db_exists():

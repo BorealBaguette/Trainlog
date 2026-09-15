@@ -36,6 +36,7 @@ def create_trip(trip: Trip, pg_session=None):
                 "material_type": trip.material_type,
                 "material_type_advanced": trip.material_type_advanced,
                 "seat": trip.seat,
+                "seat_car": trip.seat_car,
                 "reg": trip.reg,
                 "waypoints": trip.waypoints,
                 "notes": trip.notes,
@@ -65,20 +66,27 @@ def create_trip(trip: Trip, pg_session=None):
         )
         path.set_trip_id(trip.trip_id)
         ewkt = coords_to_ewkt([[node.lat, node.lng] for node in path.list])
+        raw_path = getattr(trip, "raw_path", None)
+        raw_ewkt = coords_to_ewkt([[p["lat"], p["lng"]] for p in raw_path]) if raw_path else None
         if ewkt is not None:
             # altitude/timestamps are JSON-string arrays aligned with the geom
             # vertices (None for non-flights / paths without a 3D track).
+            # raw_geom is the untouched GPS trace (GPX imports only), preserved
+            # alongside the possibly routed/cleaned geom.
             pg.execute(
-                "INSERT INTO paths (trip_id, geom, altitude, timestamps)"
+                "INSERT INTO paths (trip_id, geom, altitude, timestamps, raw_geom)"
                 " VALUES (:trip_id, ST_GeomFromEWKT(:ewkt),"
-                " CAST(:altitude AS jsonb), CAST(:timestamps AS jsonb))"
+                " CAST(:altitude AS jsonb), CAST(:timestamps AS jsonb),"
+                " ST_GeomFromEWKT(:raw_ewkt))"
                 " ON CONFLICT (trip_id) DO UPDATE SET geom = EXCLUDED.geom,"
-                " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps",
+                " altitude = EXCLUDED.altitude, timestamps = EXCLUDED.timestamps,"
+                " raw_geom = COALESCE(EXCLUDED.raw_geom, paths.raw_geom)",
                 {
                     "trip_id": trip.trip_id,
                     "ewkt": ewkt,
                     "altitude": getattr(trip, "altitude", None),
                     "timestamps": getattr(trip, "timestamps", None),
+                    "raw_ewkt": raw_ewkt,
                 },
             )
 

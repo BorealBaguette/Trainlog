@@ -415,8 +415,11 @@ def parse_trip_params(args):
 
 
 def build_trip_payload(row, trip_type, params, use_routing, flask_request):
-    """Build a ``(newTrip, path)`` pair ready for saveTripToDb from a parsed/staged
-    GPX row, applying URL param overrides and optional smart routing.
+    """Build a ``(newTrip, path, altitude, timestamps, raw_waypoints)`` tuple ready
+    for saveTripToDb from a parsed/staged GPX row, applying URL param overrides and
+    optional smart routing. ``raw_waypoints`` is the untouched GPS trace, always
+    returned regardless of routing, so callers can preserve it alongside the
+    (possibly cleaned/routed) ``path``.
 
     `row` has the keys produced by parse_gpx_files (origin, destination,
     start_time, end_time, distance, duration, path, notes). `path` may be a JSON
@@ -504,7 +507,12 @@ def build_trip_payload(row, trip_type, params, use_routing, flask_request):
             path = cleaning_result["path"]
             newTrip["trip_length"] = cleaning_result["distance"]
             newTrip["estimated_trip_duration"] = cleaning_result["duration"]
-            newTrip["waypoints"] = json.dumps(cleaning_result["waypoints"])
+            # clean_gps_route's "waypoints" is [origin, anchor1, ..., dest] — trim the
+            # endpoints, since trips.waypoints holds only the intermediates (the
+            # endpoints already live in paths.geom via `path` above). Storing them
+            # un-trimmed used to add two spurious waypoints almost on top of the
+            # origin/destination.
+            newTrip["waypoints"] = json.dumps(cleaning_result["waypoints"][1:-1])
             # Routing resampled the geometry — the raw-track arrays no longer align.
             altitude = timestamps = None
         else:
@@ -518,4 +526,4 @@ def build_trip_payload(row, trip_type, params, use_routing, flask_request):
         path = raw_waypoints
         newTrip["waypoints"] = json.dumps(cluster_waypoints(raw_waypoints, 20))
 
-    return newTrip, path, altitude, timestamps
+    return newTrip, path, altitude, timestamps, raw_waypoints

@@ -434,7 +434,7 @@ def _name_candidates(pg):
     worth the click.
     """
     rows = pg.execute(
-        """
+        r"""
         WITH unresolved AS (
             SELECT trip_id,
                    btrim(reg) AS reg,

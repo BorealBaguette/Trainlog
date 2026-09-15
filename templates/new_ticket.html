@@ -29,7 +29,7 @@
             <label for="ticket_currency">{{currency}} : </label>
             <select class="form-control" id="ticket_currency" name="currency">
                 {% for currency in currencyOptions %}
-                <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}"
+                <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}"
                     {% if currency['currency'] == user_currency %}selected{% endif %}>
                     {{ currency['currency'] }}
                 </option>
@@ -70,8 +70,7 @@
         // Format currency select with flag emojis
         const currencySelect = document.getElementById('ticket_currency');
         for (let option of currencySelect.options) {
-            const countryCode = option.dataset.country;
-            const emoji = getFlagEmoji(countryCode);  // Assume getFlagEmoji function is defined elsewhere
+            const emoji = option.dataset.emoji || getFlagEmoji(option.dataset.country);
             option.text = `${option.text} ${emoji}`; // Prepend the emoji to the option text
         }
     });

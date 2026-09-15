@@ -6,8 +6,6 @@ logger = logging.getLogger(__name__)
 
 photonInstances = {
     "trainlog": "https://photon.srv.trainlog.me",
-    "chiel": "https://photon.chiel.uk",
-    "komoot": "https://photon.komoot.io",
 }
 
 

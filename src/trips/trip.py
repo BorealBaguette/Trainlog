@@ -56,6 +56,8 @@ class Trip:
         altitude=None,
         timestamps=None,
         route_source="router",
+        seat_car=None,
+        raw_path=None,
     ):
         self.trip_id = trip_id
         self.username = username
@@ -78,6 +80,9 @@ class Trip:
         self.material_type = _strip_tags(material_type)
         self.material_type_advanced = material_type_advanced
         self.seat = _strip_tags(seat)
+        # 0-based index into this trip's resolved trainset units array — see
+        # migration 0058_seat_car.sql for why this isn't a real car number.
+        self.seat_car = seat_car
         self.reg = _strip_tags(reg)
         self.waypoints = waypoints
         self.notes = _strip_tags(notes)
@@ -100,6 +105,10 @@ class Trip:
         self.timestamps = timestamps
         # How the route was produced: 'router' | 'freehand' | 'gpx' | 'gpx_routed' | 'fr24'.
         self.route_source = route_source
+        # Untouched GPS trace this trip was built from (GPX imports only), kept
+        # alongside `path` so a routed/cleaned trip can later be re-corrected
+        # against its original source track. None otherwise.
+        self.raw_path = raw_path
         self.carbon = (
             calculate_carbon_footprint_for_trip(vars(self), path) if path else None
         )

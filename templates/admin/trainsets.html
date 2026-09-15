@@ -1,0 +1,245 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+{% include nav %}
+{% include "includes/trainset_display.html" %}
+
+<style>
+  .uses-badge { cursor: help; font-variant-numeric: tabular-nums; }
+  .users-badge {
+    display: inline-flex; align-items: center; gap: .25rem;
+    font-size: .72rem; font-variant-numeric: tabular-nums; font-weight: 600;
+    color: var(--bs-gray-700); background: var(--bs-gray-200);
+    border-radius: 1rem; padding: .1rem .45rem; cursor: help;
+  }
+  .users-badge i { font-size: .68rem; color: var(--bs-gray-600); }
+  .meta-none { color: var(--bs-gray-400); font-size: .8rem; font-style: italic; }
+  .owner-badge { font-size: .78rem; }
+  .cars-badge {
+    font-size: .78rem; font-variant-numeric: tabular-nums;
+    color: var(--bs-gray-700); background: var(--bs-gray-100);
+    border: 1px solid var(--bs-gray-300); border-radius: .35rem; padding: .05rem .4rem;
+  }
+
+  /* Compact row height overall: the default Bootstrap table cell padding was written
+     for text, not a table that's mostly images — tighten it everywhere on this table
+     rather than fight it per column. */
+  #trainsetsTable > tbody > tr > td { padding: .3rem .5rem; vertical-align: middle; }
+
+  /* fixed layout: every column but Design has an explicit width (set via DataTables'
+     `width` option below); this makes Design the one column that absorbs whatever's
+     left, and — just as importantly — gives its cell a real, finite width so a long
+     train's strip scrolls inside it instead of stretching the whole table. Without
+     this, auto layout sizes each column off its content, and an unconstrained cell
+     grows to fit its longest train rather than the other way around. */
+  #trainsetsTable { table-layout: fixed; }
+  /* Safety net: fixed layout makes each width a hard cap rather than auto layout's
+     "grow to fit" hint, so a header/value that doesn't quite fit clips with an
+     ellipsis instead of visually spilling into the next column. */
+  #trainsetsTable th, #trainsetsTable > tbody > tr > td {
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  #trainsetsTable td.ts-design-col { overflow: visible; }  /* the strip scrolls itself */
+
+  /* Design column: a compact read-only strip (the shared trainset_display module).
+     Every other column is a fixed width (set via DataTables' own `width` option,
+     autoWidth:false); Design is the one left unset, so it's the column that absorbs
+     whatever space the fixed ones don't use — full-width, not a fixed pixel guess.
+     Wide rather than tall, since a train reads left-to-right; padding-bottom clears
+     the horizontal scrollbar so it doesn't sit on top of each car's caption. The
+     shared render always reserves a class-bar strip above each car (for travel-class
+     dots this table never shows) and a chunky caption below it — both collapsed here
+     to squeeze out dead space. */
+  .ts-admin-strip { min-height: 24px; cursor: zoom-in; }
+  .ts-admin-strip:hover { outline: 2px solid var(--bs-primary); outline-offset: 2px; border-radius: 4px; }
+  #trainsetsTable .trainset-inline-scroll { max-width: 100% !important; padding-bottom: 14px; }
+  #trainsetsTable .ts-inline-label { display: none; }   /* no per-row name/label needed here */
+  #trainsetsTable .compo-class-bar { display: none !important; }
+  #trainsetsTable .compo-coach-no { margin-top: 2px !important; padding: 0 3px !important; font-size: .55rem !important; }
+</style>
+
+<div class="container-fluid px-4">
+  <h1 class="mt-3">Trainsets</h1>
+  <div class="btn-group btn-group-sm mb-3" role="group">
+    <a href="{{ url_for('admin.wagons_admin') }}" class="btn btn-outline-secondary">Wagons</a>
+    <a href="{{ url_for('admin.trainsets_admin') }}" class="btn btn-outline-secondary active">Trainsets</a>
+  </div>
+  <div class="form-check form-switch mb-3">
+    <input class="form-check-input" type="checkbox" id="showPersonalToggle">
+    <label class="form-check-label" for="showPersonalToggle">
+      Also show personal trainsets <span class="text-muted">(public ones only by default)</span>
+    </label>
+  </div>
+  <table id="trainsetsTable" class="table table-striped table-bordered" style="width:100%">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Design</th>
+        <th>Owner</th>
+        <th>Cars</th>
+        <th>Uses</th>
+        <th>Users</th>
+        <th>Created</th>
+      </tr>
+    </thead>
+  </table>
+</div>
+
+<!-- ══════════════════════════════════ Design modal -->
+<div class="modal fade" id="tsDesignModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-xl modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="fas fa-train me-2"></i><span id="tsDesignModalTitle">Trainset</span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body" style="background-color: #f8f9fa;">
+        <!-- Content injected via JS -->
+      </div>
+    </div>
+  </div>
+</div>
+
+<script defer>
+const API = '/api/admin/trainsets';
+
+function esc(s) {
+  return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+const TIP = 'data-bs-toggle="tooltip" data-bs-placement="top"';
+
+/* Trips using this trainset. Zero is common, so it's muted rather than a loud "0". */
+function renderUses(n) {
+  const v = Number(n) || 0;
+  if (!v) return '<span class="meta-none">0</span>';
+  const tone = v >= 100 ? 'bg-success' : v >= 10 ? 'bg-primary' : 'bg-secondary';
+  return `<span class="badge ${tone} uses-badge" ${TIP}
+                title="${v} trip${v === 1 ? '' : 's'} use this trainset">${v}</span>`;
+}
+
+/* Distinct users behind those trips, its own sortable column so "used a lot by one
+   person" and "used a little by many" can each be found — same idea as the wagons
+   catalogue's Uses/Users split. */
+function renderUsers(u) {
+  const v = Number(u) || 0;
+  if (!v) return '<span class="meta-none">0</span>';
+  return `<span class="users-badge" ${TIP}
+                title="${v} distinct user${v === 1 ? '' : 's'}">
+                <i class="fa-solid fa-user"></i>${v}</span>`;
+}
+
+function renderOwner(username, isAdmin) {
+  if (isAdmin) {
+    return '<span class="badge bg-info text-dark owner-badge">Public</span>';
+  }
+  return username
+    ? `<span class="owner-badge">${esc(username)}</span>`
+    : '<span class="meta-none">—</span>';
+}
+
+function renderCreated(iso) {
+  if (!iso) return '<span class="meta-none">—</span>';
+  const d = new Date(iso);
+  return `<span ${TIP} title="${esc(iso)}">${d.toLocaleDateString()}</span>`;
+}
+
+/* ── design column: compact strip, click to expand ──────────────────
+   Reuses the shared trainset_display module (includes/trainset_display.html) rather
+   than re-implementing wagon-strip rendering — same functions the trip page uses for
+   its inline/modal composition views. */
+const _unitsCache = {};   // tid -> enriched units, so the modal doesn't re-fetch
+
+function _fetchUnits(tid) {
+  if (_unitsCache[tid]) return $.Deferred().resolve(_unitsCache[tid]).promise();
+  return $.getJSON(`${API}/${tid}/units`).then(r => { _unitsCache[tid] = r.units; return r.units; });
+}
+
+function openDesignModal(tid, name) {
+  $('#tsDesignModalTitle').text(name || 'Trainset');
+  const $modalBody = $('#tsDesignModal .modal-body');
+  $modalBody.html('<div class="text-center text-muted py-4"><i class="fas fa-spinner fa-spin"></i></div>');
+  $('#tsDesignModal').modal('show');
+  _fetchUnits(tid).then(units => _renderTrainset($modalBody, units, name, null));
+}
+
+/* ── DataTable ──────────────────────────────────────────────────── */
+const table = $('#trainsetsTable').DataTable({
+  // Responsive's own width/visibility recalculation fights the fixed layout below
+  // (used so Design gets a real, finite width to scroll a long train inside rather
+  // than stretching the table) — off, so our explicit column widths are authoritative.
+  serverSide: true, processing: true, responsive: false,
+  ajax: {
+    url: API, type: 'GET',
+    data: d => ({
+      draw: d.draw, start: d.start, length: d.length,
+      'search[value]': d.search.value,
+      // d.order can come back empty (a click landing on "no sort") — fall back to
+      // the table's own initial order rather than let that crash the request.
+      'order[0][column]': (d.order[0] || {}).column ?? 4,
+      'order[0][dir]':    (d.order[0] || {}).dir    ?? 'desc',
+      only_public: $('#showPersonalToggle').is(':checked') ? '0' : '1',
+    })
+  },
+  columns: [
+    { data: 'name',       orderable: true, width: '190px',
+      render: (d) => `<span title="${esc(d)}">${esc(d)}</span>` },
+    { data: 'id',         orderable: false, className: 'ts-design-col',
+      render: (d, t) => t === 'display'
+        ? `<div id="trainsetInline${d}" class="ts-admin-strip" data-tid="${d}"></div>` : '' },
+    { data: 'username',   orderable: true, className: 'text-center', width: '90px',
+      render: (d, t, row) => t === 'display' ? renderOwner(d, row.is_admin) : (d || '') },
+    { data: 'cars',       orderable: true, className: 'text-center', width: '55px',
+      render: (d, t) => t === 'display' ? `<span class="cars-badge">${Number(d) || 0}</span>` : (d || 0) },
+    { data: 'uses',       orderable: true, className: 'text-center', width: '60px',
+      render: (d, t) => t === 'display' ? renderUses(d) : (d || 0) },
+    { data: 'users',      orderable: true, className: 'text-center', width: '65px',
+      render: (d, t) => t === 'display' ? renderUsers(d) : (d || 0) },
+    { data: 'created_at', orderable: true, width: '115px',
+      render: (d, t) => t === 'display' ? renderCreated(d) : (d || '') },
+  ],
+  autoWidth: false,
+  order: [[4, 'desc']], pageLength: 25, lengthMenu: [[25,50,100],[25,50,100]],
+  language: { processing: '<i class="fas fa-spinner fa-spin"></i> Loading…' },
+});
+
+$('#showPersonalToggle').on('change', () => table.ajax.reload());
+
+/* Row data cache (by id), so the click handler knows each strip's name without a
+   second lookup — server-side paging replaces the DOM each draw, so this is rebuilt
+   from the same response the table just rendered. */
+const _rowById = {};
+table.on('xhr', () => {
+  const json = table.ajax.json();
+  if (json && json.data) json.data.forEach(r => { _rowById[r.id] = r; });
+});
+
+/* Fill in each row's compact strip after the page's DOM lands. _renderTrainsetInline
+   draws at its own fixed 46px target (shared with the trip page); re-normalize at a
+   smaller size afterwards rather than fork the shared renderer for one page. */
+table.on('draw', () => {
+  document.querySelectorAll('#trainsetsTable .ts-admin-strip').forEach(el => {
+    const tid = el.dataset.tid;
+    _fetchUnits(tid).then(units => {
+      _renderTrainsetInline(tid, units, {}, null);
+      const strip = el.querySelector('.ts-strip');
+      if (strip) normalizeStrip(strip, { target: 20, min: 14, max: 30 });
+    });
+  });
+});
+
+$('#trainsetsTable').on('click', '.ts-admin-strip', function () {
+  const tid = this.dataset.tid;
+  openDesignModal(tid, (_rowById[tid] || {}).name);
+});
+
+/* ── tooltips ───────────────────────────────────────────────────────
+   Re-created on every draw: server-side paging replaces the row DOM each time,
+   so stale instances would leak and stop firing. */
+let _overlays = [];
+table.on('draw', () => {
+  _overlays.forEach(o => o.dispose());
+  const scope = document.getElementById('trainsetsTable');
+  _overlays = [...scope.querySelectorAll('[data-bs-toggle="tooltip"]')].map(el => new bootstrap.Tooltip(el));
+});
+</script>
+{% endblock %}

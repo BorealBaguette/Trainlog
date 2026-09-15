@@ -1,0 +1,22 @@
+# Martin, rendering trip cards for the Discord announcer (src/trip_card.py).
+#
+# Port 3000, not 5000, is deliberate: the services nginx routes
+# <name>.srv.trainlog.me to <container>:5000 by default, so a Martin listening
+# on 5000 would be published to the internet the moment the container came up.
+# Style rendering is uncached and non-concurrent — a public endpoint anyone can
+# POST arbitrary geometry to is a free CPU sink. On 3000 it is reachable only
+# from inside trainlog_network.
+listen_addresses: 0.0.0.0:3000
+
+# Only the style renderer is used here; there are no tile sources to cache, and
+# a smaller cache keeps the warm footprint down on a shared host.
+cache_size_mb: 64
+
+styles:
+  # Experimental in 1.15.0 — Martin logs a warning and reserves the right to
+  # change the HTTP shape in a patch release. Pin the image tag.
+  rendering: true
+  sources:
+    # Written by the style-init container on every start. Must be a file:
+    # Martin rejects http:// entries in `sources` ("is not a file").
+    dark: /styles/dark.json

@@ -121,18 +121,22 @@ function buildItinerary(trips, prices){
   var total_string = []
 
   var text = {
-    "air" : "{{air}}",
-    "train" : "{{train}}",
-    "bus" : "{{bus}}",
-    "ferry" : "{{ferry}}",
-    "car" : "{{car}}",
-    "cycle" : "{{cycle}}",
-    "walk" : "{{walk}}",
-    "aerialway": '{{aerialway}}',
-    "scooter": '{{scooter}}',
-    "funicular": '{{funicular}}',
-    "rail": '{{rail}}',
-    "ski": '{{ski}}',
+    "train": "{{train}}",
+    "tram": "{{tram}}",
+    "metro": "{{metro}}",
+    "funicular": "{{funicular}}",
+    "rail": "{{rail}}",
+    "air": "{{air}}",
+    "bus": "{{bus}}",
+    "ferry": "{{ferry}}",
+    "helicopter": "{{helicopter}}",
+    "aerialway": "{{aerialway}}",
+    "walk": "{{walk}}",
+    "cycle": "{{cycle}}",
+    "ski": "{{ski}}",
+    "scooter": "{{scooter}}",
+    "car": "{{car}}",
+    "other": "{{other}}",
   }
 
 {% if 'price' in request.args %}              

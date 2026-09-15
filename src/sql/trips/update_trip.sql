@@ -18,6 +18,7 @@ UPDATE trips SET
     material_type = :material_type,
     material_type_advanced = :material_type_advanced,
     seat = :seat,
+    seat_car = :seat_car,
     reg = :reg,
     waypoints = :waypoints,
     notes = :notes,

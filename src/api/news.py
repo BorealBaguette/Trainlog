@@ -22,6 +22,11 @@ logger = logging.getLogger(__name__)
 
 news_blueprint = Blueprint("news", __name__)
 
+NEWS_PAGE_SIZE = 1
+# A view only counts once the reader has stayed on the page for a while,
+# so opening the page just to clear the notification badge does not count
+NEWS_VIEW_DELAY_SECONDS = 5
+
 
 @news_blueprint.route("/api/news/count")
 def get_news_count():
@@ -81,7 +86,9 @@ def news_app():
     """Get news list for app"""
 
     with pg_session() as pg:
-        result = pg.execute(news_sql.list_news()).fetchall()
+        result = pg.execute(
+            news_sql.list_news(), {"limit": None, "offset": 0}
+        ).fetchall()
         news_list = [news_row_to_dict(item) for item in result]
 
     return jsonify(news_list), 200
@@ -110,6 +117,24 @@ def attach_reactions(pg, news_list, current_user):
         item["reactions"] = by_news.get(item["id"], [])
 
 
+def fetch_news_page(pg, current_user, offset, limit=NEWS_PAGE_SIZE):
+    """Return (news_list, has_more) for one page of news, with reactions and,
+    for the owner, view counts attached"""
+    rows = pg.execute(
+        news_sql.list_news(), {"limit": limit + 1, "offset": offset}
+    ).fetchall()
+    has_more = len(rows) > limit
+    news_list = [news_row_to_dict(item) for item in rows[:limit]]
+    attach_reactions(pg, news_list, current_user)
+
+    if current_user == owner:
+        views = dict(pg.execute(news_sql.count_news_views()).fetchall())
+        for item in news_list:
+            item["views"] = views.get(item["id"], 0)
+
+    return news_list, has_more
+
+
 @news_blueprint.route("/news")
 def news(username=None):
     """Display news page"""
@@ -117,20 +142,19 @@ def news(username=None):
     current_user = userinfo.get("logged_in_user")
 
     with pg_session() as pg:
-        result = pg.execute(news_sql.list_news()).fetchall()
-        news_list = [news_row_to_dict(item) for item in result]
-        attach_reactions(pg, news_list, current_user)
+        news_list, has_more = fetch_news_page(pg, current_user, offset=0)
 
         if current_user and current_user != "public":
-            pg.execute(
-                news_sql.upsert_news_visit(), {"username": current_user}
-            )
+            pg.execute(news_sql.upsert_news_visit(), {"username": current_user})
 
     response = make_response(
         render_template(
             "news.html",
             username=current_user,
             news_list=news_list,
+            news_has_more=has_more,
+            news_page_size=NEWS_PAGE_SIZE,
+            news_view_delay=NEWS_VIEW_DELAY_SECONDS,
             **lang.get(userinfo.get("lang", "en"), {}),
             **userinfo,
             nav="bootstrap/navigation.html"
@@ -143,6 +167,44 @@ def news(username=None):
     )
 
     return response
+
+
+@news_blueprint.route("/api/news/more")
+def news_more():
+    """Render the next page of older news items"""
+    offset = request.args.get("offset", type=int) or 0
+    userinfo = session.get("userinfo", {})
+    current_user = userinfo.get("logged_in_user")
+
+    with pg_session() as pg:
+        news_list, has_more = fetch_news_page(pg, current_user, offset=offset)
+
+    context = dict(lang.get(userinfo.get("lang", "en"), {}), **userinfo)
+    context["username"] = current_user
+    html = "".join(
+        render_template("includes/news_card.html", item=item, **context)
+        for item in news_list
+    )
+    return jsonify({"html": html, "has_more": has_more})
+
+
+@news_blueprint.route("/api/news/views", methods=["POST"])
+def record_news_views():
+    """Record that the current user actually read the given news items"""
+    current_user = session.get("userinfo", {}).get("logged_in_user")
+    if not current_user or current_user in ("public", owner):
+        return jsonify({"recorded": 0})
+
+    payload = request.get_json(silent=True) or {}
+    news_ids = [i for i in payload.get("ids", []) if isinstance(i, int)]
+    if news_ids:
+        with pg_session() as pg:
+            pg.execute(
+                news_sql.record_news_views(),
+                {"username": current_user, "news_ids": news_ids},
+            )
+
+    return jsonify({"recorded": len(news_ids)})
 
 
 @news_blueprint.route("/u/<username>/news/submit", methods=["POST"])

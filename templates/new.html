@@ -4,6 +4,7 @@
 {% if vehicle_type == 'ferry' %}
 <script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
 {% endif %}
+<script src="{{ url_for('static', filename='js/currency_combo.js') }}"></script>
 
 {% include "bootstrap/navigation.html"%}
 
@@ -251,6 +252,7 @@
         <small id="regVesselName" class="form-text text-muted" style="display:none;margin-top:-.6rem;margin-bottom:.6rem;"></small>
         <label for="seat" class="sr-only">{{seat}}</label>
         <input type="text" class="non_poi" name="seat" id="seat" placeholder="{{seat}}">
+        <input type="hidden" name="seat_car" id="seat_car">
         <label for="notes" class="sr-only">{{notes}}</label>
         <input type="text" name="notes" id="notes" placeholder="{{notes}}">
         <label for="tagSearchInput">{{tags|default('Tags')}}</label>
@@ -269,7 +271,7 @@
           <label for="currency" id="currency_label" class="sr-only">{{currency}}</label>  
           <select name="currency" id="currency">
               {% for currency in currencyOptions %}
-              <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}"
+              <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" data-name="{{ currency.get('name', '') }}"
                   {% if currency['currency'] == user_currency %}selected{% endif %}>
                   {{ currency['currency'] }}
               </option>
@@ -793,19 +795,14 @@
   });
 {% endif %}
 
-  const currencySelect = document.getElementById('currency');
-  for (let option of currencySelect.options) {
-      const countryCode = option.dataset.country;
-      const emoji = getFlagEmoji(countryCode);
-      option.text = `${option.text} ${emoji}`; // Prepend the emoji to the option text
-  }
+  enhanceCurrencySelect('currency');
 
   $('#price').on('input', function() {
       var priceDefined = isNumber($(this).val());
-      
+
       if(priceDefined) {
           // Show currency and purchasing_date if price is defined
-          $('#currency').show();
+          $('#currency-combo-wrap').show();
           $('#currency_label').show();
           $('#purchasing_date').show();
           $('#purchasing_date_label').show();
@@ -815,7 +812,7 @@
           $("#price").css("grid-column-end", "");
       } else {
           // Hide currency and purchasing_date if price is not defined
-          $('#currency').hide();
+          $('#currency-combo-wrap').hide();
           $('#currency_label').hide();
           $('#purchasing_date').hide();
           $('#purchasing_date_label').hide();

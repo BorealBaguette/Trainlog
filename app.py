@@ -92,7 +92,9 @@ from src.g_search import (
     fetch_picture_for_registration,
     find_vessel_ids,
     get_vessel_picture,
+    search_commons_images,
 )
+from src.wikidata import search_ships as wikidata_search_ships
 from py.image_generator import generate_image
 from src.sql.leaderboards import get_leaderboard_countries_query
 from src.sql.percents import upsert_percent_query
@@ -129,6 +131,15 @@ from src.transit_routing import (
     convert_here_response_to_trips,
 )
 from py.gps_cleaner import clean_gps_route
+from src.trip_periods import (
+    MAX_YEAR as MAX_PERIOD_YEAR,
+)
+from src.trip_periods import (
+    MIN_YEAR as MIN_PERIOD_YEAR,
+)
+from src.trip_periods import parse_period, period_label, period_trip_ids
+from src.trip_selections import parse_trip_ids, store_trip_ids
+from src.trip_stats import discord_summary, trip_stats
 from src.update_currency import run_currency_update
 from py.utils import (
     get_all_countries,
@@ -152,11 +163,17 @@ from py.utils import (
     validate_png_file,
     time_ago
 )
-from src.api.admin import admin_blueprint, operators_api_blueprint, wagons_admin_blueprint
+from src.api.admin import (
+    admin_blueprint,
+    operators_api_blueprint,
+    trainsets_admin_blueprint,
+    wagons_admin_blueprint,
+)
 from src.api.feature_requests import feature_requests_blueprint
 from src.api.vagonweb import vagonweb_blueprint
 from src.api.leaderboards import _getLeaderboardUsers
 from src.api.news import news_blueprint
+from src.api.og import og_blueprint, og_image_url
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
@@ -170,8 +187,10 @@ from src.api.trainset import public_trainset_info, trainset_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
 from src import visualisations as viz_module
+from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
+from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
 from src.consts import DbNames, TripTypes
 from src.global_map import (
     available_bins,
@@ -181,10 +200,27 @@ from src.global_map import (
 )
 from src.operators import find_operator_ids, get_trip_operator_logos
 from src.pg import setup_db, pg_session
+from src.search_terms import like_pattern
+from src.trip_search import (
+    base_type_filter,
+    country_code_pattern,
+    filter_conditions,
+    parse_filters,
+)
 from src.suspicious_activity import (
     check_denied_login,
     log_denied_login,
     log_suspicious_activity,
+)
+from src.error_gifs import (
+    BUCKETS as ERROR_GIF_BUCKETS,
+    GiphyError,
+    add_gif,
+    error_gif_buckets,
+    giphy_search,
+    random_error_gif,
+    remove_gif,
+    set_caption,
 )
 from src.utils import (
     getNameFromPath,
@@ -210,6 +246,7 @@ from src.utils import (
     get_default_trip_visibility,
     current_user_is_friend_with,
     external_url,
+    parse_date,
 )
 from src.trips import (
     Trip,
@@ -226,7 +263,7 @@ from src.trips import (
     delete_ticket_from_db,
     get_current_trip_id,
 )
-from src.paths import Path, coords_to_ewkt, fetch_path, geom_geojson_to_coords
+from src.paths import Path, coords_to_ewkt, fetch_path, fetch_raw_path, geom_geojson_to_coords
 from src.trips.freehand_transform import (
     apply_to_trip,
     purge_expired_backups,
@@ -238,6 +275,7 @@ from src.sql.plans import (
     get_plan_query,
     get_user_plans_query,
     update_plan_query,
+    update_plan_visibility_query,
     archive_plan_query,
     delete_plan_query,
     get_plan_trips_query,
@@ -261,6 +299,14 @@ from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
+from src.trip_announcer import (
+    announced_trip_ids,
+    is_postable,
+    post_trip_now,
+    postable_trip_ids,
+    retract_announcement,
+    start_trip_announcer,
+)
 from src.photon import photonInstances, photonRequest, photonRequestSingle
 from src.routing import forward_routing_core
 from src.gpx_import import (
@@ -276,6 +322,7 @@ from src.error_reporter import report_error
 
 app = Flask(__name__)
 start_email_listener(app)
+start_trip_announcer(app)
 
 app.config['DEBUG'] = True
 Compress(app)
@@ -287,12 +334,14 @@ app.register_blueprint(admin_blueprint, url_prefix="/admin")
 
 app.register_blueprint(operators_api_blueprint, url_prefix="/api/admin/operators")
 app.register_blueprint(wagons_admin_blueprint, url_prefix="/api/admin/wagons")
+app.register_blueprint(trainsets_admin_blueprint, url_prefix="/api/admin/trainsets")
 app.register_blueprint(vagonweb_blueprint, url_prefix="/api/admin/vagonweb")
 app.register_blueprint(feature_requests_blueprint)
 app.register_blueprint(finance_blueprint)
 app.register_blueprint(bmc_blueprint)
 app.register_blueprint(discord_oauth_blueprint)
 app.register_blueprint(news_blueprint)
+app.register_blueprint(og_blueprint)
 app.register_blueprint(carbon_blueprint)
 app.register_blueprint(stats_blueprint)
 app.register_blueprint(wrapped_blueprint)
@@ -302,7 +351,9 @@ app.register_blueprint(trainset_blueprint)
 app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
 app.register_blueprint(trips_blueprint)
+app.register_blueprint(plans_api_blueprint)
 app.register_blueprint(live_tracks_blueprint)
+app.register_blueprint(wagon_leaderboard_blueprint)
 
 app.config["CACHE_TYPE"] = "SimpleCache"
 app.config["CACHE_DEFAULT_TIMEOUT"] = 864000
@@ -750,7 +801,7 @@ def starts_with_flag_emoji(s):
     return bool(re.match(pattern, s))
 
 
-def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, timestamps=None):
+def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, timestamps=None, raw_path=None):
     newPath[0]["lat"] = float(newPath[0]["lat"])
     newPath[0]["lng"] = float(newPath[0]["lng"])
     newPath[-1]["lat"] = float(newPath[-1]["lat"])
@@ -847,6 +898,7 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         last_modified=now,
         type=sanitize_param(trip_type),
         seat=sanitize_param(newTrip["seat"]),
+        seat_car=parse_seat_car(newTrip.get("seat_car")),
         material_type=sanitize_param(newTrip["material_type"]),
         material_type_advanced=sanitize_param(newTrip["material_type_advanced"]),
         reg=sanitize_param(newTrip["reg"]),
@@ -866,6 +918,7 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         altitude=altitude,
         timestamps=timestamps,
         route_source=newTrip.get("route_source") or "router",
+        raw_path=raw_path,
     )
 
     create_trip(trip)
@@ -1372,7 +1425,7 @@ def new_auto(username):
         username=username,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(username),
         user_currency=getLoggedUserCurrency(),
     )
 
@@ -1391,6 +1444,19 @@ def get_new_trip_types(user_lang):
         for t in group
         if t != "other"
     }
+
+
+@app.route("/u/<username>/compose")
+@login_required
+def compose_default(username):
+    """Bare /compose — the form needs a type, and trains are what most people log.
+
+    Any query string (``?plan=``, the save-and-continue prefill) is carried over, and
+    the type switcher in the header changes it from there.
+    """
+    return redirect(
+        url_for("compose", username=username, vehicle_type="train", **request.args)
+    )
 
 
 @app.route("/u/<username>/compose/<vehicle_type>")
@@ -1609,7 +1675,7 @@ def new(username, vehicle_type, template="new.html"):
         destinationTerminalName=destination_terminal_name,
         trip_visibility=get_default_trip_visibility(vehicle_type),
         manualOrigin=manual_origin,
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(username),
         user_currency=getLoggedUserCurrency(),
         fr24_calls=fr24_usage(username) if vehicle_type == "air" else None,
         # When building a trip for a plan, this enables the relative day+time mode
@@ -1918,7 +1984,7 @@ def new_ticket(username):
         username=username,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(username),
         user_currency=getLoggedUserCurrency(),
     )
 
@@ -2006,9 +2072,12 @@ def gps_logger_upload(token=None, trip_type=None, routing=None):
             params = parse_trip_params(request.args)
             rows = parse_gpx_files(cleaned_files, source="gpslogger", username=user.username)
             for row in rows:
-                newTrip, path, altitude, timestamps = build_trip_payload(
+                newTrip, path, altitude, timestamps, raw_waypoints = build_trip_payload(
                     row, trip_type, params, use_routing, request
                 )
+                # Distinct from the manual GPX-upload UI's "gpx"/"gpx_routed" — this is a
+                # direct, unreviewed import (Tasker/GPSLogger hitting the API).
+                newTrip["route_source"] = "routed_gpx_api" if use_routing else "gpx_api"
                 saveTripToDb(
                     username=user.username,
                     newTrip=newTrip,
@@ -2016,6 +2085,7 @@ def gps_logger_upload(token=None, trip_type=None, routing=None):
                     trip_type=trip_type,
                     altitude=altitude,
                     timestamps=timestamps,
+                    raw_path=raw_waypoints,
                 )
             return (f"OK (imported {len(rows)} trip(s))", 200)
         except GpxIngestError as e:
@@ -2250,7 +2320,7 @@ def saveTripFromGPX(username, gpx_id):
 
     row = dict(gpx._mapping)
     raw_count = len(json.loads(row["path"]))
-    newTrip, path, altitude, timestamps = build_trip_payload(
+    newTrip, path, altitude, timestamps, raw_waypoints = build_trip_payload(
         row, trip_type, parse_trip_params(request.args), use_routing, request
     )
 
@@ -2269,6 +2339,7 @@ def saveTripFromGPX(username, gpx_id):
         trip_type=trip_type,
         altitude=altitude,
         timestamps=timestamps,
+        raw_path=raw_waypoints,
     )
 
     return jsonify({
@@ -2342,6 +2413,41 @@ def previewSmartRouting(username, gpx_id, trip_type):
                          raw_waypoints=json.dumps(raw_waypoints),
                          cleaning_result=json.dumps(cleaning_result),
                          success=cleaning_result["success"])
+
+
+@app.route("/u/<username>/simplify_path", methods=["POST"])
+@login_required
+def simplify_path(username):
+    """
+    Reduce an arbitrary dense point list (e.g. a freehand-edited route seeded from
+    a raw GPX trace) down to a small set of router-friendly waypoints, via the same
+    auto-routing/anchor-search used for GPX auto-import (clean_gps_route). Used
+    before switching a freehand session back to router mode, so the router is never
+    handed hundreds of hard waypoints (which OSRM can't route through / times out on).
+    """
+    data = request.get_json() or {}
+    path = data.get("path") or []
+    trip_type = data.get("type", "train")
+
+    if len(path) < 2:
+        return jsonify({"error": "Need at least 2 points"}), 400
+
+    raw_waypoints = [{"lat": p[0], "lng": p[1]} for p in path]
+    cleaning_result = clean_gps_route(
+        raw_waypoints=raw_waypoints,
+        forwardRouting=lambda rpath, routingType, options=None: forward_routing_core(
+            routingType=routingType, path=rpath, flask_request=request, extra_args=options
+        ),
+        trip_type=trip_type,
+        deviation_threshold=800,
+    )
+
+    if not cleaning_result["success"]:
+        return jsonify({"error": cleaning_result.get("error", "routing failed")}), 502
+
+    return jsonify({
+        "waypoints": [[wp["lat"], wp["lng"]] for wp in cleaning_result["waypoints"]],
+    })
 
 
 def parse_maprika_filename(filename):
@@ -3077,7 +3183,7 @@ def ticket_list(username):
         tickets=result,
         username=username,
         country_list=get_all_countries(),
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(username),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -3804,10 +3910,15 @@ def vector_style(language, style):
 
     with open(json_path, "r", encoding="utf-8") as f:
         file_contents = f.read()
+        # Match the incoming request's scheme rather than hardcoding https: in
+        # local dev (plain http) a forced https sprite URL is a different
+        # origin from the page itself — nothing listens there, so the sprite
+        # fetch just times out/CORS-fails. In production this still resolves
+        # to https, since the site itself is only ever served over https.
         file_contents = file_contents.replace(
             "{{mapPinUrl}}",
             url_for(
-                "static", filename="styles/vector_maps", _scheme="https", _external=True
+                "static", filename="styles/vector_maps", _scheme=request.scheme, _external=True
             ),
         )
         template_url = "https://tiles.trainlog.me/tile/streets-v2+landcover-v1.1+hillshade-v1/{x}/{y}/{z}/{language}"
@@ -4659,7 +4770,12 @@ def listOperatorsLogos(tripType=None):
 
 
 def render_public_trip_page(
-    tripIds=None, tagId=None, ticketId=None, template="public/public_trip.html"
+    tripIds=None,
+    tagId=None,
+    ticketId=None,
+    template="public/public_trip.html",
+    owner_only=False,
+    period=None,
 ):
     
     user_obj = None
@@ -4673,6 +4789,28 @@ def render_public_trip_page(
     tag_name = None
     countries = []
     length = 0
+    # The segment this page was reached by: a share key stays a share key
+    # across the poster and back links instead of expanding to a full id list.
+    tripIdsParam = tripIds
+
+    # this needs to be done before changing the tripIds variable
+    if period is not None:
+        multitrip_url = url_for("multi_trip_period", **period)
+    else:
+        multitrip_url = url_for(
+            "multi_trip", tripIds=tripIds, tagId=tagId, ticketId=ticketId
+        )
+
+    if tripIds is None and period is not None:
+        # A year/month/week/day pseudo-tag: resolved on every request, so a trip
+        # logged later simply appears on the page for its period.
+        try:
+            start, end = parse_period(period["kind"], period["period"])
+        except ValueError:
+            abort(404)
+        ids = period_trip_ids(get_user_id(period["username"]), start, end)
+        tripIds = ",".join(str(trip_id) for trip_id in ids) or None
+        tag_name = period_label(period["kind"], period["period"])
 
     if tripIds is None and tagId is not None:
         with pg_session() as pg:
@@ -4702,7 +4840,7 @@ def render_public_trip_page(
                 {"uuid": tagId},
             ).fetchone()
         if shared:
-            return redirect(url_for("multi_trip", tagUuid=tagId))
+            return redirect(url_for("multi_trip", tagId=tagId))
     elif tripIds is None and ticketId is not None:
         with pg_session() as pg:
             result = pg.execute(
@@ -4725,7 +4863,10 @@ def render_public_trip_page(
     # The page shell only needs visibility screening, per-trip countries/length
     # for the OG tags and the sorted id list — fetch just that in one set-based
     # query instead of the full get_trip_pg machinery once per trip.
-    requested_ids = [int(t) for t in tripIds.split(",")]
+    try:
+        requested_ids = parse_trip_ids(tripIds)
+    except ValueError:
+        abort(410)
     with pg_session() as pg:
         rows = pg.execute(
             """
@@ -4748,7 +4889,7 @@ def render_public_trip_page(
     # Legacy multi-owner tags (from before attach_tag checked ownership) are as
     # broken on this single-owner page as shared tags — send them along too.
     if tagId is not None and len(set(usernames.values())) > 1:
-        return redirect(url_for("multi_trip", tagUuid=tagId))
+        return redirect(url_for("multi_trip", tagId=tagId))
     users_by_name = {
         username: User.query.filter_by(username=username).first()
         for username in set(usernames.values())
@@ -4822,6 +4963,24 @@ def render_public_trip_page(
     except Exception:
         abort(500)
 
+    # Playing an animation of a single trip is pointless, so the button only
+    # makes sense once at least two trips are actually visible on the page.
+    if len(trip_list_sorted) < 2:
+        multitrip_url = None
+
+    # Feature request #68: the period's figures, and the Discord block that
+    # exports them. Computed from the trips the page actually shows, so the
+    # summary cannot disagree with the list above it.
+    period_stats = period_stats_export = None
+    if period is not None:
+        period_stats = trip_stats(
+            [trip["uid"] for trip in trip_list_sorted],
+            lang[session["userinfo"]["lang"]],
+        )
+        period_stats_export = discord_summary(
+            tag_name, period_stats, external_url("public_trip_period", **period)
+        )
+
     # Open Graph info
     og = {}
     if tag_name:
@@ -4841,6 +5000,17 @@ def render_public_trip_page(
             f"From {trip_list_sorted[0]['origin_station']} to {trip_list_sorted[-1]['destination_station']}"
         )
 
+    # The link preview: a map of these trips rather than the site's logo.
+    og_trip_ids = tripIdsParam or ",".join(
+        str(trip["uid"]) for trip in trip_list_sorted
+    )
+    og["image"] = og_image_url(
+        period=period,
+        tag_uuid=tagId,
+        trip_ids_param=tripIdsParam,
+        trip_ids=[trip["uid"] for trip in trip_list_sorted],
+    )
+
     user = User.query.filter_by(username=getUser()).first()
     if user is None:
         tileserver = "default"
@@ -4849,15 +5019,31 @@ def render_public_trip_page(
         tileserver = user.tileserver
         globe = user.globe
 
+    # The poster is a personal keepsake, not a share view: it is offered, and served,
+    # only when every trip on the page belongs to the viewer (the site owner, as
+    # everywhere else on this page, sees it regardless).
+    own_trips = bool(session.get(owner)) or (
+        user is not None
+        and all(trip["username"] == user.username for trip in trip_list_sorted)
+    )
+    if owner_only and not own_trips:
+        abort(401)
+
     return render_template(
         template,
+        own_trips=own_trips,
         logosList=listOperatorsLogos(),
         tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
+        tripIdsParam=og_trip_ids,
+        period_args=period,
         title=lang[session["userinfo"]["lang"]]["sharedLink"],
         collection_voyage=tag_type,
         tag_description=tag_name,
         tag_uuid=tagId,
+        multitrip_url=multitrip_url,
         special_og=True,
+        period_stats=period_stats,
+        period_stats_export=period_stats_export,
         tileserver=tileserver,
         globe=globe,
         og=og,
@@ -4883,9 +5069,12 @@ def public_trip_leaflet(tripIds=None, tagId=None, ticketId=None):
 def public_trip_legacy(tripIds=None, tagId=None, ticketId=None):
     if tripIds:
         return redirect(url_for("public_trip", tripIds=tripIds), 301)
-    if tagId:
+    elif tagId:
         return redirect(url_for("public_trip", tagId=tagId), 301)
-    return redirect(url_for("public_trip", ticketId=request.view_args.get("ticketId")), 301)
+    elif ticketId:
+        return redirect(url_for("public_trip", ticketId=ticketId), 301)
+    else:
+        abort(410)
 
 
 @app.route("/public/trip/<tripIds>")
@@ -4902,35 +5091,191 @@ def public_trip(tripIds=None, tagId=None, ticketId=None):
     )
 
 
+@app.route("/public/trip/<tripIds>/poster")
+@app.route("/public/tag/<tagId>/poster")
+@app.route("/public/ticket/<ticketId>/poster")
+def public_trip_poster(tripIds=None, tagId=None, ticketId=None):
+    return render_public_trip_page(
+        tripIds, tagId, ticketId, template="public/trip_poster.html", owner_only=True
+    )
+
+
+# Pseudo-tags: every trip in a year, month, ISO week or day, matched on local
+# departure time. Nothing is stored — the list is rebuilt on each request, so
+# these pages stay current without cluttering the tag list.
+@app.route("/public/<username>/<any(year, month, week, day):kind>/<period>")
+@public_required
+def public_trip_period(username, kind, period):
+    return render_public_trip_page(
+        template="public/new_trip.html",
+        period={"username": username, "kind": kind, "period": period},
+    )
+
+
+@app.route("/public/<username>/<any(year, month, week, day):kind>/<period>/poster")
+@public_required
+def public_trip_period_poster(username, kind, period):
+    return render_public_trip_page(
+        template="public/trip_poster.html",
+        owner_only=True,
+        period={"username": username, "kind": kind, "period": period},
+    )
+
+
+@app.route("/public/multiTrip/<username>/<any(year, month, week, day):kind>/<period>")
+@public_required
+def multi_trip_period(username, kind, period):
+    return multi_trip(period={"username": username, "kind": kind, "period": period})
+
+
+@app.route("/admin/trip_card/<trip_ids>.png")
+@owner_required
+def admin_trip_card(trip_ids):
+    """Render a trip's Discord card and return it, without posting anything.
+
+    For eyeballing the layout against real trips — long station names, missing
+    logos, odd durations — which is the only way to find out how it copes.
+
+    Addressed exactly as og.trip_card is, share key included, so a link to the
+    public card can be pasted here to see a trip the public route will not
+    serve — that route screens for a public trip of a public profile, this one
+    draws whatever the owner asks for.
+    """
+    from src.trip_card import _martin, render_trip_card
+
+    try:
+        ids = parse_trip_ids(trip_ids)
+    except ValueError:
+        return make_response((f"{trip_ids} is not a trip id or a share key", 404))
+    if len(ids) != 1:
+        return make_response(("one trip at a time: this is the single-trip card", 404))
+    trip_id = ids[0]
+
+    # Say which of the three failures it was: "404" alone sent me looking for a
+    # missing trip when the answer was an unreachable renderer.
+    with pg_session() as pg:
+        row = pg.execute(
+            """
+            SELECT t.trip_id, p.trip_id IS NOT NULL AS has_route
+            FROM trips t LEFT JOIN paths p ON p.trip_id = t.trip_id
+            WHERE t.trip_id = :trip_id
+            """,
+            {"trip_id": trip_id},
+        ).fetchone()
+    if row is None:
+        return make_response((f"no trip {trip_id} in this database", 404))
+    if not row["has_route"]:
+        return make_response((f"trip {trip_id} has no route to draw", 404))
+    base_url, style = _martin()
+    if not (base_url and style):
+        return make_response(("martin.url / martin.style not in config.yaml", 503))
+
+    png, reason = render_trip_card(trip_id)
+    if png is None:
+        return make_response(
+            (f"no card ({reason}) — is martin reachable at {base_url}?", 503)
+        )
+    response = make_response(png)
+    response.headers["Content-Type"] = "image/png"
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/admin/trip_card/<int:trip_id>/message")
+@owner_required
+def admin_trip_message(trip_id):
+    """The announcement text for a trip, exactly as Discord would receive it."""
+    from src.trip_announcer import format_announcement
+
+    with pg_session() as pg:
+        trip = pg.execute(
+            """
+            SELECT trip_id, operator, line_name, trip_type, origin_station,
+                   destination_station, start_datetime, end_datetime,
+                   departure_delay, arrival_delay
+            FROM trips WHERE trip_id = :trip_id
+            """,
+            {"trip_id": trip_id},
+        ).fetchone()
+    if trip is None:
+        abort(404)
+    response = make_response(format_announcement(trip))
+    response.headers["Content-Type"] = "text/plain; charset=utf-8"
+    return response
+
+
+@app.route("/public/share", methods=["POST"])
+def create_trip_share():
+    """Store a trip selection and redirect to its short link.
+
+    Reached by a real form submit from the trips table, so the browser treats
+    the new tab as user-initiated (a fetch + window.open would be popup-blocked)
+    and the address bar ends up on the short URL rather than the long one.
+    """
+    try:
+        ids = [int(part) for part in request.form.get("trips", "").split(",") if part]
+        key = store_trip_ids(ids)
+    except ValueError:
+        abort(400)
+
+    target = "multi_trip" if request.form.get("view") == "multiTrip" else "public_trip"
+    return redirect(url_for(target, tripIds=key), code=303)
+
+
 @app.route("/public/multiTrip/<tripIds>")
-@app.route("/public/multiTrip/tag/<tagUuid>")
-def multi_trip(tripIds=None, tagUuid=None):
-    """
-    Public Trip
-    """
+@app.route("/public/multiTrip/tag/<tagId>")
+@app.route("/public/multiTrip/ticket/<ticketId>")
+def multi_trip(tripIds=None, tagId=None, ticketId=None, period=None):
     tag_name = None
-    if tripIds is None:
-        with pg_session() as pg:
-            result = pg.execute(
-                """
-                SELECT string_agg(tags_associations.trip_id::text, ',') AS trip_ids,
-                       tags.name AS name
-                FROM tags_associations
-                LEFT JOIN tags ON tags.uid = tags_associations.tag_id
-                WHERE tags.uuid = :uuid
-                GROUP BY tags.name
-                """,
-                {"uuid": tagUuid},
-            ).fetchone()
-            tripIds = result["trip_ids"] if result else None
-            tag_name = result["name"] if result else None
+    if not tripIds:
+        if period:
+            try:
+                start, end = parse_period(period["kind"], period["period"])
+            except ValueError:
+                abort(404)
+            ids = period_trip_ids(get_user_id(period["username"]), start, end)
+            tripIds = ",".join(str(trip_id) for trip_id in ids) or None
+            tag_name = period_label(period["kind"], period["period"])
+        elif tagId:
+            with pg_session() as pg:
+                result = pg.execute(
+                    """
+                    SELECT string_agg(tags_associations.trip_id::text, ',') AS trip_ids,
+                        tags.name AS tag_name
+                    FROM tags_associations
+                    LEFT JOIN tags ON tags.uid = tags_associations.tag_id
+                    WHERE tags.uuid = :uuid
+                    GROUP BY tags.name
+                    """,
+                    {"uuid": tagId},
+                ).fetchone()
+                tripIds = result["trip_ids"] if result else None
+                tag_name = result["tag_name"] if result else None
+        elif ticketId:
+            with pg_session() as pg:
+                result = pg.execute(
+                    """
+                    SELECT string_agg(trips.trip_id::text, ',') AS trip_ids,
+                        tickets.name AS ticket_name
+                    FROM trips
+                    LEFT JOIN tickets ON trips.ticket_id = tickets.uid
+                    WHERE tickets.uid = :uid
+                    GROUP BY tickets.name
+                    """,
+                    {"uid": ticketId},
+                ).fetchone()
+                tripIds = result["trip_ids"] if result else None
+                tag_name = result["ticket_name"] if result else None
         if not tripIds:
             abort(410)
 
     # Same batched screening as the tag page: one set-based query, private/
     # friends trips drop out of the embedded id list (getMultiTrips would filter
     # them anyway), owner-level sharing checked once per owner of a visible trip.
-    requested_ids = [int(t) for t in tripIds.split(",")]
+    try:
+        requested_ids = parse_trip_ids(tripIds)
+    except ValueError:
+        abort(410)
     with pg_session() as pg:
         rows = pg.execute(
             "SELECT trip_id, user_id, visibility FROM trips WHERE trip_id = ANY(:ids)",
@@ -5472,9 +5817,41 @@ def _plan_display_order(rows):
     return ordered
 
 
-def build_plan_trip_list(plan_uuid):
+def _plan_leg_visibilities_for(author):
+    """Which plan_trips.visibility values this viewer may see. A plan leg carries the
+    visibility its real trip will get once logged, and the shared views honour it the
+    same way the trips themselves do: the author (and the site owner) sees every leg,
+    an accepted friend also sees 'friends' ones, everyone else only 'public'.
+    None means no filtering at all."""
+    if session.get(author.username) or session.get(owner):
+        return None
+    if current_user_is_friend_with(author.username):
+        return ("public", "friends")
+    return ("public",)
+
+
+def plan_hidden_leg_count(plan, author):
+    """How many of the plan's legs this viewer is not allowed to see — shown beside
+    the trip count so the shared views never present a silently trimmed itinerary."""
+    allowed = _plan_leg_visibilities_for(author)
+    if allowed is None:
+        return 0
+    with pg_session() as pg:
+        return pg.execute(
+            "SELECT COUNT(*) FROM plan_trips WHERE plan_id = :plan_id"
+            " AND COALESCE(visibility, 'private') <> ALL(:allowed)",
+            {"plan_id": plan["uid"], "allowed": list(allowed)},
+        ).fetchone()[0]
+
+
+def build_plan_trip_list(plan_uuid, allowed_visibilities=None):
     """(tripList, priceDict) in the SAME shape as processPublicTrips, built from
-    plan_trips so new_trip.html renders a plan unchanged. Reuses formatTrip."""
+    plan_trips so new_trip.html renders a plan unchanged. Reuses formatTrip.
+
+    `allowed_visibilities` (from _plan_leg_visibilities_for) drops the legs a viewer
+    may not see before anything else is derived, so the order, the day separators, the
+    connection warnings and every total describe exactly what is on screen. None — the
+    author's own views — keeps the whole plan."""
     user_currency = getLoggedUserCurrency()
     empty = {"total_price": 0, "user_currency": user_currency, "total_carbon": 0, "total_distance": 0}
     with pg_session() as pg:
@@ -5484,6 +5861,12 @@ def build_plan_trip_list(plan_uuid):
         plan_uid = plan._mapping["uid"]
         rows = pg.execute(get_plan_trips_query(), {"plan_id": plan_uid}).fetchall()
         cost_rows = pg.execute(get_plan_costs_query(), {"plan_id": plan_uid}).fetchall()
+    if allowed_visibilities is not None:
+        rows = [
+            r
+            for r in rows
+            if (r._mapping["visibility"] or "private") in allowed_visibilities
+        ]
 
     # Shared costs -> per-leg "ticket" fields, so a leg on a cost renders with the
     # existing ticket UI (name + per-leg share). Each cost is converted once; the
@@ -5574,6 +5957,12 @@ def build_plan_trip_list(plan_uuid):
         trip["day_number"] = pt["start_day"]
         trip["end_day_number"] = pt["end_day"]
         trip["weekdays"] = pt["weekdays"]
+        # Booked = the ticket is actually bought (not just a budget estimate); the
+        # plan view flags those legs.
+        trip["booked"] = bool(pt["booked"])
+        # Already logged as a real trip (partial validation) -> never logged again,
+        # and the plan view links the leg to the trip it produced.
+        trip["validated_trip_id"] = pt["validated_trip_id"]
         trip["cost_id"] = pt["cost_id"]
         # A leg on a shared cost renders like a ticketed trip (reuse the ticket UI).
         cinfo = cost_by_id.get(pt["cost_id"])
@@ -5625,13 +6014,38 @@ def build_plan_trip_list(plan_uuid):
 
 
 def _render_plan_view(plan, username, controls):
+    """`username` is the viewer; `plan_author` below is the user who created the plan
+    (not the site owner, which `owner` means everywhere else in this module)."""
     user = User.query.filter_by(username=username).first() if username else None
-    owner_username = get_username(plan["user_id"])
+    author_username = get_username(plan["user_id"])
     data_url = (
-        url_for("get_plan_trips_json", username=owner_username, plan_uuid=plan["uuid"])
+        url_for("get_plan_trips_json", username=author_username, plan_uuid=plan["uuid"])
         if controls
         else url_for("public_plan_data", plan_uuid=plan["uuid"])
     )
+    # Side-panel "save a copy" action, mirroring Ride along on trips/tags: only on the
+    # read-only share view, and only for a logged-in viewer who is not the plan's author
+    # (they would just be forking their own plan, which the management view already does).
+    copy_url = (
+        url_for("copy_plan_route", username=username, plan_uuid=plan["uuid"])
+        # getUser() yields "public" for a visitor who is not logged in.
+        if not controls and username not in (None, "public") and username != author_username
+        else None
+    )
+    # The map's twin: the same plan as a leg-by-leg list. Its author gets their own
+    # editable plan page; anyone else the read-only itinerary, and only when the
+    # plan's visibility lets them in (the map does not imply access to it).
+    author_user = User.query.filter_by(uid=plan["user_id"]).first()
+    if username == author_username:
+        itinerary_url = url_for("plan_view", username=author_username, plan_uuid=plan["uuid"])
+    else:
+        itinerary_url = (
+            url_for("public_plan_itinerary", plan_uuid=plan["uuid"])
+            if author_user is not None and _may_view_plan_itinerary(plan, author_user)
+            else None
+        )
+    # Legs this viewer may not see are left off the map; the count sits by the title.
+    hidden_legs = plan_hidden_leg_count(plan, author_user) if author_user else 0
     return render_template(
         "public/new_trip.html",
         logosList=listOperatorsLogos(),
@@ -5639,17 +6053,27 @@ def _render_plan_view(plan, username, controls):
         title=plan["name"],
         collection_voyage="voyage",
         tag_description=plan["name"],
-        special_og=False,
+        # The link preview: a map of the plan's legs, captioned with its name.
+        # As on a trip page the card prints that caption itself, so the tags
+        # beside it stay the site's own pair — the name is only used if the
+        # picture ever stops being served.
+        special_og=True,
         tileserver=user.tileserver if user else "default",
         globe=user.globe if user else False,
-        og={},
-        num_hidden_trips=0,
+        og={
+            "title": plan["name"],
+            "description": plan["description"] or "Trainlog plan",
+            "image": external_url("og.plan_image", uuid=plan["uuid"], ext="jpg"),
+        },
+        num_hidden_trips=hidden_legs,
         colorblind=getattr(user, "colorblind", False) if user else False,
         planDataUrl=data_url,
         planControls=controls,
         relativeDates=True,
         plan=plan,
-        plan_owner=owner_username,
+        plan_author=author_username,
+        plan_copy_url=copy_url,
+        plan_itinerary_url=itinerary_url,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -5790,13 +6214,13 @@ def compute_plan_stats(trip_list, costs=None):
         total_price += price
         agg = per_type.setdefault(ty, {"count": 0, "duration": 0.0, "distance": 0.0, "price": 0.0})
         agg["count"] += 1
-        if travels:
-            agg["duration"] += dur
+        agg["duration"] += dur
         agg["distance"] += dist
         agg["price"] += price
     per_type_rows = sorted(
         ({"type": k, **v, "duration_h": (_fmt_dhm(v["duration"]) if v["duration"] else ""),
-          "distance_km": round(v["distance"] / 1000),
+          # A stay/activity has no distance -> leave the cell empty rather than "0 km".
+          "distance_km": (round(v["distance"] / 1000) if v["distance"] else None),
           "price_str": (f"{round(v['price'])} {user_currency}" if v["price"] else "")}
          for k, v in per_type.items()),
         key=lambda r: r["duration"], reverse=True,
@@ -5843,11 +6267,14 @@ def compute_plan_stats(trip_list, costs=None):
     }
 
 
-@app.route("/u/<username>/plan/<plan_uuid>")
-@login_required
-def plan_view(username, plan_uuid):
-    plan = get_owned_plan(plan_uuid, username)
-    trip_list, _ = build_plan_trip_list(plan_uuid)
+def _plan_itinerary_context(plan, username, allowed_visibilities=None):
+    """Everything plans/plan.html needs to draw a plan's leg-by-leg itinerary, shared
+    by the author's editable page (plan_view) and its read-only twin
+    (public_plan_itinerary). The caller adds who may do what; `allowed_visibilities`
+    (None on the author's own page) drops the legs the viewer may not see.
+    `username` is the plan's author — whose trip history the currency picker
+    ordering should reflect, not necessarily the current viewer."""
+    trip_list, _ = build_plan_trip_list(plan["uuid"], allowed_visibilities)
     # add a per-leg formatted duration for the management list (stays/stops have no
     # travel duration -> leave it blank rather than showing "0m")
     for item in trip_list:
@@ -5865,7 +6292,14 @@ def plan_view(username, plan_uuid):
     # The anchor date / Day-1 prompt only matter when some legs are relative (Day N).
     # A fully precise-dated plan needs neither.
     plan_has_relative = any(
-        item["trip"].get("day_number") is not None for item in trip_list
+        item["trip"].get("day_number") is not None
+        and item["trip"].get("validated_trip_id") is None
+        for item in trip_list
+    )
+    # Legs still to be logged: the "log as trips" control is pointless without one,
+    # and only these carry a tick box.
+    plan_unlogged_count = sum(
+        1 for item in trip_list if item["trip"].get("validated_trip_id") is None
     )
     # Localised vehicle-type names for the add-trip dropdown / breakdown (the lang
     # keys are the type ids themselves: train -> "Train", poi -> "Activity", ...).
@@ -5878,20 +6312,36 @@ def plan_view(username, plan_uuid):
             "accommodation", "poi", "restaurant", "other",
         ]
     }
-    return render_template(
-        "plans/plan.html",
+    return dict(
         title=plan["name"],
-        username=username,
-        nav="bootstrap/navigation.html",
-        isCurrent=has_current_trip(get_user_id(username)),
         plan=plan,
         plan_trips=trip_list,
         plan_stats=stats,
         plan_costs=plan_costs,
         plan_has_relative=plan_has_relative,
+        plan_unlogged_count=plan_unlogged_count,
         type_labels=type_labels,
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(username),
         user_currency=getLoggedUserCurrency(),
+    )
+
+
+@app.route("/u/<username>/plan/<plan_uuid>")
+@login_required
+def plan_view(username, plan_uuid):
+    plan = get_owned_plan(plan_uuid, username)
+    return render_template(
+        "plans/plan.html",
+        username=username,
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id(username)),
+        # The author's own plan page: every control is live (the same template
+        # renders read-only for a shared plan — see public_plan_itinerary).
+        plan_editable=True,
+        plan_copy_url=None,
+        plan_map_url=url_for("public_plan", plan_uuid=plan_uuid),
+        num_hidden_trips=0,
+        **_plan_itinerary_context(plan, username),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -5918,6 +6368,31 @@ def update_plan_route(username, plan_uuid):
                 "name": sanitize_param(request.form.get("name") or plan["name"]),
                 "description": sanitize_param(request.form.get("description")),
                 "anchor_date": request.form.get("anchor_date") or plan["anchor_date"],
+                "last_modified": datetime.now(),
+            },
+        )
+    return redirect(url_for("plan_view", username=username, plan_uuid=plan_uuid))
+
+
+PLAN_VISIBILITIES = ("public", "friends", "private")
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/visibility", methods=["POST"])
+@login_required
+def update_plan_visibility_route(username, plan_uuid):
+    """Who can open this plan's share link (/public/plan/<uuid>) — see
+    _plan_public_or_403. Same three levels as a trip's own visibility."""
+    plan = get_owned_plan(plan_uuid, username)
+    visibility = request.form.get("visibility")
+    if visibility not in PLAN_VISIBILITIES:
+        abort(400)
+    with pg_session() as pg:
+        pg.execute(
+            update_plan_visibility_query(),
+            {
+                "uid": plan["uid"],
+                "user_id": plan["user_id"],
+                "visibility": visibility,
                 "last_modified": datetime.now(),
             },
         )
@@ -6114,7 +6589,8 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         title=lang[session["userinfo"]["lang"]]["edit"],
         start_datetime=start_str,
         end_datetime=end_str,
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(username),
+        user_currency=getLoggedUserCurrency(),
         unknownType=None,
         precision=precision,
         tripId=plan_trip_uid,
@@ -6141,6 +6617,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         tripType=pt["trip_type"],
         tripTicketId="",
         wplist=wplist,
+        raw_path=[],
         tripNotes=pt["notes"] or "",
         colorblind=colorblind,
         tripDepartureDelay="",
@@ -6360,7 +6837,11 @@ def validate_plan_route(username, plan_uuid):
         start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
     else:
         start_date = plan["anchor_date"]
-    tag_uuid = validate_plan(plan, start_date)
+    # Log only the ticked legs (the plan view sends the selection); an absent field
+    # means "everything not logged yet".
+    raw_uids = (request.form.get("trip_uids") or "").strip()
+    plan_trip_uids = [int(x) for x in re.findall(r"\d+", raw_uids)] if raw_uids else None
+    tag_uuid = validate_plan(plan, start_date, plan_trip_uids=plan_trip_uids)
     # Land on the new tag grouping the validated trips; fall back to the plan list
     # for an empty plan (no trips -> no tag).
     if tag_uuid:
@@ -6368,22 +6849,45 @@ def validate_plan_route(username, plan_uuid):
     return redirect(url_for("plan_list", username=username))
 
 
-def _plan_public_or_403(plan_uuid):
-    """Fetch a plan by uuid for public viewing: owner always; otherwise the owner
-    must have public trips. Returns the plan dict or aborts."""
+def _get_plan_and_author(plan_uuid):
+    """(plan dict, author User) by uuid, 410 if either is gone."""
     with pg_session() as pg:
         row = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
     if row is None:
         abort(410)
     plan = dict(row._mapping)
-    owner_user = User.query.filter_by(uid=plan["user_id"]).first()
-    if owner_user is None:
+    author = User.query.filter_by(uid=plan["user_id"]).first()
+    if author is None:
         abort(410)
-    if (
-        not session.get(owner_user.username)
-        and not owner_user.is_public_trips()
-        and not session.get(owner)
-    ):
+    return plan, author
+
+
+def _may_view_plan_map(author):
+    """The map at /public/plan/<uuid> is the plan's picture and predates per-plan
+    visibility: it follows the author's own trip-sharing setting, exactly as it always
+    has. The author and the site owner always get through."""
+    return bool(
+        session.get(author.username) or session.get(owner) or author.is_public_trips()
+    )
+
+
+def _may_view_plan_itinerary(plan, author):
+    """The leg-by-leg itinerary is what plans.visibility governs — the three trip
+    levels: 'public' opens to anyone holding the link, 'friends' to the author's
+    accepted friends, 'private' to the author alone (site owner included)."""
+    if session.get(author.username) or session.get(owner):
+        return True
+    visibility = plan.get("visibility") or "private"
+    if visibility == "public":
+        return True
+    return visibility == "friends" and current_user_is_friend_with(author.username)
+
+
+def _plan_public_or_403(plan_uuid):
+    """Fetch a plan by uuid for the map view (and the actions reachable from it).
+    Returns the plan dict or aborts."""
+    plan, author = _get_plan_and_author(plan_uuid)
+    if not _may_view_plan_map(author):
         abort(401)
     return plan
 
@@ -6397,11 +6901,108 @@ def public_plan(plan_uuid):
     return _render_plan_view(plan, getUser(), controls=False)
 
 
+@app.route("/public/plan/<plan_uuid>/itinerary")
+def public_plan_itinerary(plan_uuid):
+    """The shared plan as a read-only leg-by-leg itinerary — the twin of the map at
+    /public/plan/<uuid>, and the link the author hands out. Same template as their
+    own plan page, with every control off."""
+    plan, author = _get_plan_and_author(plan_uuid)
+    if not _may_view_plan_itinerary(plan, author):
+        abort(401)
+    viewer = getUser()
+    author_username = author.username
+    # Saving a copy mirrors the map view's action: a logged-in viewer who is not the
+    # author (they already own it).
+    copy_url = (
+        url_for("copy_plan_route", username=viewer, plan_uuid=plan_uuid)
+        if viewer not in (None, "public") and viewer != author_username
+        else None
+    )
+    return render_template(
+        "plans/plan.html",
+        username=viewer,
+        nav=(
+            "bootstrap/no_user_nav.html" if viewer == "public"
+            else "bootstrap/navigation.html"
+        ),
+        isCurrent=False,
+        plan_editable=False,
+        plan_copy_url=copy_url,
+        plan_author=author_username,
+        num_hidden_trips=plan_hidden_leg_count(plan, author),
+        # The map is gated separately (the author's trip-sharing setting), so only
+        # offer the switch when this viewer can actually open it.
+        plan_map_url=(
+            url_for("public_plan", plan_uuid=plan_uuid)
+            if _may_view_plan_map(author)
+            else None
+        ),
+        **_plan_itinerary_context(plan, author_username, _plan_leg_visibilities_for(author)),
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
 @app.route("/public/plan/<plan_uuid>/getPlanTrips")
 def public_plan_data(plan_uuid):
     _plan_public_or_403(plan_uuid)
-    tripList, priceDict = build_plan_trip_list(plan_uuid)
+    # The map draws only the legs this viewer may see (their count is on the page).
+    plan, author = _get_plan_and_author(plan_uuid)
+    tripList, priceDict = build_plan_trip_list(
+        plan_uuid, _plan_leg_visibilities_for(author)
+    )
     return jsonify([tripList, priceDict])
+
+
+@app.route("/u/<username>/plans/copy/<plan_uuid>", methods=["POST"])
+@login_required
+def copy_plan_route(username, plan_uuid):
+    """Save a shared plan into `username`'s own plans. `username` is the user doing the
+    copying (enforced by login_required, so it is the logged-in user); the source plan
+    may have been created by a different user, and read access is checked exactly as
+    the public plan view checks it. The copy is an independent plan — later edits on
+    either side do not propagate."""
+    plan = _plan_public_or_403(plan_uuid)
+    user = User.query.filter_by(username=username).first()
+    suffix = lang[session["userinfo"]["lang"]]["copySuffix"]
+    new_uuid = duplicate_plan(
+        plan["uuid"],
+        user.uid,
+        name=f"{plan['name']} {suffix}",
+        require_same_user=False,
+    )
+    if new_uuid is None:
+        abort(404)
+    return redirect(url_for("plan_view", username=username, plan_uuid=new_uuid))
+
+
+@app.route("/u/<username>/plan/<plan_uuid>/copy_to_user", methods=["POST"])
+@owner_required
+def copy_plan_to_user_route(username, plan_uuid):
+    """Site-owner tool: copy any plan into any account. `username` is the plan's author
+    (whose management page the action was triggered from) and the recipient comes from
+    the `target` form field; regular users copy shared plans through copy_plan_route
+    instead. The copy keeps the original name — it lands in an account that has no other
+    copy of it — and is independent of the source plan."""
+    with pg_session() as pg:
+        row = pg.execute(get_plan_query(), {"uuid": plan_uuid}).fetchone()
+    if row is None:
+        abort(410)
+    plan = dict(row._mapping)
+    target_username = (request.form.get("target") or "").strip()
+    target = User.query.filter_by(username=target_username).first()
+    if target is None:
+        abort(404)
+    new_uuid = duplicate_plan(
+        plan["uuid"], target.uid, name=plan["name"], require_same_user=False
+    )
+    if new_uuid is None:
+        abort(404)
+    logger.info(
+        f"owner copied plan {plan_uuid} (by {username}) to {target_username} -> {new_uuid}"
+    )
+    # Land on the copy in the recipient's account, so the result is visible immediately.
+    return redirect(url_for("plan_view", username=target_username, plan_uuid=new_uuid))
 
 
 @app.route("/u/<username>/scottySaveTrip", methods=["GET", "POST"])
@@ -6549,6 +7150,70 @@ def deleteTrip(username):
             delete_trip(id, username)
 
     return ""
+
+
+def _discord_linked(username):
+    """Whether this user has linked a Discord account, and so may post trips."""
+    user = User.query.filter_by(username=username).first()
+    return bool(user and user.discord_id)
+
+
+@app.route("/u/<username>/postTripAnnouncement", methods=["POST"])
+@login_required
+def post_trip_announcement(username):
+    """Post one trip to the Discord channel now, at its owner's request.
+
+    The announcer only posts in a short window at departure, so a trip logged
+    from the platform, or one that fell in an outage, would otherwise never
+    make it out. Only while the trip is being travelled (post_trip_now), and
+    only for someone who has linked their Discord account.
+    """
+    trip_id = request.form.get("tripId", type=int)
+    if trip_id is None:
+        abort(400)
+
+    check_current_user_owns_trip(trip_id)
+    user = User.query.filter_by(username=username).first()
+    if user is None or not user.discord_id:
+        abort(403)
+
+    posted, reason = post_trip_now(
+        trip_id, user.uid, user.username, user.discord_id
+    )
+    # The row's new state, so the page can swap the buttons over without
+    # reloading itself.
+    return jsonify(
+        {
+            "ok": posted,
+            "reason": reason,
+            "announced": posted,
+            "postable": not posted and is_postable(trip_id, user.uid),
+        }
+    )
+
+
+@app.route("/u/<username>/deleteTripAnnouncement", methods=["POST"])
+@login_required
+def delete_trip_announcement(username):
+    """Take a trip's Discord post out of the channel, at its owner's request.
+
+    A trip announced while it was public by mistake says where somebody is, and
+    until this there was no way to take the post back.
+    """
+    trip_id = request.form.get("tripId", type=int)
+    if trip_id is None:
+        abort(400)
+
+    check_current_user_owns_trip(trip_id)
+    removed = retract_announcement(trip_id)
+
+    # A trip whose post is gone may be posted again, for as long as it is still
+    # being travelled — so the page is told, and offers it or does not.
+    user = User.query.filter_by(username=username).first()
+    postable = bool(
+        removed and user and user.discord_id and is_postable(trip_id, user.uid)
+    )
+    return jsonify({"ok": removed, "announced": not removed, "postable": postable})
 
 
 @app.route("/u/<username>/updateTrip", methods=["GET", "POST"])
@@ -6821,6 +7486,7 @@ def get_trip(trip_id):
         last_modified=sanitize_param(trip["last_modified"]),
         type=sanitize_param(trip["type"]),
         seat=sanitize_param(trip["seat"]),
+        seat_car=trip.get("seat_car"),
         material_type=sanitize_param(trip["material_type"]),
         material_type_advanced=sanitize_param(trip.get("material_type_advanced")),
         reg=sanitize_param(trip["reg"]),
@@ -6840,6 +7506,12 @@ def get_trip(trip_id):
 
 def sanitize_param(param):
     return param if param != "" else None
+
+
+def parse_seat_car(param):
+    """Form value for the marked car (a stringified array index) -> int or None."""
+    param = sanitize_param(param)
+    return int(param) if param is not None else None
 
 
 def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False):
@@ -6933,6 +7605,7 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         last_modified=datetime.now(),
         type=original_trip.type,
         seat=sanitize_param(formData["seat"]),
+        seat_car=parse_seat_car(formData.get("seat_car")),
         material_type=sanitize_param(formData["material_type"]),
         material_type_advanced=sanitize_param(formData.get("material_type_advanced")),
         reg=sanitize_param(formData["reg"]),
@@ -7161,6 +7834,29 @@ def router_status_single():
             return jsonify({"status": "DOWN", "message": f"HTTP {dummy.status_code}"})
     except Exception as e:
         return jsonify({"status": "DOWN", "message": str(e)})
+
+
+@app.route("/status/trip_counter")
+def status_trip_counter():
+    """Highest trip_id, for the odometer on /status. A backwards index scan on
+    the SERIAL primary key that stops at the first row, so it is cheap enough
+    for the page to poll every second."""
+    with pg_session() as pg:
+        max_id = pg.execute("SELECT COALESCE(MAX(trip_id), 0) FROM trips").scalar()
+    response = jsonify({"max_trip_id": max_id})
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/status/trip_rate")
+def status_trip_rate():
+    """Trips created per minute, for the speedometer on /status. Polled far
+    less often than the odometer: this one has to scan."""
+    response = jsonify(
+        {"rate": get_trip_rate(), "window_min": TRIP_RATE_WINDOW_MIN}
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/photon_status/<instance>")
@@ -8277,11 +8973,16 @@ def processPublicTrips(tripIds):
         # (which would raise TypeError when mixing dated and non-dated trips).
         dt = d["trip"]["utc_filtered_start_datetime"]
         if isinstance(dt, str):
-            return (1, dt)
+            # Adjust start datetime by departure delay (in seconds)
+            # TODO: remove this part here once the postgres query provides "actual_departure_time"
+            dt_obj = parse_date(dt)
+            departure_delay = d["trip"]["departure_delay"] or 0
+            dt_obj += timedelta(seconds=departure_delay)
+            return (1, dt_obj.strftime("%Y-%m-%d %H:%M:%S"))
         return (0 if dt == -1 else 2, "")
 
-    sortedTripList = sorted(tripList, key=lambda d: d["trip"]["uid"], reverse=True)
-    sortedTripList = sorted(sortedTripList, key=_pub_trip_sort_key, reverse=True)
+    sortedTripList = sorted(tripList, key=lambda d: d["trip"]["uid"])
+    sortedTripList = sorted(sortedTripList, key=_pub_trip_sort_key)
     
     priceDict = {
         "total_price": total_price, 
@@ -8392,7 +9093,6 @@ def bulkSetPowerType(username):
 def mergeTrips(username, tripIds):
     # Process and sort the trips (includes permission checks)
     sortedTripList, priceDict = processPublicTrips(tripIds)
-    sortedTripList.reverse()
 
     if not sortedTripList:
         return jsonify({"error": "No trips found to merge."}), 400
@@ -8708,10 +9408,21 @@ SORT_FIELD_EXPRS = {
     "origin_station":        "LOWER(CASE WHEN ascii(origin_station) BETWEEN 127462 AND 127487 THEN substring(origin_station FROM 4) ELSE origin_station END)",
     "destination_station":   "LOWER(CASE WHEN ascii(destination_station) BETWEEN 127462 AND 127487 THEN substring(destination_station FROM 4) ELSE destination_station END)",
     "type":                  "LOWER(type)",
-    "operator":              "LOWER(operator)",
+    # Sort on the operator as displayed (resolved through the aliases), falling back
+    # to the raw text when it names no known operator — otherwise a trip logged 'cff'
+    # shows as SBB but sorts under C. Empty text is folded to NULL so operatorless
+    # trips group with the NULLs at one end instead of straddling both.
+    "operator":              "LOWER(NULLIF(COALESCE(operator_name, operator), ''))",
     "line_name":             "LOWER(line_name)",
     "price":                 "price",
 }
+
+# The instant a trip is ordered on under the default "temporal" sort. Also the
+# expression the now-anchor counts against, so the boundary it finds is exactly the
+# point the ordering puts it at.
+TEMPORAL_SORT_EXPR = (
+    "(utc_filtered_start_datetime + COALESCE(departure_delay, 0) * interval '1 second')"
+)
 
 def get_trips_api_internal(username, is_public=False):
     # Retrieve parameters from DataTables request
@@ -8749,6 +9460,20 @@ def get_trips_api_internal(username, is_public=False):
         sort_column_name = SORT_FIELD_EXPRS[custom_sort_field]
         sort_direction = request.form.get("sort_dir", sort_direction)
 
+    # Now-anchor: with upcoming trips folded in, the descending timeline runs
+    # [far future … now … oldest past], so its first page is the most distant plan —
+    # useless as a landing page. When the client asks for it (first draw only, no
+    # explicit ?page=), the offset is moved so that "now" sits mid-page instead.
+    # Only for the temporal descending order, where "above/below now" means anything.
+    anchor_now = (
+        request.form.get("anchorNow", type=int, default=0) == 1
+        and include_planned == 1
+        and sort_column_name == "temporal"
+        and sort_direction == "desc"
+        # "All rows" has no page to centre.
+        and length is not None
+    )
+
     # Negative global terms (smart-search "!term"): trips that match NONE of these
     # in any field. Sent by the frontend as a JSON list.
     try:
@@ -8758,152 +9483,23 @@ def get_trips_api_internal(username, is_public=False):
     except (ValueError, TypeError):
         global_not_terms = []
 
-    # Handle column-specific searches
-    column_searches = {}
-    for i in range(20):  # Check up to 20 columns
-        column_search = request.form.get(f"columns[{i}][search][value]", "")
-        column_exact = request.form.get(f"columns[{i}][search][exact]", "false") == "true"
-        column_negate = request.form.get(f"columns[{i}][search][negate]", "false") == "true"
-        column_searches[i] = {
-            "value": column_search,
-            "exact": column_exact,
-            "negate": column_negate,
+    # Field filters ("from:Oslo", "duration>2h"): a list rather than one value per
+    # column, so a field can carry several terms. They are ANDed, the alternatives
+    # inside one term ORed.
+    filters = parse_filters(request.form.get("filters"), is_public=is_public)
+
+    additional_conditions, search_params = filter_conditions(filters)
+    search_params.update(
+        {
+            "username": username,
+            "past": past,
+            "include_planned": include_planned,
         }
+    )
 
-    # Build additional WHERE conditions for column-specific searches
-    additional_conditions = []
-    search_params = {
-        "username": username,
-        "past": past,
-        "include_planned": include_planned,
-    }
-    
-    # Add column-specific search conditions
-    for column_index, search_data in column_searches.items():
-        if column_index < len(trip_column_names):
-            column_name = trip_column_names[column_index]
-            param_name = f"col_search_{column_index}"
-            search_term = search_data["value"]
-            is_exact = search_data["exact"]
-            is_negate = search_data["negate"]
-
-            # Choose LIKE pattern based on exact/partial matching
-            if is_exact:
-                search_pattern = search_term  # Exact match
-            else:
-                search_pattern = f"%{search_term}%"  # Partial match
-
-            # Each branch below appends exactly one predicate; remember the position
-            # so a negated search ("from:!Paris") can wrap that predicate in NOT.
-            _cond_start = len(additional_conditions)
-
-            # Map frontend column names to actual query column names in FilteredTrips
-            if column_name == "type":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(type) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(type)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "origin_station":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(origin_station) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(origin_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "destination_station":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(destination_station) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(destination_station)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "start_datetime":
-                if is_exact:
-                    additional_conditions.append(f"COALESCE(to_char(start_datetime, 'YYYY-MM-DD'), '') = :{param_name}")
-                else:
-                    additional_conditions.append(f"COALESCE(to_char(start_datetime, 'YYYY-MM-DD'), '') LIKE :{param_name}")
-            elif column_name == "operator":
-                if is_exact:
-                    operator_match = f"LOWER(COALESCE(operator, '')) = LOWER(:{param_name})"
-                else:
-                    operator_match = f"remove_diacritics(LOWER(COALESCE(operator, ''))) LIKE remove_diacritics(LOWER(:{param_name}))"
-                # Also match trips whose operator resolves to the same company under a
-                # different spelling, so "operator:SBB" finds one logged as CFF. The
-                # names are resolved to ids once here rather than per row, leaving an
-                # indexed integer lookup in the correlated subquery.
-                operator_ids = find_operator_ids(search_term, exact=is_exact)
-                if operator_ids:
-                    ids_param = f"{param_name}_operator_ids"
-                    search_params[ids_param] = operator_ids
-                    operator_match = (
-                        f"({operator_match} OR EXISTS (SELECT 1 FROM trip_operators tvs"
-                        f" WHERE tvs.trip_id = FilteredTrips.uid"
-                        f" AND tvs.operator_id = ANY(:{ids_param})))"
-                    )
-                additional_conditions.append(operator_match)
-            elif column_name == "line_name":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(line_name, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(line_name, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "countries":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(countries) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(countries)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "visibility":
-                if is_exact and search_term == "":
-                    additional_conditions.append(f"visibility IS NULL")
-                elif is_exact:
-                    additional_conditions.append(f"LOWER(visibility) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(visibility)) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "material_type":
-                if is_exact:
-                    additional_conditions.append(f"(LOWER(COALESCE(material_type, '')) = LOWER(:{param_name}) OR LOWER(iata) = LOWER(:{param_name}) OR LOWER(manufacturer) = LOWER(:{param_name}) OR LOWER(model) = LOWER(:{param_name}))")
-                else:
-                    additional_conditions.append(f"(remove_diacritics(LOWER(COALESCE(material_type, ''))) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(iata)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(manufacturer)) LIKE remove_diacritics(LOWER(:{param_name})) OR remove_diacritics(LOWER(model)) LIKE remove_diacritics(LOWER(:{param_name})))")
-            elif column_name == "reg":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(reg, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(reg, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            elif column_name == "notes":
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(notes, '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(notes, ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-            else:
-                # Fallback for other columns. CAST to text first: these include
-                # numeric/time columns (start_time, end_time, trip_length,
-                # trip_speed, trip_duration_seconds, price) and PG won't COALESCE
-                # them with '' the way SQLite's dynamic typing did.
-                if is_exact:
-                    additional_conditions.append(f"LOWER(COALESCE(CAST({column_name} AS text), '')) = LOWER(:{param_name})")
-                else:
-                    additional_conditions.append(f"remove_diacritics(LOWER(COALESCE(CAST({column_name} AS text), ''))) LIKE remove_diacritics(LOWER(:{param_name}))")
-
-            # Negate the predicate this column just appended. COALESCE(..., FALSE)
-            # makes NULL columns (e.g. a missing operator) count as "not matching",
-            # so they are included by a negative filter rather than dropped.
-            if is_negate and len(additional_conditions) > _cond_start:
-                additional_conditions[-1] = (
-                    f"NOT COALESCE({additional_conditions[-1]}, FALSE)"
-                )
-
-            search_params[param_name] = search_pattern
-
-    # Push an exact trip-type filter down into the base CTE. The column-specific
-    # "type" search above is a diacritics-insensitive LIKE, which no index can
-    # serve, so the CTE would materialise every one of the user's trips and only
-    # then drop the other types. When the value names a real trip type exactly
-    # (a partial "type:fer" still falls back to the LIKE) and isn't negated, we
-    # also constrain base by trip_type = :base_type, letting the
-    # (user_id, trip_type) index fetch just those rows. The LIKE stays on the
-    # outer query, so results are identical — this only narrows the scan.
-    base_type = None
-    type_search = column_searches.get(0)
-    if type_search and type_search["value"] and not type_search["negate"]:
-        candidate = type_search["value"].strip().lower()
-        if candidate in {t.value for t in TripTypes}:
-            base_type = candidate
-            search_params["base_type"] = base_type
+    base_type = base_type_filter(filters, {t.value for t in TripTypes})
+    if base_type:
+        search_params["base_type"] = base_type
 
     # Global free-text search across every field. Appended to the outer query only
     # when there is something to match, so the common empty-search case lets Postgres
@@ -8918,7 +9514,6 @@ def get_trips_api_internal(username, is_public=False):
             "origin_station",
             "destination_station",
             "COALESCE(operator, '')",
-            "COALESCE(countries, '')",
             "COALESCE(line_name, '')",
             "COALESCE(CAST(start_datetime AS text), '')",
             "COALESCE(CAST(end_datetime AS text), '')",
@@ -8932,6 +9527,9 @@ def get_trips_api_internal(username, is_public=False):
             "COALESCE(model, '')",
         ]
         terms = [like.format(col=col) for col in global_search_columns]
+        # The countries column is JSON keyed by code, matched on the quoted, upper-case
+        # code so that "NO" does not find every trip with a "nonelec" split.
+        terms.append(f"COALESCE(countries, '') LIKE :{param}_country")
         terms.append(
             "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = FilteredTrips.ticket_id"
             f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
@@ -8958,7 +9556,8 @@ def get_trips_api_internal(username, is_public=False):
         return "(" + " OR ".join(terms) + ")"
 
     if search_value:
-        search_params["search"] = f"%{search_value}%"
+        search_params["search"] = like_pattern(search_value)
+        search_params["search_country"] = country_code_pattern(search_value)
         global_operator_ids = find_operator_ids(search_value)
         if global_operator_ids:
             search_params["search_operator_ids"] = global_operator_ids
@@ -8974,7 +9573,8 @@ def get_trips_api_internal(username, is_public=False):
     # term. COALESCE(..., FALSE) so a trip with all-NULL fields still passes the NOT.
     for idx, neg_term in enumerate(global_not_terms):
         neg_param = f"search_not_{idx}"
-        search_params[neg_param] = f"%{neg_term}%"
+        search_params[neg_param] = like_pattern(neg_term)
+        search_params[f"{neg_param}_country"] = country_code_pattern(neg_term)
         # Exclude by alias too, so "!SBB" also drops trips logged as CFF — otherwise
         # a negative filter would leave behind the spellings it looks equivalent to.
         neg_operator_ids = find_operator_ids(neg_term)
@@ -8991,8 +9591,14 @@ def get_trips_api_internal(username, is_public=False):
         )
 
     # Build the queries
-    cte = get_dynamic_user_trips_query(base_type_filter=base_type is not None)
-    base_count_query = cte + "SELECT COUNT(*) FROM FilteredTrips"
+    cte = get_dynamic_user_trips_query(base_type_filter=bool(base_type))
+    # The anchor rides along with the count that is run anyway: how many of the
+    # matching rows sit above now, which — the order being descending on the same
+    # expression — is the rank of the first past row.
+    count_columns = "COUNT(*)"
+    if anchor_now:
+        count_columns += f", COUNT(*) FILTER (WHERE {TEMPORAL_SORT_EXPR} > NOW())"
+    base_count_query = cte + f"SELECT {count_columns} FROM FilteredTrips"
     base_data_query = cte + "SELECT * FROM FilteredTrips"
     
     # Add type filtering if needed
@@ -9036,7 +9642,7 @@ def get_trips_api_internal(username, is_public=False):
     if sort_column_name == "temporal":
         data_query = base_data_query + (
             f" ORDER BY (utc_filtered_start_datetime IS NULL AND is_project) {sort_direction},"
-            f" (utc_filtered_start_datetime + COALESCE(departure_delay, 0) * interval '1 second') {sort_direction} {nulls},"
+            f" {TEMPORAL_SORT_EXPR} {sort_direction} {nulls},"
             f" uid {sort_direction} LIMIT :limit OFFSET :offset"
         )
     elif sort_column_name == "end_datetime":
@@ -9055,15 +9661,34 @@ def get_trips_api_internal(username, is_public=False):
             f"   + COALESCE(price_to_eur({ticket_share_sql}, {ticket_currency_sql}, {ticket_date_sql}), 0) "
             f"END"
         )
-        data_query = base_data_query + f" ORDER BY {price_expr} {sort_direction} NULLS LAST LIMIT :limit OFFSET :offset"
+        data_query = base_data_query + (
+            f" ORDER BY {price_expr} {sort_direction} NULLS LAST,"
+            f" uid {sort_direction} LIMIT :limit OFFSET :offset"
+        )
     else:
-        data_query = base_data_query + f" ORDER BY {sort_column_name} {sort_direction} {nulls} LIMIT :limit OFFSET :offset"
+        # uid breaks ties so paging stays stable: sorts like operator or type have
+        # large groups of equal (often NULL) values, and without it PG is free to
+        # return them in a different order for each page's query, which makes rows
+        # repeat across pages and others vanish.
+        data_query = base_data_query + (
+            f" ORDER BY {sort_column_name} {sort_direction} {nulls},"
+            f" uid {sort_direction} LIMIT :limit OFFSET :offset"
+        )
 
     search_params["user_id"] = get_user_id(username)
 
     with pg_session() as pg:
         # Fetch filtered count
-        records_filtered = pg.execute(count_query, search_params).scalar()
+        count_row = pg.execute(count_query, search_params).fetchone()
+        records_filtered = count_row[0]
+
+        # Centre the requested page on now: half a page of upcoming trips above the
+        # boundary, the rest of the page below it. The offset stops being a multiple
+        # of the page length, which DataTables displays happily; the next page click
+        # snaps back to its own grid.
+        if anchor_now:
+            now_offset = count_row[1]
+            start = max(0, now_offset - length // 2)
 
         # Fetch the actual page data
         search_params.update({
@@ -9146,14 +9771,17 @@ def get_trips_api_internal(username, is_public=False):
             )
 
     # Return the JSON for DataTables
-    return jsonify(
-        {
-            "draw": draw,
-            "recordsTotal": records_filtered,
-            "recordsFiltered": records_filtered,
-            "data": trip_list,
-        }
-    )
+    response = {
+        "draw": draw,
+        "recordsTotal": records_filtered,
+        "recordsFiltered": records_filtered,
+        "data": trip_list,
+    }
+    # Tell the client where the anchored page actually starts, so its paginator and
+    # "showing x to y" agree with the rows it was handed.
+    if anchor_now:
+        response["start"] = start
+    return jsonify(response)
 
 
 @app.route("/u/<username>/get_trips_api", methods=["POST"])
@@ -9184,6 +9812,70 @@ def admin():
     )
 
 
+@app.route("/admin/error_gifs")
+@owner_required
+def admin_error_gifs():
+    """Curate the GIFs the error pages serve, per status code."""
+    lang_code = session["userinfo"]["lang"]
+    buckets = error_gif_buckets(lang_code)
+    for bucket in buckets:
+        bucket["title"] = lang[lang_code].get(f"error{bucket['code']}Title")
+        for gif in bucket["gifs"]:
+            if gif["provider"] == "local":
+                gif["src"] = url_for("static", filename=gif["path"])
+
+    return render_template(
+        "admin/error_gifs.html",
+        title="Error GIFs",
+        username=getUser(),
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id()),
+        buckets=buckets,
+        bucket_codes=ERROR_GIF_BUCKETS,
+        langs=sorted(readLang().keys()),
+        **lang[lang_code],
+        **session["userinfo"],
+    )
+
+
+@app.route("/admin/error_gifs/search")
+@owner_required
+def admin_error_gifs_search():
+    """Search GIPHY for candidates to add to a bucket."""
+    terms = (request.args.get("q") or "").strip()
+    if not terms:
+        return jsonify({"error": "Nothing to search for"}), 400
+    try:
+        return jsonify({"results": giphy_search(terms)})
+    except GiphyError as e:
+        return jsonify({"error": str(e)}), 502
+
+
+@app.route("/admin/error_gifs/<code>/<gif_id>", methods=["POST", "DELETE"])
+@owner_required
+def admin_error_gifs_edit(code, gif_id):
+    """Add, caption or remove one GIPHY entry."""
+    if code not in ERROR_GIF_BUCKETS:
+        abort(404)
+
+    try:
+        if request.method == "DELETE":
+            remove_gif(code, gif_id)
+            return jsonify({"ok": True})
+
+        data = request.get_json(silent=True) or {}
+        if "caption" in data:
+            caption = set_caption(
+                code, gif_id, (data.get("caption") or "").strip(), data.get("lang")
+            )
+            return jsonify({"ok": True, "caption": caption})
+        return jsonify({"ok": True, "entry": add_gif(code, gif_id)})
+    except ValueError as e:
+        return jsonify({"error": str(e)}), 409
+    except GiphyError as e:
+        return jsonify({"error": str(e)}), 502
+
+
 @app.route("/admin/getLastCurrencyDate")
 @owner_required
 def getLastCurrencyDate():
@@ -9196,6 +9888,41 @@ def getLastCurrencyDate():
             return jsonify(str(last_rate_date[0]))
         else:
             return "None"
+
+
+@app.route("/admin/currency_test")
+def admin_currency_test():
+    """Spot-check sandbox for the exchange rate feed. Deliberately ungated: read-only,
+    no user data, just a conversion widget over base_data/exchanges.csv's rates."""
+    return render_template(
+        "admin/currency_test.html",
+        title="Currency test",
+        username=getUser(),
+        nav="bootstrap/navigation.html",
+        isCurrent=has_current_trip(get_user_id()),
+        currencyOptions=get_available_currencies(getUser()),
+        todayDate=date.today().isoformat(),
+        **lang[session["userinfo"]["lang"]],
+        **session["userinfo"],
+    )
+
+
+@app.route("/admin/currency_test/convert")
+def admin_currency_test_convert():
+    amount = request.args.get("amount")
+    base_currency = (request.args.get("from") or "").upper()
+    target_currency = (request.args.get("to") or "").upper()
+    convert_date = request.args.get("date") or date.today().isoformat()
+
+    try:
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid amount"}), 400
+
+    result = get_exchange_rate(amount, base_currency, target_currency, convert_date)
+    if result is None:
+        return jsonify({"error": "No rate available for that pair/date"}), 404
+    return jsonify({"result": result})
 
 
 @app.route("/toggle_role/<int:uid>/<role>/<action>", methods=["POST", "GET"])
@@ -9268,6 +9995,11 @@ def user_settings(username):
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
         params["live_tracking"] = ("live_tracking" in request.form) and bool(user.premium)
+        # Gated on a linked Discord account rather than premium: without one
+        # there is nobody to post as, and the announcer skips the user anyway.
+        params["discord_autopost"] = (
+            "discord_autopost" in request.form
+        ) and bool(user.discord_id)
 
         for param in params:
             if getattr(user, param) != params[param]:
@@ -9286,10 +10018,11 @@ def user_settings(username):
     colorblind_checked = "checked" if user.colorblind else ""
     flight_3d_checked = "checked" if user.flight_3d else ""
     live_tracking_checked = "checked" if user.live_tracking else ""
+    discord_autopost_checked = "checked" if user.discord_autopost else ""
 
     return render_template(
         "user_settings.html",
-        currencyOptions=get_available_currencies(),
+        currencyOptions=get_available_currencies(username),
         title=lang[session["userinfo"]["lang"]]["user_settings"],
         username=username,
         langs=langs,
@@ -9300,6 +10033,7 @@ def user_settings(username):
         colorblind_checked=colorblind_checked,
         flight_3d_checked=flight_3d_checked,
         live_tracking_checked=live_tracking_checked,
+        discord_autopost_checked=discord_autopost_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
@@ -9501,7 +10235,7 @@ def user_settings_app(username):
 
     return jsonify({
         "username": user.username,
-        "currencyOptions": get_available_currencies(),
+        "currencyOptions": get_available_currencies(username),
         "langs": langs,
         "share_level": user.share_level,
         "leaderboard": user.leaderboard,
@@ -9541,6 +10275,17 @@ def dynamic_trips(username, time=None):
         projects=projects,
         trip_column_names=trip_column_names,
         country_list=get_all_countries(),
+        # Which rows offer to take their Discord post down, and which offer to
+        # post themselves. Read here rather than joined into the trips API: the
+        # table is paged server-side, and both lists are short enough to send
+        # whole (the postable one is a trip someone is on, so nearly always
+        # empty or one row).
+        discordAnnouncedIds=json.dumps(announced_trip_ids(get_user_id(username))),
+        discordPostableIds=json.dumps(
+            postable_trip_ids(get_user_id(username))
+            if _discord_linked(username)
+            else []
+        ),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -9598,6 +10343,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
                 ).fetchone()
             )[1]
         )
+        raw_path = fetch_raw_path(pg, int(tripId))
     user = User.query.filter_by(username=trip["username"]).first()
     if not (session.get(user.username) or session.get(owner)):
         abort(401)
@@ -9610,6 +10356,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     tripMaterialType = trip["material_type"]
     tripMaterialTypeAdvanced = trip["material_type_advanced"] if trip["material_type_advanced"] else ""
     tripSeat = trip["seat"]
+    tripSeatCar = trip["seat_car"]
     tripReg = trip["reg"]
     tripType = trip["type"]
     tripNotes = trip["notes"]
@@ -9665,7 +10412,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "title": lang[session["userinfo"]["lang"]][edit_copy_type],
         "start_datetime": trip["start_datetime"],
         "end_datetime": trip["end_datetime"],
-        "currencyOptions": get_available_currencies(),
+        "currencyOptions": get_available_currencies(username),
+        "user_currency": getLoggedUserCurrency(),
         "unknownType": unknownType,
         "precision": precision,
         "tripId": tripId,
@@ -9684,6 +10432,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripMaterialType": tripMaterialType or "",
         "tripMaterialTypeAdvanced": tripMaterialTypeAdvanced or "",
         "tripSeat": tripSeat or "",
+        "tripSeatCar": tripSeatCar if tripSeatCar is not None else "",
         "tripReg": tripReg or "",
         "tripPrice": tripPrice if tripPrice is not None else "",
         "tripCurrency": tripCurrency or "",
@@ -9691,6 +10440,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripType": tripType,
         "tripTicketId": tripTicketId or "",
         "wplist": wplist,
+        "raw_path": raw_path,
         "route_source": trip.get("route_source") or "router",
         "tripNotes": tripNotes or "",
         "colorblind": colorblind,
@@ -10341,6 +11091,107 @@ def _clean_vessel_number(value, digits, label):
     return value
 
 
+# The register itself, as one query (see _register_rows).
+SHIP_REGISTER_SQL = """
+            -- How many logged trips each hull actually accounts for. Resolved
+            -- through vessel_resolve, so trips logged under an old name count
+            -- towards the same hull; the register is sorted by it, which puts the
+            -- ships worth curating at the top.
+            WITH trip_counts AS (
+                SELECT vessel_resolve(reg) AS vessel_id,
+                       COUNT(*) AS trips,
+                       -- How many people, not just how many crossings: forty trips by
+                       -- one commuter and forty by forty travellers are different
+                       -- ships to be curating.
+                       COUNT(DISTINCT user_id) AS users,
+                       -- Who mostly runs her. Decoration, but a useful one: the
+                       -- operator is often what identifies a small ferry, where the
+                       -- name is generic and the hull has no IMO. mode() ignores
+                       -- NULLs and NULLIF keeps blanks from winning; the first name
+                       -- only, since a ferry is rarely a multi-operator trip.
+                       MODE() WITHIN GROUP (
+                           ORDER BY NULLIF(btrim(split_part(operator, ',', 1)), '')
+                       ) AS operator
+                FROM trips
+                WHERE trip_type = 'ferry' AND reg IS NOT NULL AND btrim(reg) <> ''
+                GROUP BY 1
+            )
+            SELECT v.uid, v.imo, v.trainlog_id,
+                   -- The hull as it is NOW. Not columns of the hull — it has none of
+                   -- these — but the most recent registration's, so a row can be
+                   -- recognised at a glance. The history is under Periods.
+                   r.name, r.country_code,
+                   -- Every other name it has carried. Shown as "ex …" and, because
+                   -- DataTables searches the text of a row, that is also what makes
+                   -- a hull findable by a name it no longer goes by.
+                   ARRAY(
+                       SELECT a.name FROM vessel_registrations a
+                       WHERE a.vessel_id = v.uid
+                         AND a.name IS NOT NULL
+                         AND a.uid IS DISTINCT FROM r.uid
+                       ORDER BY a.effective_date DESC NULLS LAST, a.uid DESC
+                   ) AS former_names,
+                   p.local_image_path,
+                   COALESCE(c.trips, 0) AS trips,
+                   COALESCE(c.users, 0) AS users,
+                   c.operator,
+                   o.short_name AS operator_name,
+                   o.logo_url AS operator_logo,
+                   (SELECT COUNT(*) FROM vessel_registrations a WHERE a.vessel_id = v.uid)
+                       AS registrations
+            FROM vessels v
+            LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+            LEFT JOIN trip_counts c ON c.vessel_id = v.uid
+            -- That operator name resolved through operator_aliases, exactly as a
+            -- trip resolves its own (see get_trip.sql), so a ferry logged as SNCM
+            -- picks up the logo held under Corsica Linea. The current logo: this is
+            -- a register of ships, not a history of liveries.
+            LEFT JOIN LATERAL (
+                SELECT op.short_name,
+                       (SELECT l.logo_url FROM operator_logos l
+                        WHERE l.operator_id = op.operator_id
+                        ORDER BY l.effective_date DESC NULLS LAST, l.uid DESC
+                        LIMIT 1) AS logo_url
+                FROM operator_aliases a
+                JOIN operators op ON op.operator_id = a.operator_id
+                WHERE a.normalized = operator_normalize(c.operator)
+                ORDER BY (a.operator_type = 'operator') DESC, a.operator_id
+                LIMIT 1
+            ) o ON TRUE
+            LEFT JOIN LATERAL (
+                SELECT local_image_path
+                FROM ship_pictures
+                WHERE registration_id = r.uid AND local_image_path IS NOT NULL
+                ORDER BY fetch_date DESC NULLS LAST, uid DESC
+                LIMIT 1
+            ) p ON TRUE
+            -- One row or all of them: the same query serves the page and the single-row
+            -- refresh the table does over ajax after an edit, so a row that comes back can
+            -- never disagree with the one it replaces. CAST, because a bind parameter that
+            -- is only ever compared to NULL has no type psycopg2 can infer.
+            WHERE (CAST(:vessel_id AS INTEGER) IS NULL OR v.uid = CAST(:vessel_id AS INTEGER))
+            ORDER BY COALESCE(c.trips, 0) DESC, r.name NULLS LAST, v.uid
+            
+"""
+
+
+def _register_rows(pg, vessel_id=None):
+    """The register's rows — all of them, or the one hull asked for."""
+    return [
+        # The flag is rendered here rather than in the template: get_flag_emoji is a
+        # plain helper, not a Jinja global, and every other page that shows a flag
+        # server-side does the same.
+        dict(
+            row._mapping,
+            flag=get_flag_emoji(row["country_code"]) if row["country_code"] else "",
+            unregistered=False,
+        )
+        for row in pg.execute(
+            SHIP_REGISTER_SQL, {"vessel_id": vessel_id}
+        ).fetchall()
+    ]
+
+
 @app.route("/admin/ships", methods=["GET", "POST"])
 @admin_required
 def ships():
@@ -10425,64 +11276,49 @@ def ships():
                         {"vessel_id": uid, "name": name},
                     )
 
-        return jsonify({"success": True})
+        # The uid, so the caller can fetch back the row it has just changed (or created)
+        # instead of reloading the page.
+        return jsonify({"success": True, "vessel_id": uid})
 
     with pg_session() as pg:
-        shipList = [
-            # The flag is rendered here rather than in the template: get_flag_emoji is a
-            # plain helper, not a Jinja global, and every other page that shows a flag
-            # server-side does the same.
-            dict(row._mapping, flag=get_flag_emoji(row["country_code"]) if row["country_code"] else "")
+        shipList = _register_rows(pg)
+
+        # What people have logged that the register does not know: a ferry trip whose
+        # reg resolves to no hull at all. Almost always a name typed by hand. These join
+        # the register in ONE table — an unregistered ship is a ship, it just has no row
+        # yet, and keeping it in a list of its own meant scrolling between two tables to
+        # see whether a name was already held under another spelling.
+        unlinked = [
+            dict(row._mapping, unregistered=True)
             for row in pg.execute(
                 """
-                -- How many logged trips each hull actually accounts for. Resolved
-                -- through vessel_resolve, so trips logged under an old name count
-                -- towards the same hull; the register is sorted by it, which puts the
-                -- ships worth curating at the top.
-                WITH trip_counts AS (
-                    SELECT vessel_resolve(reg) AS vessel_id,
+                -- Grouped by the NORMALISED name, so "MS Pont-Aven", "Pont Aven" and
+                -- "pont-aven" are one ship and one decision, exactly as vessel_resolve
+                -- would treat them once the row exists. The spelling offered back is the
+                -- commonest one; the others are shown so a mis-grouping is visible.
+                WITH unlinked AS (
+                    SELECT vessel_normalize(reg) AS name_key,
+                           MODE() WITHIN GROUP (ORDER BY btrim(reg)) AS reg,
                            COUNT(*) AS trips,
-                           -- Who mostly runs her. Decoration, but a useful one: the
-                           -- operator is often what identifies a small ferry, where the
-                           -- name is generic and the hull has no IMO. mode() ignores
-                           -- NULLs and NULLIF keeps blanks from winning; the first name
-                           -- only, since a ferry is rarely a multi-operator trip.
+                           COUNT(DISTINCT user_id) AS users,
+                           ARRAY_AGG(DISTINCT btrim(reg)) AS spellings,
+                           -- Who runs her, as in the register above: on a ship with
+                           -- nothing but a generic name, the operator is what says which
+                           -- ship it is.
                            MODE() WITHIN GROUP (
                                ORDER BY NULLIF(btrim(split_part(operator, ',', 1)), '')
                            ) AS operator
                     FROM trips
-                    WHERE trip_type = 'ferry' AND reg IS NOT NULL AND btrim(reg) <> ''
+                    WHERE trip_type = 'ferry'
+                      AND reg IS NOT NULL AND btrim(reg) <> ''
+                      -- Punctuation only normalises to nothing, and a registration must
+                      -- have a name or an MMSI — there is nothing here to create.
+                      AND vessel_normalize(reg) IS NOT NULL
+                      AND vessel_resolve(reg) IS NULL
                     GROUP BY 1
                 )
-                SELECT v.uid, v.imo, v.trainlog_id,
-                       -- The hull as it is NOW. Not columns of the hull — it has none of
-                       -- these — but the most recent registration's, so a row can be
-                       -- recognised at a glance. The history is under Periods.
-                       r.name, r.country_code,
-                       -- Every other name it has carried. Shown as "ex …" and, because
-                       -- DataTables searches the text of a row, that is also what makes
-                       -- a hull findable by a name it no longer goes by.
-                       ARRAY(
-                           SELECT a.name FROM vessel_registrations a
-                           WHERE a.vessel_id = v.uid
-                             AND a.name IS NOT NULL
-                             AND a.uid IS DISTINCT FROM r.uid
-                           ORDER BY a.effective_date DESC NULLS LAST, a.uid DESC
-                       ) AS former_names,
-                       p.local_image_path,
-                       COALESCE(c.trips, 0) AS trips,
-                       c.operator,
-                       o.short_name AS operator_name,
-                       o.logo_url AS operator_logo,
-                       (SELECT COUNT(*) FROM vessel_registrations a WHERE a.vessel_id = v.uid)
-                           AS registrations
-                FROM vessels v
-                LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
-                LEFT JOIN trip_counts c ON c.vessel_id = v.uid
-                -- That operator name resolved through operator_aliases, exactly as a
-                -- trip resolves its own (see get_trip.sql), so a ferry logged as SNCM
-                -- picks up the logo held under Corsica Linea. The current logo: this is
-                -- a register of ships, not a history of liveries.
+                SELECT u.*, o.short_name AS operator_name, o.logo_url AS operator_logo
+                FROM unlinked u
                 LEFT JOIN LATERAL (
                     SELECT op.short_name,
                            (SELECT l.logo_url FROM operator_logos l
@@ -10491,25 +11327,32 @@ def ships():
                             LIMIT 1) AS logo_url
                     FROM operator_aliases a
                     JOIN operators op ON op.operator_id = a.operator_id
-                    WHERE a.normalized = operator_normalize(c.operator)
+                    WHERE a.normalized = operator_normalize(u.operator)
                     ORDER BY (a.operator_type = 'operator') DESC, a.operator_id
                     LIMIT 1
                 ) o ON TRUE
-                LEFT JOIN LATERAL (
-                    SELECT local_image_path
-                    FROM ship_pictures
-                    WHERE registration_id = r.uid AND local_image_path IS NOT NULL
-                    ORDER BY fetch_date DESC NULLS LAST, uid DESC
-                    LIMIT 1
-                ) p ON TRUE
-                ORDER BY COALESCE(c.trips, 0) DESC, r.name NULLS LAST, v.uid
+                ORDER BY u.trips DESC, u.reg
                 """
             ).fetchall()
         ]
 
+    # One list, one table. The unregistered rows carry the register's own keys — the
+    # logged text stands in for the name, and everything a hull has and they have not is
+    # simply absent — so the template renders both from the same loop and DataTables
+    # sorts and searches across the two.
+    shipList = shipList + [
+        dict(row, name=row["reg"], registrations=0, uid=None, imo=None,
+             trainlog_id=None, flag="", former_names=[], local_image_path=None)
+        for row in unlinked
+    ]
+    shipList.sort(key=lambda s: (-(s["trips"] or 0), (s["name"] or "").lower()))
+
     return render_template(
         "admin/ships.html",
         shipList=shipList,
+        # The one-click cleanup below acts on exactly these, and the button says how many.
+        unusedCount=sum(1 for s in shipList if not s["unregistered"] and not s["trips"]),
+        unregisteredCount=sum(1 for s in shipList if s["unregistered"]),
         # For the flag picker in the Periods form, same list every other country select
         # on the site is built from.
         country_list=get_all_countries(),
@@ -10585,6 +11428,467 @@ def delete_ship():
         )
 
     return jsonify({"success": True})
+
+
+@app.route("/admin/ships/<int:vessel_id>/row")
+@admin_required
+def ship_row(vessel_id):
+    """
+    One hull's row of the register, as the HTML the table holds.
+
+    What the page fetches after an edit instead of reloading itself: the register is a
+    table of several hundred rows, most of them with a photo, and re-fetching all of it
+    to show that one name changed is the reload this replaces. Rendered from the same
+    partial the table is built from, so the row that comes back cannot drift from the
+    one it replaces.
+    """
+    with pg_session() as pg:
+        rows = _register_rows(pg, vessel_id)
+
+    if not rows:
+        return "", 404
+    return render_template("admin/ship_row.html", ship=rows[0])
+
+
+@app.route("/admin/ships/lookup")
+@admin_required
+def ship_lookup():
+    """
+    Hulls matching a few typed characters, for picking one to merge into.
+
+    Deliberately not the register query: this is a chooser, so it wants a name, a number
+    and a photo for twenty rows, not trip counts and operator logos for eight hundred.
+    Searches every name a hull has carried, since the row being merged away is often the
+    one holding the spelling being searched for.
+    """
+    query = (request.args.get("q") or "").strip()
+    exclude = request.args.get("exclude") or 0
+    if not query:
+        return jsonify({"success": True, "results": []})
+
+    with pg_session() as pg:
+        rows = pg.execute(
+            """
+            SELECT v.uid, v.imo, v.trainlog_id, r.name, p.local_image_path
+            FROM vessels v
+            LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+            LEFT JOIN LATERAL (
+                SELECT local_image_path
+                FROM ship_pictures
+                WHERE registration_id = r.uid AND local_image_path IS NOT NULL
+                ORDER BY fetch_date DESC NULLS LAST, uid DESC
+                LIMIT 1
+            ) p ON TRUE
+            WHERE v.uid <> CAST(:exclude AS INTEGER)
+              AND (v.imo LIKE :like
+                   OR v.trainlog_id ILIKE :like
+                   OR EXISTS (SELECT 1 FROM vessel_registrations a
+                              WHERE a.vessel_id = v.uid AND a.name ILIKE :like))
+            ORDER BY r.name NULLS LAST, v.uid
+            LIMIT 20
+            """,
+            {"like": f"%{query}%", "exclude": exclude},
+        ).fetchall()
+
+    return jsonify(
+        {
+            "success": True,
+            "results": [
+                {
+                    "uid": row["uid"],
+                    "imo": row["imo"],
+                    "trainlog_id": row["trainlog_id"],
+                    "name": row["name"],
+                    "image": (
+                        f"/static/images/ship_pictures/{row['local_image_path']}"
+                        if row["local_image_path"]
+                        else None
+                    ),
+                }
+                for row in rows
+            ],
+        }
+    )
+
+
+@app.route("/admin/ships/merge", methods=["POST"])
+@admin_required
+def merge_ships():
+    """
+    Fold one hull into another: the trips move, and the hull merged away is deleted.
+
+    The same ship reaches the register more than once — logged as "John Paul II", as
+    "St John Paul Ii" and as "MV Saint John Paul II", each spelling resolving to nothing
+    and each registered in its turn. They are one hull with three rows, and the only way
+    back is to say which row is the ship.
+
+    What moves is the trips, and a photo where the survivor has none. What does NOT move
+    is the loser's registrations: they are dated periods of a hull, and grafting an
+    undated one onto another hull makes it the newest — which would rename the survivor
+    to the misspelling being merged away. They go with the row (ON DELETE CASCADE).
+    """
+    source_id = (request.form.get("source_id") or "").strip()
+    target_id = (request.form.get("target_id") or "").strip()
+    if not (source_id and target_id):
+        return jsonify({"success": False, "error": "Two hulls are needed"}), 400
+    if source_id == target_id:
+        return jsonify({"success": False, "error": "That is the same hull"}), 400
+
+    with pg_session() as pg:
+        hulls = {
+            row["uid"]: row
+            for row in pg.execute(
+                """
+                SELECT v.uid, v.imo, v.trainlog_id,
+                       vessel_identity(v.uid, NULL) AS registration_id
+                FROM vessels v WHERE v.uid IN (:source, :target)
+                """,
+                {"source": int(source_id), "target": int(target_id)},
+            ).fetchall()
+        }
+        source = hulls.get(int(source_id))
+        target = hulls.get(int(target_id))
+        if not (source and target):
+            return jsonify({"success": False, "error": "No such hull"}), 400
+
+        # Resolved to ids first: after the UPDATE these trips resolve to the target, and
+        # after the DELETE the source is gone — neither can be used to find them again.
+        trip_ids = [
+            row[0]
+            for row in pg.execute(
+                """
+                SELECT trip_id FROM trips
+                WHERE trip_type = 'ferry'
+                  AND reg IS NOT NULL AND btrim(reg) <> ''
+                  AND vessel_resolve(reg) = :source
+                """,
+                {"source": source["uid"]},
+            ).fetchall()
+        ]
+        if trip_ids:
+            pg.execute(
+                "UPDATE trips SET reg = :key WHERE trip_id = ANY(:ids)",
+                {"key": target["imo"] or target["trainlog_id"], "ids": trip_ids},
+            )
+
+        # A photo is worth keeping: it is the same ship, and the row being merged away
+        # may be the one somebody found a picture for. Only where the survivor has none,
+        # so a curated photo is never displaced by an older one.
+        if source["registration_id"] and target["registration_id"]:
+            pg.execute(
+                """
+                UPDATE ship_pictures SET registration_id = :target
+                WHERE registration_id = :source
+                  AND NOT EXISTS (
+                      SELECT 1 FROM ship_pictures q
+                      WHERE q.registration_id = :target AND q.local_image_path IS NOT NULL
+                  )
+                """,
+                {"source": source["registration_id"], "target": target["registration_id"]},
+            )
+
+        # Registrations and any photo left on them go with it (ON DELETE CASCADE); the
+        # image files stay on disk, as they do for a plain delete.
+        pg.execute("DELETE FROM vessels WHERE uid = :uid", {"uid": source["uid"]})
+
+    return jsonify({"success": True, "vessel_id": target["uid"], "trips": len(trip_ids)})
+
+
+@app.route("/admin/ships/prune", methods=["POST"])
+@admin_required
+def prune_ships():
+    """
+    Drop every hull no trip resolves to.
+
+    A hull earns its row by being sailed on. One with no trip at all is nearly always a
+    mistake — a typo'd IMO, a duplicate created before the name resolved, a row from a
+    trip since deleted or re-typed — and it costs the register nothing to be rid of it,
+    because registering the ship again is the same three fields.
+
+    Photos go with it (ON DELETE CASCADE on ship_pictures); the files stay on disk, as
+    they do for a single delete. Note this reaches a hull an admin added by hand and has
+    not logged a trip on yet, which is the one case where it is not a mistake — hence a
+    button that says how many, and not something that runs on its own.
+    """
+    with pg_session() as pg:
+        deleted = pg.execute(
+            """
+            -- The used set is resolved ONCE, over the ferry trips, rather than per hull:
+            -- vessel_resolve is four index lookups a call, and asking it per vessel per
+            -- trip is the shape that took the periods endpoint to a minute (0056).
+            WITH used AS (
+                SELECT DISTINCT vessel_resolve(reg) AS uid
+                FROM trips
+                WHERE trip_type = 'ferry' AND reg IS NOT NULL AND btrim(reg) <> ''
+            )
+            DELETE FROM vessels
+            WHERE uid NOT IN (SELECT uid FROM used WHERE uid IS NOT NULL)
+            RETURNING uid
+            """
+        ).fetchall()
+
+    # The uids, not just the count: the page takes those rows out of the table itself
+    # rather than reloading to find them gone.
+    return jsonify({"success": True, "deleted": [row[0] for row in deleted]})
+
+
+@app.route("/admin/ships/wikidata_search")
+@admin_required
+def ship_wikidata_search():
+    """
+    Ships on Wikidata matching a name, with their numbers and their photo.
+
+    The counterpart to the backfill, which goes the other way: it matches a hull we hold
+    by its IMO or MMSI, and can do nothing for a ship logged as a bare name. This finds
+    the item by name so the numbers can be filled in from it — and once there is a
+    number, everything else in the register works.
+
+    Candidates only, as with the Commons search: several real ships share a name, and
+    Wikidata cannot tell which one somebody sailed on.
+    """
+    try:
+        results = wikidata_search_ships(request.args.get("q"))
+    except Exception as exc:
+        logger.exception("Wikidata ship search failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+    return jsonify({"success": True, "results": results})
+
+
+def _unresolved_trips(pg, reg):
+    """
+    The ferry trips logged under this text that still resolve to no hull.
+
+    Read BEFORE anything is written, in both the register and the merge paths: once a row
+    exists that resolves the name, "trips that resolve to nothing" no longer describes
+    them, and a name two hulls share would be settled by vessel_resolve's own tie-break
+    (lowest uid) rather than by the admin who is looking at it.
+    """
+    return [
+        row[0]
+        for row in pg.execute(
+            """
+            SELECT trip_id FROM trips
+            WHERE trip_type = 'ferry'
+              AND reg IS NOT NULL AND btrim(reg) <> ''
+              AND vessel_normalize(reg) = vessel_normalize(:reg)
+              AND vessel_resolve(reg) IS NULL
+            """,
+            {"reg": reg},
+        ).fetchall()
+    ]
+
+
+@app.route("/admin/ships/adopt", methods=["POST"])
+@admin_required
+def adopt_ship():
+    """
+    Turn a name people have been logging into a hull of its own.
+
+    The register only knows a ferry trip's `reg` when something resolves it; everything
+    else is text somebody typed, and that text is all this has to go on. So: create the
+    hull (with an IMO if the admin knows one, otherwise its trainlog_id alone), give it
+    its first registration under the name as logged, and re-point the trips at the hull's
+    key — the same rewrite migration 0056 did, and what makes a later rename reach every
+    trip at once instead of orphaning them.
+
+    The trips are chosen BEFORE the row exists, while they still resolve to nothing. Two
+    hulls may end up sharing a name, and vessel_resolve settles that by uid; picking the
+    trips afterwards would quietly hand them to whichever hull won.
+
+    `merge_into` registers nothing and moves the trips onto a hull already held. That is
+    the answer when the number given belongs to one — "IMO 9107796, Polarlys" logged as
+    text, against a Polarlys the register has had all along. The clash is reported with
+    the hull it clashed with, so the page can offer the merge in place of the refusal:
+    the two are the same ship, and a second row for her is exactly what should not be
+    created.
+    """
+    reg = (request.form.get("reg") or "").strip()
+    name = (request.form.get("name") or "").strip() or reg
+    country_code = (request.form.get("country_code") or "").strip() or None
+    merge_into = (request.form.get("merge_into") or "").strip()
+
+    if not reg:
+        return jsonify({"success": False, "error": "No reg given"}), 400
+
+    try:
+        imo = _clean_vessel_number(request.form.get("imo"), 7, "IMO")
+        mmsi = _clean_vessel_number(request.form.get("mmsi"), 9, "MMSI")
+    except ValueError as exc:
+        return jsonify({"success": False, "error": str(exc)}), 400
+
+    with pg_session() as pg:
+        # Merging: the hull exists and is not touched. Its name, numbers and periods are
+        # what is already known about the ship, and they outrank a form filled in from
+        # the text of a trip — all that is missing is the trips.
+        if merge_into:
+            hull = pg.execute(
+                """
+                SELECT v.uid, v.imo, v.trainlog_id, r.name
+                FROM vessels v
+                LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+                WHERE v.uid = :uid
+                """,
+                {"uid": int(merge_into)},
+            ).fetchone()
+            if not hull:
+                return jsonify({"success": False, "error": "No such hull"}), 400
+
+            trip_ids = _unresolved_trips(pg, reg)
+            if trip_ids:
+                pg.execute(
+                    "UPDATE trips SET reg = :key WHERE trip_id = ANY(:ids)",
+                    {"key": hull["imo"] or hull["trainlog_id"], "ids": trip_ids},
+                )
+            return jsonify(
+                {
+                    "success": True,
+                    "merged": True,
+                    "vessel_id": hull["uid"],
+                    "name": hull["name"] or reg,
+                    "trips": len(trip_ids),
+                }
+            )
+
+        if imo:
+            clash = pg.execute(
+                """
+                SELECT v.uid, r.name
+                FROM vessels v
+                LEFT JOIN vessel_registrations r ON r.uid = vessel_identity(v.uid, NULL)
+                WHERE v.imo = :imo
+                """,
+                {"imo": imo},
+            ).fetchone()
+            if clash:
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": f"IMO {imo} is already hull #{clash['uid']}"
+                        f" ({clash['name'] or 'unnamed'})",
+                        # What makes the merge offerable rather than just refused.
+                        "vessel_id": clash["uid"],
+                        "label": clash["name"] or imo,
+                    }
+                ), 409
+        if mmsi:
+            clash = pg.execute(
+                """
+                SELECT r.vessel_id, c.name
+                FROM vessel_registrations r
+                LEFT JOIN vessel_registrations c
+                       ON c.uid = vessel_identity(r.vessel_id, NULL)
+                WHERE r.mmsi = :mmsi
+                """,
+                {"mmsi": mmsi},
+            ).fetchone()
+            if clash:
+                return jsonify(
+                    {
+                        "success": False,
+                        "error": f"MMSI {mmsi} belongs to hull #{clash['vessel_id']}"
+                        f" ({clash['name'] or 'unnamed'})",
+                        "vessel_id": clash["vessel_id"],
+                        "label": clash["name"] or mmsi,
+                    }
+                ), 409
+
+        trip_ids = _unresolved_trips(pg, reg)
+
+        hull = pg.execute(
+            "INSERT INTO vessels (imo) VALUES (:imo) RETURNING uid, trainlog_id",
+            {"imo": imo},
+        ).fetchone()
+
+        registration_id = pg.execute(
+            """
+            INSERT INTO vessel_registrations (vessel_id, name, mmsi, country_code)
+            VALUES (:vessel_id, :name, :mmsi, :country_code)
+            RETURNING uid
+            """,
+            {
+                "vessel_id": hull["uid"],
+                "name": name,
+                "mmsi": mmsi,
+                "country_code": country_code,
+            },
+        ).scalar()
+
+        if trip_ids:
+            pg.execute(
+                "UPDATE trips SET reg = :key WHERE trip_id = ANY(:ids)",
+                {"key": imo or hull["trainlog_id"], "ids": trip_ids},
+            )
+
+        # The photo of the Wikidata item the admin picked, if they picked one. Fetched
+        # here rather than left for a second click, because the identification has just
+        # been made and this is the picture of the ship that was identified — with an
+        # author and a licence, which the image search cannot give.
+        photo = None
+        image_url = (request.form.get("commons_image") or "").strip()
+        if image_url:
+            try:
+                photo = fetch_commons_picture(pg, registration_id, image_url)
+            except Exception:
+                # The hull is registered either way; a photo that failed to download is
+                # one button press away in the Periods view.
+                logger.exception("Commons photo import failed for new hull %s", hull["uid"])
+
+    return jsonify(
+        {
+            "success": True,
+            "vessel_id": hull["uid"],
+            "registration_id": registration_id,
+            "trainlog_id": hull["trainlog_id"],
+            "name": name,
+            "trips": len(trip_ids),
+            "photo": bool(photo),
+        }
+    )
+
+
+@app.route("/admin/ships/commons_search")
+@admin_required
+def ship_commons_search():
+    """
+    Candidate photos from Wikimedia Commons for a free-text query.
+
+    The lookup for a ship known only by name: /registrations/fetch_photo goes through
+    Wikidata, which matches on numbers alone, and a hull with neither an IMO nor an MMSI
+    gets nothing from it. Search results cannot be trusted to be the right ship, so they
+    are returned to be looked at and picked from — never stored here.
+    """
+    try:
+        results = search_commons_images(request.args.get("q"))
+    except Exception as exc:
+        logger.exception("Commons search failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+    return jsonify({"success": True, "results": results})
+
+
+@app.route("/admin/ships/registrations/commons_photo", methods=["POST"])
+@admin_required
+def use_commons_search_photo():
+    """Store one chosen Commons file against one registration, with its attribution."""
+    registration_id = request.form.get("registration_id")
+    title = (request.form.get("title") or "").strip()
+    if not (registration_id and title):
+        return jsonify({"success": False, "error": "Nothing chosen"}), 400
+
+    try:
+        with pg_session() as pg:
+            stored = fetch_commons_picture(pg, int(registration_id), title)
+    except Exception as exc:
+        logger.exception("Commons photo import failed")
+        return jsonify({"success": False, "error": str(exc)}), 502
+
+    if not stored:
+        # fetch_commons_picture refuses a file whose licence it cannot read, which is
+        # the case worth naming: nothing is wrong with the network.
+        return jsonify(
+            {"success": False, "error": "Could not read that file's licence — not stored"}
+        ), 400
+
+    return jsonify({"success": True, "image": f"/static/images/ship_pictures/{stored}"})
 
 
 def _photo_credit_fields():
@@ -11652,10 +12956,16 @@ def handle_error(e):
     title_key = f"error{error_code}Title"
     body_key  = f"error{error_code}Body"
 
+    gif = random_error_gif(error_code, lang_code)
+    if gif and gif["provider"] == "local":
+        gif = {**gif, "src": url_for("static", filename=gif["path"])}
+
     template_data = {
+        "title":       lang_dict.get(title_key, "Error"),
         "errorTitle":  lang_dict.get(title_key, "Error"),
         "errorHeader": lang_dict.get(title_key, "Error"),
-        "errorImagePath": url_for("static", filename=f"images/errors/{error_code}.png"),
+        "errorCode":   error_code,
+        "errorGif":    gif,
         "errorBody":   lang_dict.get(body_key, "An error occurred."),
     }
 
@@ -11674,8 +12984,35 @@ def handle_error(e):
     )
 
 
+def _own_period_redirect(kind, period):
+    """Send a bare period URL to the logged-in user's own period page."""
+    try:
+        parse_period(kind, period)
+    except ValueError:
+        abort(404)
+    user = getUser()
+    if user == "public":
+        return redirect(
+            url_for("login") + "?" + urllib.parse.urlencode({"next": request.path}), 302
+        )
+    return redirect(
+        url_for("public_trip_period", username=user, kind=kind, period=period)
+    )
+
+
+# Typing just a period at the root is a shortcut to your own trips for it:
+# /2026, /year/2026, /month/2026-10, /week/2026-W40, /day/2026-10-01.
+@app.route("/<any(year, month, week, day):kind>/<period>")
+def own_trip_period(kind, period):
+    return _own_period_redirect(kind, period)
+
+
 @app.route("/<int:error_code>")
 def error_route(error_code):
+    # A four-digit number at the root reads as a year, not as an HTTP status —
+    # nobody asks for error 2026.
+    if MIN_PERIOD_YEAR <= error_code <= MAX_PERIOD_YEAR:
+        return _own_period_redirect("year", str(error_code))
     # Create a new HTTPException instance with the captured error code
     exception = HTTPException()
     exception.code = error_code
@@ -11698,6 +13035,8 @@ def leaderboard(type):
         template = "leaderboard_world_squares.html"
     elif type == "carbon":
         template = "leaderboard_carbon.html"
+    elif type == "wagons":
+        template = "leaderboard_wagons.html"
     else:
         template = "leaderboard.html"
 
@@ -13011,14 +14350,71 @@ def user_bounds(username, year=None):
     )
 
 
+# Trips/min is measured over a long window on purpose: with a short one the
+# reading sags between events and spikes on each new trip, which reads as noise
+# rather than activity. Counting rows by `created` (rather than watching trip_id
+# climb) means the figure only moves when trips are actually logged.
+TRIP_RATE_WINDOW_MIN = 10
+
+# The window is snapped to a fixed grid rather than measured back from "now", so
+# that every worker derives the same cutoff and returns the same count. With a
+# per-request window, a burst of trips sitting near the edge fell inside one
+# worker's window and outside another's, and consecutive polls answered by
+# different workers flapped between two readings. The grid matches the interval
+# the page asks at, so a fresh query still lands on a fresh bucket.
+TRIP_RATE_BUCKET = timedelta(seconds=10)
+_TRIP_RATE_EPOCH = datetime(1970, 1, 1)
+
+
+def get_trip_rate():
+    """Trips created per minute over the last TRIP_RATE_WINDOW_MIN minutes.
+
+    Queried fresh each time: `trips.created` carries no index, so this is a
+    sequential scan, which is why the page asks for it every ten seconds rather
+    than alongside the once-a-second id poll. `created` is written as a naive
+    local datetime.now() (not PG now()), so the cutoff uses that same clock.
+    """
+    now = datetime.now()
+    bucket = _TRIP_RATE_EPOCH + (
+        (now - _TRIP_RATE_EPOCH) // TRIP_RATE_BUCKET
+    ) * TRIP_RATE_BUCKET
+    cutoff = bucket - timedelta(minutes=TRIP_RATE_WINDOW_MIN)
+    with pg_session() as pg:
+        recent = pg.execute(
+            "SELECT COUNT(*) FROM trips WHERE created >= :cutoff",
+            {"cutoff": cutoff},
+        ).scalar()
+    return round(recent / TRIP_RATE_WINDOW_MIN, 2)
+
+
+def get_trip_activity():
+    """Highest trip_id with the current creation rate, to seed the status page.
+    The page then polls the two apart: the id every second (a primary-key
+    lookup), the rate every ten (a scan).
+    """
+    with pg_session() as pg:
+        max_id = pg.execute("SELECT COALESCE(MAX(trip_id), 0) FROM trips").scalar()
+    return {
+        "max_trip_id": max_id,
+        "rate": get_trip_rate(),
+        "window_min": TRIP_RATE_WINDOW_MIN,
+    }
+
+
 @app.route("/status")
 def router_status():
     latest_commit_hex = latest_commit.hexsha
     latest_commit_dt = latest_commit.committed_datetime
 
+    try:
+        trip_seed = get_trip_activity()
+    except Exception:
+        # A gimmick must never take the status page down with it.
+        trip_seed = None
+
     return render_template(
         "status.html",
-        title=lang[session["userinfo"]["lang"]]["router_status"],
+        title=lang[session["userinfo"]["lang"]]["system_status"],
         username=getUser(),
         translations=lang[session["userinfo"]["lang"]],
         photon_instances=photonInstances,
@@ -13026,6 +14422,7 @@ def router_status():
         latest_commit_hex_short=latest_commit_hex[:7],
         latest_commit_display=latest_commit_dt.strftime("%Y-%m-%d %H:%M UTC"),
         latest_commit_ago=time_ago(latest_commit_dt),
+        trip_seed=trip_seed,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -13443,6 +14840,13 @@ def ensure_auth_db_columns():
     if "discord_username" not in existing:
         authDb.session.execute(
             sqlalchemy.text("ALTER TABLE user ADD COLUMN discord_username VARCHAR(50)")
+        )
+        authDb.session.commit()
+    if "discord_autopost" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN discord_autopost BOOLEAN NOT NULL DEFAULT 0"
+            )
         )
         authDb.session.commit()
     if "pending_email" not in existing:

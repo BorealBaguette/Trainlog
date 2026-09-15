@@ -1,43 +1,216 @@
 from flask import g, has_app_context
 
 from src.pg import get_or_create_pg_session
+from src.utils import get_user_id
 
 
-def get_available_currencies():
+def get_available_currencies(username=None):
+    # Sourced from Frankfurter (api.frankfurter.dev). BGN stays despite no longer being
+    # published (Bulgaria adopted the euro) so old BGN trips keep resolving. XAU/XAG/XPD/XPT
+    # are precious metals, not currencies — no real "country", so they get an "emoji" instead.
     available_currencies = [
-        {"currency": "EUR", "country": "EU"},
+        {"currency": "AED", "country": "AE"},
+        {"currency": "AFN", "country": "AF"},
+        {"currency": "ALL", "country": "AL"},
+        {"currency": "AMD", "country": "AM"},
+        {"currency": "ANG", "country": "CW"},
+        {"currency": "AOA", "country": "AO"},
+        {"currency": "ARS", "country": "AR"},
         {"currency": "AUD", "country": "AU"},
+        {"currency": "AWG", "country": "AW"},
+        {"currency": "AZN", "country": "AZ"},
+        {"currency": "BAM", "country": "BA"},
+        {"currency": "BBD", "country": "BB"},
+        {"currency": "BDT", "country": "BD"},
         {"currency": "BGN", "country": "BG"},
+        {"currency": "BHD", "country": "BH"},
+        {"currency": "BIF", "country": "BI"},
+        {"currency": "BMD", "country": "BM"},
+        {"currency": "BND", "country": "BN"},
+        {"currency": "BOB", "country": "BO"},
         {"currency": "BRL", "country": "BR"},
+        {"currency": "BSD", "country": "BS"},
+        {"currency": "BTN", "country": "BT"},
+        {"currency": "BWP", "country": "BW"},
+        {"currency": "BYN", "country": "BY"},
+        {"currency": "BZD", "country": "BZ"},
         {"currency": "CAD", "country": "CA"},
+        {"currency": "CDF", "country": "CD"},
         {"currency": "CHF", "country": "CH"},
+        {"currency": "CLP", "country": "CL"},
         {"currency": "CNY", "country": "CN"},
+        {"currency": "COP", "country": "CO"},
+        {"currency": "CRC", "country": "CR"},
+        {"currency": "CUP", "country": "CU"},
+        {"currency": "CVE", "country": "CV"},
         {"currency": "CZK", "country": "CZ"},
+        {"currency": "DJF", "country": "DJ"},
         {"currency": "DKK", "country": "DK"},
+        {"currency": "DOP", "country": "DO"},
+        {"currency": "DZD", "country": "DZ"},
+        {"currency": "EGP", "country": "EG"},
+        {"currency": "ERN", "country": "ER"},
+        {"currency": "ETB", "country": "ET"},
+        {"currency": "EUR", "country": "EU"},
+        {"currency": "FJD", "country": "FJ"},
+        {"currency": "FKP", "country": "FK"},
         {"currency": "GBP", "country": "GB"},
+        {"currency": "GEL", "country": "GE"},
+        # GGP/IMP/JEP are Channel Islands pseudo-currencies pegged 1:1 to GBP, not
+        # real ISO 4217 codes, so Intl.DisplayNames (browser-side) has no name for
+        # them — ship an English fallback name for the picker to use instead.
+        {"currency": "GGP", "country": "GG", "name": "Guernsey Pound"},
+        {"currency": "GHS", "country": "GH"},
+        {"currency": "GIP", "country": "GI"},
+        {"currency": "GMD", "country": "GM"},
+        {"currency": "GNF", "country": "GN"},
+        {"currency": "GTQ", "country": "GT"},
+        {"currency": "GYD", "country": "GY"},
         {"currency": "HKD", "country": "HK"},
+        {"currency": "HNL", "country": "HN"},
+        {"currency": "HTG", "country": "HT"},
         {"currency": "HUF", "country": "HU"},
         {"currency": "IDR", "country": "ID"},
         {"currency": "ILS", "country": "IL"},
+        {"currency": "IMP", "country": "IM", "name": "Isle of Man Pound"},
         {"currency": "INR", "country": "IN"},
+        {"currency": "IQD", "country": "IQ"},
+        {"currency": "IRR", "country": "IR"},
         {"currency": "ISK", "country": "IS"},
+        {"currency": "JEP", "country": "JE", "name": "Jersey Pound"},
+        {"currency": "JMD", "country": "JM"},
+        {"currency": "JOD", "country": "JO"},
         {"currency": "JPY", "country": "JP"},
+        {"currency": "KES", "country": "KE"},
+        {"currency": "KGS", "country": "KG"},
+        {"currency": "KHR", "country": "KH"},
+        {"currency": "KMF", "country": "KM"},
+        {"currency": "KPW", "country": "KP"},
         {"currency": "KRW", "country": "KR"},
+        {"currency": "KWD", "country": "KW"},
+        {"currency": "KYD", "country": "KY"},
+        {"currency": "KZT", "country": "KZ"},
+        {"currency": "LAK", "country": "LA"},
+        {"currency": "LBP", "country": "LB"},
+        {"currency": "LKR", "country": "LK"},
+        {"currency": "LRD", "country": "LR"},
+        {"currency": "LSL", "country": "LS"},
+        {"currency": "LYD", "country": "LY"},
+        {"currency": "MAD", "country": "MA"},
+        {"currency": "MDL", "country": "MD"},
+        {"currency": "MGA", "country": "MG"},
+        {"currency": "MKD", "country": "MK"},
+        {"currency": "MMK", "country": "MM"},
+        {"currency": "MNT", "country": "MN"},
+        {"currency": "MOP", "country": "MO"},
+        {"currency": "MRU", "country": "MR"},
+        {"currency": "MUR", "country": "MU"},
+        {"currency": "MVR", "country": "MV"},
+        {"currency": "MWK", "country": "MW"},
         {"currency": "MXN", "country": "MX"},
         {"currency": "MYR", "country": "MY"},
+        {"currency": "MZN", "country": "MZ"},
+        {"currency": "NAD", "country": "NA"},
+        {"currency": "NGN", "country": "NG"},
+        {"currency": "NIO", "country": "NI"},
         {"currency": "NOK", "country": "NO"},
+        {"currency": "NPR", "country": "NP"},
         {"currency": "NZD", "country": "NZ"},
+        {"currency": "OMR", "country": "OM"},
+        {"currency": "PAB", "country": "PA"},
+        {"currency": "PEN", "country": "PE"},
+        {"currency": "PGK", "country": "PG"},
         {"currency": "PHP", "country": "PH"},
+        {"currency": "PKR", "country": "PK"},
         {"currency": "PLN", "country": "PL"},
+        {"currency": "PYG", "country": "PY"},
+        {"currency": "QAR", "country": "QA"},
         {"currency": "RON", "country": "RO"},
+        {"currency": "RSD", "country": "RS"},
+        {"currency": "RUB", "country": "RU"},
+        {"currency": "RWF", "country": "RW"},
+        {"currency": "SAR", "country": "SA"},
+        {"currency": "SBD", "country": "SB"},
+        {"currency": "SCR", "country": "SC"},
+        {"currency": "SDG", "country": "SD"},
         {"currency": "SEK", "country": "SE"},
         {"currency": "SGD", "country": "SG"},
+        {"currency": "SHP", "country": "SH"},
+        {"currency": "SLE", "country": "SL"},
+        {"currency": "SOS", "country": "SO"},
+        {"currency": "SRD", "country": "SR"},
+        {"currency": "SSP", "country": "SS"},
+        {"currency": "STN", "country": "ST"},
+        {"currency": "SVC", "country": "SV"},
+        {"currency": "SYP", "country": "SY"},
+        {"currency": "SZL", "country": "SZ"},
         {"currency": "THB", "country": "TH"},
+        {"currency": "TJS", "country": "TJ"},
+        {"currency": "TMT", "country": "TM"},
+        {"currency": "TND", "country": "TN"},
+        {"currency": "TOP", "country": "TO"},
         {"currency": "TRY", "country": "TR"},
+        {"currency": "TTD", "country": "TT"},
+        {"currency": "TWD", "country": "TW"},
+        {"currency": "TZS", "country": "TZ"},
+        {"currency": "UAH", "country": "UA"},
+        {"currency": "UGX", "country": "UG"},
         {"currency": "USD", "country": "US"},
+        {"currency": "UYU", "country": "UY"},
+        {"currency": "UZS", "country": "UZ"},
+        {"currency": "VES", "country": "VE"},
+        {"currency": "VND", "country": "VN"},
+        {"currency": "VUV", "country": "VU"},
+        {"currency": "WST", "country": "WS"},
+        {"currency": "XAF", "country": "CM"},
+        {"currency": "XAG", "country": "", "emoji": "🥈"},
+        {"currency": "XAU", "country": "", "emoji": "🥇"},
+        {"currency": "XCD", "country": "AG"},
+        {"currency": "XCG", "country": "SX"},
+        {"currency": "XOF", "country": "CI"},
+        {"currency": "XPD", "country": "", "emoji": "🚗"},
+        {"currency": "XPF", "country": "PF"},
+        {"currency": "XPT", "country": "", "emoji": "💍"},
+        {"currency": "YER", "country": "YE"},
         {"currency": "ZAR", "country": "ZA"},
+        {"currency": "ZMW", "country": "ZM"},
+        {"currency": "ZWG", "country": "ZW"},
     ]
+
+    usage_counts = _get_currency_usage_counts(username)
+    if usage_counts:
+        available_currencies.sort(
+            key=lambda c: (-usage_counts.get(c["currency"], 0), c["currency"])
+        )
+
     return available_currencies
+
+
+def _get_currency_usage_counts(username):
+    """{currency: trip count} for the given user, used to rank the currency
+    picker by how often each currency actually gets used. Empty (not an error)
+    when no username is given (e.g. a logged-out visitor, or a caller like
+    get_exchange_rate() that just needs the supported-codes set), so the list
+    just stays alphabetical."""
+    if not username or username == "public":
+        return {}
+
+    user_id = get_user_id(username)
+    if user_id is None:
+        return {}
+
+    with get_or_create_pg_session(None) as session:
+        rows = session.execute(
+            """
+            SELECT currency, COUNT(*) AS uses
+            FROM trips
+            WHERE user_id = :user_id AND currency IS NOT NULL
+            GROUP BY currency
+            """,
+            {"user_id": user_id},
+        ).fetchall()
+
+    return {row[0]: row[1] for row in rows}
 
 
 def get_exchange_rate(price, base_currency, target_currency, date, pg=None):

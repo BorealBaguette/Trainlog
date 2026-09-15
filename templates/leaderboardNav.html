@@ -1,90 +1,17 @@
-<div class="leaderboard-switcher text-center">
+{% import "includes/leaderboard_types.html" as lb with context %}
+{% set tabs = lb.leaderboard_types %}
+
+<div class="leaderboard-switcher">
   <!-- Desktop / tablet -->
-  <div class="d-none d-md-flex justify-content-center flex-wrap gap-2">
-    <a href="{{ url_for('leaderboard', type='all') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'all' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'all' else 'false' }}"
-       title="{{ leaderboardTotal }}">
-      {{ leaderboardTotal }}
+  <nav class="d-none d-md-flex justify-content-center switch-tabs">
+    {% for code, icon, label in tabs %}
+    <a href="{{ url_for('leaderboard', type=code) }}"
+       class="switch-tab"
+       aria-current="{{ 'page' if type == code else 'false' }}">
+      {{ label }}
     </a>
-
-    <a href="{{ url_for('leaderboard', type='train') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'train' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'train' else 'false' }}"
-       title="{{ train }}">
-      {{ train }}
-    </a>
-
-    <a href="{{ url_for('leaderboard', type='bus') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'bus' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'bus' else 'false' }}"
-       title="{{ bus }}">
-      {{ bus }}
-    </a>
-
-    <a href="{{ url_for('leaderboard', type='air') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'air' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'air' else 'false' }}"
-       title="{{ air }}">
-      {{ air }}
-    </a>
-
-    <a href="{{ url_for('leaderboard', type='ferry') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'ferry' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'ferry' else 'false' }}"
-       title="{{ ferry }}">
-      {{ ferry }}
-    </a>
-
-    <a href="{{ url_for('leaderboard', type='aerialway') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'aerialway' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'aerialway' else 'false' }}"
-       title="{{ aerialway }}">
-      {{ aerialway }}
-    </a>
-
-    <a href="{{ url_for('leaderboard', type='metro') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'metro' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'metro' else 'false' }}"
-       title="{{ metro }}">
-      {{ metro }}
-    </a>
-
-    <a href="{{ url_for('leaderboard', type='tram') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'tram' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'tram' else 'false' }}"
-       title="{{ tram }}">
-      {{ tram }}
-    </a>
-
-    <a href="{{ url_for('leaderboard', type='train_countries') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'train_countries' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'train_countries' else 'false' }}"
-       title="{{ leaderboardTrainCountries }}">
-      {{ leaderboardTrainCountries }}
-    </a>
-
-    <a href="{{ url_for('leaderboard', type='world_squares') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'world_squares' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'world_squares' else 'false' }}"
-       title="{{ worldSquares }}">
-      {{ worldSquares }}
-    </a>
-
-    <a href="{{ url_for('leaderboard', type='countries') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'countries' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'countries' else 'false' }}"
-       title="{{ crossedCountries }}">
-      {{ crossedCountries }}
-    </a>
-
-    <a href="{{ url_for('leaderboard', type='carbon') }}"
-       class="btn btn-pill {{ 'btn-switch active' if type == 'carbon' else 'btn-switch' }}"
-       aria-current="{{ 'page' if type == 'carbon' else 'false' }}"
-       title="{{ CO2 }}">
-      {{ CO2 }}
-    </a>
-  </div>
+    {% endfor %}
+  </nav>
 
   <!-- Mobile -->
   <div class="dropdown d-md-none">
@@ -93,18 +20,9 @@
       {{ leaderboardSelectType }}
     </button>
     <ul class="dropdown-menu shadow-lg rounded-3 w-100" aria-labelledby="leaderboardDropdown">
-      <li><a class="dropdown-item {{ 'active' if type == 'all' }}" href="{{ url_for('leaderboard', type='all') }}">{{ leaderboardTotal }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'train' }}" href="{{ url_for('leaderboard', type='train') }}">{{ train }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'bus' }}" href="{{ url_for('leaderboard', type='bus') }}">{{ bus }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'air' }}" href="{{ url_for('leaderboard', type='air') }}">{{ air }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'ferry' }}" href="{{ url_for('leaderboard', type='ferry') }}">{{ ferry }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'aerialway' }}" href="{{ url_for('leaderboard', type='aerialway') }}">{{ aerialway }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'metro' }}" href="{{ url_for('leaderboard', type='metro') }}">{{ metro }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'tram' }}" href="{{ url_for('leaderboard', type='tram') }}">{{ tram }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'train_countries' }}" href="{{ url_for('leaderboard', type='train_countries') }}">{{ leaderboardTrainCountries }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'world_squares' }}" href="{{ url_for('leaderboard', type='world_squares') }}">{{ worldSquares }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'countries' }}" href="{{ url_for('leaderboard', type='countries') }}">{{ crossedCountries }}</a></li>
-      <li><a class="dropdown-item {{ 'active' if type == 'carbon' }}" href="{{ url_for('leaderboard', type='carbon') }}">{{ CO2 }}</a></li>
+      {% for code, icon, label in tabs %}
+      <li><a class="dropdown-item {{ 'active' if type == code }}" href="{{ url_for('leaderboard', type=code) }}">{{ label }}</a></li>
+      {% endfor %}
     </ul>
   </div>
 </div>
@@ -119,29 +37,34 @@
   --switch-active-text: #fff;
 }
 
-/* Base button style */
-.btn.btn-switch.btn-pill {
-  border: 1px solid var(--switch-border);
-  background: var(--switch-bg);
-  color: var(--switch-text);
-  border-radius: 9999px;
-  padding: .45rem .9rem;
+/* Tabs: a thin baseline the whole row sits on, the current one underlined over it */
+.switch-tabs {
+  flex-wrap: wrap;
+  gap: 0 .25rem;
+  border-bottom: 1px solid var(--switch-border);
+}
+
+.switch-tab {
+  padding: .45rem .7rem;
+  font-size: .9rem;
   font-weight: 500;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, .06);
-  transition: all 0.15s ease;
+  color: #5b6472;
+  text-decoration: none;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color .15s ease, border-color .15s ease;
 }
 
-/* Hover */
-.btn.btn-switch:hover {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, .08);
+.switch-tab:hover {
+  color: var(--switch-text);
+  border-bottom-color: var(--switch-border);
 }
 
-/* Active */
-.btn.btn-switch[aria-current="page"] {
-  background: var(--switch-active-bg);
-  border-color: var(--switch-active-bg);
-  color: var(--switch-active-text);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, .15);
+.switch-tab[aria-current="page"] {
+  color: var(--switch-active-bg);
+  font-weight: 600;
+  border-bottom-color: var(--switch-active-bg);
 }
 
 /* Dropdown button */

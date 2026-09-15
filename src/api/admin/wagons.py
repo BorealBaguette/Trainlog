@@ -23,19 +23,43 @@ _EDITABLE_FIELDS = {"label", "category", "subcategory", "era", "source", "notes"
 _VALID_IMAGE_TYPES = {"plain", "sides", "sides_L", "sides_R"}
 _VALID_IMAGE_EXTS  = {"gif", "png"}
 _COL_MAP = {0: "name", 1: "label", 2: "category", 3: "subcategory",
-            4: "era", 5: "countries", 6: "uses", 7: "image_type", 8: "image"}
+            4: "era", 5: "countries", 6: "uses", 7: "users",
+            8: "image_type", 9: "image"}
 
 WAGONS_ROOT   = Path("static/images/wagons").resolve()
 CUSTOM_FOLDER = "images/custom"          # relative to WAGONS_ROOT, stored in DB
 
+# Sentinel stored in wagons.license for drawings licensed directly to Trainlog
+# (mirrored by TRAINLOG_LICENSE in static/js/wagon_img.js).
+TRAINLOG_LICENSE = "TRAINLOG_LICENSED"
+
 
 _USAGE_TTL = 300          # seconds; the admin table re-queries on every page change
-_usage_cache: dict = {"at": 0.0, "counts": {}}
+_usage_cache: dict = {"at": 0.0, "counts": {}, "users": {}, "sets": {},
+                      "countries": {}}
 
 
-def _wagon_usage() -> dict[str, int]:
+def _trip_countries(value) -> set:
+    """Country codes of a trip, from the {"CC": metres} map stored on trips.countries."""
+    try:
+        parsed = json.loads(value or "{}")
+    except (TypeError, ValueError):
+        return set()
+    if not isinstance(parsed, dict):
+        return set()
+    # Region-level keys ("CN-11") still count for their country.
+    return {cc.split("-")[0].upper() for cc in parsed if isinstance(cc, str) and cc}
+
+
+def _wagon_usage() -> tuple[dict[str, int], dict[str, set], dict[str, int],
+                            dict[str, Counter]]:
     """
-    Trips using each wagon, keyed by wagon name.
+    Trips using each wagon, keyed by wagon name, plus the distinct users those trips
+    belong to, how many saved trainsets contain it, and how many of those trips ran
+    in each country.
+
+    The users come back as sets, not counts, so that callers grouping several wagons
+    together (the artist leaderboard) can union them instead of double-counting.
 
     There is no foreign key to follow: trips.material_type_advanced holds either an
     inline JSON array of units, a composite {"trainsets": [names]}, or a bare trainset
@@ -46,9 +70,12 @@ def _wagon_usage() -> dict[str, int]:
     """
     now = time.time()
     if now - _usage_cache["at"] < _USAGE_TTL:
-        return _usage_cache["counts"]
+        return (_usage_cache["counts"], _usage_cache["users"],
+                _usage_cache["sets"], _usage_cache["countries"])
 
     counts: Counter = Counter()
+    user_sets: dict[str, set] = {}
+    wagon_countries: dict[str, Counter] = {}
     try:
         with pg_session() as pg:
             sets = {}
@@ -62,17 +89,22 @@ def _wagon_usage() -> dict[str, int]:
                 # than guessing which one a given trip meant.
                 sets.setdefault(r["name"], set()).update(names)
 
+            # Grouped by (composition, user, countries) rather than just
+            # composition, so a composition's trip count, its distinct-user count
+            # and the countries it ran in can all be derived without re-scanning
+            # the trips table.
             rows = pg.execute(
                 """
-                SELECT material_type_advanced AS mta, COUNT(*) AS n
+                SELECT material_type_advanced AS mta, user_id, countries,
+                       COUNT(*) AS n
                 FROM trips
                 WHERE material_type_advanced IS NOT NULL AND material_type_advanced <> ''
-                GROUP BY material_type_advanced
+                GROUP BY material_type_advanced, user_id, countries
                 """
             ).fetchall()
 
         for row in rows:
-            value, n = (row["mta"] or "").strip(), row["n"]
+            value, user_id, n = (row["mta"] or "").strip(), row["user_id"], row["n"]
             names: set[str] = set()
             if value.startswith("["):
                 try:
@@ -89,14 +121,26 @@ def _wagon_usage() -> dict[str, int]:
             else:
                 names = sets.get(value, set())
 
+            ccs = _trip_countries(row["countries"])
             for wagon in names:
                 counts[wagon] += n
+                user_sets.setdefault(wagon, set()).add(user_id)
+                if ccs:
+                    wagon_countries.setdefault(wagon, Counter()).update(
+                        dict.fromkeys(ccs, n)
+                    )
     except Exception as e:                        # never break the listing over a stat
         logger.warning("wagon usage count failed: %s", e)
-        return _usage_cache["counts"]
+        return (_usage_cache["counts"], _usage_cache["users"],
+                _usage_cache["sets"], _usage_cache["countries"])
 
-    _usage_cache.update(at=now, counts=dict(counts))
-    return _usage_cache["counts"]
+    set_counts: Counter = Counter()
+    for names in sets.values():
+        set_counts.update(names)
+    _usage_cache.update(at=now, counts=dict(counts), users=user_sets,
+                        sets=dict(set_counts), countries=wagon_countries)
+    return (_usage_cache["counts"], _usage_cache["users"],
+            _usage_cache["sets"], _usage_cache["countries"])
 
 
 def _sanitize_name(label: str) -> str:
@@ -157,7 +201,7 @@ def list_wagons():
     order_dir = "ASC" if request.args.get("order[0][dir]", "asc") == "asc" else "DESC"
 
     # Must run before the session below opens — pg_session() refuses to nest.
-    usage = _wagon_usage()
+    usage, usage_users, _, _ = _wagon_usage()
 
     with pg_session() as pg:
         total = pg.execute("SELECT COUNT(*) FROM wagons").scalar()
@@ -188,21 +232,25 @@ def list_wagons():
             filtered = total
             qparams  = {"limit": length, "offset": start}
 
-        # Usage counts live in Python (see _wagon_usage), so they are fed back in as a
-        # pair of arrays and joined — that keeps sorting by popularity in SQL, which
-        # server-side paging requires.
+        # Usage counts live in Python (see _wagon_usage), so they are fed back in as
+        # parallel arrays and joined — that keeps sorting by popularity in SQL, which
+        # server-side paging requires. Users are keyed the same way, off the same
+        # wagon-name list, since every wagon with a trip count also has a user count.
         qparams["u_names"]  = list(usage.keys())
         qparams["u_counts"] = list(usage.values())
+        qparams["u_users"]  = [len(usage_users.get(n, ())) for n in usage]
 
         data = [dict(r) for r in pg.execute(
             f"""
             SELECT name, label, category, subcategory, era, image, notes,
                    source, image_type, image_ext, px_per_meter,
                    author, license, gauge, countries,
-                   COALESCE(u.ucount, 0) AS uses
+                   COALESCE(u.ucount, 0) AS uses,
+                   COALESCE(u.ausers, 0) AS users
             FROM wagons
-            LEFT JOIN unnest(CAST(:u_names AS text[]), CAST(:u_counts AS bigint[]))
-                   AS u(uname, ucount) ON u.uname = wagons.name
+            LEFT JOIN unnest(CAST(:u_names AS text[]), CAST(:u_counts AS bigint[]),
+                             CAST(:u_users AS bigint[]))
+                   AS u(uname, ucount, ausers) ON u.uname = wagons.name
             {where}
             ORDER BY {order_col} {order_dir} NULLS LAST
             LIMIT :limit OFFSET :offset
@@ -356,6 +404,49 @@ def _uploaded_sides(image_type: str) -> list[tuple[str, object]]:
         suffix = {"sides_L": "_L", "sides_R": "_R"}.get(image_type, "")
         pairs = [(suffix, request.files.get("file"))]
     return [(sfx, f) for sfx, f in pairs if f and f.filename]
+
+
+# Free-text columns whose values repeat across wagons, so the form can offer what
+# is already in the catalogue. Fixed tuple — these names are interpolated into SQL.
+_SUGGEST_FIELDS = ("category", "subcategory", "era", "author", "license",
+                   "source", "gauge")
+
+
+@wagons_admin_blueprint.route("suggestions", methods=["GET"])
+@admin_required
+def wagon_suggestions():
+    """
+    Existing values for each repeatable field, most-used first.
+
+    Typing these by hand splits the catalogue on a single character — the wagon-artist
+    leaderboard ranked "Paul Nikolic (niko1266)" and "Paul Nikolik (Niko1266)" as two
+    different people — so the form offers what is already there instead.
+    """
+    out = {}
+    with pg_session() as pg:
+        for field in _SUGGEST_FIELDS:
+            rows = pg.execute(
+                f"""SELECT {field}::text AS value, COUNT(*) AS n
+                    FROM wagons
+                    WHERE {field} IS NOT NULL AND {field}::text <> ''
+                    GROUP BY 1
+                    ORDER BY n DESC, 1"""
+            ).fetchall()
+            if field == "author":
+                # One drawing can credit several people, stored comma-separated;
+                # suggest the individuals, not the combinations.
+                counts: Counter = Counter()
+                for row in rows:
+                    for part in row["value"].split(","):
+                        part = part.strip()
+                        if part:
+                            counts[part] += row["n"]
+                out[field] = [v for v, _ in counts.most_common()]
+            else:
+                # The Trainlog sentinel has its own checkbox; nobody should type it.
+                out[field] = [r["value"] for r in rows
+                              if r["value"] != TRAINLOG_LICENSE]
+    return jsonify(out)
 
 
 @wagons_admin_blueprint.route("suggest-cuts", methods=["POST"])

@@ -15,7 +15,7 @@ stats_blueprint = Blueprint("stats", __name__)
 # Every metric a chart can be plotted against. Each stats query emits
 # past{Metric} and plannedFuture{Metric} for all of these, so adding one here
 # means adding two columns per query and nothing else.
-METRIC_NAMES = ["Trips", "Km", "Duration", "CO2", "Delay"]
+METRIC_NAMES = ["Trips", "Km", "Duration", "CO2", "Delay", "DelayAccumulated"]
 
 # Column keys each metric occupies in a result row.
 DEFAULT_METRICS = {m: (f"past{m}", f"plannedFuture{m}") for m in METRIC_NAMES}
@@ -42,6 +42,7 @@ COUNTRY_SPLIT_COLUMNS = {
     "Duration": "trip_duration",
     "CO2": "carbon",
     "Delay": "arrival_delay",
+    "DelayAccumulated": "added_duration",
 }
 
 
@@ -177,7 +178,12 @@ def attach_vessel_photos(pg, vehicles):
     ).fetchall():
         entry = (row["local_image_path"], row["country_code"])
         name = (row["name"] or "").strip()
-        for key in [name.upper(), row["imo"], row["trainlog_id"], *(row["mmsis"] or [])]:
+        for key in [
+            name.upper(),
+            row["imo"],
+            row["trainlog_id"],
+            *(row["mmsis"] or []),
+        ]:
             if key:
                 cached.setdefault(key, entry)
 
@@ -188,11 +194,6 @@ def attach_vessel_photos(pg, vehicles):
         if country:
             vehicle["country"] = country
 
-
-# How many trainset rows get their wagons resolved. The chart draws ten and the
-# fullscreen view scrolls twenty at a time, so this is a few screens' depth; the
-# tail keeps its numbers and simply has no picture.
-TRAINSET_IMAGE_ROWS = 40
 
 # Only the fields the strip needs to draw. The wagons table carries a lot more
 # (era, notes, licence) and none of it belongs in a chart payload.
@@ -265,10 +266,12 @@ def attach_trainset_units(pg, rows, username):
 
     # 1) every named trainset in one go, preferring the user's own set over the
     #    admin one of the same name (same precedence as _units_by_name).
-    resolved = rows[:TRAINSET_IMAGE_ROWS]
-    wanted = {
-        name for row in resolved for name in parsed[row["trainset"]][0]
-    }
+    #
+    #    Every row, not a top slice. The fullscreen chart scrolls the whole
+    #    ranking, and resolving only the first few screens' worth meant the
+    #    artwork stopped part-way down it while the bars carried on. Doing the
+    #    lot costs the same two queries — only the lists they take get longer.
+    wanted = {name for row in rows for name in parsed[row["trainset"]][0]}
     by_name = {}
     if wanted:
         for name, units_json in pg.execute(
@@ -302,7 +305,7 @@ def attach_trainset_units(pg, rows, username):
 
     # 2) every wagon those units point at, also in one go.
     wagon_names = {
-        u["name"] for row in resolved for u in units_of(row["trainset"]) if u.get("name")
+        u["name"] for row in rows for u in units_of(row["trainset"]) if u.get("name")
     }
     wagons = {}
     if wagon_names:
@@ -317,32 +320,30 @@ def attach_trainset_units(pg, rows, username):
             )
         }
 
-    resolved_ids = {id(row) for row in resolved}
     for row in rows:
         names, inline = parsed[row["trainset"]]
 
         units = []
-        if id(row) in resolved_ids:
-            for unit in units_of(row["trainset"]):
-                wagon = wagons.get(unit.get("name")) or {}
-                slim = {
-                    k: wagon[k] for k in _WAGON_DISPLAY_FIELDS if wagon.get(k) is not None
-                }
-                slim["_side"] = unit.get("_side", "L")
-                # Kept even with no artwork, so the strip can stand a
-                # placeholder in its place: an outline in the right position
-                # still tells you how many cars the set has, which is more than
-                # an empty box does. `_phType` picks which outline.
-                if unit.get("_phType"):
-                    slim["_phType"] = unit["_phType"]
-                units.append(slim)
-            if units:
-                row["units"] = units
+        for unit in units_of(row["trainset"]):
+            wagon = wagons.get(unit.get("name")) or {}
+            slim = {
+                k: wagon[k] for k in _WAGON_DISPLAY_FIELDS if wagon.get(k) is not None
+            }
+            slim["_side"] = unit.get("_side", "L")
+            # Kept even with no artwork, so the strip can stand a
+            # placeholder in its place: an outline in the right position
+            # still tells you how many cars the set has, which is more than
+            # an empty box does. `_phType` picks which outline.
+            if unit.get("_phType"):
+                slim["_phType"] = unit["_phType"]
+            units.append(slim)
+        if units:
+            row["units"] = units
 
         # Named sets show their name; ad-hoc ones are named from their units.
         # Resolved wagons give the nicest labels, but the inline JSON already
-        # carries one per unit, so even an unresolved row past the cut-off gets
-        # a readable name — never the stored JSON.
+        # carries one per unit, so a row that resolves to nothing still gets a
+        # readable name — never the stored JSON.
         row["label"] = (
             " + ".join(dict.fromkeys(u["label"] for u in units if u.get("label")))
             if units and not names
@@ -363,7 +364,9 @@ def _merge_by_label(rows):
             continue
         for past_key, planned_key in DEFAULT_METRICS.values():
             target[past_key] = (target.get(past_key) or 0) + (row.get(past_key) or 0)
-            target[planned_key] = (target.get(planned_key) or 0) + (row.get(planned_key) or 0)
+            target[planned_key] = (target.get(planned_key) or 0) + (
+                row.get(planned_key) or 0
+            )
         # Keep the artwork of whichever copy had some.
         if "units" not in target and "units" in row:
             target["units"] = row["units"]
@@ -411,9 +414,7 @@ def get_stats_countries(pg, user_id, trip_type, year=None):
         trip_length = trip.get("trip_length") or 0
 
         for country_code, distance in country_distances.items():
-            stats = countries.setdefault(
-                country_code, _zero_row(country=country_code)
-            )
+            stats = countries.setdefault(country_code, _zero_row(country=country_code))
             country_km = (
                 sum(distance.values()) if isinstance(distance, dict) else distance
             ) or 0
@@ -469,7 +470,9 @@ def _time_series(pg, query_func, user_id, trip_type, year, key, span):
             entry[planned_key] = row.get(planned_key) or 0
         by_bucket[bucket] = entry
 
-    return [by_bucket.get(bucket, _zero_row(**{key: bucket})) for bucket in span(by_bucket)]
+    return [
+        by_bucket.get(bucket, _zero_row(**{key: bucket})) for bucket in span(by_bucket)
+    ]
 
 
 def get_stats_years(pg, user_id, trip_type, year=None):
@@ -564,9 +567,7 @@ def fetch_stats(username, trip_type, year=None, datasets=ALL_DATASETS):
                 stats["airportCities"] = cities
 
         if stats.get("trainsets"):
-            stats["trainsets"] = attach_trainset_units(
-                pg, stats["trainsets"], username
-            )
+            stats["trainsets"] = attach_trainset_units(pg, stats["trainsets"], username)
 
         if "countries" in datasets:
             stats["countries"] = get_stats_countries(

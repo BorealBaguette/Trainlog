@@ -132,7 +132,7 @@
                         <label for="editTicketCurrency" class="form-label">Currency</label>
                         <select class="form-control" id="editTicketCurrency" name="currency">
                             {% for currency in currencyOptions %}
-                            <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}">
+                            <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}">
                                 {{ currency['currency'] }}
                             </option>
                             {% endfor %}
@@ -414,8 +414,7 @@ $(document).ready(function () {
 
     const currencySelect = document.getElementById('editTicketCurrency');
     for (let option of currencySelect.options) {
-        const countryCode = option.dataset.country;
-        const emoji = getFlagEmoji(countryCode);
+        const emoji = option.dataset.emoji || getFlagEmoji(option.dataset.country);
         option.text = `${option.text} ${emoji}`; // Prepend the emoji to the option text
     }
 </script>
