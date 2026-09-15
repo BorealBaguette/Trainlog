@@ -716,6 +716,7 @@
                     </select>
                     {% endif %}
                     <div id="freehandToggleSlot"></div>
+                    <div id="gpxToggleSlot"></div>
                 </div>
 
                 <div id="map" class="mapRouting full-height" style="width: 100%; height: 400px;"></div>
@@ -797,6 +798,30 @@
 
 
     var wplist = JSON.parse("{{wplist}}");
+    // Original raw GPS trace (GPX imports only), preserved server-side (see
+    // migration 0073) so it can be shown as a reference and optionally reselected
+    // as the saved path instead of the routed/cleaned one.
+    var rawPath = {{ raw_path | tojson }};
+    var rawPathLayer = null;
+    var renderGpxToggle = null;
+    var freehandToggleHandle = null;
+    var gpxToggleBtn = null;
+    // Which toggle started the current freehand session, for button highlighting only —
+    // saving always records route_source "freehand" regardless of how it was seeded.
+    var freehandSource = null; // null | 'manual' | 'gpx'
+    var RAW_PATH_STYLE_BACKDROP = { color: '#666', weight: 3, opacity: 0.8, dashArray: '2,8' };
+    var RAW_PATH_STYLE_ACTIVE = { color: '#0d6efd', weight: 2, opacity: 0.6, dashArray: '2,8' };
+    // The raw trace can have thousands of points; freehand puts a draggable marker on
+    // every intermediate waypoint, so seed with at most this many (uniform stride,
+    // endpoints always kept) to keep dragging usable.
+    var GPX_FREEHAND_POINT_CAP = 200;
+    function downsamplePath(points, cap) {
+        if (!points || points.length <= cap) return points || [];
+        var result = [];
+        var step = (points.length - 1) / (cap - 1);
+        for (var i = 0; i < cap; i++) result.push(points[Math.round(i * step)]);
+        return result;
+    }
     var spinnerContent = '<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>';
     var errorContent = "<h4> {{routingError}} <h4>";
     errorContent += "<p> {{routingErrorDetails}} </p>";
@@ -891,7 +916,7 @@
 
             // ── Freehand inline toggle (opens straight into freehand for freehand trips) ──
             {% if tripType not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
-            addFreehandToggle(document.getElementById('freehandToggleSlot'), {
+            freehandToggleHandle = addFreehandToggle(document.getElementById('freehandToggleSlot'), {
                 active: routeSource === 'freehand',
                 compact: true,
                 labelFreehand: "{{ freehandMode|default('Freehand') }}",
@@ -900,6 +925,39 @@
             });
             if (routeSource === 'freehand') enterFreehand();
             {% endif %}
+
+            // ── Raw GPX trace (GPX-derived trips only): always shown as an
+            // uneditable reference line. The toggle seeds a freehand session from
+            // it (downsampled) so the user can fine-tune it; the trace itself never
+            // moves, and it's the freehand copy that gets saved (route_source
+            // "freehand", same as any other hand-edited route). ──
+            if (rawPath && rawPath.length > 1) {
+                rawPathLayer = L.polyline(rawPath, Object.assign(
+                    { interactive: false }, RAW_PATH_STYLE_BACKDROP
+                )).addTo(map);
+
+                {% if tripType not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
+                gpxToggleBtn = document.createElement('button');
+                gpxToggleBtn.type = 'button';
+                gpxToggleBtn.className = 'btn btn-sm btn-outline-secondary';
+                renderGpxToggle = function () {
+                    var active = freehandSource === 'gpx';
+                    gpxToggleBtn.classList.toggle('btn-outline-secondary', !active);
+                    gpxToggleBtn.classList.toggle('btn-secondary', active);
+                    gpxToggleBtn.innerHTML = '<i class="fa-solid ' +
+                        (active ? 'fa-route' : 'fa-satellite-dish') + '"></i> ' +
+                        (active
+                            ? "{{ useRoutedPathLabel|default('Use routed path') }}"
+                            : "{{ useRawGpxLabel|default('Edit GPX track') }}");
+                };
+                renderGpxToggle();
+                gpxToggleBtn.addEventListener('click', function (e) {
+                    e.preventDefault();
+                    freehandSource === 'gpx' ? exitFreehand() : enterGpxFreehand();
+                });
+                document.getElementById('gpxToggleSlot').appendChild(gpxToggleBtn);
+                {% endif %}
+            }
         }
     });
 
@@ -912,15 +970,13 @@
         var wrap = rt.closest('.form-check');
         if (wrap) wrap.style.opacity = disabled ? '0.5' : '';
     }
-    function enterFreehand() {
-        if (freehandActive) return;
-        freehandActive = true;
+    function startFreehandEditor(origin, dest, waypoints) {
         setRouterToggleDisabled(true);
         if (window.control) map.removeControl(window.control);
         freehandEditor = createFreehandEditor(map, {
-            origin: wplist[0],
-            dest: wplist[wplist.length - 1],
-            waypoints: wplist.slice(1, -1),
+            origin: origin,
+            dest: dest,
+            waypoints: waypoints,
             markerIconStart: markerIconStart,
             markerIconEnd: markerIconEnd,
             onChange: function (path, distance) {
@@ -936,12 +992,110 @@
             }
         });
     }
-    function exitFreehand() {
-        if (!freehandActive) return;
-        freehandActive = false;
+    // Tears down whichever freehand editor is active without touching the router —
+    // used when switching directly between the two freehand sources (no router
+    // involved), as opposed to exitFreehand() which is the "back to Router" action.
+    function teardownFreehandEditor() {
         setRouterToggleDisabled(false);
         if (freehandEditor) { freehandEditor.destroy(); freehandEditor = null; }
-        if (window.control) window.control.addTo(map); // re-adds + re-routes
+        if (rawPathLayer) rawPathLayer.setStyle(RAW_PATH_STYLE_BACKDROP);
+        freehandActive = false;
+        freehandSource = null;
+    }
+    function enterFreehand() {
+        if (freehandActive && freehandSource === 'manual') return;
+        if (freehandActive) teardownFreehandEditor(); // switch away from a gpx-seeded session
+        freehandActive = true;
+        freehandSource = 'manual';
+        startFreehandEditor(wplist[0], wplist[wplist.length - 1], wplist.slice(1, -1));
+    }
+
+    // "Edit GPX track": seed a freehand session from the (downsampled) raw trace so
+    // the user can fine-tune it; the underlying rawPathLayer stays fixed/uneditable.
+    function enterGpxFreehand() {
+        if (freehandActive && freehandSource === 'gpx') return;
+        if (freehandActive) teardownFreehandEditor(); // switch away from a manual freehand session
+        if (freehandToggleHandle) freehandToggleHandle.setActive(false);
+        freehandActive = true;
+        freehandSource = 'gpx';
+        var seed = downsamplePath(rawPath, GPX_FREEHAND_POINT_CAP);
+        startFreehandEditor(seed[0], seed[seed.length - 1], seed.slice(1, -1));
+        rawPathLayer.setStyle(RAW_PATH_STYLE_ACTIVE);
+        if (renderGpxToggle) renderGpxToggle();
+    }
+
+    // Back to Router. A freehand session can carry far more waypoints than a router
+    // can sanely route through (a GPX-seeded one especially — up to GPX_FREEHAND_POINT_CAP).
+    // Handing them all to the router as hard waypoints overloads/breaks OSRM, so above a
+    // small cap they're first reduced via the same auto-routing/anchor-search used for
+    // GPX auto-import (clean_gps_route, through /simplify_path), then the router is
+    // (re)started from that small "proper" set — the user can still add more by hand
+    // from there, same as any other router session.
+    var ROUTER_WAYPOINT_CAP = 15;
+    // Simplifying can take up to a minute (it's a real routing search, one request
+    // per candidate segment) — block re-entry and show a blocking overlay so it
+    // doesn't look hung.
+    var simplifyingRoute = false;
+    var simplifyOverlay = null;
+    function showSimplifyOverlay() {
+        if (simplifyOverlay) return;
+        simplifyOverlay = document.createElement('div');
+        simplifyOverlay.style.cssText = 'position:absolute;inset:0;z-index:1000;' +
+            'background:rgba(255,255,255,0.85);display:flex;flex-direction:column;' +
+            'align-items:center;justify-content:center;text-align:center;';
+        simplifyOverlay.innerHTML = spinnerContent +
+            '<div style="margin-top:12px;max-width:80%;">' +
+            "{{ simplifyingRoute|default('Simplifying route… this can take up to a minute') }}" +
+            '</div>';
+        document.getElementById('map').appendChild(simplifyOverlay);
+        if (gpxToggleBtn) gpxToggleBtn.disabled = true;
+        $('#editPathButton').prop('disabled', true);
+    }
+    function hideSimplifyOverlay() {
+        if (simplifyOverlay) { simplifyOverlay.remove(); simplifyOverlay = null; }
+        if (gpxToggleBtn) gpxToggleBtn.disabled = false;
+        $('#editPathButton').prop('disabled', false);
+    }
+    function exitFreehand() {
+        if (!freehandActive || simplifyingRoute) return;
+        var path = freehandEditor ? freehandEditor.getPath() : null;
+        var waypoints = freehandEditor ? freehandEditor.getWaypoints() : [];
+        teardownFreehandEditor();
+        if (renderGpxToggle) renderGpxToggle();
+
+        function resumeRouting(newWplist) {
+            if (!window.control) return;
+            window.control.setWaypoints(newWplist.map(function (p) { return L.latLng(p[0], p[1]); }));
+            window.control.addTo(map); // re-adds + re-routes
+        }
+
+        if (!path || path.length < 2) return;
+        var origin = [path[0].lat, path[0].lng];
+        var dest = [path[path.length - 1].lat, path[path.length - 1].lng];
+
+        if (waypoints.length <= ROUTER_WAYPOINT_CAP) {
+            resumeRouting([origin].concat(waypoints.map(function (w) { return [w.lat, w.lng]; })).concat([dest]));
+            return;
+        }
+
+        simplifyingRoute = true;
+        showSimplifyOverlay();
+        fetch('{{ url_for("simplify_path", username=username) }}', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                path: path.map(function (p) { return [p.lat, p.lng]; }),
+                type: tripType
+            })
+        }).then(function (r) { return r.json(); }).then(function (data) {
+            resumeRouting(data.waypoints && data.waypoints.length >= 2 ? data.waypoints : [origin, dest]);
+        }).catch(function () {
+            // Better a straight line to fine-tune than hundreds of hard waypoints.
+            resumeRouting([origin, dest]);
+        }).finally(function () {
+            simplifyingRoute = false;
+            hideSimplifyOverlay();
+        });
     }
     {% endif %}
 

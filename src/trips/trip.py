@@ -57,6 +57,7 @@ class Trip:
         timestamps=None,
         route_source="router",
         seat_car=None,
+        raw_path=None,
     ):
         self.trip_id = trip_id
         self.username = username
@@ -104,6 +105,10 @@ class Trip:
         self.timestamps = timestamps
         # How the route was produced: 'router' | 'freehand' | 'gpx' | 'gpx_routed' | 'fr24'.
         self.route_source = route_source
+        # Untouched GPS trace this trip was built from (GPX imports only), kept
+        # alongside `path` so a routed/cleaned trip can later be re-corrected
+        # against its original source track. None otherwise.
+        self.raw_path = raw_path
         self.carbon = (
             calculate_carbon_footprint_for_trip(vars(self), path) if path else None
         )
