@@ -1104,6 +1104,8 @@ def formatTrip(trip, public=False):
                 trip_duration = ["man", trip["manual_trip_duration"]]
             elif trip["estimated_trip_duration"] is not None:
                 trip_duration = ["est", trip["estimated_trip_duration"]]
+            else:
+                trip_duration = ["", ""]
 
         start_date = start_date.strftime("%Y-%m-%d")
     else:
