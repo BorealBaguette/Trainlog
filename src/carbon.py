@@ -178,6 +178,72 @@ def split_km_for_country(cc, value_m):
     
     return electric_km, diesel_km
 
+MAX_PREVIEW_COUNTRY_LOOKUPS = 400
+
+def compute_electrification_preview(path, trip_type, power_type, details, sampled=False):
+    """
+    Aggregate + per-country electrification breakdown for a route, before it's
+    saved. Reuses getCountriesFromPath — the exact function that computes the
+    "countries" field stored on save — so this can never drift from what
+    actually gets persisted. Falls back to split_km_for_country's per-country
+    diesel_share defaults when no OSM electrification data is available.
+
+    path: list of {"lat":.., "lng":..} dicts
+    trip_type: "train" | "tram" | "metro" | "funicular" | "rail" | ...
+    power_type: "auto" | "electric" | "thermic" | "manual" | None
+    details: routing details dict, e.g. {"electrified": [[start_idx, end_idx, type], ...]}
+    sampled: approximate country attribution to keep long routes fast (preview only)
+
+    Returns {'percent', 'elec_m', 'nonelec_m', 'countries', 'source'}, or
+    {'percent': None, 'source': None} when the path has no distance at all.
+    'source' is 'osm' (real OSM data), 'estimate' (per-country defaults) or
+    'forced' (vehicle type or explicit power_type is fully electric/non-electric).
+    """
+    from py.utils import getCountriesFromPath
+
+    details = details or {}
+    # Distances and the elec/nonelec split stay full-resolution either way; only
+    # the per-point country lookup is sampled, and only for previews.
+    step = max(1, len(path) // MAX_PREVIEW_COUNTRY_LOOKUPS) if sampled else 1
+    countries = json.loads(
+        getCountriesFromPath(path, trip_type, details, power_type, country_sample_step=step)
+    )
+
+    elec_m = 0.0
+    total_m = 0.0
+    is_split_format = True
+    by_country = {}
+    for cc, value in countries.items():
+        if isinstance(value, dict):
+            cc_elec = value.get('elec', 0) or 0
+            cc_nonelec = value.get('nonelec', 0) or 0
+        else:
+            is_split_format = False
+            electric_km, diesel_km = split_km_for_country(cc, value)
+            cc_elec = electric_km * 1000
+            cc_nonelec = diesel_km * 1000
+        elec_m += cc_elec
+        total_m += cc_elec + cc_nonelec
+        by_country[cc] = {'elec_m': round(cc_elec), 'nonelec_m': round(cc_nonelec)}
+
+    if total_m <= 0:
+        return {'percent': None, 'source': None}
+
+    use_osm = (
+        trip_type in ('train', 'rail')
+        and power_type in (None, '', 'auto')
+        and 'electrified' in details
+    )
+    source = 'estimate' if not is_split_format else ('osm' if use_osm else 'forced')
+
+    return {
+        'percent': round(elec_m / total_m * 100, 1),
+        'elec_m': round(elec_m),
+        'nonelec_m': round(total_m - elec_m),
+        'countries': by_country,
+        'source': source,
+    }
+
 def calculate_rail_emissions(distance_km, countries, rail_type='train', start_datetime=None, force_electric=False):
     """
     Calculate rail transport CO2 emissions in kg CO2e (train/metro/tram/aerialway)
