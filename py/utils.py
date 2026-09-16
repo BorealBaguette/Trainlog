@@ -214,7 +214,14 @@ def getDistance(orig, dest):
     return distance
 
 
-def getCountriesFromPath(path, type, routing_details=None, powerType=None):
+def getCountriesFromPath(path, type, routing_details=None, powerType=None, country_sample_step=1):
+    """
+    country_sample_step > 1 resolves the country only every Nth point and reuses
+    the last resolved one in between. Point-in-polygon lookups dominate the cost
+    here (a 37k-point route is seconds), while the country itself only changes at
+    borders, so this is a big speedup for a tiny error near crossings. It is for
+    previews ONLY — saving must stay exact and always uses the default of 1.
+    """
     countries = {}
     country = None
     if type in ["air", "helicopter"]:
@@ -236,7 +243,7 @@ def getCountriesFromPath(path, type, routing_details=None, powerType=None):
         return json.dumps(countries)
    
     # Determine power type (auto, electric, or thermic/manual)
-    if type in ("tram", "funicular"):
+    if type in ("tram", "funicular", "metro"):
         power_type = "electric"
     elif powerType:
         power_type = powerType
@@ -280,16 +287,22 @@ def getCountriesFromPath(path, type, routing_details=None, powerType=None):
         else:
             interpolated_points = [path[index]]
         segment_countries = {}
+        # Sampled previews reuse the last resolved country between samples; with
+        # the default step of 1 this is always False and every point is resolved.
+        reuse_last_country = (
+            country_sample_step > 1 and country is not None and index % country_sample_step != 0
+        )
         for node in interpolated_points:
-            precountry = getCountryFromCoordinates(lat=node["lat"], lng=node["lng"])
-            if precountry is not None:
-                country = precountry["countryCode"]
-            else:
-                if type == "ferry":
-                    country = "UN"
+            if not reuse_last_country:
+                precountry = getCountryFromCoordinates(lat=node["lat"], lng=node["lng"])
+                if precountry is not None:
+                    country = precountry["countryCode"]
                 else:
-                    if country is None:
+                    if type == "ferry":
                         country = "UN"
+                    else:
+                        if country is None:
+                            country = "UN"
             segment_countries[country] = segment_countries.get(country, 0) + 1
         for country, count in segment_countries.items():
             if country not in countries:

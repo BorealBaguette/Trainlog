@@ -1,6 +1,5 @@
 from flask import jsonify, request, render_template
-from src.carbon import calculate_carbon_footprint_for_trip
-import json
+from src.carbon import calculate_carbon_footprint_for_trip, compute_electrification_preview
 from flask import Blueprint
 
 carbon_blueprint = Blueprint('carbon', __name__)
@@ -121,6 +120,39 @@ def api_calculate_carbon():
     except Exception as e:
         app.logger.error(f"Error calculating carbon: {str(e)}")
         return jsonify({'error': 'Failed to calculate carbon emissions', 'details': str(e)}), 500
+
+@carbon_blueprint.route('/api/electrification-preview', methods=['POST'])
+def api_electrification_preview():
+    """
+    Preview the electrified share of a route before it is saved.
+
+    This is a fallback for paths that never go through /forwardRouting (freehand
+    drawing, GPX import) or a power_type override with no fresh route fetch — the
+    normal case (routing through /forwardRouting) gets this embedded directly in
+    the route response by src/routing.py, so no separate request is needed at all.
+
+    Expected JSON payload:
+    {
+        "path": [{"lat": .., "lng": ..}, ...],
+        "type": "train",
+        "powerType": "auto" | "electric" | "thermic" | "manual" | null,
+        "details": {} // routing details (electrified segments), if any
+    }
+    """
+    try:
+        data = request.get_json()
+        if not data or not data.get('path'):
+            return jsonify({'error': 'Invalid request format'}), 400
+
+        path = [{'lat': p.get('lat'), 'lng': p.get('lng')} for p in data['path']]
+        result = compute_electrification_preview(
+            path, data.get('type'), data.get('powerType'), data.get('details') or {},
+            sampled=True,
+        )
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': 'Failed to preview electrification', 'details': str(e)}), 500
 
 @carbon_blueprint.route('/api/batch-calculate-carbon', methods=['POST'])
 def api_batch_calculate_carbon():

@@ -35,6 +35,29 @@
 /* distance + info icon share one row */
 #sidebar .route-meta { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 0 0 11px; }
 
+/* Groups the distance/electrification chips as one flex unit within .route-meta,
+   so the freehand-toggle button (appended as a sibling, pushed right via
+   margin-left:auto below) wraps as a whole relative to the chips instead of
+   interleaving with them individually when the row runs out of width. */
+#sidebar .route-meta-chips { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* The electrification chip is rendered in a loading state first so its space is
+   reserved and the row doesn't visibly grow a chip once the request lands. */
+#sidebar .route-elec.elec-loading { color: #9ca3af; min-width: 74px; text-align: center; }
+
+/* Once the freehand button no longer fits beside the chips it takes the whole
+   next row, rather than sitting stranded at the right of an empty one.
+   syncFreehandWrap() in routing.js adds the class when it measures a wrap. */
+#sidebar .route-meta .freehand-toggle-btn.fh-wrapped {
+  flex: 1 1 100%; margin-left: 0; justify-content: center;
+}
+
+/* ...and with the row to themselves, the chips stretch across it too, so the
+   block reads as one full-width stack rather than a short row above a wide button. */
+#sidebar .route-meta.chips-full .route-meta-chips { width: 100%; }
+#sidebar .route-meta.chips-full .route-meta-chips > .route-dist-wrap { flex: 1 1 auto; }
+#sidebar .route-meta.chips-full .route-dist { display: block; text-align: center; }
+
 /* hint (route notes / which bus router answered): a small badge pinned to the
    distance chip's top-right corner, opening a floating bubble below it */
 #sidebar .route-dist-wrap { position: relative; display: inline-block; }
@@ -57,10 +80,32 @@
   padding: 7px 9px; font-size: .78rem; line-height: 1.4; color: #4b5563;
   white-space: normal; text-align: left;
 }
-#sidebar .route-bubble::before { /* caret pointing back up at the badge */
-  content: ""; position: absolute; top: -5px; left: 8px; width: 8px; height: 8px;
+/* caret pointing back up at the badge. --bubble-dx is set by clampRouteBubble()
+   in routing.js when it has to nudge the bubble away from a panel edge; the caret
+   shifts the opposite way so it keeps pointing at the badge. */
+#sidebar .route-bubble::before {
+  content: ""; position: absolute; top: -5px;
+  left: clamp(8px, calc(8px - var(--bubble-dx, 0px)), calc(100% - 16px));
+  width: 8px; height: 8px;
   background: #fff; border-left: 1px solid #e5e7eb; border-top: 1px solid #e5e7eb;
   transform: rotate(45deg);
+}
+
+/* Per-country electrification breakdown inside a route-bubble */
+#sidebar .elec-country-list { margin-top: 6px; padding-top: 6px; border-top: 1px solid #eef0f3; }
+#sidebar .elec-country-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+#sidebar .elec-country-row span:first-child { flex: 1; } /* name left, km + % together on the right */
+#sidebar .elec-country-km { color: #9ca3af; font-variant-numeric: tabular-nums; }
+#sidebar .elec-country-row span:last-child { font-weight: 600; color: #374151; font-variant-numeric: tabular-nums; }
+
+/* propulsion override, inside the same bubble as the breakdown it changes */
+#sidebar .elec-override {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  margin-top: 7px; padding-top: 7px; border-top: 1px solid #eef0f3;
+}
+#sidebar .elec-override-select {
+  font: inherit; color: #374151; background: #fff;
+  border: 1px solid #d7dbe0; border-radius: 6px; padding: 2px 4px; cursor: pointer;
 }
 
 /* amber when the car router was used as a bus fallback */
