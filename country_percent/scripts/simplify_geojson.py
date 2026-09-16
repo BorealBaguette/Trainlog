@@ -2,7 +2,7 @@
 Simplify a processed GeoJSON file by:
 1. unpacking features of type GeometryCollection,
 2. deleting features of all types except Polygon and Multipolygon,
-3. removing redundant polygon points,
+3. simplifying polygon outlines with Douglas-Peucker, keeping shared borders,
 4. converting the output to CRS84,
 5. truncating coordinate precision to the cm range,
 6. recomputing polygon areas,
@@ -19,13 +19,14 @@ It assumes CRS84 if the input file has no CRS, performs distance
 calculations in EPSG:3857, and always writes output in CRS84.
 """
 
+import collections
+import itertools
 import json
-import math
 import os
 import sys
 
 import geopandas as gpd
-from shapely.geometry import mapping, shape
+from shapely.geometry import LineString, MultiPolygon, Polygon, mapping, shape
 from shapely.validation import explain_validity
 
 DEFAULT_INPUT_CRS = "urn:ogc:def:crs:OGC:1.3:CRS84"
@@ -34,6 +35,7 @@ OUTPUT_CRS = "urn:ogc:def:crs:OGC:1.3:CRS84"
 
 PROPERTIES_TO_KEEP = ["station"]
 MIN_AREA_M2 = 50  # lower once a real polygon this small shows up
+SIMPLIFY_TOLERANCE_M = 1.0
 
 
 def round_area(value):
@@ -53,86 +55,100 @@ def truncate_geometry(geometry):
     return geometry
 
 
-def distance(a, b):
-    return math.hypot(a[0] - b[0], a[1] - b[1])
+def polygons_of(geometry):
+    if geometry.geom_type == "MultiPolygon":
+        return list(geometry.geoms)
+    return [geometry]
 
 
-def distance_to_segment(p, a, b):
-    ab = (b[0] - a[0], b[1] - a[1])
-    ap = (p[0] - a[0], p[1] - a[1])
-    if ab == (0, 0):
-        return math.hypot(*ap)
-    # clamp the projection of p onto ab to the segment
-    t = max(0.0, min(1.0, (ap[0] * ab[0] + ap[1] * ab[1]) / (ab[0] ** 2 + ab[1] ** 2)))
-    return math.hypot(ap[0] - t * ab[0], ap[1] - t * ab[1])
+def rings_of(geometry):
+    for polygon in polygons_of(geometry):
+        yield polygon.exterior
+        yield from polygon.interiors
 
 
-def simplify_ring(ring):
-    # Drop a point closer than MIN_POINT_DISTANCE_M to its predecessor,
-    # or one that deviates less than the factor times the chord length
-    # from the chord between its neighbours, for chords up to
-    # MAX_ENDPOINT_DISTANCE_M.
-    MIN_POINT_DISTANCE_M = 0.5
-    MAX_ENDPOINT_DISTANCE_M = 15.0
-    MAX_MIDPOINT_DISTANCE_FACTOR = 0.2
-
-    assert ring[0] == ring[-1], "polygon ring must be closed"
-    if len(ring) < 4:
-        return ring
-
-    work = list(ring)  # rings from shapely's mapping() are tuples
-    work.pop()
-
-    def removable(i):
-        prev = work[i - 1]
-        curr = work[i]
-        next = work[(i + 1) % len(work)]
-        length_prev_next = distance(prev, next)
-        return (
-            length_prev_next <= MAX_ENDPOINT_DISTANCE_M
-            and distance_to_segment(curr, prev, next)
-            <= length_prev_next * MAX_MIDPOINT_DISTANCE_FACTOR
-        ) or (distance(prev, curr) <= MIN_POINT_DISTANCE_M)
-
-    # A closed ring has no first point, so the neighbours wrap around
-    # the end. Repeat until a full pass removes nothing.
-    changed = True
-    while changed and len(work) > 3:
-        changed = False
-        i = 0
-        while i < len(work) and len(work) > 3:
-            if removable(i):
-                del work[i]
-                changed = True
-            else:
-                i += 1
-
-    work.append(work[0])
-    return work
+def count_points(geometries):
+    return sum(len(ring.coords) for g in geometries for ring in rings_of(g))
 
 
-def simplify_polygon_coords(coords):
-    simplified = []
-    for ring in coords:
-        simplified.append(simplify_ring(ring))
-    return simplified
+def simplify_geometries_once(geometries, iteration):
+    """Douglas-Peucker on every ring, simplifying borders shared between
+    polygons only once so that they stay shared.
+
+    A ring is cut into arcs where the set of polygons owning a vertex
+    changes. An arc between two such junctions is simplified once and the
+    result reused by every polygon containing it.
+    """
+    owners = collections.defaultdict(set)
+    for idx, geometry in enumerate(geometries):
+        for ring in rings_of(geometry):
+            for coord in ring.coords[:-1]:
+                owners[coord].add(idx)
+
+    cache = {}
+
+    def simplify_arc(arc):
+        # the same arc is traversed in opposite directions by its two owners
+        key = tuple(arc) if arc[0] <= arc[-1] else tuple(reversed(arc))
+        if key not in cache:
+            cache[key] = list(LineString(key).simplify(SIMPLIFY_TOLERANCE_M).coords)
+        simplified = cache[key]
+        return simplified if tuple(arc) == key else simplified[::-1]
+
+    def simplify_ring(ring):
+        coords = list(ring.coords[:-1])
+        n = len(coords)
+        cuts = [
+            i
+            for i in range(n)
+            if owners[coords[i]] != owners[coords[i - 1]]
+            or owners[coords[i]] != owners[coords[(i + 1) % n]]
+        ]
+        if len(cuts) < 2:
+            return list(LineString(ring.coords).simplify(SIMPLIFY_TOLERANCE_M).coords)
+        # rotate the ring to start at a junction, then simplify arc by arc
+        start = cuts[0]
+        coords = coords[start:] + coords[:start]
+        cuts = sorted({(i - start) % n for i in cuts}) + [n]
+        result = []
+        for a, b in zip(cuts, cuts[1:]):
+            arc = coords[a : b + 1] if b < n else coords[a:] + [coords[0]]
+            result.extend(simplify_arc(arc)[:-1])
+        result.append(result[0])
+        return result
+
+    def simplify_polygon(polygon):
+        simplified = Polygon(
+            simplify_ring(polygon.exterior),
+            [simplify_ring(ring) for ring in polygon.interiors],
+        )
+        if polygon.is_valid and not simplified.is_valid:
+            return polygon
+        return simplified
+
+    result = []
+    for idx, geometry in enumerate(geometries):
+        polygons = [simplify_polygon(polygon) for polygon in polygons_of(geometry)]
+        if geometry.geom_type == "MultiPolygon":
+            result.append(MultiPolygon(polygons))
+        else:
+            result.append(polygons[0])
+        if idx % 10 == 0:
+            progress = 100 * idx / len(geometries)
+            print(
+                f"Simplify iteration {iteration}, progress: {progress:.2f}%", end="\r"
+            )
+    print(f"Simplify iteration {iteration}, progress: 100.00%")
+    return result
 
 
-def simplify_multipolygon_coords(coords):
-    simplified = []
-    for polygon in coords:
-        simplified.append(simplify_polygon_coords(polygon))
-    return simplified
-
-
-def simplify_geometry(geometry):
-    geom_type = geometry["type"]
-    if geom_type == "Polygon":
-        geometry["coordinates"] = simplify_polygon_coords(geometry["coordinates"])
-    elif geom_type == "MultiPolygon":
-        geometry["coordinates"] = simplify_multipolygon_coords(geometry["coordinates"])
-    else:
-        raise ValueError(f"unexpected geometry type {geom_type}")
+def simplify_geometries(geometries):
+    # repeat until nothing changes, so that re-running the script is a no-op
+    for iteration in itertools.count(1):
+        simplified = simplify_geometries_once(geometries, iteration)
+        if count_points(simplified) == count_points(geometries):
+            return simplified
+        geometries = simplified
 
 
 def explode_and_filter_geometries(gdf):
@@ -208,15 +224,8 @@ def process(country_code):
     # Transform to Web Mercator for accurate distance calculations
     gdf_mercator = gdf.to_crs(WEB_MERCATOR_CRS)
 
-    total_features = len(gdf_mercator)
-    for idx in range(total_features):
-        geometry = mapping(gdf_mercator.iloc[idx].geometry)
-        simplify_geometry(geometry)
-        gdf_mercator.at[idx, "geometry"] = shape(geometry)
-        if idx % 10 == 0:
-            progress = 100 * idx / total_features
-            print(f"Simplify progress: {progress:.2f}%", end="\r")
-    print("Simplify progress: 100.00%")
+    print("Simplifying...")
+    gdf_mercator["geometry"] = simplify_geometries(list(gdf_mercator["geometry"]))
 
     # Transform to output crs
     gdf = gdf_mercator.to_crs(OUTPUT_CRS)
