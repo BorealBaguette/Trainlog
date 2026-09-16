@@ -163,11 +163,10 @@ def clip_to_region(iso_spec, iso_code, processed_path):
     print(f"Saved initial file {iso_code}.geojson")
 
 
-def buffer_linestring(line_coords):
-    if len(line_coords) < 2:
-        return None  # broken way, a line needs two points
-    line = LineString(line_coords)
-    gdf = gpd.GeoDataFrame({"geometry": [line]}, crs="EPSG:4326")
+def buffer_linestrings(lines_coords):
+    # broken ways with a single node cannot form a line
+    lines = [LineString(coords) for coords in lines_coords if len(coords) >= 2]
+    gdf = gpd.GeoDataFrame({"geometry": lines}, crs="EPSG:4326")
 
     # Buffer the linestring and transform to Web Mercator for accurate distance calculations
     gdf = gdf.to_crs("EPSG:3857")
@@ -176,7 +175,7 @@ def buffer_linestring(line_coords):
     # Transform back to WGS84
     gdf = gdf.to_crs("EPSG:4326")
 
-    return gdf.iloc[0].geometry
+    return gdf.geometry
 
 
 def process_railway_geometry(iso_code, iso_spec):
@@ -218,31 +217,12 @@ def process_railway_geometry(iso_code, iso_spec):
     stripped_data = {"type": "FeatureCollection", "features": []}
 
     print("Buffering linestrings and creating polygons...")
-
-    total_lines = len(lines_coords)
-    processed_lines = 0
-    start_time = time.time()
-
-    for line_coords in lines_coords:
-        processed_lines += 1
-        if processed_lines % 20 == 0 or processed_lines == total_lines:
-            progress = 100 * processed_lines / total_lines
-            elapsed_time = time.time() - start_time
-            eta = elapsed_time * total_lines / processed_lines - elapsed_time
-            print(
-                f"ID: {processed_lines}, Progress: {progress:.2f}%, ETA: {eta:.2f} seconds",
-                end="\r",
-            )
-
-        buffered_geometry = buffer_linestring(line_coords)
-        if buffered_geometry is None:
-            continue
+    for buffered_geometry in buffer_linestrings(lines_coords):
         feature = {
             "type": "Feature",
             "geometry": shape(buffered_geometry).__geo_interface__,
         }
         stripped_data["features"].append(feature)
-    print("\nBuffering completed!")
 
     stripped_data["features"] = merge_overlapping_polygons(stripped_data["features"])
 
