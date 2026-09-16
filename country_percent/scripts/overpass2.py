@@ -201,26 +201,11 @@ def process_railway_geometry(iso_code, iso_spec):
         for node in data["elements"]
         if node["type"] == "node"
     }
-    stripped_data = {"type": "FeatureCollection", "features": []}
 
-    print("Buffering linestrings and creating polygons...")
-
-    ways = [element for element in data["elements"] if element["type"] == "way"]
-    total_ways = len(ways)
-    processed_ways = 0
-    start_time = time.time()
-
-    for way in ways:
-        processed_ways += 1
-        if processed_ways % 20 == 0 or processed_ways == total_ways:
-            progress = 100 * processed_ways / total_ways
-            elapsed_time = time.time() - start_time
-            eta = elapsed_time * total_ways / processed_ways - elapsed_time
-            print(
-                f"ID: {processed_ways}, Progress: {progress:.2f}%, ETA: {eta:.2f} seconds",
-                end="\r",
-            )
-
+    lines_coords = []
+    for way in data["elements"]:
+        if way["type"] != "way":
+            continue
         tags = way["tags"]
         if tags["railway"] in ["construction", "disused", "abandoned", "proposed"]:
             continue
@@ -228,10 +213,28 @@ def process_railway_geometry(iso_code, iso_spec):
             continue
         if tags.get("usage") in ["industrial"]:
             continue
+        lines_coords.append([nodes_dict[node_id] for node_id in way["nodes"]])
 
-        buffered_geometry = buffer_linestring(
-            [(nodes_dict[node_id]) for node_id in way["nodes"]]
-        )
+    stripped_data = {"type": "FeatureCollection", "features": []}
+
+    print("Buffering linestrings and creating polygons...")
+
+    total_lines = len(lines_coords)
+    processed_lines = 0
+    start_time = time.time()
+
+    for line_coords in lines_coords:
+        processed_lines += 1
+        if processed_lines % 20 == 0 or processed_lines == total_lines:
+            progress = 100 * processed_lines / total_lines
+            elapsed_time = time.time() - start_time
+            eta = elapsed_time * total_lines / processed_lines - elapsed_time
+            print(
+                f"ID: {processed_lines}, Progress: {progress:.2f}%, ETA: {eta:.2f} seconds",
+                end="\r",
+            )
+
+        buffered_geometry = buffer_linestring(line_coords)
         if buffered_geometry is None:
             continue
         feature = {
