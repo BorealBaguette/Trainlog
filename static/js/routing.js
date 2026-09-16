@@ -65,6 +65,16 @@ var markergroup = new L.featureGroup(markerIconStart, markerIconEnd);
 
 var routeDetails = null;
 
+// Bumped on every reroute so a slow /api/electrification-preview response from an
+// earlier route can't overwrite the sidebar after a newer one has already resolved.
+var elecPreviewRequestId = 0;
+
+// Last computed preview plus the exact path object it was computed for. Lets
+// power-type toggles and plain re-renders reuse it instead of re-running the
+// (expensive — see /api/electrification-preview) country walk server-side.
+var lastElecPreview = null;
+var lastElecPreviewPath = null;
+
 // Which upstream router answered the last bus routing request (HTTP status set by
 // forward_routing_core in src/routing.py). 234/235 mean the road (car) router was
 // used as a fallback, so the route may follow roads buses aren't allowed on.
@@ -87,12 +97,44 @@ function busRouterHint() {
 }
 
 // The hint bubbles are <details>, which stay open until re-clicked — close them on any
-// click outside so they behave like a popover.
+// click outside so they behave like a popover. Listen on the capture phase: the
+// leaflet-sidebar plugin stops click propagation on its content container (to keep
+// clicks from reaching the map) during the bubble phase, which would otherwise
+// swallow clicks made anywhere inside the sidebar before they reach this listener.
 document.addEventListener('click', function (e) {
   document.querySelectorAll('#sidebar .route-hint[open]').forEach(function (d) {
     if (!d.contains(e.target)) d.removeAttribute('open');
   });
-});
+}, true);
+
+// A bubble is anchored to its badge, so one near either edge of the panel would
+// otherwise overflow and get clipped by #sidebar's overflow:auto. Nudge it back
+// inside on open, and shift the caret the opposite way so it still points at the
+// badge. 'toggle' doesn't bubble, hence the capture-phase listener.
+function clampRouteBubble(details) {
+  var bubble = details.querySelector('.route-bubble');
+  var panel = document.getElementById('sidebar');
+  if (!bubble || !panel) return;
+
+  bubble.style.transform = '';
+  bubble.style.removeProperty('--bubble-dx');
+
+  var b = bubble.getBoundingClientRect();
+  var p = panel.getBoundingClientRect();
+  var pad = 8;
+  var dx = 0;
+  if (b.right > p.right - pad) dx = (p.right - pad) - b.right;
+  if (b.left + dx < p.left + pad) dx = (p.left + pad) - b.left;
+  if (!dx) return;
+
+  bubble.style.transform = 'translateX(' + dx + 'px)';
+  bubble.style.setProperty('--bubble-dx', dx + 'px');
+}
+
+document.addEventListener('toggle', function (e) {
+  var d = e.target;
+  if (d && d.matches && d.matches('#sidebar .route-hint[open]')) clampRouteBubble(d);
+}, true);
 
 (function() {
   var originalOpen = XMLHttpRequest.prototype.open;
@@ -316,7 +358,10 @@ function buildNewRouterToggleHtml() {
           style="margin-right: 8px;"
           ${useNewRouter ? 'checked' : ''}
         >
-        <span>${texts.useNewRouter} ᵦ</span>
+        <span class="route-dist-wrap" style="display: inline-flex; align-items: center;">
+          ${texts.useNewRouter}
+          <details class="route-hint" style="position: static; margin-left: 6px;"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${texts.useNewRouterHint}</div></details>
+        </span>
       </label>
       <select id="newRouterProfile" class="form-select form-select-sm" onchange="switchRouterProfile(this.value)" style="width: auto; margin-top: 8px; ${useNewRouter ? '' : 'display: none;'}">
         ${options}
@@ -707,6 +752,12 @@ function combineRoutes(routes, waypoints, callback, context) {
 var FERRY_SPLIT_TYPES = ['car', 'bus', 'train', 'cycle', 'walk'];
 window.FERRY_SPLIT_TYPES = FERRY_SPLIT_TYPES;
 
+// Rail-family types the electrification preview applies to. Tram/metro/funicular
+// are always treated as fully electric server-side (getCountriesFromPath in
+// py/utils.py); train is the only one where it's actually detected (OSM data from
+// the new router) or estimated (per-country defaults) rather than known outright.
+var ELEC_PREVIEW_TYPES = ['train', 'tram', 'metro', 'funicular'];
+
 // Plural form selection lives in util.js as window.pluralize (shared, CLDR-based).
 
 // Car-carrying rail shuttles (Channel Tunnel "Le Shuttle"/Eurotunnel, Alpine
@@ -961,6 +1012,203 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     window.baseRouter = baseRouter;
     var customRouter = createCustomRouter(baseRouter, freehandSegments);
 
+    // The freehand-toggle button is appended into .route-meta by the page (see
+    // routing.html). While it fits beside the chips it sits right-aligned; once it
+    // wraps it would otherwise sit stranded on the right of an empty row, so give
+    // it the full row instead. Flexbox can't express "only when wrapped", hence
+    // the offsetTop comparison.
+    function syncFreehandWrap() {
+      var meta = document.querySelector('#sidebar .route-meta');
+      if (!meta) return;
+      var btn = meta.querySelector('.freehand-toggle-btn');
+      var chips = meta.querySelector('.route-meta-chips');
+      if (!btn || !chips) return;
+      btn.classList.remove('fh-wrapped'); // measure in its natural width first
+      meta.classList.remove('chips-full');
+      if (btn.offsetTop > chips.offsetTop) {
+        btn.classList.add('fh-wrapped');
+        // Chips now have the row to themselves, so stretch them across it to
+        // match the full-width button below instead of stopping short.
+        meta.classList.add('chips-full');
+      }
+    }
+    window.addEventListener('resize', syncFreehandWrap);
+
+    function renderElecPreview(data) {
+      var el = document.getElementById('elecPreview');
+      if (!el) return;
+      if (!data || data.percent === null || data.percent === undefined) {
+        el.innerHTML = ''; // nothing to show — drop the loading state
+        syncFreehandWrap();
+        return;
+      }
+
+      // Same icon+km convention as the country-flag hover (static/js/util.js
+      // getFlagEmojiListNew): ⚡ for electrified, 🛢️ for non-electrified.
+      var parts = [];
+      if (data.elec_m) parts.push(`⚡${mToKm(data.elec_m)}km`);
+      if (data.nonelec_m) parts.push(`🛢️${mToKm(data.nonelec_m)}km`);
+      if (!parts.length) {
+        el.innerHTML = '';
+        syncFreehandWrap();
+        return;
+      }
+
+      var countryCodes = data.countries ? Object.keys(data.countries) : [];
+
+      var explanation;
+      if (data.source === 'osm') {
+        explanation = texts.electrificationOsm;
+      } else if (data.source === 'estimate') {
+        explanation = texts.electrificationEstimate;
+      } else if (data.source === 'forced') {
+        // Tram/metro/funicular are always electric (no propulsion choice exists
+        // for them); train/bus/car/cycle/ferry got here because the user picked
+        // an explicit propulsion via the radio buttons rather than "auto".
+        explanation = ['tram', 'metro', 'funicular'].includes(type)
+          ? texts.electrificationTypeElectric
+          : (newTrip["powerType"] === 'electric' ? texts.electrificationUserElectric : texts.electrificationUserThermic);
+      } else {
+        explanation = '';
+      }
+      // Per-country breakdown, shown even for a single country: it's what names
+      // the country (with its flag), which the sentence above deliberately doesn't.
+      var countryRows = countryCodes.map(function(cc) {
+        var cd = data.countries[cc];
+        var ccTotal = cd.elec_m + cd.nonelec_m;
+        if (!ccTotal) return '';
+        var ccPercent = Math.round(cd.elec_m / ccTotal * 100);
+        return `<div class="elec-country-row"><span>${getFlagEmoji(cc)} ${regionNames.of(cc)}</span>`
+             + `<span class="elec-country-km">${mToKm(ccTotal)} km</span>`
+             + `<span>${ccPercent}%</span></div>`;
+      }).join('');
+      if (countryRows) countryRows = `<div class="elec-country-list">${countryRows}</div>`;
+
+      // Only train/rail have a propulsion choice to override — tram/metro/funicular
+      // are always electric, and their split doesn't depend on powerType at all.
+      var overrideHtml = '';
+      if (type === 'train' || type === 'rail') {
+        var current = newTrip["powerType"] || 'auto';
+        var options = [['auto', texts.auto], ['electric', texts.electric], ['thermic', texts.thermic]]
+          .map(function(o) {
+            return `<option value="${o[0]}"${current === o[0] ? ' selected' : ''}>${o[1]}</option>`;
+          }).join('');
+        overrideHtml = `<label class="elec-override"><span>${texts.powerType}</span>`
+                     + `<select class="elec-override-select">${options}</select></label>`;
+      }
+
+      var infoHtml = (explanation || countryRows || overrideHtml)
+        ? `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${explanation.replace("{percent}", data.percent)}${countryRows}${overrideHtml}</div></details>`
+        : '';
+
+      // Re-rendering replaces the <details>, which would collapse an open bubble —
+      // and the override lives inside it, so keep it open across its own changes.
+      var wasOpen = !!el.querySelector('.route-hint[open]');
+      el.innerHTML = `<span class="route-dist route-elec">${parts.join(' ')}</span>${infoHtml}`;
+      if (wasOpen) {
+        var reopened = el.querySelector('.route-hint');
+        if (reopened) reopened.open = true; // fires 'toggle' → clampRouteBubble
+      }
+
+      var select = el.querySelector('.elec-override-select');
+      // Listener goes straight on the element: the leaflet-sidebar plugin stops
+      // event propagation at its content container, so delegation from document
+      // would never see it (same reason the outside-click handler uses capture).
+      if (select) select.addEventListener('change', function() { setPowerType(this.value); });
+
+      syncFreehandWrap();
+    }
+
+    // Applies a propulsion override chosen from the sidebar. newTrip["powerType"]
+    // is what the save posts, so this changes the stored value as well as the
+    // display; the form radios are kept in step because edit_copy.html reads them
+    // back when closing the map modal and would otherwise clobber this.
+    function setPowerType(value) {
+      newTrip["powerType"] = value;
+      if (routeDetails) routeDetails["powerType"] = value;
+      var radio = document.querySelector('input[name="powerType"][value="' + value + '"]');
+      if (radio) radio.checked = true;
+      refreshElecPreview();
+    }
+
+    // Reclassifies an already-known per-country elec/nonelec split against the
+    // *current* powerType, without any network call — used when the user toggles
+    // the propulsion radios after a route has already been fetched. Tram/metro/
+    // funicular ignore powerType entirely (always forced electric server-side).
+    function deriveElecPreview(base, currentPowerType) {
+      if (!base || base.percent === null || base.percent === undefined) return base;
+      if (!currentPowerType || currentPowerType === 'auto') return base;
+      if (['tram', 'metro', 'funicular'].includes(type)) return base;
+
+      var countries = {};
+      var elec_m = 0, nonelec_m = 0;
+      Object.keys(base.countries || {}).forEach(function(cc) {
+        var total = base.countries[cc].elec_m + base.countries[cc].nonelec_m;
+        var ccElec = currentPowerType === 'electric' ? total : 0;
+        countries[cc] = {elec_m: ccElec, nonelec_m: total - ccElec};
+        elec_m += ccElec;
+        nonelec_m += total - ccElec;
+      });
+      var total_m = elec_m + nonelec_m;
+      return {
+        percent: total_m > 0 ? Math.round((elec_m / total_m) * 1000) / 10 : null,
+        elec_m: elec_m,
+        nonelec_m: nonelec_m,
+        countries: countries,
+        source: 'forced'
+      };
+    }
+
+    function refreshElecPreview() {
+      // The server-side country walk is expensive (it's O(points), and routes run
+      // to tens of thousands of points), so only ever ask for a path we haven't
+      // already asked about.
+      var powerType = newTrip["powerType"];
+      var cached = (lastElecPreview && lastElecPreviewPath === currentRoute) ? lastElecPreview : null;
+      if (cached) {
+        if (powerType && powerType !== 'auto') {
+          // Explicit propulsion is pure reclassification of the known totals.
+          renderElecPreview(deriveElecPreview(cached, powerType));
+          return;
+        }
+        // Back to "auto": only the cached result of an auto request describes the
+        // detected/estimated split — a forced one has lost it and must be refetched.
+        if (cached.source !== 'forced') {
+          renderElecPreview(cached);
+          return;
+        }
+      }
+      if (!currentRoute) return;
+      var requestId = ++elecPreviewRequestId;
+      var requestedPath = currentRoute;
+      fetch('/api/electrification-preview', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: currentRoute.map(function(p) { return {lat: p.lat, lng: p.lng}; }),
+          type: type,
+          powerType: newTrip["powerType"],
+          details: newTrip["details"] || {}
+        })
+      }).then(function(r) { return r.json(); }).then(function(data) {
+        if (requestId !== elecPreviewRequestId) return; // a newer request already resolved
+        lastElecPreview = data;
+        lastElecPreviewPath = requestedPath;
+        renderElecPreview(data);
+      }).catch(function() {
+        if (requestId === elecPreviewRequestId) renderElecPreview(null); // clear the spinner
+      });
+    }
+
+    // Live-update the preview when the user overrides the propulsion type via the
+    // powerType radios (edit_copy.html/new.html) instead of waiting for a reroute.
+    document.addEventListener('change', function(e) {
+      if (!e.target || e.target.name !== 'powerType') return;
+      newTrip["powerType"] = e.target.value;
+      if (routeDetails) routeDetails["powerType"] = e.target.value;
+      if (ELEC_PREVIEW_TYPES.includes(type)) refreshElecPreview();
+    });
+
     var control = L.Routing.control({
       routeWhileDragging: true,
       plan: plan,
@@ -1047,7 +1295,20 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       var formattedData = `${texts.distanceTime.replace("{km}", km).replace("{time}", time)}`;
       // The hint badge sits on the distance chip's top-right corner, so it has to live
       // inside the (relatively positioned) wrapper rather than beside the chip.
-      content += `<div class="route-meta"><span class="route-dist-wrap"><span class="route-dist">${formattedData}</span>${hintHtml}</span></div>`;
+      // The chips are grouped in their own flex container (.route-meta-chips) so that,
+      // when the freehand-toggle button is injected into .route-meta afterward (see
+      // routing.html/edit_copy.html), it wraps as a single unit relative to the chips
+      // instead of fighting each chip individually for space in the same flex row.
+      content += `<div class="route-meta"><span class="route-meta-chips"><span class="route-dist-wrap"><span class="route-dist">${formattedData}</span>${hintHtml}</span>`;
+      if (ELEC_PREVIEW_TYPES.includes(type)) {
+        // Rendered up front in a loading state so the chip's space is already
+        // reserved: refreshElecPreview() then fills it in place instead of the
+        // row visibly growing a new chip once the request lands.
+        content += `<span class="route-dist-wrap" id="elecPreview">`
+                 + `<span class="route-dist route-elec elec-loading">`
+                 + `<i class="fa-solid fa-circle-notch fa-spin"></i></span></span>`;
+      }
+      content += `</span></div>`;
 
       flutterBridge.routeInfo(formattedData, distanceM, durationS);
       flutterBridge.loading(false);
@@ -1063,6 +1324,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       }
        
       sidebar.setContent(content);
+      syncFreehandWrap(); // the page appends the freehand button during setContent
 
       currentRoute = this._selectedRoute.coordinates;
       newTrip["trip_length"] = this._selectedRoute.summary.totalDistance;
@@ -1072,7 +1334,9 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
         routeDetails["powerType"] = newTrip["powerType"]
         newTrip["details"] = routeDetails;
       }
-      
+
+      if (ELEC_PREVIEW_TYPES.includes(type)) refreshElecPreview();
+
       const waypoints = this._selectedRoute.waypoints;
       console.log(this._selectedRoute)
 
@@ -1097,6 +1361,22 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       
       sidebar.setContent(errorContentWithToggle);
     }).addTo(map);
+
+    // Dragging a waypoint marker made LRM request the exact same route twice:
+    // its Plan.dragEnd fires 'waypointdragend' (which the control routes on,
+    // because routeWhileDragging is set) and then immediately _fireChanged() →
+    // 'waypointschanged' (which the control routes on again, via autoRoute).
+    // Neither request cancels the other, since createCustomRouter.route() returns
+    // no abortable handle for LRM's _pendingRequest.abort().
+    // Drop the second by muting the waypointschanged handler for the rest of the
+    // tick — it stays active for waypoint add/remove (removeWaypoint() and the
+    // click-to-insert on the line), which have no dragend and rely on it to reroute.
+    plan.on('waypointdragend', function() {
+      plan.off('waypointschanged', control._onWaypointsChanged, control);
+      setTimeout(function() {
+        plan.on('waypointschanged', control._onWaypointsChanged, control);
+      }, 0);
+    });
 
     // After LRM draws the route line, bring freehand hit areas to the SVG front
     // so they sit on top of the route line and capture clicks first.
