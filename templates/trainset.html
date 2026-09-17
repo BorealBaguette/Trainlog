@@ -1017,7 +1017,7 @@ function renderStrip() {
     const imgAttrs = !u.image
       ? 'class="wagon-placeholder-img"'
       : (u.px_per_meter ? `data-ppm="${u.px_per_meter}"` : '');
-    const canFlip = u.image_type === 'sides';
+    const canFlip = u.image_type === 'sides' || !u.image;
     const phLabels = { 'loco_l': '◀—', 'loco_both': '◀▶', 'loco_r': '—▶', 'mid': '■' };
     el.innerHTML = `
       <div class="unit-number">#${i + 1}</div>
