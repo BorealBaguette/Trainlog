@@ -646,7 +646,11 @@
   window.tsbConfirmSave = function () {
     var name = document.getElementById('tsb-save-name').value.trim();
     if (!name) { document.getElementById('tsb-save-name').focus(); return; }
-    var units = _units.map(function (u) { return { name: u.name, _side: u._side || 'L' }; });
+    var units = _units.map(function (u) {
+      var o = { name: u.name, _side: u._side || 'L' };
+      if (u._phType) o._phType = u._phType;
+      return o;
+    });
     $.ajax({
       url: '/api/trainsets', method: 'POST',
       contentType: 'application/json',
