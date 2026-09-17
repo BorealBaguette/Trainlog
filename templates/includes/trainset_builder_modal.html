@@ -488,7 +488,8 @@
 
       var nom = document.createElement('span');
       nom.className = 'tsb-nom';
-      nom.textContent = u.label || '?';
+      // A symmetric placeholder shows its side nowhere else.
+      nom.textContent = (u.label || '?') + (!u.image && u._side === 'R' ? ' ►' : '');
       card.appendChild(nom);
 
       if (_seatField()) {
@@ -546,12 +547,12 @@
         var btns = document.createElement('div');
         btns.className = 'd-flex justify-content-center gap-1 mt-1';
 
-        if (u.image_type === 'sides') {
+        if (u.image_type === 'sides' || !u.image) {
           var flip = document.createElement('button');
           flip.type = 'button';
           flip.className = 'btn btn-outline-secondary p-0';
           flip.style.cssText = 'font-size:.6rem;width:18px;height:18px;line-height:1';
-          flip.title = _i18n.flip;
+          flip.title = _i18n.flip + ' (' + (u._side || 'L') + ')';
           flip.textContent = '↔';
           flip.onclick = (function (uid) { return function () { tsbFlip(uid); }; })(u._uid);
           btns.appendChild(flip);
