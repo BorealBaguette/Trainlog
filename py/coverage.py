@@ -61,7 +61,7 @@ def get_coverage_geojson_dict_from_regions(cc):
     reference_crs = None
     first_payload = True
 
-    offset = 10**6
+    offset = 10**7
     merged_features = []
 
     for file_index, file_path in enumerate(region_file_paths):
@@ -80,7 +80,8 @@ def get_coverage_geojson_dict_from_regions(cc):
 
         region_code = os.path.splitext(os.path.basename(file_path))[0]
         total_area_m2 += geojson_data.get("total_area_m2") or sum(
-            f.get("properties", {}).get("area_m2", 0) for f in geojson_data.get("features", [])
+            f.get("properties", {}).get("area_m2", 0)
+            for f in geojson_data.get("features", [])
         )
 
         for feature in geojson_data.get("features", []):
