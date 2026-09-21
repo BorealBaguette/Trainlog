@@ -7249,6 +7249,194 @@ def copyTrip(username):
     return ""
 
 
+# ---------------------------------------------------------------------------
+# patchTrip — partial edits.
+#
+# updateTrip rewrites every column from the posted form (update_trip.sql has no
+# COALESCE), so a payload that omits a field NULLs it. patchTrip takes the
+# stored trip, replaces the columns the caller sent, renders the result back
+# into the payload the edit page would have posted for it, and hands that to
+# the same pipeline. Patching a field is therefore exactly equivalent to
+# opening the editor, changing that one field and pressing save.
+#
+# The payload is in `trips` column terms — the shape the app already reads
+# trips in — so a client can send back a subset of what it was given, and a
+# column added later is carried over without anything here knowing it exists.
+# The rendering step is what the pipeline needs: it consumes form fields, where
+# a start and end time become five columns by way of a timezone lookup,
+# `lineName` is the `line_name` column, and `countries`/`carbon` are derived
+# and never posted at all.
+# ---------------------------------------------------------------------------
+
+# The route, which is not made of `trips` columns and is never rendered from
+# the stored trip: leaving these out is what makes update_trip reuse the stored
+# geometry and leave the 3D flight track alone.
+ROUTE_FIELDS = ("path", "altitude", "timestamps", "details")
+
+# Columns, but measurements of a route rather than anything a user typed. The
+# pipeline reads their presence as "this was just re-routed" and re-derives
+# `countries` from the path, which on a patch that never touched the route
+# would throw away the OSM electrification split held in it — so they are sent
+# on only when the caller actually patches one of them.
+ROUTE_MEASUREMENTS = ("trip_length", "estimated_trip_duration")
+
+
+def _camel_case(column):
+    """`line_name` -> `lineName`, the spelling the form uses for a few fields."""
+    head, *rest = column.split("_")
+    return head + "".join(word.capitalize() for word in rest)
+
+
+def _as_form_value(value):
+    """As a form would carry it: everything is text, and "" means unset — which
+    sanitize_param turns back into NULL. Keeping to that spelling matters, since
+    the pipeline tests some fields for truthiness and a bare 0 would read as
+    unset where "0" does not."""
+    return "" if value is None else str(value)
+
+
+def _trip_datetime(value):
+    """A trip datetime as the column holds it: either a 1/-1 "no date" sentinel,
+    or a naive local wall-clock time.
+
+    Accepts the ISO 8601 a client sends as readily as the "YYYY-MM-DD HH:MM:SS"
+    the database hands back, and drops any UTC marker rather than converting:
+    start_datetime is local time, and its UTC counterpart is derived from it
+    further down the pipeline.
+    """
+    if isinstance(value, str) and value.strip() in ("1", "-1"):
+        value = int(value.strip())
+    if value in (1, -1):
+        return value
+    if not isinstance(value, datetime):
+        value = datetime.fromisoformat(str(value).strip())
+    return value.replace(tzinfo=None)
+
+
+def _date_form_fields_from_trip(trip):
+    """The trip's datetimes as the form's precision fields — the same reading of
+    start_datetime that edit_copy_trip does to prefill the editor's date
+    pickers, so that processDates puts back what is already there."""
+    start = _trip_datetime(trip["start_datetime"])
+    form = {"onlyDateDuration": _as_form_value(trip["manual_trip_duration"])}
+
+    # 1 = future/project, -1 = past (adapt_pg_trip_row): no date at all.
+    if start in (1, -1):
+        form["precision"] = "unknown"
+        form["unknownType"] = "future" if start == 1 else "past"
+    # The seconds field is a marker rather than a time: 01 means date-only.
+    elif start.second == 1:
+        form["precision"] = "onlyDate"
+        form["onlyDate"] = start.strftime("%Y-%m-%d")
+    else:
+        end = _trip_datetime(trip["end_datetime"])
+        form["precision"] = "preciseDates"
+        form["newTripStart"] = start.strftime("%Y-%m-%dT%H:%M")
+        form["newTripEnd"] = (
+            start if end in (1, -1) else end
+        ).strftime("%Y-%m-%dT%H:%M")
+    return form
+
+
+def build_form_data_from_trip(trip):
+    """Render a trip's columns into the payload its edit page would have posted.
+
+    This is what a patch is applied through: replace some columns, render, post.
+    Every column is offered under both its own name and its camelCase spelling,
+    because the form uses the latter for a handful of them (lineName, powerType,
+    co2Override). Columns the pipeline does not read it simply ignores, so this
+    needs no knowledge of which ones matter.
+    """
+    form = {}
+    for column, value in trip.items():
+        if column not in ROUTE_FIELDS and column not in ROUTE_MEASUREMENTS:
+            form[column] = form[_camel_case(column)] = _as_form_value(value)
+    form.update(_date_form_fields_from_trip(trip))
+    return form
+
+
+def _read_patch_payload(payload):
+    """The caller's fields, spelled as the trip row holds them: JSON arrays
+    serialised, and null meaning "clear" just as an empty form field does."""
+    patched = {}
+    for key, value in payload.items():
+        if isinstance(value, (list, dict)):
+            value = json.dumps(value)
+        patched[key] = "" if value is None else value
+
+    # An empty route is a broken payload rather than a clear — and merely naming
+    # "path" makes update_trip replace the geometry and drop the 3D track with it.
+    if patched.get("path") == "":
+        del patched["path"]
+    return patched
+
+
+@app.route("/u/<username>/patchTrip", methods=["GET", "POST"])
+@login_required
+def patchTrip(username):
+    """Partial trip edit: only the columns present in the payload change, every
+    other one keeps its stored value.
+
+    Takes `trips` columns — the shape trips are read in — as a form post or a
+    JSON body, with `trip_id` (or `uid`) naming the trip. An explicit null
+    clears a column; omitting it leaves it untouched. Dates are the local
+    start_datetime/end_datetime, with the usual 1/-1 sentinels for a trip whose
+    date is unknown and a :01 seconds marker for a date without a time; their
+    UTC counterparts are derived here and ignored if sent. The trip type is not
+    patchable, no more than it is through updateTrip.
+
+    Responds with the columns that were applied and any key not recognised.
+    """
+    if request.method != "POST":
+        return ""
+
+    payload = request.get_json(silent=True)
+    if payload is None:
+        payload = dict(request.form)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Expected an object of trip fields"}), 400
+
+    uid = payload.pop("uid", None)
+    try:
+        trip_id = int(payload.pop("trip_id", uid))
+    except (TypeError, ValueError):
+        return jsonify({"error": "A numeric trip_id is required"}), 400
+
+    # Aborts 404 if the trip is missing or is not the caller's, so it is known
+    # to exist by the time it is read.
+    check_current_user_owns_trip(trip_id)
+    stored = get_trip_pg(trip_id)
+
+    patched = _read_patch_payload(payload)
+    # Anything that names neither a column (under either spelling) nor the route
+    # is a key nothing downstream reads. It is reported rather than refused, so a
+    # client sending a field this version predates is told, not broken.
+    known = set(stored) | {_camel_case(c) for c in stored} | set(ROUTE_FIELDS)
+    ignored = sorted(set(patched) - known)
+    trip = {**stored, **patched}
+
+    try:
+        formData = build_form_data_from_trip(trip)
+    except ValueError as e:
+        return jsonify({"error": f"Invalid date: {e}"}), 400
+
+    # A route the caller worked out for itself: its geometry, the 3D track that
+    # belongs with it, and the measurements taken off it.
+    for field in ROUTE_FIELDS:
+        if field in patched:
+            formData[field] = patched[field]
+    if not set(patched).isdisjoint(ROUTE_MEASUREMENTS):
+        for field in ROUTE_MEASUREMENTS:
+            formData[field] = _as_form_value(trip[field])
+
+    new_trip = update_trip_values_from_form_data(trip_id, formData)
+    update_trip(trip_id, new_trip, formData)
+
+    return jsonify(
+        {"trip_id": trip_id, "patched": sorted(patched), "ignored": ignored}
+    )
+
+
 def check_current_user_owns_trip(trip_id):
     """
     Ensures that a given trip belongs to the currently logged in user
