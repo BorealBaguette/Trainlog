@@ -413,21 +413,6 @@
             return iso.split("-").length;
         }
 
-        // Check whether this group actually contains any hierarchy.
-        var hasHierarchy = countries.some(function (country) {
-            return getDepth(country.iso) > 2;
-        });
-
-        if (!hasHierarchy) {
-            // Normal country list: alphabetical by frontend name.
-            countries.sort(function (a, b) {
-                return (a.name || a.iso || '').localeCompare(
-                    b.name || b.iso || ''
-                );
-            });
-            return;
-        }
-
         // Sort by hierarchy level first, then frontend name.
         countries.sort(function (a, b) {
             var depthA = getDepth(a.iso);
