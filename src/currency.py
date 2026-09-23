@@ -300,7 +300,9 @@ def get_exchange_rate(price, base_currency, target_currency, date, pg=None):
 
 def get_currency_leaderboard(pg=None):
     """Aggregate every priced trip by currency: usage share plus totals/averages
-    in the original currency and converted to EUR at the latest available rate.
+    in the original currency and converted to EUR at each expense's own purchase
+    date (a trip's purchase_date, or a ticket's purchasing_date), so a 5-year-old
+    TRY price isn't valued at today's rate.
     Flag/name display is left to the frontend (same Intl.DisplayNames + getFlagEmoji
     logic already used by the picker on this page)."""
     with get_or_create_pg_session(pg) as session:
@@ -310,6 +312,8 @@ def get_currency_leaderboard(pg=None):
         # only the ticket share counts; in different currencies they're treated as
         # two separate charges (e.g. a pass plus a separately-paid seat fee) and
         # both count.
+        # Sums are grouped per (currency, day) before calling price_to_eur so the
+        # plpgsql rate lookup runs once per distinct day rather than once per row.
         rows = session.execute(
             """
             WITH base AS (
@@ -317,8 +321,10 @@ def get_currency_leaderboard(pg=None):
                     t.trip_id,
                     t.price AS trip_price,
                     t.currency AS trip_currency,
+                    COALESCE(t.purchase_date, t.start_datetime, t.created)::date AS trip_date,
                     tk.price AS ticket_price,
                     tk.currency AS ticket_currency,
+                    tk.purchasing_date::date AS ticket_date,
                     COUNT(*) OVER (PARTITION BY tk.uid) AS ticket_trip_count
                 FROM trips t
                 LEFT JOIN tickets tk
@@ -327,54 +333,56 @@ def get_currency_leaderboard(pg=None):
                     AND tk.currency IS NOT NULL AND tk.currency != ''
             ),
             priced AS (
-                SELECT ticket_currency AS currency, ticket_price / ticket_trip_count AS price
+                SELECT ticket_currency AS currency, ticket_date AS d,
+                       ticket_price / ticket_trip_count AS price
                 FROM base
                 WHERE ticket_currency IS NOT NULL
 
                 UNION ALL
 
-                SELECT trip_currency AS currency, trip_price AS price
+                SELECT trip_currency AS currency, trip_date AS d, trip_price AS price
                 FROM base
                 WHERE trip_price IS NOT NULL AND trip_price != 0
                     AND trip_currency IS NOT NULL AND trip_currency != ''
                     AND (ticket_currency IS NULL OR ticket_currency != trip_currency)
+            ),
+            per_day AS (
+                SELECT currency, d, COUNT(*) AS n, SUM(price) AS total,
+                       price_to_eur(SUM(price), currency, d) AS total_eur
+                FROM priced
+                GROUP BY currency, d
             )
-            SELECT currency, COUNT(*) AS trip_count, SUM(price) AS total_price, AVG(price) AS avg_price
-            FROM priced
+            SELECT currency, SUM(n)::int AS trip_count, SUM(total) AS total_price,
+                   SUM(total) / SUM(n) AS avg_price, SUM(total_eur) AS total_price_eur
+            FROM per_day
             GROUP BY currency
             ORDER BY trip_count DESC
             """
         ).fetchall()
 
-        rate_date = session.execute("SELECT MAX(rate_date) FROM exchanges").scalar()
+    total_trips = sum(row.trip_count for row in rows)
 
-        total_trips = sum(row.trip_count for row in rows)
-
-        leaderboard = []
-        for row in rows:
-            total_price_eur = None
-            avg_price_eur = None
-            if rate_date:
-                total_price_eur = get_exchange_rate(
-                    row.total_price, row.currency, "EUR", rate_date, pg=session
-                )
-                if total_price_eur is not None:
-                    avg_price_eur = round(total_price_eur / row.trip_count, 2)
-
-            leaderboard.append(
-                {
-                    "currency": row.currency,
-                    # Full precision kept (not rounded to 2dp here) so tiny shares
-                    # don't all collapse to a wall of "0.00%" — the frontend picks
-                    # a value-aware number of decimals per row.
-                    "percentage": (row.trip_count / total_trips * 100) if total_trips else 0,
-                    "trip_count": row.trip_count,
-                    "total_price": round(row.total_price, 2),
-                    "avg_price": round(row.avg_price, 2),
-                    "total_price_eur": total_price_eur,
-                    "avg_price_eur": avg_price_eur,
-                }
-            )
+    leaderboard = []
+    for row in rows:
+        total_price_eur = (
+            round(row.total_price_eur, 2) if row.total_price_eur is not None else None
+        )
+        leaderboard.append(
+            {
+                "currency": row.currency,
+                # Full precision kept (not rounded to 2dp here) so tiny shares
+                # don't all collapse to a wall of "0.00%" — the frontend picks
+                # a value-aware number of decimals per row.
+                "percentage": (row.trip_count / total_trips * 100) if total_trips else 0,
+                "trip_count": row.trip_count,
+                "total_price": round(row.total_price, 2),
+                "avg_price": round(row.avg_price, 2),
+                "total_price_eur": total_price_eur,
+                "avg_price_eur": round(total_price_eur / row.trip_count, 2)
+                if total_price_eur is not None
+                else None,
+            }
+        )
 
     total_price_eur_sum = sum(
         row["total_price_eur"] for row in leaderboard if row["total_price_eur"] is not None
@@ -383,7 +391,6 @@ def get_currency_leaderboard(pg=None):
 
     return {
         "leaderboard": leaderboard,
-        "rate_date": rate_date,
         "total_trips": total_trips,
         "total_price_eur_sum": round(total_price_eur_sum, 2),
         "avg_price_eur_overall": avg_price_eur_overall,
