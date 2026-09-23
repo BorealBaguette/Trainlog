@@ -28,10 +28,27 @@
   /* Emoji flags render soft/compressed at the default ~1em text size; bumping the font
      size (not just the box width) makes the browser draw them noticeably crisper. */
   .settings2-combo-flag { width: 1.6em; text-align: center; flex: none; font-size: 1.5em; }
+  .ct-lb-name { display: flex; align-items: center; gap: 6px; }
   .settings2-combo-empty { padding: 10px; color: #6c757d; font-size: 0.85rem; text-align: center; }
   .settings2-combo-btn span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ct-flag-icon { font-size: 1.7rem; line-height: 1; padding: 0.25rem 0.65rem; }
   .ct-result-flag { font-size: 1.4em; }
+
+  /* Leaderboard: numeric columns line up (tabular-nums), and the "in original
+     currency" vs "converted to EUR" column pairs get a visible seam + tint so
+     four money columns in a row don't read as one undifferentiated block. */
+  .ct-lb-table .ct-lb-money { font-variant-numeric: tabular-nums; }
+  /* style2.css has a sitewide `th { background-color: #207cca !important; color: white; }`
+     (for other tables' colored headers) — override it explicitly here, matching its
+     !important so this table's header can use its own light/readable styling. */
+  .ct-lb-table thead th { background-color: #f8f9fa !important; color: #212529 !important; border-bottom: 1px solid #dee2e6; }
+  .ct-lb-table .ct-lb-group-label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6c757d !important; border-bottom: none; padding-bottom: 2px; }
+  .ct-lb-table thead tr:first-child th { border-bottom: none; }
+  .ct-lb-table thead th.text-muted { color: #6c757d !important; }
+  .ct-lb-table .ct-lb-eur-group { border-left: 1px solid #dee2e6; background: rgba(13, 110, 253, 0.04); }
+  .ct-lb-table tbody tr:hover .ct-lb-eur-group { background: rgba(13, 110, 253, 0.08); }
+  .ct-lb-table tfoot th { border-top: 2px solid #dee2e6; background-color: #f8f9fa !important; color: #212529 !important; }
+  .ct-lb-table tfoot th.text-muted { color: #6c757d !important; }
 </style>
 
 <div class="container" style="margin-top: 20px; margin-bottom: 60px; max-width: 900px;">
@@ -97,6 +114,60 @@
             <button type="button" class="btn btn-primary" id="ct_convert">Convert</button>
 
             <div id="ct_result" class="mt-3 fs-5"></div>
+        </div>
+    </div>
+
+    <div class="card mt-4">
+        <div class="card-body">
+            <h2 class="h5">Currency leaderboard</h2>
+            <p class="text-muted mb-3">
+                Every trip with a price. Using the
+                {% if currencyLeaderboard.rate_date %}{{ currencyLeaderboard.rate_date }}{% else %}latest available{% endif %}
+                rate for the € conversion.
+            </p>
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle ct-lb-table">
+                    <thead>
+                        <tr>
+                            <th colspan="4"></th>
+                            <th colspan="2" class="text-center ct-lb-group-label">In original currency</th>
+                            <th colspan="2" class="text-center ct-lb-group-label ct-lb-eur-group">≈ In euros</th>
+                        </tr>
+                        <tr>
+                            <th>Currency</th>
+                            <th></th>
+                            <th class="text-end">%</th>
+                            <th class="text-end">Trips</th>
+                            <th class="text-end">Total</th>
+                            <th class="text-end text-muted">Avg</th>
+                            <th class="text-end ct-lb-eur-group">Total</th>
+                            <th class="text-end text-muted ct-lb-eur-group">Avg</th>
+                        </tr>
+                    </thead>
+                    <tbody id="ct_leaderboard_body">
+                        {% for row in currencyLeaderboard.leaderboard %}
+                        <tr data-currency="{{ row.currency }}">
+                            <td>{{ row.currency }}</td>
+                            <td class="ct-lb-name"></td>
+                            <td class="text-end">{{ "%.2f"|format(row.percentage) }}%</td>
+                            <td class="text-end">{{ row.trip_count }}</td>
+                            <td class="text-end ct-lb-money fw-semibold" data-value="{{ row.total_price }}" data-currency="{{ row.currency }}"></td>
+                            <td class="text-end ct-lb-money text-muted" data-value="{{ row.avg_price }}" data-currency="{{ row.currency }}"></td>
+                            <td class="text-end ct-lb-money fw-semibold ct-lb-eur-group" data-value="{{ row.total_price_eur if row.total_price_eur is not none else '' }}" data-currency="EUR"></td>
+                            <td class="text-end ct-lb-money text-muted ct-lb-eur-group" data-value="{{ row.avg_price_eur if row.avg_price_eur is not none else '' }}" data-currency="EUR"></td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <th colspan="4" class="text-end">Total</th>
+                            <th colspan="2" class="text-end text-muted">—</th>
+                            <th class="text-end ct-lb-money fw-semibold ct-lb-eur-group" data-value="{{ currencyLeaderboard.total_price_eur_sum }}" data-currency="EUR"></th>
+                            <th class="text-end ct-lb-money text-muted ct-lb-eur-group" data-value="{{ currencyLeaderboard.avg_price_eur_overall if currencyLeaderboard.avg_price_eur_overall is not none else '' }}" data-currency="EUR"></th>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
         </div>
     </div>
 </div>
@@ -190,6 +261,7 @@
             if (!name || name === code) name = item.dataset.name || name;
             if (name) name = name.charAt(0).toUpperCase() + name.slice(1);
             const flag = item.dataset.emoji || getFlagEmoji(item.dataset.country);
+            item.dataset.name_resolved = name || code;
             item.dataset.label = name ? `${name} (${code})` : code;
             item.dataset.flag = flag;
             item.dataset.search = normalizeSearch(`${item.dataset.label} ${code}`);
@@ -199,8 +271,52 @@
         return combo;
     }
 
-    setupCurrencyCombo('ct_from', 'EUR');
+    const ctFromCombo = setupCurrencyCombo('ct_from', 'EUR');
     setupCurrencyCombo('ct_to', 'USD');
+
+    // Reuse the "From" combo's resolved flag+name per code (built above from the
+    // same currencyOptions the picker uses) to label the leaderboard rows.
+    if (ctFromCombo) {
+        const byCode = {};
+        ctFromCombo.items.forEach(item => { byCode[item.dataset.value] = item; });
+        document.querySelectorAll('#ct_leaderboard_body tr').forEach(tr => {
+            const item = byCode[tr.dataset.currency];
+            const cell = tr.querySelector('.ct-lb-name');
+            if (item && cell) {
+                cell.innerHTML = `<span class="settings2-combo-flag">${item.dataset.flag}</span><span>${item.dataset.name_resolved}</span>`;
+            } else if (cell) {
+                cell.textContent = tr.dataset.currency;
+            }
+        });
+    }
+
+    // Same locale the rest of the page (and layout.html) uses for Intl formatting;
+    // gsw (Swiss German) isn't reliably supported, same fallback as trip_poster.html.
+    const moneyLocale = typeof langId !== 'undefined' ? (langId === 'gsw' ? 'de' : langId) : 'en';
+
+    // Cents only matter at everyday-price scale; on totals in the thousands they're
+    // rounding noise, so drop decimals and group thousands as the value grows.
+    // Currency style also gives us the right symbol/placement per code.
+    function formatMoney(value, currencyCode) {
+        if (value === '' || value === null || isNaN(value)) return '—';
+        const decimals = Math.abs(value) >= 1000 ? 0 : 2;
+        try {
+            return new Intl.NumberFormat(moneyLocale, {
+                style: 'currency',
+                currency: currencyCode,
+                minimumFractionDigits: decimals,
+                maximumFractionDigits: decimals,
+            }).format(value);
+        } catch (e) {
+            // Not a real ISO 4217 code (e.g. GGP, IMP, JEP, XAU/XAG/XPD/XPT).
+            return value.toLocaleString(moneyLocale, { minimumFractionDigits: decimals, maximumFractionDigits: decimals }) + ' ' + currencyCode;
+        }
+    }
+    document.querySelectorAll('.ct-lb-money').forEach(cell => {
+        const raw = cell.dataset.value;
+        const value = raw === '' ? null : parseFloat(raw);
+        cell.textContent = value === null ? '—' : formatMoney(value, cell.dataset.currency);
+    });
 
     function convert() {
         var amount = document.getElementById('ct_amount').value;

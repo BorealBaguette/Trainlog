@@ -84,7 +84,7 @@ from py.coverage import (
     get_coverage_geojson_dict,
     has_coverage_file,
 )
-from src.currency import get_available_currencies, get_exchange_rate
+from src.currency import get_available_currencies, get_currency_leaderboard, get_exchange_rate
 from scripts.backfill_vessels import apply_plan as backfill_apply_plan
 from scripts.backfill_vessels import build_plan as backfill_build_plan
 from src.g_search import (
@@ -9716,6 +9716,7 @@ def admin_currency_test():
         isCurrent=has_current_trip(get_user_id()),
         currencyOptions=get_available_currencies(getUser()),
         todayDate=date.today().isoformat(),
+        currencyLeaderboard=get_currency_leaderboard(),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

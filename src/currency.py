@@ -296,3 +296,94 @@ def get_exchange_rate(price, base_currency, target_currency, date, pg=None):
         return None
 
     return round(price * rate, 2)
+
+
+def get_currency_leaderboard(pg=None):
+    """Aggregate every priced trip by currency: usage share plus totals/averages
+    in the original currency and converted to EUR at the latest available rate.
+    Flag/name display is left to the frontend (same Intl.DisplayNames + getFlagEmoji
+    logic already used by the picker on this page)."""
+    with get_or_create_pg_session(pg) as session:
+        # A trip's spend can come from its own price and/or from a ticket that
+        # covers several trips (its price is split evenly across them). When both
+        # exist in the same currency they're the same expense recorded twice, so
+        # only the ticket share counts; in different currencies they're treated as
+        # two separate charges (e.g. a pass plus a separately-paid seat fee) and
+        # both count.
+        rows = session.execute(
+            """
+            WITH base AS (
+                SELECT
+                    t.trip_id,
+                    t.price AS trip_price,
+                    t.currency AS trip_currency,
+                    tk.price AS ticket_price,
+                    tk.currency AS ticket_currency,
+                    COUNT(*) OVER (PARTITION BY tk.uid) AS ticket_trip_count
+                FROM trips t
+                LEFT JOIN tickets tk
+                    ON tk.uid = t.ticket_id
+                    AND tk.price IS NOT NULL AND tk.price != 0
+                    AND tk.currency IS NOT NULL AND tk.currency != ''
+            ),
+            priced AS (
+                SELECT ticket_currency AS currency, ticket_price / ticket_trip_count AS price
+                FROM base
+                WHERE ticket_currency IS NOT NULL
+
+                UNION ALL
+
+                SELECT trip_currency AS currency, trip_price AS price
+                FROM base
+                WHERE trip_price IS NOT NULL AND trip_price != 0
+                    AND trip_currency IS NOT NULL AND trip_currency != ''
+                    AND (ticket_currency IS NULL OR ticket_currency != trip_currency)
+            )
+            SELECT currency, COUNT(*) AS trip_count, SUM(price) AS total_price, AVG(price) AS avg_price
+            FROM priced
+            GROUP BY currency
+            ORDER BY trip_count DESC
+            """
+        ).fetchall()
+
+        rate_date = session.execute("SELECT MAX(rate_date) FROM exchanges").scalar()
+
+        total_trips = sum(row.trip_count for row in rows)
+
+        leaderboard = []
+        for row in rows:
+            total_price_eur = None
+            avg_price_eur = None
+            if rate_date:
+                total_price_eur = get_exchange_rate(
+                    row.total_price, row.currency, "EUR", rate_date, pg=session
+                )
+                if total_price_eur is not None:
+                    avg_price_eur = round(total_price_eur / row.trip_count, 2)
+
+            leaderboard.append(
+                {
+                    "currency": row.currency,
+                    "percentage": round(row.trip_count / total_trips * 100, 2)
+                    if total_trips
+                    else 0,
+                    "trip_count": row.trip_count,
+                    "total_price": round(row.total_price, 2),
+                    "avg_price": round(row.avg_price, 2),
+                    "total_price_eur": total_price_eur,
+                    "avg_price_eur": avg_price_eur,
+                }
+            )
+
+    total_price_eur_sum = sum(
+        row["total_price_eur"] for row in leaderboard if row["total_price_eur"] is not None
+    )
+    avg_price_eur_overall = round(total_price_eur_sum / total_trips, 2) if total_trips else None
+
+    return {
+        "leaderboard": leaderboard,
+        "rate_date": rate_date,
+        "total_trips": total_trips,
+        "total_price_eur_sum": round(total_price_eur_sum, 2),
+        "avg_price_eur_overall": avg_price_eur_overall,
+    }
