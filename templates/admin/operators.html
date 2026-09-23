@@ -331,10 +331,10 @@
                             <option value="poi">POI</option>
                         </select>
                     </div>
-                    <!-- Logo is uploaded when creating an operator; existing operators
-                         manage their logos through the carousel (click the logo). -->
+                    <!-- Optional here; existing operators manage their logos through the
+                         carousel (click the logo cell in the table). -->
                     <div class="form-group" id="operatorLogoGroup">
-                        <label for="logo">Logo Image</label>
+                        <label for="logo">Logo Image (optional)</label>
                         <input type="file" class="form-control-file" id="logo" name="logo">
                     </div>
                     <div id="operatorFormError" class="mt-2"></div>
@@ -500,11 +500,16 @@
               searchable: false,
               orderable: false,
               render(data, type, row) {
-                if (type === 'display')
-                    return `<img src="/static/${data}" width="100px" loading="lazy" id="logo-img-${row.operator_id}"` +
+                if (type !== 'display') return data || '';
+                // The cell is the only way into the logo carousel, so an operator
+                // without a logo gets a button there instead of a broken image.
+                if (!data)
+                    return `<button class="btn btn-outline-secondary btn-sm" title="Upload a logo"
+                                    onclick="showLogoCarousel(${row.operator_id})">
+                              <i class="fa-solid fa-upload"></i> Add logo
+                            </button>`;
+                return `<img src="/static/${data}" width="100px" loading="lazy" id="logo-img-${row.operator_id}"` +
                     `alt="logo for ${row.short_name}" onclick="showLogoCarousel(${row.operator_id})" style="cursor: pointer;"">`
-                else
-                    return data;
               }
             },
             {
@@ -898,6 +903,13 @@
             .then(response => {
                 const carouselInner = $('#carousel-images');
                 carouselInner.empty();  // Clear the previous images
+
+                if (!response.logos.length)
+                    carouselInner.append(`
+                        <div class="carousel-item active">
+                            <p class="text-muted text-center my-4">No logo yet.</p>
+                        </div>
+                    `);
 
                 // Loop through the logos and add them to the carousel
                 response.logos.forEach((logo, index) => {
