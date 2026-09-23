@@ -364,9 +364,10 @@ def get_currency_leaderboard(pg=None):
             leaderboard.append(
                 {
                     "currency": row.currency,
-                    "percentage": round(row.trip_count / total_trips * 100, 2)
-                    if total_trips
-                    else 0,
+                    # Full precision kept (not rounded to 2dp here) so tiny shares
+                    # don't all collapse to a wall of "0.00%" — the frontend picks
+                    # a value-aware number of decimals per row.
+                    "percentage": (row.trip_count / total_trips * 100) if total_trips else 0,
                     "trip_count": row.trip_count,
                     "total_price": round(row.total_price, 2),
                     "avg_price": round(row.avg_price, 2),
