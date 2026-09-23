@@ -1317,12 +1317,12 @@
     "leaderboardWagonsSortBy": "Sorteren op",
     "wagonArtistNoTrainsets": "No public trainset uses any of these wagons yet.",
     "wagonArtistPublicTrainsets": "public trainsets",
-    "discordAutopostSetting": "Mijn ritten bij vertrek op Discord plaatsen",
+    "discordAutopostSetting": "Plaats ritten bij vertrek op Discord",
     "discordAutopostHint": "Alleen openbare ritten worden geplaatst.",
-    "removeDiscordPost": "Discord-bericht verwijderen",
-    "confirmRemoveDiscordPost": "Het bericht van deze rit uit Discord verwijderen?",
-    "removeDiscordPostFailed": "Het Discord-bericht kon niet worden verwijderd. Probeer het opnieuw.",
-    "postToDiscord": "Op Discord plaatsen",
+    "removeDiscordPost": "Verwijder Discord-bericht",
+    "confirmRemoveDiscordPost": "Verwijder bericht van deze rit uit Discord? ",
+    "removeDiscordPostFailed": "Het Discord-bericht kon niet verwijderd worden. Probeer het opnieuw.",
+    "postToDiscord": "Plaats op Discord",
     "confirmPostToDiscord": "Deze rit nu op Discord plaatsen?",
     "postToDiscordFailed": "De rit kon niet op Discord worden geplaatst. Probeer het opnieuw."
 }
