@@ -39,10 +39,10 @@
  *
  * reverseWagonUnit(unit)
  *   Turn one car to face the other way, in place (and return it): a two-sided drawing
- *   ('sides') swaps its L/R side, a directional placeholder swaps loco_l/loco_r.
- *   One-sided drawings ('sides_L' / 'sides_R' / plain) and symmetric placeholders
- *   have no other face and are left as they are. Backs the per-car flip button in
- *   both builders.
+ *   ('sides') swaps its L/R side; a placeholder swaps its side as well and, if
+ *   directional, its loco_l/loco_r type. One-sided drawings ('sides_L' / 'sides_R' /
+ *   plain) have no other face and are left as they are. Backs the per-car flip
+ *   button in both builders.
  *
  * reverseTrainsetUnits(units)
  *   Turn a whole train around: returns a NEW array with the cars in mirrored order,
@@ -164,8 +164,10 @@
   var PH_MIRROR = { loco_l: 'loco_r', loco_r: 'loco_l' };
 
   function reverseWagonUnit(u) {
-    if (u.image_type === 'sides') u._side = (u._side === 'R') ? 'L' : 'R';
-    else if (!u.image && PH_MIRROR[u._phType]) u._phType = PH_MIRROR[u._phType];
+    // A placeholder keeps its side too, so a real wagon that later replaces it
+    // (e.g. once imported) faces the way the user chose.
+    if (u.image_type === 'sides' || !u.image) u._side = (u._side === 'R') ? 'L' : 'R';
+    if (!u.image && PH_MIRROR[u._phType]) u._phType = PH_MIRROR[u._phType];
     return u;
   }
 
