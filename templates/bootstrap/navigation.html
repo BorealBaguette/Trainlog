@@ -403,26 +403,45 @@
       }
     });
 
-    // Sort the countries within each group
+    // Sort countries by frontend name, grouped by hierarchy level.
+    // Normal countries have depth 1; GB-ENG-C has depth 3, etc.
     sortedGroups.forEach(function (group) {
-      group.countries.sort(function (a, b) {
-        return (a.name || a.iso || '').localeCompare(b.name || b.iso || '');
-      });
+        var countries = group.countries;
+
+        // Determine hierarchy depth from the ISO code.
+        function getDepth(iso) {
+            return iso.split("-").length;
+        }
+
+        // Sort by hierarchy level first, then frontend name.
+        countries.sort(function (a, b) {
+            var depthA = getDepth(a.iso);
+            var depthB = getDepth(b.iso);
+
+            if (depthA !== depthB) {
+                return depthA - depthB;
+            }
+
+            return (a.name || a.iso || '').localeCompare(
+                b.name || b.iso || ''
+            );
+        });
     });
 
-    // Reattach the sorted groups to the DOM
-    sortedGroups.forEach(function (group, index) {
-      group.header.appendTo(group.header.parent());
-      group.countries.forEach(function (country) {
-        country.element.html(country.html);
-        country.element.appendTo(country.element.parent());
-      });
-      if (group.separator) {
-        group.separator.appendTo(group.separator.parent());
-      }
-    });
-  });
 
+
+        // Reattach the sorted groups to the DOM
+        sortedGroups.forEach(function (group, index) {
+          group.header.appendTo(group.header.parent());
+          group.countries.forEach(function (country) {
+            country.element.html(country.html);
+            country.element.appendTo(country.element.parent());
+          });
+          if (group.separator) {
+            group.separator.appendTo(group.separator.parent());
+          }
+        });
+      });
 
    $(function(){
       var current = location.pathname;

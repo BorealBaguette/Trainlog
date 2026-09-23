@@ -679,9 +679,9 @@ def changeLang(langToSet, session=False):
     session["userinfo"]["available_languages"] = available_languages
     session["userinfo"]["lang"] = langToSet
 
-
 def get_country_codes_from_files(immediate_only=False):
     country_codes = {}
+
     path = "country_percent/countries/processed/"
 
     # fmt: off
@@ -724,14 +724,20 @@ def get_country_codes_from_files(immediate_only=False):
     }
 
     def add_to_country_codes(name):
+        name = name.upper()
+
         if "-" in name:
-            cc = name.split("-")[0].upper()
+            parts = name.split("-")
+            cc = parts[0]
             continent = "Region_" + cc
+
             if not immediate_only:
-                add_to_country_codes(cc) # also add full country if subdivisions exist
+                for i in range(1, len(parts)):
+                    add_to_country_codes("-".join(parts[:i]))
         else:
-            cc = name.upper()
+            cc = name
             continent = country_to_continent.get(cc, "Unknown")
+
         if continent not in country_codes:
             country_codes[continent] = []
 
@@ -760,11 +766,11 @@ def get_country_codes_from_files(immediate_only=False):
             return (0, key)
 
     sorted_country_codes = dict(sorted(country_codes.items(), key=sort_key))
+
     return sorted_country_codes
 
 
 app.jinja_env.globals.update(get_country_codes_from_files=get_country_codes_from_files)
-
 
 @app.route("/api/localtime", methods=["GET"])
 def get_local_time():

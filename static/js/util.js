@@ -79,31 +79,68 @@ function getFlagEmoji(countryCode) {
   }
 
 function getTooltipSVG(countryCode, gb=false) {
-  if (gb){
-    var imagePath = `/static/images/flags/${gb.toLowerCase()}.svg`;
-  }
-  else{
-    var imagePath = `/static/images/flags/${countryCode.toLowerCase()}.svg`;
-  }
+  var imageCode = (gb || countryCode).toLowerCase();
   var CountryName = regionNames.of(countryCode);
-  return `<img class="flagPNG" src="${imagePath}" alt="${CountryName} flag"/>`
+
+  return `<img class="flagPNG" src="/static/images/flags/${imageCode}.svg"
+    alt="${CountryName} flag"
+    onerror="fallbackFlag(this)">`;
 }
 
+function fallbackFlag(image) {
+  image.onerror = null;
+
+  var code = image.src.split("/").pop().replace(".svg", "");
+  var parts = code.split("-");
+
+  if (parts.length <= 2) {
+    return;
+  }
+
+  // Keep country + first subdivision, e.g. gb-eng-h -> gb-eng
+  code = parts.slice(0, 2).join("-");
+
+  image.onerror = function() {
+    // If the regional flag itself doesn't exist, fall back to the country.
+    this.onerror = null;
+    this.src = `/static/images/flags/${parts[0]}.svg`;
+  };
+
+  image.src = `/static/images/flags/${code}.svg`;
+}
 
 function getTooltipSprite(countryCode, positions, gb = false) {
   var CountryName = regionNames.of(countryCode);
+
   if (gb) {
-      countryCode = gb;
+    countryCode = gb;
   }
 
-  const position = positions[countryCode.toLowerCase()];
+  let lookupCode = countryCode.toLowerCase();
+  let position;
+
+  while (lookupCode) {
+    position = positions[lookupCode];
+
+    if (position) {
+      break;
+    }
+
+    const lastDash = lookupCode.lastIndexOf("-");
+    if (lastDash === -1) {
+      break;
+    }
+
+    lookupCode = lookupCode.substring(0, lastDash);
+  }
 
   if (!position) {
-      return `<div class="flagPNG" style="background: red;" alt="${CountryName} flag">Flag not found</div>`;
+    return `<div class="flagPNG" style="background: red;" alt="${CountryName} flag">Flag not found</div>`;
   }
 
   const imagePath = '/static/images/flags/sprite/sprite.png';
   const backgroundPosition = `-${position.x}px -${position.y}px`;
+
   return `<div class="flagPNG" style="background-image: url(${imagePath}); background-position: ${backgroundPosition}; width: 30px; height: 20px;" alt="${CountryName} flag"></div>`;
 }
 
@@ -1243,7 +1280,7 @@ function getRegionFromCode(region_code){
     'CN-BJ': 'Beijing', 'CN-TJ': 'Tianjin', 'CN-HE': 'Hebei', 'CN-SX': 'Shanxi', 'CN-NM': 'Inner Mongolia', 'CN-LN': 'Liaoning', 'CN-JL': 'Jilin', 'CN-HL': 'Heilongjiang', 'CN-SH': 'Shanghai', 'CN-JS': 'Jiangsu', 'CN-ZJ': 'Zhejiang', 'CN-AH': 'Anhui', 'CN-FJ': 'Fujian', 'CN-JX': 'Jiangxi', 'CN-SD': 'Shandong', 'CN-HA': 'Henan', 'CN-HB': 'Hubei', 'CN-HN': 'Hunan', 'CN-GD': 'Guangdong', 'CN-GX': 'Guangxi', 'CN-HI': 'Hainan', 'CN-CQ': 'Chongqing', 'CN-SC': 'Sichuan', 'CN-GZ': 'Guizhou', 'CN-YN': 'Yunnan', 'CN-XZ': 'Tibet', 'CN-SN': 'Shaanxi', 'CN-GS': 'Gansu', 'CN-QH': 'Qinghai', 'CN-NX': 'Ningxia', 'CN-XJ': 'Xinjiang', 'CN-HK': 'Hong Kong', 'CN-MO': 'Macao',
     'AT-2': 'Kärnten', 'AT-4': 'Oberösterreich', 'AT-6': 'Steiermark', 'AT-8': 'Vorarlberg', 'AT-5': 'Salzburg', 'AT-1': 'Burgenland', 'AT-3': 'Niederösterreich', 'AT-7': 'Tirol', 'AT-9': 'Wien',
     "CZ-41": "Karlovarský kraj", "CZ-42": "Ústecký kraj", "CZ-51": "Liberecký kraj", "CZ-52": "Královéhradecký kraj", "CZ-53": "Pardubický kraj", "CZ-63": "Kraj Vysočina", "CZ-64": "Jihomoravský kraj", "CZ-71": "Olomoucký kraj", "CZ-72": "Zlínský kraj", "CZ-80": "Moravskoslezský kraj", "CZ-10": "Praha, Hlavní město", "CZ-20": "Středočeský kraj", "CZ-31": "Jihočeský kraj", "CZ-32": "Plzeňský kraj",
-    "GB-NIR": "Northern Ireland", "GB-SCT": "Scotland", "GB-WLS": "Wales" ,"GB-ENG": "England",
+    "GB-ENG": "England", "GB-NIR": "Northern Ireland", "GB-SCT": "Scotland", "GB-WLS": "Wales" , "GB-ENG-C": "North East England", "GB-ENG-D": "North West England", "GB-ENG-E": "Yorkshire and The Humber", "GB-ENG-F": "East Midlands", "GB-ENG-G": "West Midlands", "GB-ENG-H": "East of England", "GB-ENG-I": "London", "GB-ENG-J": "South East England", "GB-ENG-K": "South West England",
     "IE-L": "Leinster", "IE-M": "Munster", "IE-C": "Connacht", "IE-U": "Ulster",
     "SE-K": "Blekinge", "SE-W": "Dalarna", "SE-I": "Gotland", "SE-X": "Gävleborg", "SE-N": "Halland", "SE-Z": "Jämtland", "SE-F": "Jönköping", "SE-H": "Kalmar", "SE-G": "Kronoberg", "SE-BD": "Norrbotten", "SE-M": "Skåne", "SE-AB": "Stockholm", "SE-D": "Södermanland", "SE-C": "Uppsala", "SE-S": "Värmland", "SE-AC": "Västerbotten", "SE-Y": "Västernorrland", "SE-U": "Västmanland", "SE-O": "Västra Götaland", "SE-T": "Örebro", "SE-E": "Östergötland",
     "FI-02": "Etelä-Karjala", "FI-03": "Etelä-Pohjanmaa", "FI-04": "Etelä-Savo", "FI-05": "Kainuu", "FI-06": "Kanta-Häme", "FI-07": "Keski-Pohjanmaa", "FI-08": "Keski-Suomi", "FI-09": "Kymenlaakso", "FI-10": "Lappi", "FI-11": "Pirkanmaa", "FI-12": "Österbotten", "FI-13": "Pohjois-Karjala", "FI-14": "Pohjois-Pohjanmaa", "FI-15": "Pohjois-Savo", "FI-16": "Päijät-Häme", "FI-17": "Satakunta", "FI-18": "Uusimaa", "FI-19": "Varsinais-Suomi",
@@ -1252,7 +1289,7 @@ function getRegionFromCode(region_code){
     "NO-03": "Oslo", "NO-11": "Rogaland", "NO-15": "Møre og Romsdal", "NO-18": "Nordland", "NO-30": "Viken", "NO-34": "Innlandet", "NO-38": "Vestfold og Telemark", "NO-42": "Agder", "NO-46": "Vestland", "NO-50": "Trøndelag",
     "PL-02": "Dolnośląskie", "PL-04": "Kujawsko-Pomorskie", "PL-06": "Lubelskie", "PL-08": "Lubuskie", "PL-10": "Łódzkie", "PL-12": "Małopolskie", "PL-14": "Mazowieckie", "PL-16": "Opolskie", "PL-18": "Podkarpackie", "PL-20": "Podlaskie", "PL-22": "Pomorskie", "PL-24": "Śląskie", "PL-26": "Świętokrzyskie", "PL-28": "Warmińsko-Mazurskie", "PL-30": "Wielkopolskie", "PL-32": "Zachodniopomorskie",
     "JP-01": "Hokkaido", "JP-02": "Aomori", "JP-03": "Iwate", "JP-04": "Miyagi", "JP-05": "Akita", "JP-06": "Yamagata", "JP-07": "Fukushima", "JP-08": "Ibaraki", "JP-09": "Tochigi", "JP-10": "Gunma", "JP-11": "Saitama", "JP-12": "Chiba", "JP-13": "Tokyo", "JP-14": "Kanagawa", "JP-15": "Niigata", "JP-16": "Toyama", "JP-17": "Ishikawa", "JP-18": "Fukui", "JP-19": "Yamanashi", "JP-20": "Nagano", "JP-21": "Gifu", "JP-22": "Shizuoka", "JP-23": "Aichi", "JP-24": "Mie", "JP-25": "Shiga", "JP-26": "Kyoto", "JP-27": "Osaka", "JP-28": "Hyogo", "JP-29": "Nara", "JP-30": "Wakayama", "JP-31": "Tottori", "JP-32": "Shimane", "JP-33": "Okayama", "JP-34": "Hiroshima", "JP-35": "Yamaguchi", "JP-36": "Tokushima", "JP-37": "Kagawa", "JP-38": "Ehime", "JP-39": "Kochi", "JP-40": "Fukuoka", "JP-41": "Saga", "JP-42": "Nagasaki", "JP-43": "Kumamoto", "JP-44": "Oita", "JP-45": "Miyazaki", "JP-46": "Kagoshima", "JP-47": "Okinawa",
-    "CA-AB": "Alberta", "CA-BC": "British Columbia", "CA-MB": "Manitoba", "CA-NB": "New Brunswick", "CA-NL": "Newfoundland and Labrador", "CA-NS": "Nova Scotia", "CA-ON": "Ontario", "CA-PE": "Prince Edward Island", "CA-QC": "Quebec", "CA-SK": "Saskatchewan",
+    "CA-AB": "Alberta", "CA-BC": "British Columbia", "CA-MB": "Manitoba", "CA-NB": "New Brunswick", "CA-NL": "Newfoundland and Labrador", "CA-NS": "Nova Scotia", "CA-ON": "Ontario", "CA-PE": "Prince Edward Island", "CA-QC": "Quebec", "CA-SK": "Saskatchewan", "CA-YT": "Yukon",
     "MX-BCN": "Baja California", "MX-CAM": "Campeche", "MX-CHH": "Chihuahua", "MX-CHP": "Chiapas", "MX-CMX": "Mexico City", "MX-JAL": "Jalisco", "MX-MEX": "State of Mexico", "MX-OAX": "Oaxaca", "MX-ROO": "Quintana Roo", "MX-SIN": "Sinaloa", "MX-TAB": "Tabasco", "MX-VER": "Veracruz", "MX-YUC": "Yucatán",
     "AU-ACT": "Australian Capital Territory", "AU-NSW": "New South Wales", "AU-NT": "Northern Territory", "AU-QLD": "Queensland", "AU-SA": "South Australia", "AU-TAS": "Tasmania", "AU-VIC": "Victoria", "AU-WA": "Western Australia",
     "ES-AN": "Andalucía", "ES-AR": "Aragón", "ES-AS": "Asturias", "ES-CB": "Cantabria", "ES-CE": "Ceuta", "ES-CL": "Castilla y León", "ES-CM": "Castilla-La Mancha", "ES-CN": "Canarias", "ES-CT": "Cataluña", "ES-EX": "Extremadura", "ES-GA": "Galicia", "ES-IB": "Islas Baleares", "ES-MC": "Región de Murcia", "ES-MD": "Comunidad de Madrid", "ES-ML": "Melilla", "ES-NC": "Navarra", "ES-PV": "País Vasco", "ES-RI": "La Rioja", "ES-VC": "Comunidad Valenciana",
