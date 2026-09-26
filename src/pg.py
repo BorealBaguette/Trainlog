@@ -5,7 +5,7 @@ import threading
 import time
 from contextlib import contextmanager
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event, exc
 from sqlalchemy.orm import sessionmaker
 
 from src import sql
@@ -51,8 +51,35 @@ def init_db_engine():
             pool_size=5,         # Connections per worker
             max_overflow=10,     # Additional connections if needed
         )
+        _guard_against_fork(pg_session_engine)
         Session = sessionmaker(bind=pg_session_engine)
         logger.info(f"Database engine initialized for process {os.getpid()}")
+
+
+def _guard_against_fork(engine):
+    """Never use a pooled connection opened by another process.
+
+    A worker gunicorn forks later on (to replace one that died) is a copy of
+    the master, pool included. Once the master has touched Postgres — the trip
+    announcer does every minute — the new worker would talk over the master's
+    own sockets, and two processes interleaving on one connection read each
+    other's results. SQLAlchemy's recipe: remember which process opened each
+    connection and drop it at checkout anywhere else.
+    """
+
+    @event.listens_for(engine, "connect")
+    def _remember_pid(dbapi_connection, connection_record):
+        connection_record.info["pid"] = os.getpid()
+
+    @event.listens_for(engine, "checkout")
+    def _check_pid(dbapi_connection, connection_record, connection_proxy):
+        if connection_record.info["pid"] != os.getpid():
+            # Detach without closing: closing would end the session the
+            # owning process is still using.
+            connection_record.dbapi_connection = connection_proxy.dbapi_connection = None
+            raise exc.DisconnectionError(
+                "Connection belongs to another process; reconnecting"
+            )
 
 
 @contextmanager
