@@ -17,7 +17,8 @@ INSERT INTO trips (
     material_type,
     material_type_advanced,
     reg,
-    waypoints
+    waypoints,
+    visibility
 )
 SELECT
     :new_user_id,
@@ -38,7 +39,8 @@ SELECT
     material_type,
     material_type_advanced,
     reg,
-    waypoints
+    waypoints,
+    :visibility
 FROM trips
 WHERE trip_id = :trip_id
 RETURNING trip_id
