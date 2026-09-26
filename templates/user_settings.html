@@ -50,30 +50,46 @@
   .settings2-save { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e9ecef; }
 
 
-  .dw-section { margin-top: 1.5rem; }
-  .dw-info { background: none; border: 0; padding: 0; color: #6c757d; line-height: 1; }
-  .dw-info:hover { color: #0d6efd; }
-  .dw-help { margin-top: 0.5rem; padding: 0.6rem 0.8rem; border-radius: 10px; background: #f1f6ff; color: #495057; font-size: 0.85rem; }
-  .dw-msg { margin-top: 0.6rem; font-size: 0.85rem; color: #198754; }
-  .dw-msg-error { color: #dc3545; }
-  .dw-list { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; }
-  .dw-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.55rem 0.75rem; border: 1px solid #e9ecef; border-radius: 12px; background: #fafbfc; }
-  .dw-item-off .dw-name, .dw-item-off .dw-icon { opacity: 0.5; }
-  .dw-icon { overflow: hidden; width: 2rem; height: 2rem; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #5865f2; color: #fff; }
-  .dw-name { flex: 1; min-width: 0; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .dw-item-main { background: #f1f6ff; border-color: #cfe0ff; }
-  .dw-icon-main { background: #fff; }
-  .dw-icon img { width: 100%; height: 100%; object-fit: cover; }
-  .dw-btn { border: 0; background: none; color: #6c757d; padding: 0.3rem 0.45rem; border-radius: 8px; }
-  .dw-btn:hover { background: #e9ecef; color: #212529; }
-  .dw-auto { width: 4.6rem; padding: 0.25rem 0; border: 1px solid #ced4da; border-radius: 999px; background: none; color: #6c757d; font-size: 0.78rem; font-weight: 600; }
-  .dw-auto:disabled { opacity: 0.35; }
-  .dw-auto-on { color: #0d6efd; background: #e7f0ff; border-color: #9ec5fe; }
-  .dw-switch { width: 2.5rem; min-height: 0; margin: 0; padding: 0; display: flex; align-items: center; justify-content: center; }
-  .dw-switch .form-check-input { float: none; margin: 0; }
-  .dw-btn, .dw-btn-space { width: 2rem; flex: none; text-align: center; }
-  .dw-btn-danger:hover { background: #fdecea; color: #dc3545; }
-  .dw-add { display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem; padding: 0.9rem; border: 1px dashed #ced4da; border-radius: 12px; }
+  .dw-section { margin-top: 1.75rem; }
+  .dw-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+  .dw-title { font-weight: 600; }
+  .dw-flash { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; padding: 0.55rem 0.8rem; border-radius: 10px; font-size: 0.85rem; background: #e8f5ee; color: #146c43; }
+  .dw-flash-error { background: #fdecea; color: #b02a37; }
+
+  .dw-list { border: 1px solid #e9ecef; border-radius: 14px; background: #fff; }
+  .dw-row { display: flex; align-items: center; gap: 0.85rem; padding: 0.8rem 0.9rem; }
+  .dw-row + .dw-row { border-top: 1px solid #f1f3f5; }
+  .dw-avatar { position: relative; width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #5865f2; color: #fff; font-size: 1.15rem; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,0.06); transition: opacity .15s, filter .15s; }
+  .dw-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .dw-avatar-main { background: #fff; }
+  .dw-body { flex: 1; min-width: 0; transition: opacity .15s; }
+  .dw-name { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; line-height: 1.3; }
+  .dw-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dw-badge { flex: none; padding: 0.05rem 0.45rem; border-radius: 999px; background: #e7f0ff; color: #0d6efd; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+  .dw-status { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.15rem; font-size: 0.8rem; color: #6c757d; }
+  .dw-status-auto { color: #0d6efd; }
+  .dw-row-off .dw-avatar { opacity: 0.45; filter: grayscale(1); }
+  .dw-row-off .dw-name { color: #6c757d; }
+
+  .dw-switch { margin: 0; padding: 0; min-height: 0; display: flex; }
+  .dw-switch .form-check-input { float: none; margin: 0; width: 2.4em; height: 1.3em; cursor: pointer; }
+  .dw-more { width: 2rem; height: 2rem; flex: none; border: 0; border-radius: 8px; background: none; color: #6c757d; }
+  .dw-more:hover, .dw-more[aria-expanded="true"] { background: #f1f3f5; color: #212529; }
+  .dw-menu { width: 17rem; max-width: calc(100vw - 2rem); padding: 0.35rem; border: 1px solid #e9ecef; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+  .dw-menu .dropdown-item { display: flex; align-items: center; white-space: normal; line-height: 1.3; gap: 0.6rem; padding: 0.5rem 0.65rem; border-radius: 8px; font-size: 0.9rem; }
+  .dw-menu .dropdown-item i { flex: none; width: 1rem; text-align: center; color: #6c757d; }
+  .dw-menu .dropdown-item .dw-check { margin-left: auto; color: #0d6efd; }
+  .dw-menu .dropdown-item.text-danger i { color: inherit; }
+  .dw-menu .dropdown-item:disabled { opacity: 0.45; }
+
+  .dw-add-row { display: flex; align-items: center; gap: 0.85rem; width: 100%; padding: 0.75rem 0.9rem; border: 0; border-top: 1px solid #f1f3f5; border-radius: 0 0 14px 14px; background: none; color: #0d6efd; font-weight: 600; text-align: left; }
+  .dw-list:not(:has(.dw-row)) .dw-add-row { border-top: 0; border-radius: 14px; }
+  .dw-add-row:hover { background: #f8faff; }
+  .dw-add-icon { width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; border: 1.5px dashed #9ec5fe; border-radius: 50%; }
+
+  .dw-modal .modal-content { border: 0; border-radius: 16px; }
+  .dw-steps { margin: 0 0 1.25rem; padding: 0.75rem 0.9rem; border-radius: 12px; background: #f1f6ff; color: #495057; font-size: 0.85rem; }
+  .dw-steps i { color: #5865f2; }
 
   .settings2-integration-row {
     display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
@@ -442,92 +458,157 @@
             </div>
 
             <div class="dw-section">
-              <div class="d-flex align-items-center gap-2">
-                <div class="fw-semibold">{{ discordWebhooksTitle }}</div>
-                <button type="button" class="dw-info" data-bs-toggle="collapse" data-bs-target="#dwHelp" aria-expanded="false" aria-label="{{ discordWebhooksTitle }}"><i class="fa-solid fa-circle-info"></i></button>
+              <div class="dw-head">
+                <div class="dw-title">{{ discordWebhooksTitle }}</div>
+                <div class="settings2-hint m-0">{{ discordAutopostHint }}</div>
               </div>
-              <div class="settings2-hint">{{ discordAutopostHint }}</div>
-              <div class="collapse" id="dwHelp"><div class="dw-help">{{ discordWebhooksHint }}<br><b>{{ discordAutoLabel }}</b>: {{ discordAutoPublishHint }}</div></div>
 
               {% set dw_messages = {
                 'added': discordWebhookMsgAdded, 'deleted': discordWebhookMsgDeleted,
                 'toggled': discordWebhookMsgToggled, 'tested': discordWebhookMsgTested,
                 'test_failed': discordWebhookMsgTestFailed, 'invalid': discordWebhookMsgInvalid,
                 'limit': discordWebhookMsgLimit } %}
-              {% if discord_webhook_status in dw_messages %}
-              <div class="dw-msg {{ 'dw-msg-error' if discord_webhook_status in ('invalid', 'limit', 'test_failed') }}">{{ dw_messages[discord_webhook_status] }}</div>
+              {% set dw_error = discord_webhook_status in ('invalid', 'limit', 'test_failed') %}
+              {% if discord_webhook_status in dw_messages and discord_webhook_status not in ('invalid', 'limit') %}
+              <div class="dw-flash {{ 'dw-flash-error' if dw_error }}">
+                <i class="fa-solid {{ 'fa-circle-exclamation' if dw_error else 'fa-circle-check' }}"></i>
+                {{ dw_messages[discord_webhook_status] }}
+              </div>
               {% endif %}
+
+              {% macro dw_status(enabled, auto) -%}
+                {% if not enabled %}
+                <div class="dw-status">{{ discordStatusOff }}</div>
+                {% elif auto %}
+                <div class="dw-status dw-status-auto"><i class="fa-solid fa-robot"></i> {{ discordStatusAuto }}</div>
+                {% else %}
+                <div class="dw-status"><i class="fa-solid fa-hand-pointer"></i> {{ discordStatusManual }}</div>
+                {% endif %}
+              {%- endmacro %}
+
+              {% macro dw_auto_item(action, enabled, auto) -%}
+                <li>
+                  <form method="POST" action="{{ action }}">
+                    <button type="submit" class="dropdown-item" {{ '' if enabled else 'disabled' }}>
+                      <i class="fa-solid fa-robot"></i> {{ discordAutoPublish }}
+                      {% if auto %}<i class="fa-solid fa-check dw-check"></i>{% endif %}
+                    </button>
+                  </form>
+                </li>
+              {%- endmacro %}
 
               <div class="dw-list">
-                {# The Trainlog server: only once Discord is linked (the post needs the id). Off-able, not removable. #}
+                {# The Trainlog server: only once Discord is linked (the post needs the id). Can be switched off, not removed. #}
                 {% if discord_id %}
-                <div class="dw-item dw-item-main {{ '' if discord_main_checked else 'dw-item-off' }}">
-                  <span class="dw-icon dw-icon-main"><img src="{{ url_for('static', filename='images/logo_square.png') }}" alt=""></span>
-                  <span class="dw-name">{{ discordMainServer }}</span>
-                  <form method="POST" action="{{ url_for('discord_webhooks.main_autopost_toggle', username=username) }}">
-                    <button type="submit" class="dw-auto {{ 'dw-auto-on' if discord_autopost_checked }}" title="{{ discordAutoPublish }}" {{ '' if discord_main_checked else 'disabled' }}><i class="fa-solid fa-robot"></i> {{ discordAutoLabel }}</button>
-                  </form>
+                <div class="dw-row {{ '' if discord_main_checked else 'dw-row-off' }}">
+                  <span class="dw-avatar dw-avatar-main"><img src="{{ url_for('static', filename='images/logo_square.png') }}" alt=""></span>
+                  <div class="dw-body">
+                    <div class="dw-name"><span class="dw-name-text">{{ discordMainServer }}</span><span class="dw-badge">{{ discordOfficial }}</span></div>
+                    {{ dw_status(discord_main_checked, discord_autopost_checked) }}
+                  </div>
                   <form method="POST" action="{{ url_for('discord_webhooks.main_toggle', username=username) }}" class="form-check form-switch dw-switch">
-                    <input class="form-check-input" type="checkbox" role="switch" onchange="this.form.submit()" {{ discord_main_checked }}>
+                    <input class="form-check-input" type="checkbox" role="switch" aria-label="{{ discordMainServer }}" onchange="this.form.submit()" {{ discord_main_checked }}>
                   </form>
-                  <span class="dw-btn-space"></span><span class="dw-btn-space"></span>
+                  <div class="dropdown">
+                    <button type="button" class="dw-more" data-bs-toggle="dropdown" aria-expanded="false" aria-label="{{ discordMoreActions }}"><i class="fa-solid fa-ellipsis"></i></button>
+                    <ul class="dropdown-menu dropdown-menu-end dw-menu">
+                      {{ dw_auto_item(url_for('discord_webhooks.main_autopost_toggle', username=username), discord_main_checked, discord_autopost_checked) }}
+                    </ul>
+                  </div>
                 </div>
                 {% endif %}
+
                 {% for hook in discord_webhooks %}
-                <div class="dw-item {{ '' if hook.enabled else 'dw-item-off' }}">
-                  <span class="dw-icon" data-webhook-id="{{ hook.id }}"><i class="fa-brands fa-discord"></i></span>
-                  <span class="dw-name">{{ hook.label }}</span>
-                  <form method="POST" action="{{ url_for('discord_webhooks.autopost_toggle', username=username, webhook_id=hook.id) }}">
-                    <button type="submit" class="dw-auto {{ 'dw-auto-on' if hook.autopost }}" title="{{ discordAutoPublish }}" {{ '' if hook.enabled else 'disabled' }}><i class="fa-solid fa-robot"></i> {{ discordAutoLabel }}</button>
-                  </form>
+                <div class="dw-row {{ '' if hook.enabled else 'dw-row-off' }}">
+                  <span class="dw-avatar" data-webhook-id="{{ hook.id }}"><i class="fa-brands fa-discord"></i></span>
+                  <div class="dw-body">
+                    <div class="dw-name"><span class="dw-name-text">{{ hook.label }}</span></div>
+                    {{ dw_status(hook.enabled, hook.autopost) }}
+                  </div>
                   <form method="POST" action="{{ url_for('discord_webhooks.toggle', username=username, webhook_id=hook.id) }}" class="form-check form-switch dw-switch">
-                    <input class="form-check-input" type="checkbox" role="switch" title="{{ discordWebhookOn if hook.enabled else discordWebhookOff }}" onchange="this.form.submit()" {{ 'checked' if hook.enabled }}>
+                    <input class="form-check-input" type="checkbox" role="switch" aria-label="{{ hook.label }}" onchange="this.form.submit()" {{ 'checked' if hook.enabled }}>
                   </form>
-                  <form method="POST" action="{{ url_for('discord_webhooks.test', username=username, webhook_id=hook.id) }}">
-                    <button type="submit" class="dw-btn" title="{{ discordWebhookTest }}"><i class="fa-solid fa-paper-plane"></i></button>
-                  </form>
-                  <form method="POST" action="{{ url_for('discord_webhooks.delete', username=username, webhook_id=hook.id) }}" onsubmit="return confirm({{ (discordWebhookConfirmDelete or "")|tojson }})">
-                    <button type="submit" class="dw-btn dw-btn-danger" title="{{ discordWebhookDelete }}"><i class="fa-solid fa-trash"></i></button>
-                  </form>
+                  <div class="dropdown">
+                    <button type="button" class="dw-more" data-bs-toggle="dropdown" aria-expanded="false" aria-label="{{ discordMoreActions }}"><i class="fa-solid fa-ellipsis"></i></button>
+                    <ul class="dropdown-menu dropdown-menu-end dw-menu">
+                      {{ dw_auto_item(url_for('discord_webhooks.autopost_toggle', username=username, webhook_id=hook.id), hook.enabled, hook.autopost) }}
+                      <li>
+                        <form method="POST" action="{{ url_for('discord_webhooks.test', username=username, webhook_id=hook.id) }}">
+                          <button type="submit" class="dropdown-item"><i class="fa-solid fa-paper-plane"></i> {{ discordWebhookSendTest }}</button>
+                        </form>
+                      </li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li>
+                        <form method="POST" action="{{ url_for('discord_webhooks.delete', username=username, webhook_id=hook.id) }}" onsubmit="return confirm({{ (discordWebhookConfirmDelete or "")|tojson }})">
+                          <button type="submit" class="dropdown-item text-danger"><i class="fa-solid fa-trash"></i> {{ discordWebhookDelete }}</button>
+                        </form>
+                      </li>
+                    </ul>
+                  </div>
                 </div>
                 {% endfor %}
+
+                <button type="button" class="dw-add-row" data-bs-toggle="modal" data-bs-target="#dwAddModal">
+                  <span class="dw-add-icon"><i class="fa-solid fa-plus"></i></span>
+                  {{ discordWebhookAddButton }}
+                </button>
               </div>
+            </div>
 
-              {% if discord_webhooks %}
-              <script>
-                fetch({{ url_for('discord_webhooks.avatars', username=username)|tojson }})
-                  .then(r => r.json())
-                  .then(avatars => {
-                    for (const [id, src] of Object.entries(avatars)) {
-                      const icon = document.querySelector(`.dw-icon[data-webhook-id="${id}"]`);
-                      if (!icon) continue;
-                      const img = document.createElement('img');
-                      img.alt = '';
-                      img.src = src;
-                      icon.replaceChildren(img);
-                    }
-                  })
-                  .catch(() => {});
-              </script>
-              {% endif %}
-
-              <button type="button" class="btn btn-sm btn-outline-primary mt-2" data-bs-toggle="collapse" data-bs-target="#dwAdd">
-                <i class="fa-solid fa-plus me-1"></i> {{ discordWebhookAddButton }}
-              </button>
-              <div class="collapse {{ 'show' if discord_webhook_status in ('invalid', 'limit') }}" id="dwAdd">
-                <form method="POST" action="{{ url_for('discord_webhooks.add', username=username) }}" class="dw-add">
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text"><i class="fa-solid fa-server"></i></span>
-                    <input class="form-control" name="label" maxlength="50" placeholder="{{ discordWebhookLabel }}">
+            <div class="modal fade dw-modal" id="dwAddModal" tabindex="-1" aria-labelledby="dwAddTitle" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered">
+                <form method="POST" action="{{ url_for('discord_webhooks.add', username=username) }}" class="modal-content">
+                  <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title" id="dwAddTitle">{{ discordWebhookAddButton }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ cancel }}"></button>
                   </div>
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text"><i class="fa-solid fa-link"></i></span>
-                    <input class="form-control" name="url" required placeholder="{{ discordWebhookUrl }}">
+                  <div class="modal-body">
+                    <div class="dw-steps"><i class="fa-brands fa-discord me-1"></i> {{ discordWebhooksHint }}</div>
+                    {% if discord_webhook_status in ('invalid', 'limit') %}
+                    <div class="dw-flash dw-flash-error"><i class="fa-solid fa-circle-exclamation"></i> {{ dw_messages[discord_webhook_status] }}</div>
+                    {% endif %}
+                    <label class="form-label small fw-semibold" for="dwLabel">{{ discordWebhookLabel }}</label>
+                    <input class="form-control mb-3" id="dwLabel" name="label" maxlength="50">
+                    <label class="form-label small fw-semibold" for="dwUrl">{{ discordWebhookUrl }}</label>
+                    <input class="form-control" id="dwUrl" name="url" required placeholder="https://discord.com/api/webhooks/…">
                   </div>
-                  <button type="submit" class="btn btn-sm btn-primary align-self-start">{{ discordWebhookAdd }}</button>
+                  <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">{{ cancel }}</button>
+                    <button type="submit" class="btn btn-primary">{{ discordWebhookAdd }}</button>
+                  </div>
                 </form>
               </div>
             </div>
+
+            <script>
+              document.addEventListener('DOMContentLoaded', () => {
+                // The status is only for the page it was redirected to; a reload should not repeat it.
+                const url = new URL(location.href);
+                const status = url.searchParams.get('dw');
+                if (status) {
+                  url.searchParams.delete('dw');
+                  history.replaceState(null, '', url);
+                }
+                if (status === 'invalid' || status === 'limit') {
+                  bootstrap.Modal.getOrCreateInstance(document.getElementById('dwAddModal')).show();
+                }
+              });
+              {% if discord_webhooks %}
+              fetch({{ url_for('discord_webhooks.avatars', username=username)|tojson }})
+                .then(r => r.json())
+                .then(avatars => {
+                  for (const [id, src] of Object.entries(avatars)) {
+                    const icon = document.querySelector(`.dw-avatar[data-webhook-id="${id}"]`);
+                    if (!icon) continue;
+                    const img = document.createElement('img');
+                    img.alt = '';
+                    img.src = src;
+                    icon.replaceChildren(img);
+                  }
+                })
+                .catch(() => {});
+              {% endif %}
+            </script>
 
           </div>
         </div>
