@@ -84,6 +84,7 @@ from py.coverage import (
     get_coverage_geojson_dict,
     has_coverage_file,
 )
+from src import openrailwaymap
 from src.router_regions import regions_geojson
 from src.currency import get_available_currencies, get_currency_leaderboard, get_exchange_rate
 from scripts.backfill_vessels import apply_plan as backfill_apply_plan
@@ -3942,11 +3943,12 @@ def vector_style(language, style):
 
 @app.route("/getORMStyle/<style>.json")
 def orm_style(style):
-    allowed = {"standard", "speed", "signals", "electrification", "track", "operator"}
-    if style not in allowed:
+    if style not in openrailwaymap.PRESETS:
         return ("Not found", 404)
-    resp = requests.get(f"https://openrailwaymap.app/style/{style}.json", timeout=10)
-    return jsonify(resp.json())
+    try:
+        return jsonify(openrailwaymap.build_style(style))
+    except (requests.RequestException, ValueError):
+        return ("OpenRailwayMap style unavailable", 502)
 
 
 @app.route("/u/<username>/new_map")
