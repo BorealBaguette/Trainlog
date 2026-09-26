@@ -5,7 +5,7 @@ from flask import make_response
 
 # Import these from wherever they currently live in your project
 # Adjust imports to match your structure.
-from py.utils import getCountryFromCoordinates          # example
+from src.router_regions import all_in_region
 from src.graphhopper import convert_graphhopper_to_osrm     # example
 
 
@@ -59,35 +59,15 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
             "fallback": ("https://routing.openstreetmap.de/routed-car", 234),
         }
 
-        routing_groups = [
-            {
-                "countries": {"AL", "AD", "AT", "AX", "PT", "BE", "BA", "BG", "HR", "CY", "CZ", "DK", "EE", "FO", "FI", "FR", "DE", "GR", "GG", "JE", "HU", "IS", "IE", "GB", "IM", "IT", "XK", "LV", "LI", "LT", "LU", "MK", "MT", "MD", "MC", "ME", "NL", "NO", "PL", "PT", "RO", "RS", "SK", "SI", "ES", "SE", "CH"},
-                "router": routers["trainlog"],
-            },
-            {
-                "countries": {"US", "CA", "GL", "MX"},
-                "router": routers["jkimb"],
-            },
-        ]
-
         coord_pairs = [
             {"lng": float(coord.split(",")[0]), "lat": float(coord.split(",")[1])}
             for coord in path.replace("route/v1/driving/", "").split(";")
         ]
 
-        countries = []
-        for wp in coord_pairs:
-            try:
-                countries.append(getCountryFromCoordinates(wp["lat"], wp["lng"])["countryCode"])
-            except Exception:
-                countries.append("UN")
-
-        unique_countries = set(countries)
-
         base, return_code = routers["fallback"]
-        for group in routing_groups:
-            if unique_countries.issubset(group["countries"]):
-                base, return_code = group["router"]
+        for region, router in (("europe", "trainlog"), ("americas", "jkimb")):
+            if all_in_region(region, coord_pairs):
+                base, return_code = routers[router]
                 break
 
     else:

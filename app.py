@@ -84,6 +84,7 @@ from py.coverage import (
     get_coverage_geojson_dict,
     has_coverage_file,
 )
+from src.router_regions import regions_geojson
 from src.currency import get_available_currencies, get_currency_leaderboard, get_exchange_rate
 from scripts.backfill_vessels import apply_plan as backfill_apply_plan
 from scripts.backfill_vessels import build_plan as backfill_build_plan
@@ -14238,6 +14239,7 @@ def router_status():
         latest_commit_display=latest_commit_dt.strftime("%Y-%m-%d %H:%M UTC"),
         latest_commit_ago=time_ago(latest_commit_dt),
         trip_seed=trip_seed,
+        router_regions=regions_geojson(),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
