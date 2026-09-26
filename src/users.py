@@ -66,10 +66,14 @@ class User(authDb.Model):
     # Discord's @username at the time of linking (display only — not re-synced,
     # so it can go stale if they rename on Discord; discord_id is the real key).
     discord_username = authDb.Column(authDb.String(50), nullable=True)
-    # Post this user's public trips to the Discord channel as they depart (see
+    # Post this user's public trips to the Trainlog Discord channel as they depart (see
     # src/trip_announcer.py). Off by default: it broadcasts where someone is,
     # which is a different disclosure from a trip sitting on their profile.
     discord_autopost = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    # Whether the Trainlog server is one of the places trips are posted to, like
+    # each of the user's own webhooks. Independent of discord_autopost, which
+    # only decides whether posting happens by itself at departure.
+    discord_main_enabled = authDb.Column(authDb.Boolean, nullable=False, default=True)
     # Email change requested but not yet confirmed. `email` itself only updates
     # once the user clicks the link sent to `pending_email` (see
     # /u/<username>/change_email), so a user can't take over an inbox they don't

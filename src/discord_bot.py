@@ -151,6 +151,53 @@ def guild_display_name(discord_id: str):
     return name, avatar
 
 
+_USER_CACHE = {}
+
+
+def discord_user_profile(discord_id: str):
+    """(display name, avatar url) of a Discord account, wherever it is a member.
+
+    Unlike guild_display_name this needs no shared server, so it works for posts
+    on servers the bot is not in — at the cost of the account's global display
+    name and avatar instead of a per-server nickname.
+
+    Returns (None, None) when the lookup fails. Never raises.
+    """
+    cached = _USER_CACHE.get(discord_id)
+    if cached and cached[0] > time.time():
+        return cached[1], cached[2]
+
+    bot_token = load_config().get("discord", {}).get("bot_token")
+    if not bot_token:
+        return None, None
+
+    try:
+        response = requests.get(
+            f"{DISCORD_API}/users/{discord_id}",
+            headers={"Authorization": f"Bot {bot_token}"},
+            timeout=10,
+        )
+        if response.status_code != 200:
+            logger.info(
+                "Discord user lookup for %s: %s %s",
+                discord_id, response.status_code, response.text,
+            )
+            return None, None
+        user = response.json()
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("Discord API error while looking up user %s: %s", discord_id, e)
+        return None, None
+
+    name = user.get("global_name") or user.get("username")
+    avatar = (
+        f"https://cdn.discordapp.com/avatars/{discord_id}/{user['avatar']}.png"
+        if user.get("avatar")
+        else None
+    )
+    _USER_CACHE[discord_id] = (time.time() + _MEMBER_TTL, name, avatar)
+    return name, avatar
+
+
 def post_webhook_message(
     webhook_url: str, content: str, username: str = None, file=None,
     avatar_url: str = None,

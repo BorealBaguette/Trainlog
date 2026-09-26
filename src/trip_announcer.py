@@ -51,9 +51,11 @@ from py.utils import get_flag_emoji
 from src.consts import Env
 from src.discord_bot import (
     delete_webhook_message,
+    discord_user_profile,
     guild_display_name,
     post_webhook_message,
 )
+from src.discord_webhooks import enabled_webhooks
 from src.pg import pg_session
 from src.trip_card import RENDER_FAILED, render_trip_card
 from src.users import User
@@ -98,15 +100,33 @@ TYPE_EMOJI = {
 
 
 def _opted_in():
-    """{user_id: (username, discord_id)} for users who asked for this.
+    """{user_id: (username, discord_id, to_main)} for users who asked for this.
+
+    Each destination has its own autopost: the Trainlog channel (enabled,
+    autopost on, and a linked Discord account) and every one of the user's own
+    webhooks that is enabled with autopost on. ``to_main`` says whether the
+    main channel is among them.
 
     Needs an app context — the opt-in lives in the SQLite auth db, not in PG.
-    A linked Discord account is required: opting in is done from there.
     """
-    users = User.query.filter(
-        User.discord_autopost.is_(True), User.discord_id.isnot(None)
-    ).all()
-    return {user.uid: (user.username, user.discord_id) for user in users}
+    with pg_session() as pg:
+        hook_users = {
+            row["user_id"]
+            for row in pg.execute(
+                "SELECT DISTINCT user_id FROM user_discord_webhooks "
+                "WHERE enabled AND autopost"
+            ).fetchall()
+        }
+    opted_in = {}
+    for user in User.query.filter(
+        User.discord_autopost.is_(True) | User.uid.in_(hook_users)
+    ).all():
+        to_main = bool(
+            user.discord_autopost and user.discord_id and user.discord_main_enabled
+        )
+        if to_main or user.uid in hook_users:
+            opted_in[user.uid] = (user.username, user.discord_id, to_main)
+    return opted_in
 
 
 def _due_trips(user_ids, now):
@@ -180,6 +200,62 @@ def _record_message(trip_id, message_id):
         )
 
 
+def _post_to_user_webhooks(trip, username, discord_id, body, card, auto_only=False):
+    """Send an announced trip to the owner's own webhooks, best effort.
+
+    Only called once the main post is confirmed, so a retry of a failed
+    announcement cannot post here twice. One dead webhook costs only itself.
+    """
+    posted = 0
+    # Not the guild nickname _poster uses: the bot is not in these servers, so
+    # the account's own display name and avatar are the closest thing to it.
+    name, avatar = discord_user_profile(discord_id) if discord_id else (None, None)
+    for hook in enabled_webhooks(trip["user_id"], auto_only):
+        message_id = post_webhook_message(
+            hook["url"], body, username=name or username, file=card,
+            avatar_url=avatar,
+        )
+        if message_id:
+            posted += 1
+            with pg_session() as pg:
+                pg.execute(
+                    """
+                    INSERT INTO trip_announcement_posts (trip_id, webhook_id, message_id)
+                    VALUES (:trip_id, :webhook_id, :message_id)
+                    ON CONFLICT (trip_id, webhook_id)
+                    DO UPDATE SET message_id = :message_id
+                    """,
+                    {
+                        "trip_id": trip["trip_id"],
+                        "webhook_id": hook["id"],
+                        "message_id": message_id,
+                    },
+                )
+    return posted
+
+
+def user_posts(pg, trip_id):
+    """The trip's posts in users' own webhooks, as (webhook_id, url, message_id)."""
+    return pg.execute(
+        """
+        SELECT p.webhook_id, p.message_id, w.url
+        FROM trip_announcement_posts p
+        JOIN user_discord_webhooks w ON w.id = p.webhook_id
+        WHERE p.trip_id = :trip_id
+        """,
+        {"trip_id": trip_id},
+    ).fetchall()
+
+
+def drop_user_posts(posts):
+    """Delete those posts from Discord. Returns the webhook ids that are clear."""
+    return [
+        post["webhook_id"]
+        for post in posts
+        if delete_webhook_message(post["url"], post["message_id"])
+    ]
+
+
 def announced_trip_ids(user_id):
     """The user's trips whose Discord post is still up.
 
@@ -199,7 +275,9 @@ def announced_trip_ids(user_id):
             SELECT a.trip_id
             FROM trip_announcements a
             JOIN trips t ON t.trip_id = a.trip_id
-            WHERE t.user_id = :user_id AND a.message_id IS NOT NULL
+            WHERE t.user_id = :user_id
+              AND (a.message_id IS NOT NULL OR EXISTS (
+                  SELECT 1 FROM trip_announcement_posts p WHERE p.trip_id = a.trip_id))
             """,
             {"user_id": user_id},
         ).fetchall()
@@ -229,6 +307,7 @@ _POSTABLE = f"""
       AND t.visibility = 'public'
       AND NOT COALESCE(t.is_project, FALSE)
       AND a.message_id IS NULL
+      AND NOT EXISTS (SELECT 1 FROM trip_announcement_posts p WHERE p.trip_id = t.trip_id)
       AND {_TRIP_WINDOW}
 """
 
@@ -310,7 +389,7 @@ def is_postable(trip_id, user_id) -> bool:
     return row is not None
 
 
-def post_trip_now(trip_id, user_id, username, discord_id=None):
+def post_trip_now(trip_id, user_id, username, discord_id=None, to_main=True):
     """Post one trip to the channel now, at its owner's request.
 
     Returns (posted, reason). The conditions are checked here rather than
@@ -334,8 +413,12 @@ def post_trip_now(trip_id, user_id, username, discord_id=None):
         logger.info("Trip %s is not postable by hand", trip_id)
         return False, "not_postable"
 
+    # The main channel is optional here: an instance without one (dev) can
+    # still post to the owner's own webhooks.
     webhook_url, reason = _webhook_url()
-    if not webhook_url:
+    if not discord_id or not to_main:
+        webhook_url = None  # the main channel is for linked accounts that want it
+    if not webhook_url and not enabled_webhooks(user_id):
         logger.warning("Trip %s not posted (%s)", trip_id, reason)
         return False, "no_webhook"
 
@@ -382,10 +465,23 @@ def retract_announcement(trip_id) -> bool:
             "SELECT message_id FROM trip_announcements WHERE trip_id = :trip_id",
             {"trip_id": trip_id},
         ).fetchone()
-    if row is None or row["message_id"] is None:
+        posts = user_posts(pg, trip_id)
+    message_id = row["message_id"] if row else None
+    if message_id is None and not posts:
         return True
 
-    if not drop_announcement(trip_id, row["message_id"]):
+    cleared = drop_user_posts(posts)
+    if cleared:
+        with pg_session() as pg:
+            pg.execute(
+                "DELETE FROM trip_announcement_posts "
+                "WHERE trip_id = :trip_id AND webhook_id = ANY(:ids)",
+                {"trip_id": trip_id, "ids": cleared},
+            )
+
+    if message_id is None:
+        return len(cleared) == len(posts)
+    if len(cleared) < len(posts) or not drop_announcement(trip_id, message_id):
         return False
 
     # The row stays, so _due_trips keeps skipping this trip and it is never
@@ -521,12 +617,20 @@ def _worth_waiting(trip, now) -> bool:
 
 
 def _announce(webhook_url, trip, username, discord_id=None, release_on_error=True,
-              card=None, body=None) -> bool:
+              card=None, body=None, auto_only=False) -> bool:
     """Post one already-claimed trip. True if it made it into the channel."""
     if card is None:
         card, _ = _card(trip["trip_id"])
     if body is None:
         body = format_announcement(trip, has_card=card is not None)
+    if not webhook_url:
+        # Own webhooks only. Nothing posted means nothing to protect from a
+        # double post, so the claim goes back for the next tick.
+        if _post_to_user_webhooks(trip, username, discord_id, body, card, auto_only):
+            return True
+        if release_on_error:
+            _release(trip["trip_id"])
+        return False
     name, avatar = _poster(username, discord_id)
     message_id = post_webhook_message(
         webhook_url,
@@ -537,6 +641,7 @@ def _announce(webhook_url, trip, username, discord_id=None, release_on_error=Tru
     )
     if message_id:
         _record_message(trip["trip_id"], message_id)
+        _post_to_user_webhooks(trip, username, discord_id, body, card, auto_only)
         return True
     if message_id is False:
         # Discord answered with an error, so nothing was posted: drop the claim
@@ -594,8 +699,11 @@ def announce_due_trips(webhook_url, now=None) -> int:
                              trip["trip_id"])
             continue
 
-        username, discord_id = users[trip["user_id"]]
-        if _announce(webhook_url, trip, username, discord_id, card=card, body=body):
+        username, discord_id, to_main = users[trip["user_id"]]
+        if _announce(
+            webhook_url if to_main else None,
+            trip, username, discord_id, card=card, body=body, auto_only=True,
+        ):
             posted += 1
     return posted
 

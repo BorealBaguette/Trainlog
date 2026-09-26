@@ -4,7 +4,7 @@ from flask import abort
 
 from src.pg import pg_session
 from src.sql.trips import delete_trip_query
-from src.trip_announcer import drop_announcement
+from src.trip_announcer import drop_announcement, drop_user_posts, user_posts
 from src.utils import get_username
 
 logger = logging.getLogger(__name__)
@@ -34,6 +34,8 @@ def delete_trip(trip_id: int, username: str):
             {"trip_id": trip_id},
         ).fetchone()
 
+        posts = user_posts(pg, trip_id)
+
         pg.execute(delete_trip_query(), {"trip_id": trip_id})
         pg.execute(
             "DELETE FROM tags_associations WHERE trip_id = :trip_id",
@@ -45,5 +47,6 @@ def delete_trip(trip_id: int, username: str):
     # the trip should go whether or not Discord answers.
     if announcement:
         drop_announcement(trip_id, announcement["message_id"])
+    drop_user_posts(posts)
 
     logger.info(f"Successfully deleted trip {trip_id}")

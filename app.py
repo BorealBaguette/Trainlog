@@ -178,6 +178,11 @@ from src.api.og import og_blueprint, og_image_url
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
+from src.discord_webhooks import (
+    discord_webhooks_blueprint,
+    enabled_webhooks,
+    list_webhooks,
+)
 from src.discord_bot import sync_discord_tier
 from src.api.carbon import carbon_blueprint
 from src.api.wrapped import wrapped_blueprint, DISTANCE_COMPARISONS, DURATION_COMPARISONS
@@ -341,6 +346,7 @@ app.register_blueprint(feature_requests_blueprint)
 app.register_blueprint(finance_blueprint)
 app.register_blueprint(bmc_blueprint)
 app.register_blueprint(discord_oauth_blueprint)
+app.register_blueprint(discord_webhooks_blueprint)
 app.register_blueprint(news_blueprint)
 app.register_blueprint(og_blueprint)
 app.register_blueprint(carbon_blueprint)
@@ -7155,10 +7161,15 @@ def deleteTrip(username):
     return ""
 
 
-def _discord_linked(username):
-    """Whether this user has linked a Discord account, and so may post trips."""
-    user = User.query.filter_by(username=username).first()
-    return bool(user and user.discord_id)
+def _can_announce(user):
+    """Whether this user has somewhere to post trips: the main channel or a webhook."""
+    return bool(
+        user
+        and (
+            (user.discord_id and user.discord_main_enabled)
+            or enabled_webhooks(user.uid)
+        )
+    )
 
 
 @app.route("/u/<username>/postTripAnnouncement", methods=["POST"])
@@ -7177,11 +7188,15 @@ def post_trip_announcement(username):
 
     check_current_user_owns_trip(trip_id)
     user = User.query.filter_by(username=username).first()
-    if user is None or not user.discord_id:
+    if not _can_announce(user):
         abort(403)
 
     posted, reason = post_trip_now(
-        trip_id, user.uid, user.username, user.discord_id
+        trip_id,
+        user.uid,
+        user.username,
+        user.discord_id,
+        to_main=user.discord_main_enabled,
     )
     # The row's new state, so the page can swap the buttons over without
     # reloading itself.
@@ -7214,7 +7229,7 @@ def delete_trip_announcement(username):
     # being travelled — so the page is told, and offers it or does not.
     user = User.query.filter_by(username=username).first()
     postable = bool(
-        removed and user and user.discord_id and is_postable(trip_id, user.uid)
+        removed and _can_announce(user) and is_postable(trip_id, user.uid)
     )
     return jsonify({"ok": removed, "announced": not removed, "postable": postable})
 
@@ -8406,6 +8421,10 @@ def delete_user(uid):
             pg.execute(
                 "DELETE FROM tag_members WHERE username = :username",
                 {"username": user.username},
+            )
+            pg.execute(
+                "DELETE FROM user_discord_webhooks WHERE user_id = :user_id",
+                {"user_id": user_id},
             )
         authDb.session.delete(user)
         authDb.session.commit()
@@ -9811,11 +9830,6 @@ def user_settings(username):
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
         params["live_tracking"] = ("live_tracking" in request.form) and bool(user.premium)
-        # Gated on a linked Discord account rather than premium: without one
-        # there is nobody to post as, and the announcer skips the user anyway.
-        params["discord_autopost"] = (
-            "discord_autopost" in request.form
-        ) and bool(user.discord_id)
 
         for param in params:
             if getattr(user, param) != params[param]:
@@ -9835,6 +9849,7 @@ def user_settings(username):
     flight_3d_checked = "checked" if user.flight_3d else ""
     live_tracking_checked = "checked" if user.live_tracking else ""
     discord_autopost_checked = "checked" if user.discord_autopost else ""
+    discord_main_checked = "checked" if user.discord_main_enabled else ""
 
     return render_template(
         "user_settings.html",
@@ -9850,11 +9865,14 @@ def user_settings(username):
         flight_3d_checked=flight_3d_checked,
         live_tracking_checked=live_tracking_checked,
         discord_autopost_checked=discord_autopost_checked,
+        discord_main_checked=discord_main_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
         user_globe=user.globe,
         discord_id=user.discord_id,
+        discord_webhooks=list_webhooks(user.uid),
+        discord_webhook_status=request.args.get("dw"),
         user_email=user.email,
         pending_email=user.pending_email,
         **lang[session["userinfo"]["lang"]],
@@ -10099,7 +10117,7 @@ def dynamic_trips(username, time=None):
         discordAnnouncedIds=json.dumps(announced_trip_ids(get_user_id(username))),
         discordPostableIds=json.dumps(
             postable_trip_ids(get_user_id(username))
-            if _discord_linked(username)
+            if _can_announce(User.query.filter_by(username=username).first())
             else []
         ),
         **lang[session["userinfo"]["lang"]],
@@ -14663,6 +14681,13 @@ def ensure_auth_db_columns():
         authDb.session.execute(
             sqlalchemy.text(
                 "ALTER TABLE user ADD COLUMN discord_autopost BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        authDb.session.commit()
+    if "discord_main_enabled" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN discord_main_enabled BOOLEAN NOT NULL DEFAULT 1"
             )
         )
         authDb.session.commit()
