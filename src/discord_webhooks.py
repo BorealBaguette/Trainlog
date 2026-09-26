@@ -21,7 +21,8 @@ MAX_WEBHOOKS = 5
 # Only Discord's own webhook URLs are accepted: the server POSTs to whatever is
 # stored here, so anything else would let a user aim it at an arbitrary host.
 _WEBHOOK_URL = re.compile(
-    r"^https://(?:(?:canary|ptb)\.)?discord(?:app)?\.com/api/webhooks/\d+/[\w-]+$"
+    r"^https://(?:(?:canary|ptb)\.)?discord(?:app)?\.com/api/(?:v\d+/)?webhooks/\d+/[\w-]+"
+    r"(?:\?thread_id=\d+)?$"
 )
 
 

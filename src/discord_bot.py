@@ -280,7 +280,13 @@ def delete_webhook_message(webhook_url: str, message_id: str) -> bool:
         return False
 
     try:
-        response = requests.delete(f"{webhook_url}/messages/{message_id}", timeout=20)
+        # A webhook url aimed at a thread ends in ?thread_id=..., which has to
+        # stay after the path, and is needed to delete a message inside it.
+        base, _, query = webhook_url.partition("?")
+        response = requests.delete(
+            f"{base}/messages/{message_id}" + (f"?{query}" if query else ""),
+            timeout=20,
+        )
         if response.status_code in (204, 404):
             return True
         logger.warning(
