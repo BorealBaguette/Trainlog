@@ -436,6 +436,10 @@
     .cp-save-bar { padding: .7rem .9rem calc(.7rem + env(safe-area-inset-bottom, 0px)); }
     .cp-summary-actions { display: flex; }
 
+    /* Keyboard up: the map gives most of its height back so the field being typed in
+       isn't left under the keyboard. The user's own split returns when it closes. */
+    body.compose-kbd .compose-map { flex-basis: min(var(--compose-map-h, 32vh), 25%); }
+
     body.compose-map-collapsed .compose-map { flex-basis: 0; height: 0; }
     body.compose-map-collapsed .compose-resizer { display: none; }
 
@@ -1052,11 +1056,37 @@ var map = createMap(null, [48, 8]);
 // used to push the save bar out of reach mid-edit; visualViewport is, so it wins where it
 // exists. The summary bar sticks below the header, whose height depends on its font and
 // on whether the FR24 button is in it, so that too is measured rather than assumed.
+//
+// While the on-screen keyboard is up, the map card shrinks (compose-kbd) so the field
+// being typed in has room above the keyboard. The keyboard is detected as the viewport
+// having lost a keyboard's worth of height while a text field has focus, measured against
+// the tallest viewport seen: iOS never shrinks innerHeight, and some Androids shrink it
+// along with the visual viewport, so neither can serve as the baseline.
 (function () {
   var wrap = document.querySelector('.compose-wrap');
   var header = document.querySelector('.cp-header');
+  var body = document.body;
   var vv = window.visualViewport;
   var queued = false;
+  var fullH = 0;
+  var kbd = false;
+  var TEXT_FIELD = 'textarea, [contenteditable="true"], input:not([type=checkbox]):not([type=radio])' +
+    ':not([type=button]):not([type=submit]):not([type=date]):not([type=time]):not([type=range]):not([type=file])';
+
+  function focusedField() {
+    var el = document.activeElement;
+    return el && el.matches && el.matches(TEXT_FIELD) ? el : null;
+  }
+
+  // Scroll the panel, not the page, to bring the field up. iOS pans the whole page to
+  // reveal a focused field, which on top of the viewport sizing above left the form
+  // scrolled off the top and blank space under it — so the page is put back afterwards.
+  function reveal(field) {
+    requestAnimationFrame(function () {
+      field.scrollIntoView({ block: 'center' });
+      window.scrollTo(0, 0);
+    });
+  }
 
   function sizeCompose() {
     queued = false;
@@ -1068,8 +1098,26 @@ var map = createMap(null, [48, 8]);
       document.documentElement.style.setProperty(
         '--cp-header-h', Math.round(header.getBoundingClientRect().height) + 'px');
     }
+
+    fullH = Math.max(fullH, vh);
+    var field = focusedField();
+    var open = !!field && vh < fullH - 120;
+    if (open !== kbd) {
+      kbd = open;
+      body.classList.toggle('compose-kbd', open);
+      if (open) reveal(field);
+    } else if (kbd && (window.scrollY || (vv && vv.offsetTop))) {
+      window.scrollTo(0, 0);
+    }
+
     if (map && map.invalidateSize) map.invalidateSize();
   }
+
+  // Moving between fields with the keyboard already up resizes nothing, so nothing
+  // above would bring the next field into view.
+  document.addEventListener('focusin', function (e) {
+    if (kbd && e.target.matches && e.target.matches(TEXT_FIELD)) reveal(e.target);
+  });
   // The keyboard animating in fires resize per frame; one measurement per frame is enough.
   function scheduleSize() {
     if (queued) return;
@@ -1079,8 +1127,11 @@ var map = createMap(null, [48, 8]);
 
   sizeCompose();
   window.addEventListener('resize', scheduleSize);
-  window.addEventListener('orientationchange', scheduleSize);
-  if (vv) vv.addEventListener('resize', scheduleSize);
+  window.addEventListener('orientationchange', function () { fullH = 0; scheduleSize(); });
+  if (vv) {
+    vv.addEventListener('resize', scheduleSize);
+    vv.addEventListener('scroll', scheduleSize);
+  }
   window.addEventListener('load', sizeCompose);   // webfonts can change the header height
 })();
 
@@ -2458,13 +2509,41 @@ updateTimingPanel();
 // ── Default dates ──
 (function() {
   var now = new Date();
-  var today = now.toISOString().slice(0, 10);
+  // toISOString() is UTC; shift by the offset so the date matches the local time below.
+  var today = new Date(now - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   document.getElementById('newTripStartDate').value = today;
   document.getElementById('newTripStartTime').value = now.toTimeString().slice(0, 5);
   document.getElementById('newTripEndDate').value = today;
   document.getElementById('onlyDate').value = today;
   document.getElementById('purchasing_date').value = today;
   document.getElementById('purchasing_date').max = today;
+})();
+
+// ── End date follows the start date ──
+//    Both default to today, so moving the start to a past trip's day used to leave the
+//    end on today. The end moves by as many days as the start did — an untouched end
+//    lands on the new start, an overnight arrival keeps its extra day — and never ends up
+//    before the start.
+(function () {
+  var start = document.getElementById('newTripStartDate');
+  var end = document.getElementById('newTripEndDate');
+  var prev = start.value;
+  function dayNum(v) { var p = v.split('-'); return Date.UTC(+p[0], p[1] - 1, +p[2]) / 864e5; }
+
+  // Fills (save & continue, FR24, the journey planner) set the start without an event,
+  // so pick up whatever it holds when the user starts editing it.
+  start.addEventListener('focus', function () { prev = start.value; });
+  start.addEventListener('change', function () {
+    var next = start.value;
+    if (!next) return;
+    var moved = end.value && prev
+      ? new Date((dayNum(end.value) + dayNum(next) - dayNum(prev)) * 864e5).toISOString().slice(0, 10)
+      : next;
+    end.value = moved < next ? next : moved;
+    end.min = next;
+    prev = next;
+    end.dispatchEvent(new Event('change', { bubbles: true }));   // delays read it back
+  });
 })();
 
 // ── Currency flags ──
