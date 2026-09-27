@@ -87,20 +87,32 @@
      --cp-header-h is measured at runtime; the header's height depends on its font and
      on whether the FR24 button is in it. */
   .cp-summary {
-    display: flex; align-items: center; gap: .5rem;
-    padding: .45rem 1.1rem; border-bottom: 1px solid #f0f2f5;
-    background: #fbfcfe; font-size: .78rem; color: #6b7280;
+    display: flex; align-items: center; gap: .6rem;
+    padding: .55rem 1.1rem; border-bottom: 1px solid #f0f2f5;
+    background: #fbfcfe; font-size: .8rem; color: #6b7280;
     position: sticky; top: var(--cp-header-h, 56px); z-index: 9;
   }
-  .cp-summary-text {
+  /* Route name on the first line, the figures about it as chips on the second. */
+  .cp-summary-main {
     flex: 1 1 auto; min-width: 0;
-    display: flex; align-items: baseline; gap: .35rem; flex-wrap: wrap;
+    display: flex; flex-direction: column; gap: .35rem;
   }
+  .cp-summary-text { display: flex; align-items: center; gap: .4rem; min-width: 0; }
   .cp-summary-route {
     font-weight: 600; color: #1a202c;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
   }
-  .cp-summary-meta { color: #4b78d6; font-weight: 500; }
+  /* Positioned so the electrification bubble anchors to the row's left edge, not to its
+     chip — the chip sits far enough right that a bubble hung off it overflows the panel. */
+  .cp-summary-chips { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+  .cp-summary-chips[hidden] { display: none; }
+  .cp-chip {
+    display: inline-flex; align-items: center; gap: .3rem; height: 22px;
+    padding: 0 .55rem; border-radius: 999px; white-space: nowrap;
+    background: #eef2fb; color: #3f64b5; font-size: .72rem; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .cp-chip i { font-size: .8rem; opacity: .8; }
   .cp-summary[data-state="error"] { background: #fff5f5; color: #b3261e; }
   .cp-summary[data-state="error"] .cp-summary-route { color: #b3261e; }
   /* The spinner is a one-off here: the routing sidebar's own is styled for a panel this
@@ -115,11 +127,88 @@
      screen — side by side it is always visible and never in the way. */
   .cp-summary-actions { display: none; flex: 0 0 auto; gap: .3rem; }
   .cp-summary-btn {
-    width: 34px; height: 30px; padding: 0; line-height: 1;
+    width: 32px; height: 32px; padding: 0; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
     border: 1px solid #e2e6ea; border-radius: 8px; background: #fff;
-    color: #4b78d6; font-size: .9rem; cursor: pointer;
+    color: #4b78d6; font-size: .9rem; cursor: pointer; transition: background .12s;
   }
-  .cp-summary-btn:active { background: #e8eeff; }
+  .cp-summary-btn:hover, .cp-summary-btn:active { background: #e8eeff; }
+
+  /* Router choice: a summary-bar button opening a small popover. It turns solid while
+     the new router is on, so the choice stays visible with the popover closed. */
+  .cp-hint { position: relative; flex: 0 0 auto; margin: 0; }
+  .cp-hint > summary { list-style: none; }
+  .cp-hint > summary::-webkit-details-marker { display: none; }
+  .cp-hint > summary::marker { content: ""; }
+  .cp-hint[open] > summary { background: #e8eeff; border-color: #c7d6f5; }
+  .cp-hint:has(#newRouterToggleCompose:checked) > summary {
+    background: #4b78d6; border-color: #4b78d6; color: #fff;
+  }
+  .cp-bubble {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 1200;
+    width: 240px; padding: .75rem .85rem; text-align: left;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(17, 24, 39, .14), 0 2px 6px rgba(17, 24, 39, .06);
+    font-size: .8rem; line-height: 1.4; color: #374151;
+  }
+  .cp-bubble-title {
+    font-size: .68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #9ca3af; margin-bottom: .5rem;
+  }
+  .cp-bubble .form-switch { display: flex; align-items: center; gap: .55rem; margin: 0; padding: 0; min-height: 0; }
+  .cp-bubble .form-switch .form-check-input { margin: 0; flex: 0 0 auto; cursor: pointer; }
+  .cp-bubble .form-check-label { cursor: pointer; font-weight: 500; }
+  .cp-beta {
+    display: inline-block; margin-left: .25rem; padding: 0 .35rem; border-radius: 999px;
+    background: #fef3c7; color: #92400e; font-size: .62rem; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .04em; vertical-align: 1px;
+  }
+  /* Driven by the switch's own state rather than JS, so it can't fall out of sync. */
+  #newRouterProfileCompose { display: none; margin-top: .6rem; border-radius: 8px; }
+  .cp-bubble:has(#newRouterToggleCompose:checked) #newRouterProfileCompose { display: block; }
+
+  /* Electrification chip (⚡/🛢️ km + info bubble): routing.js renders this into
+     #elecPreview inside the routing sidebar, which this page hides. .elec-preview-mirror
+     is the same target class routing.js also writes to, styled here as a chip like the
+     others since routing_panel.css (#sidebar-scoped) isn't loaded on this page. */
+  .elec-preview-mirror { display: inline-flex; align-items: center; gap: .25rem; }
+  .elec-preview-mirror:empty { display: none; }
+  .elec-preview-mirror .route-dist {
+    display: inline-flex; align-items: center; height: 22px; padding: 0 .55rem;
+    border-radius: 999px; background: #f1f3f6; color: #374151; white-space: nowrap;
+    font-style: normal; font-size: .72rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .elec-preview-mirror .route-elec.elec-loading { color: #9ca3af; min-width: 48px; justify-content: center; }
+  .elec-preview-mirror .route-hint { margin: 0; line-height: 0; }
+  .elec-preview-mirror .route-hint summary {
+    list-style: none; cursor: pointer; width: 18px; height: 18px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #9ca3af; font-size: .75rem; transition: color .12s;
+  }
+  .elec-preview-mirror .route-hint summary::-webkit-details-marker { display: none; }
+  .elec-preview-mirror .route-hint summary::marker { content: ""; }
+  .elec-preview-mirror .route-hint summary:hover,
+  .elec-preview-mirror .route-hint[open] summary { color: #4b78d6; }
+  .elec-preview-mirror .route-bubble {
+    position: absolute; top: calc(100% + 8px); left: 0; z-index: 1200;
+    width: max-content; max-width: min(280px, 100%); padding: .6rem .75rem;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(17, 24, 39, .14), 0 2px 6px rgba(17, 24, 39, .06);
+    font-size: .78rem; line-height: 1.45; color: #4b5563; white-space: normal; text-align: left;
+  }
+  .elec-preview-mirror .elec-country-list { margin-top: 6px; padding-top: 6px; border-top: 1px solid #eef0f3; }
+  .elec-preview-mirror .elec-country-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+  .elec-preview-mirror .elec-country-row span:first-child { flex: 1; }
+  .elec-preview-mirror .elec-country-km { color: #9ca3af; font-variant-numeric: tabular-nums; }
+  .elec-preview-mirror .elec-country-row span:last-child { font-weight: 600; color: #374151; font-variant-numeric: tabular-nums; }
+  .elec-preview-mirror .elec-override {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-top: 7px; padding-top: 7px; border-top: 1px solid #eef0f3;
+  }
+  .elec-preview-mirror .elec-override-select {
+    font: inherit; color: #374151; background: #fff;
+    border: 1px solid #d7dbe0; border-radius: 6px; padding: 2px 4px; cursor: pointer;
+  }
 
   /* ── Full-screen map ──
      The panel is covered rather than hidden: display:none on it would tear down the
@@ -473,9 +562,40 @@
 
     <!-- Route summary + (on phones) the map's controls -->
     <div class="cp-summary" id="routeSummary" data-state="idle" aria-live="polite">
-      <div class="cp-summary-text" id="routeSummaryText">
-        <span class="cp-summary-route">{{ routePickEnds|default('Pick a start and an end') }}</span>
+      <div class="cp-summary-main">
+        <div class="cp-summary-text" id="routeSummaryText">
+          <span class="cp-summary-route">{{ routePickEnds|default('Pick a start and an end') }}</span>
+        </div>
+        <div class="cp-summary-chips" id="routeSummaryChips" hidden>
+          <span id="routeSummaryMeta" style="display:contents"></span>
+          {% if vehicle_type in ('train', 'metro', 'tram', 'funicular') %}
+          <!-- Filled by routing.js's renderElecPreview() — see ELEC_PREVIEW_TYPES; this page
+               hides the routing sidebar that normally hosts it (#elecPreview). -->
+          <span class="route-dist-wrap elec-preview-mirror" id="elecPreviewCompose"></span>
+          {% endif %}
+        </div>
       </div>
+      {% if vehicle_type in ('train', 'metro', 'tram') %}
+      <details class="cp-hint" id="routerHint">
+        <summary class="cp-summary-btn" title="{{ useNewRouter|default('Use new router') }}"
+                 aria-label="{{ useNewRouter|default('Use new router') }}"><i class="fas fa-route"></i></summary>
+        <div class="cp-bubble">
+          <div class="cp-bubble-title">{{ routerMode|default('Router') }}</div>
+          <div class="form-check form-switch">
+            <input class="form-check-input" type="checkbox" role="switch" id="newRouterToggleCompose">
+            <label class="form-check-label" for="newRouterToggleCompose">
+              {{ useNewRouter|default('Use new router') }}<span class="cp-beta">beta</span>
+            </label>
+          </div>
+          <select id="newRouterProfileCompose" class="form-select form-select-sm">
+            <option value="train" {% if vehicle_type == 'train' %}selected{% endif %}>{{ train|default('Train') }}</option>
+            <option value="tram" {% if vehicle_type == 'tram' %}selected{% endif %}>{{ tram|default('Tram') }}</option>
+            <option value="metro" {% if vehicle_type == 'metro' %}selected{% endif %}>{{ metro|default('Metro') }}</option>
+            <option value="all">{{ all|default('All') }}</option>
+          </select>
+        </div>
+      </details>
+      {% endif %}
       <div class="cp-summary-actions">
         <button type="button" class="cp-summary-btn" id="mapCollapseBtn"
                 title="{{ collapseMap|default('Hide map') }}" aria-label="{{ collapseMap|default('Hide map') }}">
@@ -879,7 +999,20 @@ var texts = {
   train:                  "{{ train|default('Train') }}",
   tram:                   "{{ tram|default('Tram') }}",
   metro:                  "{{ metro|default('Metro') }}",
-  all:                    "{{ all|default('All') }}"
+  all:                    "{{ all|default('All') }}",
+  // Read by routing.js's renderElecPreview() (electrification chip/bubble) — same
+  // keys routing.html/edit_copy.html pass it, missing here left explanation.replace()
+  // throwing on an undefined string, which renderElecPreview's caller (an async
+  // fetch .catch()) silently turned into a blank chip instead of a visible error.
+  electrificationOsm:         "{{ electrificationOsm|default('') }}",
+  electrificationEstimate:    "{{ electrificationEstimate|default('') }}",
+  electrificationTypeElectric: "{{ electrificationTypeElectric|default('') }}",
+  electrificationUserElectric: "{{ electrificationUserElectric|default('') }}",
+  electrificationUserThermic:  "{{ electrificationUserThermic|default('') }}",
+  powerType:               "{{ powerType|default('Power') }}",
+  auto:                    "{{ auto|default('Auto') }}",
+  electric:                "{{ electric|default('Electric') }}",
+  thermic:                 "{{ thermic|default('Diesel') }}"
 };
 
 // ── Global newTrip — routing.js reads/writes this (trip_length, estimated_trip_duration, details…) ──
@@ -1160,10 +1293,12 @@ function renderRouteSummary(state) {
             : (orig && dest ? (orig + ' → ' + dest) : (orig || dest));
 
   // No state given: keep whatever the routing events last established. A single-point
-  // type never routes, so picking its place is already the finished state.
+  // type never routes, so picking its place is already the finished state — and with
+  // only one of origin/destination set, startRouting() hasn't run yet, so there's no
+  // route in flight to report either.
   if (!state) {
     if (bar.dataset.state !== 'idle') state = bar.dataset.state;
-    else state = single ? 'ok' : 'routing';
+    else state = (single || !(orig && dest)) ? 'ok' : 'routing';
   }
   if (!route) state = 'idle';
 
@@ -1178,15 +1313,19 @@ function renderRouteSummary(state) {
     if (state === 'routing') {
       html = '<span class="cp-summary-spin"></span>' + html +
              '<span>' + escapeHtmlSummary(routeSummaryTexts.routing) + '</span>';
-    } else if (newTrip.trip_length) {
-      var meta = texts.distanceTime
-        .replace('{km}', mToKm(newTrip.trip_length))
-        .replace('{time}', secondsToDhm(newTrip.estimated_trip_duration || 0, "{{ langId|default('en') }}"));
-      html += '<span class="cp-summary-meta">' + meta + '</span>';
     }
   }
   bar.dataset.state = state;
   text.innerHTML = html;
+
+  var chips = document.getElementById('routeSummaryChips');
+  var showChips = state === 'ok' && !!newTrip.trip_length;
+  chips.hidden = !showChips;
+  document.getElementById('routeSummaryMeta').innerHTML = showChips
+    ? '<span class="cp-chip"><i class="bi bi-signpost-split"></i>' + mToKm(newTrip.trip_length) + ' km</span>' +
+      '<span class="cp-chip"><i class="bi bi-clock"></i>' +
+        secondsToDhm(newTrip.estimated_trip_duration || 0, "{{ langId|default('en') }}") + '</span>'
+    : '';
 }
 
 // Station names are user data (a manually named place is whatever was typed), and they go
@@ -1645,8 +1784,81 @@ function startRouting() {
   // routing() sets window.control before it returns, so the summary can subscribe to the
   // same route events the hidden sidebar would have used.
   bindRouteSummary(window.control);
+  {% if vehicle_type in ('train', 'metro', 'tram') %}
+  bindNewRouterToggle();
+  {% endif %}
   {% endif %}
 }
+
+{% if vehicle_type in ('train', 'metro', 'tram') %}
+// The sidebar routing.js would normally put this toggle in is hidden on this page (the
+// cp-summary bar replaces it), so it's wired here directly against the same
+// window.control/window.baseRouter routing() just set up.
+function bindNewRouterToggle() {
+  var toggle = document.getElementById('newRouterToggleCompose');
+  var profile = document.getElementById('newRouterProfileCompose');
+  if (!toggle || toggle._bound) return;
+  toggle._bound = true;
+
+  function applyNewRouterParams() {
+    if (!window.baseRouter) return;
+    var currentParams = window.baseRouter.options.requestParameters || {};
+    if (useNewRouter) {
+      currentParams.use_new_router = 'true';
+      currentParams.profile = profile.value;
+    } else {
+      delete currentParams.use_new_router;
+      delete currentParams.profile;
+    }
+    if (Object.keys(currentParams).length > 0) {
+      window.baseRouter.options.requestParameters = currentParams;
+    } else {
+      delete window.baseRouter.options.requestParameters;
+    }
+  }
+
+  function reroute() {
+    routeDetails = null;
+    if (newTrip.details) delete newTrip.details;
+    // Force refreshElecPreview() to hit the network again rather than replay the
+    // old router's cached percent — its own cache key is the route's coordinate
+    // array, which usually differs after a reroute, but the router switch itself
+    // isn't part of that key, so this is the one thing that reliably invalidates it.
+    lastElecPreview = null;
+    lastElecPreviewPath = null;
+    if (window.control && window.baseRouter) {
+      applyNewRouterParams();
+      window.control.route();
+    }
+  }
+
+  toggle.addEventListener('change', function() {
+    useNewRouter = this.checked;
+    reroute();
+  });
+  profile.addEventListener('change', function() {
+    if (!useNewRouter) return;
+    reroute();
+  });
+}
+
+// The bubble is a <details>, which stays open until re-clicked — close it on any click
+// outside so it behaves like a popover (same as routing.js's own route-hint bubbles).
+document.addEventListener('click', function (e) {
+  var d = document.getElementById('routerHint');
+  if (d && d.open && !d.contains(e.target)) d.removeAttribute('open');
+});
+{% endif %}
+
+{% if vehicle_type in ('train', 'metro', 'tram', 'funicular') %}
+// Same outside-click-close for the electrification info bubble routing.js writes into
+// #elecPreviewCompose (routing.js's own listener only covers its #sidebar copy).
+document.addEventListener('click', function (e) {
+  document.querySelectorAll('.elec-preview-mirror .route-hint[open]').forEach(function (d) {
+    if (!d.contains(e.target)) d.removeAttribute('open');
+  });
+});
+{% endif %}
 
 function onStationSelected(role, entry, dotId) {
   document.getElementById(dotId).classList.add('resolved');

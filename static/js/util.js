@@ -176,10 +176,9 @@ function secondsToDhm(seconds, locale, style="narrow") {
     if (hours > 0) duration.hours = hours;
     if (minutes > 0) duration.minutes = minutes;
     
-    // Show seconds if:
-    // - less than 1 minute total, OR
-    // - we already have minutes and some leftover seconds (but no larger units)
-    if (totalSeconds < 60 || (minutes > 0 && secs > 0 && !days && !hours && !months && !years)) {
+    // Seconds are only shown for sub-minute durations — once there's at least a
+    // minute to report, seconds are noise (nobody times a train trip to the second).
+    if (totalSeconds < 60) {
       duration.seconds = secs;
     }
     

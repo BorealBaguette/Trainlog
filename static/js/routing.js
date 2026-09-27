@@ -1035,10 +1035,13 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     window.addEventListener('resize', syncFreehandWrap);
 
     function renderElecPreview(data) {
-      var el = document.getElementById('elecPreview');
-      if (!el) return;
+      // #elecPreview lives in the (hidden, on compose.html) routing sidebar; pages
+      // that show electrification inline instead (compose.html) mark their own slot
+      // with .elec-preview-mirror and get the exact same markup written into it.
+      var targets = document.querySelectorAll('#elecPreview, .elec-preview-mirror');
+      if (!targets.length) return;
       if (!data || data.percent === null || data.percent === undefined) {
-        el.innerHTML = ''; // nothing to show — drop the loading state
+        targets.forEach(function(el) { el.innerHTML = ''; }); // nothing to show — drop the loading state
         syncFreehandWrap();
         return;
       }
@@ -1049,7 +1052,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       if (data.elec_m) parts.push(`⚡${mToKm(data.elec_m)}km`);
       if (data.nonelec_m) parts.push(`🛢️${mToKm(data.nonelec_m)}km`);
       if (!parts.length) {
-        el.innerHTML = '';
+        targets.forEach(function(el) { el.innerHTML = ''; });
         syncFreehandWrap();
         return;
       }
@@ -1071,6 +1074,11 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       } else {
         explanation = '';
       }
+      // A page whose texts object is missing one of the keys above (undefined, not a
+      // string) would otherwise throw on .replace() below — inside an async fetch
+      // .then(), which silently blanks the whole chip via the .catch() instead of
+      // surfacing an error. Degrade to no explanation rather than no chip at all.
+      explanation = explanation || '';
       // Per-country breakdown, shown even for a single country: it's what names
       // the country (with its flag), which the sentence above deliberately doesn't.
       var countryRows = countryCodes.map(function(cc) {
@@ -1101,20 +1109,22 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
         ? `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${explanation.replace("{percent}", data.percent)}${countryRows}${overrideHtml}</div></details>`
         : '';
 
-      // Re-rendering replaces the <details>, which would collapse an open bubble —
-      // and the override lives inside it, so keep it open across its own changes.
-      var wasOpen = !!el.querySelector('.route-hint[open]');
-      el.innerHTML = `<span class="route-dist route-elec">${parts.join(' ')}</span>${infoHtml}`;
-      if (wasOpen) {
-        var reopened = el.querySelector('.route-hint');
-        if (reopened) reopened.open = true; // fires 'toggle' → clampRouteBubble
-      }
+      targets.forEach(function(el) {
+        // Re-rendering replaces the <details>, which would collapse an open bubble —
+        // and the override lives inside it, so keep it open across its own changes.
+        var wasOpen = !!el.querySelector('.route-hint[open]');
+        el.innerHTML = `<span class="route-dist route-elec">${parts.join(' ')}</span>${infoHtml}`;
+        if (wasOpen) {
+          var reopened = el.querySelector('.route-hint');
+          if (reopened) reopened.open = true; // fires 'toggle' → clampRouteBubble
+        }
 
-      var select = el.querySelector('.elec-override-select');
-      // Listener goes straight on the element: the leaflet-sidebar plugin stops
-      // event propagation at its content container, so delegation from document
-      // would never see it (same reason the outside-click handler uses capture).
-      if (select) select.addEventListener('change', function() { setPowerType(this.value); });
+        var select = el.querySelector('.elec-override-select');
+        // Listener goes straight on the element: the leaflet-sidebar plugin stops
+        // event propagation at its content container, so delegation from document
+        // would never see it (same reason the outside-click handler uses capture).
+        if (select) select.addEventListener('change', function() { setPowerType(this.value); });
+      });
 
       syncFreehandWrap();
     }
@@ -1304,9 +1314,16 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
         // Rendered up front in a loading state so the chip's space is already
         // reserved: refreshElecPreview() then fills it in place instead of the
         // row visibly growing a new chip once the request lands.
-        content += `<span class="route-dist-wrap" id="elecPreview">`
-                 + `<span class="route-dist route-elec elec-loading">`
-                 + `<i class="fa-solid fa-circle-notch fa-spin"></i></span></span>`;
+        var elecLoadingHtml = `<span class="route-dist route-elec elec-loading">`
+                             + `<i class="fa-solid fa-circle-notch fa-spin"></i></span>`;
+        content += `<span class="route-dist-wrap" id="elecPreview">${elecLoadingHtml}</span>`;
+        // #elecPreview above is written into the (hidden, on compose.html) sidebar
+        // content further down; pages with their own visible slot (.elec-preview-mirror)
+        // need the same loading state set here too, since renderElecPreview() only
+        // fires once refreshElecPreview()'s fetch actually resolves.
+        document.querySelectorAll('.elec-preview-mirror').forEach(function(el) {
+          el.innerHTML = elecLoadingHtml;
+        });
       }
       content += `</span></div>`;
 
