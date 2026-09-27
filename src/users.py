@@ -35,12 +35,7 @@ class User(authDb.Model):
     default_landing = authDb.Column(authDb.String(20), nullable=False, default="map")
     appear_on_global = authDb.Column(authDb.Boolean, nullable=False, default=False)
     tileserver = authDb.Column(authDb.String(50), nullable=False, default="default")
-    # Which name to show for a station whose registry entry knows several.
-    #   'international' — the generally-accepted name (München Hbf, Kyiv-Pasazhyrskyi)
-    #   'native'        — the local name always (東京駅, Київ-Пасажирський)
-    #   'language'      — this user's own language where the station has a name in it,
-    #                     falling back to international
-    # See src/stations.display_name(). Only affects display: grouping is by station.
+    # 'international', 'native' or 'language'; see src/stations.display_name().
     station_display = authDb.Column(
         authDb.String(20), nullable=False, default="international"
     )

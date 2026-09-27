@@ -1,15 +1,7 @@
 """Enriching registry stations from their OSM tags, which Photon does not index.
 
-Measured over 60 stations: wikidata 97%, alt_name 37%, uic_ref 35%, int_name 3%, and 2.4
-name:* tags each. That sample skewed European and coverage falls off sharply outside it —
-Seoul Station has 105 name:* tags and neither wikidata nor uic_ref, on the node or its
-stop_area relations. So identity falls back through (osm_type, osm_id), and the sibling
-lookup falls back to the name.
-
-This project has already been banned from one free geocoder for volume, so: batched requests
-only, never on the request path (stations enter with enriched_at NULL and a background thread
-drains them — Trainlog runs no scheduler), a real User-Agent, and a pause between batches.
-The per-object OSM API is reserved for admin-triggered single re-enrichment.
+Overpass is a shared public service, so it is never called on the request path: stations
+enter with enriched_at NULL and a background thread drains them in batches.
 """
 
 import json
@@ -19,8 +11,11 @@ import time
 from datetime import datetime, timezone
 
 import requests
+from sqlalchemy import text
 
+import src.pg
 from src.pg import get_or_create_pg_session
+from src.rate_limit import RateLimited, take
 from src.sql.stations import resolve_station_labels_query
 from src.station_names import international_name
 from src.stations import add_aliases
@@ -32,19 +27,26 @@ OSM_API_URL = "https://api.openstreetmap.org/api/0.6"
 
 USER_AGENT = "Trainlog/1.0 (+https://trainlog.me; station registry enrichment)"
 
-# Measured: 60 ids answer in 2.19s. Larger batches risk hitting Overpass's timeout and losing
-# the whole batch rather than part of it.
+# Larger batches risk Overpass's timeout, losing the whole batch.
 BATCH_SIZE = 60
 
-# Overpass advertises two slots; this is not latency-sensitive work.
 PAUSE_BETWEEN_BATCHES_S = 2.0
 
+# Overpass admits queries by their declared timeout, so a long one waits longer when
+# the server is busy. Only the sibling search needs the long budget.
 OVERPASS_TIMEOUT_S = 90
+OVERPASS_LOOKUP_TIMEOUT_S = 25
+
+# Overpass is often briefly overloaded; a short retry rides it out.
+OVERPASS_ATTEMPTS = 3
+OVERPASS_RETRY_BACKOFF_S = 1
+OVERPASS_RETRY_STATUSES = frozenset({429, 502, 503, 504})
+
+ENRICHER_LOCK_KEY = 0x5747_0001
 
 _OSM_TYPE_TO_OVERPASS = {"N": "node", "W": "way", "R": "relation"}
 _OVERPASS_TYPE_TO_OSM = {"node": "N", "way": "W", "relation": "R"}
 
-# Tags worth keeping verbatim in stations.names, beyond every name:* key.
 _EXTRA_NAME_TAGS = ("int_name", "alt_name", "official_name", "short_name", "loc_name")
 
 
@@ -52,20 +54,43 @@ class OverpassError(Exception):
     """Overpass could not be reached or refused the query."""
 
 
-def _overpass(query: str) -> dict:
-    response = requests.post(
-        OVERPASS_URL,
-        data={"data": query},
-        headers={"User-Agent": USER_AGENT},
-        timeout=OVERPASS_TIMEOUT_S,
-    )
-    if response.status_code != 200:
-        raise OverpassError(f"Overpass returned HTTP {response.status_code}")
-    try:
-        return response.json()
-    except ValueError as e:
-        # Overpass answers rate limiting and overload with an HTML page, not JSON.
-        raise OverpassError(f"Overpass returned a non-JSON body: {e}") from e
+def _overpass(query: str, timeout_s: int = OVERPASS_TIMEOUT_S) -> dict:
+    """Run an Overpass query, retrying transient failures.
+
+    Every attempt spends from the shared rate limit.
+    """
+    last = None
+    for attempt in range(OVERPASS_ATTEMPTS):
+        try:
+            take("overpass")
+        except RateLimited as e:
+            raise OverpassError(str(e)) from e
+
+        try:
+            response = requests.post(
+                OVERPASS_URL,
+                data={"data": query},
+                headers={"User-Agent": USER_AGENT},
+                timeout=timeout_s,
+            )
+        except requests.RequestException as e:
+            last, retryable = OverpassError(f"Overpass request failed: {e}"), True
+        else:
+            if response.status_code == 200:
+                try:
+                    return response.json()
+                except ValueError as e:
+                    # Overpass answers overload with an HTML page, not JSON.
+                    raise OverpassError(f"Overpass returned a non-JSON body: {e}") from e
+            last = OverpassError(f"Overpass returned HTTP {response.status_code}")
+            retryable = response.status_code in OVERPASS_RETRY_STATUSES
+
+        if not retryable or attempt == OVERPASS_ATTEMPTS - 1:
+            raise last
+        delay = OVERPASS_RETRY_BACKOFF_S * (2 ** attempt)
+        logger.info(f"{last} — retrying in {delay}s")
+        time.sleep(delay)
+    raise last
 
 
 def extract_names(tags: dict) -> dict:
@@ -78,7 +103,7 @@ def extract_names(tags: dict) -> dict:
 
 
 def alias_rows_from_tags(tags: dict, name_intl: str | None):
-    """Every spelling this station should be findable by, as (alias, kind, lang) triples."""
+    """Every spelling the station should be findable by, as (alias, kind, lang)."""
     rows = []
     if name_intl:
         rows.append((name_intl, "intl", None))
@@ -103,12 +128,9 @@ def alias_rows_from_tags(tags: dict, name_intl: str | None):
 
 
 def fetch_osm_objects(objects) -> dict:
-    """Fetch OSM tags and position for (osm_type, osm_id) pairs in one Overpass request.
+    """Fetch tags and position for (osm_type, osm_id) pairs in one Overpass request.
 
-    Returns {(osm_type, osm_id): {"tags": {...}, "lat": float|None, "lng": float|None}}.
-
-    `out body center` rather than `out tags` so the position comes back too — a node carries
-    lat/lon, a way or relation gets a `center`.
+    Returns {(osm_type, osm_id): {"tags": {...}, "lat": ..., "lng": ...}}.
     """
     by_type = {}
     for osm_type, osm_id in objects:
@@ -123,7 +145,8 @@ def fetch_osm_objects(objects) -> dict:
         for overpass_type, ids in by_type.items()
     )
     data = _overpass(
-        f"[out:json][timeout:{OVERPASS_TIMEOUT_S}];({clauses});out body center;"
+        f"[out:json][timeout:{OVERPASS_LOOKUP_TIMEOUT_S}];({clauses});out body center;",
+        timeout_s=OVERPASS_LOOKUP_TIMEOUT_S,
     )
 
     result = {}
@@ -142,18 +165,15 @@ def fetch_osm_objects(objects) -> dict:
 def _fetch_sibling_objects(stations) -> dict:
     """Find every OSM object belonging to the same station as each given one.
 
-    `stations` is an iterable of (station_id, wikidata, uic_ref, lat, lng, name_local).
-    Returns {station_id: [(osm_type, osm_id), …]}.
-
-    Every clause is bounded by `around` the station's coordinates: an unbounded
-    nwr["wikidata"=…] would be a planet-wide scan per station.
+    `stations` holds (station_id, wikidata, uic_ref, lat, lng, name_local) tuples.
+    Returns {station_id: [(osm_type, osm_id), ...]}. Every clause is bounded by `around`,
+    as an unbounded tag search would scan the planet.
     """
     clauses, wanted = [], {}
     for station_id, wikidata, uic_ref, lat, lng, name_local in stations:
         if lat is None or lng is None:
             continue
-        # Both tags, not whichever comes first: platform and stop nodes usually carry uic_ref
-        # but not wikidata, so asking only about wikidata found one object out of four.
+        # Both tags: platform and stop nodes often carry uic_ref but not wikidata.
         if wikidata:
             clauses.append(f'nwr(around:2000,{lat},{lng})["wikidata"="{wikidata}"];')
             wanted[("wikidata", wikidata)] = station_id
@@ -161,14 +181,10 @@ def _fetch_sibling_objects(stations) -> dict:
             clauses.append(f'nwr(around:2000,{lat},{lng})["uic_ref"="{uic_ref}"];')
             wanted[("uic_ref", uic_ref)] = station_id
 
-        # Neither tag (common outside Europe — see the module docstring): fall back to an
-        # identical name within 500m. Weaker evidence than a shared QID, but two distinct
-        # stations with the same name that close together is not a real situation.
+        # Neither tag, common outside Europe: fall back to the same name within 500m.
         if not wikidata and not uic_ref and name_local:
-            # Unescaped quotes make the query malformed and fail the whole batch.
             escaped = name_local.replace("\\", "\\\\").replace('"', '\\"')
-            # Any transport object, not just ["railway"]: a bus stop is highway=bus_stop, a
-            # ferry terminal amenity=ferry_terminal. Those pools need this fallback most.
+            # Any transport object: bus stops and ferry terminals are not tagged railway.
             transport = "".join(
                 f'nwr(around:500,{lat},{lng})["name"="{escaped}"]["{key}"];'
                 for key in ("railway", "highway", "amenity", "aerialway", "public_transport")
@@ -188,8 +204,7 @@ def _fetch_sibling_objects(stations) -> dict:
         if not osm_type:
             continue
         tags = element.get("tags", {})
-        # The union response does not say which clause produced which element, so the
-        # identifying tag is the only link back to the station.
+        # The response does not say which clause matched; the tag is the only link back.
         station_id = None
         for key in ("wikidata", "uic_ref", "name"):
             if tags.get(key) and (key, tags[key]) in wanted:
@@ -201,12 +216,10 @@ def _fetch_sibling_objects(stations) -> dict:
 
 
 def _identity_to_write(pg, station_id, wikidata, uic_ref):
-    """Drop any identity anchor a different live station in the same pool already holds.
+    """Drop any identity anchor another live station in the same pool already holds.
 
-    Returns (wikidata, uic_ref) with the colliding ones replaced by None. Two live stations
-    claiming one anchor are the same place and want merging, which is an admin's decision —
-    but attempting the write violates the identity indexes from 0062, so it cannot simply be
-    tried and hoped for.
+    Returns (wikidata, uic_ref). Two stations claiming one anchor need an admin merge;
+    writing it would violate the unique index.
     """
     kept = []
     for column, value in (("wikidata", wikidata), ("uic_ref", uic_ref)):
@@ -235,15 +248,10 @@ def _identity_to_write(pg, station_id, wikidata, uic_ref):
 
 
 def enrich_stations(station_ids, map_objects: bool = True, pg_session_=None) -> dict:
-    """Fetch and store the OSM tags for these stations. Batched; safe to call repeatedly.
+    """Fetch and store the OSM tags for these stations. Safe to call repeatedly.
 
-    Updates wikidata, uic_ref, names, name_intl and country_code, records every spelling in
-    station_aliases, and stamps enriched_at so the station leaves the queue.
-
-    Nothing here may leave a station queued forever, because the drain takes the oldest rows
-    first: one row that can never succeed blocks every row behind it, retrying on each pass.
-    So a station whose object is gone from OSM is still stamped, and each station's writes are
-    wrapped in a SAVEPOINT — one failure rolls back that station alone and the batch carries on.
+    Every station is stamped even when it fails, so one bad row cannot block the queue,
+    and each is written in its own SAVEPOINT so a failure does not sink the batch.
     """
     station_ids = [int(s) for s in station_ids]
     if not station_ids:
@@ -269,10 +277,8 @@ def enrich_stations(station_ids, map_objects: bool = True, pg_session_=None) -> 
 
             name_local = tags.get("name") or None
 
-            # Recompute the display name only where the tags know something the autocomplete
-            # could not: int_name and name:xx-Latn, which Photon does not carry. Otherwise the
-            # autocomplete's answer is better, because it had the city — recomputing
-            # unconditionally rewrote "Paris - Gare de Lyon" to "Gare de Lyon".
+            # Only recompute the name when the tags know better than the autocomplete did, which
+            # also had the city: int_name or name:xx-Latn.
             has_better_name_tag = bool(tags.get("int_name")) or any(
                 key.startswith("name:") and key.endswith("-Latn") and value
                 for key, value in tags.items()
@@ -288,24 +294,14 @@ def enrich_stations(station_ids, map_objects: bool = True, pg_session_=None) -> 
                 else None
             )
 
-            # An identity anchor another *live* station in this pool already holds is dropped
-            # rather than written. Two live stations claiming one QID are the same place and
-            # want merging, which is an admin's call — but writing it would violate
-            # stations_wikidata_key and, before SAVEPOINTs, took the whole batch down with it.
             wikidata, uic_ref = _identity_to_write(
                 pg, row["station_id"], tags.get("wikidata"), tags.get("uic_ref")
             )
 
             savepoint = pg.begin_nested()
             try:
-                # `names` is merged, not assigned: an admin's added language name lives there
-                # too (see _record_language_name), and assigning dropped it on the next pass —
-                # or blanked the column outright when Overpass returned nothing.
-                #
-                # The position is refreshed from OSM, making a bad one self-correcting:
-                # measured, one station in 46 sat 9.7km from its own node, and those
-                # coordinates anchor the geometry backfill, the duplicate radius and the
-                # sibling `around` bound. Admin corrections live in curated_* and are untouched.
+                # `names` is merged, not replaced: it also holds names an admin added. The position is
+                # refreshed from OSM; admin corrections live in curated_*.
                 pg.execute(
                     """
                     UPDATE stations SET
@@ -344,10 +340,7 @@ def enrich_stations(station_ids, map_objects: bool = True, pg_session_=None) -> 
                 savepoint.rollback()
                 failed += 1
                 logger.warning(f"Could not enrich station {row['station_id']}: {e}")
-                # Stamp it anyway, so it leaves the queue. The drain takes the oldest rows
-                # first, so a row that fails for a durable reason would otherwise be retried
-                # on every pass forever. The station keeps the name the autocomplete gave it
-                # and works; an admin can re-enrich it from the panel.
+                # Stamp it anyway so it leaves the queue; an admin can re-enrich it.
                 stamp = pg.begin_nested()
                 try:
                     pg.execute(
@@ -396,9 +389,7 @@ def enrich_stations(station_ids, map_objects: bool = True, pg_session_=None) -> 
                         )
                         objects_mapped += 1
 
-        # Re-resolve the spellings these stations can now claim; without this the newly added
-        # aliases sit inert until a full rebuild. Measured: 41 labels and 11,453 trip
-        # endpoints unresolved against stations already holding their exact spelling.
+        # The new aliases may resolve labels that were waiting for them.
         if enriched:
             pg.execute(
                 resolve_station_labels_query(scoped=True), {"station_ids": station_ids}
@@ -410,25 +401,29 @@ def enrich_stations(station_ids, map_objects: bool = True, pg_session_=None) -> 
 def start_station_enricher(app, interval_s: int = 600):
     """Drain the enrichment queue periodically, in a background thread.
 
-    Follows start_email_listener(): Trainlog runs no scheduler. Each gunicorn worker starts
-    one, which is harmless — the queue is a table column (`enriched_at IS NULL`), not
-    in-memory state, so they contend for rows rather than a lock, a restart mid-drain loses
-    nothing, and the batch size and pause keep the combined rate inside Overpass's limits.
+    Every worker starts one, but a pass only runs under an advisory lock: the queue is read
+    without claiming rows, so concurrent passes would send the same batch.
     """
     def loop():
-        # Let the app finish booting; nothing here is urgent.
         time.sleep(60)
         while True:
             try:
-                with app.app_context():
-                    result = drain_enrichment_queue(max_batches=5)
-                if result["enriched"]:
+                src.pg.init_db_engine()
+                # A bare connection, since the drain opens pg_sessions and those cannot nest.
+                # Transaction-scoped, so it is released however the pass ends.
+                with app.app_context(), src.pg.pg_session_engine.begin() as lock_conn:
+                    locked = lock_conn.execute(
+                        text("SELECT pg_try_advisory_xact_lock(:key)"),
+                        {"key": ENRICHER_LOCK_KEY},
+                    ).scalar()
+                    result = drain_enrichment_queue(max_batches=5) if locked else {}
+                if result.get("enriched"):
                     logger.info(
                         f"Station enricher: {result['enriched']} station(s), "
                         f"{result['objects_mapped']} OSM object(s)."
                     )
             except Exception as e:
-                # Never let this thread die: the queue is durable, so the next pass retries.
+                # The queue is durable, so the next pass retries.
                 logger.warning(f"Station enricher pass failed: {e}")
             time.sleep(interval_s)
 
@@ -438,10 +433,9 @@ def start_station_enricher(app, interval_s: int = 600):
 def drain_enrichment_queue(
     max_batches: int | None = None, map_objects: bool = True, pg_session_=None
 ) -> dict:
-    """Enrich stations awaiting it, in batches.
+    """Enrich stations awaiting it, in batches, up to `max_batches`.
 
-    `max_batches` bounds one run so a tick cannot become an hour of Overpass traffic. A failed
-    batch is left queued rather than retried immediately.
+    A failed batch is left queued for the next run.
     """
     totals = {
         "enriched": 0,
@@ -472,8 +466,6 @@ def drain_enrichment_queue(
             totals["objects_mapped"] += result["objects_mapped"]
             totals["failed"] += result["failed"]
         except (OverpassError, requests.RequestException) as e:
-            # A network failure is transient, so this batch is left queued deliberately —
-            # unlike a per-station failure, which is stamped so it cannot block the queue.
             logger.warning(f"Enrichment batch failed, leaving it queued: {e}")
             totals["failed_batches"] += 1
             break

@@ -1,12 +1,8 @@
 """The station registry: write and maintenance side.
 
-Trip endpoints stay free text; `station_labels` caches what each distinct *spelling*
-resolves to. Keyed on the label rather than the trip, so a trip edit needs no sync —
-see migration 0059. Identity is physical (wikidata, then uic_ref, then the OSM object),
-never lexical: see migration 0058 for why, and 0060 for the ambiguity rule.
-
-The cache is derived — check_labels_consistency() detects drift, rebuild_labels() cures it.
-Reading happens in SQL: see migration 0060 and stats_stations.sql.
+Trip endpoints stay free text; `station_labels` caches what each distinct spelling resolves
+to, per mode. Identity is physical (wikidata, then uic_ref, then the OSM object), never the
+name. The cache is derived: rebuild_labels() recreates it from the trips.
 """
 
 import json
@@ -22,21 +18,10 @@ from src.sql.stations import (
 
 logger = logging.getLogger(__name__)
 
-# Trip types the registry does not track. Canonical statement of this rule; SQL keeps its own
-# copy in station_type_tracked() (migration 0060) and check_labels_consistency() compares them.
+# Trip types the registry does not track. Mirrored by station_type_tracked() in SQL.
 #
-# Air already has a better register: `airports` is keyed on IATA, and an air label carries that
-# code — "🇳🇱 Amsterdam Airport Schiphol (AMS)" — which src/api/stats.py parses back out.
-# Resolving flights here would trade a stable identity for a Photon guess.
-#
-# The rest are private by nature: these endpoints are home addresses, friends' houses, hotels
-# and restaurants. Nothing to canonicalise (two users writing "home" mean different places),
-# and the admin queue displays sample_label verbatim ordered by use, which would list the most
-# visited private addresses on the site. A privacy boundary, not a tuning decision — enforced
-# here, in SQL, and by deleting what was already collected (migration 0061).
-#
-# `other` is the unknowable catch-all, so it is treated as private. Ski, aerialway, funicular
-# and helicopter stay tracked: lift stations and helipads are public infrastructure.
+# Air is already identified by IATA code. The rest are private: their endpoints are homes,
+# hotels and restaurants, and the admin queue would list them by popularity.
 REGISTRY_EXCLUDED_TYPES = frozenset(
     {
         "air",
@@ -58,34 +43,24 @@ def tracks_stations(trip_type: str | None) -> bool:
 
 
 def station_bucket(trip_type: str | None) -> str:
-    """The pool of places a trip type resolves against — its own mode, kept separate.
+    """The pool of stations a trip type resolves against.
 
     Modes stay apart because their stops are different places: the bus stop at Amsterdam
-    Centraal is not the tram stop, the train station or the metro beneath it. Splitting too
-    finely is the safe direction — two rows for one place is one merge in the admin panel,
-    one row for two places credits a trip to somewhere the user never went.
-
-    Both spellings of accommodation map to one pool; the codebase carries
-    TripTypes.ACCOMODATION = "accomodation" alongside "accommodation".
+    Centraal is not the train station.
     """
     if trip_type in ("accommodation", "accomodation"):
         return "accommodation"
     return trip_type or "other"
 
 
-# Shortest query the registry search will run. A trigram index cannot serve a needle with no
-# trigrams in it, so anything shorter is a full scan of station_aliases.
+# A trigram index cannot serve a shorter needle.
 MIN_SEARCH_LENGTH = 3
 
 
 def search_registry(
     query: str, trip_type: str, user_id: int | None = None, limit: int = 10, pg_session_=None
 ) -> list[dict]:
-    """Stations in the registry matching `query`, best first.
-
-    Untracked trip types return nothing without querying, so the registry stays out of the
-    autocomplete for personal modes by construction rather than by their pools being empty.
-    """
+    """Stations in the registry matching `query`, best first."""
     if not tracks_stations(trip_type):
         return []
     if not query or len(query.strip()) < MIN_SEARCH_LENGTH:
@@ -97,7 +72,6 @@ def search_registry(
             {
                 "query": query.strip(),
                 "station_type": station_bucket(trip_type),
-                # -1 matches no user, so the visits boost is simply zero when anonymous.
                 "user_id": user_id if user_id is not None else -1,
                 "limit": limit,
             },
@@ -105,19 +79,13 @@ def search_registry(
     return [dict(row._mapping) for row in rows]
 
 
-# How a user wants stations named. Mirrors User.station_display.
 DISPLAY_MODES = ("international", "native", "language")
 
 
 def display_name(station: dict, mode: str = "international", user_lang: str | None = None):
     """The name to show for a station, given a user's display preference.
 
-    `station` is a row (or dict) carrying curated_name, name_intl, name_local and `names`.
-    curated_name always wins — it is the admin's answer for cases the rules cannot settle,
-    so a display mode must not route around it. 'language' falls back to the international
-    name: OSM carries only ~2.4 name:* tags per station.
-
-    Mirrored by station_display_name() in migration 0060 — keep the two in step.
+    curated_name always wins. Mirrored by station_display_name() in SQL.
     """
     if not station:
         return None
@@ -138,8 +106,7 @@ def display_name(station: dict, mode: str = "international", user_lang: str | No
         return station.get("name_local") or international
 
     if mode == "language" and user_lang:
-        # Exact tag first, then the base language: a user set to pt-BR should still get
-        # name:pt, and zh-Hans should fall back to name:zh.
+        # pt-BR falls back to name:pt.
         for key in (f"name:{user_lang}", f"name:{str(user_lang).split('-')[0]}"):
             value = names.get(key)
             if value:
@@ -149,12 +116,7 @@ def display_name(station: dict, mode: str = "international", user_lang: str | No
 
 
 def stations_for_osm_objects(pairs, station_type, pg_session_=None) -> dict:
-    """Map (osm_type, osm_id) pairs to the station they belong to in this mode's pool.
-
-    `pairs` is an iterable of (osm_type, osm_id). Missing keys mean the object is not known
-    to belong to any registered station of this type. Scoped by pool because one object can
-    anchor a station in several — see migration 0065.
-    """
+    """Map (osm_type, osm_id) pairs to their station in this mode's pool."""
     pairs = [(t, int(i)) for t, i in pairs if t and i is not None]
     if not pairs:
         return {}
@@ -178,11 +140,7 @@ def stations_for_osm_objects(pairs, station_type, pg_session_=None) -> dict:
 
 
 def register_labels(labels, pg_session_=None) -> int:
-    """Make sure these (label, trip_type) pairs exist in the cache, and resolve them.
-
-    `labels` is an iterable of (raw_label, trip_type). Counts are left to
-    refresh_label_counts(); see migration 0059 for why they are not maintained per write.
-    """
+    """Make sure these (label, trip_type) pairs exist in the cache, and resolve them."""
     rows = [
         {"label": raw.strip(), "station_type": station_bucket(trip_type)}
         for raw, trip_type in labels
@@ -202,17 +160,12 @@ def register_labels(labels, pg_session_=None) -> int:
                 """,
                 row,
             )
-        # Unscoped: one UPDATE over distinct spellings, not over the trips.
         pg.execute(resolve_station_labels_query(scoped=False))
     return len(rows)
 
 
 def sync_trip_labels(trip_ids, pg_session_=None) -> None:
-    """Register the labels of these trips. Accepts one id or a collection.
-
-    Called wherever a trip's endpoints are written. Nothing is keyed on the trip, so this
-    only ensures the spellings it uses are known; a later edit needs no re-sync.
-    """
+    """Register the labels of these trips. Accepts one id or a collection."""
     if not isinstance(trip_ids, (list, tuple, set)):
         trip_ids = [trip_ids]
     trip_ids = [int(t) for t in trip_ids]
@@ -233,7 +186,7 @@ def sync_trip_labels(trip_ids, pg_session_=None) -> None:
 
 
 def rebuild_labels(pg_session_=None) -> int:
-    """Re-derive every label from the trips and resolve them. The recovery path."""
+    """Re-derive every label from the trips and resolve them."""
     with get_or_create_pg_session(pg_session_) as pg:
         pg.execute(
             """
@@ -265,8 +218,7 @@ def refresh_label_counts(pg_session_=None) -> int:
               AND (sl.occurrences, sl.users) IS DISTINCT FROM (c.n, c.u)
             """
         )
-        # A spelling whose last trip was deleted has no endpoints left, so the join above
-        # cannot reach it and it would keep its old count at the top of the queue forever.
+        # The join above cannot reach spellings with no trips left.
         pg.execute(
             """
             UPDATE station_labels sl
@@ -285,8 +237,7 @@ def refresh_label_counts(pg_session_=None) -> int:
 def resync_station(station_id: int, pg_session_=None) -> int:
     """Re-resolve the spellings affected by a change to one station.
 
-    Scoped to labels pointing here or matching a current alias — a handful of rows. Returns
-    the number of trip endpoints now resolving here.
+    Returns the number of trip endpoints now resolving to it.
     """
     with get_or_create_pg_session(pg_session_) as pg:
         pg.execute(
@@ -300,12 +251,11 @@ def resync_station(station_id: int, pg_session_=None) -> int:
 
 
 def check_labels_consistency(pg_session_=None) -> dict:
-    """Detect drift in the derived cache. A full table pass — an admin diagnostic.
+    """Detect drift in the derived cache. A full table pass.
 
       missing       spellings in use that the cache does not know about
       misresolved   rows whose station_id disagrees with resolving them again now
-      type_mismatch trip types where REGISTRY_EXCLUDED_TYPES and station_type_tracked()
-                    disagree about whether the registry tracks them
+      type_mismatch trip types where Python and SQL disagree about tracking
     """
     with get_or_create_pg_session(pg_session_) as pg:
         missing = pg.execute(
@@ -320,8 +270,8 @@ def check_labels_consistency(pg_session_=None) -> dict:
             )
             """
         ).scalar()
-        # Must call station_resolve_alias(): comparing station_labels against a CTE that
-        # reads station_labels subtracts the table from itself and always reports zero.
+        # Must call station_resolve_alias(): a CTE reading station_labels would compare the table
+        # with itself.
         misresolved = pg.execute(
             """
             SELECT count(*) FROM station_labels sl
@@ -330,8 +280,6 @@ def check_labels_consistency(pg_session_=None) -> dict:
             )
             """
         ).scalar()
-        # Checked against the trip types actually in use, not a hardcoded list that would
-        # itself need keeping in step.
         type_mismatch = [
             row[0]
             for row in pg.execute(
@@ -356,12 +304,10 @@ def find_station(
     uic_ref: str | None = None,
     pg_session_=None,
 ) -> int | None:
-    """The station this place already is, or None if it would be a new one.
+    """The existing station for this place, or None.
 
-    Matched by strength of identity, not by what the caller passed: a known OSM object first,
-    then wikidata, then uic_ref, then the object itself. Every lookup is scoped to the mode's
-    pool (migration 0065) and resolves through superseded_by, so matching a merged-away
-    station lands on its survivor and never on the husk.
+    Tries a known OSM object, then wikidata, then uic_ref, within the mode's pool, and
+    follows superseded_by to the surviving station.
     """
     bucket = station_bucket(station_type)
     with get_or_create_pg_session(pg_session_) as pg:
@@ -416,8 +362,7 @@ def upsert_station(
 ) -> int | None:
     """Find or create the station for a place the user just picked. Returns its station_id.
 
-    Matching is find_station()'s job. A new row is left with enriched_at NULL — the enrichment
-    queue — so a trip save never waits on a third party.
+    New rows are left for the background enricher, so a trip save never waits on OSM.
     """
     bucket = station_bucket(station_type)
 
@@ -436,8 +381,7 @@ def upsert_station(
         if not name_intl:
             return None
 
-        # The lookups above are a find-then-insert, so two concurrent saves through the same
-        # new station both miss and the second would violate stations_osm_key.
+        # Find-then-insert: a concurrent save of the same new station can win the race.
         station_id = pg.execute(
             """
             INSERT INTO stations (osm_type, osm_id, wikidata, uic_ref, station_type,
@@ -462,7 +406,6 @@ def upsert_station(
         ).scalar()
 
         if station_id is None:
-            # Lost the race; the other transaction's row is as good as ours would have been.
             station_id = pg.execute(
                 "SELECT station_id FROM stations"
                 " WHERE osm_type = :osm_type AND osm_id = :osm_id"
@@ -491,16 +434,11 @@ def upsert_station(
 
 FLAG_PREFIX_RE = re.compile(r"^[\U0001F1E6-\U0001F1FF]{2}\s*")
 
-# A flag emoji is two regional indicator symbols standing for 'A'..'Z'.
 _REGIONAL_INDICATOR_A = 0x1F1E6
 
 
 def country_from_flag(label: str | None) -> str | None:
-    """The ISO country code a label's leading flag emoji stands for, or None.
-
-    Mirrors station_flag_country() (migration 0058). A hint, never a filter: stored flags are
-    demonstrably wrong — "Paris Gare du Nord" appears under 🇬🇭 and 🇬🇧 as well as 🇫🇷.
-    """
+    """The ISO country code a label's leading flag emoji stands for, or None."""
     if not label or len(label) < 2:
         return None
     a, b = ord(label[0]), ord(label[1])
@@ -513,21 +451,15 @@ def country_from_flag(label: str | None) -> str | None:
 
 
 def strip_flag(label: str | None) -> str:
-    """The label without its leading flag emoji.
-
-    The flag is presentation glued onto the stored string, not part of the name; storing it
-    would make name_intl differ from the OSM name by two invisible characters.
-    """
+    """The label without its leading flag emoji."""
     return FLAG_PREFIX_RE.sub("", label or "").strip()
 
 
 def seed_stations_from_trip(new_trip: dict, trip_type: str, pg_session_=None) -> dict:
-    """Register the places this trip's endpoints refer to, and return their station ids.
+    """Register the stations this trip's endpoints were picked from.
 
-    `new_trip["originStation"]` is the [coords, label] pair the browser sends, with an
-    optional third element carrying the OSM identity of the picked result — see
-    stationSearchAutocomplete in static/js/util.js. Older clients and the import paths send
-    only two elements, which is handled below.
+    Each endpoint is [coords, label, osm_ref] as sent by stationSearchAutocomplete in util.js;
+    imports and manual stations send no osm_ref.
     """
     result = {}
     if not tracks_stations(trip_type):
@@ -545,9 +477,8 @@ def seed_stations_from_trip(new_trip: dict, trip_type: str, pg_session_=None) ->
         if not name:
             continue
 
-        # No OSM identity, no registry row: a row identified only by its name can never be
-        # matched, so registering one would add a fresh duplicate on every save. Free text
-        # becomes an unresolved station_labels row instead, which is the right home for it.
+        # A row with no OSM identity could never be matched again; free text stays an
+        # unresolved label instead.
         if not (osm_ref.get("osm_id") and osm_ref.get("osm_type")):
             continue
 
@@ -579,9 +510,7 @@ def seed_stations_from_trip(new_trip: dict, trip_type: str, pg_session_=None) ->
 def add_aliases(station_id: int, aliases, pg_session_=None) -> int:
     """Record spellings for a station. `aliases` is an iterable of (alias, kind, lang).
 
-    Silently skips spellings the station already has, and those that normalise to nothing
-    (a name with no alphanumerics would otherwise match everything). Returns the number of
-    rows actually inserted.
+    Returns the number of new rows.
     """
     rows = [
         {"station_id": station_id, "alias": alias.strip(), "kind": kind, "lang": lang}
@@ -612,8 +541,7 @@ def add_aliases(station_id: int, aliases, pg_session_=None) -> int:
 def stations_holding_alias(alias: str, station_type: str, pg_session_=None) -> list[int]:
     """Which live stations in this pool already answer to this spelling.
 
-    A spelling held by two stations resolves to neither, so callers check this before adding
-    one rather than discovering afterwards that they made a label unresolvable.
+    A spelling held by two stations resolves to neither.
     """
     if not alias or not alias.strip():
         return []
@@ -635,8 +563,7 @@ def stations_holding_alias(alias: str, station_type: str, pg_session_=None) -> l
 def merge_stations(source_id: int, target_id: int, pg_session_=None) -> dict:
     """Fold one station into another.
 
-    The source survives with `superseded_by` set and its objects and aliases move across.
-    Reads follow superseded_by, so trips keep working before the resync finishes.
+    The source is kept with superseded_by set; its objects and aliases move to the target.
     """
     with get_or_create_pg_session(pg_session_) as pg:
         same_pool = pg.execute(
@@ -651,7 +578,6 @@ def merge_stations(source_id: int, target_id: int, pg_session_=None) -> dict:
             "UPDATE station_osm_objects SET station_id = :t WHERE station_id = :s",
             {"s": source_id, "t": target_id},
         )
-        # Move the spellings across, dropping any the target already holds.
         pg.execute(
             """
             UPDATE station_aliases a SET station_id = :t, kind = 'alias'
@@ -670,12 +596,8 @@ def merge_stations(source_id: int, target_id: int, pg_session_=None) -> dict:
             "UPDATE stations SET superseded_by = :t WHERE station_id = :s",
             {"s": source_id, "t": target_id},
         )
-        # Hand the survivor any identity anchor it lacks. Must follow the line above: the
-        # source only leaves the identity indexes once it is superseded (migration 0062), and
-        # while both rows are live they cannot hold the same anchor.
-        #
-        # Only where the target is empty: a target already holding a different QID means an
-        # admin merged two things OSM considers distinct, which is their call to make.
+        # After the superseded_by update: two live rows cannot hold the same anchor. Only where
+        # the target has none, as a different QID means the admin merged two distinct objects.
         pg.execute(
             """
             UPDATE stations t
@@ -699,7 +621,7 @@ def merge_stations(source_id: int, target_id: int, pg_session_=None) -> dict:
 
 
 def modes_in_use(pg_session_=None) -> list[dict]:
-    """Every mode present in the data, with how much of each is registered or still queued."""
+    """Every tracked mode, with its registered and unresolved counts."""
     with get_or_create_pg_session(pg_session_) as pg:
         rows = pg.execute(
             """
@@ -719,11 +641,7 @@ def modes_in_use(pg_session_=None) -> list[dict]:
 
 
 def delete_station(station_id: int, pg_session_=None) -> dict:
-    """Remove a station. Its spellings go back to the unresolved queue.
-
-    For a mis-registration, where merging is not the answer because the row should not exist
-    at all. Nothing about a trip changes. Returns the spellings freed and their uses.
-    """
+    """Remove a station. Its spellings go back to the unresolved queue."""
     with get_or_create_pg_session(pg_session_) as pg:
         freed = pg.execute(
             "SELECT COALESCE(array_agg(label_id), '{}') AS ids,"
@@ -733,9 +651,8 @@ def delete_station(station_id: int, pg_session_=None) -> dict:
         ).fetchone()
         label_ids = list(freed["ids"] or [])
 
-        # Also the labels this station was *blocking*: removing one of two stations sharing a
-        # spelling makes it resolvable, and those labels never pointed here. Captured before
-        # the delete, because the aliases cascade away with the station.
+        # Also the labels this station was blocking by sharing their spelling. Read before the
+        # delete, since the aliases cascade away with it.
         label_ids += [
             row[0]
             for row in pg.execute(
@@ -752,14 +669,12 @@ def delete_station(station_id: int, pg_session_=None) -> dict:
         ]
         label_ids = list(dict.fromkeys(label_ids))
 
-        # A station merged into this one points here via superseded_by, and that FK has no
-        # ON DELETE — clearing it first makes those rows ordinary stations again.
+        # superseded_by has no ON DELETE; stations merged into this one become ordinary again.
         unmerged = pg.execute(
             "UPDATE stations SET superseded_by = NULL WHERE superseded_by = :id",
             {"id": station_id},
         ).rowcount
 
-        # Aliases and objects cascade; station_labels.station_id is ON DELETE SET NULL.
         deleted = pg.execute(
             "DELETE FROM stations WHERE station_id = :id", {"id": station_id}
         ).rowcount
@@ -788,12 +703,7 @@ def delete_station(station_id: int, pg_session_=None) -> dict:
 
 
 def label_location(label: str, station_type: str, pg_session_=None) -> dict | None:
-    """Where the trips using this label actually begin or end, or None if none have a path.
-
-    The trip paths are the only record of where a written label meant, so this is what makes
-    registering it a check rather than a guess. See src/sql/stations/label_location.sql for
-    why the centre is a median and what `spread_m` is for.
-    """
+    """Where the trips using this label begin or end, or None if none have a path."""
     if not label or not label.strip():
         return None
     with get_or_create_pg_session(pg_session_) as pg:
@@ -819,14 +729,9 @@ def unresolved_labels(
     status: str | None = None,
     pg_session_=None,
 ) -> list[dict]:
-    """The admin work queue: spellings resolving to no station, costliest first.
+    """The admin work queue: spellings resolving to no station, most used first.
 
-    `search` filters diacritic-insensitively, so "munchen" finds "München". Filtered in SQL
-    because the queue is ~143k rows and a page holds a couple of hundred.
-
-    `auto_result` is what the seeding script made of the label, NULL if it has not reached it
-    yet — the difference between "nobody has looked" and "looked, and a human is needed".
-    `status` filters on it; pass 'unchecked' for the ones with no verdict.
+    `status` filters on the seeding verdict; 'unchecked' means none yet.
     """
     search = (search or "").strip()
     with get_or_create_pg_session(pg_session_) as pg:
@@ -860,7 +765,7 @@ def count_unresolved(
     status: str | None = None,
     pg_session_=None,
 ) -> int:
-    """How many unresolved spellings match the filters — not how many are being shown."""
+    """How many unresolved spellings match the filters."""
     search = (search or "").strip()
     with get_or_create_pg_session(pg_session_) as pg:
         return pg.execute(
@@ -878,11 +783,7 @@ def count_unresolved(
 
 
 def registry_stats(pg_session_=None) -> dict:
-    """Coverage figures for the admin panel.
-
-    `endpoints` and `resolved` sum the cached per-label counts rather than scanning 1.5M
-    trip rows on every load.
-    """
+    """Coverage figures for the admin panel."""
     with get_or_create_pg_session(pg_session_) as pg:
         return dict(
             pg.execute(

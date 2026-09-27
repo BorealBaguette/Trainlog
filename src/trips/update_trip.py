@@ -69,9 +69,6 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
         # The operator text and the trip type both feed the resolution, and either
         # may have changed here.
         sync_trip_operators(trip_id, pg_session_=pg)
-        # Same for the endpoints: make sure the station registry knows the
-        # spellings this trip uses. Keyed on the label, not the trip, so an
-# edit needs no bookkeeping here.
         sync_trip_labels(trip_id, pg_session_=pg)
 
         # Update the route geometry. trip.path may be [[lat,lng],...] or

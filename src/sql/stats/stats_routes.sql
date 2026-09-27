@@ -1,18 +1,8 @@
 {base_filter}
 {time_categories}
 
--- Routes are grouped through the station registry, for the same reason as stats_stations:
--- "Gare de Lens" -> "Lille Flandres" and "Lens" -> "Lille Flandres" are one route, and
--- grouping on the written text made them two.
---
--- Each endpoint is resolved by joining station_labels once — see stats_stations.sql for why
--- this is a join and not the station_label_display() helper; at four endpoint lookups per
--- trip that helper cost this query 15s against 34ms.
---
--- MATERIALIZED, and that is load-bearing rather than a hint. Inlined, this CTE's expressions
--- are substituted into the LEAST/GREATEST pair and again into the GROUP BY, so
--- station_normalize() — which calls unaccent — was evaluated six times per trip instead of
--- twice. That alone was 257ms of the group step. Materialising computes each key once.
+-- Routes are grouped by resolved station, like stats_stations.sql. MATERIALIZED so the
+-- keys are computed once rather than for each use in LEAST/GREATEST and GROUP BY.
 , resolved AS MATERIALIZED (
     SELECT
         COALESCE('#' || so.station_id::text,
@@ -38,9 +28,7 @@
         is_past, is_planned_future, trip_length, trip_duration, carbon, arrival_delay,
         departure_delay
     FROM time_categories t
-    -- Only resolved labels matter: an unresolved one contributes no station either way, and
-    -- they are the overwhelming majority of the table. The predicate lets these joins read
-    -- station_labels_resolved_key (0060) instead of hashing every spelling ever typed, twice.
+    -- Filtering on resolved labels lets the joins use station_labels_resolved_key.
     LEFT JOIN station_labels lo
            ON lo.normalized   = station_normalize(t.origin_station)
           AND lo.station_type = station_type_bucket(t.trip_type)
@@ -52,9 +40,7 @@
           AND ld.station_id IS NOT NULL
     LEFT JOIN stations sd ON sd.station_id = ld.station_id
 ),
--- Ordered by registry key, not by displayed name, so a route and its return journey land in
--- the same group whatever each was typed as. The displayed pair is ordered the same way, so
--- the two halves of the label line up with the key that produced them.
+-- Ordered by key so a route and its return journey share a group.
 ordered AS (
     SELECT
         LEAST(origin_key, destination_key) AS key_a,

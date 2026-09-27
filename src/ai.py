@@ -202,9 +202,7 @@ def geocode_station(query, trip_type="train", fallback_coords=None, city_fallbac
         if tags:
             params["osm_tag"] = tags  # requests serialises a list as repeated params
 
-        # The same naming pipeline the website and the MCP tool use, so a trip imported from
-        # an email or a screenshot stores the identical label to one entered by hand — these
-        # three paths previously had three different city-prefix rules between them.
+        # The website's pipeline, so an imported trip gets the same label as one entered by hand.
         responses = photonRequestLangs("/api", params, ("en", "default"), timeout=10)
         features = process_station_results(responses)
 
@@ -230,7 +228,6 @@ def geocode_station(query, trip_type="train", fallback_coords=None, city_fallbac
                 country = getCountryFromCoordinates(lat, lng)
                 country_code = country.get("countryCode", "")
 
-            # Already the international name, city-prefixed where that disambiguates.
             name = props.get("name") or query
 
             return {
@@ -238,10 +235,7 @@ def geocode_station(query, trip_type="train", fallback_coords=None, city_fallbac
                 "lat": lat,
                 "lng": lng,
                 "country_code": country_code,
-                # The OSM identity of the place, carried so the trip this becomes can be
-                # registered in the station registry like one entered through the web form.
-                # Dropping it here is what left AI- and MCP-created trips with a label and no
-                # station, and so absent from every aggregate that groups by station.
+                # Carried so the trip can be registered like one from the web form.
                 "osm_ref": (
                     {
                         "osm_type": props.get("osm_type"),
@@ -621,12 +615,6 @@ def create_trip_from_parsed(user, parsed_trip, purchase_date=None, source="ai"):
         material_type=material_type, material_type_advanced=None, reg=None, waypoints=None, notes=build_notes(parsed_trip, user.lang, source), visibility=get_default_trip_visibility(trip_type)
     )
     
-    # Register the endpoints in the station registry, exactly as the web form does.
-    #
-    # Reuses seed_stations_from_trip rather than repeating it, so a trip created from an
-    # email, a screenshot or an MCP call ends up in the registry on the same terms as one
-    # typed in by hand. Without this these trips resolved only if their label happened to
-    # match a station somebody else had already registered.
     if origin_point and dest_point:
         seed_stations_from_trip(
             {

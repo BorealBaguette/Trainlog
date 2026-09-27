@@ -280,12 +280,7 @@
             </button>
             <input type="hidden" id="tileserver" name="tileserver" form="settingsForm" value="{{ user_tileserver }}">
 
-            {# How stations are named. A display choice over data already stored, so it costs
-               nothing and changes no trip: two users see the same trip under different names
-               and both still count as the same station. #}
-            {# The three labels have to say *whose* language each one means. An earlier
-               wording called the middle option "Native", which reads as "my native language"
-               rather than "the station's own name" — the opposite of what it does. #}
+            {# Display only: grouping is by station whatever the name shown. #}
             <label class="settings2-label mt-3" for="station_display">{{ stationNamesLabel }}</label>
             <div class="settings2-combo" data-combo="station_display">
               <div class="input-group">

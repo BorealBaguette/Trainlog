@@ -109,11 +109,7 @@ def get_stats_category(
 
 
 def station_naming_for(username):
-    """The (display mode, language) this user's station names should be rendered with.
-
-    Falls back to the international name for the all-users admin view, which has no
-    single reader to have a preference, and for a username that no longer exists.
-    """
+    """The (display mode, language) to render this user's station names with."""
     if not username:
         return ("international", None)
 
@@ -552,8 +548,6 @@ def fetch_stats(username, trip_type, year=None, datasets=ALL_DATASETS):
     # Handle admin case - use None as user_id to get all users
     user_id = None if username is None else get_user_id(username)
 
-    # Read once, not per dataset: the stations and routes queries both need it and it is a
-    # lookup on the auth database, which the stats session knows nothing about.
     station_naming = station_naming_for(username)
 
     with pg_session() as pg:

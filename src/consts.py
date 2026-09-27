@@ -68,16 +68,8 @@ class TripTypes(str, Enum):
             raise ValueError(f"Invalid trip type: {type_str}")
 
 
-# The icon for each trip type. Lifted out of the inject_distinct_types context processor in
-# app.py so the navbar, the stats menu and the admin panels all draw a bus with the same
-# glyph — three copies of this list would drift the first time a type was added.
-# Photon osm_tag filters per trip type. Without one Photon answers from the whole planet
-# index, so a search for "Grenoble" returns the city boundary relation rather than its station.
-# The trip form in templates/new.html sends these explicitly; anything that does not (the admin
-# registry panel) gets them applied by search_stations().
-#
-# Personal modes are absent on purpose: their endpoints are addresses and houses, not tagged
-# infrastructure, so a filter would return nothing.
+# Photon osm_tag filters per trip type. Unfiltered, Photon answers "Grenoble" with the city
+# boundary. Personal modes have no tagged infrastructure to filter on.
 STATION_OSM_TAGS = {
     "train": ("railway:halt", "railway:station"),
     "tram": ("railway:tram_stop", "railway:station", "railway:halt"),
@@ -91,6 +83,7 @@ STATION_OSM_TAGS = {
     "ski": ("aerialway:station",),
 }
 
+# Shared by the navbar, the stats menu and the admin panels.
 TRIP_TYPE_ICONS = {
     "train": "fa-solid fa-train",
     "tram": "fa-solid fa-train-tram",

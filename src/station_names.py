@@ -1,31 +1,17 @@
 """What a place is called internationally, and which of its names to show a given person.
 
-Photon's `lang=en` often returns a translation rather than a name ("Munich Hbf", "Prague Main
-Station"). international_name() picks the name the place is actually known by, first hit wins:
+Photon's `lang=en` often returns a translation ("Munich Hbf") rather than the name the place
+is known by. international_name() picks that name, first hit wins:
 
-  1. `int_name`                    the tag meaning exactly this; only ~3% of stations have it
-  2. local name, if Latin script   the common case, returned untouched: München Hbf
-  3. `name:<lang>-Latn`            a mapper's romanisation beats a generated one
-  4. `name:en`, if it is itself    Ukrainian mappers write "Kyiv-Volynskyi" there; see
-     a romanisation                ROMANISATION_SIMILARITY
-  5. transliteration               scripts ICU romanises well (see TRANSLITERABLE)
-  6. `name:en`, then local, then ""
+  1. `int_name`
+  2. the local name, if it is in Latin script
+  3. `name:<lang>-Latn`, a mapper's romanisation
+  4. `name:en`, if it is itself a romanisation of the local name
+  5. BGN/PCGN transliteration, for scripts ICU romanises well (see TRANSLITERABLE)
+  6. `name:en`, then the local name
 
-Rules 1 and 3 need OSM tags, so they apply only after enrichment, not in the autocomplete.
-
-Why BGN/PCGN and not ICU's generic `Any-Latin`, measured:
-
-    Москва-Казанская   Any-Latin -> 'Moskva-Kazanskaâ'      BGN -> 'Moskva-Kazanskaya'
-    Київ-Пасажирський  Any-Latin -> 'Kií̈v-Pasažirsʹkij'     BGN -> 'Kyyiv-Pasazhyrsʹkyy'
-    София              Any-Latin -> 'Sofiâ'                 BGN -> 'Sofiya'
-    Երևան              Any-Latin -> 'Erevan'                BGN -> 'Yerevan'
-
-Scripts ICU does not romanise usefully fall through to name:en instead. Measured: 東京 ->
-'dong jing', 서울역 -> 'seoul-yeog', กรุงเทพ -> 'krungtheph', القاهرة -> 'lqاhrh' (which does not
-even leave the Arabic script). Tokyo, Seoul Station and Bangkok are the real answers.
-
-preferred_spelling() answers a different question — which known spelling to put in front of
-the person who just searched. See its docstring.
+Rules 1 and 3 need OSM tags, so they apply only after enrichment. BGN rather than ICU's
+generic Any-Latin because it gives the spellings timetables use (Moskva-Kazanskaya, not Moskva-Kazanskaâ).
 """
 
 import difflib
@@ -34,52 +20,21 @@ import re
 import unicodedata
 from collections import Counter
 
+import icu
+
 logger = logging.getLogger(__name__)
 
-# PyICU is optional: it has no wheels and needs an apt layer for the ICU headers. Script
-# detection (rule 2, the common case) is pure Python below; only transliteration needs ICU.
-# Without it, non-Latin names fall through to name:en — the old behaviour.
-try:
-    import icu
 
-    HAS_ICU = True
-except ImportError:  # pragma: no cover - depends on the deployment image
-    icu = None
-    HAS_ICU = False
-    logger.warning(
-        "PyICU is not installed: station names in Cyrillic, Greek, Armenian and Georgian "
-        "will fall back to their English name instead of being romanised."
-    )
-
-# How close `name:en` must be to the generated transliteration before it counts as a
-# romanisation of the local name rather than a translation. Whole countries tag name:en with
-# a romanisation better than any transform's: "Kyiv-Volynskyi" over "Kyyiv-Volynskyy".
-#
-# Measured (difflib ratio, accents folded), which is where 85 comes from:
-#
-#     romanisations              Yerevan/Yerevan            100.0
-#                                Sofia/Sofiya                90.9
-#                                Kyiv-Volynskyi/Kyyiv-…      89.7
-#                                Kyiv-Tovarnyi/Kyyiv-…       88.9
-#                                Kyiv-Demiivskyi/Kyyiv-…     87.5
-#     ── threshold 85 ──
-#     translations / exonyms     Saint Petersburg/Sankt-…    83.9
-#                                Belgrade/Beograd            80.0
-#                                Moscow Kazansky/Moskva-…    68.8
-#                                Athens/Athína               66.7
-#                                Kyiv Passenger Railway…     37.5
-#                                Airport/Aërodhrómio         33.3
-#
-# The gap between 87.5 and 83.9 is the basis for the number. Lower starts preferring exonyms
-# ("Belgrade" over "Beograd"); higher discards good mapper romanisations.
+# How close `name:en` must be to the transliteration to count as a romanisation of the
+# local name rather than a translation. Lower starts preferring exonyms (Belgrade over
+# Beograd); higher loses mapper romanisations (Kyiv-Volynskyi over Kyyiv-Volynskyy).
 ROMANISATION_SIMILARITY = 85
 
 # Scripts (ICU short names) whose BGN/PCGN romanisation is good enough to show a user.
 TRANSLITERABLE = frozenset({"Cyrl", "Grek", "Armn", "Geor"})
 
-# Cyrillic is not one romanisation — Ukrainian and Russian differ — so the transform is picked
-# by country. KZ, KG, TJ and MN have no BGN transform of their own and use the Russian one,
-# which is what their own romanisations are based on.
+# Cyrillic romanisation depends on the language, hence by country. KZ, KG, TJ and MN
+# have no BGN transform of their own and use the Russian one.
 _BGN_BY_COUNTRY = {
     "RU": "Russian-Latin/BGN",
     "KZ": "Russian-Latin/BGN",
@@ -107,16 +62,13 @@ _BGN_BY_SCRIPT = {
     "Geor": "Georgian-Latin/BGN",
 }
 
-# BGN renders the Cyrillic soft and hard signs as modifier primes ("Pasazhyrsʹkyy"). They
-# appear in no timetable, so they are dropped; ASCII quotes are what some transforms emit.
+# BGN renders soft and hard signs as primes, which no timetable uses.
 _PRIME_CHARS = str.maketrans("", "", "ʹʺ’ʼ'`")
 
 _transliterator_cache = {}
 
 
 def _get_transliterator(transform_id):
-    if not HAS_ICU:
-        return None
     if transform_id not in _transliterator_cache:
         try:
             _transliterator_cache[transform_id] = icu.Transliterator.createInstance(
@@ -128,8 +80,7 @@ def _get_transliterator(transform_id):
     return _transliterator_cache[transform_id]
 
 
-# Unicode character names begin with their script, so stdlib can answer "what script is this"
-# without ICU. Values are ICU short names, which is what the transform tables are keyed on.
+# Unicode character names begin with their script. Values are ICU short names.
 _SCRIPT_BY_NAME_PREFIX = {
     "LATIN": "Latn",
     "CYRILLIC": "Cyrl",
@@ -165,11 +116,7 @@ def _script_of_char(ch):
 
 
 def dominant_script(text):
-    """The script short name most of `text`'s letters are written in ('Latn', 'Cyrl', …).
-
-    Non-letters do not vote. None if the string has no letters, or an unlisted script.
-    Stdlib-only so it works without PyICU; cross-checked against icu.Script.getScript().
-    """
+    """The ICU short name of the script most of `text`'s letters are in, or None."""
     if not text:
         return None
     scripts = [
@@ -188,12 +135,12 @@ def is_latin(text):
 
 
 def transliterate(text, country_code=None):
-    """Romanise `text` with the most appropriate BGN/PCGN transform, or None if unavailable.
+    """Romanise `text` with the matching BGN/PCGN transform, or None.
 
-    Returns None rather than a poor result when the script is one ICU does not romanise
-    usefully, so callers fall through to name:en instead of showing 'dong jing'.
+    None for scripts ICU does not romanise usefully, so callers fall through to name:en
+    rather than showing 'dong jing' for 東京.
     """
-    if not text or not HAS_ICU:
+    if not text:
         return None
     script = dominant_script(text)
     if script not in TRANSLITERABLE:
@@ -202,8 +149,7 @@ def transliterate(text, country_code=None):
     transform_id = None
     if country_code:
         transform_id = _BGN_BY_COUNTRY.get(country_code.upper())
-    # The country's transform must match the text's script, or a Greek-named place in Ukraine
-    # goes through the Ukrainian Cyrillic transform.
+    # The country's transform must match the script: a Greek name in Ukraine is not Ukrainian.
     if transform_id and _BGN_BY_SCRIPT.get(script) is not None:
         expected_script_family = _BGN_BY_SCRIPT[script].split("-")[0]
         cyrillic_family = {
@@ -234,7 +180,7 @@ def transliterate(text, country_code=None):
     if script == "Geor":
         result = result.title()
     result = re.sub(r"\s+", " ", result).strip()
-    # Some transforms silently leave the source script in place (Arabic-Latin/BGN: 'lqاhrh').
+    # Some transforms leave the source script in place.
     if not result or not is_latin(result):
         return None
     return unicodedata.normalize("NFC", result)
@@ -250,11 +196,7 @@ def _fold(text):
 
 
 def looks_like_romanisation(name_en, romanised):
-    """True if `name_en` appears to be a romanisation of the local name, not a translation.
-
-    Both describe the same place, so the question is only whether they are the same *word*.
-    See ROMANISATION_SIMILARITY for the measurements behind the threshold.
-    """
+    """True if `name_en` looks like a romanisation of the local name, not a translation."""
     if not name_en or not romanised:
         return False
     ratio = difflib.SequenceMatcher(None, _fold(name_en), _fold(romanised)).ratio()
@@ -264,11 +206,8 @@ def looks_like_romanisation(name_en, romanised):
 def international_name(name_local, name_en, *, country_code=None, tags=None):
     """The name a place should be shown under internationally.
 
-    `name_local` is the OSM `name` (Photon `lang=default`), `name_en` is `name:en`
-    (`lang=en`). `tags` is the full OSM tag dict when available — only the registry has it,
-    the autocomplete does not — and unlocks rules 1 and 3.
-
-    Returns "" only when given nothing usable.
+    `name_local` is the OSM `name`, `name_en` is `name:en`. `tags` is the full OSM tag dict,
+    available after enrichment. Returns "" only when given nothing usable.
     """
     tags = tags or {}
 
@@ -289,8 +228,7 @@ def international_name(name_local, name_en, *, country_code=None, tags=None):
         if key.startswith("name:") and key.endswith("-Latn") and value.strip():
             return value.strip()
 
-    # 4/5. Romanise, where ICU does it well — but a name:en that is itself a romanisation is
-    # a mapper's spelling of the same word and beats the generated one.
+    # 4/5. A name:en that is itself a romanisation beats the generated one.
     if name_local:
         romanised = transliterate(name_local, country_code)
         if romanised:
@@ -298,16 +236,14 @@ def international_name(name_local, name_en, *, country_code=None, tags=None):
                 return name_en
             return romanised
 
-    # 6. For the scripts it does not, name:en *is* the international name.
+    # 6. name:en, then the local name.
     if name_en:
         return name_en
-
-    # 6. Nothing better to offer than the local name as it stands.
     return name_local or ""
 
 
 def normalise_for_comparison(name):
-    """Fold a name for comparison. Mirrors station_normalize() in migration 0058."""
+    """Fold a name for comparison. Mirrors station_normalize() in SQL."""
     if not name:
         return None
     folded = unicodedata.normalize("NFD", name.lower())
@@ -316,23 +252,17 @@ def normalise_for_comparison(name):
     ) or None
 
 
-# How well a typed prefix must match the front of a spelling before that spelling is offered
-# instead of the station's own name. 0.7 leaves room for a typo or two — "pietarsar" scores
-# 0.89 against Pietarsaari-Pedersöre, "pietrsari" 0.78, while "helsink" scores 0.13.
+# How closely a typed prefix must match a spelling for it to be offered, leaving room for
+# a typo or two.
 _SPELLING_MATCH_MIN = 0.7
 
-# And it must be clearly better than the station's own name, not fractionally: a query naming
-# a *different* station scored a hair higher against this one's abbreviation than against its
-# full name, so the name it was offered under changed as the user kept typing.
+# And by how much it must beat the station's own name, so the offered name does not
+# flip back and forth as the user types.
 _SPELLING_MARGIN = 0.2
 
 
 def _prefix_similarity(folded_query, folded_name):
-    """How well `folded_query` matches the beginning of `folded_name`. 0.0 to 1.0.
-
-    Compared against the leading slice, not the whole name: otherwise the length difference
-    between a part-typed query and a full name dominates the score.
-    """
+    """How well `folded_query` matches the beginning of `folded_name`, 0.0 to 1.0."""
     if not folded_query or not folded_name:
         return 0.0
     return difflib.SequenceMatcher(
@@ -343,14 +273,8 @@ def _prefix_similarity(folded_query, folded_name):
 def preferred_spelling(query, canonical, matched_alias):
     """Which spelling of a station to offer someone who searched for `query`.
 
-    When the matched spelling is closer to what they typed than the registry's own name is,
-    that spelling is offered, and stored on their trip if they pick it. A Finn typing
-    "Pietarsaari-Pedersöre" should not be answered "Jakobstad-Pedersöre".
-
-    Not made redundant by the read path (migration 0060), which only applies once a user sets
-    station_display='language'; the default is 'international' and defaults are what most
-    people run. Nothing is lost either way — resolution is keyed on the normalised label, so
-    both spellings still group as one station in every aggregate.
+    A Finn typing "Pietarsaari" is offered the Finnish name rather than "Jakobstad". Both
+    spellings resolve to the same station, so this only affects the stored label.
     """
     if not matched_alias or matched_alias == canonical:
         return canonical
@@ -361,19 +285,15 @@ def preferred_spelling(query, canonical, matched_alias):
     if not folded_query or not folded_alias:
         return canonical
 
-    # 1. The name we would show already contains what was typed: nothing to fix. Stays first
-    # and stays exact — a French user typing "Oslo" wants "Gare centrale d'Oslo", and a
-    # prefix comparison here handed them "Oslo S" instead, overriding their own setting.
+    # 1. The name we would show already contains what was typed.
     if folded_canonical and folded_query in folded_canonical:
         return canonical
 
-    # 2. The typed text appears in the alias: clearly the language being searched in.
+    # 2. The alias contains it: that is the language being typed.
     if folded_query in folded_alias:
         return matched_alias
 
-    # 3. Neither contains it exactly — the normal case mid-typing. Containment alone was the
-    # whole test here and threw away the Finnish spelling for one missing letter, since
-    # "pietarsar" is not a substring of "pietarsaaripedersore". Compare fuzzily instead.
+    # 3. Mid-typing, neither contains it exactly, so compare fuzzily.
     alias_score = _prefix_similarity(folded_query, folded_alias)
     canonical_score = _prefix_similarity(folded_query, folded_canonical)
     if (alias_score >= _SPELLING_MATCH_MIN

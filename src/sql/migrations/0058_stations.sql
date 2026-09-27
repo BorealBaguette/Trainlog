@@ -1,27 +1,15 @@
--- Canonical stations, the places trips actually start and end at.
---
--- A trip's endpoints were only their printed label, so one physical station became as many
--- "stations" as there were spellings of it, and every aggregate grouping on the string counted
--- them apart. This is the registry those labels resolve to. Following operator_aliases (0042)
--- and vessels (0054), `trips.origin_station` stays free text and the source of truth, and
--- resolution happens at read time — so identifying a station later fixes every trip that ever
--- named it.
---
--- Seeded LAZILY, when somebody first picks a station: the answer to the maintenance problem
--- that killed the hand-curated list, whose 123k rows nobody could keep current.
+-- Station registry. Trip endpoints stay free text and remain the source of truth;
+-- station_labels maps each distinct spelling to a station, resolved at read time, so
+-- identifying a station later fixes every trip that ever named it.
 
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 1. Normalisation
+-- Helpers
 -- ─────────────────────────────────────────────────────────────────────────────
--- Fold a written station name to a comparison key. Mirrors operator_normalize() (0042), plus
--- stripping the leading flag emoji, which must not take part in matching.
---
--- [:alnum:] rather than [a-z0-9] is deliberate: the class is ctype-aware, so Київ, 東京 and
--- Αθήνα keep their letters instead of normalising to the empty string.
---
--- The schema qualification is load-bearing: CREATE INDEX evaluates its expression under a
--- restricted search_path, so an unqualified version fails there while working in a SELECT.
+
+-- Comparison key for a written name: no flag, case, accents or punctuation.
+-- [:alnum:] rather than [a-z0-9] so non-Latin names (Київ, 東京) keep their letters.
+-- Schema-qualified because index expressions are evaluated under a restricted search_path.
 CREATE OR REPLACE FUNCTION station_normalize(text) RETURNS text AS $$
     SELECT NULLIF(
         lower(regexp_replace(
@@ -32,17 +20,13 @@ CREATE OR REPLACE FUNCTION station_normalize(text) RETURNS text AS $$
     )
 $$ LANGUAGE sql IMMUTABLE;
 
--- Diacritic-folded lowercase, for fuzzy matching: "munchen" must find "München".
--- Schema-qualified for the same index-expression reason as station_normalize() above.
+-- Folded form for fuzzy search, so "munchen" finds "München".
 CREATE OR REPLACE FUNCTION station_fold(text) RETURNS text AS $$
     SELECT lower(public.unaccent('public.unaccent'::regdictionary, COALESCE($1, '')))
 $$ LANGUAGE sql IMMUTABLE;
 
--- The country code carried by a label's leading flag emoji, or NULL. A flag is two regional
--- indicator symbols (U+1F1E6..U+1F1FF) standing for 'A'..'Z', so "🇫🇷 Gare de Lyon" is 'FR'.
---
--- A hint, not a fact: measured, "Paris Gare du Nord" appears with 🇬🇭 and 🇬🇧 alongside 🇫🇷,
--- "Rotterdam Centraal" with 🇧🇪. Resolution prefers on it, never excludes on it.
+-- Country code of a label's leading flag emoji, or NULL. Stored flags are often wrong,
+-- so this only ever breaks ties, never filters.
 CREATE OR REPLACE FUNCTION station_flag_country(text) RETURNS text AS $$
     SELECT CASE
         WHEN $1 IS NULL OR length($1) < 2 THEN NULL
@@ -54,8 +38,15 @@ CREATE OR REPLACE FUNCTION station_flag_country(text) RETURNS text AS $$
     END
 $$ LANGUAGE sql IMMUTABLE;
 
--- Which pool of places a trip type draws from. Mirrors station_bucket() in src/stations.py,
--- which carries the reasoning.
+-- The label's flag with its trailing space, or ''.
+CREATE OR REPLACE FUNCTION station_flag_prefix(text) RETURNS text AS $$
+    SELECT CASE
+        WHEN station_flag_country($1) IS NULL THEN ''
+        ELSE substring($1 FROM 1 FOR 2) || ' '
+    END
+$$ LANGUAGE sql IMMUTABLE;
+
+-- Mirrors station_bucket() in src/stations.py.
 CREATE OR REPLACE FUNCTION station_type_bucket(trip_type text) RETURNS text AS $$
     SELECT CASE
         WHEN $1 IN ('accommodation', 'accomodation') THEN 'accommodation'
@@ -64,124 +55,91 @@ CREATE OR REPLACE FUNCTION station_type_bucket(trip_type text) RETURNS text AS $
     END
 $$ LANGUAGE sql IMMUTABLE;
 
+-- Mirrors REGISTRY_EXCLUDED_TYPES in src/stations.py, which gives the reasons.
+CREATE OR REPLACE FUNCTION station_type_tracked(trip_type text) RETURNS boolean AS $$
+    SELECT station_type_bucket($1) NOT IN (
+        'air',
+        'car', 'walk', 'cycle', 'scooter',
+        'accommodation', 'restaurant', 'poi',
+        'other'
+    )
+$$ LANGUAGE sql IMMUTABLE;
+
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 2. The registry
+-- Registry
 -- ─────────────────────────────────────────────────────────────────────────────
+
 CREATE TABLE stations (
     station_id    SERIAL PRIMARY KEY,
 
-    -- The OSM object a user picked. Not the identity: see wikidata/uic_ref below and
-    -- station_osm_objects for why one station has several of these.
+    -- The OSM object first picked. Identity prefers wikidata, then uic_ref: both are
+    -- shared by every object of a station and survive OSM object churn.
     osm_type      CHAR(1),
     osm_id        BIGINT,
-
-    -- The real identity anchors, and the reason this table is worth having. Measured over 60
-    -- stations: wikidata on 97%, uic_ref on 35%. Both are shared by every OSM object of one
-    -- station and both survive the object churn that changes osm_id, which makes them better
-    -- identity than (osm_type, osm_id) — so resolution prefers them, in this order.
     wikidata      TEXT,
     uic_ref       TEXT,
 
     station_type  TEXT NOT NULL,
 
-    -- name_local is the OSM `name`; name_intl is what src/station_names.py made of it;
-    -- `names` holds every name:* / int_name / alt_name tag verbatim. All three are stored so
-    -- that display is a rendering decision and never a re-fetch.
+    -- name_local is the OSM `name`, name_intl the name chosen by src/station_names.py,
+    -- names every name:* / int_name / alt_name tag. curated_name is an admin override.
     name_local    TEXT,
     name_intl     TEXT NOT NULL,
     names         JSONB NOT NULL DEFAULT '{}'::jsonb,
-
-    -- An admin's correction, outranking name_intl everywhere. The escape hatch for what the
-    -- naming rules cannot settle: BGN gives "Kyyiv-Pasazhyrskyy" where the accepted spelling
-    -- is "Kyiv-Pasazhyrskyi", and bilingual places have no single right answer.
     curated_name  TEXT,
 
     country_code  TEXT,
 
-    -- Where OSM puts the object, and where an admin says the station actually is.
-    --
-    -- A station node is often placed on whichever track the mapper was tracing — the train
-    -- station's node out on the tram tracks, or on the metro platform below. Fine for OSM and
-    -- wrong here: these coordinates anchor the geometry backfill, the duplicate radius and the
-    -- sibling lookup's `around` bound, so a node on the wrong tracks breaks all three.
-    --
-    -- The OSM value is kept rather than overwritten, so re-enrichment can refresh it without
-    -- destroying the correction.
+    -- OSM often places a station node on the wrong tracks; the admin correction lives
+    -- beside it so re-enrichment can refresh the OSM position without losing it.
     lat           DOUBLE PRECISION,
     lng           DOUBLE PRECISION,
     curated_lat   DOUBLE PRECISION,
     curated_lng   DOUBLE PRECISION,
-
-    -- What every reader should use. Generated rather than left to each caller to COALESCE:
-    -- a caller that forgets silently uses the position the correction exists to fix.
     effective_lat DOUBLE PRECISION GENERATED ALWAYS AS (COALESCE(curated_lat, lat)) STORED,
     effective_lng DOUBLE PRECISION GENERATED ALWAYS AS (COALESCE(curated_lng, lng)) STORED,
 
-    -- NULL means the tags are not fetched yet: this column is the enrichment queue, and why
-    -- a trip save never waits on a third-party API.
+    -- NULL = waiting for OSM enrichment; this column is the queue.
     enriched_at   TIMESTAMPTZ,
 
-    -- Set when this station is folded into another. Reads follow it; nothing is deleted, so
-    -- trips pointing here keep working.
+    -- Set when merged into another station. Reads follow it.
     superseded_by INTEGER REFERENCES stations (station_id)
 );
 
--- Identity, strongest first. Partial so the majority of rows with no uic_ref do not all
--- collide on NULL.
+-- Identity is unique per mode among live stations only: a merged-away row must not
+-- block its survivor from taking the same anchor.
 CREATE UNIQUE INDEX stations_wikidata_key ON stations (station_type, wikidata)
-    WHERE wikidata IS NOT NULL;
+    WHERE wikidata IS NOT NULL AND superseded_by IS NULL;
 CREATE UNIQUE INDEX stations_uic_ref_key ON stations (station_type, uic_ref)
-    WHERE uic_ref IS NOT NULL;
-CREATE UNIQUE INDEX stations_osm_key ON stations (osm_type, osm_id)
-    WHERE osm_id IS NOT NULL;
+    WHERE uic_ref IS NOT NULL AND superseded_by IS NULL;
+CREATE UNIQUE INDEX stations_osm_key ON stations (station_type, osm_type, osm_id)
+    WHERE osm_id IS NOT NULL AND superseded_by IS NULL;
 
 CREATE INDEX stations_enrichment_queue_idx ON stations (station_id)
     WHERE enriched_at IS NULL;
 CREATE INDEX stations_superseded_by_idx ON stations (superseded_by)
     WHERE superseded_by IS NOT NULL;
--- The geometry backfill asks "stations near this point", so it is indexed on the effective
--- coordinates rather than the raw ones.
 CREATE INDEX stations_coords_idx ON stations (effective_lat, effective_lng);
 
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 3. Which OSM objects are this station
--- ─────────────────────────────────────────────────────────────────────────────
--- Photon indexes the station node, the building way, the stop_area relation and every platform
--- separately, so one station comes back several times under different osm_ids — measured,
--- Antwerpen-Centraal six times and München Hbf five — and two users will not pick the same one.
---
--- Recording every object of a station makes that harmless: whichever is picked resolves to the
--- same row, and the autocomplete collapses duplicates exactly instead of guessing by distance.
+-- Photon returns a station's node, building, stop_area and platforms as separate results,
+-- so every OSM object of a station maps to it. Per mode: at an interchange one node can
+-- anchor both the metro stop and the train station.
 CREATE TABLE station_osm_objects (
     osm_type   CHAR(1) NOT NULL,
     osm_id     BIGINT  NOT NULL,
     station_id INTEGER NOT NULL REFERENCES stations (station_id) ON DELETE CASCADE,
-    PRIMARY KEY (osm_type, osm_id)
+    PRIMARY KEY (osm_type, osm_id, station_id)
 );
 CREATE INDEX station_osm_objects_station_id_idx ON station_osm_objects (station_id);
 
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 4. Aliases
--- ─────────────────────────────────────────────────────────────────────────────
--- Every spelling a station is known by: its own names, every name:* tag, alt_name, int_name,
--- and anything an admin adds.
---
--- Deliberately unlike operator_aliases (0042), which puts a UNIQUE index on the normalised
--- spelling because one spelling means one operator. False for stations — "Hauptbahnhof" and
--- "Centraal" name hundreds of places — so a spelling may point at many stations and
--- resolution must handle that. See station_resolve_alias() in 0060.
---
--- This is also what fixes searchability: Photon indexes only default/de/en/fr, so a station
--- named in Finnish cannot be found by a Finn. Enrichment writes every name:* here.
+-- Every spelling a station is known by. Not unique across stations: "Hauptbahnhof" names
+-- hundreds of them, and station_resolve_alias() handles the ambiguity.
 CREATE TABLE station_aliases (
     alias_id   SERIAL PRIMARY KEY,
     station_id INTEGER NOT NULL REFERENCES stations (station_id) ON DELETE CASCADE,
     alias      TEXT NOT NULL,
     normalized TEXT GENERATED ALWAYS AS (station_normalize(alias)) STORED,
-    -- Where the spelling came from. 'lang' rows carry the language in `lang`.
     kind       TEXT NOT NULL DEFAULT 'alias',
     lang       TEXT,
     CONSTRAINT station_aliases_kind_check
@@ -190,16 +148,174 @@ CREATE TABLE station_aliases (
     CONSTRAINT station_aliases_normalized_check CHECK (normalized IS NOT NULL)
 );
 
--- One row per spelling per station; the same spelling on two stations is allowed.
 CREATE UNIQUE INDEX station_aliases_station_normalized_key
     ON station_aliases (station_id, normalized);
--- Exact resolution: raw trip text -> candidate stations.
 CREATE INDEX station_aliases_normalized_idx ON station_aliases (normalized);
--- Fuzzy search, on the folded form so "munchen" finds "München". Queries must fold their
--- search term with station_fold() too, or they will not use this index.
+-- Queries must fold their search term with station_fold() to use this.
 CREATE INDEX station_aliases_alias_trgm_idx
     ON station_aliases USING gin (station_fold(alias) gin_trgm_ops);
 
--- The planner needs statistics before the first autocomplete query after deploy.
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Label cache
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- What each distinct written spelling resolves to, per mode. Keyed on the spelling rather
+-- than the trip, so editing a trip needs no sync. station_id NULL is the admin queue.
+CREATE TABLE station_labels (
+    label_id        SERIAL PRIMARY KEY,
+    normalized      TEXT NOT NULL,
+    station_type    TEXT NOT NULL,
+    sample_label    TEXT NOT NULL,
+    station_id      INTEGER REFERENCES stations (station_id) ON DELETE SET NULL,
+    -- Refreshed in bulk by refresh_label_counts(); they only order the queue.
+    occurrences     INTEGER NOT NULL DEFAULT 0,
+    users           INTEGER NOT NULL DEFAULT 0,
+    -- What the seeding script concluded; see find_candidate() in src/station_seed.py.
+    auto_checked_at TIMESTAMPTZ,
+    auto_result     TEXT,
+    CONSTRAINT station_labels_normalized_check CHECK (normalized <> '')
+);
+
+CREATE UNIQUE INDEX station_labels_key ON station_labels (station_type, normalized);
+CREATE INDEX station_labels_station_id_idx ON station_labels (station_id);
+CREATE INDEX station_labels_unresolved_idx ON station_labels (occurrences DESC)
+    WHERE station_id IS NULL;
+CREATE INDEX station_labels_auto_result_idx ON station_labels (auto_result)
+    WHERE station_id IS NULL;
+-- Aggregates only join resolved labels, a small minority of the table.
+CREATE INDEX station_labels_resolved_key
+    ON station_labels (station_type, normalized)
+    INCLUDE (station_id)
+    WHERE station_id IS NOT NULL;
+
+CREATE INDEX trips_origin_station_normalized_idx
+    ON trips (station_normalize(origin_station));
+CREATE INDEX trips_destination_station_normalized_idx
+    ON trips (station_normalize(destination_station));
+
+CREATE OR REPLACE VIEW trip_station_endpoints AS
+SELECT trip_id,
+       user_id,
+       station_normalize(origin_station)  AS normalized,
+       station_type_bucket(trip_type)     AS station_type,
+       origin_station                     AS raw
+FROM trips
+WHERE station_normalize(origin_station) IS NOT NULL
+  AND station_type_tracked(trip_type)
+UNION ALL
+SELECT trip_id,
+       user_id,
+       station_normalize(destination_station),
+       station_type_bucket(trip_type),
+       destination_station
+FROM trips
+WHERE station_normalize(destination_station) IS NOT NULL
+  AND station_type_tracked(trip_type);
+
+INSERT INTO station_labels (normalized, station_type, sample_label, occurrences, users)
+SELECT normalized,
+       station_type,
+       (array_agg(raw ORDER BY n DESC))[1],
+       sum(n)::int,
+       max(u)::int
+FROM (
+    SELECT normalized, station_type, raw,
+           count(*) AS n, count(DISTINCT user_id) AS u
+    FROM trip_station_endpoints
+    GROUP BY 1, 2, 3
+) spellings
+GROUP BY normalized, station_type;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Resolution and display
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- The single station a spelling names, or NULL for a human to decide:
+--   1. exactly one candidate in the label's flag country
+--   2. otherwise exactly one candidate
+-- Guessing between two real stations would silently credit trips to the wrong place.
+CREATE OR REPLACE FUNCTION station_resolve_alias(
+    p_normalized text, p_station_type text, p_flag_country text
+) RETURNS integer AS $$
+    SELECT CASE
+        WHEN count(*) FILTER (WHERE c.country_matches) = 1
+            THEN (array_agg(c.station_id) FILTER (WHERE c.country_matches))[1]
+        WHEN count(*) = 1
+            THEN (array_agg(c.station_id))[1]
+        ELSE NULL
+    END
+    FROM (
+        SELECT s.station_id,
+               s.country_code IS NOT DISTINCT FROM p_flag_country AS country_matches
+        FROM station_aliases a
+        JOIN stations s ON s.station_id = a.station_id
+        WHERE a.normalized = p_normalized
+          AND s.station_type = p_station_type
+          AND s.superseded_by IS NULL
+    ) c
+$$ LANGUAGE sql STABLE;
+
+-- Mirrors display_name() in src/stations.py. Takes columns rather than an id because
+-- aggregates have already joined `stations`.
+CREATE OR REPLACE FUNCTION station_display_name(
+    p_curated text, p_name_intl text, p_name_local text, p_names jsonb,
+    p_mode text, p_lang text
+) RETURNS text AS $$
+    SELECT COALESCE(
+        p_curated,
+        CASE
+            WHEN p_mode = 'native' THEN p_name_local
+            WHEN p_mode = 'language' AND p_lang IS NOT NULL AND p_lang <> '' THEN
+                COALESCE(p_names ->> ('name:' || p_lang),
+                         p_names ->> ('name:' || split_part(p_lang, '-', 1)))
+        END,
+        p_name_intl
+    )
+$$ LANGUAGE sql IMMUTABLE;
+
+CREATE OR REPLACE FUNCTION station_display_name(
+    p_station_id integer, p_mode text, p_lang text
+) RETURNS text AS $$
+    SELECT station_display_name(
+        s.curated_name, s.name_intl, s.name_local, s.names, p_mode, p_lang
+    )
+    FROM stations s
+    WHERE s.station_id = p_station_id
+$$ LANGUAGE sql STABLE;
+
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Seeding runs started from the admin panel
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- In the database because the browser's progress poll can land on any worker.
+-- updated_at is the heartbeat that tells a dead run from a slow one.
+CREATE TABLE station_seed_runs (
+    run_id           SERIAL PRIMARY KEY,
+    started_by       TEXT NOT NULL,
+    started_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
+    finished_at      TIMESTAMPTZ,
+    params           JSONB NOT NULL DEFAULT '{}'::jsonb,
+    -- running | done | stopped | failed
+    state            TEXT NOT NULL DEFAULT 'running',
+    stop_requested   BOOLEAN NOT NULL DEFAULT FALSE,
+    total            INTEGER NOT NULL DEFAULT 0,
+    attempted        INTEGER NOT NULL DEFAULT 0,
+    registered       INTEGER NOT NULL DEFAULT 0,
+    skipped          INTEGER NOT NULL DEFAULT 0,
+    failed           INTEGER NOT NULL DEFAULT 0,
+    endpoints_gained INTEGER NOT NULL DEFAULT 0,
+    error            TEXT,
+    log              JSONB NOT NULL DEFAULT '[]'::jsonb
+);
+
+
+-- Replaced by Photon plus this registry.
+DROP TABLE IF EXISTS train_stations;
+
 ANALYZE stations;
 ANALYZE station_aliases;
+ANALYZE station_labels;

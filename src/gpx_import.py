@@ -40,12 +40,7 @@ class GpxIngestError(ValueError):
 
 
 def getAddressFromCoords(lat, lng):
-    """Reverse-geocode a coordinate to a "flag City - Suburb" label via Photon.
-
-    The place names go through the same international-name rule as the station autocomplete,
-    so a track imported in Japan is labelled like a trip entered by hand there rather than in
-    English only.
-    """
+    """Reverse-geocode a coordinate to a "flag City - Suburb" label via Photon."""
     responses = photonRequestLangs(
         "/reverse", {"lon": lng, "lat": lat}, ("en", "default")
     )
@@ -61,9 +56,7 @@ def getAddressFromCoords(lat, lng):
         for field in field_names:
             english = props.get(field)
             if english:
-                # merge_language_passes only carries `name` and `city` across; for the other
-                # fields the local spelling is not available, and international_name falls
-                # back to the English one.
+                # Only the city has a local spelling from merge_language_passes.
                 local = props.get("city_local") if field == "city" else None
                 return international_name(local, english, country_code=country_code)
         return ""

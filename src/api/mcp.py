@@ -748,11 +748,7 @@ def _search_stations(query: str, trip_type: str, limit: int) -> list[dict]:
     if tags:
         params["osm_tag"] = tags  # requests serialises a list as repeated params
 
-    # Exactly the pipeline the website's autocomplete runs, rather than a near-copy of part
-    # of it. This function used to ask for lang=en and prefix the city whenever it differed
-    # from the name at all, so the same station came back under a different label here than
-    # in the browser — and since a trip stores that label as text, a trip logged through MCP
-    # would not group with the same trip logged through the website.
+    # The website's pipeline, so a trip logged here gets the same label and groups with it.
     responses = photonRequestLangs("/api", params, ("en", "default"), timeout=3)
     if all(response is None for response in responses.values()):
         raise ValueError("Station search is temporarily unavailable.")

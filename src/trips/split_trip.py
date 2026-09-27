@@ -264,9 +264,6 @@ def split_trip(trip_id, split_index, mid_station, user_id):
         )
         _write_path(pg, trip_id, c1, a1, t1)
         sync_trip_operators(trip_id, pg_session_=pg)
-        # Same for the endpoints: make sure the station registry knows the
-        # spellings this trip uses. Keyed on the label, not the trip, so an
-# edit needs no bookkeeping here.
         sync_trip_labels(trip_id, pg_session_=pg)
 
         # ── Leg 2: a new trip starting at the cut. Price/ticket stay on leg 1 only. ──
@@ -312,9 +309,6 @@ def split_trip(trip_id, split_index, mid_station, user_id):
         ).fetchone()[0]
         _write_path(pg, leg2_id, c2, a2, t2)
         sync_trip_operators(leg2_id, pg_session_=pg)
-        # Same for the endpoints: make sure the station registry knows the
-        # spellings this trip uses. Keyed on the label, not the trip, so an
-# edit needs no bookkeeping here.
         sync_trip_labels(leg2_id, pg_session_=pg)
 
     logger.info(

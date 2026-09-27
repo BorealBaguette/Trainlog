@@ -16,6 +16,8 @@ import logging
 import urllib.parse
 import urllib.request
 
+from src.rate_limit import RateLimited, take
+
 logger = logging.getLogger(__name__)
 
 SPARQL_URL = "https://query.wikidata.org/sparql"
@@ -30,6 +32,7 @@ CHUNK = 250
 
 
 def sparql(query, timeout=180):
+    take("wikidata")
     url = f"{SPARQL_URL}?{urllib.parse.urlencode({'query': query, 'format': 'json'})}"
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -94,6 +97,7 @@ SHIP_CLASS = "Q11446"
 
 
 def api(params, timeout=30):
+    take("wikidata")
     url = f"{WIKIDATA_API}?{urllib.parse.urlencode({**params, 'format': 'json'})}"
     request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -139,6 +143,8 @@ def search_ships(name, limit=15):
                 }
             )
             collect(hit["title"] for hit in hits["query"]["search"])
+        except RateLimited:
+            raise
         except Exception as exc:
             logger.warning("Wikidata full-text search failed for %r: %s", name, exc)
 
@@ -156,6 +162,8 @@ def search_ships(name, limit=15):
             }
         )
         collect(hit["id"] for hit in hits.get("search") or [])
+    except RateLimited:
+        raise
     except Exception as exc:
         logger.warning("Wikidata label search failed for %r: %s", name, exc)
 

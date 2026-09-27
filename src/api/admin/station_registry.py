@@ -1,8 +1,5 @@
-"""Admin panel for the station registry (migrations 0058-0061).
-
-The registry mostly runs itself; this covers the judgement it cannot make alone — the
-unresolved-label queue, merging two rows that are one station, and curated_name for the
-names the rules get wrong. Every action is reversible and none touches a user's trips.
+"""Admin panel for the station registry: the unresolved-label queue, merging, and
+curation. No action here touches a user's trips.
 """
 
 import logging
@@ -45,14 +42,12 @@ station_registry_blueprint = Blueprint("station_registry", __name__)
 @station_registry_blueprint.route("")
 @admin_required
 def station_registry():
-    # Stats are loaded from /stats rather than passed: the name `stats` is already a navbar
-    # translation key and would collide with the lang/userinfo splat below.
+    # Not passed as `stats`: that name is a navbar translation key in the lang splat.
     return render_template(
         "admin/station_registry.html",
         nav="bootstrap/navigation.html",
         username=getUser(),
         trip_type_icons=TRIP_TYPE_ICONS,
-        # Pulls in leafletLayout.html for the detail modal's position map.
         leaflet=True,
         isCurrent=has_current_trip(),
         **lang[session["userinfo"]["lang"]],
@@ -96,11 +91,9 @@ def unresolved():
 @station_registry_blueprint.route("/label-location")
 @admin_required
 def label_location_route():
-    """Where the trips using a label actually start or end.
+    """Where the trips using a label start or end.
 
-    Fetched when the resolve modal opens rather than with the queue: it is a percentile over
-    every path endpoint using the spelling, which is worth paying for once on the label being
-    worked and not a hundred times per page.
+    Fetched per label when the modal opens: it is a percentile over every path endpoint.
     """
     label = request.args.get("label") or ""
     mode = request.args.get("mode") or "train"
@@ -230,21 +223,15 @@ def curate(station_id):
             "UPDATE stations SET curated_name = :name WHERE station_id = :id",
             {"name": name or None, "id": station_id},
         )
-        # The curated name is itself a spelling this station should be findable by.
         if name:
             add_aliases(station_id, [(name, "alias", None)], pg_session_=pg)
-    # Trips already using this spelling should pick the station up.
     return jsonify({"success": True, "trips_resynced": resync_station(station_id)})
 
 
 @station_registry_blueprint.route("/station/<int:station_id>/position", methods=["POST"])
 @admin_required
 def set_position(station_id):
-    """Move the station's dot, or clear the move and fall back to the OSM position.
-
-    The correction lives in curated_lat/curated_lng, never overwriting the OSM value, so
-    re-enrichment can refresh the position without destroying it. See migration 0058.
-    """
+    """Move the station's pin, or clear the move and fall back to the OSM position."""
     body = request.json or {}
     if body.get("clear"):
         lat = lng = None
@@ -288,12 +275,9 @@ def add_alias(station_id):
     if not alias:
         return jsonify({"success": False, "error": "empty alias"}), 400
 
-    # With a language, the spelling *is* the station's name in that language and is shown to
-    # readers of it — the only way to add one OSM and Wikidata do not carry.
+    # With a language, the spelling is also the station's name in that language.
     kind = "lang" if alias_lang else "alias"
 
-    # The queue shows labels flag and all; storing it would put a misleading spelling in the
-    # alias list, even though station_normalize would ignore it.
     added = add_aliases(station_id, [(strip_flag(alias), kind, alias_lang)])
     if alias_lang:
         _record_language_name(station_id, alias_lang, strip_flag(alias))
@@ -309,9 +293,7 @@ def add_alias(station_id):
 def _record_language_name(station_id, alias_lang, name):
     """Also store an admin-supplied name in `stations.names`, as `name:<lang>`.
 
-    station_aliases makes a spelling findable; `names` is what display_name() shows. Without
-    this an admin's added name would search correctly and never be displayed. Merged, not
-    assigned, so a later re-enrichment does not drop it.
+    Aliases only make a name findable; `names` is what is displayed.
     """
     with pg_session() as pg:
         pg.execute(
@@ -333,7 +315,6 @@ def delete_alias(alias_id):
         ).fetchone()
         if row is None:
             return jsonify({"success": False, "error": "not found"}), 404
-        # The station's own names are how it is found at all; removing one would strand it.
         if row["kind"] in ("intl", "local"):
             return jsonify(
                 {
@@ -357,11 +338,10 @@ def enrich_one(station_id):
         return jsonify({"success": False, "error": str(e)}), 502
 
 
-# ── Seeding ──────────────────────────────────────────────────────────────────────────────
+# ── Seeding ─────────────────────────────────────────────────────────────────────────────
 #
-# Owner-only, unlike the rest of the panel: this registers stations unattended, at a rate no
-# one is reading, and it spends the Photon that serves the live autocomplete. Everything else
-# here is one admin deciding one label.
+# Owner-only: it registers stations unattended and spends the Photon that serves the live
+# autocomplete.
 
 
 @station_registry_blueprint.route("/seed", methods=["GET"])
@@ -438,13 +418,8 @@ def merge():
 def register_preview():
     """Everything the station page shows, for a station that does not exist yet.
 
-    Shaped exactly like /station/<id> so one renderer draws both, and the admin decides on the
-    real page rather than a summary of it. That needs the OSM tags up front, so this fetches
-    them; saving fetches them again to write them, which is one extra Overpass call per manual
-    registration.
-
-    A fetch failure stops the preview rather than degrading it: a page with no identity looks
-    exactly like a station that has none, and that is not a thing to register on.
+    Shaped like /station/<id> so one renderer draws both. A failed OSM fetch stops the
+    preview: a page with no identity would look like a station that has none.
     """
     body = request.json or {}
     raw_label = (body.get("raw_name") or "").strip()
@@ -456,8 +431,6 @@ def register_preview():
     endpoints = _label_endpoints(raw_label, station_type)
     existing = find_station(station_type=station_type, osm_type=osm_type, osm_id=osm_id)
 
-    # An existing station already has a page; return it verbatim so the two cases render from
-    # identical data and cannot drift apart.
     if existing:
         payload = _station_payload(existing)
         payload.update(
@@ -495,7 +468,6 @@ def register_preview():
     lat = position.get("lat") if position.get("lat") is not None else body.get("lat")
     lng = position.get("lng") if position.get("lng") is not None else body.get("lng")
 
-    # The spellings this station would answer to, in the shape the page lists them.
     aliases, seen = [], set()
     for a, kind, lang in alias_rows_from_tags(tags, name_intl):
         key = (a or "").strip().lower()
@@ -565,8 +537,7 @@ def _label_endpoints(raw_label, station_type):
 def register():
     """Create a station for an unresolved label, from a chosen search result.
 
-    The queue's main action: the label becomes an alias of the picked place, resolving every
-    trip using that spelling at once.
+    The label becomes an alias of it, resolving every trip using that spelling.
     """
     body = request.json or {}
     raw_label = (body.get("raw_name") or "").strip()
@@ -576,10 +547,8 @@ def register():
 
     station_type = body.get("station_type") or "train"
 
-    # Refuse to give this spelling to a second station: a search routinely offers several rows
-    # that are the same place, and registering two attaches the label to both, which resolves
-    # to neither. Measured: 2,100 endpoints stranded on one label. The browser locks the result
-    # list too, but a second tab or a direct call bypasses that; this is the check that holds.
+    # A spelling held by two stations resolves to neither. The browser prevents it too,
+    # but this is the check that holds.
     if raw_label:
         holders = stations_holding_alias(strip_flag(raw_label), station_type)
         if holders:
@@ -611,24 +580,19 @@ def register():
     if station_id is None:
         return jsonify({"success": False, "error": "could not register"}), 400
 
-    # The typed label becomes a spelling of this station — often not the station's own name,
-    # and what actually resolves the trips.
     if raw_label:
         add_aliases(station_id, [(strip_flag(raw_label), "alias", None)])
 
     resynced = resync_station(station_id)
 
-    # Fetch the tags now rather than leaving the row for the background thread. The preview
-    # already showed the admin this station's identity and spellings; saving has to actually
-    # write them, or the page they approved is not the page they get.
+    # Enrich now: the admin approved the preview's identity and spellings.
     enriched = {}
     try:
         enriched = enrich_stations([station_id])
     except Exception as e:
         logger.warning(f"Station {station_id} registered but enrichment failed: {e}")
 
-    # A moved marker goes to the curated position, not to lat/lng: enrichment refreshes those
-    # from OSM and would put the pin straight back where the admin moved it from.
+    # Curated, not lat/lng, which enrichment refreshes from OSM.
     curated_lat, curated_lng = body.get("curated_lat"), body.get("curated_lng")
     if curated_lat is not None and curated_lng is not None:
         with pg_session() as pg:

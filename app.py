@@ -333,8 +333,6 @@ from src.error_reporter import report_error
 app = Flask(__name__)
 start_email_listener(app)
 start_trip_announcer(app)
-# Fetches OSM tags for stations that entered the registry since the last pass. Same
-# daemon-thread pattern as the email listener; Trainlog runs no scheduler.
 start_station_enricher(app)
 
 app.config['DEBUG'] = True
@@ -894,8 +892,7 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
             station_type=trip_type,
         )
 
-    # Register both endpoints in the station registry, so this station becomes known and
-    # curatable. Lazy seeding: nothing is fetched here, the row is queued for enrichment.
+    # Queues the picked stations for enrichment; nothing is fetched here.
     seed_stations_from_trip(newTrip, trip_type)
 
     user_id = User.query.filter_by(username=username).first().uid
@@ -1364,7 +1361,7 @@ def inject_distinct_types():
     if hasattr(g, "distinct_types_ctx"):
         return {"distinctTypes": g.distinct_types_ctx}
 
-    # 4) Icon mapping — shared with the admin panels, see src/consts.py
+    # 4) Icon mapping
     icon_map = TRIP_TYPE_ICONS
 
     # 5) Query, but fail soft if DB is locked (or anything else goes wrong)
@@ -7805,7 +7802,6 @@ def stationAutocomplete():
             request.args,
             trip_type=request.args.get("trip_type", "train"),
             user_id=get_user_id(username) if username else None,
-            # How this user wants stations named; see src/stations.display_name().
             display=(
                 (user.station_display, user.lang) if user else ("international", None)
             ),
@@ -9757,8 +9753,6 @@ def user_settings(username):
         params["user_currency"] = request.form["user_currency"]
         params["default_landing"] = request.form["default_landing"]
         params["tileserver"] = request.form["tileserver"]
-        # Whitelisted rather than taken as given: this reaches display_name(), and an
-        # unknown value would silently fall through to the international name forever.
         station_display = request.form.get("station_display", "international")
         params["station_display"] = (
             station_display if station_display in DISPLAY_MODES else "international"
@@ -9785,13 +9779,7 @@ def user_settings(username):
     appear_on_global_checked = "checked" if user.appear_on_global else ""
     colorblind_checked = "checked" if user.colorblind else ""
     user_station_display = user.station_display
-    # The user's own language, named in their own language, so the "in my own language"
-    # option says which language that actually is.
-    #
-    # The flag is stripped: the language-picker table stores names as "🇯🇵 日本語", and dropped
-    # into the middle of a sentence that flag lands between the option's own icon and the
-    # text, reading as a stray mark rather than as a flag. strip_flag() is the same helper
-    # that keeps flags out of station names.
+    # The user's language, named in itself for the "in my language" option, without the flag.
     station_lang_name = strip_flag(lang.get(user.lang, {}).get(user.lang, user.lang))
     flight_3d_checked = "checked" if user.flight_3d else ""
     live_tracking_checked = "checked" if user.live_tracking else ""

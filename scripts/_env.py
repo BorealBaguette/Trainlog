@@ -1,18 +1,8 @@
-"""Load the environment a script needs to reach the database.
+"""Load .env for scripts run by hand, which the Makefile would otherwise provide.
 
-The app is started through the Makefile, which does `env $(cat .env | xargs)` and overrides
-POSTGRES_HOST to localhost. A script run by hand gets neither, so `src.pg` raised a bare
-KeyError on POSTGRES_HOST — which says nothing about what to do.
-
-This reads .env the same way and picks a host that actually resolves from here:
-
-  * On the server, POSTGRES_HOST is `trainlog_db`, the Docker service name, and works.
-  * From a shell on the host machine that name does not resolve, but the port is published,
-    so localhost is what is meant.
-
-.env is parsed rather than loaded with python-dotenv on purpose: dotenv is not in
-requirements.txt, it is only present as a transitive dependency, and a maintenance script
-should not stop working the day that changes.
+POSTGRES_HOST is the Docker service name, which does not resolve from the host machine;
+there the published port on localhost is used instead. Parsed by hand because
+python-dotenv is only a transitive dependency.
 """
 
 import os
@@ -28,7 +18,6 @@ def _parse_env_file(path):
                 if not line or line.startswith("#") or "=" not in line:
                     continue
                 key, _, value = line.partition("=")
-                # Values may be quoted; the shell would strip those too.
                 values[key.strip()] = value.strip().strip("'\"")
     except FileNotFoundError:
         pass
@@ -44,10 +33,7 @@ def _resolves(host):
 
 
 def load_env(repo_root=None):
-    """Populate os.environ from .env, without overriding what is already set.
-
-    Returns the host chosen for POSTGRES_HOST, so a caller can report it.
-    """
+    """Populate os.environ from .env without overriding what is set. Returns POSTGRES_HOST."""
     repo_root = repo_root or os.path.join(os.path.dirname(__file__), "..")
     for key, value in _parse_env_file(os.path.join(repo_root, ".env")).items():
         os.environ.setdefault(key, value)

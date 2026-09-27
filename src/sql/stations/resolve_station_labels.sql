@@ -1,15 +1,7 @@
--- Resolve station_labels against the registry: fill in station_id for every spelling.
+-- Resolve station_labels against the registry. `scoped` limits it to the labels of the
+-- given stations.
 --
--- This is what register_labels() and rebuild_labels() run (src/stations.py). `scoped` limits
--- it to the labels naming one station, so an alias change costs a handful of rows rather
--- than a full pass.
---
--- Do not write a bare bind-parameter reference in these comments: SQLAlchemy's parameter
--- parser does not skip SQL comments, and an unscoped run would then demand a value for it.
---
--- The matching rule, including how ambiguity is handled, lives in station_resolve_alias()
--- (migration 0060) so that this query, resolve_station_names.sql and delete_station() cannot
--- drift apart.
+-- Never write a bind-parameter reference in these comments: SQLAlchemy parses them too.
 UPDATE station_labels sl
 SET station_id = m.station_id
 FROM (

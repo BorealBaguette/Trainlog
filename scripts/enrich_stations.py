@@ -1,31 +1,7 @@
-"""
-Fetch OSM tags for stations that have just entered the registry.
-
-A station is registered the moment a user picks it, from what the autocomplete already knew:
-a name, a country and a position. Its OSM tags — `wikidata`, `uic_ref`, `int_name`,
-`alt_name` and every `name:*` — are deliberately *not* fetched at that moment, because a trip
-save must never wait on a third-party API. The row is created with `enriched_at NULL`, and
-this script is what fills it in.
-
-Until it runs, a station works but is thin: it resolves and displays, but it is not findable
-by its other-language names, its duplicates cannot be collapsed exactly, and it has no stable
-identity to merge on.
-
-A background thread does this automatically: src/station_osm.start_station_enricher, started
-at boot alongside the email listener. Trainlog runs no scheduler and nothing is cronned, so
-this script is not the mechanism — it is for draining by hand, after a bulk import or to
-catch up without waiting for the next pass:
+"""Drain the station enrichment queue by hand, e.g. after a bulk import. The background
+enricher (src/station_osm.start_station_enricher) normally does this.
 
     python3 scripts/enrich_stations.py --max-batches 20
-
-Bounded on purpose. One batch is 60 stations in one Overpass request (measured 2.19s), and
---max-batches caps a single run so one pass cannot become an hour of Overpass traffic;
-whatever is left stays queued for the next one. A batch that fails is left queued rather
-than retried in a tight loop.
-
-This project has already been banned from one free geocoder for excessive use, so the
-batching, the pause between batches and the identifying User-Agent in src/station_osm.py are
-requirements, not tuning.
 """
 
 import argparse
@@ -37,8 +13,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from scripts._env import load_env  # noqa: E402
 
-# Reads .env and picks a database host that resolves from wherever this is run,
-# so the script works both on the server and from a local shell.
 load_env()
 
 from src.pg import init_db_engine  # noqa: E402
@@ -89,7 +63,6 @@ def main():
         if result["failed_batches"]:
             print(f"{result['failed_batches']} batch(es) failed and stay queued.")
 
-    # Non-zero on failure, so a caller that checks exit codes notices.
     return 1 if result["failed_batches"] else 0
 
 

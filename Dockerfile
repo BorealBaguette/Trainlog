@@ -9,12 +9,7 @@ WORKDIR /code
 # or Hebrew station name renders as .notdef boxes. droid-fallback is 7 MB and
 # covers CJK; noto-core is 41 MB and covers most everything else.
 #
-# PyICU romanises station names in Cyrillic, Greek, Armenian and Georgian
-# (src/station_names.py). It is published as an sdist only, so pip compiles it here and needs
-# the ICU development headers and pkg-config to find them.
-#
-# Placed before the requirements COPY so this layer is cached independently: it only rebuilds
-# when the Dockerfile itself changes, not on every dependency edit.
+# libicu-dev and pkg-config: PyICU ships as source only and is compiled on install.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends fonts-droid-fallback fonts-noto-core \
         libicu-dev pkg-config \

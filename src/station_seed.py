@@ -1,43 +1,16 @@
-"""Register stations for the labels people already use, a few at a time.
+"""Register stations for the unresolved labels of existing trips.
 
-The registry seeds itself as people log trips, but that only ever reaches places logged
-*from now on*. Years of existing trips name stations nobody has picked since the registry
-existed, so they sit unresolved — 143,682 distinct spellings at the time of writing, and the
-top fifteen alone account for ~68,000 trip endpoints.
+New trips seed the registry as they are logged; this covers the years of trips before it.
+It walks the unresolved queue from the most used label down, and registers a match only
+when two independent searches agree: one on the label's text, one at where its trips
+actually end. Anything less certain stays in the queue for a human, because an unresolved
+label is harmless and a wrong one silently misattributes trips.
 
-This walks that queue from the top, searches each spelling the same way the trip form does,
-and registers the match when it is confident. Enrichment then picks the new stations up on
-its own.
+Only Photon (self-hosted) is queried; new stations are left for the background enricher,
+so Overpass is never touched from here. Progress lives in station_labels.auto_checked_at,
+so a stopped run simply continues next time.
 
-Started from the admin panel's Seed button, which runs seed_run() in a background thread and
-watches it through station_seed_runs.
-
-── Pacing ────────────────────────────────────────────────────────────────────────────────
-Two very different services are involved and only one of them is yours:
-
-  Photon    self-hosted, two or three queries per label — the name search, and a reverse
-            lookup at the label's own location. Yours to saturate, but it also serves the
-            live autocomplete, so the delay keeps this from competing with real users.
-  Overpass  public, and the reason for care. Not touched here at all: this only creates rows
-            with enriched_at NULL, and the background enricher drains them at its own pace.
-
-So "slowly" is really about Photon and about not resolving thousands of labels in one
-transaction. The default of 0.5s between labels is ~2 labels/second, which will not be
-noticed alongside normal traffic and gets through the meaningful part of the queue in an
-evening.
-
-── Resuming ──────────────────────────────────────────────────────────────────────────────
-There is no progress file and none is needed: a label is done when it has been checked
-(station_labels.auto_checked_at), and a station is enriched when enriched_at is set. Both
-live in the database, so stopping a run and starting another tomorrow simply continues, and
-running it twice does no harm. Clearing auto_checked_at re-opens a label.
-
-── What it will not do ───────────────────────────────────────────────────────────────────
-Guess. A label is registered only when two independent searches — one on its text, one on
-where its trips actually end — land on the same OSM object within 50m, with nothing else as
-close. Anything less certain is left for a human in the admin panel. Auto-registering a poor
-match would attribute trips to the wrong place and nothing would ever flag it — the whole
-point of the unresolved queue is that being unresolved is safe and being wrong is not.
+Started from the admin panel's Seed button, which runs seed_run() in a background thread.
 """
 
 import difflib
@@ -64,8 +37,7 @@ from src.stations import (
 
 logger = logging.getLogger(__name__)
 
-# The OSM tags to search per mode, mirroring the tables in templates/new.html. Without them
-# a search for "Bern" finds the city rather than the station.
+# Without them a search for "Bern" finds the city rather than the station.
 OSM_TAGS = {
     "train": ["railway:halt", "railway:station"],
     "tram": ["railway:tram_stop", "railway:station", "railway:halt"],
@@ -79,24 +51,12 @@ OSM_TAGS = {
     "ski": ["aerialway:station"],
 }
 
-# How alike the label and the candidate's name must be before this registers it unattended.
-#
-# High on purpose. A human working the queue sees the whole result list and can tell that
-# "Bern" means Bern railway station; this sees one string and must not talk itself into a
-# match. Below the threshold the label stays in the queue, which costs nothing.
+# How alike the label and the candidate's name must be to register it unattended. High
+# on purpose: below it the label stays in the queue, which costs nothing.
 MIN_CONFIDENCE = 0.82
 
-# Abbreviations users write that OSM spells out, or used to.
-#
-# This is the "names change" problem in miniature. Trips carry 2,734 endpoints labelled
-# "Wien Hbf" — a name OSM no longer uses, having renamed it "Wien Hauptbahnhof" — so
-# searching the label verbatim today returns *Dresden Hbf* and nothing else. Same for
-# "München Hbf" and "Berlin Hbf", together another ~7,000 endpoints.
-#
-# Each label is therefore searched in both forms and scored against both, which turns a
-# systematic miss on the busiest German-speaking stations into an exact match. Kept small and
-# unambiguous on purpose: an expansion that is merely usually right would start matching the
-# wrong station, and the queue is a safe place for anything uncertain.
+# Abbreviations users write that OSM spells out: labels still say "Wien Hbf" while OSM
+# now says "Wien Hauptbahnhof". Kept to expansions that are never wrong.
 ABBREVIATIONS = {
     "hbf": "hauptbahnhof",
     "hb": "hauptbahnhof",
@@ -128,16 +88,11 @@ def _fold(text):
     )
 
 
-# The separator apply_city_prefix() puts between a city and a station name.
 _CITY_SEPARATOR = " - "
 
 
 def split_city_prefix(name):
-    """('Melbourne', 'Richmond') from 'Melbourne - Richmond'. City is None when unprefixed.
-
-    The prefix is added by apply_city_prefix() when the station name alone does not say which
-    city it is in, so it is present on some spellings of a station and absent from others.
-    """
+    """('Melbourne', 'Richmond') from 'Melbourne - Richmond'; city is None when unprefixed."""
     stripped = strip_flag(name or "").strip()
     if _CITY_SEPARATOR in stripped:
         city, _, rest = stripped.partition(_CITY_SEPARATOR)
@@ -149,26 +104,9 @@ def split_city_prefix(name):
 def confidence(label, candidate_name):
     """How sure we are that `candidate_name` is what `label` meant, 0..1.
 
-    Scored against the label as written and against its expanded form, whichever agrees
-    better: "Wien Hbf" and "Wien Hauptbahnhof" are the same station under two spellings, and
-    only the expansion says so.
-
-    ── Why the city prefix is removed before comparing ───────────────────────────────────────
-    Comparing the whole strings scores the city twice — once as itself and once as padding —
-    and that is enough to pick the wrong station. Measured, and it registered 2,004 endpoints
-    against the wrong place:
-
-        label "Melbourne - Richmond" vs "Melbourne - East Richmond"   0.89   <- chosen
-        label "Melbourne - Richmond" vs "Richmond"                    0.64   <- correct
-
-    Richmond and East Richmond are different stations 677m apart. The correct candidate lost
-    precisely because it carries no prefix — its suburb is Richmond, so apply_city_prefix()
-    leaves it alone — while its wrong neighbour carries one that matches the label's. Nine
-    shared characters of "melbourne" outweighed the "east" that makes them different places.
-
-    So the city is compared as a city and the station name as a station name. A city stated on
-    both sides and disagreeing is disqualifying: "Melbourne - Richmond" is not "Sydney -
-    Richmond", however alike the two strings look.
+    The city prefix is compared separately from the station name: compared as one string, a
+    shared city outweighs the difference between "Richmond" and "East Richmond". Two cities
+    that disagree disqualify the candidate.
     """
     label_city, label_core = split_city_prefix(label)
     candidate_city, candidate_core = split_city_prefix(candidate_name)
@@ -177,9 +115,6 @@ def confidence(label, candidate_name):
     if not b:
         return 0.0
 
-    # Both name a city and they are not the same city: a different place, whatever the rest
-    # of the string says. Only checked when both state one — an unprefixed candidate is not
-    # claiming to be anywhere, and Photon was queried with the full label anyway.
     if label_city and candidate_city:
         if difflib.SequenceMatcher(
             None, _fold(label_city), _fold(candidate_city)
@@ -197,17 +132,10 @@ def confidence(label, candidate_name):
     return best
 
 
-# How much better the winner must be than the best *different* station before this registers
-# it unattended.
-#
-# Without this the top two candidates can be near-identical in score and one is chosen by
-# floating-point luck — which is how a label ends up on a station nobody can tell it was meant
-# to be. Cities repeat station names ("Richmond" exists in Melbourne, Sydney and London), and
-# a label that cannot tell them apart belongs in the queue where a human sees the whole list.
+# How much the winner must beat the best different station by. Closer than this, the
+# choice belongs to a human.
 AMBIGUITY_MARGIN = 0.05
 
-# Both searches must land on the same OSM object, this close to where the label's trips end.
-# The same rule the admin panel uses to collapse its two lists into one answer.
 AGREEMENT_M = 50
 AGREEMENT_RADIUS_KM = 1
 
@@ -220,9 +148,6 @@ def _by_name(label, station_type):
 
     tags = OSM_TAGS.get(station_type)
 
-    # Search both spellings. Photon indexes the name OSM holds *now*, so a label written the
-    # way the station used to be called finds nothing — searching the expanded form is what
-    # reaches it.
     queries = [query]
     expanded = expand_abbreviations(label)
     if expanded and expanded.lower() != query.lower():
@@ -241,8 +166,7 @@ def _by_name(label, station_type):
     if not features:
         return None
 
-    # Score every result, not just the first: Photon ranks by its own relevance, which is not
-    # the same question as "is this the place this label names".
+    # Photon's ranking is relevance, not "is this the station the label names".
     scored = []
     for feature in features:
         props = feature.get("properties", {})
@@ -253,13 +177,8 @@ def _by_name(label, station_type):
     if best is None or best_score < MIN_CONFIDENCE:
         return None
 
-    # Is the winner actually distinguishable from the runner-up?
-    #
-    # The same query returns one station as several OSM objects, so "the runner-up" has to
-    # mean a different *station*, not a different object of this one. Photon's results are
-    # already deduplicated by process_station_results(), which collapses objects of one
-    # station, so anything still carrying a different osm id here is a genuinely different
-    # place — and if it scores as well as the winner, neither can be trusted unattended.
+    # Results are already deduplicated per station, so any other object scoring as well
+    # is a different station.
     best_key = (best.get("properties", {}).get("osm_type"),
                 best.get("properties", {}).get("osm_id"))
     for score, feature in scored[1:]:
@@ -269,8 +188,7 @@ def _by_name(label, station_type):
         if (props.get("osm_type"), props.get("osm_id")) != best_key:
             return None
 
-    # A country stated by the label and contradicted by the candidate is a stronger signal
-    # than the name similarity is — same name, wrong country is a different place.
+    # Same name, different country is a different place.
     props = best["properties"]
     label_country = None
     stripped = strip_flag(label)
@@ -283,10 +201,7 @@ def _by_name(label, station_type):
 
 
 def _by_location(label, station_type, location):
-    """What is actually at the label's own location, nearest first.
-
-    Asked without the label's text, so nothing about how it is spelled can mislead it.
-    """
+    """What is at the label's own location, nearest first, searched without its text."""
     params = {
         "lat": location["lat"],
         "lon": location["lng"],
@@ -308,17 +223,13 @@ def _osm_key(feature):
 
 
 def find_candidate(label, station_type):
-    """What the two searches make of this label. Always returns a dict with a `status`:
+    """What the two searches make of this label. Returns a dict with a `status`:
 
-      ok           both landed on one OSM object within AGREEMENT_M — safe to register
-      far          both agree on the object, but it sits further away than that. Probably the
-                   right station with a bad position; an admin should place the pin.
-      ambiguous    they disagree, or two different places are equally close
+      ok           both landed on one OSM object within AGREEMENT_M: safe to register
+      far          both agree on the object, but it is further away than that
+      ambiguous    they disagree, or two places are equally close
       no_match     the name search found nothing confident
-      no_location  the label's trips have no path, so there is nothing to agree with
-
-    The name search answers "what is called this", the location search "what is at the place
-    these trips end". The location is what decides; the name only has to not contradict it.
+      no_location  the label's trips have no path to compare with
     """
     location = label_location(label, station_type)
     if not location:
@@ -340,8 +251,7 @@ def find_candidate(label, station_type):
     named_key = _osm_key(by_name["feature"])
     agreed = named_key in {_osm_key(f) for f in nearby}
 
-    # Everything either search puts within AGREEMENT_M. Two distinct objects that close is a
-    # choice, and a choice belongs to a human.
+    # Two distinct objects this close is a choice for a human.
     close = {}
     for feature in [by_name["feature"], *nearby]:
         away = distance(feature)
@@ -359,9 +269,8 @@ def find_candidate(label, station_type):
             }
         return {"status": "ambiguous"}
 
-    # Nothing that close. If both searches still picked the same object, the match is likely
-    # right and the position is what is wrong — which a human fixes by dragging the marker,
-    # not by choosing a different station.
+    # Both searches agree but nothing is close: the station is probably right and its
+    # position wrong, which a human fixes by moving the pin.
     if not close and agreed:
         return {
             "status": "far",
@@ -388,12 +297,8 @@ def pending_labels(limit, pg):
         SELECT label_id, sample_label, station_type, occurrences
         FROM station_labels
         WHERE station_id IS NULL AND occurrences > 0
-          -- Already looked at, whatever the verdict. Re-asking Photon the same question on
-          -- every run costs queries and changes nothing; clear auto_checked_at to redo one.
+          -- Clear auto_checked_at to re-check a label.
           AND auto_checked_at IS NULL
-          -- Belt and braces: an untracked mode should never be in this table at all, but a
-          -- stale row from before the exclusion must not be auto-registered against a Photon
-          -- result — least of all one of the personal modes, whose labels are private.
           AND station_type_tracked(station_type)
         ORDER BY occurrences DESC
         LIMIT :limit
@@ -405,9 +310,7 @@ def pending_labels(limit, pg):
 def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None):
     """Work the queue, reporting as it goes. Returns the final totals.
 
-    `progress(line, totals)` is called once per label with a line for a human and the running
-    counts; `should_stop()` is asked after each one, so a run can be ended without losing
-    anything — a label is finished when its auto_checked_at is set, not when the run is.
+    `progress(line, totals)` is called once per label; `should_stop()` is asked after each.
     """
     totals = {
         "total": 0,
@@ -435,8 +338,7 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
         except Exception as e:
             totals["failed"] += 1
             report(f"!  {label}: {e}")
-            # A Photon failure is not this label's fault; stop rather than burn through the
-            # rest of the queue marking everything unmatched.
+            # A Photon outage would otherwise mark the rest of the queue as unmatched.
             break
 
         if candidate["status"] != "ok":
@@ -473,14 +375,11 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
                     totals["skipped"] += 1
                     report(f"!  {row['occurrences']:,}  {label}  (could not register)")
                 else:
-                    # The label as people write it becomes a spelling of this station — that
-                    # is what resolves their trips, and it is often not the station's own name.
+                    # The label as written becomes a spelling of the station, which resolves the trips.
                     add_aliases(station_id, [(strip_flag(label), "alias", None)])
                     resync_station(station_id)
 
-                    # Registering a station is not the same as resolving the spelling: if
-                    # another station already answers to it, it stays ambiguous and resolves
-                    # to neither. Record what is true rather than what was attempted.
+                    # Another station may already hold this spelling; record the real outcome.
                     with pg_session() as pg:
                         attached = pg.execute(
                             "SELECT station_id FROM station_labels WHERE label_id = :id",
@@ -505,14 +404,8 @@ def seed_run(limit, delay, min_occurrences, dry_run, progress, should_stop=None)
     return totals
 
 
-# ── Running one from the admin panel ──────────────────────────────────────────────────────
-#
-# The console version prints; this one writes the same lines to station_seed_runs, because the
-# browser polling for them may be talking to a different gunicorn worker than the one doing
-# the work. See migration 0067.
+# ── Running one from the admin panel ─────────────────────────────────────────────────
 
-# How much of the log to keep. Enough to see what the run has been doing, not so much that a
-# 5,000-label run carries its whole history in one row that is rewritten twice a second.
 LOG_LINES = 200
 
 # A running row whose heartbeat is older than this belongs to a worker that is gone.
@@ -521,17 +414,13 @@ STALE_AFTER_S = 120
 
 def start_seed_run(app, username, limit, delay, min_occurrences, dry_run):
     """Begin a pass in a background thread. Returns the run as /seed reports it."""
-    # Also clears a run whose worker restarted mid-pass, which would otherwise claim to be
-    # running forever and block this one.
+    # Also clears a run whose worker restarted mid-pass, which would otherwise block this one.
     run_status()
 
     with pg_session() as pg:
-        # One run at a time, enforced in the insert rather than by reading first: two passes
-        # over the same queue would ask Photon for everything twice.
+        # One run at a time, enforced by the insert itself.
         run_id = pg.execute(
-            # CAST() rather than ::jsonb: SQLAlchemy does not recognise a bind parameter
-            # followed by a colon, so ":params::jsonb" reaches Postgres with the ":params"
-            # still in it.
+            # CAST() rather than ::jsonb, which SQLAlchemy's parameter parser mangles.
             "INSERT INTO station_seed_runs (started_by, params)"
             " SELECT :user, CAST(:params AS jsonb)"
             " WHERE NOT EXISTS (SELECT 1 FROM station_seed_runs WHERE state = 'running')"
@@ -647,9 +536,7 @@ def run_status():
     """The last run, as the panel shows it, plus the registry totals it is moving."""
     run = latest_run()
     if run and run["state"] == "running" and run["since_update"] > STALE_AFTER_S:
-        # Its worker restarted mid-pass. Nothing was lost — every label it finished is
-        # recorded — but the row would otherwise claim to be running forever and block the
-        # next run from starting.
+        # Its worker restarted mid-pass; every finished label is already recorded.
         _finish(run["run_id"], None, "failed", error="interrupted by a restart")
         run = latest_run()
     return {"run": run, "stats": registry_stats()}

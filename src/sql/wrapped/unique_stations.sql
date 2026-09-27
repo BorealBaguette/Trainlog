@@ -1,13 +1,5 @@
--- How many distinct stations this user visited in the year.
---
--- Counted through the registry rather than over the written text. This is the number the
--- name-drift problem hit hardest: a station logged under two spellings counted twice, so the
--- figure was inflated by exactly the amount of inconsistency in a user's own typing, and the
--- more places somebody logged the more wrong it got.
---
--- Resolution is a join for the same performance reason as stats_stations.sql. Spellings that
--- resolve to no station still count as themselves, which is right: an unrecognised place is
--- still a place this user went.
+-- How many distinct stations this user visited in the year, counting every spelling of a
+-- registered station once. Unresolved spellings count as themselves.
 WITH base_filter AS (
     SELECT *, COALESCE(utc_start_datetime, start_datetime) AS filtered_datetime
     FROM trips

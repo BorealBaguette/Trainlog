@@ -112,9 +112,6 @@ def update_trip_type(trip_id, new_type: TripTypes):
         )
         # The trip type selects which pool of operators the name resolves against.
         sync_trip_operators(trip_id, pg_session_=pg)
-        # Same for the endpoints: make sure the station registry knows the
-        # spellings this trip uses. Keyed on the label, not the trip, so an
-# edit needs no bookkeeping here.
         sync_trip_labels(trip_id, pg_session_=pg)
 
 
@@ -171,9 +168,6 @@ def bulk_edit_trips(
 
             if "operator" in safe_fields:
                 sync_trip_operators(trip_ids, pg_session_=pg)
-                # Same for the endpoints: make sure the station registry knows the
-                # spellings this trip uses. Keyed on the label, not the trip, so an
-# edit needs no bookkeeping here.
                 sync_trip_labels(trip_ids, pg_session_=pg)
 
         return True, None
@@ -195,9 +189,6 @@ def bulk_change_type(username, trip_ids, new_type: TripTypes):
                 )
             # The trip type selects which pool of operators names resolve against.
             sync_trip_operators(trip_ids, pg_session_=pg)
-            # Same for the endpoints: make sure the station registry knows the
-            # spellings this trip uses. Keyed on the label, not the trip, so an
-# edit needs no bookkeeping here.
             sync_trip_labels(trip_ids, pg_session_=pg)
         return True, None
     except Exception as e:

@@ -1,36 +1,13 @@
-"""
-Resolve historical trip endpoints against the station registry.
+"""Resolve historical trip endpoints against the station registry by route geometry.
 
-Trips store only a label, so the years of existing trips have no station attached. Two
-passes recover what can be recovered, in descending order of confidence, and the rest
-becomes the admin queue.
-
-  1. Text     exact match of the spelling against station_aliases. Free, and run by
-              rebuild_labels() itself — this script only reports it.
-
-  2. Geometry the identity everyone assumed was lost. `trips.origin_station` dropped the
-              coordinates, but `paths.geom` still holds the route, so ST_StartPoint and
-              ST_EndPoint give a real position for both endpoints of every routed trip.
-              An unresolved label whose endpoint sits on top of a registered station, and
-              whose text is recognisably that station's, is that station.
-
-  3. Nothing  left unresolved, ordered by occurrence count for a human to look at.
-
-── Why pass 2 writes aliases rather than station ids ──────────────────────────────────────
-`station_labels` is purely derived: rebuild_labels() re-resolves every spelling from the
-registry, and that property is what makes the whole design safe to re-run. A geometry match
-written straight into `station_labels.station_id` would be erased by the next rebuild,
-because nothing in the registry says where it came from.
-
-So a geometry match instead records the label as an *alias* of the station it matched. The
-knowledge then lives in the registry, where it is durable, and the ordinary text resolution
-picks it up on every rebuild. It also makes that spelling searchable, and it fixes every
-other trip using the same label at the same time — including trips with no route geometry
-of their own, which pass 2 could never have reached directly.
+An unresolved label whose trips' path endpoints sit on a registered station, and whose
+text is recognisably that station's, is recorded as an alias of it. An alias rather than
+a station id: station_labels is derived and rebuilt from aliases, and the alias also
+resolves every other trip using the same label.
 
 Usage:
     python3 scripts/backfill_stations.py --report          # measure, change nothing
-    python3 scripts/backfill_stations.py --geometry        # run pass 2 and resync
+    python3 scripts/backfill_stations.py --geometry        # run the pass and resync
     python3 scripts/backfill_stations.py --geometry --limit 500 --dry-run
 """
 
@@ -42,8 +19,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from scripts._env import load_env  # noqa: E402
 
-# Reads .env and picks a database host that resolves from wherever this is run,
-# so the script works both on the server and from a local shell.
 load_env()
 
 from src.pg import init_db_engine, pg_session  # noqa: E402
@@ -53,18 +28,12 @@ from src.stations import (  # noqa: E402
     unresolved_labels,
 )
 
-# How close a trip's path endpoint must be to a registered station to be considered the same
-# place. Generous enough for a large terminus, where the routing engine's start point can sit
-# several hundred metres from the station node it was snapped from, and far below the spacing
-# of two distinct stations that share a name.
+# Large enough for a routed start point several hundred metres from a big terminus.
 MATCH_RADIUS_M = 1500
 
-# How alike the trip's label and the station's known spellings must also be. Distance alone
-# is not enough: in a dense city several stations fall inside the radius, and matching on
-# proximity only would attribute a trip to whichever happened to be nearest.
+# Distance alone would pick whichever of several city stations is nearest.
 MIN_NAME_SIMILARITY = 0.45
 
-# Candidate aliases found by geometry, before they are written.
 GEOMETRY_MATCH_SQL = """
 WITH unresolved AS (
     SELECT sl.label_id, sl.normalized, sl.station_type, sl.sample_label
@@ -174,8 +143,6 @@ def geometry_pass(limit, dry_run):
 
     written = set()
     for row in rows:
-        # kind='alias' rather than a name kind: this spelling is how users write the place,
-        # not something OSM calls it.
         add_aliases(row["station_id"], [(row["raw_name"], "alias", None)])
         written.add(row["station_id"])
 

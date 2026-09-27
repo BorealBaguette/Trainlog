@@ -38,9 +38,6 @@ def _duplicate_trip(trip_id: int, owner_id: int) -> int:
             {"new_id": new_trip_id, "old_id": trip_id},
         )
         sync_trip_operators(new_trip_id, pg_session_=pg)
-        # Same for the endpoints: make sure the station registry knows the
-        # spellings this trip uses. Keyed on the label, not the trip, so an
-# edit needs no bookkeeping here.
         sync_trip_labels(new_trip_id, pg_session_=pg)
 
     logger.info(f"Successfully duplicated trip {trip_id} into {new_trip_id}")
@@ -62,9 +59,6 @@ def duplicate_trip(trip_id: int):
             {"new_id": new_trip_id, "old_id": trip_id},
         )
         sync_trip_operators(new_trip_id, pg_session_=pg)
-        # Same for the endpoints: make sure the station registry knows the
-        # spellings this trip uses. Keyed on the label, not the trip, so an
-# edit needs no bookkeeping here.
         sync_trip_labels(new_trip_id, pg_session_=pg)
 
     logger.info(f"Successfully duplicated trip {trip_id} into {new_trip_id}")
