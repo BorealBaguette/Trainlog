@@ -710,7 +710,7 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
               disambiguation = disambiguation ? disambiguation + " · " + source : source;
             }
             displayLabel = label + (item.properties.homonymy_order ? item.properties.homonymy_order : "");
-            stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation });
+            stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation, "verified": !!item.properties.from_registry });
             // [coords, label, osmRef]. osmRef lets the server register the station; manual stations
             // have none.
             globalStationDict[displayLabel] = [
@@ -767,11 +767,17 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
         if (item.disambiguation) {
           disambiguation = " <span class='disambiguation'>" + sanitize(item.disambiguation) + "</span>"
         }
+        var verified = item.verified ? "<i class='bi bi-check-circle-fill station-verified-icon'></i>" : "";
         return $("<li>")
-          .append("<div>" + sanitize(item.label) + disambiguation + "</div>")
+          .append("<div>" + verified + sanitize(item.label) + disambiguation + "</div>")
           .appendTo(ul);
       }
     };
+  }).on("autocompleteselect", function (event, ui) {
+    var ref = globalStationDict[ui.item.value] && globalStationDict[ui.item.value][2];
+    $(this).toggleClass("station-verified", !!(ref && ref.station_id));
+  }).on("input", function () {
+    $(this).removeClass("station-verified");
   });
 }
 
