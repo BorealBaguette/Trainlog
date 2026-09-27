@@ -705,6 +705,10 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
             if (item.properties.canonical_name && item.properties.canonical_name !== item.properties.name) {
               disambiguation = item.properties.canonical_name + (disambiguation ? " · " + disambiguation : "");
             }
+            if (window.TRIPLOG_IS_ADMIN) {
+              var source = item.properties.from_registry ? "registry #" + item.properties.station_id : "Photon";
+              disambiguation = disambiguation ? disambiguation + " · " + source : source;
+            }
             displayLabel = label + (item.properties.homonymy_order ? item.properties.homonymy_order : "");
             stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation });
             // [coords, label, osmRef]. osmRef lets the server register the station; manual stations

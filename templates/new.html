@@ -1,6 +1,6 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
-<script>window.TRIPLOG_TRIP_TYPE = {{ vehicle_type | tojson }};</script>
+<script>window.TRIPLOG_TRIP_TYPE = {{ vehicle_type | tojson }}; window.TRIPLOG_IS_ADMIN = {{ (is_admin or false) | tojson }};</script>
 
 {% if vehicle_type == 'ferry' %}
 <script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>

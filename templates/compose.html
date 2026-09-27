@@ -1,6 +1,6 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
-<script>window.TRIPLOG_TRIP_TYPE = {{ vehicle_type | tojson }};</script>
+<script>window.TRIPLOG_TRIP_TYPE = {{ vehicle_type | tojson }}; window.TRIPLOG_IS_ADMIN = {{ (is_admin or false) | tojson }};</script>
 {% include "bootstrap/leafletLayout.html" %}
 
 {% if vehicle_type == 'ferry' %}
