@@ -2,12 +2,12 @@
 Simplify a processed GeoJSON file by:
 1. unpacking features of type GeometryCollection,
 2. deleting features of all types except Polygon and Multipolygon,
-3. removing redundant polygon points,
-4. recomputing polygon areas,
-5. deleting very tiny polygons,
-6. re-assign new IDs,
-7. converting the output to CRS84,
-8. truncating coordinate precision to the cm range.
+3. simplifying polygon outlines with Douglas-Peucker, keeping shared borders,
+4. converting the output to CRS84,
+5. truncating coordinate precision to the cm range,
+6. recomputing polygon areas,
+7. re-assign new IDs,
+8. failing on very tiny or invalid polygons.
 
 Usage:
     python simplify_geojson.py <COUNTRY_CODE>
@@ -19,106 +19,136 @@ It assumes CRS84 if the input file has no CRS, performs distance
 calculations in EPSG:3857, and always writes output in CRS84.
 """
 
+import collections
+import itertools
 import json
 import os
 import sys
 
 import geopandas as gpd
-from shapely.geometry import LineString, Point, mapping, shape
+from shapely.geometry import LineString, MultiPolygon, Polygon, mapping, shape
+from shapely.validation import explain_validity
 
 DEFAULT_INPUT_CRS = "urn:ogc:def:crs:OGC:1.3:CRS84"
 WEB_MERCATOR_CRS = "EPSG:3857"
 OUTPUT_CRS = "urn:ogc:def:crs:OGC:1.3:CRS84"
 
 PROPERTIES_TO_KEEP = ["station"]
+MIN_AREA_M2 = 50  # lower once a real polygon this small shows up
+SIMPLIFY_TOLERANCE_M = 1.0
 
 
-def round_float(value, decimals=6):
-    factor = 10**decimals
-    return round(value * factor) / factor
+def round_area(value):
+    return round(value, 2)
 
 
 def truncate_coords(coords):
-    if isinstance(coords, list) or isinstance(coords, tuple):
-        if coords and all(isinstance(item, (int, float)) for item in coords):
-            assert all(e == 0 for e in coords[3:])
-            coords = coords[:2]
-            updated = []
-            for item in coords:
-                if isinstance(item, int):
-                    updated.append(item)
-                else:
-                    updated.append(round_float(item))
-            return updated
-        return [truncate_coords(item) for item in coords]
-    return coords
+    if coords and all(isinstance(item, (int, float)) for item in coords):
+        # a single position
+        assert all(e == 0 for e in coords[3:])
+        return [round(item, 6) for item in coords[:2]]
+    return [truncate_coords(item) for item in coords]
 
 
-def simplify_ring(ring):
-    MIN_POINT_DISTANCE_M = 0.5
-
-    MAX_ENDPOINT_DISTANCE_M = 15.0
-    MAX_MIDPOINT_DISTANCE_FACTOR = 0.2
-
-    if len(ring) < 4:
-        return ring
-
-    closed = ring[0] == ring[-1]
-    work = list(ring[:-1]) if closed else list(ring[:])
-    if len(work) < 3:
-        return ring
-
-    i = 0
-    while i < len(work) - 2:
-        line_i_i1 = LineString([work[i], work[i + 1]])
-        line_i_i2 = LineString([work[i], work[i + 2]])
-        point_i1 = Point(work[i + 1])
-
-        if (
-            line_i_i2.length <= MAX_ENDPOINT_DISTANCE_M
-            and point_i1.distance(line_i_i2)
-            <= line_i_i2.length * MAX_MIDPOINT_DISTANCE_FACTOR
-        ) or (line_i_i1.length <= MIN_POINT_DISTANCE_M):
-            del work[i + 1]
-            if len(work) < 3:
-                break
-            continue
-        i += 1
-
-    if closed:
-        work.append(work[0])
-    return work
+def truncate_geometry(geometry):
+    geometry["coordinates"] = truncate_coords(geometry["coordinates"])
+    return geometry
 
 
-def simplify_polygon_coords(coords):
-    simplified = []
-    for ring in coords:
-        simplified.append(simplify_ring(ring))
-    return simplified
+def polygons_of(geometry):
+    if geometry.geom_type == "MultiPolygon":
+        return list(geometry.geoms)
+    return [geometry]
 
 
-def simplify_multipolygon_coords(coords):
-    simplified = []
-    for polygon in coords:
-        simplified.append(simplify_polygon_coords(polygon))
-    return simplified
+def rings_of(geometry):
+    for polygon in polygons_of(geometry):
+        yield polygon.exterior
+        yield from polygon.interiors
 
 
-def simplify_geometry(geometry):
-    if not geometry:
-        return
-    geom_type = geometry.get("type")
-    if geom_type == "Polygon":
-        geometry["coordinates"] = simplify_polygon_coords(
-            geometry.get("coordinates", [])
+def count_points(geometries):
+    return sum(len(ring.coords) for g in geometries for ring in rings_of(g))
+
+
+def simplify_geometries_once(geometries, iteration):
+    """Douglas-Peucker on every ring, simplifying borders shared between
+    polygons only once so that they stay shared.
+
+    A ring is cut into arcs where the set of polygons owning a vertex
+    changes. An arc between two such junctions is simplified once and the
+    result reused by every polygon containing it.
+    """
+    owners = collections.defaultdict(set)
+    for idx, geometry in enumerate(geometries):
+        for ring in rings_of(geometry):
+            for coord in ring.coords[:-1]:
+                owners[coord].add(idx)
+
+    cache = {}
+
+    def simplify_arc(arc):
+        # the same arc is traversed in opposite directions by its two owners
+        key = tuple(arc) if arc[0] <= arc[-1] else tuple(reversed(arc))
+        if key not in cache:
+            cache[key] = list(LineString(key).simplify(SIMPLIFY_TOLERANCE_M).coords)
+        simplified = cache[key]
+        return simplified if tuple(arc) == key else simplified[::-1]
+
+    def simplify_ring(ring):
+        coords = list(ring.coords[:-1])
+        n = len(coords)
+        cuts = [
+            i
+            for i in range(n)
+            if owners[coords[i]] != owners[coords[i - 1]]
+            or owners[coords[i]] != owners[coords[(i + 1) % n]]
+        ]
+        if len(cuts) < 2:
+            return list(LineString(ring.coords).simplify(SIMPLIFY_TOLERANCE_M).coords)
+        # rotate the ring to start at a junction, then simplify arc by arc
+        start = cuts[0]
+        coords = coords[start:] + coords[:start]
+        cuts = sorted({(i - start) % n for i in cuts}) + [n]
+        result = []
+        for a, b in zip(cuts, cuts[1:]):
+            arc = coords[a : b + 1] if b < n else coords[a:] + [coords[0]]
+            result.extend(simplify_arc(arc)[:-1])
+        result.append(result[0])
+        return result
+
+    def simplify_polygon(polygon):
+        simplified = Polygon(
+            simplify_ring(polygon.exterior),
+            [simplify_ring(ring) for ring in polygon.interiors],
         )
-    elif geom_type == "MultiPolygon":
-        geometry["coordinates"] = simplify_multipolygon_coords(
-            geometry.get("coordinates", [])
-        )
-    else:
-        print(f"Prohibited geometry type: {geom_type}")
-        exit(1)
+        if polygon.is_valid and not simplified.is_valid:
+            return polygon
+        return simplified
+
+    result = []
+    for idx, geometry in enumerate(geometries):
+        polygons = [simplify_polygon(polygon) for polygon in polygons_of(geometry)]
+        if geometry.geom_type == "MultiPolygon":
+            result.append(MultiPolygon(polygons))
+        else:
+            result.append(polygons[0])
+        if idx % 10 == 0:
+            progress = 100 * idx / len(geometries)
+            print(
+                f"Simplify iteration {iteration}, progress: {progress:.2f}%", end="\r"
+            )
+    print(f"Simplify iteration {iteration}, progress: 100.00%")
+    return result
+
+
+def simplify_geometries(geometries):
+    # repeat until nothing changes, so that re-running the script is a no-op
+    for iteration in itertools.count(1):
+        simplified = simplify_geometries_once(geometries, iteration)
+        if count_points(simplified) == count_points(geometries):
+            return simplified
+        geometries = simplified
 
 
 def explode_and_filter_geometries(gdf):
@@ -194,26 +224,35 @@ def process(country_code):
     # Transform to Web Mercator for accurate distance calculations
     gdf_mercator = gdf.to_crs(WEB_MERCATOR_CRS)
 
-    total_features = len(gdf_mercator)
-    for idx in range(total_features):
-        geometry = mapping(gdf_mercator.iloc[idx].geometry)
-        simplify_geometry(geometry)
-        gdf_mercator.at[idx, "geometry"] = shape(geometry)
-        if idx % 10 == 0:
-            progress = 100 * idx / total_features
-            print(f"Simplify progress: {progress:.2f}%", end="\r")
-    print("Simplify progress: 100.00%")
+    print("Simplifying...")
+    gdf_mercator["geometry"] = simplify_geometries(list(gdf_mercator["geometry"]))
+
+    # Transform to output crs
+    gdf = gdf_mercator.to_crs(OUTPUT_CRS)
+
+    # Truncate coordinates to reduce file size. Areas are computed from
+    # the truncated geometry so that re-running the script is a no-op.
+    print("Truncating coordinates...")
+    gdf["geometry"] = gdf["geometry"].apply(
+        lambda geometry: shape(truncate_geometry(mapping(geometry)))
+    )
 
     print("Calculating areas...")
 
     # Compute the area for each geometry
-    gdf_mercator["area_m2"] = gdf_mercator["geometry"].area
+    gdf["area_m2"] = gdf.to_crs(WEB_MERCATOR_CRS).area
 
-    # Drop very tiny polygons (less than 1m^2)
-    gdf_mercator = gdf_mercator[gdf_mercator["area_m2"] >= 1].reset_index(drop=True)
+    # Very tiny polygons are most likely editing mistakes, so report
+    # them but keep them for manual inspection.
+    tiny_ids = list(gdf.index[gdf["area_m2"] < MIN_AREA_M2])
 
-    # Transform to output crs
-    gdf = gdf_mercator.drop(columns=["area_m2"]).to_crs(OUTPUT_CRS)
+    # Invalid polygons (self-intersections, degenerate rings) come from
+    # manual edits and need fixing in QGIS, so report them too.
+    invalid = {
+        idx: explain_validity(geometry)
+        for idx, geometry in gdf["geometry"].items()
+        if not geometry.is_valid
+    }
 
     # Update the data with the valid features
     data["features"] = gdf.to_dict("records")
@@ -224,9 +263,7 @@ def process(country_code):
         # assign new IDs
         feature["properties"]["id"] = idx
         # assign polygon area
-        feature["properties"]["area_m2"] = round_float(
-            gdf_mercator.iloc[idx]["area_m2"], decimals=2
-        )
+        feature["properties"]["area_m2"] = round_area(feature.pop("area_m2"))
         for prop_key in old_properties:
             if prop_key in PROPERTIES_TO_KEEP:
                 # keep some whitelist of other properties
@@ -236,22 +273,23 @@ def process(country_code):
     total_area_m2 = sum(
         feature["properties"]["area_m2"] for feature in data["features"]
     )
-    data["total_area_m2"] = total_area_m2
+    data["total_area_m2"] = round_area(total_area_m2)
 
     set_output_crs(data)
-
-    # Truncate coordinates to reduce file size
-    print("Truncating coordinates...")
-    for feature in data.get("features", []):
-        geometry = feature.get("geometry")
-        if geometry and "coordinates" in geometry:
-            pass
-            geometry["coordinates"] = truncate_coords(geometry["coordinates"])
 
     print("Writing output file...")
     with open(path, "w") as file:
         json.dump(data, file)
         print(f"Simplified {path}")
+
+    errors = []
+    if tiny_ids:
+        errors.append(f"Polygons smaller than {MIN_AREA_M2} m^2, ids: {tiny_ids}")
+    for idx, reason in invalid.items():
+        errors.append(f"Invalid polygon, id {idx}: {reason}")
+    if errors:
+        sys.exit("\n".join(errors))
+
 
 if __name__ == "__main__":
     process(sys.argv[1])
