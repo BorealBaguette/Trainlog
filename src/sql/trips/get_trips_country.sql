@@ -4,7 +4,7 @@ WITH base AS (
         COALESCE(utc_start_datetime, start_datetime) AS utc_filtered_start_datetime
     FROM trips
     WHERE user_id = :user_id
-      AND trip_type IN ('train', 'tram', 'metro')
+      AND trip_type IN ('train', 'tram', 'metro', 'rail')
 )
 SELECT trip_id AS uid
 FROM base
