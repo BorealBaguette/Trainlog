@@ -295,6 +295,7 @@
                         <label for="effectiveDate">Effective Date (Optional)</label>
                         <input type="date" class="form-control" id="effectiveDate" name="effectiveDate">
                     </div>
+                    <div id="uploadLogoError" class="mb-3"></div>
                     <button type="submit" class="btn btn-primary">Upload Logo</button>
                 </form>
             </div>
@@ -419,27 +420,6 @@
       </div>
     </div>
   </div>
-
-  <!-- Error Modal -->
-  <div class="modal fade" id="errorModal" tabindex="-1" aria-labelledby="errorModalLabel" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h5 class="modal-title" id="errorModalLabel">Error</h5>
-          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-        </div>
-        <div class="modal-body">
-          <p id="errorModalMessage">An error occurred.</p>
-        </div>
-        <div class="modal-footer">
-          <!-- When clicked, simply closes the modal -->
-          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-            Close
-          </button>
-        </div>
-      </div>
-    </div>
-  </div>  
 
 <!-- JavaScript -->
 <script defer>
@@ -605,37 +585,30 @@
         }
     });
 
-    function createOperator() {
-        const formData = new FormData(operatorForm);
+    // Failures (missing or non-PNG logo, name clash, ...) keep the modal open with
+    // the server's reason shown inline, so the admin can correct the form.
+    async function createOperator() {
+        const saveBtn = $('#operatorSaveBtn');
+        saveBtn.prop('disabled', true);
+        $('#operatorFormError').empty();
 
-        fetch('/api/admin/operators', {
-            method: 'POST',
-            body: formData
-        }).then((res) => {
-            if(res.status > 299)
-                res.text().then(err => {
-                    throw new Error(err)
-                })
+        try {
+            const res = await fetch('/api/admin/operators', {
+                method: 'POST',
+                body: new FormData(operatorForm)
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok)
+                throw new Error(body.message || `could not add operator (HTTP ${res.status})`);
 
             $('#operatorModal').modal('hide');
             table.ajax.reload();
-            res.json().then((json) => {
-                bootstrapToast(`Operator ${json.operator.short_name} added successfully! new id: ${json.operator.operator_id}`)
-            })
-        }).catch(() => {
-            $('#errorModalMessage').text('An error occurred while adding the operator.');
-            $('#operatorModal').modal('hide');
-            $('#operatorModal').on('hidden.bs.modal', function () {
-                $('#errorModal').modal('show');
-                $('#operatorModal').off('hidden.bs.modal'); // clean up
-            });
-
-            // After error modal is closed, re-open the operator form
-            $('#errorModal').on('hidden.bs.modal', function () {
-                $('#operatorModal').modal('show');
-                $('#errorModal').off('hidden.bs.modal'); // clean up
-            });
-        });
+            bootstrapToast(`Operator ${body.operator.short_name} added successfully! new id: ${body.operator.operator_id}`);
+        } catch (err) {
+            $('#operatorFormError').html(conflictAlertHtml(err.message));
+        } finally {
+            saveBtn.prop('disabled', false);
+        }
     }
 
     // The API updates one field per PUT, so an edit is the changed fields sent in
@@ -949,29 +922,29 @@
     }
 
     const uploadLogoForm = document.getElementById('uploadLogoForm')
-    uploadLogoForm.addEventListener('submit', (e) => {
+    uploadLogoForm.addEventListener('submit', async (e) => {
         e.preventDefault();
-
-        const fileInput = document.getElementById('logoFile');
-        const effectiveDate = document.getElementById('effectiveDate').value;
+        $('#uploadLogoError').empty();
 
         const formData = new FormData();
-        formData.append('logo', fileInput.files[0]);
-        formData.append('effective_date', effectiveDate);
+        formData.append('logo', document.getElementById('logoFile').files[0]);
+        formData.append('effective_date', document.getElementById('effectiveDate').value);
 
-        fetch(`/api/admin/operators/${currentUid}/logos`, {
-            method: 'POST',
-            body: formData
-        }).catch(err => { alert(`Error: ${err}`)}).then((res) => {
-            if(res.status > 299) {
-                res.text().then(err => {throw new Error(err)});
-                return;
-            }
+        try {
+            const res = await fetch(`/api/admin/operators/${currentUid}/logos`, {
+                method: 'POST',
+                body: formData
+            });
+            const body = await res.json().catch(() => ({}));
+            if (!res.ok)
+                throw new Error(body.message || `could not upload logo (HTTP ${res.status})`);
 
             table.ajax.reload();
             $('#logoCarouselModal').modal('hide')
             bootstrapToast('Logo added successfully.')
-        })
+        } catch (err) {
+            $('#uploadLogoError').html(conflictAlertHtml(err.message));
+        }
     });
 
     function deleteOperator(operator_id) {
@@ -1008,6 +981,7 @@
     $('#logoCarouselModal').on('show.bs.modal', function () {
         $('#logoFile').val('');
         $('#effectiveDate').val('');
+        $('#uploadLogoError').empty();
     });
 
     /* Bootstrap toast helper */
