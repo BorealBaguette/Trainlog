@@ -218,6 +218,7 @@
     "about_adv_manual_p": "Gerencie a lista de estações e paradas que você criou manualmente: edite a posição ou os detalhes delas a qualquer momento nas configurações.",
     "about_credits_maps": "Os mapas são exibidos com <a href='https://maplibre.org/'>MapLibre</a>; algumas páginas mais antigas ainda usam <a href='https://leafletjs.com'>Leaflet</a>.",
     "about_credits_currency": "As taxas de câmbio vêm do <a href='https://frankfurter.dev'>Frankfurter</a>, que combina taxas oficiais de cerca de 100 bancos centrais.",
+    "about_credits_carbon": "Os dados de intensidade de carbono da rede elétrica usados nas estimativas de pegada de carbono vêm do <a href='https://ourworldindata.org/grapher/carbon-intensity-electricity'>Our World in Data</a>.",
     "about_lead": "O Trainlog é o seu diário de viagens em transporte público: registre e mapeie suas viagens de trem, ônibus, bonde, metrô, ferry e avião, e mantenha um registro de tudo por onde você já passou.",
     "about_tab_overview": "Visão geral",
     "about_tab_log": "Registrar",

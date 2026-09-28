@@ -217,6 +217,7 @@
     "about_adv_manual_p": "Verwalte d'Liste vo de Bahnhöf und Haltestelle, wo du manuell erstellt hesch: bearbeite jederziit d Position oder Detail über d'Iistellige.",
     "about_credits_maps": "Charte werded mit <a href='https://maplibre.org/'>MapLibre</a> dargstellt; einigi ältere Siite bruuched no <a href='https://leafletjs.com'>Leaflet</a>.",
     "about_credits_currency": "Wächselkürs choemed vo <a href='https://frankfurter.dev'>Frankfurter</a>, wo offizielli Kürs vo öppe 100 Zentralbanke zämefüegt.",
+    "about_credits_carbon": "D Date zur CO2-Intensität vom Stromnetz, wo für d'Berechnig vom CO2-Fussabdruck bruucht wärded, chömed vo <a href='https://ourworldindata.org/grapher/carbon-intensity-electricity'>Our World in Data</a>.",
     "about_lead": "Trainlog isch dis Reisetagebuech für de öffentlichi Verkehr: Erfass und kartier dini Zug-, Bus-, Tram-, U-Bahn-, Fähr- und Flugreise, und bhalt de Überblick über alles, wo du scho gsi bisch.",
     "about_tab_overview": "Überblick",
     "about_tab_log": "Erfasse",
