@@ -1,0 +1,13 @@
+{
+  "dataset": "Our World in Data - Carbon intensity of electricity",
+  "url": "https://ourworldindata.org/grapher/carbon-intensity-electricity",
+  "unit": "gCO2/kWh",
+  "retrieved": "2026-09-28",
+  "notes": [
+    "Country codes are ISO 3166-1 alpha-2, converted from the OWID alpha-3/OWID_* codes.",
+    "Aggregate rows (World, EU, Ember regional groups) are excluded.",
+    "Where a country lacks fresh data for the latest year, the prior year value is carried forward.",
+    "XK (Kosovo) added from OWID_KOS.",
+    "LI/MC/SM/VA aliased to CH/FR/IT/IT respectively (grid-tied neighbors); AD averaged from ES/FR."
+  ]
+}
