@@ -415,16 +415,11 @@ _PH_MIRROR = {'loco_l': 'loco_r', 'loco_r': 'loco_l'}
 
 def reverse_wagon_unit(u):
     """Turn one car to face the other way, in place (and return it). Python port of
-    reverseWagonUnit() in static/js/wagon_img.js: a two-sided drawing swaps its L/R
-    side, a directional placeholder swaps loco_l/loco_r.
-
-    One difference: slim stored units carry no image info yet, so a unit with no
-    image_type gets its side flipped AND one with no image gets its placeholder
-    mirrored — two independent checks where the JS has an either/or. That is
-    harmless — the side is only read for two-sided drawings and the placeholder only
-    for cars without a drawing — and it means the same call works on a unit before
-    or after it is joined with the wagons table."""
-    if u.get('image_type') in (None, 'sides'):
+    reverseWagonUnit() in static/js/wagon_img.js: a two-sided drawing or a placeholder
+    swaps its L/R side, a directional placeholder also swaps loco_l/loco_r. Two
+    independent checks, so the same call works on a slim unit (no image info yet)
+    and on one joined with the wagons table."""
+    if u.get('image_type') in (None, 'sides') or not u.get('image'):
         u['_side'] = 'L' if u.get('_side') == 'R' else 'R'
     if not u.get('image') and u.get('_phType') in _PH_MIRROR:
         u['_phType'] = _PH_MIRROR[u['_phType']]
