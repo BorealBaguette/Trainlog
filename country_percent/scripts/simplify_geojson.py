@@ -10,7 +10,7 @@ Simplify a processed GeoJSON file by:
 8. truncating coordinate precision to the cm range.
 
 Usage:
-    python simplify_geojson.py <COUNTRY_CODE>
+    python scripts/simplify_geojson.py <COUNTRY_CODE>
 
 The script reads from:
     countries/processed/<COUNTRY_CODE>.geojson
@@ -168,7 +168,7 @@ def set_output_crs(data):
 
 
 def process(country_code):
-    raw_path = f"../countries/processed/{country_code}.geojson"
+    raw_path = f"countries/processed/{country_code}.geojson"
     path = raw_path
     if not os.path.exists(path):
         print(f"Geojson file not found for {country_code}")
