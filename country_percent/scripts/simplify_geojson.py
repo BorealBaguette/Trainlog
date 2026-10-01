@@ -168,7 +168,7 @@ def set_output_crs(data):
 
 
 def process(country_code):
-    raw_path = f"countries/processed/{country_code}.geojson"
+    raw_path = f"../countries/processed/{country_code}.geojson"
     path = raw_path
     if not os.path.exists(path):
         print(f"Geojson file not found for {country_code}")
@@ -252,6 +252,7 @@ def process(country_code):
     with open(path, "w") as file:
         json.dump(data, file)
         print(f"Simplified {path}")
+
 
 if __name__ == "__main__":
     process(sys.argv[1])
