@@ -1099,6 +1099,16 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     }
 
     var baseRouter = L.Routing.osrmv1({serviceUrl: routerurl, profile: profile, useHints: false});
+    // Coordinates to 6 decimals (~10 cm) in the request: a long run's stops at full
+    // float precision outgrew the server's request line (Bergen–Voss bus).
+    var _buildRouteUrl = baseRouter.buildRouteUrl;
+    baseRouter.buildRouteUrl = function(waypoints, options) {
+      var rounded = waypoints.map(function(wp) {
+        var ll = L.latLng(+wp.latLng.lat.toFixed(6), +wp.latLng.lng.toFixed(6));
+        return L.Routing.waypoint(ll, wp.name, wp.options);
+      });
+      return _buildRouteUrl.call(this, rounded, options);
+    };
     if (useNewRouter) {
       baseRouter.options.requestParameters = { use_new_router: 'true', profile: newRouterProfile };
     }

@@ -189,6 +189,11 @@ def _line_name(leg):
     return line
 
 
+# Coordinates go out to 6 decimals (~10 cm): they end up in the router's URL, one per
+# stop, and a long bus run at full float precision outgrew gunicorn's request line.
+COORD_DIGITS = 6
+
+
 def _stop(stop):
     """[lat, lng, name, country code, arrival 'HH:MM', departure 'HH:MM'] — the
     country so the form can flag it like a picked station, the times as shown there."""
@@ -199,8 +204,8 @@ def _stop(stop):
         return value[11:] if value else None
 
     return [
-        stop["lat"],
-        stop["lon"],
+        round(stop["lat"], COORD_DIGITS),
+        round(stop["lon"], COORD_DIGITS),
         stop.get("name", ""),
         getCountryFromCoordinates(stop["lat"], stop["lon"])["countryCode"],
         clock("Arrival"),
@@ -323,16 +328,24 @@ def _leg_path(leg):
 # How far along the run's path its routing ends are taken: off the stop point, still
 # within the platform.
 TRACK_END_M = 100
+TRACK_MODES = RAIL_MODES | {"METRO", "SUBWAY", "TRAM"}
 
 
 def _along(path, metres):
     """The first point of the path at least this far along it, or its last point."""
+    if metres <= 0:
+        return list(path[0])
     walked = 0.0
     for a, b in zip(path, path[1:]):
         walked += _distance_m(*a, *b)
         if walked >= metres:
             return list(b)
     return list(path[-1])
+
+
+def _pattern(departure):
+    """What makes runs share a path: same agency and line, calling at the same stops."""
+    return (departure["agency"], departure["line"], tuple(stop[2] for stop in departure["stops"]))
 
 
 def _snap_stops(stops, path):
@@ -358,7 +371,7 @@ def _snap_stops(stops, path):
             if best is None or dist < best[0]:
                 best = (dist, y / 110540, x / k)
         if best and best[0] <= MAX_SNAP_M:
-            stop[0], stop[1] = best[1], best[2]
+            stop[0], stop[1] = round(best[1], COORD_DIGITS), round(best[2], COORD_DIGITS)
 
 
 def _headsign(leg):
@@ -574,6 +587,17 @@ def motis_departures(username):
         departures.append(entry)
 
     departures.sort(key=lambda d: d.pop("_sort"))
+    # Departure-board runs come without a path. Runs of the same line calling at the
+    # same stops follow the same route, so they borrow one from the planner's runs:
+    # unsnapped, a Gyldenpris (Bergen) stop 6 m off the road sent the router into the
+    # tunnel underneath it.
+    patterns = {}
+    for d in departures:
+        if d["_path"]:
+            patterns.setdefault(_pattern(d), d["_path"])
+    for d in departures:
+        if not d["_path"]:
+            d["_path"] = patterns.get(_pattern(d))
     for d in departures:
         d.pop("_dest_m")
         path = d.pop("_path")
@@ -581,9 +605,12 @@ def motis_departures(username):
         # Where the run leaves and arrives on its track. The router starts from the
         # nearest track to a point, and a station's point can be nearer another line's
         # (La Défense's sits by the Transilien L, which the RER A route then looped round).
-        # The path itself starts at that same stop point, so step a little along it.
+        # The path itself starts at that same stop point, so rail steps a little along it.
+        # Road vehicles end on the path's own ends, the stop: a step back from a bus
+        # terminal left the route on the road short of it (Fyllingsdalen terminal).
+        step = TRACK_END_M if d["mode"] in TRACK_MODES else 0
         d["track_ends"] = (
-            [_along(path, TRACK_END_M), _along(path[::-1], TRACK_END_M)]
+            [_along(path, step), _along(path[::-1], step)]
             if path and len(path) > 1 else None
         )
 
