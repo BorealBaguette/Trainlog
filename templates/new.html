@@ -1044,7 +1044,8 @@
 
     function schedule() {
       clearTimeout(timer);
-      timer = setTimeout(search, 400);
+      // Long enough for typing a time (each keystroke is a new form state).
+      timer = setTimeout(search, 800);
     }
 
     function dayLabel(isoDate) {

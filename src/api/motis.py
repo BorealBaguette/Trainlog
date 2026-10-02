@@ -76,8 +76,23 @@ MAX_FALLBACK_STOPS = 2
 # The same lookup is fired again whenever the user nudges the date or time back and
 # forth, so keep answers for a few minutes rather than asking Transitous each time.
 _CACHE_TTL = 300
+# Which stops are near a station doesn't change from one search to the next.
+_STOPS_CACHE_TTL = 24 * 3600
 _CACHE_MAX = 256
 _cache = {}
+
+# Searches start on the half hour before the form's time minus WINDOW_BEFORE, so moving
+# the time by a few minutes asks Transitous the same thing again (and hits the cache).
+START_STEP = timedelta(minutes=30)
+
+# After Transitous answers 429, this process stops asking it for a while (its
+# Retry-After, or this long) rather than keep piling requests on.
+RATE_LIMIT_BACKOFF_S = 60
+_backoff_until = 0.0
+
+
+class RateLimited(requests.RequestException):
+    """Transitous asked us to slow down; nothing is sent until the backoff ends."""
 
 # Legal-form suffixes GTFS agency names carry and Trainlog operator names do not.
 _LEGAL_SUFFIX = re.compile(
@@ -298,7 +313,9 @@ def _stop_places(lat, lng, modes):
     Searching from the stop itself does not need that walk."""
     stops = [
         stop
-        for stop in _fetch(MOTIS_STOPS_URL, {"place": f"{lat:.6f},{lng:.6f}", "type": "STOP"})
+        for stop in _fetch(
+            MOTIS_STOPS_URL, {"place": f"{lat:.6f},{lng:.6f}", "type": "STOP"}, ttl=_STOPS_CACHE_TTL
+        )
         if stop.get("id")
         and modes & set(stop.get("modes") or ())
         and _distance_m(stop["lat"], stop["lon"], lat, lng) <= _reach(modes)
@@ -403,17 +420,28 @@ def _delay_minutes(actual, scheduled):
     return round((a - s).total_seconds() / 60) if a and s else 0
 
 
-def _fetch(url, params):
+def _fetch(url, params, ttl=_CACHE_TTL):
+    global _backoff_until
     key = (url,) + tuple(sorted(params.items()))
     hit = _cache.get(key)
     if hit and hit[0] > time.monotonic():
         return hit[1]
+    if time.monotonic() < _backoff_until:
+        raise RateLimited("Transitous rate limit: backing off")
     response = requests.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=20)
+    if response.status_code == 429:
+        try:
+            wait = max(1, int(response.headers.get("Retry-After", "")))
+        except ValueError:
+            wait = RATE_LIMIT_BACKOFF_S
+        _backoff_until = time.monotonic() + wait
+        logger.warning("Transitous rate limit (429): no requests for %d s", wait)
+        raise RateLimited("Transitous rate limit (429)")
     response.raise_for_status()
     data = response.json()
     if len(_cache) >= _CACHE_MAX:
         _cache.clear()
-    _cache[key] = (time.monotonic() + _CACHE_TTL, data)
+    _cache[key] = (time.monotonic() + ttl, data)
     return data
 
 
@@ -422,6 +450,8 @@ def _quietly(search, *args):
     rather than failing the ones that worked."""
     try:
         return search(*args)
+    except RateLimited:
+        return []  # logged once, when the 429 came in
     except (requests.RequestException, ValueError) as e:
         logger.info("MOTIS secondary search failed: %s", e)
         return []
@@ -447,6 +477,7 @@ def motis_departures(username):
     except ValueError:
         # No time on the form: the whole day.
         start, window = day, timedelta(days=1)
+    start = start.replace(minute=start.minute - start.minute % (START_STEP.seconds // 60))
     start = start.replace(tzinfo=origin_tz).astimezone(timezone.utc)
 
     params = {
@@ -507,6 +538,8 @@ def motis_departures(username):
                 ]
                 searches = list(pool.map(lambda pair: _quietly(direct_legs, *pair), pairs))
                 legs = [leg for found in searches for leg in found]
+    except RateLimited:
+        return jsonify({"error": "rate_limited", "departures": []}), 503
     except (requests.RequestException, ValueError) as e:
         logger.warning("MOTIS request failed: %s", e)
         return jsonify({"error": "unavailable", "departures": []}), 502
