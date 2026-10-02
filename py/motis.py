@@ -287,6 +287,7 @@ def call_motis_api(forwardRouting=None):
         response = requests.get(
             "https://api.transitous.org/api/v3/plan",
             params=params,
+            headers={"User-Agent": "Trainlog/1.0 (https://trainlog.me; admin@trainlog.me; journey planner)"},
             timeout=30
         )
         

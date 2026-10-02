@@ -99,6 +99,18 @@
     #motisGroup .motis-headsign { min-width: 0; font-size: 0.85rem; color: #444; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #motisGroup .motis-meta { grid-column: 3; font-size: 0.75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #motisGroup .motis-source { padding: 4px 12px; font-size: 0.7rem; color: #999; text-align: right; border-top: 1px solid #eee; }
+    /* Phones: the third column is too narrow for the line badge and headsign, so each
+       entry stacks into rows — times + journey info, then line → headsign at full
+       width, then the day. */
+    @media (max-width: 576px) {
+        #motisGroup .motis-item { grid-template-columns: 28px auto minmax(0, 1fr); gap: 2px 8px; padding: 8px 10px 8px 8px; }
+        #motisGroup .motis-logo { grid-row: 1 / 4; width: 28px; height: 22px; align-self: start; margin-top: 2px; }
+        #motisGroup .motis-time { grid-column: 2; grid-row: 1; }
+        #motisGroup .motis-meta { grid-column: 3; grid-row: 1; text-align: right; }
+        #motisGroup .motis-head { grid-column: 2 / 4; grid-row: 2; }
+        #motisGroup .motis-head .motis-line { max-width: 70%; }
+        #motisGroup .motis-day { grid-column: 2 / 4; grid-row: 3; }
+    }
     #motisGroup .motis-source a { color: inherit; }
 </style>
 

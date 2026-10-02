@@ -28,7 +28,7 @@ motis_blueprint = Blueprint("motis", __name__)
 MOTIS_PLAN_URL = "https://api.transitous.org/api/v5/plan"
 MOTIS_STOPS_URL = "https://api.transitous.org/api/v1/reverse-geocode"
 MOTIS_BOARD_URL = "https://api.transitous.org/api/v5/stoptimes"
-USER_AGENT = "Trainlog/1.0 (https://trainlog.me; trip form timetable suggestions)"
+USER_AGENT = "Trainlog/1.0 (https://trainlog.me; admin@trainlog.me; trip form timetable suggestions)"
 
 # Search from a little before the time on the form to a full day after it: the form
 # time is often just "now" or a rough guess, so the next day's runs are offered too.
