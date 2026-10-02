@@ -9,6 +9,7 @@ operator resolved to a Trainlog operator so its logo can be shown.
 import logging
 import math
 import re
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -85,14 +86,21 @@ _cache = {}
 # the time by a few minutes asks Transitous the same thing again (and hits the cache).
 START_STEP = timedelta(minutes=30)
 
-# After Transitous answers 429, this process stops asking it for a while (its
-# Retry-After, or this long) rather than keep piling requests on.
+# Transitous refuses bursts from one address: 6 plan requests at once got half of them a
+# 429 straight away (no Retry-After), while 3 at once or back to back went through. So
+# this process keeps at most this many plan/board requests in flight (stop lookups are
+# cheap, and went through 6 at once), and retries a refused one once after a pause.
+TRANSITOUS_PARALLEL = 2
+_transitous_slots = threading.BoundedSemaphore(TRANSITOUS_PARALLEL)
+RETRY_AFTER_429_S = 1.5
+# Refused again: no requests from this process for a while (Retry-After, or this long).
 RATE_LIMIT_BACKOFF_S = 60
 _backoff_until = 0.0
 
 
 class RateLimited(requests.RequestException):
     """Transitous asked us to slow down; nothing is sent until the backoff ends."""
+
 
 # Legal-form suffixes GTFS agency names carry and Trainlog operator names do not.
 _LEGAL_SUFFIX = re.compile(
@@ -314,7 +322,10 @@ def _stop_places(lat, lng, modes):
     stops = [
         stop
         for stop in _fetch(
-            MOTIS_STOPS_URL, {"place": f"{lat:.6f},{lng:.6f}", "type": "STOP"}, ttl=_STOPS_CACHE_TTL
+            MOTIS_STOPS_URL,
+            {"place": f"{lat:.6f},{lng:.6f}", "type": "STOP"},
+            ttl=_STOPS_CACHE_TTL,
+            queued=False,
         )
         if stop.get("id")
         and modes & set(stop.get("modes") or ())
@@ -340,24 +351,6 @@ def _leg_path(leg):
         return polyline.decode(geometry["points"], precision=geometry.get("precision", 6))
     except (ValueError, IndexError):
         return None
-
-
-# How far along the run's path its routing ends are taken: off the stop point, still
-# within the platform.
-TRACK_END_M = 100
-TRACK_MODES = RAIL_MODES | {"METRO", "SUBWAY", "TRAM"}
-
-
-def _along(path, metres):
-    """The first point of the path at least this far along it, or its last point."""
-    if metres <= 0:
-        return list(path[0])
-    walked = 0.0
-    for a, b in zip(path, path[1:]):
-        walked += _distance_m(*a, *b)
-        if walked >= metres:
-            return list(b)
-    return list(path[-1])
 
 
 def _pattern(departure):
@@ -420,15 +413,71 @@ def _delay_minutes(actual, scheduled):
     return round((a - s).total_seconds() / 60) if a and s else 0
 
 
-def _fetch(url, params, ttl=_CACHE_TTL):
+def _search(args):
+    """The search the form asks for (from, to, date, time, type), as
+    (trip type, origin, destination, start, window, plan parameters, modes)."""
+    trip_type = args.get("type", "train")
+    if trip_type not in TRANSIT_MODES:
+        abort(400)
+    origin = _parse_coords(args.get("from"))
+    destination = _parse_coords(args.get("to"))
+    try:
+        day = datetime.strptime(args.get("date") or "", "%Y-%m-%d")
+    except ValueError:
+        abort(400)
+    try:
+        clock = datetime.strptime(args.get("time") or "", "%H:%M").time()
+        start, window = day.replace(hour=clock.hour, minute=clock.minute) - WINDOW_BEFORE, WINDOW_LENGTH
+    except ValueError:
+        # No time on the form: the whole day.
+        start, window = day, timedelta(days=1)
+    start = start.replace(minute=start.minute - start.minute % (START_STEP.seconds // 60))
+    start = start.replace(tzinfo=_tz(*origin)).astimezone(timezone.utc)
+
+    params = {
+        "fromPlace": f"{origin[0]:.6f},{origin[1]:.6f}",
+        "toPlace": f"{destination[0]:.6f},{destination[1]:.6f}",
+        "time": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "searchWindow": int(min(window, SEARCH_WINDOW).total_seconds()),
+        "maxTransfers": 0,
+        "transitModes": TRANSIT_MODES[trip_type],
+        "directModes": "WALK",
+        "numItineraries": ITINERARIES,
+        "maxItineraries": ITINERARIES,
+        "timetableView": "true",
+        "detailedTransfers": "false",
+        # Keep direct services a faster one overtakes (an L1 stopping train behind an
+        # RE11): Pareto-optimal results drop them, but people do take them.
+        "slowDirect": "true",
+    }
+    modes = set(TRANSIT_MODES[trip_type].split(","))
+    return trip_type, origin, destination, start, window, params, modes
+
+
+def _get(url, params):
+    return requests.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=20)
+
+
+def _fetch(url, params, ttl=_CACHE_TTL, queued=True):
+    """A Transitous answer, from the cache if asked recently. Queued requests share
+    TRANSITOUS_PARALLEL slots; a 429 is retried once, then starts the backoff."""
     global _backoff_until
     key = (url,) + tuple(sorted(params.items()))
     hit = _cache.get(key)
     if hit and hit[0] > time.monotonic():
         return hit[1]
-    if time.monotonic() < _backoff_until:
-        raise RateLimited("Transitous rate limit: backing off")
-    response = requests.get(url, params=params, headers={"User-Agent": USER_AGENT}, timeout=20)
+    for attempt in range(2):
+        if time.monotonic() < _backoff_until:
+            raise RateLimited("Transitous rate limit: backing off")
+        if queued:
+            with _transitous_slots:
+                response = _get(url, params)
+        else:
+            response = _get(url, params)
+        if response.status_code != 429:
+            break
+        if attempt == 0:
+            time.sleep(RETRY_AFTER_429_S)
     if response.status_code == 429:
         try:
             wait = max(1, int(response.headers.get("Retry-After", "")))
@@ -460,43 +509,8 @@ def _quietly(search, *args):
 @motis_blueprint.route("/u/<username>/motis/departures")
 @login_required
 def motis_departures(username):
-    trip_type = request.args.get("type", "train")
-    if trip_type not in TRANSIT_MODES:
-        return jsonify({"departures": []})
+    _, origin, destination, start, window, params, modes = _search(request.args)
 
-    origin = _parse_coords(request.args.get("from"))
-    destination = _parse_coords(request.args.get("to"))
-    origin_tz = _tz(*origin)
-    try:
-        day = datetime.strptime(request.args.get("date", ""), "%Y-%m-%d")
-    except ValueError:
-        abort(400)
-    try:
-        clock = datetime.strptime(request.args.get("time", ""), "%H:%M").time()
-        start, window = day.replace(hour=clock.hour, minute=clock.minute) - WINDOW_BEFORE, WINDOW_LENGTH
-    except ValueError:
-        # No time on the form: the whole day.
-        start, window = day, timedelta(days=1)
-    start = start.replace(minute=start.minute - start.minute % (START_STEP.seconds // 60))
-    start = start.replace(tzinfo=origin_tz).astimezone(timezone.utc)
-
-    params = {
-        "fromPlace": f"{origin[0]:.6f},{origin[1]:.6f}",
-        "toPlace": f"{destination[0]:.6f},{destination[1]:.6f}",
-        "time": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "searchWindow": int(min(window, SEARCH_WINDOW).total_seconds()),
-        "maxTransfers": 0,
-        "transitModes": TRANSIT_MODES[trip_type],
-        "directModes": "WALK",
-        "numItineraries": ITINERARIES,
-        "maxItineraries": ITINERARIES,
-        "timetableView": "true",
-        "detailedTransfers": "false",
-        # Keep direct services a faster one overtakes (an L1 stopping train behind an
-        # RE11): Pareto-optimal results drop them, but people do take them.
-        "slowDirect": "true",
-    }
-    modes = set(TRANSIT_MODES[trip_type].split(","))
     def direct_legs(from_place, to_place):
         plan = _fetch(MOTIS_PLAN_URL, dict(params, fromPlace=from_place, toPlace=to_place))
         return [
@@ -526,8 +540,7 @@ def motis_departures(username):
                 searches.append(_quietly(direct_legs, *nearest))
             if board:
                 searches.append(board.result())
-            legs = [leg for found in searches for leg in found]
-            if not legs:
+            if not any(searches):
                 # Still nothing: every remaining point/stop combination (the nearest
                 # stop can be the wrong feed's, e.g. the RER one at Paris Austerlitz).
                 pairs = [
@@ -537,13 +550,18 @@ def motis_departures(username):
                     if (f, t) not in (points, nearest)
                 ]
                 searches = list(pool.map(lambda pair: _quietly(direct_legs, *pair), pairs))
-                legs = [leg for found in searches for leg in found]
     except RateLimited:
         return jsonify({"error": "rate_limited", "departures": []}), 503
     except (requests.RequestException, ValueError) as e:
         logger.warning("MOTIS request failed: %s", e)
         return jsonify({"error": "unavailable", "departures": []}), 502
 
+    return jsonify({"departures": _departures(searches, start, window, destination)})
+
+
+def _departures(searches, start, window, destination):
+    """The form's departure list from the direct legs each search found."""
+    legs = [leg for found in searches for leg in found]
     # Each search widened its window until it had ITINERARIES results, so one that
     # reaches few departures (walking from the point misses most of Oslo S's platforms)
     # runs days ahead while a denser one stops after a few hours. Cut the merged list
@@ -635,22 +653,11 @@ def motis_departures(username):
         d.pop("_dest_m")
         path = d.pop("_path")
         _snap_stops(d["stops"], path)
-        # Where the run leaves and arrives on its track. The router starts from the
-        # nearest track to a point, and a station's point can be nearer another line's
-        # (La Défense's sits by the Transilien L, which the RER A route then looped round).
-        # The path itself starts at that same stop point, so rail steps a little along it.
-        # Road vehicles end on the path's own ends, the stop: a step back from a bus
-        # terminal left the route on the road short of it (Fyllingsdalen terminal).
-        step = TRACK_END_M if d["mode"] in TRACK_MODES else 0
-        d["track_ends"] = (
-            [_along(path, step), _along(path[::-1], step)]
-            if path and len(path) > 1 else None
-        )
 
     if departures:
         try:
             operators = _resolve_operators(
-                {d["agency"] for d in departures if d["agency"]}, day.date()
+                {d["agency"] for d in departures if d["agency"]}, start.date()
             )
         except Exception:
             logger.exception("Operator lookup for MOTIS agencies failed")
@@ -660,4 +667,4 @@ def motis_departures(username):
             d["operator"] = info.get("operator") or d["agency"]
             d["logo_url"] = info.get("logo_url")
 
-    return jsonify({"departures": departures})
+    return departures

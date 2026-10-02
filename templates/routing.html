@@ -102,8 +102,7 @@ var destCoord = newTrip["destinationStation"][0];
 var origLabel = newTrip["originStation"][1];
 var destLabel = newTrip["destinationStation"][1];
 var viaStations = newTrip["viaStations"] || [];
-// A timetable run picked on the form routes from its own track ends (see toRouting).
-var wplist = [newTrip["routeStart"] || origCoord].concat(viaStations.map(function(v){ return v[0]; })).concat([newTrip["routeEnd"] || destCoord]);
+var wplist = [origCoord].concat(viaStations.map(function(v){ return v[0]; })).concat([destCoord]);
 // Via stations name their waypoints (routing.js); all start soft.
 window.routingWaypointMeta = viaStations.map(function(v){ return { name: v[1] }; });
 var spinnerContent = '<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>';

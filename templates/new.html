@@ -1120,12 +1120,6 @@
       });
       setViaCollapsed(true);
       updateViaSummary();
-      // Route from the run's own track ends while origin and destination stay as picked
-      // (toRouting in util.js checks the labels).
-      window.motisTrackEnds = d.track_ends ? {
-        origin: $('#originStation').val(), destination: $('#destinationStation').val(),
-        start: d.track_ends[0], end: d.track_ends[1]
-      } : null;
 
       // Real-time data on a run that has started: carry its delays over.
       if ((d.departure_delay || d.arrival_delay) && $('#delayToggle').is(':visible')) {
