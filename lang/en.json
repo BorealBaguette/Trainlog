@@ -1367,5 +1367,14 @@
     "removeDiscordPostFailed": "The Discord post could not be removed. Please try again.",
     "postToDiscord": "Post to Discord",
     "confirmPostToDiscord": "Post this trip to Discord now?",
-    "postToDiscordFailed": "The trip could not be posted to Discord. Please try again."
+    "postToDiscordFailed": "The trip could not be posted to Discord. Please try again.",
+    "motisDepartures": "Timetable departures",
+    "motisSearching": "Searching timetables…",
+    "motisNone": "No direct departure found in timetables",
+    "waypointSoft": "Approximate",
+    "waypointHard": "Exact",
+    "waypointSoftHint": "The route only needs to pass near this point.",
+    "waypointHardHint": "The route goes exactly through this point, even if that means a detour.",
+    "motisLine": "Line {line}",
+    "motisStops": {"one": "{n} stop", "other": "{n} stops"}
 }

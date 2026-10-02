@@ -1370,5 +1370,14 @@
     "removeDiscordPostFailed": "Der Discord-Beitrag konnte nicht entfernt werden. Bitte versuche es erneut.",
     "postToDiscord": "Auf Discord posten",
     "confirmPostToDiscord": "Diese Fahrt jetzt auf Discord posten?",
-    "postToDiscordFailed": "Die Fahrt konnte nicht auf Discord gepostet werden. Bitte versuche es erneut."
+    "postToDiscordFailed": "Die Fahrt konnte nicht auf Discord gepostet werden. Bitte versuche es erneut.",
+    "motisDepartures": "Abfahrten laut Fahrplan",
+    "motisSearching": "Fahrpläne werden durchsucht…",
+    "motisNone": "Keine direkte Verbindung im Fahrplan gefunden",
+    "waypointSoft": "Ungefähr",
+    "waypointHard": "Genau",
+    "waypointSoftHint": "Die Route muss nur in der Nähe dieses Punkts vorbeiführen.",
+    "waypointHardHint": "Die Route führt genau durch diesen Punkt, auch wenn das einen Umweg bedeutet.",
+    "motisLine": "Linie {line}",
+    "motisStops": {"one": "{n} Halt", "other": "{n} Halte"}
 }

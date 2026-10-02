@@ -1367,5 +1367,14 @@
     "removeDiscordPostFailed": "Discordi postitust ei õnnestunud eemaldada. Palun proovi uuesti.",
     "postToDiscord": "Postita Discordi",
     "confirmPostToDiscord": "Kas postitada see reis kohe Discordi?",
-    "postToDiscordFailed": "Reisi ei õnnestunud Discordi postitada. Palun proovi uuesti."
+    "postToDiscordFailed": "Reisi ei õnnestunud Discordi postitada. Palun proovi uuesti.",
+    "motisDepartures": "Väljumised sõiduplaani järgi",
+    "motisSearching": "Otsitakse sõiduplaanidest…",
+    "motisNone": "Sõiduplaanidest ei leitud otseühendust",
+    "waypointSoft": "Ligikaudne",
+    "waypointHard": "Täpne",
+    "waypointSoftHint": "Marsruut peab läbima ainult selle punkti lähedalt.",
+    "waypointHardHint": "Marsruut läbib täpselt seda punkti, isegi kui see tähendab ringteed.",
+    "motisLine": "Liin {line}",
+    "motisStops": {"one": "{n} peatus", "other": "{n} peatust"}
 }

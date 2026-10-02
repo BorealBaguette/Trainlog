@@ -2,11 +2,15 @@
 import requests
 from urllib.parse import parse_qs
 from flask import make_response
+import os
 
 # Import these from wherever they currently live in your project
 # Adjust imports to match your structure.
 from src.router_regions import all_in_region
 from src.graphhopper import convert_graphhopper_to_osrm     # example
+
+
+NEW_TRAIN_ROUTER = os.environ.get("NEW_TRAIN_ROUTER_URL", "http://127.0.0.1:8989")
 
 
 def forward_routing_core(routingType, path, flask_request, extra_args=None):
@@ -27,7 +31,9 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
 
     if routingType == "train":
         use_new_router = flask_request.args.get("use_new_router", "false").lower() == "true"
-        base = "https://train-gh.srv.trainlog.me" if use_new_router else "https://train.srv.trainlog.me"
+        # TEMPORARY, for testing the hard/soft waypoint OpenRailRouting build on its
+        # test port: revert to "https://train-gh.srv.trainlog.me" once it is deployed there.
+        base = NEW_TRAIN_ROUTER if use_new_router else "https://train.srv.trainlog.me"
 
     elif routingType == "ferry":
         base = "https://ferry.srv.trainlog.me"
@@ -92,6 +98,19 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
         gh_profile = requested_profile
         args = "&".join(p for p in args.split("&") if not p.startswith("profile="))
 
+    # Per-waypoint hard/soft modes, only understood by the new (GraphHopper) router:
+    # one entry per coordinate, sent as a single parameter (it drops repeated ones).
+    # Never forwarded to the old router, which may reject unknown parameters.
+    waypoint_modes = parse_qs(args).get("waypoint_modes", [None])[0]
+    args = "&".join(p for p in args.split("&") if not p.startswith("waypoint_modes="))
+    if waypoint_modes:
+        modes = [m.strip().lower() or "soft" for m in waypoint_modes.split(",")]
+        point_count = len(path.split("/")[-1].split(";"))
+        if len(modes) != point_count or not set(modes) <= {"hard", "soft"}:
+            waypoint_modes = None  # malformed: fall back to the router default (all soft)
+        else:
+            waypoint_modes = ",".join(modes)
+
     def build_url(base_url):
         q = f"?{args}" if args else ""
         full_url = f"{base_url}/{path}{q}"
@@ -111,6 +130,8 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
             f"{base_url}/route?"
             f"{point_params}&type=json&profile={gh_profile}&details=electrified&details=distance"
         )
+        if waypoint_modes:
+            full_url += f"&waypoint_modes={waypoint_modes}"
 
         if routingType == "ferry" and radiuses:
             full_url += f"&radiuses={radiuses}"

@@ -1368,5 +1368,14 @@
     "removeDiscordPostFailed": "De Discord-Poscht het nöd chöne entfernt werde. Bitte probier's nomol.",
     "postToDiscord": "Uf Discord poschte",
     "confirmPostToDiscord": "Die Fahrt jetz uf Discord poschte?",
-    "postToDiscordFailed": "D Fahrt het nöd chöne uf Discord gposchtet werde. Bitte probier's nomol."
+    "postToDiscordFailed": "D Fahrt het nöd chöne uf Discord gposchtet werde. Bitte probier's nomol.",
+    "motisDepartures": "Abfahrte laut Fahrplan",
+    "motisSearching": "Fahrplän wärde duresuecht…",
+    "motisNone": "Kei diräkti Verbindig im Fahrplan gfunde",
+    "waypointSoft": "Ungfähr",
+    "waypointHard": "Gnau",
+    "waypointSoftHint": "D Route mues nume i de Nöchi vo dem Punkt verbiifüere.",
+    "waypointHardHint": "D Route füert gnau dur dä Punkt, au wänn das en Umwäg bedütet.",
+    "motisLine": "Linie {line}",
+    "motisStops": {"one": "{n} Halt", "other": "{n} Hält"}
 }

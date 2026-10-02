@@ -1,6 +1,7 @@
 {% extends "bootstrap/layout.html" %}
 {% include "bootstrap/leafletLayout.html" %}
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/waypoint_popup.css') }}">
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lib/leaflet.geometryutil.js') }}"></script>
 <script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
@@ -809,10 +810,19 @@
         "downloadGeoJSONButton": "{{downloadGeoJSONButton}}",
         "saveTripButton": "{{submit}}",
         "saveTripContinueButton": "{{saveTripContinueButton}}",
+        "waypoint": {{ waypoint|tojson }},
+        "freehandMode": {{ freehandMode|tojson }},
+        "remove": {{ remove|tojson }},
+        "waypointSoft": {{ waypointSoft|tojson }},
+        "waypointHard": {{ waypointHard|tojson }},
+        "waypointSoftHint": {{ waypointSoftHint|tojson }},
+        "waypointHardHint": {{ waypointHardHint|tojson }},
     };
 
 
     var wplist = JSON.parse("{{wplist}}");
+    // Name + hard/soft mode of each stored intermediate waypoint (see routing.js).
+    window.routingWaypointMeta = {{ waypoint_meta|default([])|tojson }};
     // Original raw GPS trace (GPX imports only), preserved server-side (see
     // migration 0073) so it can be shown as a reference and optionally reselected
     // as the saved path instead of the routed/cleaned one.
@@ -908,8 +918,12 @@
 
                         // Recompute the route
                         window.control.route();
+                        updateMarkerVisuals();
                     }
                 });
+                // routing() made the new router the default for rail types.
+                routerToggle.checked = useNewRouter;
+                if (routerProfile) routerProfile.style.display = useNewRouter ? '' : 'none';
             }
             if (routerProfile) {
                 routerProfile.addEventListener('change', function() {

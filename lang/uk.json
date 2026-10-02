@@ -1374,5 +1374,14 @@
     "removeDiscordPostFailed": "Не вдалося видалити допис у Discord. Спробуйте ще раз.",
     "postToDiscord": "Опублікувати в Discord",
     "confirmPostToDiscord": "Опублікувати цю поїздку в Discord зараз?",
-    "postToDiscordFailed": "Не вдалося опублікувати поїздку в Discord. Спробуйте ще раз."
+    "postToDiscordFailed": "Не вдалося опублікувати поїздку в Discord. Спробуйте ще раз.",
+    "motisDepartures": "Відправлення за розкладом",
+    "motisSearching": "Пошук у розкладах…",
+    "motisNone": "У розкладах не знайдено прямих відправлень",
+    "waypointSoft": "Приблизно",
+    "waypointHard": "Точно",
+    "waypointSoftHint": "Маршрут має лише пройти поруч із цією точкою.",
+    "waypointHardHint": "Маршрут проходить точно через цю точку, навіть якщо це означає об'їзд.",
+    "motisLine": "Лінія {line}",
+    "motisStops": {"one": "{n} зупинка", "few": "{n} зупинки", "many": "{n} зупинок", "other": "{n} зупинки"}
 }

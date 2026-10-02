@@ -1370,5 +1370,14 @@
     "removeDiscordPostFailed": "Discord-opslaget kunne ikke fjernes. Prøv venligst igen.",
     "postToDiscord": "Slå op på Discord",
     "confirmPostToDiscord": "Vil du slå denne tur op på Discord nu?",
-    "postToDiscordFailed": "Turen kunne ikke slås op på Discord. Prøv venligst igen."
+    "postToDiscordFailed": "Turen kunne ikke slås op på Discord. Prøv venligst igen.",
+    "motisDepartures": "Afgange ifølge køreplan",
+    "motisSearching": "Søger i køreplaner…",
+    "motisNone": "Ingen direkte afgang fundet i køreplanerne",
+    "waypointSoft": "Omtrentlig",
+    "waypointHard": "Præcis",
+    "waypointSoftHint": "Ruten skal kun passere i nærheden af dette punkt.",
+    "waypointHardHint": "Ruten går præcis gennem dette punkt, også selvom det betyder en omvej.",
+    "motisLine": "Linje {line}",
+    "motisStops": {"one": "{n} stop", "other": "{n} stop"}
 }

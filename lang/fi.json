@@ -1368,5 +1368,14 @@
     "removeDiscordPostFailed": "Discord-julkaisun poistaminen epäonnistui. Yritä uudelleen.",
     "postToDiscord": "Julkaise Discordissa",
     "confirmPostToDiscord": "Julkaistaanko tämä matka Discordissa nyt?",
-    "postToDiscordFailed": "Matkan julkaiseminen Discordissa epäonnistui. Yritä uudelleen."
+    "postToDiscordFailed": "Matkan julkaiseminen Discordissa epäonnistui. Yritä uudelleen.",
+    "motisDepartures": "Lähdöt aikataulun mukaan",
+    "motisSearching": "Haetaan aikatauluista…",
+    "motisNone": "Aikatauluista ei löytynyt suoraa lähtöä",
+    "waypointSoft": "Likimääräinen",
+    "waypointHard": "Tarkka",
+    "waypointSoftHint": "Reitin tarvitsee vain kulkea tämän pisteen läheltä.",
+    "waypointHardHint": "Reitti kulkee tarkalleen tämän pisteen kautta, vaikka se tarkoittaisi kiertotietä.",
+    "motisLine": "Linja {line}",
+    "motisStops": {"one": "{n} pysähdys", "other": "{n} pysähdystä"}
 }

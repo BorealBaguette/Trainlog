@@ -1366,5 +1366,14 @@
     "removeDiscordPostFailed": "A Discord-bejegyzést nem sikerült eltávolítani. Kérlek, próbáld újra.",
     "postToDiscord": "Közzététel a Discordon",
     "confirmPostToDiscord": "Közzéteszed most ezt az utazást a Discordon?",
-    "postToDiscordFailed": "Az utazást nem sikerült közzétenni a Discordon. Kérlek, próbáld újra."
+    "postToDiscordFailed": "Az utazást nem sikerült közzétenni a Discordon. Kérlek, próbáld újra.",
+    "motisDepartures": "Indulások a menetrend szerint",
+    "motisSearching": "Keresés a menetrendekben…",
+    "motisNone": "Nem található közvetlen indulás a menetrendekben",
+    "waypointSoft": "Hozzávetőleges",
+    "waypointHard": "Pontos",
+    "waypointSoftHint": "Az útvonalnak csak a pont közelében kell elhaladnia.",
+    "waypointHardHint": "Az útvonal pontosan ezen a ponton halad át, akkor is, ha ez kerülőt jelent.",
+    "motisLine": "{line}-es vonal",
+    "motisStops": {"one": "{n} megálló", "other": "{n} megálló"}
 }

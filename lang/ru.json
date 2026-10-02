@@ -1374,5 +1374,14 @@
     "removeDiscordPostFailed": "Не удалось удалить публикацию в Discord. Попробуйте ещё раз.",
     "postToDiscord": "Опубликовать в Discord",
     "confirmPostToDiscord": "Опубликовать эту поездку в Discord сейчас?",
-    "postToDiscordFailed": "Не удалось опубликовать поездку в Discord. Попробуйте ещё раз."
+    "postToDiscordFailed": "Не удалось опубликовать поездку в Discord. Попробуйте ещё раз.",
+    "motisDepartures": "Отправления по расписанию",
+    "motisSearching": "Поиск по расписаниям…",
+    "motisNone": "В расписаниях не найдено прямых отправлений",
+    "waypointSoft": "Приблизительно",
+    "waypointHard": "Точно",
+    "waypointSoftHint": "Маршрут должен лишь пройти рядом с этой точкой.",
+    "waypointHardHint": "Маршрут проходит точно через эту точку, даже если это означает крюк.",
+    "motisLine": "Линия {line}",
+    "motisStops": {"one": "{n} остановка", "few": "{n} остановки", "many": "{n} остановок", "other": "{n} остановки"}
 }

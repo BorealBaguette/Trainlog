@@ -197,6 +197,7 @@ from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
 from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
+from src.api.motis import motis_blueprint
 from src.consts import DbNames, TripTypes
 from src.global_map import (
     available_bins,
@@ -363,6 +364,7 @@ app.register_blueprint(trips_blueprint)
 app.register_blueprint(plans_api_blueprint)
 app.register_blueprint(live_tracks_blueprint)
 app.register_blueprint(wagon_leaderboard_blueprint)
+app.register_blueprint(motis_blueprint)
 
 app.config["CACHE_TYPE"] = "SimpleCache"
 app.config["CACHE_DEFAULT_TIMEOUT"] = 864000
@@ -6548,9 +6550,12 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
     # Routing waypoints are just the endpoints (+ any stored waypoints), NOT every geom
     # vertex — mirrors the normal trip editor (see the edit route's wplist logic).
     wplist = [coords[0], coords[-1]] if coords else [[0, 0], [0, 0]]
+    waypoint_meta = []
     if pt["waypoints"]:
-        wp = [[p["lat"], p["lng"]] for p in json.loads(pt["waypoints"])]
+        stored = json.loads(pt["waypoints"])
+        wp = [[p["lat"], p["lng"]] for p in stored]
         wplist = [coords[0]] + wp + [coords[-1]]
+        waypoint_meta = _waypoint_meta(stored)
 
     sdt, edt = pt["start_datetime"], pt["end_datetime"]
     start_str = sdt.strftime("%Y-%m-%d %H:%M:%S") if sdt else ""
@@ -6629,6 +6634,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         tripType=pt["trip_type"],
         tripTicketId="",
         wplist=wplist,
+        waypoint_meta=waypoint_meta,
         raw_path=[],
         tripNotes=pt["notes"] or "",
         colorblind=colorblind,
@@ -7335,6 +7341,15 @@ def get_trip(trip_id):
         arrival_delay=trip.get("arrival_delay"),
         route_source=trip.get("route_source") or "router",
     )
+
+
+def _waypoint_meta(stored_waypoints):
+    """Name and hard/soft mode of each stored intermediate waypoint, for the routing
+    map (routing.js reads them as window.routingWaypointMeta)."""
+    return [
+        {"name": p.get("name") or "", "hard": bool(p.get("hard"))}
+        for p in stored_waypoints
+    ]
 
 
 def sanitize_param(param):
@@ -10235,11 +10250,12 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     unknownType = None
 
     wplist = [path[0], path[-1]]
+    waypoint_meta = []
     if trip["waypoints"]:
-        waypoints_coords = [
-            [point["lat"], point["lng"]] for point in json.loads(trip["waypoints"])
-        ]
+        stored = json.loads(trip["waypoints"])
+        waypoints_coords = [[point["lat"], point["lng"]] for point in stored]
         wplist = [path[0]] + waypoints_coords + [path[-1]]
+        waypoint_meta = _waypoint_meta(stored)
 
     if trip["start_datetime"] in (1, -1):
         precision = "unknown"
@@ -10302,6 +10318,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripType": tripType,
         "tripTicketId": tripTicketId or "",
         "wplist": wplist,
+        "waypoint_meta": waypoint_meta,
         "raw_path": raw_path,
         "route_source": trip.get("route_source") or "router",
         "tripNotes": tripNotes or "",

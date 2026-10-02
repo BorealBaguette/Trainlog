@@ -1366,5 +1366,14 @@
     "removeDiscordPostFailed": "Discord gönderisi kaldırılamadı. Lütfen tekrar deneyin.",
     "postToDiscord": "Discord'da paylaş",
     "confirmPostToDiscord": "Bu yolculuk şimdi Discord'da paylaşılsın mı?",
-    "postToDiscordFailed": "Yolculuk Discord'da paylaşılamadı. Lütfen tekrar deneyin."
+    "postToDiscordFailed": "Yolculuk Discord'da paylaşılamadı. Lütfen tekrar deneyin.",
+    "motisDepartures": "Tarifeye göre kalkışlar",
+    "motisSearching": "Tarifelerde aranıyor…",
+    "motisNone": "Tarifelerde direkt sefer bulunamadı",
+    "waypointSoft": "Yaklaşık",
+    "waypointHard": "Tam",
+    "waypointSoftHint": "Rotanın yalnızca bu noktanın yakınından geçmesi yeterli.",
+    "waypointHardHint": "Rota, bir sapma gerektirse bile tam olarak bu noktadan geçer.",
+    "motisLine": "{line} hattı",
+    "motisStops": {"one": "{n} durak", "other": "{n} durak"}
 }

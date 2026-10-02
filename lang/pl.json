@@ -1374,5 +1374,14 @@
     "removeDiscordPostFailed": "Nie udało się usunąć wpisu z Discorda. Spróbuj ponownie.",
     "postToDiscord": "Opublikuj na Discordzie",
     "confirmPostToDiscord": "Opublikować tę podróż na Discordzie teraz?",
-    "postToDiscordFailed": "Nie udało się opublikować podróży na Discordzie. Spróbuj ponownie."
+    "postToDiscordFailed": "Nie udało się opublikować podróży na Discordzie. Spróbuj ponownie.",
+    "motisDepartures": "Odjazdy według rozkładu",
+    "motisSearching": "Przeszukiwanie rozkładów…",
+    "motisNone": "Nie znaleziono bezpośredniego odjazdu w rozkładach",
+    "waypointSoft": "Przybliżony",
+    "waypointHard": "Dokładny",
+    "waypointSoftHint": "Trasa musi jedynie przebiegać w pobliżu tego punktu.",
+    "waypointHardHint": "Trasa przebiega dokładnie przez ten punkt, nawet jeśli oznacza to objazd.",
+    "motisLine": "Linia {line}",
+    "motisStops": {"one": "{n} przystanek", "few": "{n} przystanki", "many": "{n} przystanków", "other": "{n} przystanku"}
 }

@@ -1366,5 +1366,14 @@
     "removeDiscordPostFailed": "无法删除 Discord 帖子，请重试。",
     "postToDiscord": "发布到 Discord",
     "confirmPostToDiscord": "现在把这次行程发布到 Discord 吗？",
-    "postToDiscordFailed": "无法发布到 Discord，请重试。"
+    "postToDiscordFailed": "无法发布到 Discord，请重试。",
+    "motisDepartures": "时刻表班次",
+    "motisSearching": "正在搜索时刻表…",
+    "motisNone": "时刻表中未找到直达班次",
+    "waypointSoft": "大致",
+    "waypointHard": "精确",
+    "waypointSoftHint": "路线只需从该点附近经过。",
+    "waypointHardHint": "即使需要绕行，路线也会精确经过该点。",
+    "motisLine": "{line}号线",
+    "motisStops": {"other": "{n}站"}
 }

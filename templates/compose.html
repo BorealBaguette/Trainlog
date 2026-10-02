@@ -1,5 +1,6 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/waypoint_popup.css') }}">
 {% include "bootstrap/leafletLayout.html" %}
 
 {% if vehicle_type == 'ferry' %}
@@ -991,6 +992,11 @@ var errorContent = '<h4>' + {{ (routingError|default("Routing error"))|tojson }}
 var saveErrorContent = '<h4>' + {{ (saveError|default("Save error"))|tojson }} +
   '</h4><p><button onclick="location.reload()">' + {{ (retry|default("Retry"))|tojson }} + '</button></p>';
 var texts = {
+  "freehandMode": {{ freehandMode|tojson }},
+  "waypointSoft": {{ waypointSoft|tojson }},
+  "waypointHard": {{ waypointHard|tojson }},
+  "waypointSoftHint": {{ waypointSoftHint|tojson }},
+  "waypointHardHint": {{ waypointHardHint|tojson }},
   routeTitle:             "{{ routeTitle|default('{origLabel} → {destLabel}') }}",
   fineTuneNote:           "{{ fineTuneNote|default('Drag waypoints to fine-tune the route.') }}",
   distanceTime:           "{{ distanceTime|default('{km} · {time}') }}",
@@ -1829,6 +1835,7 @@ function startRouting() {
   updateAirRoute();
   {% else %}
   wplist = [originEntry[0]].concat(viaStations.filter(Boolean).map(function(v) { return v[0]; })).concat([destEntry[0]]);
+  window.routingWaypointMeta = viaStations.filter(Boolean).map(function(v) { return { name: v[1] }; });
   renderRouteSummary('routing');
   routing(map, false, vehicle_type);
   bindPlanSync();
@@ -1883,9 +1890,12 @@ function bindNewRouterToggle() {
     }
   }
 
+  // routing() made the new router the default for rail types.
+  toggle.checked = useNewRouter;
   toggle.addEventListener('change', function() {
     useNewRouter = this.checked;
     reroute();
+    updateMarkerVisuals();
   });
   profile.addEventListener('change', function() {
     if (!useNewRouter) return;

@@ -1370,5 +1370,14 @@
     "removeDiscordPostFailed": "Het Discord-bericht kon niet verwijderd worden. Probeer het opnieuw.",
     "postToDiscord": "Plaats op Discord",
     "confirmPostToDiscord": "Deze rit nu op Discord plaatsen?",
-    "postToDiscordFailed": "De rit kon niet op Discord worden geplaatst. Probeer het opnieuw."
+    "postToDiscordFailed": "De rit kon niet op Discord worden geplaatst. Probeer het opnieuw.",
+    "motisDepartures": "Vertrektijden uit de dienstregeling",
+    "motisSearching": "Dienstregelingen doorzoeken…",
+    "motisNone": "Geen rechtstreeks vertrek gevonden in de dienstregeling",
+    "waypointSoft": "Bij benadering",
+    "waypointHard": "Exact",
+    "waypointSoftHint": "De route hoeft alleen in de buurt van dit punt te komen.",
+    "waypointHardHint": "De route gaat precies door dit punt, ook als dat een omweg betekent.",
+    "motisLine": "Lijn {line}",
+    "motisStops": {"one": "{n} halte", "other": "{n} haltes"}
 }

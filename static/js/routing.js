@@ -52,7 +52,10 @@ antpathStyles =  {
   hardwareAccelerated: true
 };
 
+// The GraphHopper router is the default for every rail type; set by routing() the
+// first time it runs (alongside newRouterProfile), then kept across re-renders.
 var useNewRouter = false;
+var NEW_ROUTER_TYPES = ["train", "tram", "metro", "funicular", "rail"];
 // Persists the ferry-split checkbox's state across re-renders (routeWhileDragging
 // fires routeselected repeatedly, which fully re-creates the sidebar HTML — without
 // this, an unchecked box would silently reset to checked on the next drag/reroute).
@@ -338,6 +341,7 @@ function switchRouter() {
 
   // Recompute the route with the new router
   control.route();
+  updateMarkerVisuals(); // hard-waypoint badges only apply to the new router
 }
 
 function buildNewRouterToggleHtml() {
@@ -407,10 +411,15 @@ window.removeWaypoint = function(index) {
   }
 };
 
+// Re-render the open waypoint popup after one of its buttons changed the waypoint,
+// so it stays open showing the new state (its content is a function, see createMarker).
+function refreshWaypointPopup(index) {
+  var marker = window.currentPlan && window.currentPlan._markers && window.currentPlan._markers[index];
+  var popup = marker && marker.getPopup();
+  if (popup && popup.isOpen()) popup.update();
+}
+
 window.toggleFreehand = function(index) {
-  // Close popup
-  map.closePopup();
-  
   // For waypoint at index, toggle the segment FROM index TO index+1
   if (freehandSegments.has(index)) {
     freehandSegments.delete(index);
@@ -420,6 +429,7 @@ window.toggleFreehand = function(index) {
   
   // Update marker visual appearance
   updateMarkerVisuals();
+  refreshWaypointPopup(index);
   
   // Force re-route to update the display
   if (window.currentControl) {
@@ -431,8 +441,10 @@ window.toggleFreehand = function(index) {
 window.updateMarkerVisuals = function() {
   if (window.currentPlan && window.currentPlan._markers) {
     window.currentPlan._markers.forEach(function(marker, index) {
-      if (index > 0 && index < window.currentPlan._markers.length - 1) {
-        let segmentIsFreehand = freehandSegments.has(index);
+      {
+        // No freehand badge on the destination: there is no segment after it.
+        let segmentIsFreehand = index < window.currentPlan._markers.length - 1 && freehandSegments.has(index);
+        let hard = useNewRouter && isHardWaypoint(window.currentPlan.getWaypoints()[index]);
         
         setTimeout(() => {
           if (marker.getElement()) {
@@ -441,6 +453,11 @@ window.updateMarkerVisuals = function() {
             } else {
               removeFreehandOverlay(marker.getElement());
             }
+            if (hard) {
+              addHardOverlay(marker.getElement());
+            } else {
+              removeHardOverlay(marker.getElement());
+            }
           }
         }, 100);
       }
@@ -448,39 +465,71 @@ window.updateMarkerVisuals = function() {
   }
 };
 
-// Function to add freehand overlay
-window.addFreehandOverlay = function(element) {
-  // Remove existing overlay if present
-  removeFreehandOverlay(element);
-  
-  // Create star overlay
-  const overlay = document.createElement('div');
-  overlay.className = 'freehand-overlay';
-  overlay.innerHTML = '★';
-  overlay.style.cssText = `
-    position: absolute;
-    top: -5px;
-    right: -5px;
-    color: #ff8800;
-    font-size: 16px;
-    font-weight: bold;
-    text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-    pointer-events: none;
-    z-index: 1000;
-    line-height: 1;
-  `;
-  
+// Marker badges (styled in waypoint_popup.css): freehand from this point / exact point.
+function setMarkerBadge(element, kind, icon, on) {
+  const existing = element.querySelector('.wp-badge-' + kind);
+  if (!on) {
+    if (existing) existing.remove();
+    return;
+  }
+  if (existing) return;
+  const badge = document.createElement('div');
+  badge.className = 'wp-badge wp-badge-' + kind;
+  badge.innerHTML = `<i class="fa-solid ${icon}"></i>`;
   element.style.position = 'relative';
-  element.appendChild(overlay);
+  element.appendChild(badge);
+}
+
+window.addFreehandOverlay = function(element) { setMarkerBadge(element, 'freehand', 'fa-pen-nib', true); };
+window.removeFreehandOverlay = function(element) { setMarkerBadge(element, 'freehand', 'fa-pen-nib', false); };
+
+// Hard ("exactly here") vs soft ("roughly here, the train passes by") waypoints, for
+// the new router only (see HANDOFF.md / waypoint_modes). The mode lives on the
+// waypoint object itself (wp.options.hard), which Leaflet Routing Machine keeps across
+// drags, reroutes and splices, so it can't drift out of step with the waypoints the way
+// an index-keyed set would. Soft is the router's default and ours.
+function isHardWaypoint(wp) {
+  return !!(wp && wp.options && wp.options.hard);
+}
+
+window.setWaypointHard = function(index, hard) {
+  var wps = window.currentPlan && window.currentPlan.getWaypoints();
+  if (!wps || !wps[index]) return;
+  if (isHardWaypoint(wps[index]) === !!hard) return; // already in that mode: nothing to reroute
+  wps[index].options = L.extend({}, wps[index].options, { hard: !!hard });
+  updateMarkerVisuals();
+  refreshWaypointPopup(index);
+  if (window.currentControl) window.currentControl.route();
 };
 
-// Function to remove freehand overlay
-window.removeFreehandOverlay = function(element) {
-  const existing = element.querySelector('.freehand-overlay');
-  if (existing) {
-    existing.remove();
-  }
-};
+// One waypoint popup at a time (Leaflet's autoClose), closed by a click anywhere outside
+// it: on the map (closeOnClick) and also elsewhere on the page (sidebar, edit form),
+// which Leaflet doesn't watch. Capture phase, because the sidebar plugin stops click
+// propagation. Clicks inside the popup (its buttons) and on markers (which open
+// their own) are left alone.
+document.addEventListener('click', function(e) {
+  if (typeof map === 'undefined' || !map || !map._popup || !map.hasLayer(map._popup)) return;
+  if (map._popup.options.className !== 'wp-leaflet-popup') return;
+  if (e.target.closest('.leaflet-popup, .leaflet-marker-icon')) return;
+  if (map.getContainer().contains(e.target)) return; // the map handles its own clicks
+  map.closePopup();
+}, true);
+
+window.addHardOverlay = function(element) { setMarkerBadge(element, 'hard', 'fa-crosshairs', true); };
+window.removeHardOverlay = function(element) { setMarkerBadge(element, 'hard', 'fa-crosshairs', false); };
+
+// Tells the new router which of `waypoints` are hard. Set on the base router right
+// before each segment request (its URL is built synchronously), and omitted when every
+// point is soft, the router's default, so routers without the parameter keep working.
+function applyWaypointModes(router, waypoints) {
+  var params = router.options.requestParameters;
+  if (!params) return;
+  delete params.waypoint_modes;
+  if (!params.use_new_router || !waypoints.some(isHardWaypoint)) return;
+  params.waypoint_modes = waypoints.map(function(wp) {
+    return isHardWaypoint(wp) ? 'hard' : 'soft';
+  }).join(',');
+}
 
 // Custom router that handles freehand segments
 function createCustomRouter(baseRouter, freehandSegments) {
@@ -618,6 +667,7 @@ function createCustomRouter(baseRouter, freehandSegments) {
           
         } else {
           // Handle routed segment
+          applyWaypointModes(baseRouter, segment.waypoints);
           baseRouter.route(segment.waypoints, function(err, routes) {
             if (err) {
               hasError = true;
@@ -682,6 +732,10 @@ function combineRoutes(routes, waypoints, callback, context) {
           var freeStart = combinedCoordinates.length > 0
             ? combinedCoordinates[combinedCoordinates.length - 1]
             : route.coordinates[0];
+          // Freehand from the origin: nothing before it to continue from, so the line
+          // has to start at the origin itself (otherwise it would begin at the next
+          // point, or be a single point when the whole trip is freehand).
+          if (combinedCoordinates.length === 0) combinedCoordinates.push(freeStart);
           combinedCoordinates.push(freeEnd);
 
           // Update hit area to cover the actual snapped span
@@ -857,16 +911,40 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
 
   }
   else{
-    var plan = new L.Routing.Plan(wplist, {
+    if (newRouterProfile === null) {
+      newRouterProfile = ["train", "tram", "metro"].includes(type) ? type : "train";
+      useNewRouter = NEW_ROUTER_TYPES.includes(type);
+    }
+
+    // Intermediate waypoints may come with a name (a via station, a timetable stop)
+    // and a hard/soft mode (a reopened trip), given by the page as
+    // window.routingWaypointMeta, one {name, hard} per intermediate point.
+    var wpMeta = window.routingWaypointMeta || [];
+    var planWaypoints = wplist.map(function(c, i) {
+      var meta = (i > 0 && i < wplist.length - 1 && wpMeta[i - 1]) || {};
+      return L.Routing.waypoint(L.latLng(c[0], c[1]), meta.name || '', { hard: !!meta.hard });
+    });
+
+    var plan = new L.Routing.Plan(planWaypoints, {
       reverseWaypoints: true,
       routeWhileDragging: true,
       createMarker: function(i, wp, n) {
+        const isStart = i === 0, isEnd = i === n - 1;
         let icon;
         
-        if (i === 0) {
-          icon = markerIconStart;
-        } else if (i === n - 1) {
-          icon = markerIconEnd;
+        if (isStart || isEnd) {
+          // The start/end pins wrapped in a div icon (same image, size and anchors), so
+          // they can carry the freehand/exact badges like the numbered markers — an
+          // <img> icon can't hold child elements.
+          const base = isStart ? markerIconStart : markerIconEnd;
+          icon = L.divIcon({
+            className: 'wp-endpoint-icon',
+            html: `<img src="${base.options.iconUrl}" width="25" height="41" alt="">`,
+            iconSize: base.options.iconSize,
+            iconAnchor: base.options.iconAnchor,
+            popupAnchor: base.options.popupAnchor,
+            tooltipAnchor: base.options.tooltipAnchor,
+          });
         } else {
           icon = new L.NumberedDivIcon({ number: i });
         }
@@ -876,90 +954,79 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
           icon: icon
         });
 
-        // For intermediate waypoints, add popup with delete and freehand toggle
-        if (i > 0 && i < n - 1) {
-          // Check if the segment FROM this waypoint is freehand
-          let segmentIsFreehand = freehandSegments.has(i);
-          
-          // Add visual indicator for freehand waypoints
-          if (segmentIsFreehand) {
-            // Add a simple star overlay to indicate freehand segment starts here
-            setTimeout(() => {
-              if (marker.getElement()) {
-                addFreehandOverlay(marker.getElement());
-              }
-            }, 100);
-          } else {
-            // Remove overlay for non-freehand waypoints
-            setTimeout(() => {
-              if (marker.getElement()) {
-                removeFreehandOverlay(marker.getElement());
-              }
-            }, 100);
-          }
-          
-          // Create popup content with delete button and freehand toggle
-          const freehandLabel = segmentIsFreehand ? (texts.normalRoute || 'Normal Route') : (texts.freehandRoute || 'Freehand Route');
-          const freehandButtonColor = segmentIsFreehand ? '#28a745' : '#ff8800';
-          const freehandIcon = segmentIsFreehand ? '🔄' : '✏️';
-          
-          const popupContent = `
-            <div style="text-align: center; min-width: 150px;">
-              <p style="margin: 5px 0 10px 0;">
-                ${segmentIsFreehand ? '✏️ ' : ''}${texts.waypoint || 'Waypoint'} ${i}
-                ${segmentIsFreehand ? ' (Freehand Start)' : ''}
-              </p>
-              <button 
-                onclick="toggleFreehand(${i})" 
-                style="
-                  background-color: ${freehandButtonColor};
-                  color: white;
-                  border: none;
-                  padding: 5px 10px;
-                  border-radius: 4px;
-                  cursor: pointer;
-                  font-size: 13px;
-                  margin-bottom: 5px;
-                  width: 100%;
-                  font-weight: bold;
-                "
-                onmouseover="this.style.opacity='0.8'"
-                onmouseout="this.style.opacity='1'"
-                title="Toggle freehand for segment from this waypoint to next"
-              >
-                ${freehandIcon} ${freehandLabel}
-              </button>
-              <button 
-                onclick="removeWaypoint(${i})" 
-                style="
-                  background-color: #dc3545;
-                  color: white;
-                  border: none;
-                  padding: 5px 10px;
-                  border-radius: 4px;
-                  cursor: pointer;
-                  font-size: 13px;
-                  width: 100%;
-                "
-                onmouseover="this.style.backgroundColor='#c82333'"
-                onmouseout="this.style.backgroundColor='#dc3545'"
-              >
-                🗑️ ${texts.remove || 'Remove'}
-              </button>
-            </div>
-          `;
-          
-          marker.bindPopup(popupContent, {
-            closeButton: true,
-            autoClose: false,
-            closeOnClick: false
-          });
+        // Badges: exact point (new router only), freehand from here (not on the
+        // destination, which has no segment after it).
+        setTimeout(() => {
+          const el = marker.getElement();
+          if (!el) return;
+          if (useNewRouter && isHardWaypoint(wp)) addHardOverlay(el); else removeHardOverlay(el);
+          if (!isEnd && freehandSegments.has(i)) addFreehandOverlay(el); else removeFreehandOverlay(el);
+        }, 100);
 
-          // Open popup on click (works for both desktop and mobile)
-          marker.on('click', function(e) {
-            e.target.openPopup();
-          });
-        }
+        // Built when opened, so it reflects the waypoint's current freehand/hard
+        // state and the router in use (hard/soft only exists on the new router).
+        const popupContent = function() {
+          const freehand = !isEnd && freehandSegments.has(i);
+          const hard = isHardWaypoint(wp);
+          const endpointName = isStart ? origLabel : isEnd ? destLabel : '';
+          const name = wp.name || endpointName;
+          const title = name ? sanitize(name) : `${texts.waypoint || 'Waypoint'} ${i}`;
+          const badge = isStart || isEnd
+            ? `<span class="wp-popup-index wp-popup-${isStart ? 'start' : 'end'}${window.colorblindMode ? ' colorblind' : ''}"><i class="fa-solid ${isStart ? 'fa-flag' : 'fa-flag-checkered'}"></i></span>`
+            : `<span class="wp-popup-index">${i}</span>`;
+          const modeButton = function(isHard, icon, label) {
+            const active = hard === isHard;
+            return `<button type="button" class="wp-mode-btn${active ? ' active' : ''}"
+                aria-pressed="${active}" onclick="setWaypointHard(${i}, ${isHard})">
+                <i class="fa-solid ${icon}"></i>${label}</button>`;
+          };
+          // Approximate = pulled onto the line that passes by (magnet); exact = crosshairs.
+          const modeToggle = useNewRouter ? `
+            <div class="wp-popup-mode">
+              <div class="wp-mode" role="group">
+                ${modeButton(false, 'fa-magnet', texts.waypointSoft || 'Approximate')}
+                ${modeButton(true, 'fa-crosshairs', texts.waypointHard || 'Exact')}
+              </div>
+              <p class="wp-popup-hint">${hard ? (texts.waypointHardHint || '') : (texts.waypointSoftHint || '')}</p>
+            </div>` : '';
+          // Freehand applies to the segment towards the next point, so not from the
+          // destination; the endpoints can't be removed.
+          const actions = [
+            isEnd ? '' : `
+              <button type="button" class="wp-action${freehand ? ' active' : ''}" aria-pressed="${freehand}"
+                  onclick="toggleFreehand(${i})">
+                <i class="fa-solid fa-pen-nib"></i>${texts.freehandMode || 'Freehand'}
+                ${freehand ? '<i class="fa-solid fa-check wp-action-state"></i>' : ''}
+              </button>`,
+            isStart || isEnd ? '' : `
+              <button type="button" class="wp-action wp-action-danger" onclick="removeWaypoint(${i})">
+                <i class="fa-regular fa-trash-can"></i>${texts.remove || 'Remove'}
+              </button>`,
+          ].join('');
+          return `
+            <div class="wp-popup">
+              <div class="wp-popup-title">
+                ${badge}
+                <span class="wp-popup-name" title="${title}">${title}</span>
+              </div>
+              ${modeToggle}
+              ${actions.trim() ? `<div class="wp-popup-actions">${actions}</div>` : ''}
+            </div>`;
+        };
+
+        marker.bindPopup(popupContent, {
+          className: 'wp-leaflet-popup',
+          minWidth: 220,
+          maxWidth: 220,
+          closeButton: true,
+          autoClose: true,
+          closeOnClick: true
+        });
+
+        // Open popup on click (works for both desktop and mobile)
+        marker.on('click', function(e) {
+          e.target.openPopup();
+        });
 
         return marker;
       },
@@ -996,10 +1063,6 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       var autoPan = false;
     }
 
-    if (newRouterProfile === null) {
-      newRouterProfile = ["train", "tram", "metro"].includes(type) ? type : "train";
-    }
-
     var profile = "train"
     if (type == "bus" ){
       profile = "driving";
@@ -1009,6 +1072,9 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     }
 
     var baseRouter = L.Routing.osrmv1({serviceUrl: routerurl, profile: profile, useHints: false});
+    if (useNewRouter) {
+      baseRouter.options.requestParameters = { use_new_router: 'true', profile: newRouterProfile };
+    }
     window.baseRouter = baseRouter;
     var customRouter = createCustomRouter(baseRouter, freehandSegments);
 
@@ -1254,7 +1320,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       var trainCount = window.modeSegments ? window.modeSegments.filter(function(s) { return s.mode === 'train'; }).length : 0;
 
       // Add router selector for train, tram, metro
-      if(["train", "tram", "metro"].includes(type)){
+      if(["train", "tram", "metro", "funicular"].includes(type)){
         content += buildNewRouterToggleHtml();
         // Tuck the "adjust the markers" hint behind a small info icon (rendered inline with distance).
         hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${texts.fineTuneNote}</div></details>`;
@@ -1358,7 +1424,14 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       console.log(this._selectedRoute)
 
       if(waypoints.length > 2) {
-          const latLngs = waypoints.slice(1, -1).map(point => point.latLng);
+          // {lat, lng} plus the name and hard flag when set, so a reopened trip
+          // shows the same names and keeps its exact points exact.
+          const latLngs = waypoints.slice(1, -1).map(function(point) {
+            var saved = { lat: point.latLng.lat, lng: point.latLng.lng };
+            if (point.name) saved.name = point.name;
+            if (isHardWaypoint(point)) saved.hard = true;
+            return saved;
+          });
           newTrip["waypoints"] = JSON.stringify(latLngs);
       }
       
@@ -1370,7 +1443,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       var errorContentWithToggle = errorContent;
       
       // Add router selector for train, tram, metro even on error
-      if(["train", "tram", "metro"].includes(type)){
+      if(["train", "tram", "metro", "funicular"].includes(type)){
         errorContentWithToggle = buildNewRouterToggleHtml() + errorContent;
         flutterBridge.routingError('Routing failed');
         flutterBridge.loading(false);

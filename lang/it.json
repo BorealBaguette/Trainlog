@@ -1370,5 +1370,14 @@
     "removeDiscordPostFailed": "Non è stato possibile rimuovere il post su Discord. Riprova.",
     "postToDiscord": "Pubblica su Discord",
     "confirmPostToDiscord": "Pubblicare questo viaggio su Discord adesso?",
-    "postToDiscordFailed": "Non è stato possibile pubblicare il viaggio su Discord. Riprova."
+    "postToDiscordFailed": "Non è stato possibile pubblicare il viaggio su Discord. Riprova.",
+    "motisDepartures": "Partenze da orario",
+    "motisSearching": "Ricerca negli orari…",
+    "motisNone": "Nessuna partenza diretta trovata negli orari",
+    "waypointSoft": "Approssimativo",
+    "waypointHard": "Esatto",
+    "waypointSoftHint": "Il percorso deve solo passare vicino a questo punto.",
+    "waypointHardHint": "Il percorso passa esattamente per questo punto, anche a costo di una deviazione.",
+    "motisLine": "Linea {line}",
+    "motisStops": {"one": "{n} fermata", "many": "{n} fermate", "other": "{n} fermate"}
 }

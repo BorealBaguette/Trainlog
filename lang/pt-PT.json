@@ -1370,5 +1370,14 @@
     "removeDiscordPostFailed": "Não foi possível remover a publicação do Discord. Tente novamente.",
     "postToDiscord": "Publicar no Discord",
     "confirmPostToDiscord": "Publicar esta viagem no Discord agora?",
-    "postToDiscordFailed": "Não foi possível publicar a viagem no Discord. Tente novamente."
+    "postToDiscordFailed": "Não foi possível publicar a viagem no Discord. Tente novamente.",
+    "motisDepartures": "Partidas segundo os horários",
+    "motisSearching": "A pesquisar nos horários…",
+    "motisNone": "Nenhuma partida direta encontrada nos horários",
+    "waypointSoft": "Aproximado",
+    "waypointHard": "Exato",
+    "waypointSoftHint": "O percurso só precisa de passar perto deste ponto.",
+    "waypointHardHint": "O percurso passa exatamente por este ponto, mesmo que isso implique um desvio.",
+    "motisLine": "Linha {line}",
+    "motisStops": {"one": "{n} paragem", "many": "{n} paragens", "other": "{n} paragens"}
 }

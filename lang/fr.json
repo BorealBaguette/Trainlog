@@ -1367,5 +1367,14 @@
     "removeDiscordPostFailed": "La publication Discord n'a pas pu être supprimée. Veuillez réessayer.",
     "postToDiscord": "Publier sur Discord",
     "confirmPostToDiscord": "Publier ce trajet sur Discord maintenant ?",
-    "postToDiscordFailed": "Le trajet n'a pas pu être publié sur Discord. Veuillez réessayer."
+    "postToDiscordFailed": "Le trajet n'a pas pu être publié sur Discord. Veuillez réessayer.",
+    "motisDepartures": "Départs selon les horaires",
+    "motisSearching": "Recherche dans les horaires…",
+    "motisNone": "Aucun départ direct trouvé dans les horaires",
+    "waypointSoft": "Approximatif",
+    "waypointHard": "Exact",
+    "waypointSoftHint": "Le trajet doit seulement passer à proximité de ce point.",
+    "waypointHardHint": "Le trajet passe exactement par ce point, même au prix d'un détour.",
+    "motisLine": "Ligne {line}",
+    "motisStops": {"one": "{n} arrêt", "many": "{n} arrêts", "other": "{n} arrêts"}
 }

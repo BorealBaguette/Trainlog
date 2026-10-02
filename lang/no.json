@@ -1370,5 +1370,14 @@
     "removeDiscordPostFailed": "Discord-innlegget kunne ikke fjernes. Prøv igjen.",
     "postToDiscord": "Legg ut på Discord",
     "confirmPostToDiscord": "Legge ut denne turen på Discord nå?",
-    "postToDiscordFailed": "Turen kunne ikke legges ut på Discord. Prøv igjen."
+    "postToDiscordFailed": "Turen kunne ikke legges ut på Discord. Prøv igjen.",
+    "motisDepartures": "Avganger etter rutetabell",
+    "motisSearching": "Søker i rutetabeller…",
+    "motisNone": "Ingen direkte avgang funnet i rutetabellene",
+    "waypointSoft": "Omtrentlig",
+    "waypointHard": "Nøyaktig",
+    "waypointSoftHint": "Ruten trenger bare å passere nær dette punktet.",
+    "waypointHardHint": "Ruten går nøyaktig gjennom dette punktet, selv om det betyr en omvei.",
+    "motisLine": "Linje {line}",
+    "motisStops": {"one": "{n} stopp", "other": "{n} stopp"}
 }

@@ -1366,5 +1366,14 @@
     "removeDiscordPostFailed": "Discordの投稿を削除できませんでした。もう一度お試しください。",
     "postToDiscord": "Discordに投稿",
     "confirmPostToDiscord": "この旅程を今すぐDiscordに投稿しますか？",
-    "postToDiscordFailed": "Discordに投稿できませんでした。もう一度お試しください。"
+    "postToDiscordFailed": "Discordに投稿できませんでした。もう一度お試しください。",
+    "motisDepartures": "時刻表の出発便",
+    "motisSearching": "時刻表を検索中…",
+    "motisNone": "時刻表に直通の出発便が見つかりません",
+    "waypointSoft": "おおよそ",
+    "waypointHard": "正確",
+    "waypointSoftHint": "ルートはこの地点の近くを通れば十分です。",
+    "waypointHardHint": "遠回りになっても、ルートはこの地点を正確に通ります。",
+    "motisLine": "{line}号線",
+    "motisStops": {"other": "{n}駅"}
 }

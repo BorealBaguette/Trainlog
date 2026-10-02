@@ -1370,5 +1370,14 @@
     "removeDiscordPostFailed": "Discord-inlägget kunde inte tas bort. Försök igen.",
     "postToDiscord": "Lägg upp på Discord",
     "confirmPostToDiscord": "Lägga upp den här resan på Discord nu?",
-    "postToDiscordFailed": "Resan kunde inte läggas upp på Discord. Försök igen."
+    "postToDiscordFailed": "Resan kunde inte läggas upp på Discord. Försök igen.",
+    "motisDepartures": "Avgångar enligt tidtabell",
+    "motisSearching": "Söker i tidtabeller…",
+    "motisNone": "Ingen direkt avgång hittades i tidtabellerna",
+    "waypointSoft": "Ungefärlig",
+    "waypointHard": "Exakt",
+    "waypointSoftHint": "Rutten behöver bara passera nära den här punkten.",
+    "waypointHardHint": "Rutten går exakt genom den här punkten, även om det innebär en omväg.",
+    "motisLine": "Linje {line}",
+    "motisStops": {"one": "{n} hållplats", "other": "{n} hållplatser"}
 }

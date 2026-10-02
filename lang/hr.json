@@ -1374,5 +1374,14 @@
     "removeDiscordPostFailed": "Objavu na Discordu nije bilo moguće ukloniti. Pokušajte ponovno.",
     "postToDiscord": "Objavi na Discordu",
     "confirmPostToDiscord": "Objaviti ovo putovanje na Discordu sada?",
-    "postToDiscordFailed": "Putovanje nije bilo moguće objaviti na Discordu. Pokušajte ponovno."
+    "postToDiscordFailed": "Putovanje nije bilo moguće objaviti na Discordu. Pokušajte ponovno.",
+    "motisDepartures": "Polasci prema voznom redu",
+    "motisSearching": "Pretraživanje voznih redova…",
+    "motisNone": "U voznim redovima nije pronađen izravni polazak",
+    "waypointSoft": "Približno",
+    "waypointHard": "Točno",
+    "waypointSoftHint": "Ruta mora samo proći blizu ove točke.",
+    "waypointHardHint": "Ruta prolazi točno kroz ovu točku, čak i ako to znači obilazak.",
+    "motisLine": "Linija {line}",
+    "motisStops": {"one": "{n} stanica", "few": "{n} stanice", "other": "{n} stanica"}
 }
