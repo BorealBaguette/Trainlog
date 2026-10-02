@@ -492,6 +492,14 @@ function isHardWaypoint(wp) {
   return !!(wp && wp.options && wp.options.hard);
 }
 
+// Whether the pointer press in progress was made with Ctrl (⌘ on a Mac) held, for
+// Ctrl-click on the route to insert an exact waypoint (see spliceWaypoints below).
+// Leaflet Routing Machine's line-touched event doesn't pass the original event on.
+var ctrlPointerDown = false;
+document.addEventListener('mousedown', function(e) {
+  ctrlPointerDown = e.ctrlKey || e.metaKey;
+}, true);
+
 window.setWaypointHard = function(index, hard) {
   var wps = window.currentPlan && window.currentPlan.getWaypoints();
   if (!wps || !wps[index]) return;
@@ -1023,8 +1031,15 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
           closeOnClick: true
         });
 
-        // Open popup on click (works for both desktop and mobile)
+        // Open popup on click (works for both desktop and mobile); Ctrl/⌘-click
+        // toggles the exact point instead (new router only).
         marker.on('click', function(e) {
+          const oe = e.originalEvent;
+          if (useNewRouter && oe && (oe.ctrlKey || oe.metaKey)) {
+            e.target.closePopup();
+            window.setWaypointHard(i, !isHardWaypoint(wp));
+            return;
+          }
           e.target.openPopup();
         });
 
@@ -1040,7 +1055,19 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     // so we only need to handle pure insertions (remove === 0).
     var _origSplice = plan.spliceWaypoints.bind(plan);
     plan.spliceWaypoints = function(index, remove) {
-      var added = Array.prototype.slice.call(arguments, 2);
+      var args = Array.prototype.slice.call(arguments);
+      var added = args.slice(2);
+      // A waypoint inserted by a Ctrl/⌘-click on the route is an exact point
+      // (new router only). Made hard before the splice, which routes straight away.
+      if (remove === 0 && added.length > 0 && ctrlPointerDown && useNewRouter) {
+        ctrlPointerDown = false;
+        added = added.map(function(a) {
+          var wp = a && a.hasOwnProperty('latLng') ? a : L.Routing.waypoint(a);
+          wp.options = L.extend({}, wp.options, { hard: true });
+          return wp;
+        });
+        args = [index, remove].concat(added);
+      }
       if (remove === 0 && added.length > 0) {
         // Mutate the existing Set in place — createCustomRouter captured this
         // object by reference, so a reassignment would break its closure.
@@ -1053,7 +1080,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
           freehandSegments.add(seg + added.length);
         });
       }
-      return _origSplice.apply(plan, arguments);
+      return _origSplice.apply(plan, args);
     };
 
     if (window.innerWidth > 600){
