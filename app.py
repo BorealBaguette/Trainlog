@@ -108,7 +108,6 @@ from src.sql.stations import (
 from src.sql.tags import get_tags_query
 from src.sql.tickets import get_ticket_query, get_tickets_query
 from src.sql.trips import (
-    delete_user_trips_query,
     get_duplicate_query,
     get_dynamic_user_trips_query,
     get_material_types_query,
@@ -304,6 +303,8 @@ from src.plans.duplicate_plan import duplicate_plan
 from src.plans.validate_plan import validate_plan
 from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
+from src.account_export import build_account_data_csvs
+from src.delete_account import delete_account_data
 from src.users import User, Friendship, authDb
 from src.email_parser import start_email_listener
 from src.trip_announcer import (
@@ -8402,34 +8403,8 @@ def delete_user(uid):
     if not user:
         return ""
 
-    user_id = get_user_id(user.username)
     try:
-        with pg_session() as pg:
-            idList = [
-                row["uid"]
-                for row in pg.execute(
-                    "SELECT trip_id AS uid FROM trips WHERE user_id = :user_id",
-                    {"user_id": user_id},
-                ).fetchall()
-            ]
-
-        with pg_session() as pg:
-            if idList:
-                pg.execute(
-                    "DELETE FROM paths WHERE trip_id = ANY(:ids)",
-                    {"ids": [int(i) for i in idList]},
-                )
-            pg.execute(delete_user_trips_query(), {"user_id": user_id})
-            pg.execute(
-                "DELETE FROM tag_members WHERE username = :username",
-                {"username": user.username},
-            )
-            pg.execute(
-                "DELETE FROM user_discord_webhooks WHERE user_id = :user_id",
-                {"user_id": user_id},
-            )
-        authDb.session.delete(user)
-        authDb.session.commit()
+        delete_account_data(user)
         invalidate_admin_users_cache()
     except Exception as e:
         print(e)
@@ -10032,6 +10007,57 @@ def confirm_email_change(token):
     return redirect(url_for("user_settings", username=user.username))
 
 
+@app.route("/u/<username>/delete_account/verify_password", methods=["POST"])
+@login_required
+def verify_delete_account_password(username):
+    """Checked between the delete-account modal's two steps, so a wrong
+    password is caught before the destructive step is even shown — not only
+    after the final submit. That final submit still re-checks it itself
+    (see delete_account below); this is an added UX step, not a replacement,
+    since a forged request could skip straight past this endpoint."""
+    user = User.query.filter_by(username=username).first()
+    password = request.form.get("delete_confirm_secret", "")
+    valid = bool(password) and check_password_hash(user.pass_hash, password)
+    return jsonify({"valid": valid})
+
+
+@app.route("/u/<username>/delete_account", methods=["POST"])
+@login_required
+def delete_account(username):
+    """Self-service, permanent account deletion. Two things stand between this
+    and an accidental click: the current password (proves it's really the
+    account holder, not just a stolen/left-open session) and the username
+    typed back exactly (mirrored client-side in user_settings.html, but
+    re-checked here since the client can't be trusted). Neither check is
+    skippable by the browser sending an odd request.
+
+    The form fields are named delete_confirm_secret/delete_confirm_phrase
+    rather than password/username on purpose: a real name="password" input
+    gets its own save/fill prompt from the browser no matter what autocomplete
+    hints say, which fights the whole point of a confirmation step."""
+    user = User.query.filter_by(username=username).first()
+    user_lang = lang[session["userinfo"]["lang"]]
+
+    password = request.form.get("delete_confirm_secret", "")
+    confirm_username = request.form.get("delete_confirm_phrase", "").strip()
+
+    if confirm_username != username:
+        flash(user_lang["deleteAccountConfirmMismatch"], "error")
+        return redirect(url_for("user_settings", username=username))
+
+    if not password or not check_password_hash(user.pass_hash, password):
+        flash(user_lang["deleteAccountWrongPassword"], "error")
+        return redirect(url_for("user_settings", username=username))
+
+    delete_account_data(user)
+    invalidate_admin_users_cache()
+
+    session.pop(username, None)
+    session.pop("logged_in", None)
+    flash(user_lang["deleteAccountSuccess"], "success")
+    return redirect(url_for("login"))
+
+
 @app.route("/u/<username>/settings_app", methods=["GET", "POST"])
 @login_required
 def user_settings_app(username):
@@ -10296,24 +10322,21 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     return render_template("edit_copy.html", **context)
 
 
-@app.route("/u/<username>/export")
-@login_required
-def export(username):
-    requestedTrips = request.args.get("trips", default=None)
-
+def _export_trips_csv_text(username, requested_trip_ids=None):
+    """The trips CSV shared by /export and /export_all. Kept in app.py because
+    it depends on adapt_pg_trip_row's legacy row shaping."""
     si = StringIO()
     cw = csv.writer(si)
     user_id = get_user_id(username)
     with pg_session() as pg:
-        if requestedTrips is None:
+        if requested_trip_ids is None:
             rows = pg.execute(
                 "SELECT * FROM trips WHERE user_id = :uid", {"uid": user_id}
             ).fetchall()
         else:
-            ids = [int(t) for t in requestedTrips.split(",")]
             rows = pg.execute(
                 "SELECT * FROM trips WHERE user_id = :uid AND trip_id = ANY(:ids)",
-                {"uid": user_id, "ids": ids},
+                {"uid": user_id, "ids": requested_trip_ids},
             ).fetchall()
     trips = [adapt_pg_trip_row(row._mapping, username) for row in rows]
 
@@ -10341,7 +10364,17 @@ def export(username):
         rowP.append(encoded)
         processedRows.append(rowP)
     cw.writerows(processedRows)
-    response = make_response(si.getvalue())
+    return si.getvalue()
+
+
+@app.route("/u/<username>/export")
+@login_required
+def export(username):
+    requestedTrips = request.args.get("trips", default=None)
+    ids = [int(t) for t in requestedTrips.split(",")] if requestedTrips else None
+
+    csv_text = _export_trips_csv_text(username, ids)
+    response = make_response(csv_text)
     response.headers["Content-Disposition"] = (
         "attachment; filename=trainlog_{}_{}.csv".format(
             username, datetime.strftime(datetime.now(), "%Y-%m-%d_%H%M%S")
@@ -10349,6 +10382,41 @@ def export(username):
     )
     response.headers["Content-type"] = "text/csv"
 
+    return response
+
+
+@app.route("/u/<username>/export_all")
+@login_required
+def export_all(username):
+    """GDPR-style "everything Trainlog has on you": the trips CSV plus every
+    other table a self-service account deletion would touch (see
+    src/account_export.py / src/delete_account.py, which cover the same set of
+    tables), bundled as one zip. Used both by the standalone download button in
+    settings and by the delete-account flow's export step."""
+    user = User.query.filter_by(username=username).first()
+
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("trips.csv", _export_trips_csv_text(username))
+        for filename, csv_text in build_account_data_csvs(user).items():
+            zf.writestr(filename, csv_text)
+        zf.writestr(
+            "README.txt",
+            "This archive contains every piece of data Trainlog stores about "
+            f"your account ({username}), as of "
+            f"{datetime.now().strftime('%Y-%m-%d %H:%M UTC')}. Each file is a "
+            "CSV export of one table; empty files mean that table has no rows "
+            "for your account.\n",
+        )
+    buf.seek(0)
+
+    response = make_response(buf.read())
+    response.headers["Content-Disposition"] = (
+        "attachment; filename=trainlog_full_export_{}_{}.zip".format(
+            username, datetime.strftime(datetime.now(), "%Y-%m-%d_%H%M%S")
+        )
+    )
+    response.headers["Content-type"] = "application/zip"
     return response
 
 

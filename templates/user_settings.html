@@ -103,6 +103,16 @@
     font-size: 0.82rem; font-weight: 600;
   }
 
+  .settings2-danger-card { border-color: #f5c2c7; min-height: 0; }
+
+  /* Visually masked like a password field, but deliberately type="text" with a
+     non-"password"/"username" name — browsers offer to save/fill an actual
+     type="password" input no matter what else the page does to discourage it
+     (a longstanding, deliberate override), so the only reliable way to keep
+     this confirmation step from triggering the password manager UI at all is
+     to not look like a login field in the first place. */
+  .settings2-masked-field { -webkit-text-security: disc; }
+
   /* Searchable combo (custom dropdown): flag stays in the left icon box only,
      never in the collapsed button text; the open list shows a flag per row
      plus a real search box, since flag-in-list/no-flag-collapsed can't be
@@ -432,6 +442,169 @@
             </div>
             {% endif %}
           </div>
+
+          <div class="settings2-card settings2-danger-card mt-4">
+            <h3 class="settings2-card-title text-danger"><i class="fa-solid fa-triangle-exclamation"></i> {{ settingsDangerZoneTitle }}</h3>
+            <p class="settings2-hint mb-3">{{ deleteAccountWarning }}</p>
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">
+              <i class="fa-solid fa-trash"></i> {{ deleteAccountButton }}
+            </button>
+          </div>
+
+          <div class="modal fade" id="deleteAccountModal" tabindex="-1" aria-labelledby="deleteAccountModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+              <form method="POST" action="{{ url_for('delete_account', username=username) }}" class="modal-content" id="deleteAccountForm">
+                <div class="modal-header border-0 pb-0">
+                  <h5 class="modal-title text-danger" id="deleteAccountModalLabel"><i class="fa-solid fa-triangle-exclamation"></i> {{ deleteAccountModalTitle }}</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ cancel }}"></button>
+                </div>
+
+                <!-- Step 1: prove it's really you -->
+                <div class="modal-body" id="deleteAccountStep1">
+                  <p>{{ deleteAccountWarning }}</p>
+
+                  <label class="form-label small fw-semibold mt-2" for="deleteAccountSecret">{{ deleteAccountPasswordLabel }}</label>
+                  <input type="text" class="form-control settings2-masked-field" id="deleteAccountSecret" name="delete_confirm_secret" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                  <div class="text-danger small mt-1 d-none mb-2" id="deleteAccountSecretError">{{ deleteAccountWrongPassword }}</div>
+
+                  <label class="form-label small fw-semibold mt-3" for="deleteAccountConfirmPhrase">{{ deleteAccountConfirmLabel|replace("{username}", username) }}</label>
+                  <input type="text" class="form-control" id="deleteAccountConfirmPhrase" name="delete_confirm_phrase" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                </div>
+                <div class="modal-footer border-0 pt-0" id="deleteAccountStep1Footer">
+                  <button type="button" class="btn btn-light" data-bs-dismiss="modal">{{ cancel }}</button>
+                  <button type="button" class="btn btn-danger" id="deleteAccountContinue" disabled>{{ deleteAccountContinueButton }}</button>
+                </div>
+
+                <!-- Step 2: last chance to grab a copy, then the real delete -->
+                <div class="modal-body d-none" id="deleteAccountStep2">
+                  <p class="settings2-hint">{{ deleteAccountDownloadHint }}</p>
+                  <button type="button" class="btn btn-outline-primary w-100 mb-2" id="deleteAccountDownloadBtn">
+                    <i class="fa-solid fa-file-zipper" id="deleteAccountDownloadIcon"></i> <span id="deleteAccountDownloadLabel">{{ deleteAccountDownloadButton }}</span>
+                  </button>
+                </div>
+                <div class="modal-footer border-0 pt-0 d-none" id="deleteAccountStep2Footer">
+                  <button type="button" class="btn btn-light" id="deleteAccountBack">{{ deleteAccountBackButton }}</button>
+                  <button type="submit" class="btn btn-danger">
+                    <i class="fa-solid fa-trash"></i> {{ deleteAccountConfirmButton }}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <script>
+            document.addEventListener('DOMContentLoaded', () => {
+              const usernameInput = document.getElementById('deleteAccountConfirmPhrase');
+              const secretInput = document.getElementById('deleteAccountSecret');
+              const secretError = document.getElementById('deleteAccountSecretError');
+              const continueBtn = document.getElementById('deleteAccountContinue');
+              const targetUsername = {{ username|tojson }};
+              const checkStep1 = () => {
+                continueBtn.disabled = !secretInput.value || usernameInput.value !== targetUsername;
+              };
+              if (usernameInput && continueBtn) {
+                usernameInput.addEventListener('input', checkStep1);
+                secretInput.addEventListener('input', () => {
+                  secretError.classList.add('d-none');
+                  checkStep1();
+                });
+              }
+
+              const step1 = document.getElementById('deleteAccountStep1');
+              const step1Footer = document.getElementById('deleteAccountStep1Footer');
+              const step2 = document.getElementById('deleteAccountStep2');
+              const step2Footer = document.getElementById('deleteAccountStep2Footer');
+
+              const showStep2 = () => {
+                step1.classList.add('d-none');
+                step1Footer.classList.add('d-none');
+                step2.classList.remove('d-none');
+                step2Footer.classList.remove('d-none');
+              };
+              const showStep1 = () => {
+                step2.classList.add('d-none');
+                step2Footer.classList.add('d-none');
+                step1.classList.remove('d-none');
+                step1Footer.classList.remove('d-none');
+              };
+
+              if (continueBtn) {
+                continueBtn.addEventListener('click', () => {
+                  continueBtn.disabled = true;
+
+                  const body = new URLSearchParams({ delete_confirm_secret: secretInput.value });
+                  fetch({{ url_for('verify_delete_account_password', username=username)|tojson }}, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body,
+                  })
+                    .then((resp) => resp.json())
+                    .then((data) => {
+                      if (data.valid) {
+                        showStep2();
+                      } else {
+                        secretError.classList.remove('d-none');
+                        secretInput.focus();
+                      }
+                    })
+                    .catch((err) => console.error('Password check failed', err))
+                    .finally(checkStep1);
+                });
+              }
+              const backBtn = document.getElementById('deleteAccountBack');
+              if (backBtn) backBtn.addEventListener('click', showStep1);
+
+              const downloadBtn = document.getElementById('deleteAccountDownloadBtn');
+              const downloadIcon = document.getElementById('deleteAccountDownloadIcon');
+              const downloadLabel = document.getElementById('deleteAccountDownloadLabel');
+              if (downloadBtn) {
+                downloadBtn.addEventListener('click', () => {
+                  const originalLabel = downloadLabel.textContent;
+                  downloadBtn.disabled = true;
+                  downloadIcon.classList.replace('fa-file-zipper', 'fa-spinner');
+                  downloadIcon.classList.add('fa-spin');
+                  downloadLabel.textContent = {{ preparingExportLabel|tojson }};
+
+                  fetchAndSaveFile(
+                    {{ url_for('export_all', username=username)|tojson }},
+                    'trainlog_full_export.zip'
+                  ).finally(() => {
+                    downloadBtn.disabled = false;
+                    downloadIcon.classList.replace('fa-spinner', 'fa-file-zipper');
+                    downloadIcon.classList.remove('fa-spin');
+                    downloadLabel.textContent = originalLabel;
+                  });
+                });
+              }
+
+              const deleteModalEl = document.getElementById('deleteAccountModal');
+              const deleteForm = document.getElementById('deleteAccountForm');
+
+              // Pressing Enter in a form field implicitly submits the form, and some
+              // browsers do that even while step 2's real submit button is hidden
+              // (d-none is just display:none, not guaranteed to be skipped) — which
+              // would delete the account straight from step 1. Redirect that to
+              // "Continue" instead; only a submit while step 2 is actually showing
+              // goes through for real.
+              if (deleteForm) {
+                deleteForm.addEventListener('submit', (e) => {
+                  if (step2.classList.contains('d-none')) {
+                    e.preventDefault();
+                    if (!continueBtn.disabled) showStep2();
+                  }
+                });
+              }
+
+              if (deleteModalEl) {
+                deleteModalEl.addEventListener('hidden.bs.modal', () => {
+                  deleteForm.reset();
+                  if (continueBtn) continueBtn.disabled = true;
+                  showStep1();
+                });
+              }
+            });
+          </script>
         </div>
 
         <!-- Integrations -->
@@ -627,6 +800,14 @@
 
             <div class="settings2-integration-row">
               <div>
+                <div class="fw-semibold"><i class="fa-solid fa-file-zipper me-1"></i> {{ downloadAllDataButton }}</div>
+                <div class="settings2-hint">{{ downloadAllDataHint }}</div>
+              </div>
+              <button type="button" class="btn btn-outline-primary btn-sm" id="downloadAllDataBtn">{{ downloadAllDataButton }}</button>
+            </div>
+
+            <div class="settings2-integration-row">
+              <div>
                 <div class="fw-semibold"><i class="fa-solid fa-file-import me-1"></i> {{importText}}</div>
               </div>
               <button type="button" class="btn btn-outline-primary btn-sm" id="importTrainlogBtn">{{import}}</button>
@@ -657,6 +838,70 @@
 
 {% include "includes/import_modal.html" %}
 {% include "includes/tileserver_picker.html" %}
+
+<div class="modal fade" id="dataExportLoadingModal" tabindex="-1" aria-labelledby="dataExportLoadingLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-body d-flex align-items-center gap-3 py-4">
+        <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+        <span id="dataExportLoadingLabel">{{ preparingExportLabel }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Fetches the file ourselves (rather than a plain link) so callers can show
+  // their own loading state while the zip is being built server-side, which
+  // can take a while for a large account.
+  function fetchAndSaveFile(url, fallbackFilename) {
+    return fetch(url, { credentials: 'same-origin' })
+      .then((resp) => {
+        if (!resp.ok) throw new Error('export failed');
+        const disposition = resp.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        return resp.blob().then((blob) => ({ blob, filename: match ? match[1] : fallbackFilename }));
+      })
+      .then(({ blob, filename }) => {
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(objectUrl);
+      })
+      .catch((err) => console.error('Export download failed', err));
+  }
+
+  // Standalone use (Data tab): pops the blocking spinner modal. Not used from
+  // inside the delete-account modal — Bootstrap doesn't cleanly support one
+  // modal stacked on top of another (hiding the inner one gets confused by the
+  // outer modal's own backdrop/state and can get stuck open), so that flow
+  // shows an inline loading state on its own button instead (see below).
+  function downloadFileWithSpinner(url, fallbackFilename) {
+    const loadingModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('dataExportLoadingModal'));
+    loadingModal.show();
+    // On a small account the fetch can resolve before the modal's fade-in even
+    // finishes, hiding it again mid-transition (looks like it never showed, or
+    // flashes). The download itself isn't delayed — only hiding the modal waits
+    // on whichever of these two finishes last.
+    const minVisible = new Promise((resolve) => setTimeout(resolve, 400));
+
+    return Promise.all([fetchAndSaveFile(url, fallbackFilename), minVisible])
+      .finally(() => loadingModal.hide());
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const downloadAllBtn = document.getElementById('downloadAllDataBtn');
+    if (downloadAllBtn) {
+      downloadAllBtn.addEventListener('click', () => {
+        downloadFileWithSpinner({{ url_for('export_all', username=username)|tojson }}, 'trainlog_full_export.zip');
+      });
+    }
+  });
+</script>
 
 <script>
   // Searchable combo: flag box + button (closed state, no flag in the text)
