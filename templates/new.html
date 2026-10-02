@@ -96,7 +96,11 @@
     }
     #motisGroup .motis-head { grid-column: 3; display: flex; align-items: center; gap: 6px; min-width: 0; }
     #motisGroup .motis-head .motis-line { flex: none; max-width: 65%; }
-    #motisGroup .motis-headsign { min-width: 0; font-size: 0.85rem; color: #444; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #motisGroup .motis-headsign {
+        min-width: 0; font-size: 0.85rem; line-height: 1.2; color: #444; overflow: hidden;
+        /* Long termini wrap to a second line before being cut */
+        display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere;
+    }
     #motisGroup .motis-meta { grid-column: 3; font-size: 0.75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #motisGroup .motis-source { padding: 4px 12px; font-size: 0.7rem; color: #999; text-align: right; border-top: 1px solid #eee; }
     /* Phones: the third column is too narrow for the line badge and headsign, so each
@@ -971,10 +975,11 @@
       if (!h) return minFmt.format(m);
       return m ? hourFmt.format(h) + ' ' + minFmt.format(m) : hourFmt.format(h);
     }
-    // A bare line number ("3", "50E", "7bis") reads better as "Line 3"; named
-    // services ("IR90 1808", "TGV INOUI 6643", "RE11") already say what they are.
+    // A bare line number or letter ("3", "50E", "7bis", "L") reads better as "Line 3";
+    // named services ("IR90 1808", "TGV INOUI 6643", "RER A") already say what they are.
     function lineLabel(line) {
-      return /^\d+[a-z]{0,3}$/i.test(line) ? texts.line.replace('{line}', line) : line;
+      // A lone letter only: two-letter names are often service classes (IC, RE, EC).
+      return /^(\d+[a-z]{0,3}|[A-Z])$/i.test(line) ? texts.line.replace('{line}', line) : line;
     }
     var dayFmt = new Intl.DateTimeFormat("{{ langId }}" || 'en',
       { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
@@ -1070,7 +1075,7 @@
         // "[Ligne 6] → Nation": the arrow follows the line it belongs to.
         var $head = $('<span class="motis-head">').appendTo($item);
         $('<span class="motis-line">').text(d.line ? lineLabel(d.line) : (d.operator || '')).appendTo($head);
-        if (d.headsign) $('<span class="motis-headsign">').text('→ ' + d.headsign).appendTo($head);
+        if (d.headsign) $('<span class="motis-headsign">').text('→ ' + d.headsign).attr('title', d.headsign).appendTo($head);
         $('<span class="motis-day">').text(dayLabel(depDate)).appendTo($item);
         // Journey time and stops on the way; the operator only when no logo names it.
         $('<span class="motis-meta">')
@@ -1114,6 +1119,12 @@
       });
       setViaCollapsed(true);
       updateViaSummary();
+      // Route from the run's own track ends while origin and destination stay as picked
+      // (toRouting in util.js checks the labels).
+      window.motisTrackEnds = d.track_ends ? {
+        origin: $('#originStation').val(), destination: $('#destinationStation').val(),
+        start: d.track_ends[0], end: d.track_ends[1]
+      } : null;
 
       // Real-time data on a run that has started: carry its delays over.
       if ((d.departure_delay || d.arrival_delay) && $('#delayToggle').is(':visible')) {

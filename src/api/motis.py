@@ -14,6 +14,7 @@ from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
+import polyline
 import requests
 from flask import Blueprint, abort, jsonify, request
 
@@ -171,12 +172,20 @@ def _line_name(leg):
     # tripShortName tends to be an internal id, so it is left out.
     if (
         leg.get("mode") in RAIL_MODES
+        # Train numbers only (6643, 1808): RER mission codes (QIWI58) are not. And not on
+        # lettered suburban lines (RER A, Transilien L), whose numbers mean nothing to riders.
+        and re.fullmatch(r"\d{1,6}", number)
+        and not re.fullmatch(r"[A-Z]{1,2}", line)
         and number.strip("0")
-        and len(number) <= 6
         and number not in line.split()
         and not line.endswith(number)
     ):
         line = f"{line} {number}".strip()
+    # A lettered line whose agency is a network acronym is known by both ("RER A");
+    # other lettered lines get the translated "Line" in the form.
+    agency = (leg.get("agencyName") or "").strip()
+    if re.fullmatch(r"[A-Z]{1,2}", line) and re.fullmatch(r"[A-Z]{2,5}", agency):
+        line = f"{agency} {line}"
     return line
 
 
@@ -260,7 +269,7 @@ def _board_legs(stop_id, modes, start, destination):
             {
                 **{k: dep.get(k) for k in (
                     "mode", "headsign", "displayName", "routeShortName", "tripShortName",
-                    "agencyName", "routeColor", "realTime", "tripId",
+                    "agencyName", "routeColor", "realTime", "tripId", "tripTo",
                 )},
                 "cancelled": dep.get("cancelled") or dep.get("tripCancelled"),
                 "from": frm,
@@ -291,6 +300,75 @@ def _stop_places(lat, lng, modes):
     ]
     stops.sort(key=lambda stop: _distance_m(stop["lat"], stop["lon"], lat, lng))
     return [stop["id"] for stop in stops[:MAX_FALLBACK_STOPS]]
+
+
+# A stop is moved onto the run's path only when this close: further than that, the path is
+# more likely truncated or wrong than the stop.
+MAX_SNAP_M = 150
+
+
+def _leg_path(leg):
+    """The run's path as [(lat, lng), ...], from MOTIS's legGeometry, or None.
+
+    Only planner legs have one (departure-board runs don't)."""
+    geometry = leg.get("legGeometry") or {}
+    if not geometry.get("points"):
+        return None
+    try:
+        return polyline.decode(geometry["points"], precision=geometry.get("precision", 6))
+    except (ValueError, IndexError):
+        return None
+
+
+# How far along the run's path its routing ends are taken: off the stop point, still
+# within the platform.
+TRACK_END_M = 100
+
+
+def _along(path, metres):
+    """The first point of the path at least this far along it, or its last point."""
+    walked = 0.0
+    for a, b in zip(path, path[1:]):
+        walked += _distance_m(*a, *b)
+        if walked >= metres:
+            return list(b)
+    return list(path[-1])
+
+
+def _snap_stops(stops, path):
+    """Move each intermediate stop onto the nearest point of the run's path.
+
+    The stops become the trip's via waypoints, and a stop's coordinates can be well off
+    the track it is served on: IDFM puts the RER A's Gare de Lyon on top of the surface
+    tracks of the terminus, 64 m from the tunnel the RER A actually runs in, so the router
+    detoured into the terminus and reversed out to reach it. The path follows the line."""
+    if not path or len(path) < 2:
+        return
+    for stop in stops:
+        lat, lng = stop[0], stop[1]
+        k = math.cos(math.radians(lat)) * 111320
+        best = None
+        for (alat, alng), (blat, blng) in zip(path, path[1:]):
+            ax, ay, bx, by = alng * k, alat * 110540, blng * k, blat * 110540
+            px, py = lng * k, lat * 110540
+            dx, dy = bx - ax, by - ay
+            t = max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / ((dx * dx + dy * dy) or 1)))
+            x, y = ax + t * dx, ay + t * dy
+            dist = math.hypot(px - x, py - y)
+            if best is None or dist < best[0]:
+                best = (dist, y / 110540, x / k)
+        if best and best[0] <= MAX_SNAP_M:
+            stop[0], stop[1] = best[1], best[2]
+
+
+def _headsign(leg):
+    """Where the run is going. IDFM puts the RER/Transilien mission code (NATO, QIWI) in
+    the headsign; the terminus name is in tripTo."""
+    headsign = (leg.get("headsign") or "").strip()
+    terminus = ((leg.get("tripTo") or {}).get("name") or "").strip()
+    if terminus and (not headsign or re.fullmatch(r"[A-Z]{4}", headsign)):
+        return terminus
+    return headsign
 
 
 def _hex_colour(value):
@@ -446,9 +524,13 @@ def motis_departures(username):
         # One entry per run: the same train comes back from several searches (and,
         # Frecciarossa-style, from two feeds), sometimes alighting at different stops
         # of the destination station (Temple vs République).
+        # The line's first word too: RER A and RER E share the agency name "RER" and can
+        # leave the same minute; the SNCF and Trenitalia copies of a Frecciarossa still
+        # agree on it ("FR 6441" / "FR").
         trip_key = (
             (leg.get("agencyName") or "").strip().lower(),
             leg.get("scheduledStartTime"),
+            ((leg.get("displayName") or leg.get("routeShortName") or "").split() or [""])[0].lower(),
         )
         stops = leg.get("intermediateStops", [])
 
@@ -463,7 +545,7 @@ def motis_departures(username):
             "departure_delay": _delay_minutes(leg.get("startTime"), leg.get("scheduledStartTime")) if leg.get("realTime") else 0,
             "arrival_delay": _delay_minutes(leg.get("endTime"), leg.get("scheduledEndTime")) if leg.get("realTime") else 0,
             "line": _line_name(leg),
-            "headsign": leg.get("headsign") or "",
+            "headsign": _headsign(leg),
             "agency": (leg.get("agencyName") or "").strip(),
             "mode": leg.get("mode"),
             "color": _hex_colour(leg.get("routeColor")),
@@ -471,6 +553,7 @@ def motis_departures(username):
             "to_name": to.get("name"),
             "stops": [_stop(s) for s in stops],
             "_sort": dep_utc,
+            "_path": _leg_path(leg),
         }
         entry["_dest_m"] = _distance_m(to["lat"], to["lon"], *destination)
         kept = seen.get(trip_key)
@@ -481,6 +564,8 @@ def motis_departures(username):
                     kept[field] = entry[field]
             # ...and, for the rest, whatever each copy has that the other lacks (one
             # feed the train number, the other the headsign).
+            if not kept["_path"]:
+                kept["_path"] = entry["_path"]
             for field in ("line", "headsign", "color"):
                 if len(entry[field] or "") > len(kept[field] or ""):
                     kept[field] = entry[field]
@@ -491,6 +576,16 @@ def motis_departures(username):
     departures.sort(key=lambda d: d.pop("_sort"))
     for d in departures:
         d.pop("_dest_m")
+        path = d.pop("_path")
+        _snap_stops(d["stops"], path)
+        # Where the run leaves and arrives on its track. The router starts from the
+        # nearest track to a point, and a station's point can be nearer another line's
+        # (La Défense's sits by the Transilien L, which the RER A route then looped round).
+        # The path itself starts at that same stop point, so step a little along it.
+        d["track_ends"] = (
+            [_along(path, TRACK_END_M), _along(path[::-1], TRACK_END_M)]
+            if path and len(path) > 1 else None
+        )
 
     if departures:
         try:

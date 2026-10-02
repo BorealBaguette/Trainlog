@@ -544,6 +544,16 @@ function toRouting(data, routingUrl, type){
       newTrip["viaStations"].push(globalStationDict[val]);
     }
   });
+  // A timetable run picked on the form (new.html): route from the ends of its track
+  // rather than the station points, as long as the stations are still the ones it ran between.
+  var trackEnds = window.motisTrackEnds;
+  var formValue = (name) => (data.find((x) => x.name === name) || {}).value;
+  if (trackEnds && !("originManualToggle" in newTrip) && !("destinationManualToggle" in newTrip)
+      && trackEnds.origin === formValue("originStation")
+      && trackEnds.destination === formValue("destinationStation")){
+    newTrip["routeStart"] = trackEnds.start;
+    newTrip["routeEnd"] = trackEnds.end;
+  }
   // Carry FR24-imported flight data through (set by the FR24 import on the air form)
   if (typeof window.FR24 !== "undefined" && window.FR24){
     newTrip["fr24_id"] = window.FR24["fr24_id"];
