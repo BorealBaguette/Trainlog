@@ -10,7 +10,7 @@ from src.router_regions import all_in_region
 from src.graphhopper import convert_graphhopper_to_osrm     # example
 
 
-NEW_TRAIN_ROUTER = os.environ.get("NEW_TRAIN_ROUTER_URL", "http://127.0.0.1:8989")
+NEW_TRAIN_ROUTER = os.environ.get("NEW_TRAIN_ROUTER_URL", "http://train-gh.srv.trainlog.me:8991")
 
 
 def forward_routing_core(routingType, path, flask_request, extra_args=None):
