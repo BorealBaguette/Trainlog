@@ -793,6 +793,7 @@
     "useOldRouter": "Cambiar al motor de enrutamiento clásico",
     "useLegacyRouter": "Usar el router antiguo",
     "useLegacyRouterHint": "Usa el router anterior, que estima la electrificación por país en lugar de usar datos de OSM.",
+    "newTripOnMap": "Añadir en el mapa",
     "freehandMode": "A mano alzada",
     "routerMode": "Ruta",
     "useRoutedPathLabel": "Usar ruta calculada",

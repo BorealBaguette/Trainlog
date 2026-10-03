@@ -791,6 +791,7 @@
     "useOldRouter": "Uf klassische Routenmaschine umschalte",
     "useLegacyRouter": "De alt Router bruuche",
     "useLegacyRouterHint": "Bruucht de bisherig Router, wo d Elektrifizierig pro Land schätzt anstatt OSM-Date z bruuche.",
+    "newTripOnMap": "Uf de Charte zuefüege",
     "freehandMode": "Freihand",
     "routerMode": "Routing",
     "useRoutedPathLabel": "Berächneti Route bruuche",

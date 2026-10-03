@@ -821,6 +821,7 @@
     "useOldRouter": "Passer au routeur classique",
     "useLegacyRouter": "Utiliser l'ancien routeur",
     "useLegacyRouterHint": "Utilise le routeur précédent, qui estime l'électrification par pays au lieu d'utiliser les données OSM.",
+    "newTripOnMap": "Ajouter sur la carte",
     "freehandMode": "Main levée",
     "routerMode": "Routage",
     "useRoutedPathLabel": "Utiliser l'itinéraire calculé",

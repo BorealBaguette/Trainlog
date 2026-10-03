@@ -790,6 +790,7 @@
     "useOldRouter": "Klasik yönlendirme motoruna geç",
     "useLegacyRouter": "Eski yönlendiriciyi kullan",
     "useLegacyRouterHint": "OSM verileri yerine elektrifikasyonu ülke bazında tahmin eden önceki yönlendiriciyi kullanır.",
+    "newTripOnMap": "Haritada ekle",
     "freehandMode": "Serbest çizim",
     "routerMode": "Rota",
     "useRoutedPathLabel": "Yönlendirilmiş rotayı kullan",

@@ -796,6 +796,7 @@
     "useOldRouter": "Przełącz na klasyczny router",
     "useLegacyRouter": "Użyj starego routera",
     "useLegacyRouterHint": "Używa poprzedniego routera, który szacuje elektryfikację dla danego kraju zamiast korzystać z danych OSM.",
+    "newTripOnMap": "Dodaj na mapie",
     "freehandMode": "Odręcznie",
     "routerMode": "Trasowanie",
     "useRoutedPathLabel": "Użyj wyznaczonej trasy",

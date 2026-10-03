@@ -793,6 +793,7 @@
     "useOldRouter": "Bytt til klassisk rutemotor",
     "useLegacyRouter": "Bruk den gamle ruteren",
     "useLegacyRouterHint": "Bruker den forrige ruteren, som anslår elektrifisering ut fra et landgjennomsnitt i stedet for OSM-data.",
+    "newTripOnMap": "Legg til på kartet",
     "freehandMode": "Frihånd",
     "routerMode": "Rute",
     "useRoutedPathLabel": "Bruk rutet sti",

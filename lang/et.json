@@ -790,6 +790,7 @@
     "useOldRouter": "Lülita klassikalisele marsruutimismootorile",
     "useLegacyRouter": "Kasuta vana ruuterit",
     "useLegacyRouterHint": "Kasutab varasemat ruuterit, mis hindab elektrifitseerimist riigi järgi, mitte OSM-i andmete põhjal.",
+    "newTripOnMap": "Lisa kaardil",
     "freehandMode": "Vabakäsi",
     "routerMode": "Marsruut",
     "useRoutedPathLabel": "Kasuta marsruuditud teekonda",

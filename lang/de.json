@@ -793,6 +793,7 @@
     "useOldRouter": "Zum klassischen Routingsystem wechseln",
     "useLegacyRouter": "Alten Router verwenden",
     "useLegacyRouterHint": "Verwendet den bisherigen Router, der die Elektrifizierung pro Land schätzt statt OSM-Daten zu nutzen.",
+    "newTripOnMap": "Auf der Karte hinzufügen",
     "freehandMode": "Freihand",
     "routerMode": "Routing",
     "useRoutedPathLabel": "Berechnete Route verwenden",

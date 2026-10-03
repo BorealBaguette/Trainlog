@@ -793,6 +793,7 @@
     "useOldRouter": "Byt till klassisk routingsmotor",
     "useLegacyRouter": "Använd den gamla routern",
     "useLegacyRouterHint": "Använder den tidigare routern, som uppskattar elektrifieringen per land i stället för att använda OSM-data.",
+    "newTripOnMap": "Lägg till på kartan",
     "freehandMode": "Frihand",
     "routerMode": "Rutt",
     "useRoutedPathLabel": "Använd ruttad väg",

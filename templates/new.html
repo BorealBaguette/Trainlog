@@ -44,7 +44,7 @@
     /* More than a few vias (a timetable service's stops): fold them into one summary row */
     .via-summary {
         display: flex; align-items: center; gap: 8px; margin-bottom: 0.6rem;
-        padding: 0 4px 0 12px; min-height: 32px; background-color: #f3f3f3;
+        padding: 0 4px 0 16px; min-height: 32px; background-color: #f3f3f3;
         font-size: 0.875rem; cursor: pointer; user-select: none;
     }
     .via-summary:hover { background-color: #e8e8e8; }
@@ -62,16 +62,20 @@
     }
 
     /* Timetable (MOTIS) departures between the chosen stations */
-    #motisGroup { margin: 0.75rem 0 1rem; }
-    /* Lined up with the via summary row just above it: same padding and icon column,
-       and the chevron where the via row's sits (that row has a clear × after it). */
+    .via-motis-row { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; }
+    .via-motis-row > .ts-btn { flex: none; min-height: 32px; }
+    #motisGroup { flex: 1; min-width: 0; }
+    #motisGroup .dropdown { position: static; }
+    #motisGroup .motis-menu { top: calc(100% + 4px); left: 0; right: 0; }
+    /* Same height, padding and icon column as the via summary row, 16px on the left like
+       the station fields and the Via button (style2.css, .ts-btn). */
     #motisGroup .motis-toggle {
         display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
-        padding: 0 4px 0 12px; min-height: 32px; border: 0; background-color: #f3f3f3; color: #333;
+        padding: 0 4px 0 16px; min-height: 32px; border: 0; background-color: #f3f3f3; color: #333;
         font-size: 0.875rem; line-height: 1.4; cursor: pointer;
     }
     .via-summary > .fa-route, #motisGroup .motis-clock, #motisGroup .motis-spinner { flex: none; width: 16px; text-align: center; }
-    #motisGroup #motisChevron { margin-right: 36px; } /* the via row's gap + 28px × */
+    #motisGroup #motisChevron { margin-right: 8px; }
     #motisGroup .motis-toggle:hover { background-color: #e8e8e8; }
     #motisGroup .motis-toggle[disabled] { cursor: default; color: #888; background-color: #f8f8f8; }
     /* While searching: a spinner for the clock, and a bar sweeping along the bottom */
@@ -284,16 +288,19 @@
           <button type="button" class="via-summary-clear" id="viaSummaryClear" title="{{tsClearBtn}}">&times;</button>
         </div>
         <div id="viaContainer"></div>
-        <button type="button" id="addViaBtn" class="ts-btn"><i class="fas fa-plus"></i> {{via}}</button>
       </group>
-      {% endif %}
 
+      {# The Via button and, where there is a timetable, the departures bar share a row. #}
+      <div class="via-motis-row non_poi">
+        <button type="button" id="addViaBtn" class="ts-btn"><i class="fas fa-plus"></i> {{via}}</button>
       {% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') %}
       {# Direct services between the two stations around the chosen time, from MOTIS.
          Filled by initMotisDepartures() below; hidden until there is something to say. #}
       <group id="motisGroup" class="non_poi" style="display:none">
+        {# Static display: the list opens under the whole row (positioned on .via-motis-row),
+           not just under the bar. #}
         <div class="dropdown">
-          <button type="button" id="motisToggle" class="motis-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+          <button type="button" id="motisToggle" class="motis-toggle" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false">
             <i class="fa-regular fa-clock motis-clock"></i>
             <i class="fa-solid fa-circle-notch fa-spin motis-spinner" aria-hidden="true"></i>
             <span class="motis-toggle-label" id="motisToggleLabel"></span>
@@ -303,6 +310,8 @@
           <ul class="dropdown-menu motis-menu" id="motisMenu" aria-labelledby="motisToggle"></ul>
         </div>
       </group>
+      {% endif %}
+      </div>
       {% endif %}
 
       <br class="non_poi">

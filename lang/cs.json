@@ -796,6 +796,7 @@
     "useOldRouter": "Přepnout na klasický směrovací stroj",
     "useLegacyRouter": "Použít starší router",
     "useLegacyRouterHint": "Použije předchozí router, který elektrifikaci odhaduje podle země místo dat z OSM.",
+    "newTripOnMap": "Přidat na mapě",
     "freehandMode": "Od ruky",
     "routerMode": "Trasování",
     "useRoutedPathLabel": "Použít trasovanou cestu",

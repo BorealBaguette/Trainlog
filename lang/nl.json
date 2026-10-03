@@ -793,6 +793,7 @@
     "useOldRouter": "Overschakelen naar klassieke routeringsengine",
     "useLegacyRouter": "Oude router gebruiken",
     "useLegacyRouterHint": "Gebruikt de vorige router, die de elektrificatie per land schat in plaats van OSM-gegevens te gebruiken.",
+    "newTripOnMap": "Toevoegen op de kaart",
     "freehandMode": "Vrije hand",
     "routerMode": "Routering",
     "useRoutedPathLabel": "Gerouteerd pad gebruiken",

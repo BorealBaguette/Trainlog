@@ -790,6 +790,7 @@
     "useOldRouter": "旧式の経路設定に切り替え",
     "useLegacyRouter": "従来の経路設定を使う",
     "useLegacyRouterHint": "以前の経路設定を使います。OSMの電化データではなく、国別の推定値で電化を見積もります。",
+    "newTripOnMap": "地図で追加",
     "freehandMode": "フリーハンド",
     "routerMode": "ルート",
     "useRoutedPathLabel": "ルート検索されたパスを使用",

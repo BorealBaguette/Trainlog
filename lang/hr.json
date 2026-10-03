@@ -796,6 +796,7 @@
     "useOldRouter": "Prebaci na klasični motor za usmjeravanje",
     "useLegacyRouter": "Koristi stari router",
     "useLegacyRouterHint": "Koristi prethodni router, koji elektrifikaciju procjenjuje po državi umjesto prema podacima iz OSM-a.",
+    "newTripOnMap": "Dodaj na karti",
     "freehandMode": "Slobodnom rukom",
     "routerMode": "Ruta",
     "useRoutedPathLabel": "Koristi usmjerenu rutu",

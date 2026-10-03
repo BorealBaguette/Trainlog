@@ -7845,6 +7845,14 @@ def stationAutocomplete():
     if responseJson is None:
         return "Photon Error", 500
     
+    # Unnamed features (a reverse lookup can return a bare platform or a building)
+    # can't be offered as a station, and everything below keys on the name.
+    responseJson["features"] = [
+        feature
+        for feature in responseJson.get("features") or []
+        if (feature.get("properties") or {}).get("name")
+    ]
+
     homonymy_filter = {}
     for index, result in enumerate(responseJson["features"]):
         props = result["properties"]

@@ -821,6 +821,7 @@
     "useOldRouter": "Switch to classic routing engine",
     "useLegacyRouter": "Use legacy router",
     "useLegacyRouterHint": "Uses the previous router, which estimates electrification per country instead of using OSM data.",
+    "newTripOnMap": "Add on the map",
     "freehandMode": "Freehand",
     "routerMode": "Router",
     "useRoutedPathLabel": "Use routed path",

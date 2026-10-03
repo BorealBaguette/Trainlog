@@ -111,12 +111,10 @@
               {%- for trip_type, icon, label in group %}
             <div class="new-trip-row">
               <a class="dropdown-item" href="{{ url_for('new', username=username, vehicle_type=trip_type) }}"><i class="{{ icon }}"></i> {{ label }}</a>
-              {#- Alpha only: the same trip on the map-first form. A shortcut on the row
-                  rather than a second menu — the navbar has no room for two of these. -#}
-              {%- if is_alpha %}
-              <a class="dropdown-item new-trip-compose" title="{{ new }} α" aria-label="{{ new }} α"
-                 href="{{ url_for('compose', username=username, vehicle_type=trip_type) }}"><i class="bi bi-pin-map"></i><span class="new-trip-alpha">α</span></a>
-              {%- endif %}
+              {#- The same trip on the map-first form. A shortcut on the row rather than a
+                  second menu — the navbar has no room for two of these. -#}
+              <a class="dropdown-item new-trip-compose" title="{{ newTripOnMap }}" aria-label="{{ newTripOnMap }}"
+                 href="{{ url_for('compose', username=username, vehicle_type=trip_type) }}"><i class="bi bi-pin-map"></i></a>
             </div>
               {%- endfor %}
             {%- endfor %}
@@ -333,7 +331,6 @@
      tight to the pin. */
   gap: .1rem;
 }
-.new-trip-alpha { font-size: .75em; line-height: 1; align-self: flex-start; margin-top: .15em; }
 .new-trip-row > .new-trip-compose:hover { color: #0d6efd; }
 /* Selected, the item takes Bootstrap's blue background — and the hover rule above
    outranks Bootstrap's own :active colour, so the pin has to be turned white here or

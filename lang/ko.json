@@ -790,6 +790,7 @@
     "useOldRouter": "클래식 라우팅 엔진으로 전환",
     "useLegacyRouter": "기존 라우터 사용",
     "useLegacyRouterHint": "OSM 데이터 대신 국가별 추정치로 전철화를 계산하는 이전 라우터를 사용합니다.",
+    "newTripOnMap": "지도에서 추가",
     "freehandMode": "자유 그리기",
     "routerMode": "경로",
     "useRoutedPathLabel": "라우팅된 경로 사용",

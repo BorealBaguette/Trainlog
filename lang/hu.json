@@ -790,6 +790,7 @@
     "useOldRouter": "Váltás a klasszikus útvonalmotorra",
     "useLegacyRouter": "A régi útválasztó használata",
     "useLegacyRouterHint": "Az előző útválasztót használja, amely országonként becsüli a villamosítást az OSM-adatok helyett.",
+    "newTripOnMap": "Hozzáadás a térképen",
     "freehandMode": "Szabadkézi",
     "routerMode": "Útvonal",
     "useRoutedPathLabel": "Útvonaltervezett út használata",
