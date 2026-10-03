@@ -306,6 +306,8 @@ function switchRouter() {
   if (profileSelect) {
     profileSelect.style.display = useNewRouter ? '' : 'none';
   }
+  var allExactWrap = document.getElementById('allExactWrap');   // a new-router option too
+  if (allExactWrap) allExactWrap.style.display = useNewRouter ? '' : 'none';
 
   // Show loading indicator
   sidebar.setContent(spinnerContent);
@@ -346,38 +348,51 @@ function switchRouter() {
 }
 
 function buildNewRouterToggleHtml() {
-  var options = [
-    ["train", texts.train], ["tram", texts.tram], ["metro", texts.metro], ["all", texts.all]
+  // Styled in waypoint_popup.css (.router-box). The trip-type choice and "every point
+  // exact" belong to the new router, so they show only while it is in use; the legacy
+  // router is the fallback, last.
+  var profiles = [
+    ["train", texts.train, "fa-train"], ["tram", texts.tram, "fa-train-tram"],
+    ["metro", texts.metro, "fa-train-subway"], ["all", texts.all, "fa-layer-group"]
   ].map(function(p) {
-    var selected = newRouterProfile === p[0] ? 'selected' : '';
-    return `<option value="${p[0]}" ${selected}>${p[1]}</option>`;
+    var active = newRouterProfile === p[0];
+    return `<button type="button" class="router-seg-btn${active ? ' active' : ''}" aria-pressed="${active}"
+              onclick="switchRouterProfile('${p[0]}')"><i class="fa-solid ${p[2]}" aria-hidden="true"></i><span>${p[1]}</span></button>`;
   }).join('');
 
   return `
-    <div style="margin: 10px 0; padding: 10px; background-color: #f0f0f0; border-radius: 4px;">
-      <label style="display: flex; align-items: center; cursor: pointer;">
-        <input
-          type="checkbox"
-          id="newRouterToggle"
-          onchange="switchRouter()"
-          style="margin-right: 8px;"
-          ${useNewRouter ? '' : 'checked'}
-        >
-        <span class="route-dist-wrap" style="display: inline-flex; align-items: center;">
-          ${texts.useLegacyRouter}
-          <details class="route-hint" style="position: static; margin-left: 6px;"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${texts.useLegacyRouterHint}</div></details>
-        </span>
+    <div class="router-box">
+      <div class="router-seg" id="newRouterProfile" role="group" style="${useNewRouter ? '' : 'display: none;'}">
+        ${profiles}
+      </div>
+      <label class="router-row" id="allExactWrap" title="${texts.allWaypointsExactHint}" style="${useNewRouter ? '' : 'display: none;'}">
+        <i class="fa-solid fa-crosshairs router-row-icon"></i>
+        <span class="router-row-label">${texts.allWaypointsExact}</span>
+        <input type="checkbox" class="router-switch all-exact-toggle" onchange="setAllWaypointsExact(this.checked)"
+               ${allWaypointsExact ? 'checked' : ''}>
       </label>
-      <select id="newRouterProfile" class="form-select form-select-sm" onchange="switchRouterProfile(this.value)" style="width: auto; margin-top: 8px; ${useNewRouter ? '' : 'display: none;'}">
-        ${options}
-      </select>
+      <div class="router-row">
+        <i class="fa-solid fa-clock-rotate-left router-row-icon"></i>
+        <span class="router-row-label">
+          <label for="newRouterToggle">${texts.useLegacyRouter}</label>
+          <!-- Outside the label: a click on it must not flip the switch -->
+          <details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${texts.useLegacyRouterHint}</div></details>
+        </span>
+        <input type="checkbox" class="router-switch" id="newRouterToggle" onchange="switchRouter()"
+               ${useNewRouter ? '' : 'checked'}>
+      </div>
     </div>
   `;
 }
 
 function switchRouterProfile(value) {
-  if (!useNewRouter) return;
+  if (!useNewRouter || value === newRouterProfile) return;
   newRouterProfile = value;
+  document.querySelectorAll('#newRouterProfile .router-seg-btn').forEach(function (btn) {
+    var on = btn.getAttribute('onclick').indexOf("'" + value + "'") > -1;
+    btn.classList.toggle('active', on);
+    btn.setAttribute('aria-pressed', String(on));
+  });
   var currentParams = window.baseRouter.options.requestParameters || {};
   currentParams.profile = newRouterProfile;
   window.baseRouter.options.requestParameters = currentParams;
@@ -489,38 +504,54 @@ window.removeFreehandOverlay = function(element) { setMarkerBadge(element, 'free
 // waypoint object itself (wp.options.hard), which Leaflet Routing Machine keeps across
 // drags, reroutes and splices, so it can't drift out of step with the waypoints the way
 // an index-keyed set would. Soft is the router's default and ours.
+// "Every point exact" (setAllWaypointsExact) overrides that while it is on, for places
+// where the timetable puts its stops on their tracks; each waypoint keeps its own flag
+// underneath, which applies again once it is off.
+var allWaypointsExact = false;
 function isHardWaypoint(wp) {
-  return !!(wp && wp.options && wp.options.hard);
+  return !!wp && (allWaypointsExact || !!(wp.options && wp.options.hard));
 }
 
-// A waypoint placed by hand along the route (dragged there, or added by dragging the
-// line) is meant to be passed through right there, so it becomes exact — when dropped
-// from close enough for that to be the track it's on: at zoom 15 a pixel is ~3 m (Paris),
-// a dropped pin within ~10–15 m. Further out it stays approximate, which is what lets the
-// router find the line it was near. Never the origin or destination (the station), and
-// never back to approximate: Ctrl-click or the popup does that. New router only.
-var EXACT_DROP_ZOOM = 15;
-function placedExactly(map) {
-  return useNewRouter && map && map.getZoom() >= EXACT_DROP_ZOOM;
+// A point placed by hand (any pin dragged, origin and destination included, or one
+// added by dragging the line) is meant to be passed through right there, so it becomes
+// exact, at any zoom. Never back to approximate on its own: Ctrl-click or the popup
+// does that. And not a point whose mode was set by hand (wp.options.modeSet): one made
+// approximate on purpose stays so when dragged again. New router only.
+function placedExactly() {
+  return useNewRouter;
 }
-
-// Whether the pointer press in progress was made with Ctrl (⌘ on a Mac) held, for
-// Ctrl-click on the route to insert an exact waypoint (see spliceWaypoints below).
-// Leaflet Routing Machine's line-touched event doesn't pass the original event on.
-var ctrlPointerDown = false;
-document.addEventListener('mousedown', function(e) {
-  ctrlPointerDown = e.ctrlKey || e.metaKey;
-}, true);
 
 window.setWaypointHard = function(index, hard) {
   var wps = window.currentPlan && window.currentPlan.getWaypoints();
   if (!wps || !wps[index]) return;
   if (isHardWaypoint(wps[index]) === !!hard) return; // already in that mode: nothing to reroute
-  wps[index].options = L.extend({}, wps[index].options, { hard: !!hard });
+  if (allWaypointsExact && !hard) {
+    // One point made approximate while every point is exact: the others stay exact,
+    // now each on its own flag.
+    wps.forEach(function (wp) { wp.options = L.extend({}, wp.options, { hard: true }); });
+    allWaypointsExact = false;
+    syncAllExactToggles();
+  }
+  // modeSet: chosen by hand, so dragging the point later leaves it as it is.
+  wps[index].options = L.extend({}, wps[index].options, { hard: !!hard, modeSet: true });
   updateMarkerVisuals();
   refreshWaypointPopup(index);
   if (window.currentControl) window.currentControl.route();
 };
+
+// The "every point exact" switches (routing sidebar, compose, edit dialog) call this.
+window.setAllWaypointsExact = function(on) {
+  if (allWaypointsExact === !!on) return;
+  allWaypointsExact = !!on;
+  syncAllExactToggles();
+  updateMarkerVisuals();
+  var wps = window.currentPlan && window.currentPlan.getWaypoints();
+  if (wps) wps.forEach(function (_, i) { refreshWaypointPopup(i); });
+  if (window.currentControl) window.currentControl.route();
+};
+function syncAllExactToggles() {
+  document.querySelectorAll('.all-exact-toggle').forEach(function (el) { el.checked = allWaypointsExact; });
+}
 
 // One waypoint popup at a time (Leaflet's autoClose), closed by a click anywhere outside
 // it: on the map (closeOnClick) and also elsewhere on the page (sidebar, edit form),
@@ -871,14 +902,58 @@ function detectModeSegments(route) {
   return segments;
 }
 
+// Fits of this map (the route once found, an imported GPX…) frame what the open panel
+// leaves visible: padding on whichever side it covers, the right on a wide screen, the
+// top on a phone. Leaflet Routing Machine fits the route without knowing about
+// the panel, hence on the map's fitBounds itself. A fit that sets its own padding, or a
+// page that hides the panel (compose), is left alone.
+function fitAroundSidebar(map) {
+  if (map._fitsAroundSidebar) return;
+  map._fitsAroundSidebar = true;
+  var fitBounds = map.fitBounds;
+  map.fitBounds = function (bounds, options) {
+    var o = options || {};
+    if (!o.padding && !o.paddingTopLeft && !o.paddingBottomRight) {
+      var pad = sidebarPadding(map);
+      if (pad) options = L.extend({}, o, pad);
+    }
+    return fitBounds.call(this, bounds, options);
+  };
+}
+function sidebarPadding(map) {
+  var el = document.getElementById('sidebar');
+  if (!map._sidebarOpen || !el || !el.offsetWidth || !el.offsetHeight) return null;
+  // Its size, not its position: it slides in, and the first route can land mid-slide.
+  // The sidebar's own .leaflet-sidebar wrapper holds it off the map's edge.
+  var wrap = el.parentElement || el, size = map.getSize(), MARGIN = 24;
+  var width = wrap.offsetWidth, height = wrap.offsetHeight;
+  // A side panel takes part of the map's width; on phones it is a sheet across the top
+  // (routing_panel.css).
+  if (width < size.x * 0.8) {
+    return { paddingTopLeft: [MARGIN, MARGIN], paddingBottomRight: [width + MARGIN, MARGIN] };
+  }
+  if (height < size.y) {
+    return { paddingTopLeft: [MARGIN, height + MARGIN], paddingBottomRight: [MARGIN, MARGIN] };
+  }
+  return null;
+}
+
 function routing(map, showSidebar=true, type, allowFerrySplit=false){
   flutterBridge.loading(true);
 
   sidebar = L.control.sidebar('sidebar', {
       closeButton: true,
       position: 'right',
-      autoPan: autoPan
+      // No pan on opening: fits leave room for the panel instead (fitAroundSidebar),
+      // and it opens after the first fit has usually happened.
+      autoPan: false
   }).addTo(map);
+  // Room is kept for the panel from the start when the page shows it (it slides in
+  // half a second after this, often after the route has been fitted), until closed.
+  map._sidebarOpen = !!showSidebar;
+  sidebar.on('show', function () { map._sidebarOpen = true; });
+  sidebar.on('hide', function () { map._sidebarOpen = false; });
+  fitAroundSidebar(map);
   sidebar.setContent(spinnerContent);
 
   L.Control.MyControl = L.Control.extend({
@@ -942,7 +1017,10 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     var wpMeta = window.routingWaypointMeta || [];
     var planWaypoints = wplist.map(function(c, i) {
       var meta = (i > 0 && i < wplist.length - 1 && wpMeta[i - 1]) || {};
-      return L.Routing.waypoint(L.latLng(c[0], c[1]), meta.name || '', { hard: !!meta.hard });
+      // hard: false (not just absent) is a point made approximate by hand (see saving).
+      return L.Routing.waypoint(L.latLng(c[0], c[1]), meta.name || '', {
+        hard: meta.hard === true, modeSet: meta.hard === false
+      });
     });
 
     var plan = new L.Routing.Plan(planWaypoints, {
@@ -1069,11 +1147,10 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     plan.spliceWaypoints = function(index, remove) {
       var args = Array.prototype.slice.call(arguments);
       var added = args.slice(2);
-      // A waypoint inserted by a Ctrl/⌘-click on the route, or at close zoom
-      // (placedExactly), is an exact point (new router only). Made hard before the
-      // splice, which routes straight away. Only user gestures insert this way.
-      if (remove === 0 && added.length > 0 && useNewRouter && (ctrlPointerDown || placedExactly(map))) {
-        ctrlPointerDown = false;
+      // A waypoint inserted on the route is placed by hand (only user gestures insert
+      // this way), so it is an exact point (placedExactly). Made hard before the
+      // splice, which routes straight away.
+      if (remove === 0 && added.length > 0 && placedExactly()) {
         added = added.map(function(a) {
           var wp = a && a.hasOwnProperty('latLng') ? a : L.Routing.waypoint(a);
           wp.options = L.extend({}, wp.options, { hard: true });
@@ -1372,8 +1449,11 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       // Add router selector for train, tram, metro
       if(["train", "tram", "metro", "funicular"].includes(type)){
         content += buildNewRouterToggleHtml();
-        // Tuck the "adjust the markers" hint behind a small info icon (rendered inline with distance).
-        hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${texts.fineTuneNote}</div></details>`;
+        // Tuck the routing hint behind a small info icon (rendered inline with distance):
+        // what the new router prefers, or for the legacy one that it treats every rail
+        // type alike.
+        var note = useNewRouter ? texts.fineTuneNoteNewRouter : texts.fineTuneNote;
+        hintHtml = `<details class="route-hint"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${note}</div></details>`;
       } else if (type === "bus") {
         hintHtml = busRouterHint();
       }
@@ -1480,6 +1560,9 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
             var saved = { lat: point.latLng.lat, lng: point.latLng.lng };
             if (point.name) saved.name = point.name;
             if (isHardWaypoint(point)) saved.hard = true;
+            // Approximate by choice is kept too, so dragging it after reopening the
+            // trip doesn't make it exact (placedExactly).
+            else if (point.options && point.options.modeSet) saved.hard = false;
             return saved;
           });
           newTrip["waypoints"] = JSON.stringify(latLngs);
@@ -1511,14 +1594,12 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     // Drop the second by muting the waypointschanged handler for the rest of the
     // tick — it stays active for waypoint add/remove (removeWaypoint() and the
     // click-to-insert on the line), which have no dragend and rely on it to reroute.
-    // Dragging a waypoint along the route at close zoom makes it exact (placedExactly).
+    // Dragging any pin makes it exact (placedExactly).
     // On drag start rather than end: routing while dragging, and on the drop, happens
     // before any dragend listener of ours would run.
     plan.on('waypointdragstart', function(e) {
-      var wps = plan.getWaypoints();
-      if (e.index <= 0 || e.index >= wps.length - 1) return;   // origin / destination
-      var wp = wps[e.index];
-      if (!placedExactly(map) || isHardWaypoint(wp)) return;
+      var wp = plan.getWaypoints()[e.index];
+      if (!placedExactly() || isHardWaypoint(wp) || (wp.options && wp.options.modeSet)) return;
       wp.options = L.extend({}, wp.options, { hard: true });
       updateMarkerVisuals();
     });

@@ -715,6 +715,12 @@
                         <option value="metro">{{metro}}</option>
                         <option value="all">{{all}}</option>
                     </select>
+                    {# New router only, shown with the profile choice (see routerToggle below) #}
+                    <div class="form-check form-switch mb-0" id="allExactModalWrap" style="display: none;" title="{{allWaypointsExactHint}}">
+                        <input class="form-check-input all-exact-toggle" type="checkbox" id="allExactModal" style="cursor: pointer;"
+                               onchange="setAllWaypointsExact(this.checked)">
+                        <label class="form-check-label" for="allExactModal" style="cursor: pointer;">{{allWaypointsExact}}</label>
+                    </div>
                     {% endif %}
                     <div id="freehandToggleSlot"></div>
                     <div id="gpxToggleSlot"></div>
@@ -791,9 +797,12 @@
     const texts = {
         "routeTitle": "{{routeTitle}}",
         "fineTuneNote": "{{fineTuneNote}}",
+        "fineTuneNoteNewRouter": "{{fineTuneNoteNewRouter}}",
         "distanceTime": "{{distanceTime}}",
         "useLegacyRouter": "{{useLegacyRouter}}",
         "useLegacyRouterHint": "{{useLegacyRouterHint}}",
+        "allWaypointsExact": "{{allWaypointsExact}}",
+        "allWaypointsExactHint": "{{allWaypointsExactHint}}",
         "train": "{{train}}",
         "tram": "{{tram}}",
         "metro": "{{metro}}",
@@ -901,6 +910,7 @@
                     if (routerProfile) {
                         routerProfile.style.display = useNewRouter ? '' : 'none';
                     }
+                    document.getElementById('allExactModalWrap').style.display = useNewRouter ? '' : 'none';
 
                     // Show loading indicator
                     if (window.sidebar) {
@@ -925,6 +935,7 @@
                 // routing() made the new router the default for rail types.
                 routerToggle.checked = !useNewRouter;
                 if (routerProfile) routerProfile.style.display = useNewRouter ? '' : 'none';
+                document.getElementById('allExactModalWrap').style.display = useNewRouter ? '' : 'none';
             }
             if (routerProfile) {
                 routerProfile.addEventListener('change', function() {

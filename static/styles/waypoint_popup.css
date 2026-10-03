@@ -1,5 +1,6 @@
 /* Popup and badges of the intermediate waypoint markers on the routing maps (routing.js),
-   shared by routing.html, edit_copy.html and compose.html. */
+   shared by routing.html, edit_copy.html and compose.html; and the router options box
+   of routing.js's sidebar (.router-box), in the same look. */
 
 .wp-leaflet-popup .leaflet-popup-content-wrapper {
   border-radius: 12px;
@@ -151,3 +152,99 @@
 }
 .wp-badge-freehand { top: -5px; background: #d97706; }
 .wp-badge-hard { bottom: 2px; background: #3b63b8; }
+
+/* Router options in the routing sidebar (buildNewRouterToggleHtml) */
+.router-box {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f6f7f9;
+  font: 13.5px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1f2733;
+}
+/* Each button as wide as its label needs (Tramway, Straßenbahn…), the track filled */
+.router-seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: #e7eaee;
+}
+/* As specific as it takes to beat the sidebar's full-width action-button rule
+   (routing_panel.css, #sidebar button:not(...)), which would pad them out and add a
+   bottom margin inside the grey track. */
+#sidebar .router-box button.router-seg-btn, .router-seg-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  gap: 5px;
+  min-width: 0;
+  width: auto;
+  min-height: 28px;
+  height: auto;
+  margin: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  font: 12.5px/1.15 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  cursor: pointer;
+}
+.router-seg-btn i { flex: none; font-size: 12px; }
+/* Long names (Straßenbahn, Metropolitana, 鉄道（国有鉄道・私鉄など）) wrap inside their
+   button rather than being cut off */
+.router-seg-btn span { min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+#sidebar .router-box button.router-seg-btn:hover, .router-seg-btn:hover { color: #1f2733; }
+#sidebar .router-box button.router-seg-btn.active, .router-seg-btn.active {
+  background: #fff;
+  color: #3b63b8;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(17, 24, 39, .15);
+  cursor: default;
+}
+.router-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 6px 2px;
+  cursor: pointer;
+}
+.router-row-icon { flex: none; width: 16px; text-align: center; color: #6b7280; }
+.router-row-label { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; text-wrap: pretty; }
+.router-row-label label { margin: 0; cursor: pointer; }
+/* The info badge sits right after the label, not pinned to a corner like the chips' */
+#sidebar .router-row-label .route-hint { position: relative; top: auto; right: auto; line-height: 0; }
+
+/* A small switch in place of the checkbox */
+.router-switch {
+  flex: none;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 32px;
+  height: 18px;
+  margin: 0;
+  border-radius: 9px;
+  background: #cfd4db;
+  cursor: pointer;
+  transition: background .15s;
+}
+.router-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+  transition: transform .15s;
+}
+.router-switch:checked { background: #3b63b8; }
+.router-switch:checked::after { transform: translateX(14px); }
+.router-switch:focus-visible { outline: 2px solid #86b7fe; outline-offset: 2px; }

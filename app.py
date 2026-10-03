@@ -7346,8 +7346,10 @@ def get_trip(trip_id):
 def _waypoint_meta(stored_waypoints):
     """Name and hard/soft mode of each stored intermediate waypoint, for the routing
     map (routing.js reads them as window.routingWaypointMeta)."""
+    # hard is True, False (made approximate by hand, which a later drag must not
+    # undo) or None (never set: approximate by default).
     return [
-        {"name": p.get("name") or "", "hard": bool(p.get("hard"))}
+        {"name": p.get("name") or "", "hard": p.get("hard") if isinstance(p.get("hard"), bool) else None}
         for p in stored_waypoints
     ]
 

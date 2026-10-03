@@ -161,9 +161,12 @@
   .cp-bubble .form-switch .form-check-input { margin: 0; flex: 0 0 auto; cursor: pointer; }
   .cp-bubble .form-check-label { cursor: pointer; font-weight: 500; }
   /* Driven by the switch's own state rather than JS, so it can't fall out of sync: the
-     profile belongs to the new router, i.e. the switch ("use legacy router") off. */
-  #newRouterProfileCompose { display: none; margin-top: .6rem; border-radius: 8px; }
-  .cp-bubble:has(#newRouterToggleCompose:not(:checked)) #newRouterProfileCompose { display: block; }
+     trip type and "every point exact" belong to the new router, i.e. the switch ("use
+     legacy router") off. */
+  .cp-bubble.cp-router { width: min(340px, calc(100vw - 32px)); }
+  #newRouterProfileCompose, .cp-bubble .cp-all-exact { display: none; }
+  .cp-bubble:has(#newRouterToggleCompose:not(:checked)) #newRouterProfileCompose { display: flex; }
+  .cp-bubble:has(#newRouterToggleCompose:not(:checked)) .cp-all-exact { display: flex; }
 
   /* Electrification chip (⚡/🛢️ km + info bubble): routing.js renders this into
      #elecPreview inside the routing sidebar, which this page hides. .elec-preview-mirror
@@ -677,20 +680,29 @@
       <details class="cp-hint" id="routerHint">
         <summary class="cp-summary-btn" title="{{ routerMode|default('Router') }}"
                  aria-label="{{ routerMode|default('Router') }}"><i class="fas fa-route"></i></summary>
-        <div class="cp-bubble">
+        {# Same controls as the routing page's sidebar (routing.js buildNewRouterToggleHtml,
+           styled in waypoint_popup.css): the trip type and "every point exact" belong to
+           the new router; the legacy router is the fallback, last. #}
+        <div class="cp-bubble cp-router">
           <div class="cp-bubble-title">{{ routerMode|default('Router') }}</div>
-          <div class="form-check form-switch">
-            <input class="form-check-input" type="checkbox" role="switch" id="newRouterToggleCompose">
-            <label class="form-check-label" for="newRouterToggleCompose">
-              {{ useLegacyRouter }}
-            </label>
+          <div class="router-seg" id="newRouterProfileCompose" role="group">
+            {% for value, label, icon in [('train', train|default('Train'), 'fa-train'), ('tram', tram|default('Tram'), 'fa-train-tram'),
+                                          ('metro', metro|default('Metro'), 'fa-train-subway'), ('all', all|default('All'), 'fa-layer-group')] %}
+            <button type="button" class="router-seg-btn{% if value == vehicle_type %} active{% endif %}" data-profile="{{ value }}"
+                    aria-pressed="{{ 'true' if value == vehicle_type else 'false' }}"><i class="fa-solid {{ icon }}" aria-hidden="true"></i><span>{{ label }}</span></button>
+            {% endfor %}
           </div>
-          <select id="newRouterProfileCompose" class="form-select form-select-sm">
-            <option value="train" {% if vehicle_type == 'train' %}selected{% endif %}>{{ train|default('Train') }}</option>
-            <option value="tram" {% if vehicle_type == 'tram' %}selected{% endif %}>{{ tram|default('Tram') }}</option>
-            <option value="metro" {% if vehicle_type == 'metro' %}selected{% endif %}>{{ metro|default('Metro') }}</option>
-            <option value="all">{{ all|default('All') }}</option>
-          </select>
+          <label class="router-row cp-all-exact" title="{{ allWaypointsExactHint }}">
+            <i class="fa-solid fa-crosshairs router-row-icon"></i>
+            <span class="router-row-label">{{ allWaypointsExact }}</span>
+            <input type="checkbox" class="router-switch all-exact-toggle" id="allExactCompose"
+                   onchange="setAllWaypointsExact(this.checked)">
+          </label>
+          <label class="router-row" title="{{ useLegacyRouterHint }}">
+            <i class="fa-solid fa-clock-rotate-left router-row-icon"></i>
+            <span class="router-row-label">{{ useLegacyRouter }}</span>
+            <input type="checkbox" class="router-switch" role="switch" id="newRouterToggleCompose">
+          </label>
         </div>
       </details>
       {% endif %}
@@ -1118,6 +1130,7 @@ var texts = {
   "waypointHardHint": {{ waypointHardHint|tojson }},
   routeTitle:             "{{ routeTitle|default('{origLabel} → {destLabel}') }}",
   fineTuneNote:           "{{ fineTuneNote|default('Drag waypoints to fine-tune the route.') }}",
+  fineTuneNoteNewRouter:  "{{ fineTuneNoteNewRouter }}",
   distanceTime:           "{{ distanceTime|default('{km} · {time}') }}",
   downloadGeoJSONButton:  "{{ downloadGeoJSONButton|default('Download GeoJSON') }}",
   saveTripButton:         "{{ submit|default('Save') }}",
@@ -1125,6 +1138,8 @@ var texts = {
   remove:                 "{{ remove|default('Remove') }}",
   waypoint:               "{{ waypoint|default('Waypoint') }}",
   useLegacyRouter:        "{{ useLegacyRouter }}",
+  allWaypointsExact:      "{{ allWaypointsExact }}",
+  allWaypointsExactHint:  "{{ allWaypointsExactHint }}",
   train:                  "{{ train|default('Train') }}",
   tram:                   "{{ tram|default('Tram') }}",
   metro:                  "{{ metro|default('Metro') }}",
@@ -1976,13 +1991,18 @@ function bindNewRouterToggle() {
   var profile = document.getElementById('newRouterProfileCompose');
   if (!toggle || toggle._bound) return;
   toggle._bound = true;
+  // The trip type is the segmented control's active button.
+  function profileValue() {
+    var active = profile.querySelector('.router-seg-btn.active');
+    return active ? active.dataset.profile : vehicle_type;
+  }
 
   function applyNewRouterParams() {
     if (!window.baseRouter) return;
     var currentParams = window.baseRouter.options.requestParameters || {};
     if (useNewRouter) {
       currentParams.use_new_router = 'true';
-      currentParams.profile = profile.value;
+      currentParams.profile = profileValue();
     } else {
       delete currentParams.use_new_router;
       delete currentParams.profile;
@@ -2017,8 +2037,13 @@ function bindNewRouterToggle() {
     reroute();
     updateMarkerVisuals();
   });
-  profile.addEventListener('change', function() {
-    if (!useNewRouter) return;
+  profile.addEventListener('click', function(e) {
+    var btn = e.target.closest('.router-seg-btn');
+    if (!btn || btn.classList.contains('active') || !useNewRouter) return;
+    profile.querySelectorAll('.router-seg-btn').forEach(function (b) {
+      b.classList.toggle('active', b === btn);
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
     reroute();
   });
 }
