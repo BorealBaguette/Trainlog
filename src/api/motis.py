@@ -110,6 +110,45 @@ RATE_LIMIT_BACKOFF_S = 60
 _backoff_until = 0.0
 
 
+# Transitous only loads timetables from about a month back to a year ahead, and says so
+# when asked outside them ("query time … is outside of loaded timetable window
+# [2026-09-02 00:00, 2027-10-03 00:00["). That window is remembered for a few hours, so
+# a trip logged for a past year doesn't ask at all. It moves by a day each day.
+_TIMETABLE_WINDOW_RE = re.compile(r"outside of loaded timetable window \[([\d-]+ [\d:]+), ([\d-]+ [\d:]+)\[")
+TIMETABLE_WINDOW_TTL_S = 6 * 3600
+_timetable_window = None  # (first, end) as UTC datetimes, and when to forget it
+
+
+class OutsideTimetable(requests.RequestException):
+    """The search is for a time Transitous has no timetables for."""
+
+
+def _outside_timetable(start, window):
+    """Whether a search from `start` over `window` falls wholly outside the timetables
+    Transitous has loaded, as far as it last said."""
+    if not _timetable_window or _timetable_window[2] < time.monotonic():
+        return False
+    first, end, _ = _timetable_window
+    return start + window < first or start >= end
+
+
+def _note_timetable_window(response):
+    """Remember the loaded timetable window from a 400 that names it; whether it did."""
+    global _timetable_window
+    try:
+        match = _TIMETABLE_WINDOW_RE.search(response.json().get("error", ""))
+    except ValueError:
+        return False
+    if not match:
+        return False
+    first, end = (
+        datetime.strptime(value, "%Y-%m-%d %H:%M").replace(tzinfo=timezone.utc)
+        for value in match.groups()
+    )
+    _timetable_window = (first, end, time.monotonic() + TIMETABLE_WINDOW_TTL_S)
+    return True
+
+
 class RateLimited(requests.RequestException):
     """Transitous asked us to slow down; nothing is sent until the backoff ends."""
 
@@ -517,6 +556,8 @@ def _fetch(url, params, ttl=_CACHE_TTL, queued=True):
         _backoff_until = time.monotonic() + wait
         logger.warning("Transitous rate limit (429): no requests for %d s", wait)
         raise RateLimited("Transitous rate limit (429)")
+    if response.status_code == 400 and _note_timetable_window(response):
+        raise OutsideTimetable(response.json().get("error"))
     response.raise_for_status()
     data = response.json()
     if len(_cache) >= _CACHE_MAX:
@@ -543,7 +584,7 @@ def _quietly(search, *args):
     rather than failing the ones that worked."""
     try:
         return search(*args)
-    except (RateLimited, Cancelled):
+    except (RateLimited, Cancelled, OutsideTimetable):
         return []  # a 429 is logged once, when it came in
     except (requests.RequestException, ValueError) as e:
         logger.info("MOTIS secondary search failed: %s", e)
@@ -554,6 +595,8 @@ def _quietly(search, *args):
 @login_required
 def motis_departures(username):
     _, origin, destination, start, window, params, modes = _search(request.args)
+    if _outside_timetable(start, window):
+        return jsonify({"departures": [], "outside_timetable": True})
 
     def direct_legs(from_place, to_place):
         plan = _fetch(MOTIS_PLAN_URL, dict(params, fromPlace=from_place, toPlace=to_place))
@@ -610,6 +653,9 @@ def motis_departures(username):
                 if (f, t) not in (points, nearest)
             ]
             searches = [result(f) for f in [submit(_quietly, direct_legs, *pair) for pair in pairs]]
+    except OutsideTimetable:
+        # A date outside the loaded timetables: nothing to look up, not a failure.
+        return jsonify({"departures": [], "outside_timetable": True})
     except Cancelled:
         # Nobody is waiting for this answer any more.
         return "", 204
