@@ -6,12 +6,16 @@ the line, the intermediate stops (which become the trip's via waypoints) and the
 operator resolved to a Trainlog operator so its logo can be shown.
 """
 
+import contextvars
 import logging
 import math
 import re
+import select
+import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import TimeoutError as FutureTimeout
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -32,15 +36,23 @@ MOTIS_STOPS_URL = "https://api.transitous.org/api/v1/reverse-geocode"
 MOTIS_BOARD_URL = "https://api.transitous.org/api/v5/stoptimes"
 USER_AGENT = "Trainlog/1.0 (https://trainlog.me; admin@trainlog.me; trip form timetable suggestions)"
 
-# Search from a little before the time on the form to a full day after it: the form
-# time is often just "now" or a rough guess, so the next day's runs are offered too.
+# Search from a little before the time on the form to a few days after it: the form
+# time is often just "now" or a rough guess, and a service that doesn't run every day
+# (a train a few days a week) should still show a couple of runs. Busy lines don't
+# fill those days: each search returns a count of results (below), so a metro line
+# stops after an hour or so, while Oslo–Bergen (6 a day) reaches 4 days ahead.
 WINDOW_BEFORE = timedelta(hours=1)
-WINDOW_LENGTH = WINDOW_BEFORE + timedelta(hours=24)
+WINDOW_AHEAD = timedelta(days=4)
+WINDOW_LENGTH = WINDOW_BEFORE + WINDOW_AHEAD
+# The list is never cut before this (see _departures)...
+MIN_HORIZON = timedelta(hours=24)
+# ...nor longer than this many departures, the earliest kept.
+MAX_DEPARTURES = 60
 # Ask for a number of results rather than a fixed window: MOTIS starts with a short
 # window and widens it until it has found this many itineraries. A fixed 25 h window
 # gave anything from 1 to 450 on sparse vs busy lines. Each departure tends to come
 # back about twice (walking variants, slowDirect copies, merged below), so this is
-# ~20 departures. WINDOW_LENGTH still caps how far ahead results are kept.
+# ~20 departures on a busy line. WINDOW_LENGTH caps how far ahead results are kept.
 SEARCH_WINDOW = timedelta(hours=1)
 ITINERARIES = 40
 # Departures read off the origin stop's board per request (see _board_legs). Each
@@ -100,6 +112,19 @@ _backoff_until = 0.0
 
 class RateLimited(requests.RequestException):
     """Transitous asked us to slow down; nothing is sent until the backoff ends."""
+
+
+# A search the browser has given up on (it aborts the request when the form changes)
+# stops asking Transitous: the worker would otherwise stay on it for up to ~10 s, and a
+# sync worker serves nothing else meanwhile, the user's next search included.
+class Cancelled(Exception):
+    """The request this search is for has gone away."""
+
+
+# The current search's cancel flag, seen by _fetch in the pool threads (see _submit).
+_cancel = contextvars.ContextVar("motis_cancel", default=None)
+# How often the request thread checks whether the browser is still there.
+CANCEL_POLL_S = 0.25
 
 
 # Legal-form suffixes GTFS agency names carry and Trainlog operator names do not.
@@ -429,8 +454,8 @@ def _search(args):
         clock = datetime.strptime(args.get("time") or "", "%H:%M").time()
         start, window = day.replace(hour=clock.hour, minute=clock.minute) - WINDOW_BEFORE, WINDOW_LENGTH
     except ValueError:
-        # No time on the form: the whole day.
-        start, window = day, timedelta(days=1)
+        # No time on the form: from the start of the day.
+        start, window = day, WINDOW_AHEAD
     start = start.replace(minute=start.minute - start.minute % (START_STEP.seconds // 60))
     start = start.replace(tzinfo=_tz(*origin)).astimezone(timezone.utc)
 
@@ -466,11 +491,17 @@ def _fetch(url, params, ttl=_CACHE_TTL, queued=True):
     hit = _cache.get(key)
     if hit and hit[0] > time.monotonic():
         return hit[1]
+    cancel = _cancel.get()
     for attempt in range(2):
+        if cancel is not None and cancel.is_set():
+            raise Cancelled()
         if time.monotonic() < _backoff_until:
             raise RateLimited("Transitous rate limit: backing off")
         if queued:
             with _transitous_slots:
+                # Waiting for a slot can outlast the request it is for.
+                if cancel is not None and cancel.is_set():
+                    raise Cancelled()
                 response = _get(url, params)
         else:
             response = _get(url, params)
@@ -494,13 +525,26 @@ def _fetch(url, params, ttl=_CACHE_TTL, queued=True):
     return data
 
 
+def _client_gone(sock):
+    """Whether the browser closed the request's connection (gunicorn's socket for it;
+    None elsewhere, e.g. under the Flask dev server, where nothing is cancelled)."""
+    if sock is None:
+        return False
+    try:
+        readable, _, _ = select.select([sock], [], [], 0)
+        # Readable with nothing to read: the other end has closed.
+        return bool(readable) and sock.recv(1, socket.MSG_PEEK) == b""
+    except (OSError, ValueError):
+        return True
+
+
 def _quietly(search, *args):
     """A secondary search that fails (MOTIS rejects a stop, times out) finds nothing,
     rather than failing the ones that worked."""
     try:
         return search(*args)
-    except RateLimited:
-        return []  # logged once, when the 429 came in
+    except (RateLimited, Cancelled):
+        return []  # a 429 is logged once, when it came in
     except (requests.RequestException, ValueError) as e:
         logger.info("MOTIS secondary search failed: %s", e)
         return []
@@ -520,41 +564,64 @@ def motis_departures(username):
         ]
 
     points = (params["fromPlace"], params["toPlace"])
+    client = request.environ.get("gunicorn.socket")
+    cancel = threading.Event()
+    pool = ThreadPoolExecutor(max_workers=4)
+
+    def submit(fn, *args):
+        # Each task in its own copy of this context, which carries the cancel flag.
+        ctx = contextvars.copy_context()
+        ctx.run(_cancel.set, cancel)
+        return pool.submit(ctx.run, fn, *args)
+
+    def result(future):
+        # Wait for a task, giving up as soon as the browser has.
+        while True:
+            try:
+                return future.result(timeout=CANCEL_POLL_S)
+            except FutureTimeout:
+                if _client_gone(client):
+                    cancel.set()
+                    raise Cancelled()
+
     try:
-        with ThreadPoolExecutor(max_workers=4) as pool:
-            # From the points, and at the same time look up the stops near them.
-            from_points = pool.submit(direct_legs, *points)
-            from_stops = pool.submit(_quietly, _stop_places, *origin, modes)
-            to_stops = pool.submit(_quietly, _stop_places, *destination, modes)
-            from_stops, to_stops = from_stops.result(), to_stops.result()
-            # Always also from the nearest stop at each end: walking from the point can
-            # reach only some of a big station's platforms (Oslo S: RE11 and L1 are
-            # missing from the point search, there from the stop's).
-            nearest = (from_stops[0] if from_stops else points[0], to_stops[0] if to_stops else points[1])
-            board = (
-                pool.submit(_quietly, _board_legs, from_stops[0], modes, start, destination)
-                if from_stops else None
-            )
-            searches = [from_points.result()]
-            if nearest != points:
-                searches.append(_quietly(direct_legs, *nearest))
-            if board:
-                searches.append(board.result())
-            if not any(searches):
-                # Still nothing: every remaining point/stop combination (the nearest
-                # stop can be the wrong feed's, e.g. the RER one at Paris Austerlitz).
-                pairs = [
-                    (f, t)
-                    for f in [points[0], *from_stops]
-                    for t in [points[1], *to_stops]
-                    if (f, t) not in (points, nearest)
-                ]
-                searches = list(pool.map(lambda pair: _quietly(direct_legs, *pair), pairs))
+        # From the points, and at the same time look up the stops near them.
+        from_points = submit(direct_legs, *points)
+        from_stops = submit(_quietly, _stop_places, *origin, modes)
+        to_stops = submit(_quietly, _stop_places, *destination, modes)
+        from_stops, to_stops = result(from_stops), result(to_stops)
+        # Always also from the nearest stop at each end: walking from the point can
+        # reach only some of a big station's platforms (Oslo S: RE11 and L1 are
+        # missing from the point search, there from the stop's).
+        nearest = (from_stops[0] if from_stops else points[0], to_stops[0] if to_stops else points[1])
+        from_nearest = submit(_quietly, direct_legs, *nearest) if nearest != points else None
+        board = (
+            submit(_quietly, _board_legs, from_stops[0], modes, start, destination)
+            if from_stops else None
+        )
+        searches = [result(f) for f in (from_points, from_nearest, board) if f]
+        if not any(searches):
+            # Still nothing: every remaining point/stop combination (the nearest
+            # stop can be the wrong feed's, e.g. the RER one at Paris Austerlitz).
+            pairs = [
+                (f, t)
+                for f in [points[0], *from_stops]
+                for t in [points[1], *to_stops]
+                if (f, t) not in (points, nearest)
+            ]
+            searches = [result(f) for f in [submit(_quietly, direct_legs, *pair) for pair in pairs]]
+    except Cancelled:
+        # Nobody is waiting for this answer any more.
+        return "", 204
     except RateLimited:
         return jsonify({"error": "rate_limited", "departures": []}), 503
     except (requests.RequestException, ValueError) as e:
         logger.warning("MOTIS request failed: %s", e)
         return jsonify({"error": "unavailable", "departures": []}), 502
+    finally:
+        # Don't wait for requests already sent: they finish in the background, and
+        # whatever hasn't started yet is dropped.
+        pool.shutdown(wait=False, cancel_futures=True)
 
     return jsonify({"departures": _departures(searches, start, window, destination)})
 
@@ -566,7 +633,8 @@ def _departures(searches, start, window, destination):
     # reaches few departures (walking from the point misses most of Oslo S's platforms)
     # runs days ahead while a denser one stops after a few hours. Cut the merged list
     # where the densest full search ends, so it doesn't trail off into stray runs from
-    # the next day. Searches that came back short ran out of range, not results.
+    # days later, but not before MIN_HORIZON: a line with a few runs a day still
+    # shows the next day's. Searches that came back short ran out of range, not results.
     horizons = [
         max(_departure_utc(leg) for leg in found)
         for found in searches
@@ -574,7 +642,7 @@ def _departures(searches, start, window, destination):
     ]
     end = start + window
     if horizons:
-        end = min(end, min(horizons))
+        end = min(end, max(min(horizons), start + WINDOW_BEFORE + MIN_HORIZON))
     departures, seen = [], {}
     for leg in legs:
         if not leg or leg.get("cancelled"):
@@ -638,6 +706,7 @@ def _departures(searches, start, window, destination):
         departures.append(entry)
 
     departures.sort(key=lambda d: d.pop("_sort"))
+    del departures[MAX_DEPARTURES:]
     # Departure-board runs come without a path. Runs of the same line calling at the
     # same stops follow the same route, so they borrow one from the planner's runs:
     # unsnapped, a Gyldenpris (Bergen) stop 6 m off the road sent the router into the

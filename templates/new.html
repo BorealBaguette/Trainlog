@@ -70,6 +70,19 @@
     }
     #motisGroup .motis-toggle:hover { background-color: #e8e8e8; }
     #motisGroup .motis-toggle[disabled] { cursor: default; color: #888; background-color: #f8f8f8; }
+    /* While searching: a spinner for the clock, and a bar sweeping along the bottom */
+    #motisGroup .motis-toggle { position: relative; overflow: hidden; }
+    #motisGroup .motis-toggle .motis-spinner { display: none; }
+    #motisGroup .motis-toggle.loading .motis-spinner { display: inline-block; }
+    #motisGroup .motis-toggle.loading .motis-clock { display: none; }
+    #motisGroup .motis-toggle.loading::after {
+        content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 35%;
+        background: #4b78d6; animation: motis-sweep 1.2s ease-in-out infinite;
+    }
+    @keyframes motis-sweep { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+    @media (prefers-reduced-motion: reduce) {
+        #motisGroup .motis-toggle.loading::after { animation: none; width: 100%; opacity: .5; }
+    }
     #motisGroup .motis-toggle-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #motisGroup .motis-count { background: #4b78d6; color: #fff; border-radius: 10px; padding: 0 7px; font-size: 0.75rem; }
     #motisGroup .motis-menu { width: 100%; max-height: 55vh; overflow-y: auto; padding: 0; }
@@ -277,7 +290,8 @@
       <group id="motisGroup" class="non_poi" style="display:none">
         <div class="dropdown">
           <button type="button" id="motisToggle" class="motis-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-            <i class="fa-regular fa-clock"></i>
+            <i class="fa-regular fa-clock motis-clock"></i>
+            <i class="fa-solid fa-circle-notch fa-spin motis-spinner" aria-hidden="true"></i>
             <span class="motis-toggle-label" id="motisToggleLabel"></span>
             <span class="motis-count" id="motisCount"></span>
             <i class="fa-solid fa-chevron-down" id="motisChevron"></i>
@@ -833,12 +847,16 @@
     }
   });
 
+  // The arrival can't be before the departure on the same day; on a later day
+  // (overnight) any time is fine.
   $("#newTripStartTime").on("focusout", function() {
-    if($("#newTripEndDate").val() == $("#newTripEndDate").val()){
+    if($("#newTripEndDate").val() == $("#newTripStartDate").val()){
       $("#newTripEndTime").attr({"min":$(this).val()});
       if ($("#newTripEndTime").val() < $(this).val()){
         $("#newTripEndTime").val($(this).val());
       }
+    } else {
+      $("#newTripEndTime").removeAttr("min");
     }
   });
   var URLs = {
@@ -1003,7 +1021,8 @@
         $('#newTripStartDate').val(), $('#newTripStartTime').val()].join('|') : null;
     }
 
-    function setToggle(label, count, enabled) {
+    function setToggle(label, count, enabled, loading) {
+      $toggle.toggleClass('loading', !!loading).attr('aria-busy', loading ? 'true' : null);
       $('#motisToggleLabel').text(label);
       $('#motisCount').text(count || '').toggle(!!count);
       $('#motisChevron').toggle(enabled);
@@ -1031,7 +1050,7 @@
       if (key === lastKey) return;
       lastKey = key;
       if (xhr) xhr.abort();
-      setToggle(texts.searching, null, false);
+      setToggle(texts.searching, null, false, true);
       xhr = $.getJSON(url, {
         from: origin.join(','), to: destination.join(','), date: date, time: time, type: "{{ vehicle_type }}"
       }).done(function (res) {
@@ -1044,6 +1063,9 @@
 
     function schedule() {
       clearTimeout(timer);
+      // A search for what the form no longer says is dropped straight away, not after
+      // the debounce (the server stops working on it once the request goes away).
+      if (xhr && formKey() !== lastKey) { xhr.abort(); xhr = null; lastKey = null; }
       // Long enough for typing a time (each keystroke is a new form state).
       timer = setTimeout(search, 800);
     }
