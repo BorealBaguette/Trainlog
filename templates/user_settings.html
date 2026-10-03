@@ -280,6 +280,10 @@
                 <input class="form-check-input" type="checkbox" id="globe" name="globe" form="settingsForm" {% if user_globe %}checked{% endif %}>
                 <label class="form-check-label" for="globe">{{ globeLabel }}</label>
               </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="exact_waypoints" name="exact_waypoints" form="settingsForm" {{ exact_waypoints_checked }}>
+                <label class="form-check-label" for="exact_waypoints" title="{{ allWaypointsExactHint }}">{{ allWaypointsExact }}</label>
+              </div>
             </div>
 
             <hr class="settings2-hr">

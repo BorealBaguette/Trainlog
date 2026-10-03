@@ -306,7 +306,7 @@ from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
 from src.account_export import build_account_data_csvs
 from src.delete_account import delete_account_data
-from src.users import User, Friendship, authDb
+from src.users import User, Friendship, authDb, exact_waypoints_context
 from src.email_parser import start_email_listener
 from src.trip_announcer import (
     announced_trip_ids,
@@ -1335,6 +1335,9 @@ def order_trip_types(types):
     return sorted(
         types, key=lambda t: TRIP_TYPE_SORT_KEY.get(t, len(TRIP_TYPE_SORT_KEY))
     )
+
+
+app.context_processor(exact_waypoints_context)
 
 
 @app.context_processor
@@ -9828,6 +9831,7 @@ def user_settings(username):
         params["default_landing"] = request.form["default_landing"]
         params["tileserver"] = request.form["tileserver"]
         params["globe"] = "globe" in request.form
+        params["exact_waypoints"] = "exact_waypoints" in request.form
         # Premium-only toggle: only honour it for premium users so a crafted POST
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
@@ -9850,6 +9854,7 @@ def user_settings(username):
     colorblind_checked = "checked" if user.colorblind else ""
     flight_3d_checked = "checked" if user.flight_3d else ""
     live_tracking_checked = "checked" if user.live_tracking else ""
+    exact_waypoints_checked = "checked" if user.exact_waypoints else ""
     discord_autopost_checked = "checked" if user.discord_autopost else ""
     discord_main_checked = "checked" if user.discord_main_enabled else ""
 
@@ -9866,6 +9871,7 @@ def user_settings(username):
         colorblind_checked=colorblind_checked,
         flight_3d_checked=flight_3d_checked,
         live_tracking_checked=live_tracking_checked,
+        exact_waypoints_checked=exact_waypoints_checked,
         discord_autopost_checked=discord_autopost_checked,
         discord_main_checked=discord_main_checked,
         user_currency=user.user_currency,
@@ -14761,6 +14767,13 @@ def ensure_auth_db_columns():
         authDb.session.execute(
             sqlalchemy.text(
                 "ALTER TABLE user ADD COLUMN live_tracking BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        authDb.session.commit()
+    if "exact_waypoints" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN exact_waypoints BOOLEAN NOT NULL DEFAULT 0"
             )
         )
         authDb.session.commit()

@@ -507,9 +507,13 @@ window.removeFreehandOverlay = function(element) { setMarkerBadge(element, 'free
 // "Every point exact" (setAllWaypointsExact) overrides that while it is on, for places
 // where the timetable puts its stops on their tracks; each waypoint keeps its own flag
 // underneath, which applies again once it is off.
-var allWaypointsExact = false;
+// Starts on for users who chose that in their settings; a point made approximate by
+// hand (modeSet) stays approximate then, as it was saved.
+var allWaypointsExact = !!window.exactWaypointsDefault;
 function isHardWaypoint(wp) {
-  return !!wp && (allWaypointsExact || !!(wp.options && wp.options.hard));
+  if (!wp) return false;
+  var o = wp.options || {};
+  return o.modeSet ? !!o.hard : (allWaypointsExact || !!o.hard);
 }
 
 // A point placed by hand (any pin dragged, origin and destination included, or one
@@ -528,7 +532,9 @@ window.setWaypointHard = function(index, hard) {
   if (allWaypointsExact && !hard) {
     // One point made approximate while every point is exact: the others stay exact,
     // now each on its own flag.
-    wps.forEach(function (wp) { wp.options = L.extend({}, wp.options, { hard: true }); });
+    wps.forEach(function (wp) {
+      if (!(wp.options && wp.options.modeSet)) wp.options = L.extend({}, wp.options, { hard: true });
+    });
     allWaypointsExact = false;
     syncAllExactToggles();
   }
@@ -544,6 +550,9 @@ window.setAllWaypointsExact = function(on) {
   if (allWaypointsExact === !!on) return;
   allWaypointsExact = !!on;
   syncAllExactToggles();
+  // Turned on by hand: every point, including those set approximate, becomes exact.
+  var plan = window.currentPlan && window.currentPlan.getWaypoints();
+  if (on && plan) plan.forEach(function (wp) { wp.options = L.extend({}, wp.options, { modeSet: false }); });
   updateMarkerVisuals();
   var wps = window.currentPlan && window.currentPlan.getWaypoints();
   if (wps) wps.forEach(function (_, i) { refreshWaypointPopup(i); });
@@ -552,6 +561,7 @@ window.setAllWaypointsExact = function(on) {
 function syncAllExactToggles() {
   document.querySelectorAll('.all-exact-toggle').forEach(function (el) { el.checked = allWaypointsExact; });
 }
+document.addEventListener('DOMContentLoaded', syncAllExactToggles);
 
 // One waypoint popup at a time (Leaflet's autoClose), closed by a click anywhere outside
 // it: on the map (closeOnClick) and also elsewhere on the page (sidebar, edit form),
