@@ -493,6 +493,17 @@ function isHardWaypoint(wp) {
   return !!(wp && wp.options && wp.options.hard);
 }
 
+// A waypoint placed by hand along the route (dragged there, or added by dragging the
+// line) is meant to be passed through right there, so it becomes exact — when dropped
+// from close enough for that to be the track it's on: at zoom 15 a pixel is ~3 m (Paris),
+// a dropped pin within ~10–15 m. Further out it stays approximate, which is what lets the
+// router find the line it was near. Never the origin or destination (the station), and
+// never back to approximate: Ctrl-click or the popup does that. New router only.
+var EXACT_DROP_ZOOM = 15;
+function placedExactly(map) {
+  return useNewRouter && map && map.getZoom() >= EXACT_DROP_ZOOM;
+}
+
 // Whether the pointer press in progress was made with Ctrl (⌘ on a Mac) held, for
 // Ctrl-click on the route to insert an exact waypoint (see spliceWaypoints below).
 // Leaflet Routing Machine's line-touched event doesn't pass the original event on.
@@ -1058,9 +1069,10 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     plan.spliceWaypoints = function(index, remove) {
       var args = Array.prototype.slice.call(arguments);
       var added = args.slice(2);
-      // A waypoint inserted by a Ctrl/⌘-click on the route is an exact point
-      // (new router only). Made hard before the splice, which routes straight away.
-      if (remove === 0 && added.length > 0 && ctrlPointerDown && useNewRouter) {
+      // A waypoint inserted by a Ctrl/⌘-click on the route, or at close zoom
+      // (placedExactly), is an exact point (new router only). Made hard before the
+      // splice, which routes straight away. Only user gestures insert this way.
+      if (remove === 0 && added.length > 0 && useNewRouter && (ctrlPointerDown || placedExactly(map))) {
         ctrlPointerDown = false;
         added = added.map(function(a) {
           var wp = a && a.hasOwnProperty('latLng') ? a : L.Routing.waypoint(a);
@@ -1499,6 +1511,17 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     // Drop the second by muting the waypointschanged handler for the rest of the
     // tick — it stays active for waypoint add/remove (removeWaypoint() and the
     // click-to-insert on the line), which have no dragend and rely on it to reroute.
+    // Dragging a waypoint along the route at close zoom makes it exact (placedExactly).
+    // On drag start rather than end: routing while dragging, and on the drop, happens
+    // before any dragend listener of ours would run.
+    plan.on('waypointdragstart', function(e) {
+      var wps = plan.getWaypoints();
+      if (e.index <= 0 || e.index >= wps.length - 1) return;   // origin / destination
+      var wp = wps[e.index];
+      if (!placedExactly(map) || isHardWaypoint(wp)) return;
+      wp.options = L.extend({}, wp.options, { hard: true });
+      updateMarkerVisuals();
+    });
     plan.on('waypointdragend', function() {
       plan.off('waypointschanged', control._onWaypointsChanged, control);
       setTimeout(function() {
