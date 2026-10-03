@@ -1003,6 +1003,8 @@
       { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
     var $group = $('#motisGroup'), $toggle = $('#motisToggle'), $menu = $('#motisMenu');
     var timer = null, xhr = null, lastKey = null, departures = [];
+    // The run last picked, and what it put in the form (see forgetRun).
+    var applied = null;
 
     function place(which) {
       if ($('#' + which + 'ManualToggle').is(':checked')) {
@@ -1012,6 +1014,29 @@
       }
       var entry = globalStationDict[$('#' + which + 'Station').val()];
       return entry ? entry[0] : null;
+    }
+
+    function endsKey() {
+      var origin = place('origin'), destination = place('destination');
+      return origin && destination ? origin.join() + '|' + destination.join() : null;
+    }
+
+    // Picked a run, then changed an end: what the run filled in was about another
+    // trip, so it goes — its stops (the vias still showing their times; ones added or
+    // edited by hand stay), and the line, operator and delays unless changed since.
+    // The times stay: the next search starts from them.
+    function forgetRun() {
+      var run = applied;
+      applied = null;
+      $('#viaContainer .via-row.has-time').remove();
+      updateViaSummary();
+      if (run.line && $('#lineName').val() === run.line) $('#lineName').val('');
+      if (run.operator && $('#operator').val() === run.operator) setOperatorValue('');
+      if (run.delays) {
+        setDelay('departureDelayMinutes', 0);
+        setDelay('arrivalDelayMinutes', 0);
+      }
+      $menu.find('.motis-item').removeClass('active');
     }
 
     // What a search depends on, so the same lookup isn't repeated.
@@ -1063,6 +1088,7 @@
 
     function schedule() {
       clearTimeout(timer);
+      if (applied && endsKey() !== applied.ends) forgetRun();
       // A search for what the form no longer says is dropped straight away, not after
       // the debounce (the server stops working on it once the request goes away).
       if (xhr && formKey() !== lastKey) { xhr.abort(); xhr = null; lastKey = null; }
@@ -1144,11 +1170,13 @@
       updateViaSummary();
 
       // Real-time data on a run that has started: carry its delays over.
-      if ((d.departure_delay || d.arrival_delay) && $('#delayToggle').is(':visible')) {
+      var delays = (d.departure_delay || d.arrival_delay) && $('#delayToggle').is(':visible');
+      if (delays) {
         setDelay('departureDelayMinutes', d.departure_delay);
         setDelay('arrivalDelayMinutes', d.arrival_delay);
         $('#delayToggle').prop('checked', true).trigger('change');
       }
+      applied = { ends: endsKey(), line: d.line, operator: d.operator, delays: !!delays };
 
       // The form now reflects this departure; don't search again for its own time.
       lastKey = formKey();

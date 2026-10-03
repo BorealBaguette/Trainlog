@@ -300,7 +300,8 @@ function handleGpxUpload(event) {
 }
 
 function switchRouter() {
-  useNewRouter = document.getElementById('newRouterToggle').checked;
+  // The switch is "use the legacy router": the new one is the default.
+  useNewRouter = !document.getElementById('newRouterToggle').checked;
   var profileSelect = document.getElementById('newRouterProfile');
   if (profileSelect) {
     profileSelect.style.display = useNewRouter ? '' : 'none';
@@ -360,11 +361,11 @@ function buildNewRouterToggleHtml() {
           id="newRouterToggle"
           onchange="switchRouter()"
           style="margin-right: 8px;"
-          ${useNewRouter ? 'checked' : ''}
+          ${useNewRouter ? '' : 'checked'}
         >
         <span class="route-dist-wrap" style="display: inline-flex; align-items: center;">
-          ${texts.useNewRouter}
-          <details class="route-hint" style="position: static; margin-left: 6px;"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${texts.useNewRouterHint}</div></details>
+          ${texts.useLegacyRouter}
+          <details class="route-hint" style="position: static; margin-left: 6px;"><summary><i class="fa-solid fa-circle-info"></i></summary><div class="route-bubble">${texts.useLegacyRouterHint}</div></details>
         </span>
       </label>
       <select id="newRouterProfile" class="form-select form-select-sm" onchange="switchRouterProfile(this.value)" style="width: auto; margin-top: 8px; ${useNewRouter ? '' : 'display: none;'}">

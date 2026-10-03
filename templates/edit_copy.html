@@ -706,7 +706,7 @@
                     <div class="form-check form-switch mb-0">
                         <input class="form-check-input" type="checkbox" id="newRouterToggleModal" style="cursor: pointer;">
                         <label class="form-check-label" for="newRouterToggleModal" style="cursor: pointer;">
-                            {{useNewRouter}} <small class="text-muted">ᵦ</small>
+                            {{useLegacyRouter}}
                         </label>
                     </div>
                     <select id="newRouterProfileModal" class="form-select form-select-sm" style="width: auto; display: none;">
@@ -792,8 +792,8 @@
         "routeTitle": "{{routeTitle}}",
         "fineTuneNote": "{{fineTuneNote}}",
         "distanceTime": "{{distanceTime}}",
-        "useNewRouter": "{{useNewRouter}}",
-        "useNewRouterHint": "{{useNewRouterHint}}",
+        "useLegacyRouter": "{{useLegacyRouter}}",
+        "useLegacyRouterHint": "{{useLegacyRouterHint}}",
         "train": "{{train}}",
         "tram": "{{tram}}",
         "metro": "{{metro}}",
@@ -896,7 +896,8 @@
 
             if (routerToggle) {
                 routerToggle.addEventListener('change', function() {
-                    useNewRouter = this.checked;
+                    // The switch is "use the legacy router": the new one is the default.
+                    useNewRouter = !this.checked;
                     if (routerProfile) {
                         routerProfile.style.display = useNewRouter ? '' : 'none';
                     }
@@ -922,7 +923,7 @@
                     }
                 });
                 // routing() made the new router the default for rail types.
-                routerToggle.checked = useNewRouter;
+                routerToggle.checked = !useNewRouter;
                 if (routerProfile) routerProfile.style.display = useNewRouter ? '' : 'none';
             }
             if (routerProfile) {
