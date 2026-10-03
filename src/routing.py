@@ -10,7 +10,7 @@ from src.router_regions import all_in_region
 from src.graphhopper import convert_graphhopper_to_osrm     # example
 
 
-NEW_TRAIN_ROUTER = os.environ.get("NEW_TRAIN_ROUTER_URL", "http://train-gh.srv.trainlog.me:8991")
+NEW_TRAIN_ROUTER = os.environ.get("NEW_TRAIN_ROUTER_URL", "https://train-gh.srv.trainlog.me")
 
 
 def forward_routing_core(routingType, path, flask_request, extra_args=None):
@@ -31,8 +31,6 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
 
     if routingType == "train":
         use_new_router = flask_request.args.get("use_new_router", "false").lower() == "true"
-        # TEMPORARY, for testing the hard/soft waypoint OpenRailRouting build on its
-        # test port: revert to "https://train-gh.srv.trainlog.me" once it is deployed there.
         base = NEW_TRAIN_ROUTER if use_new_router else "https://train.srv.trainlog.me"
 
     elif routingType == "ferry":
