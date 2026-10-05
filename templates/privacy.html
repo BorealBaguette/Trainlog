@@ -1,6 +1,12 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
 
+{% if username != "public" %}
+    {% include "bootstrap/navigation.html" %}
+{% else %}
+    {% include "bootstrap/no_user_nav.html" %}
+{% endif %}
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
