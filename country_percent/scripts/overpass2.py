@@ -22,7 +22,9 @@ import time
 
 import geopandas as gpd
 import osm2geojson
+import pycountry
 import requests
+from shapely import STRtree
 from shapely.geometry import LineString, mapping, shape
 from shapely.ops import unary_union
 from simplify_geojson import process as simplify_geojson
@@ -32,7 +34,6 @@ OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 OVERPASS_HEADERS = {
     "User-Agent": "trainlog.me coverage generation",
 }
-ISO3166_URL = "https://iso3166-2-api.vercel.app/api/all"
 SUBDIVISION_QUERY = """
 [out:json];
 relation["ISO3166-{iso_spec}"="{iso_code}"];
@@ -58,17 +59,23 @@ RETRY_DELAY_SECONDS = 3
 def get_overpass_data(iso_spec, iso_code, query_template):
     query = query_template.format(iso_code=iso_code, iso_spec=iso_spec)
 
-    attempt = 0
-    for attempt in range(MAX_OVERPASS_RETRIES):
+    for attempt in range(1, MAX_OVERPASS_RETRIES + 1):
         r = requests.get(OVERPASS_URL, params={"data": query}, headers=OVERPASS_HEADERS)
         match r.status_code:
             case 200:
-                return r.json()
-            case 504:
+                data = r.json()
+                # Overpass answers 200 with a "remark" and a truncated
+                # element list when it hits its runtime or memory limit.
+                if "remark" in data:
+                    print(f"Error fetching data: {data['remark']}")
+                    sys.exit(1)
+                return data
+            case 429 | 503 | 504:
+                delay = int(r.headers.get("Retry-After", RETRY_DELAY_SECONDS * attempt))
                 print(
-                    f"Error fetching data: {r.status_code} - {r.reason} (attempt {attempt} of {MAX_OVERPASS_RETRIES})"
+                    f"Error fetching data: {r.status_code} - {r.reason} (attempt {attempt} of {MAX_OVERPASS_RETRIES}, retrying in {delay}s)"
                 )
-                time.sleep(RETRY_DELAY_SECONDS * attempt)
+                time.sleep(delay)
                 continue
             case _:
                 print(f"Error fetching data: {r.status_code} - {r.reason}")
@@ -81,8 +88,17 @@ def merge_overlapping_polygons(features):
     print("Starting to merge overlapping polygons...")
     polygons = [shape(feature["geometry"]) for feature in features]
 
-    # This list keeps track of whether a polygon should be kept
-    to_keep = [True for _ in polygons]
+    # Index of the polygon that absorbed this one, None while it is alive
+    absorbed_into = [None for _ in polygons]
+
+    def owner(j):
+        while absorbed_into[j] is not None:
+            j = absorbed_into[j]
+        return j
+
+    # The tree holds the original polygons. A merged polygon intersects A
+    # iff one of its originals does, so candidates map to their owner.
+    tree = STRtree(polygons)
 
     total_polygons = len(polygons)
     processed_polygons = 0
@@ -96,18 +112,20 @@ def merge_overlapping_polygons(features):
             eta = elapsed_time * total_polygons / processed_polygons - elapsed_time
             print(f"Progress: {progress:.2f}%, ETA: {eta:.2f} seconds", end="\r")
 
-        if not to_keep[i]:
+        if absorbed_into[i] is not None:
             continue  # Skip polygons that are already merged
 
         overlapping_polygons = [polyA]
-        for j, polyB in enumerate(polygons):
-            if i != j and polyA.intersects(polyB):
-                intersection_area = polyA.intersection(polyB).area
+        candidates = {owner(j) for j in tree.query(polyA, predicate="intersects")}
+        candidates.discard(i)
+        for j in sorted(candidates):
+            polyB = polygons[j]
+            intersection_area = polyA.intersection(polyB).area
 
-                # If the overlap is significant, add B to the list of polygons to be merged
-                if intersection_area > 0.5 * polyA.area:
-                    overlapping_polygons.append(polyB)
-                    to_keep[j] = False
+            # If the overlap is significant, add B to the list of polygons to be merged
+            if intersection_area > 0.5 * polyA.area:
+                overlapping_polygons.append(polyB)
+                absorbed_into[j] = i
 
         # Merge all overlapping polygons using unary_union
         merged_polygon = unary_union(overlapping_polygons)
@@ -117,7 +135,7 @@ def merge_overlapping_polygons(features):
         )  # Update the feature's geometry
 
     print("\nPolygon merging completed!")
-    return [feature for i, feature in enumerate(features) if to_keep[i]]
+    return [feature for i, feature in enumerate(features) if absorbed_into[i] is None]
 
 
 def get_subdivision_boundary(iso_code, iso_spec):
@@ -145,9 +163,10 @@ def clip_to_region(iso_spec, iso_code, processed_path):
     print(f"Saved initial file {iso_code}.geojson")
 
 
-def buffer_linestring(line_coords):
-    line = LineString(line_coords)
-    gdf = gpd.GeoDataFrame({"geometry": [line]}, crs="EPSG:4326")
+def buffer_linestrings(lines_coords):
+    # broken ways with a single node cannot form a line
+    lines = [LineString(coords) for coords in lines_coords if len(coords) >= 2]
+    gdf = gpd.GeoDataFrame({"geometry": lines}, crs="EPSG:4326")
 
     # Buffer the linestring and transform to Web Mercator for accurate distance calculations
     gdf = gdf.to_crs("EPSG:3857")
@@ -156,7 +175,7 @@ def buffer_linestring(line_coords):
     # Transform back to WGS84
     gdf = gdf.to_crs("EPSG:4326")
 
-    return gdf.iloc[0].geometry
+    return gdf.geometry
 
 
 def process_railway_geometry(iso_code, iso_spec):
@@ -181,26 +200,11 @@ def process_railway_geometry(iso_code, iso_spec):
         for node in data["elements"]
         if node["type"] == "node"
     }
-    stripped_data = {"type": "FeatureCollection", "features": []}
 
-    print("Buffering linestrings and creating polygons...")
-
-    ways = [element for element in data["elements"] if element["type"] == "way"]
-    total_ways = len(ways)
-    processed_ways = 0
-    start_time = time.time()
-
-    for way in ways:
-        processed_ways += 1
-        if processed_ways % 20 == 0 or processed_ways == total_ways:
-            progress = 100 * processed_ways / total_ways
-            elapsed_time = time.time() - start_time
-            eta = elapsed_time * total_ways / processed_ways - elapsed_time
-            print(
-                f"ID: {processed_ways}, Progress: {progress:.2f}%, ETA: {eta:.2f} seconds",
-                end="\r",
-            )
-
+    lines_coords = []
+    for way in data["elements"]:
+        if way["type"] != "way":
+            continue
         tags = way["tags"]
         if tags["railway"] in ["construction", "disused", "abandoned", "proposed"]:
             continue
@@ -208,16 +212,17 @@ def process_railway_geometry(iso_code, iso_spec):
             continue
         if tags.get("usage") in ["industrial"]:
             continue
+        lines_coords.append([nodes_dict[node_id] for node_id in way["nodes"]])
 
-        buffered_geometry = buffer_linestring(
-            [(nodes_dict[node_id]) for node_id in way["nodes"]]
-        )
+    stripped_data = {"type": "FeatureCollection", "features": []}
+
+    print("Buffering linestrings and creating polygons...")
+    for buffered_geometry in buffer_linestrings(lines_coords):
         feature = {
             "type": "Feature",
             "geometry": shape(buffered_geometry).__geo_interface__,
         }
         stripped_data["features"].append(feature)
-    print("\nBuffering completed!")
 
     stripped_data["features"] = merge_overlapping_polygons(stripped_data["features"])
 
@@ -240,14 +245,10 @@ if __name__ == "__main__":
         iso_code = sys.argv[1].upper()
     except IndexError:
         raise ValueError("Invalid ISO3166 code: No code provided")
-    r = requests.get(ISO3166_URL)
-    for country, regions in r.json().items():
-        if iso_code == country:
-            iso_spec = 1
-            break
-        if iso_code in regions:
-            iso_spec = 2
-            break
+    if pycountry.countries.get(alpha_2=iso_code):
+        iso_spec = 1
+    elif pycountry.subdivisions.get(code=iso_code):
+        iso_spec = 2
     else:
         raise ValueError(
             "Invalid ISO3166 code: Please provide a ISO3166-1 or ISO3166-2 code"
