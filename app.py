@@ -4795,6 +4795,7 @@ def render_public_trip_page(
     template="public/public_trip.html",
     owner_only=False,
     period=None,
+    current_page=False,
 ):
     
     user_obj = None
@@ -5050,6 +5051,9 @@ def render_public_trip_page(
 
     return render_template(
         template,
+        # The owner's own /current page, not a shared link: only there may the page use the
+        # viewer's location (the pin marks the viewer, who is on the trip).
+        current_page=current_page,
         own_trips=own_trips,
         logosList=listOperatorsLogos(),
         tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
@@ -5533,17 +5537,14 @@ def download_path(trip_ids):
 @login_required
 def current(username):
     """
-    Current trip
+    Current trip: the regular trip page (itinerary + MapLibre map), whose in-progress
+    position moves with the clock. Back to the user's home when nothing is in progress.
     """
-    user_obj = User.query.filter_by(username=username).first()
-    colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
-    return render_template(
-        "current.html",
-        title=lang[session["userinfo"]["lang"]]["current"],
-        username=username,
-        colorblind=colorblind,
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
+    trip_id = get_current_trip_id()
+    if trip_id is None:
+        return redirect(url_for("user_home", username=username))
+    return render_public_trip_page(
+        str(trip_id), template="public/new_trip.html", current_page=True
     )
 
 @app.route("/u/<username>/getStats/<tripType>", methods=["GET"])
@@ -8663,45 +8664,6 @@ def fetchUpdatedTrips(username, lastLocal, public):
 def get_updated_trips(username, lastLocal):
     result = fetchUpdatedTrips(username, lastLocal, public=0)
     return jsonify(result)
-
-
-@app.route("/u/<username>/getCurrentTrip", methods=["GET", "POST"])
-@login_required
-def get_current_trip_path(username):
-    trip_id = get_current_trip_id()
-    if trip_id is None:
-        return jsonify([])
-
-    trip_ids = [trip_id]
-
-    trip_list = []
-
-    with pg_session() as pg:
-        pathResult = pg.execute(
-            get_user_lines_query(), {"ids": [int(i) for i in trip_ids]}
-        ).fetchall()
-    paths = {}
-    for path in pathResult:
-        paths[path["trip_id"]] = path["path"]
-
-    for tripId in trip_ids:
-        trip = formatTrip(get_trip_pg(tripId))
-        user = User.query.filter_by(username=trip["username"]).first()
-        if not session.get(user.username) and not user.is_public():
-            abort(401)
-        trip_list.append(
-            {
-                "time": trip["time"],
-                "trip": dict(trip),
-                "path": json.loads(paths[trip["uid"]]),
-                "distances": getDistanceFromPath(json.loads(paths[trip["uid"]])),
-            }
-        )
-    sorted_trip_list = sorted(trip_list, key=lambda d: d["trip"]["uid"], reverse=True)
-    sorted_trip_list = sorted(
-        sorted_trip_list, key=lambda d: d["trip"]["start_datetime"], reverse=True
-    )
-    return jsonify(sorted_trip_list)
 
 
 def processPublicTrips(tripIds):
