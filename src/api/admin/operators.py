@@ -47,10 +47,6 @@ def add_operator():
     def bad_request(message):
         return jsonify({"status": "error", "message": message}), 400
 
-    # An empty file field arrives as a FileStorage with no filename, which is falsy.
-    if not logo:
-        return bad_request("A logo file is required.")
-
     if operator_type not in OPERATOR_TYPES:
         return bad_request("Invalid operator type.")
 
@@ -60,10 +56,13 @@ def add_operator():
     if not long_name:
         return bad_request("Long name is required.")
 
-    try:
-        validate_png_file(logo)
-    except Exception as e:
-        return bad_request(f"Invalid logo: {e}")
+    # The logo is optional: some operators have none findable online. An empty file
+    # field arrives as a FileStorage with no filename, which is falsy.
+    if logo:
+        try:
+            validate_png_file(logo)
+        except Exception as e:
+            return bad_request(f"Invalid logo: {e}")
 
     # A name identifies one operator per pool. Two real companies sharing a name must
     # be distinguished in the name itself ("Scottish Citylink"), so say so up front
@@ -86,14 +85,15 @@ def add_operator():
         operator = OperatorsRepository.add(short_name, long_name, operator_type)
         operator_id = operator["operator_id"]
 
-        filename = secure_filename(
-            f"{operator_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        )
-        logo.save(os.path.join(LOGO_UPLOAD_FOLDER, filename))
+        if logo:
+            filename = secure_filename(
+                f"{operator_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            )
+            logo.save(os.path.join(LOGO_UPLOAD_FOLDER, filename))
 
-        OperatorsRepository.add_operator_logo(
-            operator_id, f"images/operator_logos/new/{filename}", None
-        )
+            OperatorsRepository.add_operator_logo(
+                operator_id, f"images/operator_logos/new/{filename}", None
+            )
 
         # Log the successful addition to the save log
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
