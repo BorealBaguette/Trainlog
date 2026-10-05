@@ -28,7 +28,10 @@ from shapely.ops import unary_union
 from simplify_geojson import process as simplify_geojson
 
 RAIL_WIDTH_BUFFER_M = 50
-OVERPASS_URL = "https://overpass.private.coffee/api/interpreter"
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+OVERPASS_HEADERS = {
+    "User-Agent": "trainlog.me coverage generation",
+}
 ISO3166_URL = "https://iso3166-2-api.vercel.app/api/all"
 SUBDIVISION_QUERY = """
 [out:json];
@@ -57,13 +60,13 @@ def get_overpass_data(iso_spec, iso_code, query_template):
 
     attempt = 0
     for attempt in range(MAX_OVERPASS_RETRIES):
-        r = requests.get(OVERPASS_URL, params={"data": query})
+        r = requests.get(OVERPASS_URL, params={"data": query}, headers=OVERPASS_HEADERS)
         match r.status_code:
             case 200:
                 return r.json()
             case 504:
                 print(
-                    f"Error fetching data: {r.status_code} - {r.reason} (attempt ${attempt} of ${MAX_OVERPASS_RETRIES})"
+                    f"Error fetching data: {r.status_code} - {r.reason} (attempt {attempt} of {MAX_OVERPASS_RETRIES})"
                 )
                 time.sleep(RETRY_DELAY_SECONDS * attempt)
                 continue
@@ -86,6 +89,13 @@ def merge_overlapping_polygons(features):
     start_time = time.time()
 
     for i, polyA in enumerate(polygons):
+        processed_polygons += 1
+        if processed_polygons % 20 == 0 or processed_polygons == total_polygons:
+            progress = 100 * processed_polygons / total_polygons
+            elapsed_time = time.time() - start_time
+            eta = elapsed_time * total_polygons / processed_polygons - elapsed_time
+            print(f"Progress: {progress:.2f}%, ETA: {eta:.2f} seconds", end="\r")
+
         if not to_keep[i]:
             continue  # Skip polygons that are already merged
 
@@ -105,13 +115,6 @@ def merge_overlapping_polygons(features):
         features[i]["geometry"] = mapping(
             merged_polygon
         )  # Update the feature's geometry
-
-        processed_polygons += 1
-        if (processed_polygons) % 20 == 0:
-            progress = 100 * processed_polygons / total_polygons
-            elapsed_time = time.time() - start_time
-            eta = elapsed_time * total_polygons / processed_polygons - elapsed_time
-            print(f"Progress: {progress:.2f}%, ETA: {eta:.2f} seconds", end="\r")
 
     print("\nPolygon merging completed!")
     return [feature for i, feature in enumerate(features) if to_keep[i]]
@@ -154,7 +157,8 @@ def buffer_linestring(line_coords):
     gdf = gdf.to_crs("EPSG:4326")
 
     return gdf.iloc[0].geometry
-    
+
+
 def process_railway_geometry(iso_code, iso_spec):
     print(f"Fetching railway geometry for {iso_code} using ISO 3166-{iso_spec}")
 
@@ -181,39 +185,39 @@ def process_railway_geometry(iso_code, iso_spec):
 
     print("Buffering linestrings and creating polygons...")
 
-    total_elements = len(data["elements"])
-    processed_elements = 0
+    ways = [element for element in data["elements"] if element["type"] == "way"]
+    total_ways = len(ways)
+    processed_ways = 0
     start_time = time.time()
 
-    for element in data["elements"]:
-        if processed_elements not in []:  # [9013, 9410, 9411]:
-            if (
-                element["type"] == "way"
-                and element["tags"]["railway"]
-                not in ["construction", "disused", "abandoned", "proposed"]
-                and element["tags"].get("service") not in ["yard", "spur", "siding"]
-                and element["tags"].get("usage") not in ["industrial"]
-            ):
-                buffered_geometry = buffer_linestring(
-                    [(nodes_dict[node_id]) for node_id in element["nodes"]]
-                )
-                feature = {
-                    "type": "Feature",
-                    "geometry": shape(buffered_geometry).__geo_interface__,
-                }
-                stripped_data["features"].append(feature)
-        else:
-            print(element)
-
-        processed_elements += 1
-        if (processed_elements) % 20 == 0 or processed_elements == total_elements:
-            progress = 100 * processed_elements / total_elements
+    for way in ways:
+        processed_ways += 1
+        if processed_ways % 20 == 0 or processed_ways == total_ways:
+            progress = 100 * processed_ways / total_ways
             elapsed_time = time.time() - start_time
-            eta = elapsed_time * total_elements / processed_elements - elapsed_time
+            eta = elapsed_time * total_ways / processed_ways - elapsed_time
             print(
-                f"ID: {processed_elements}, Progress: {progress:.2f}%, ETA: {eta:.2f} seconds",
+                f"ID: {processed_ways}, Progress: {progress:.2f}%, ETA: {eta:.2f} seconds",
                 end="\r",
             )
+
+        tags = way["tags"]
+        if tags["railway"] in ["construction", "disused", "abandoned", "proposed"]:
+            continue
+        if tags.get("service") in ["yard", "spur", "siding"]:
+            continue
+        if tags.get("usage") in ["industrial"]:
+            continue
+
+        buffered_geometry = buffer_linestring(
+            [(nodes_dict[node_id]) for node_id in way["nodes"]]
+        )
+        feature = {
+            "type": "Feature",
+            "geometry": shape(buffered_geometry).__geo_interface__,
+        }
+        stripped_data["features"].append(feature)
+    print("\nBuffering completed!")
 
     stripped_data["features"] = merge_overlapping_polygons(stripped_data["features"])
 
