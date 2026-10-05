@@ -570,7 +570,8 @@
     $.fn.dataTable.ext.type.search.string = function (data) {
         return typeof data === 'string' ? normalizeForSearch(data) : data;
     };
-    $('#operatorTable_filter input').off().on('input', function () {
+    const searchBox = $(table.table().container()).find('div.dt-search');
+    searchBox.find('input').off().on('input', function () {
         table.search(normalizeForSearch(this.value)).draw();
     });
 
