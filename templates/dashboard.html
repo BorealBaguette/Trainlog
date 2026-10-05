@@ -507,7 +507,7 @@
   }
   .completion-table tbody tr { border: none; transition: all 0.15s ease; }
   .completion-table tbody tr:not(:last-child) { border-bottom: 1px solid #f1f5f9; }
-  .completion-table tbody tr:hover { background-color: #f8fafc; }
+  .completion-table tbody tr:hover > * { --bs-table-bg-state: #f8fafc; }
   .completion-table td { padding: 1rem 1.25rem; border: none; vertical-align: middle; }
   .country-flag-name { font-weight: 500; color: #1f2937; font-size: 0.95rem; }
   .progress-container { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
@@ -516,7 +516,7 @@
   .progress-bar-country { background: linear-gradient(90deg, var(--success-color) 0%, #10b981 100%); }
   .progress-bar-region  { background: linear-gradient(90deg, var(--info-color) 0%, #06b6d4 100%); height: 14px; }
   .progress-text { font-weight: 600; color: #374151; font-size: 0.85rem; min-width: 40px; text-align: right; }
-  .region-row { background-color: #fafbfc !important; }
+  .region-row > * { --bs-table-bg: #fafbfc; }
   .region-row td { padding: 0.75rem 1.25rem 0.75rem 3rem; }
   .region-flag-name { color: var(--text-muted); font-size: 0.85rem; }
   .region-progress-container { background-color: #e5e7eb; height: 14px; }
