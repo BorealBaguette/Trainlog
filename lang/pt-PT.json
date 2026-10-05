@@ -1386,5 +1386,14 @@
     "motisTrack": "Linha {track}",
     "motisEarlier": "Partidas anteriores",
     "motisLater": "Partidas posteriores",
+    "tripStops": "Paragens",
+    "stopArrival": "Chegada",
+    "stopDeparture": "Partida",
+    "stopPlatform": "Linha",
+    "editStops": "Editar paragens",
+    "addStop": "Adicionar paragem",
+    "stopsRouteNote": "O percurso será recalculado passando por estes pontos: verifique-o no mapa e depois confirme.",
+    "stopsRefresh": "Atualizar horários",
+    "stopsRefreshNone": "O Transitous já não tem os horários desta viagem.",
     "motisStops": {"one": "{n} paragem", "many": "{n} paragens", "other": "{n} paragens"}
 }

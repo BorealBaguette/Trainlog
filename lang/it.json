@@ -1386,5 +1386,14 @@
     "motisTrack": "Bin. {track}",
     "motisEarlier": "Partenze precedenti",
     "motisLater": "Partenze successive",
+    "tripStops": "Fermate",
+    "stopArrival": "Arrivo",
+    "stopDeparture": "Partenza",
+    "stopPlatform": "Binario",
+    "editStops": "Modifica fermate",
+    "addStop": "Aggiungi una fermata",
+    "stopsRouteNote": "Il percorso verrà ricalcolato passando per questi punti: controllalo sulla mappa, poi conferma.",
+    "stopsRefresh": "Aggiorna orari",
+    "stopsRefreshNone": "Transitous non ha più gli orari di questa corsa.",
     "motisStops": {"one": "{n} fermata", "many": "{n} fermate", "other": "{n} fermate"}
 }

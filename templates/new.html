@@ -358,6 +358,10 @@
 
       <label for="lineName" class="sr-only">{{lineName}}</label>
       <input type="text" name="lineName" id="lineName" class="non_poi" placeholder="{{lineName}}"/>
+      {# The platforms of a timetable run picked above (initMotisDepartures), saved as the trip's
+         departure_platform / arrival_platform; edited in the edit page's stops dialog. #}
+      <input type="hidden" name="departurePlatform" id="departurePlatform"/>
+      <input type="hidden" name="arrivalPlatform" id="arrivalPlatform"/>
       <br class="non_poi">
 
       <label for="detailsToggle" class="checkboxLabel">{{details}}</label>
@@ -1067,6 +1071,7 @@
       updateViaSummary();
       if (run.line && $('#lineName').val() === run.line) $('#lineName').val('');
       if (run.operator && $('#operator').val() === run.operator) setOperatorValue('');
+      $('#departurePlatform, #arrivalPlatform').val('');
       if (run.delays) {
         setDelay('departureDelayMinutes', 0);
         setDelay('arrivalDelayMinutes', 0);
@@ -1224,6 +1229,21 @@
       setToggle(applied && applied.label || texts.title, departures.length, true);
     }
 
+    // What the trip keeps of a stop of the picked run: the via entry's third item, carried
+    // to the routing page as its waypoint's `stop` and saved with it (routing.js). Times are
+    // UTC (scheduled), tz shows them locally again, lat/lng is the stop itself (the entry's
+    // own coordinates may have been moved onto the run's path); id and trip are Transitous's
+    // stop and run ids, to fetch the actual times once the run is over.
+    function stopRecord(stop, run) {
+      // Scheduled arr/dep/platform, and the live ones (*_rt) only where they differ.
+      var platform = stop[15] || stop[6];
+      var record = { name: stop[2], cc: stop[3], platform: platform, arr: stop[7], dep: stop[8],
+                    arr_rt: stop[13], dep_rt: stop[14], platform_rt: stop[6] !== platform ? stop[6] : null,
+                    tz: stop[9], lat: stop[10], lng: stop[11], id: stop[12], trip: run.trip_id };
+      Object.keys(record).forEach(function (k) { if (record[k] == null || record[k] === '') delete record[k]; });
+      return record;
+    }
+
     function setDelay(minutesId, minutes) {
       $('#' + minutesId).val(minutes || '').trigger('input');
     }
@@ -1239,6 +1259,8 @@
       $('#newTripStartDate, #newTripStartTime').trigger('focusout');
       if (d.operator) setOperatorValue(d.operator);
       if (d.line) $('#lineName').val(d.line);
+      $('#departurePlatform').val(d.from_platform || '');
+      $('#arrivalPlatform').val(d.to_platform || '');
 
       // The service's stops become the via waypoints the route is drawn through.
       $('#viaContainer').empty();
@@ -1246,7 +1268,7 @@
         var name = stop[2] || (stop[0] + ', ' + stop[1]);
         // Same "🇨🇭 Name" shape as a station picked from the autocomplete.
         var label = stop[3] && stop[3] !== 'UN' ? getFlagEmoji(stop[3]) + ' ' + name : name;
-        globalStationDict[label] = [[stop[0], stop[1]], label];
+        globalStationDict[label] = [[stop[0], stop[1]], label, stopRecord(stop, d)];
         var arr = stop[4], dep = stop[5];
         var times = arr && dep && arr !== dep ? arr + ' \u2013 ' + dep : (arr || dep);
         addViaRow(label, [times, trackLabel(stop[6])].filter(Boolean).join(' \u00b7 '));

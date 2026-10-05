@@ -1386,5 +1386,14 @@
     "motisTrack": "Spår {track}",
     "motisEarlier": "Tidigare avgångar",
     "motisLater": "Senare avgångar",
+    "tripStops": "Hållplatser",
+    "stopArrival": "Ankomst",
+    "stopDeparture": "Avgång",
+    "stopPlatform": "Spår",
+    "editStops": "Redigera hållplatser",
+    "addStop": "Lägg till hållplats",
+    "stopsRouteNote": "Rutten beräknas om genom de här punkterna: kontrollera den på kartan och bekräfta.",
+    "stopsRefresh": "Uppdatera tider",
+    "stopsRefreshNone": "Transitous har inte längre tiderna för den här turen.",
     "motisStops": {"one": "{n} hållplats", "other": "{n} hållplatser"}
 }

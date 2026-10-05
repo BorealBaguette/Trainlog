@@ -1382,5 +1382,14 @@
     "motisTrack": "{track}. vágány",
     "motisEarlier": "Korábbi indulások",
     "motisLater": "Későbbi indulások",
+    "tripStops": "Megállók",
+    "stopArrival": "Érkezés",
+    "stopDeparture": "Indulás",
+    "stopPlatform": "Vágány",
+    "editStops": "Megállók szerkesztése",
+    "addStop": "Megálló hozzáadása",
+    "stopsRouteNote": "Az útvonal ezeken a pontokon át újraszámolódik: ellenőrizze a térképen, majd erősítse meg.",
+    "stopsRefresh": "Időpontok frissítése",
+    "stopsRefreshNone": "A Transitous már nem tárolja ennek a járatnak az időpontjait.",
     "motisStops": {"one": "{n} megálló", "other": "{n} megálló"}
 }

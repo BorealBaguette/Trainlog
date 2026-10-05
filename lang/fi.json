@@ -1384,5 +1384,14 @@
     "motisTrack": "Raide {track}",
     "motisEarlier": "Aiemmat lähdöt",
     "motisLater": "Myöhemmät lähdöt",
+    "tripStops": "Pysähdykset",
+    "stopArrival": "Saapuminen",
+    "stopDeparture": "Lähtö",
+    "stopPlatform": "Raide",
+    "editStops": "Muokkaa pysähdyksiä",
+    "addStop": "Lisää pysähdys",
+    "stopsRouteNote": "Reitti lasketaan uudelleen näiden pisteiden kautta: tarkista se kartalta ja vahvista.",
+    "stopsRefresh": "Päivitä ajat",
+    "stopsRefreshNone": "Transitousilla ei enää ole tämän vuoron aikoja.",
     "motisStops": {"one": "{n} pysähdys", "other": "{n} pysähdystä"}
 }

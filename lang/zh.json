@@ -1382,5 +1382,14 @@
     "motisTrack": "{track}站台",
     "motisEarlier": "更早的班次",
     "motisLater": "更晚的班次",
+    "tripStops": "停靠站",
+    "stopArrival": "到达",
+    "stopDeparture": "出发",
+    "stopPlatform": "站台",
+    "editStops": "编辑停靠站",
+    "addStop": "添加停靠站",
+    "stopsRouteNote": "路线将经过这些点重新计算：请在地图上检查后确认。",
+    "stopsRefresh": "刷新时间",
+    "stopsRefreshNone": "Transitous 已不再保存此班次的时间。",
     "motisStops": {"other": "{n}站"}
 }

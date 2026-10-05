@@ -1390,5 +1390,14 @@
     "motisTrack": "Колія {track}",
     "motisEarlier": "Раніші відправлення",
     "motisLater": "Пізніші відправлення",
+    "tripStops": "Зупинки",
+    "stopArrival": "Прибуття",
+    "stopDeparture": "Відправлення",
+    "stopPlatform": "Колія",
+    "editStops": "Змінити зупинки",
+    "addStop": "Додати зупинку",
+    "stopsRouteNote": "Маршрут буде перераховано через ці точки: перевірте його на карті й підтвердьте.",
+    "stopsRefresh": "Оновити час",
+    "stopsRefreshNone": "У Transitous більше немає часу цього рейсу.",
     "motisStops": {"one": "{n} зупинка", "few": "{n} зупинки", "many": "{n} зупинок", "other": "{n} зупинки"}
 }

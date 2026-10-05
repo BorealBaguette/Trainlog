@@ -1386,5 +1386,14 @@
     "motisTrack": "Gl. {track}",
     "motisEarlier": "Frühere Abfahrten",
     "motisLater": "Spätere Abfahrten",
+    "tripStops": "Halte",
+    "stopArrival": "Ankunft",
+    "stopDeparture": "Abfahrt",
+    "stopPlatform": "Gleis",
+    "editStops": "Halte bearbeiten",
+    "addStop": "Halt hinzufügen",
+    "stopsRouteNote": "Die Route wird über diese Punkte neu berechnet: prüfe sie auf der Karte und bestätige sie dann.",
+    "stopsRefresh": "Zeiten aktualisieren",
+    "stopsRefreshNone": "Transitous hat die Zeiten dieser Fahrt nicht mehr.",
     "motisStops": {"one": "{n} Halt", "other": "{n} Halte"}
 }

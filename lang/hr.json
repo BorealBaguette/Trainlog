@@ -1390,5 +1390,14 @@
     "motisTrack": "Kol. {track}",
     "motisEarlier": "Raniji polasci",
     "motisLater": "Kasniji polasci",
+    "tripStops": "Stajališta",
+    "stopArrival": "Dolazak",
+    "stopDeparture": "Polazak",
+    "stopPlatform": "Kolosijek",
+    "editStops": "Uredi stajališta",
+    "addStop": "Dodaj stajalište",
+    "stopsRouteNote": "Ruta će se ponovno izračunati kroz ove točke: provjerite je na karti, a zatim potvrdite.",
+    "stopsRefresh": "Osvježi vremena",
+    "stopsRefreshNone": "Transitous više nema vremena ove vožnje.",
     "motisStops": {"one": "{n} stanica", "few": "{n} stanice", "other": "{n} stanica"}
 }

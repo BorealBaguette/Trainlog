@@ -32,5 +32,7 @@ UPDATE trips SET
     arrival_delay = :arrival_delay,
     power_type = :power_type,
     co2_override = :co2_override,
+    departure_platform = :departure_platform,
+    arrival_platform = :arrival_platform,
     route_source = :route_source
 WHERE trip_id = :trip_id

@@ -1386,5 +1386,14 @@
     "motisTrack": "Spor {track}",
     "motisEarlier": "Tidligere avganger",
     "motisLater": "Senere avganger",
+    "tripStops": "Stopp",
+    "stopArrival": "Ankomst",
+    "stopDeparture": "Avgang",
+    "stopPlatform": "Spor",
+    "editStops": "Rediger stopp",
+    "addStop": "Legg til stopp",
+    "stopsRouteNote": "Ruten beregnes på nytt gjennom disse punktene: sjekk den på kartet, og bekreft.",
+    "stopsRefresh": "Oppdater tider",
+    "stopsRefreshNone": "Transitous har ikke lenger tidene for denne avgangen.",
     "motisStops": {"one": "{n} stopp", "other": "{n} stopp"}
 }

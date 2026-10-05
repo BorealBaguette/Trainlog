@@ -1390,5 +1390,14 @@
     "motisTrack": "Путь {track}",
     "motisEarlier": "Более ранние отправления",
     "motisLater": "Более поздние отправления",
+    "tripStops": "Остановки",
+    "stopArrival": "Прибытие",
+    "stopDeparture": "Отправление",
+    "stopPlatform": "Путь",
+    "editStops": "Изменить остановки",
+    "addStop": "Добавить остановку",
+    "stopsRouteNote": "Маршрут будет пересчитан через эти точки: проверьте его на карте и подтвердите.",
+    "stopsRefresh": "Обновить время",
+    "stopsRefreshNone": "В Transitous больше нет времени этого рейса.",
     "motisStops": {"one": "{n} остановка", "few": "{n} остановки", "many": "{n} остановок", "other": "{n} остановки"}
 }

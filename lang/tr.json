@@ -1382,5 +1382,14 @@
     "motisTrack": "Peron {track}",
     "motisEarlier": "Daha erken kalkışlar",
     "motisLater": "Daha geç kalkışlar",
+    "tripStops": "Duraklar",
+    "stopArrival": "Varış",
+    "stopDeparture": "Kalkış",
+    "stopPlatform": "Peron",
+    "editStops": "Durakları düzenle",
+    "addStop": "Durak ekle",
+    "stopsRouteNote": "Rota bu noktalardan geçecek şekilde yeniden hesaplanacak: haritada kontrol edip onaylayın.",
+    "stopsRefresh": "Saatleri yenile",
+    "stopsRefreshNone": "Transitous'ta artık bu seferin saatleri yok.",
     "motisStops": {"one": "{n} durak", "other": "{n} durak"}
 }

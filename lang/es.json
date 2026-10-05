@@ -1386,5 +1386,14 @@
     "motisTrack": "Vía {track}",
     "motisEarlier": "Salidas anteriores",
     "motisLater": "Salidas posteriores",
+    "tripStops": "Paradas",
+    "stopArrival": "Llegada",
+    "stopDeparture": "Salida",
+    "stopPlatform": "Vía",
+    "editStops": "Editar paradas",
+    "addStop": "Añadir una parada",
+    "stopsRouteNote": "La ruta se recalculará pasando por estos puntos: compruébala en el mapa y luego confirma.",
+    "stopsRefresh": "Actualizar horarios",
+    "stopsRefreshNone": "Transitous ya no tiene los horarios de este trayecto.",
     "motisStops": {"one": "{n} parada", "many": "{n} paradas", "other": "{n} paradas"}
 }

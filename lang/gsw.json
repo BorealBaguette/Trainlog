@@ -1384,5 +1384,14 @@
     "motisTrack": "Gl. {track}",
     "motisEarlier": "Früecheri Abfahrte",
     "motisLater": "Spöteri Abfahrte",
+    "tripStops": "Halt",
+    "stopArrival": "Aakunft",
+    "stopDeparture": "Abfahrt",
+    "stopPlatform": "Gleis",
+    "editStops": "Halt bearbeite",
+    "addStop": "Halt hinzuefüege",
+    "stopsRouteNote": "D Route wird über die Pünkt neu berächnet: prüef si uf de Charte und bestätig si dänn.",
+    "stopsRefresh": "Ziite aktualisiere",
+    "stopsRefreshNone": "Transitous het d Ziite vo dere Fahrt nüme.",
     "motisStops": {"one": "{n} Halt", "other": "{n} Hält"}
 }

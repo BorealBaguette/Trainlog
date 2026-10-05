@@ -34,6 +34,7 @@ motis_blueprint = Blueprint("motis", __name__)
 MOTIS_PLAN_URL = "https://api.transitous.org/api/v5/plan"
 MOTIS_STOPS_URL = "https://api.transitous.org/api/v1/reverse-geocode"
 MOTIS_BOARD_URL = "https://api.transitous.org/api/v5/stoptimes"
+MOTIS_TRIP_URL = "https://api.transitous.org/api/v5/trip"
 USER_AGENT = "Trainlog/1.0 (https://trainlog.me; admin@trainlog.me; trip form timetable suggestions)"
 
 # Search from a little before the time on the form to a few days after it: the form
@@ -286,10 +287,25 @@ def _line_name(leg):
 COORD_DIGITS = 6
 
 
+def _utc(value):
+    """MOTIS's ISO time as 'YYYY-MM-DDTHH:MM:SSZ', or None."""
+    dt = _parse_utc(value)
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ") if dt else None
+
+
 def _stop(stop):
-    """[lat, lng, name, country code, arrival 'HH:MM', departure 'HH:MM', platform] — the
-    country so the form can flag it like a picked station, the times as shown there, the
-    platform (track) when the feed has it: the real-time one if it changed."""
+    """[lat, lng, name, country code, arrival 'HH:MM', departure 'HH:MM', platform,
+    scheduled arrival UTC, scheduled departure UTC, time zone, stop lat, stop lng,
+    Transitous stop id, live arrival UTC, live departure UTC, scheduled platform].
+
+    The country so the form can flag it like a picked station; the local times as shown
+    there; the platform (track) when the feed has it, the real-time one if it changed.
+    The rest is what the trip keeps of the stop (the waypoint's `stop`, see routing.js):
+    UTC times, for the live map and current trip, the zone to show them in local time
+    again, and the stop's own position, which [0]/[1] leave once moved onto the run's
+    path (_snap_stops), and its id, to match it against Transitous later. The live times
+    only when the feed has them and they differ from the schedule; the scheduled platform
+    beside the live one shown in [6]."""
     tz = ZoneInfo(stop["tz"]) if stop.get("tz") else _tz(stop["lat"], stop["lon"])
 
     def clock(field):
@@ -304,7 +320,22 @@ def _stop(stop):
         clock("Arrival"),
         clock("Departure"),
         (stop.get("track") or stop.get("scheduledTrack") or "").strip() or None,
+        _utc(stop.get("scheduledArrival") or stop.get("arrival")),
+        _utc(stop.get("scheduledDeparture") or stop.get("departure")),
+        getattr(tz, "key", None),
+        round(stop["lat"], COORD_DIGITS),
+        round(stop["lon"], COORD_DIGITS),
+        stop.get("stopId"),
+        _live(stop, "Arrival"),
+        _live(stop, "Departure"),
+        (stop.get("scheduledTrack") or "").strip() or None,
     ]
+
+
+def _live(stop, field):
+    """The stop's live arrival/departure (UTC), when it differs from the scheduled one."""
+    live, scheduled = _utc(stop.get(field.lower())), _utc(stop.get("scheduled" + field))
+    return live if live and scheduled and live != scheduled else None
 
 
 def _distance_m(lat1, lng1, lat2, lng2):
@@ -750,9 +781,16 @@ def _departures(searches, start, window, destination):
             "headsign": _headsign(leg),
             "agency": (leg.get("agencyName") or "").strip(),
             "mode": leg.get("mode"),
+            # Transitous's id of the run, to fetch its actual times once it has run
+            # (while the feed still has them): kept with each saved stop (stopRecord).
+            "trip_id": leg.get("tripId"),
             "color": _hex_colour(leg.get("routeColor")),
             "from_name": frm.get("name"),
             "to_name": to.get("name"),
+            # Where it leaves from and arrives (the live platform if it was changed): the
+            # trip's departure_platform / arrival_platform when picked.
+            "from_platform": (frm.get("track") or frm.get("scheduledTrack") or "").strip() or None,
+            "to_platform": (to.get("track") or to.get("scheduledTrack") or "").strip() or None,
             "stops": [_stop(s) for s in stops],
             "_sort": dep_utc,
             "_path": _leg_path(leg),
@@ -762,7 +800,7 @@ def _departures(searches, start, window, destination):
         if kept:
             # Keep the arrival at the stop nearest the destination...
             if entry["_dest_m"] < kept["_dest_m"] - 50:
-                for field in ("arrival", "arrival_delay", "duration", "to_name", "stops", "_dest_m"):
+                for field in ("arrival", "arrival_delay", "duration", "to_name", "to_platform", "stops", "_dest_m"):
                     kept[field] = entry[field]
             # ...and, for the rest, whatever each copy has that the other lacks (one
             # feed the train number, the other the headsign).
@@ -807,3 +845,56 @@ def _departures(searches, start, window, destination):
             d["logo_url"] = info.get("logo_url")
 
     return departures
+
+
+# Live times are what this is for, so not the plan's few minutes of cache.
+_TRIP_CACHE_TTL = 30
+
+
+@motis_blueprint.route("/u/<username>/motis/trip")
+@login_required
+def motis_trip(username):
+    """A run's stops with their current times, by the Transitous id saved with a trip's
+    stops (stopRecord in new.html): what the stops dialog of the edit page refreshes the
+    live times and platforms from, while Transitous still has the run (usually not long
+    after it ends). Every stop of the run, first to last, scheduled and live."""
+    trip_id = (request.args.get("id") or "").strip()
+    if not trip_id or len(trip_id) > 300:
+        abort(400)
+    try:
+        trip = _fetch(MOTIS_TRIP_URL, {"tripId": trip_id}, ttl=_TRIP_CACHE_TTL)
+    except RateLimited:
+        return jsonify({"error": "rate_limited", "stops": []}), 503
+    except OutsideTimetable:
+        return jsonify({"stops": []})
+    except requests.HTTPError as e:
+        # Unknown id: the run has left the feed (or never was in this one).
+        if e.response is not None and e.response.status_code in (400, 404, 422):
+            return jsonify({"stops": []})
+        logger.warning("MOTIS trip request failed: %s", e)
+        return jsonify({"error": "unavailable", "stops": []}), 502
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("MOTIS trip request failed: %s", e)
+        return jsonify({"error": "unavailable", "stops": []}), 502
+
+    legs = [leg for leg in trip.get("legs") or [] if leg.get("mode") != "WALK"]
+    if not legs:
+        return jsonify({"stops": []})
+    leg = legs[0]
+    stops = []
+    for place in [leg.get("from") or {}, *(leg.get("intermediateStops") or []), leg.get("to") or {}]:
+        if place.get("lat") is None:
+            continue
+        stops.append({
+            "id": place.get("stopId"),
+            "name": place.get("name"),
+            "lat": round(place["lat"], COORD_DIGITS),
+            "lng": round(place["lon"], COORD_DIGITS),
+            "arr": _utc(place.get("scheduledArrival")),
+            "dep": _utc(place.get("scheduledDeparture")),
+            "arr_rt": _live(place, "Arrival"),
+            "dep_rt": _live(place, "Departure"),
+            "platform": (place.get("scheduledTrack") or place.get("track") or "").strip() or None,
+            "platform_rt": (place.get("track") or "").strip() or None,
+        })
+    return jsonify({"stops": stops, "realtime": bool(leg.get("realTime"))})

@@ -1382,5 +1382,14 @@
     "motisTrack": "{track}番線",
     "motisEarlier": "これより前の出発",
     "motisLater": "これより後の出発",
+    "tripStops": "停車駅",
+    "stopArrival": "到着",
+    "stopDeparture": "出発",
+    "stopPlatform": "番線",
+    "editStops": "停車駅を編集",
+    "addStop": "停車駅を追加",
+    "stopsRouteNote": "ルートはこれらの地点を通るよう再計算されます。地図で確認してから確定してください。",
+    "stopsRefresh": "時刻を更新",
+    "stopsRefreshNone": "Transitousにはこの便の時刻がもうありません。",
     "motisStops": {"other": "{n}駅"}
 }

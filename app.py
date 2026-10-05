@@ -926,6 +926,8 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         arrival_delay=sanitize_param(newTrip.get("arrival_delay")),
         power_type=newTrip.get("powerType"),
         co2_override=float(newTrip["co2Override"]) if newTrip.get("co2Override") else None,
+        departure_platform=newTrip.get("departurePlatform"),
+        arrival_platform=newTrip.get("arrivalPlatform"),
         altitude=altitude,
         timestamps=timestamps,
         route_source=newTrip.get("route_source") or "router",
@@ -6554,6 +6556,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
     # vertex — mirrors the normal trip editor (see the edit route's wplist logic).
     wplist = [coords[0], coords[-1]] if coords else [[0, 0], [0, 0]]
     waypoint_meta = []
+    stored = []
     if pt["waypoints"]:
         stored = json.loads(pt["waypoints"])
         wp = [[p["lat"], p["lng"]] for p in stored]
@@ -6638,6 +6641,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         tripTicketId="",
         wplist=wplist,
         waypoint_meta=waypoint_meta,
+        stored_waypoints=stored,
         raw_path=[],
         tripNotes=pt["notes"] or "",
         colorblind=colorblind,
@@ -7350,9 +7354,15 @@ def _waypoint_meta(stored_waypoints):
     """Name and hard/soft mode of each stored intermediate waypoint, for the routing
     map (routing.js reads them as window.routingWaypointMeta)."""
     # hard is True, False (made approximate by hand, which a later drag must not
-    # undo) or None (never set: approximate by default).
+    # undo) or None (never set: approximate by default). stop is a timetable stop's
+    # record (name, UTC arr/dep, tz, platform, its own lat/lng); trips saved before
+    # those were kept have just a name.
     return [
-        {"name": p.get("name") or "", "hard": p.get("hard") if isinstance(p.get("hard"), bool) else None}
+        {
+            "name": p.get("name") or "",
+            "hard": p.get("hard") if isinstance(p.get("hard"), bool) else None,
+            "stop": p.get("stop") if isinstance(p.get("stop"), dict) else None,
+        }
         for p in stored_waypoints
     ]
 
@@ -7479,6 +7489,8 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         arrival_delay=sanitize_param(formData.get("arrival_delay")),
         power_type=power_type,
         co2_override=co2_override,
+        departure_platform=formData.get("departurePlatform"),
+        arrival_platform=formData.get("arrivalPlatform"),
         # Re-drawing/importing sends a fresh source; plain metadata edits keep the stored one.
         route_source=formData.get("route_source") or original_trip.route_source,
     )
@@ -10267,6 +10279,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
 
     wplist = [path[0], path[-1]]
     waypoint_meta = []
+    stored = []
     if trip["waypoints"]:
         stored = json.loads(trip["waypoints"])
         waypoints_coords = [[point["lat"], point["lng"]] for point in stored]
@@ -10335,6 +10348,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripTicketId": tripTicketId or "",
         "wplist": wplist,
         "waypoint_meta": waypoint_meta,
+        # As saved, for the stops editor: it writes them back with the stops edited.
+        "stored_waypoints": stored,
         "raw_path": raw_path,
         "route_source": trip.get("route_source") or "router",
         "tripNotes": tripNotes or "",
@@ -10343,6 +10358,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripArrivalDelay": tripArrivalDelay,
         "tripPowerType": trip.get("power_type"),
         "tripCo2Override": trip.get("co2_override"),
+        "tripDeparturePlatform": trip.get("departure_platform") or "",
+        "tripArrivalPlatform": trip.get("arrival_platform") or "",
     }
 
     if from_app:

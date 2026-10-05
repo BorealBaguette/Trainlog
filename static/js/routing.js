@@ -504,6 +504,54 @@ window.removeFreehandOverlay = function(element) { setMarkerBadge(element, 'free
 // waypoint object itself (wp.options.hard), which Leaflet Routing Machine keeps across
 // drags, reroutes and splices, so it can't drift out of step with the waypoints the way
 // an index-keyed set would. Soft is the router's default and ours.
+// A plan waypoint at [lat, lng] from a page's {name, hard, stop} (routingWaypointMeta).
+// hard: false (not just absent) is a point made approximate by hand (see saving).
+function waypointFromMeta(c, meta) {
+  meta = meta || {};
+  var options = { hard: meta.hard === true, modeSet: meta.hard === false };
+  if (meta.name) options.label = meta.name;
+  if (meta.stop && typeof meta.stop === 'object') options.stop = meta.stop;
+  return L.Routing.waypoint(L.latLng(c[0], c[1]), meta.name || '', options);
+}
+window.waypointFromMeta = waypointFromMeta;
+
+// A waypoint's name. Leaflet Routing Machine clears wp.name when the waypoint is dragged,
+// so it is also kept on the waypoint's options (label, set when the drag starts), and a
+// timetable stop has its own.
+function waypointLabel(wp) {
+  var o = (wp && wp.options) || {};
+  return (wp && wp.name) || o.label || (o.stop && o.stop.name) || '';
+}
+
+// A named point or timetable stop dragged this far from where it was (the stop's own
+// position for a stop) is no longer that place: just a point on the route. Closer, it's a
+// nudge onto the right track, and stays the stop. Big stations' platforms and their
+// station point can be a few hundred metres apart.
+var STOP_KEEP_M = 500;
+
+// "11:28 – 11:36 · Pl. 8" for a timetable stop, in the stop's own time zone: the actual
+// times and platform (live or corrected by hand, *_rt) where known, else the scheduled.
+// Anything else needing a stop's time should do the same, and with neither, shift the
+// scheduled time by the trip's departure/arrival delays.
+function stopTimesLabel(stop) {
+  function clock(iso) {
+    if (!iso) return '';
+    try {
+      return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZone: stop.tz || undefined })
+        .format(new Date(iso));
+    } catch (e) { return ''; }
+  }
+  var arr = clock(stop.arr_rt || stop.arr), dep = clock(stop.dep_rt || stop.dep);
+  var times = arr && dep && arr !== dep ? arr + ' \u2013 ' + dep : (arr || dep);
+  var platform = '';
+  var track = stop.platform_rt || stop.platform;
+  if (track && texts.motisTrack) {
+    var bare = String(track).replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '');
+    platform = texts.motisTrack.replace('{track}', bare || track);
+  }
+  return [times, platform].filter(Boolean).join(' \u00b7 ');
+}
+
 // "Every point exact" (setAllWaypointsExact) overrides that while it is on, for places
 // where the timetable puts its stops on their tracks; each waypoint keeps its own flag
 // underneath, which applies again once it is off.
@@ -1021,16 +1069,13 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       useNewRouter = NEW_ROUTER_TYPES.includes(type);
     }
 
-    // Intermediate waypoints may come with a name (a via station, a timetable stop)
-    // and a hard/soft mode (a reopened trip), given by the page as
-    // window.routingWaypointMeta, one {name, hard} per intermediate point.
+    // Intermediate waypoints may come with a name (a via station, a timetable stop), a
+    // hard/soft mode (a reopened trip) and a timetable stop's record (stop: name,
+    // UTC arr/dep, tz, platform, the stop's own lat/lng), given by the page as
+    // window.routingWaypointMeta, one {name, hard, stop} per intermediate point.
     var wpMeta = window.routingWaypointMeta || [];
     var planWaypoints = wplist.map(function(c, i) {
-      var meta = (i > 0 && i < wplist.length - 1 && wpMeta[i - 1]) || {};
-      // hard: false (not just absent) is a point made approximate by hand (see saving).
-      return L.Routing.waypoint(L.latLng(c[0], c[1]), meta.name || '', {
-        hard: meta.hard === true, modeSet: meta.hard === false
-      });
+      return waypointFromMeta(c, (i > 0 && i < wplist.length - 1 && wpMeta[i - 1]) || {});
     });
 
     var plan = new L.Routing.Plan(planWaypoints, {
@@ -1077,7 +1122,9 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
           const freehand = !isEnd && freehandSegments.has(i);
           const hard = isHardWaypoint(wp);
           const endpointName = isStart ? origLabel : isEnd ? destLabel : '';
-          const name = wp.name || endpointName;
+          const name = waypointLabel(wp) || endpointName;
+          const stop = wp.options && wp.options.stop;
+          const stopLine = stop ? stopTimesLabel(stop) : '';
           const title = name ? sanitize(name) : `${texts.waypoint || 'Waypoint'} ${i}`;
           const badge = isStart || isEnd
             ? `<span class="wp-popup-index wp-popup-${isStart ? 'start' : 'end'}${window.colorblindMode ? ' colorblind' : ''}"><i class="fa-solid ${isStart ? 'fa-flag' : 'fa-flag-checkered'}"></i></span>`
@@ -1117,6 +1164,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
                 ${badge}
                 <span class="wp-popup-name" title="${title}">${title}</span>
               </div>
+              ${stopLine ? `<div class="wp-popup-stop"><i class="fa-regular fa-clock"></i>${sanitize(stopLine)}</div>` : ''}
               ${modeToggle}
               ${actions.trim() ? `<div class="wp-popup-actions">${actions}</div>` : ''}
             </div>`;
@@ -1564,11 +1612,15 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       console.log(this._selectedRoute)
 
       if(waypoints.length > 2) {
-          // {lat, lng} plus the name and hard flag when set, so a reopened trip
-          // shows the same names and keeps its exact points exact.
+          // {lat, lng} plus the name, hard flag and timetable stop when set, so a
+          // reopened trip shows the same names and stops and keeps its exact points exact.
+          // Trips saved before stops were kept have only {lat, lng, name?, hard?}.
           const latLngs = waypoints.slice(1, -1).map(function(point) {
             var saved = { lat: point.latLng.lat, lng: point.latLng.lng };
-            if (point.name) saved.name = point.name;
+            var label = waypointLabel(point);
+            if (label) saved.name = label;
+            // A timetable stop's record: name, UTC arr/dep, tz, platform, its own lat/lng.
+            if (point.options && point.options.stop) saved.stop = point.options.stop;
             if (isHardWaypoint(point)) saved.hard = true;
             // Approximate by choice is kept too, so dragging it after reopening the
             // trip doesn't make it exact (placedExactly).
@@ -1576,6 +1628,10 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
             return saved;
           });
           newTrip["waypoints"] = JSON.stringify(latLngs);
+      } else if (newTrip["waypoints"]) {
+          // Every intermediate point gone (removed on the map or in the stops dialog):
+          // say so, rather than leave the previous list to be saved again.
+          newTrip["waypoints"] = "[]";
       }
       
       // Store freehand segment indices
@@ -1612,6 +1668,28 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       if (!placedExactly() || isHardWaypoint(wp) || (wp.options && wp.options.modeSet)) return;
       wp.options = L.extend({}, wp.options, { hard: true });
       updateMarkerVisuals();
+    });
+    // Names and timetable stops survive a drag nearby, and go with one far away
+    // (STOP_KEEP_M): kept aside when the drag starts, since the library clears the name.
+    plan.on('waypointdragstart', function(e) {
+      var wp = plan.getWaypoints()[e.index];
+      if (!wp) return;
+      var o = wp.options = wp.options || {};
+      if (!o.label && wp.name) o.label = wp.name;
+      if (!o.anchor && (o.label || o.stop)) {
+        o.anchor = o.stop && o.stop.lat != null ? L.latLng(o.stop.lat, o.stop.lng) : L.latLng(wp.latLng);
+      }
+    });
+    plan.on('waypointdragend', function(e) {
+      var wp = plan.getWaypoints()[e.index];
+      var o = wp && wp.options;
+      if (!o || !o.anchor) return;
+      if (wp.latLng.distanceTo(o.anchor) > STOP_KEEP_M) {
+        delete o.label; delete o.stop; delete o.anchor;
+        wp.name = '';
+      } else {
+        wp.name = waypointLabel(wp);
+      }
     });
     plan.on('waypointdragend', function() {
       plan.off('waypointschanged', control._onWaypointsChanged, control);

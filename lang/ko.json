@@ -1382,5 +1382,14 @@
     "motisTrack": "{track}번 선",
     "motisEarlier": "이전 출발",
     "motisLater": "이후 출발",
+    "tripStops": "정차역",
+    "stopArrival": "도착",
+    "stopDeparture": "출발",
+    "stopPlatform": "선로",
+    "editStops": "정차역 편집",
+    "addStop": "정차역 추가",
+    "stopsRouteNote": "경로가 이 지점들을 지나도록 다시 계산됩니다. 지도에서 확인한 뒤 확정하세요.",
+    "stopsRefresh": "시간 새로고침",
+    "stopsRefreshNone": "Transitous에 더 이상 이 운행의 시간이 없습니다.",
     "motisStops": {"other": "{n}개 정류장"}
 }

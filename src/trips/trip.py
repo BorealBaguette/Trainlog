@@ -53,6 +53,8 @@ class Trip:
         arrival_delay=None,
         power_type=None,
         co2_override=None,
+        departure_platform=None,
+        arrival_platform=None,
         altitude=None,
         timestamps=None,
         route_source="router",
@@ -99,6 +101,9 @@ class Trip:
         self.path = path
         self.power_type = power_type
         self.co2_override = co2_override
+        # The platform it left from / arrived at (migration 0076), free text.
+        self.departure_platform = (_strip_tags(departure_platform) or "").strip()[:20] or None
+        self.arrival_platform = (_strip_tags(arrival_platform) or "").strip()[:20] or None
         # Optional 3D flight track (JSON-string arrays, parallel to the geom
         # vertices): altitude in metres, timestamps in epoch seconds.
         self.altitude = altitude

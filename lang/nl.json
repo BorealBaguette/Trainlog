@@ -1386,5 +1386,14 @@
     "motisTrack": "Spoor {track}",
     "motisEarlier": "Eerdere vertrekken",
     "motisLater": "Latere vertrekken",
+    "tripStops": "Haltes",
+    "stopArrival": "Aankomst",
+    "stopDeparture": "Vertrek",
+    "stopPlatform": "Spoor",
+    "editStops": "Haltes bewerken",
+    "addStop": "Halte toevoegen",
+    "stopsRouteNote": "De route wordt opnieuw berekend via deze punten: controleer hem op de kaart en bevestig.",
+    "stopsRefresh": "Tijden bijwerken",
+    "stopsRefreshNone": "Transitous heeft de tijden van deze rit niet meer.",
     "motisStops": {"one": "{n} halte", "other": "{n} haltes"}
 }

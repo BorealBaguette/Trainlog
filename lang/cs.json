@@ -1390,5 +1390,14 @@
     "motisTrack": "Kol. {track}",
     "motisEarlier": "Dřívější odjezdy",
     "motisLater": "Pozdější odjezdy",
+    "tripStops": "Zastávky",
+    "stopArrival": "Příjezd",
+    "stopDeparture": "Odjezd",
+    "stopPlatform": "Kolej",
+    "editStops": "Upravit zastávky",
+    "addStop": "Přidat zastávku",
+    "stopsRouteNote": "Trasa se přepočítá přes tyto body: zkontrolujte ji na mapě a potvrďte.",
+    "stopsRefresh": "Obnovit časy",
+    "stopsRefreshNone": "Transitous už časy tohoto spoje nemá.",
     "motisStops": {"one": "{n} zastávka", "few": "{n} zastávky", "many": "{n} zastávky", "other": "{n} zastávek"}
 }

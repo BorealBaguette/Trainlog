@@ -55,6 +55,18 @@
   white-space: nowrap;
 }
 
+/* A timetable stop's times and platform, under its name */
+.wp-popup-stop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 10px;
+  font-size: 12.5px;
+  color: #5b6472;
+  font-variant-numeric: tabular-nums;
+}
+.wp-popup-stop i { color: #9aa3af; }
+
 /* Approximate / Exact segmented switch */
 .wp-mode {
   display: grid;

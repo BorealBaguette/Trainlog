@@ -1383,5 +1383,14 @@
     "motisTrack": "Voie {track}",
     "motisEarlier": "Départs plus tôt",
     "motisLater": "Départs plus tard",
+    "tripStops": "Arrêts",
+    "stopArrival": "Arrivée",
+    "stopDeparture": "Départ",
+    "stopPlatform": "Voie",
+    "editStops": "Modifier les arrêts",
+    "addStop": "Ajouter un arrêt",
+    "stopsRouteNote": "Le trajet sera recalculé en passant par ces points : vérifiez-le sur la carte, puis validez.",
+    "stopsRefresh": "Actualiser les horaires",
+    "stopsRefreshNone": "Transitous n'a plus les horaires de ce trajet.",
     "motisStops": {"one": "{n} arrêt", "many": "{n} arrêts", "other": "{n} arrêts"}
 }
