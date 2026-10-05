@@ -489,7 +489,7 @@
             <input type="text" name="seat" id="seat" placeholder="{{seat}}" value="{{tripSeat}}">
             <input type="hidden" name="seat_car" id="seat_car" value="{{tripSeatCar}}">
             <label for="notes">{{notes}}</label>
-            <input type="text" name="notes" id="notes" placeholder="{{notes}}" value="{{tripNotes}}">
+            <textarea name="notes" id="notes" rows="2" placeholder="{{notes}}">{{tripNotes}}</textarea>
 
             <div id="tagsGroup"{% if plan_uuid %} style="display:none"{% endif %}>
               <label for="tagSearchInput">{{tags|default('Tags')}}</label>
