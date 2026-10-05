@@ -38,6 +38,8 @@ WITH base AS (
         visibility,
         departure_delay,
         arrival_delay,
+        departure_platform,
+        arrival_platform,
         power_type,
         COALESCE(utc_start_datetime, start_datetime) AS utc_filtered_start_datetime,
         COALESCE(utc_end_datetime, end_datetime) AS utc_filtered_end_datetime

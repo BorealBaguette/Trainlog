@@ -125,6 +125,7 @@
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
+<script src="{{ url_for('static', filename='js/trip_progress.js') }}"></script>
 
 <script>
 var logosList   = {{ logosList | safe }};
@@ -346,15 +347,6 @@ function getTypeColor(type) {
 }
 
 
-function calculateProgress(tripObj) {
-  const t = tripObj.trip;
-  const now   = Date.now();
-  const start = new Date(t.utc_start_datetime + 'Z').getTime() + Number(t.departure_delay || 0) * 1000;
-  const end   = new Date(t.utc_end_datetime   + 'Z').getTime() + Number(t.arrival_delay   || 0) * 1000;
-  if (isNaN(start) || isNaN(end) || end <= start) return 0;
-  return Math.min(Math.max((now - start) / (end - start), 0), 1);
-}
-
 function getPopupContent(tripObj) {
   const trip        = tripObj.trip || {};
   const origin      = trip.origin_station || '-';
@@ -386,15 +378,15 @@ function getPopupContent(tripObj) {
   if (trip.multi_operators) {
     trip.multi_operators.forEach(op => {
       operatorParts.push(op.logo_url
-        ? `<img src="/static/${op.logo_url}" alt="${op.operator_name}" style="max-height:40px;max-width:120px;object-fit:contain;">`
+        ? `<div class="popupInfo operator_popupInfo" popupinfo_content="${op.operator_name}"><img src="/static/${op.logo_url}" alt="${op.operator_name}" style="max-height:40px;max-width:120px;object-fit:contain;"></div>`
         : `<span>${op.operator_name}</span>`);
     });
   } else if (trip.logo_url) {
-    operatorParts.push(`<img src="/static/${trip.logo_url}" alt="${trip.operator || ''}" style="max-height:40px;max-width:120px;object-fit:contain;">`);
+    operatorParts.push(`<div class="popupInfo operator_popupInfo" popupinfo_content="${trip.operator || ''}"><img src="/static/${trip.logo_url}" alt="${trip.operator || ''}" style="max-height:40px;max-width:120px;object-fit:contain;"></div>`);
   } else if (trip.operator) {
     String(trip.operator).split(',').map(s => s.trim()).forEach(op => {
       operatorParts.push(logosList[op]
-        ? `<img src="/static/${logosList[op]}" alt="${op}" style="max-height:40px;max-width:120px;object-fit:contain;">`
+        ? `<div class="popupInfo operator_popupInfo" popupinfo_content="${op}"><img src="/static/${logosList[op]}" alt="${op}" style="max-height:40px;max-width:120px;object-fit:contain;"></div>`
         : `<span>${op}</span>`);
     });
   }
@@ -470,27 +462,26 @@ function openPopup(lngLat, tripObj) {
 }
 
 /* ── rendering ───────────────────────────────────────────────────────────── */
-// Single source of truth for "where along the path are we": used both for the
-// pin and for the start of the animated future segment so the two always agree.
-function pegIndex(progress, len) {
-  if (len < 2) return 0;
-  return Math.min(Math.floor(progress * (len - 1)), len - 1);
+// Single source of truth for "where along the path are we": the timetable position
+// (stops, dwell times and delays included, see trip_progress.js), used both for the pin
+// and for the start of the animated future segment so the two always agree.
+function currentPosition(tripObj, coords) {
+  return TripProgress.position(tripObj.trip, coords)
+    || { index: 0, point: coords[0], progress: 0 };
 }
 
 // `coords` must be the same [lng, lat] array that was drawn (geodesic-expanded
 // for air routes), otherwise the pin lands on the raw 2-point path start.
 // `pegOverride` is the index of the aircraft's real position, known only for a
-// live-tracked flight. When present it beats calculateProgress, which can only
-// interpolate against the timetable.
+// live-tracked flight. When present it beats the timetable position, which can only
+// interpolate.
 function addMarker(tripObj, coords, pegOverride) {
     const type     = (tripObj.trip.type === 'helicopter') ? 'air' : tripObj.trip.type;
     const color = getTypeColor(type);
-    const progress = calculateProgress(tripObj);
 
-    const pegIdx = (pegOverride !== null && pegOverride !== undefined)
-      ? pegOverride
-      : pegIndex(progress, coords.length);
-    const [pegLng, pegLat] = coords[pegIdx];
+    const [pegLng, pegLat] = (pegOverride !== null && pegOverride !== undefined)
+      ? coords[pegOverride]
+      : currentPosition(tripObj, coords).point;
 
     const marker = new maplibregl.Marker({ color })
       .setLngLat([pegLng, pegLat])
@@ -514,7 +505,6 @@ function renderTrips(trips) {
     const { trip, path } = tripObj;
     const type     = (trip.type === 'helicopter') ? 'air' : trip.type;
     const color    = getTypeColor(type);
-    const progress = calculateProgress(tripObj);
 
     // API returns [[lat, lng], ...]; MapLibre needs [[lng, lat], ...]
     let coords = path.map(([lat, lng]) => [lng, lat]);
@@ -558,10 +548,11 @@ function renderTrips(trips) {
     });
 
     // Future segment (animated white dashes overlay)
-    const future  = coords.slice(
-      liveJunction !== null ? liveJunction : pegIndex(progress, coords.length)
-    );
-    if (future.length >= 2 && (liveJunction !== null || progress < 1)) {
+    const pos = currentPosition(tripObj, coords);
+    const future = liveJunction !== null
+      ? coords.slice(liveJunction)
+      : [pos.point].concat(coords.slice(pos.index + 1));
+    if (future.length >= 2 && (liveJunction !== null || pos.progress < 1)) {
       futureFeatures.push({
         type: 'Feature',
         geometry: { type: 'LineString', coordinates: future },

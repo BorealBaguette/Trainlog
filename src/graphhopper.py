@@ -1,7 +1,9 @@
 def convert_graphhopper_to_osrm(gh_response):
     """Convert GraphHopper response to OSRM format for compatibility"""
     if not gh_response.get('paths'):
-        return {"code": "NoRoute", "message": "No route found"}
+        # Keep the router's own reason (e.g. a waypoint_modes count mismatch) rather
+        # than flattening every failure into "No route found".
+        return {"code": "NoRoute", "message": gh_response.get("message") or "No route found"}
    
     path = gh_response['paths'][0]
    

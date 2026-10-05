@@ -1,0 +1,262 @@
+/* Popup and badges of the intermediate waypoint markers on the routing maps (routing.js),
+   shared by routing.html, edit_copy.html and compose.html; and the router options box
+   of routing.js's sidebar (.router-box), in the same look. */
+
+.wp-leaflet-popup .leaflet-popup-content-wrapper {
+  border-radius: 12px;
+  box-shadow: 0 10px 28px rgba(17, 24, 39, .18), 0 2px 6px rgba(17, 24, 39, .08);
+}
+.wp-leaflet-popup .leaflet-popup-content {
+  margin: 12px 14px;
+  width: 220px !important;
+}
+.wp-leaflet-popup a.leaflet-popup-close-button {
+  top: 6px;
+  right: 6px;
+  color: #9aa3af;
+}
+
+.wp-popup {
+  font: 13.5px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1f2733;
+}
+
+.wp-popup-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 18px 10px 0; /* clear of the close button */
+  font-weight: 600;
+}
+.wp-popup-index {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 11px;
+  background: #e8eefb;
+  color: #3b63b8;
+  font-size: 12px;
+  font-weight: 700;
+}
+/* Origin / destination: a flag in the colour of their pin (green/red, or purple/orange
+   in colourblind mode, as in routing.js's marker icons). */
+.wp-popup-index.wp-popup-start { background: #e3f4e6; color: #2e8540; }
+.wp-popup-index.wp-popup-end { background: #fbe4e1; color: #c0392b; }
+.wp-popup-index.wp-popup-start.colorblind { background: #efe6f8; color: #7b3fb5; }
+.wp-popup-index.wp-popup-end.colorblind { background: #fdf0e1; color: #c56a12; }
+.wp-popup-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* A timetable stop's times and platform, under its name */
+.wp-popup-stop {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px 0 10px;
+  font-size: 12.5px;
+  color: #5b6472;
+  font-variant-numeric: tabular-nums;
+}
+.wp-popup-stop i { color: #9aa3af; }
+
+/* Approximate / Exact segmented switch */
+.wp-mode {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: #eef0f3;
+}
+.wp-mode-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 5px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #5b6472;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+.wp-mode-btn:hover { color: #1f2733; }
+.wp-mode-btn.active {
+  background: #fff;
+  color: #3b63b8;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(17, 24, 39, .15);
+  cursor: default;
+}
+.wp-popup-hint {
+  margin: 6px 2px 0;
+  font-size: 11.5px;
+  color: #6b7280;
+}
+
+.wp-popup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #eef0f3;
+}
+.wp-popup-mode + .wp-popup-actions { margin-top: 10px; }
+.wp-action {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #1f2733;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.wp-action i { width: 16px; text-align: center; color: #6b7280; }
+.wp-action:hover { background: #f3f4f6; }
+.wp-action.active { color: #b45309; }
+.wp-action.active i { color: #d97706; }
+.wp-action .wp-action-state {
+  margin-left: auto;
+  font-size: 11px;
+  color: #d97706;
+}
+.wp-action-danger { color: #c0392b; }
+.wp-action-danger i { color: #c0392b; }
+.wp-action-danger:hover { background: #fdecea; }
+
+/* Start/end pins as div icons (routing.js), so they can hold badges: no div-icon box */
+.wp-endpoint-icon { background: none; border: 0; }
+.wp-endpoint-icon img { display: block; }
+
+/* Marker badges: freehand from this point (top) and exact point (bottom) */
+.wp-badge {
+  position: absolute;
+  right: -7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 8px;
+  line-height: 1;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .35);
+  pointer-events: none;
+  z-index: 1000;
+}
+.wp-badge-freehand { top: -5px; background: #d97706; }
+.wp-badge-hard { bottom: 2px; background: #3b63b8; }
+
+/* Router options in the routing sidebar (buildNewRouterToggleHtml) */
+.router-box {
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #f6f7f9;
+  font: 13.5px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1f2733;
+}
+/* Each button as wide as its label needs (Tramway, Straßenbahn…), the track filled */
+.router-seg {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  margin-bottom: 6px;
+  border-radius: 8px;
+  background: #e7eaee;
+}
+/* As specific as it takes to beat the sidebar's full-width action-button rule
+   (routing_panel.css, #sidebar button:not(...)), which would pad them out and add a
+   bottom margin inside the grey track. */
+#sidebar .router-box button.router-seg-btn, .router-seg-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1 1 auto;
+  gap: 5px;
+  min-width: 0;
+  width: auto;
+  min-height: 28px;
+  height: auto;
+  margin: 0;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #6b7280;
+  font: 12.5px/1.15 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  cursor: pointer;
+}
+.router-seg-btn i { flex: none; font-size: 12px; }
+/* Long names (Straßenbahn, Metropolitana, 鉄道（国有鉄道・私鉄など）) wrap inside their
+   button rather than being cut off */
+.router-seg-btn span { min-width: 0; white-space: normal; overflow-wrap: anywhere; text-align: center; }
+#sidebar .router-box button.router-seg-btn:hover, .router-seg-btn:hover { color: #1f2733; }
+#sidebar .router-box button.router-seg-btn.active, .router-seg-btn.active {
+  background: #fff;
+  color: #3b63b8;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(17, 24, 39, .15);
+  cursor: default;
+}
+.router-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 6px 2px;
+  cursor: pointer;
+}
+.router-row-icon { flex: none; width: 16px; text-align: center; color: #6b7280; }
+.router-row-label { flex: 1; min-width: 0; display: inline-flex; align-items: center; gap: 6px; text-wrap: pretty; }
+.router-row-label label { margin: 0; cursor: pointer; }
+/* The info badge sits right after the label, not pinned to a corner like the chips' */
+#sidebar .router-row-label .route-hint { position: relative; top: auto; right: auto; line-height: 0; }
+
+/* A small switch in place of the checkbox */
+.router-switch {
+  flex: none;
+  appearance: none;
+  -webkit-appearance: none;
+  position: relative;
+  width: 32px;
+  height: 18px;
+  margin: 0;
+  border-radius: 9px;
+  background: #cfd4db;
+  cursor: pointer;
+  transition: background .15s;
+}
+.router-switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+  transition: transform .15s;
+}
+.router-switch:checked { background: #3b63b8; }
+.router-switch:checked::after { transform: translateX(14px); }
+.router-switch:focus-visible { outline: 2px solid #86b7fe; outline-offset: 2px; }

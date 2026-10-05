@@ -1,0 +1,135 @@
+{#
+  "Map background" picker: lets the user change the MapLibre background (and, for
+  premium, the OpenRailwayMap overlay) on the fly via MapLibreUtils.changeBackground.
+  Nothing is persisted: a reload restores the saved setting. The menu entry (#mapBgNav) stays hidden
+  unless the page loaded maplibre-utils.js. Not included on user_settings, which has
+  its own picker using the same tabs partial.
+#}
+<style>
+  /* Self-contained: public trip pages don't load Bootstrap */
+  #mapBgModal { position: fixed; inset: 0; z-index: 10000; display: none; align-items: center;
+    justify-content: center; background: rgba(0,0,0,.45); font-family: inherit; }
+  #mapBgModal.mbg-open { display: flex; }
+  #mapBgModal .mbg-box { background: #fff; color: #222; border-radius: 10px; width: min(480px, 94vw);
+    max-height: 90vh; overflow-y: auto; box-shadow: 0 4px 20px rgba(0,0,0,.3); }
+  #mapBgModal .mbg-head, #mapBgModal .mbg-foot { display: flex; align-items: center;
+    justify-content: space-between; padding: 12px 16px; }
+  #mapBgModal .mbg-body { padding: 4px 16px 12px; }
+  #mapBgModal .mbg-title { margin: 0; font-size: 1.1rem; font-weight: 600; }
+  #mapBgModal .mbg-x { border: 0; background: none; font-size: 1.5rem; line-height: 1; cursor: pointer; color: #666; }
+  #mapBgModal .mbg-primary { background: #0d6efd; border-color: #0d6efd; color: #fff; }
+  #mapBgModal .mbg-btn { padding: 6px 14px; border: 1px solid #ccc; border-radius: 6px; background: #fff; cursor: pointer; }
+  #mapBgModal .nav-tabs { display: flex; flex-wrap: wrap; gap: 4px; padding: 0; margin: 0 0 12px;
+    list-style: none; border-bottom: 1px solid #dee2e6; }
+  #mapBgModal .nav-link { border: 1px solid transparent; border-bottom: 0; background: none;
+    padding: 6px 12px; border-radius: 6px 6px 0 0; cursor: pointer; color: #0d6efd; }
+  #mapBgModal .nav-link.active { border-color: #dee2e6; background: #fff; color: #495057; }
+  #mapBgModal .tab-pane { display: none; }
+  #mapBgModal .tab-pane.active { display: block; }
+  #mapBgModal .mbg-orm { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  #mapBgModal select { margin-top: 8px; padding: 6px; border-radius: 6px; border: 1px solid #ccc; width: 100%; }
+</style>
+<div id="mapBgModal">
+  <div class="mbg-box">
+    <div class="mbg-head">
+      <h5 class="mbg-title"><i class="fa-solid fa-map"></i> {{ tilesetLabel }}</h5>
+      <button type="button" class="mbg-x" id="mapBgClose" aria-label="Close">&times;</button>
+    </div>
+    <div class="mbg-body">
+      {% include "includes/tileserver_tabs.html" %}
+      {% if is_premium %}
+      <hr>
+      <label class="mbg-orm">
+        <input type="checkbox" id="mapBgOrmEnabled">
+        <span><i class="fa-solid fa-gem" style="color: #00CED1;"></i> Enable OpenRailwayMap overlay</span>
+      </label>
+      <select id="mapBgOrmType" style="display: none;">
+        <option value="standard">Standard</option>
+        <option value="maxspeed">Max Speed</option>
+        <option value="signals">Signals</option>
+        <option value="electrified">Electrified</option>
+        <option value="gauge">Track Gauge</option>
+      </select>
+      {% endif %}
+    </div>
+    <div class="mbg-foot">
+      <button type="button" class="mbg-btn" id="mapBgReset">{{ posterLabelDefault }}</button>
+      <button type="button" class="mbg-btn mbg-primary" id="mapBgApply">{{ submit }}</button>
+    </div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  if (typeof MapLibreUtils === 'undefined') return;
+  const modalEl = document.getElementById('mapBgModal');
+  const orm = document.getElementById('mapBgOrmEnabled');
+  const ormType = document.getElementById('mapBgOrmType');
+  const getMap = () => (typeof map !== 'undefined' && map && map._tlOptions) ? map : null;
+  // Session-only: nothing is stored, a reload goes back to the saved setting.
+  // Choices are staged in the modal and only reach the map on Apply.
+  let base = null;
+
+  document.getElementById('mapBgNav').style.display = '';
+
+  const compose = () => {
+    if (!base) return null;
+    if (!orm || !orm.checked) return base;
+    const kind = modalEl.querySelector(`.ts-option[data-value="${base}"]`);
+    const prefix = kind && kind.classList.contains('ts-vector') ? 'orm-vector-' : 'openrailwaymap-';
+    return `${prefix}${ormType.value}.${base}`;
+  };
+  const show = () => {
+    modalEl.querySelectorAll('.ts-option').forEach(b => b.classList.toggle('ts-selected', b.dataset.value === base));
+    const sel = base && modalEl.querySelector(`.ts-option[data-value="${base}"]`);
+    if (sel) modalEl.querySelector(`.nav-link[data-bs-target="#${sel.closest('.tab-pane').id}"]`).click();
+  };
+  // Fill the modal from a tileserver value (base map + OpenRailwayMap overlay)
+  const load = (value) => {
+    const m = (value || '').match(/^(?:orm-vector-|openrailwaymap-)([^.]+)\.(.+)$/);
+    base = m ? m[2] : (value || null);
+    if (orm) {
+      orm.checked = !!m;
+      if (m) ormType.value = m[1];
+      ormType.style.display = m ? '' : 'none';
+    }
+    show();
+  };
+  const close = () => modalEl.classList.remove('mbg-open');
+
+  document.getElementById('mapBgNav').addEventListener('click', function (e) {
+    e.preventDefault();
+    const m = getMap();
+    if (m) load(m._currentTileserver);
+    modalEl.classList.add('mbg-open');
+  });
+  document.getElementById('mapBgClose').addEventListener('click', close);
+  modalEl.addEventListener('click', e => { if (e.target === modalEl) close(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') close(); });
+  // Tabs (no Bootstrap JS here)
+  modalEl.querySelectorAll('.nav-link').forEach(t => t.addEventListener('click', function () {
+    modalEl.querySelectorAll('.nav-link').forEach(x => x.classList.toggle('active', x === this));
+    modalEl.querySelectorAll('.tab-pane').forEach(p =>
+      p.classList.toggle('active', '#' + p.id === this.dataset.bsTarget));
+  }));
+
+  modalEl.querySelectorAll('.ts-option').forEach(b => b.addEventListener('click', function () {
+    base = this.dataset.value;
+    show();
+  }));
+  if (orm) orm.addEventListener('change', () => { ormType.style.display = orm.checked ? '' : 'none'; });
+
+  document.getElementById('mapBgApply').addEventListener('click', () => {
+    const m = getMap(), value = compose();
+    if (m && value) MapLibreUtils.changeBackground(m, value);
+    close();
+  });
+  document.getElementById('mapBgReset').addEventListener('click', () => {
+    const m = getMap();
+    if (!m) return;
+    load(m._tlOptions.tileserver);
+    MapLibreUtils.changeBackground(m, m._tlOptions.tileserver);
+    close();
+  });
+});
+</script>

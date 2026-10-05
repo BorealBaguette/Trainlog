@@ -14,6 +14,7 @@
 {% endif %}
 
 <link rel="stylesheet" href="{{ url_for('static', filename='styles/routing_panel.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/waypoint_popup.css') }}">
 <script>
 // ─── Flutter bridge (for app) ───────────────────────────────────────────────
 window.flutterBridge = {
@@ -42,6 +43,8 @@ const texts = {
   "ferry": "{{ferry}}",
   "savingTripProgress": "{{saving_trip_progress}}",
   "fineTuneNote": "{{fineTuneNote}}",
+  "fineTuneNoteNewRouter": "{{fineTuneNoteNewRouter}}",
+  "motisTrack": "{{motisTrack}}",
   "distanceTime": "{{distanceTime}}",
   "electrificationOsm": "{{electrificationOsm}}",
   "electrificationEstimate": "{{electrificationEstimate}}",
@@ -57,8 +60,14 @@ const texts = {
   "saveTripContinueButton": "{{saveTripContinueButton}}",
   "remove": "{{remove}}",
   "waypoint": "{{waypoint}}",
-  "useNewRouter": "{{useNewRouter}}",
-  "useNewRouterHint": "{{useNewRouterHint}}",
+  "waypointSoft": {{ waypointSoft|tojson }},
+  "waypointHard": {{ waypointHard|tojson }},
+  "waypointSoftHint": {{ waypointSoftHint|tojson }},
+  "waypointHardHint": {{ waypointHardHint|tojson }},
+  "useLegacyRouter": "{{useLegacyRouter}}",
+  "useLegacyRouterHint": "{{useLegacyRouterHint}}",
+  "allWaypointsExact": "{{allWaypointsExact}}",
+  "allWaypointsExactHint": "{{allWaypointsExactHint}}",
   "train": "{{train}}",
   "tram": "{{tram}}",
   "metro": "{{metro}}",
@@ -98,6 +107,8 @@ var origLabel = newTrip["originStation"][1];
 var destLabel = newTrip["destinationStation"][1];
 var viaStations = newTrip["viaStations"] || [];
 var wplist = [origCoord].concat(viaStations.map(function(v){ return v[0]; })).concat([destCoord]);
+// Via stations name their waypoints (routing.js); all start soft.
+window.routingWaypointMeta = viaStations.map(function(v){ return { name: v[1], stop: v[2] }; });
 var spinnerContent = '<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>';
 var errorContent = '<h4 id="routing-error">{{routingError}}<h4><p>{{routingErrorDetails}}</p><p><button onclick=\"location.reload()\">{{retry}}</button></p>';
 var saveErrorContent = '<h4 id="save-error">{{saveError}}</h4><p>{{saveErrorDetails}}</p><p><button onclick=\"location.reload();\">{{retry}}</button></p>';

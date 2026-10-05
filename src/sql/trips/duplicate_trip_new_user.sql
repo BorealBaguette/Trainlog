@@ -17,7 +17,13 @@ INSERT INTO trips (
     material_type,
     material_type_advanced,
     reg,
-    waypoints
+    waypoints,
+    -- The same train: where it left from and arrived (migration 0076), and how late
+    departure_platform,
+    arrival_platform,
+    departure_delay,
+    arrival_delay,
+    visibility
 )
 SELECT
     :new_user_id,
@@ -38,7 +44,12 @@ SELECT
     material_type,
     material_type_advanced,
     reg,
-    waypoints
+    waypoints,
+    departure_platform,
+    arrival_platform,
+    departure_delay,
+    arrival_delay,
+    :visibility
 FROM trips
 WHERE trip_id = :trip_id
 RETURNING trip_id

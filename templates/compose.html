@@ -1,5 +1,6 @@
 {% extends "bootstrap/layout.html" %}
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/waypoint_popup.css') }}">
 {% include "bootstrap/leafletLayout.html" %}
 
 {% if vehicle_type == 'ferry' %}
@@ -87,20 +88,32 @@
      --cp-header-h is measured at runtime; the header's height depends on its font and
      on whether the FR24 button is in it. */
   .cp-summary {
-    display: flex; align-items: center; gap: .5rem;
-    padding: .45rem 1.1rem; border-bottom: 1px solid #f0f2f5;
-    background: #fbfcfe; font-size: .78rem; color: #6b7280;
+    display: flex; align-items: center; gap: .6rem;
+    padding: .55rem 1.1rem; border-bottom: 1px solid #f0f2f5;
+    background: #fbfcfe; font-size: .8rem; color: #6b7280;
     position: sticky; top: var(--cp-header-h, 56px); z-index: 9;
   }
-  .cp-summary-text {
+  /* Route name on the first line, the figures about it as chips on the second. */
+  .cp-summary-main {
     flex: 1 1 auto; min-width: 0;
-    display: flex; align-items: baseline; gap: .35rem; flex-wrap: wrap;
+    display: flex; flex-direction: column; gap: .35rem;
   }
+  .cp-summary-text { display: flex; align-items: center; gap: .4rem; min-width: 0; }
   .cp-summary-route {
     font-weight: 600; color: #1a202c;
-    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
   }
-  .cp-summary-meta { color: #4b78d6; font-weight: 500; }
+  /* Positioned so the electrification bubble anchors to the row's left edge, not to its
+     chip — the chip sits far enough right that a bubble hung off it overflows the panel. */
+  .cp-summary-chips { position: relative; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+  .cp-summary-chips[hidden] { display: none; }
+  .cp-chip {
+    display: inline-flex; align-items: center; gap: .3rem; height: 22px;
+    padding: 0 .55rem; border-radius: 999px; white-space: nowrap;
+    background: #eef2fb; color: #3f64b5; font-size: .72rem; font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+  .cp-chip i { font-size: .8rem; opacity: .8; }
   .cp-summary[data-state="error"] { background: #fff5f5; color: #b3261e; }
   .cp-summary[data-state="error"] .cp-summary-route { color: #b3261e; }
   /* The spinner is a one-off here: the routing sidebar's own is styled for a panel this
@@ -115,11 +128,88 @@
      screen — side by side it is always visible and never in the way. */
   .cp-summary-actions { display: none; flex: 0 0 auto; gap: .3rem; }
   .cp-summary-btn {
-    width: 34px; height: 30px; padding: 0; line-height: 1;
+    width: 32px; height: 32px; padding: 0; line-height: 1;
+    display: inline-flex; align-items: center; justify-content: center;
     border: 1px solid #e2e6ea; border-radius: 8px; background: #fff;
-    color: #4b78d6; font-size: .9rem; cursor: pointer;
+    color: #4b78d6; font-size: .9rem; cursor: pointer; transition: background .12s;
   }
-  .cp-summary-btn:active { background: #e8eeff; }
+  .cp-summary-btn:hover, .cp-summary-btn:active { background: #e8eeff; }
+
+  /* Router choice: a summary-bar button opening a small popover. It turns solid while
+     the new router is on, so the choice stays visible with the popover closed. */
+  .cp-hint { position: relative; flex: 0 0 auto; margin: 0; }
+  .cp-hint > summary { list-style: none; }
+  .cp-hint > summary::-webkit-details-marker { display: none; }
+  .cp-hint > summary::marker { content: ""; }
+  .cp-hint[open] > summary { background: #e8eeff; border-color: #c7d6f5; }
+  /* Highlighted while off the default, i.e. on the legacy router */
+  .cp-hint:has(#newRouterToggleCompose:checked) > summary {
+    background: #4b78d6; border-color: #4b78d6; color: #fff;
+  }
+  .cp-bubble {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 1200;
+    width: 240px; padding: .75rem .85rem; text-align: left;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(17, 24, 39, .14), 0 2px 6px rgba(17, 24, 39, .06);
+    font-size: .8rem; line-height: 1.4; color: #374151;
+  }
+  .cp-bubble-title {
+    font-size: .68rem; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: #9ca3af; margin-bottom: .5rem;
+  }
+  .cp-bubble .form-switch { display: flex; align-items: center; gap: .55rem; margin: 0; padding: 0; min-height: 0; }
+  .cp-bubble .form-switch .form-check-input { margin: 0; flex: 0 0 auto; cursor: pointer; }
+  .cp-bubble .form-check-label { cursor: pointer; font-weight: 500; }
+  /* Driven by the switch's own state rather than JS, so it can't fall out of sync: the
+     trip type and "every point exact" belong to the new router, i.e. the switch ("use
+     legacy router") off. */
+  .cp-bubble.cp-router { width: min(340px, calc(100vw - 32px)); }
+  #newRouterProfileCompose, .cp-bubble .cp-all-exact { display: none; }
+  .cp-bubble:has(#newRouterToggleCompose:not(:checked)) #newRouterProfileCompose { display: flex; }
+  .cp-bubble:has(#newRouterToggleCompose:not(:checked)) .cp-all-exact { display: flex; }
+
+  /* Electrification chip (⚡/🛢️ km + info bubble): routing.js renders this into
+     #elecPreview inside the routing sidebar, which this page hides. .elec-preview-mirror
+     is the same target class routing.js also writes to, styled here as a chip like the
+     others since routing_panel.css (#sidebar-scoped) isn't loaded on this page. */
+  .elec-preview-mirror { display: inline-flex; align-items: center; gap: .25rem; }
+  .elec-preview-mirror:empty { display: none; }
+  .elec-preview-mirror .route-dist {
+    display: inline-flex; align-items: center; height: 22px; padding: 0 .55rem;
+    border-radius: 999px; background: #f1f3f6; color: #374151; white-space: nowrap;
+    font-style: normal; font-size: .72rem; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .elec-preview-mirror .route-elec.elec-loading { color: #9ca3af; min-width: 48px; justify-content: center; }
+  .elec-preview-mirror .route-hint { margin: 0; line-height: 0; }
+  .elec-preview-mirror .route-hint summary {
+    list-style: none; cursor: pointer; width: 18px; height: 18px; border-radius: 50%;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: #9ca3af; font-size: .75rem; transition: color .12s;
+  }
+  .elec-preview-mirror .route-hint summary::-webkit-details-marker { display: none; }
+  .elec-preview-mirror .route-hint summary::marker { content: ""; }
+  .elec-preview-mirror .route-hint summary:hover,
+  .elec-preview-mirror .route-hint[open] summary { color: #4b78d6; }
+  .elec-preview-mirror .route-bubble {
+    position: absolute; top: calc(100% + 8px); left: 0; z-index: 1200;
+    width: max-content; max-width: min(280px, 100%); padding: .6rem .75rem;
+    background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(17, 24, 39, .14), 0 2px 6px rgba(17, 24, 39, .06);
+    font-size: .78rem; line-height: 1.45; color: #4b5563; white-space: normal; text-align: left;
+  }
+  .elec-preview-mirror .elec-country-list { margin-top: 6px; padding-top: 6px; border-top: 1px solid #eef0f3; }
+  .elec-preview-mirror .elec-country-row { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; }
+  .elec-preview-mirror .elec-country-row span:first-child { flex: 1; }
+  .elec-preview-mirror .elec-country-km { color: #9ca3af; font-variant-numeric: tabular-nums; }
+  .elec-preview-mirror .elec-country-row span:last-child { font-weight: 600; color: #374151; font-variant-numeric: tabular-nums; }
+  .elec-preview-mirror .elec-override {
+    display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    margin-top: 7px; padding-top: 7px; border-top: 1px solid #eef0f3;
+  }
+  .elec-preview-mirror .elec-override-select {
+    font: inherit; color: #374151; background: #fff;
+    border: 1px solid #d7dbe0; border-radius: 6px; padding: 2px 4px; cursor: pointer;
+  }
 
   /* ── Full-screen map ──
      The panel is covered rather than hidden: display:none on it would tear down the
@@ -189,6 +279,111 @@
     line-height: 1; padding: 0;
   }
   .via-compose-remove:hover { color: #374151; }
+  /* A timetable stop's "07:22 – 07:23", display only (gone once the stop is edited) */
+  .via-compose-time {
+    position: absolute; right: 1.7rem; top: 50%; transform: translateY(-50%);
+    font-size: .75rem; color: #9ca3af; font-variant-numeric: tabular-nums; pointer-events: none;
+  }
+  .via-compose-row.has-time .form-control { padding-right: 10rem; }  /* "10:58 – 10:59 · Voie 4" */
+
+  /* Once there are vias, a summary row heads them and folds them away on click; under
+     it the stops read as its children, indented on a guide line. */
+  .via-summary {
+    display: flex; align-items: center; gap: .5rem; margin-bottom: .4rem;
+    padding: 0 .3rem 0 .6rem; min-height: 34px; border: 1px solid #e2e6ea; border-radius: 8px;
+    background: #fafbfc; font-size: .82rem; cursor: pointer; user-select: none;
+  }
+  .via-summary:hover { background: #f1f3f5; }
+  .via-summary .via-compose-icon { width: 1rem; }
+  .via-summary-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #4b5563; }
+  .via-summary-count { background: #9ca3af; color: #fff; border-radius: 10px; padding: 0 7px; font-size: .72rem; }
+  .via-summary-chevron { color: #9ca3af; font-size: .8rem; }
+  .via-summary-clear {
+    border: 0; background: none; cursor: pointer; color: #9ca3af; font-size: 1.1rem;
+    line-height: 1; width: 26px; height: 30px; padding: 0;
+  }
+  .via-summary-clear:hover { color: #374151; }
+  #viaGroup.via-collapsed #viaContainer { display: none; }
+  #viaGroup.via-has-summary #viaContainer {
+    margin: -.15rem 0 .5rem .55rem; padding: .3rem 0 0 .6rem; border-left: 2px solid #e5e7eb;
+  }
+
+  /* Timetable (MOTIS) departures between the chosen stations */
+  #motisGroup { margin-bottom: .5rem; }
+  #motisGroup .motis-toggle {
+    position: relative; overflow: hidden;
+    display: flex; align-items: center; gap: .5rem; width: 100%; text-align: left;
+    padding: .4rem .7rem; border: 1px solid #e2e6ea; border-radius: 8px; background: #fafbfc;
+    color: #374151; font-size: .82rem; line-height: 1.4; cursor: pointer;
+  }
+  #motisGroup .motis-toggle:hover { background: #f1f3f5; }
+  #motisGroup .motis-toggle[disabled] { cursor: default; color: #9ca3af; }
+  /* While searching: a spinner for the clock, and a bar sweeping along the bottom */
+  #motisGroup .motis-toggle .motis-spinner { display: none; }
+  #motisGroup .motis-toggle.loading .motis-spinner { display: inline-block; }
+  #motisGroup .motis-toggle.loading .motis-clock { display: none; }
+  #motisGroup .motis-toggle.loading::after {
+    content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 35%;
+    background: #4b78d6; animation: motis-sweep 1.2s ease-in-out infinite;
+  }
+  @keyframes motis-sweep { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+  @media (prefers-reduced-motion: reduce) {
+    #motisGroup .motis-toggle.loading::after { animation: none; width: 100%; opacity: .5; }
+  }
+  #motisGroup .motis-toggle-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #motisGroup .motis-count { background: #4b78d6; color: #fff; border-radius: 10px; padding: 0 7px; font-size: .72rem; }
+  #motisGroup .motis-menu { width: 100%; max-height: 55vh; overflow-y: auto; padding: 0; border-radius: 8px; }
+  #motisGroup .motis-item {
+    display: grid; grid-template-columns: 34px auto 1fr; align-items: center; gap: 2px 10px;
+    padding: 7px 12px 7px 10px; white-space: normal; font-size: .85rem;
+    border-left: 4px solid var(--line-color, transparent);
+    background-color: color-mix(in srgb, var(--line-color, transparent) 6%, transparent);
+  }
+  #motisGroup .motis-item + .motis-item { border-top: 1px solid #eee; }
+  #motisGroup .motis-item:hover, #motisGroup .motis-item:focus {
+    background-color: color-mix(in srgb, var(--line-color, #999) 14%, #fff);
+  }
+  #motisGroup .motis-item.active { color: inherit; background-color: color-mix(in srgb, var(--line-color, #4b78d6) 20%, #fff); }
+  #motisGroup .motis-logo { grid-row: 1 / 3; width: 34px; height: 26px; object-fit: contain; }
+  #motisGroup .motis-time { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  #motisGroup .motis-time sup { font-weight: 400; color: #888; }
+  #motisGroup .motis-day { grid-column: 2; font-size: .75rem; color: #777; white-space: nowrap; }
+  #motisGroup .motis-line {
+    justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    padding: 0 6px; border-radius: 4px; font-size: .78rem; font-weight: 600;
+    border: 1px solid var(--line-color, #ccc);
+    background-color: color-mix(in srgb, var(--line-color, #ddd) 18%, #fff);
+  }
+  #motisGroup .motis-head { grid-column: 3; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  #motisGroup .motis-head .motis-line { flex: none; max-width: 65%; }
+  #motisGroup .motis-headsign {
+    min-width: 0; font-size: .82rem; line-height: 1.2; color: #444; overflow: hidden;
+    display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere;
+  }
+  #motisGroup .motis-meta { grid-column: 3; font-size: .75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #motisGroup .motis-more {
+    display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+    padding: 6px 12px; border: 0; background: #fafafa; color: #4b78d6;
+    font-size: 0.8rem; cursor: pointer;
+    }
+  #motisGroup .motis-more:hover { background: #f0f3fa; }
+  #motisGroup .motis-more[disabled] { color: #999; cursor: default; }
+  #motisGroup li:first-child > .motis-more { border-bottom: 1px solid #eee; }
+  #motisGroup li:nth-last-child(2) > .motis-more { border-top: 1px solid #eee; }
+    #motisGroup .motis-source { padding: 4px 12px; font-size: .7rem; color: #999; text-align: right; border-top: 1px solid #eee; }
+  /* The panel is narrow (and phones narrower): each entry stacks into rows — times +
+     journey info, then line → headsign at full width, then the day. */
+  @container (max-width: 420px) {
+    #motisGroup .motis-item { grid-template-columns: 28px auto minmax(0, 1fr); gap: 2px 8px; padding: 8px 10px 8px 8px; }
+    #motisGroup .motis-logo { grid-row: 1 / 4; width: 28px; height: 22px; align-self: start; margin-top: 2px; }
+    #motisGroup .motis-time { grid-column: 2; grid-row: 1; }
+    #motisGroup .motis-meta { grid-column: 3; grid-row: 1; text-align: right; }
+    #motisGroup .motis-head { grid-column: 2 / 4; grid-row: 2; }
+    #motisGroup .motis-head .motis-line { max-width: 70%; }
+    #motisGroup .motis-day { grid-column: 2 / 4; grid-row: 3; }
+  }
+  #motisGroup .dropdown { container-type: inline-size; }
+  #motisGroup .motis-source a { color: inherit; }
 
   /* Operator pills — the shared widget (style2.css) is styled for the flat trip form;
      here it sits among Bootstrap controls, so match those like the modal variant does. */
@@ -347,6 +542,10 @@
     .cp-save-bar { padding: .7rem .9rem calc(.7rem + env(safe-area-inset-bottom, 0px)); }
     .cp-summary-actions { display: flex; }
 
+    /* Keyboard up: the map gives most of its height back so the field being typed in
+       isn't left under the keyboard. The user's own split returns when it closes. */
+    body.compose-kbd .compose-map { flex-basis: min(var(--compose-map-h, 32vh), 25%); }
+
     body.compose-map-collapsed .compose-map { flex-basis: 0; height: 0; }
     body.compose-map-collapsed .compose-resizer { display: none; }
 
@@ -473,9 +672,49 @@
 
     <!-- Route summary + (on phones) the map's controls -->
     <div class="cp-summary" id="routeSummary" data-state="idle" aria-live="polite">
-      <div class="cp-summary-text" id="routeSummaryText">
-        <span class="cp-summary-route">{{ routePickEnds|default('Pick a start and an end') }}</span>
+      <div class="cp-summary-main">
+        <div class="cp-summary-text" id="routeSummaryText">
+          <span class="cp-summary-route">{{ routePickEnds|default('Pick a start and an end') }}</span>
+        </div>
+        <div class="cp-summary-chips" id="routeSummaryChips" hidden>
+          <span id="routeSummaryMeta" style="display:contents"></span>
+          {% if vehicle_type in ('train', 'metro', 'tram', 'funicular') %}
+          <!-- Filled by routing.js's renderElecPreview() — see ELEC_PREVIEW_TYPES; this page
+               hides the routing sidebar that normally hosts it (#elecPreview). -->
+          <span class="route-dist-wrap elec-preview-mirror" id="elecPreviewCompose"></span>
+          {% endif %}
+        </div>
       </div>
+      {% if vehicle_type in ('train', 'metro', 'tram') %}
+      <details class="cp-hint" id="routerHint">
+        <summary class="cp-summary-btn" title="{{ routerMode|default('Router') }}"
+                 aria-label="{{ routerMode|default('Router') }}"><i class="fas fa-route"></i></summary>
+        {# Same controls as the routing page's sidebar (routing.js buildNewRouterToggleHtml,
+           styled in waypoint_popup.css): the trip type and "every point exact" belong to
+           the new router; the legacy router is the fallback, last. #}
+        <div class="cp-bubble cp-router">
+          <div class="cp-bubble-title">{{ routerMode|default('Router') }}</div>
+          <div class="router-seg" id="newRouterProfileCompose" role="group">
+            {% for value, label, icon in [('train', train|default('Train'), 'fa-train'), ('tram', tram|default('Tram'), 'fa-train-tram'),
+                                          ('metro', metro|default('Metro'), 'fa-train-subway'), ('all', all|default('All'), 'fa-layer-group')] %}
+            <button type="button" class="router-seg-btn{% if value == vehicle_type %} active{% endif %}" data-profile="{{ value }}"
+                    aria-pressed="{{ 'true' if value == vehicle_type else 'false' }}"><i class="fa-solid {{ icon }}" aria-hidden="true"></i><span>{{ label }}</span></button>
+            {% endfor %}
+          </div>
+          <label class="router-row cp-all-exact" title="{{ allWaypointsExactHint }}">
+            <i class="fa-solid fa-crosshairs router-row-icon"></i>
+            <span class="router-row-label">{{ allWaypointsExact }}</span>
+            <input type="checkbox" class="router-switch all-exact-toggle" id="allExactCompose"
+                   onchange="setAllWaypointsExact(this.checked)">
+          </label>
+          <label class="router-row" title="{{ useLegacyRouterHint }}">
+            <i class="fa-solid fa-clock-rotate-left router-row-icon"></i>
+            <span class="router-row-label">{{ useLegacyRouter }}</span>
+            <input type="checkbox" class="router-switch" role="switch" id="newRouterToggleCompose">
+          </label>
+        </div>
+      </details>
+      {% endif %}
       <div class="cp-summary-actions">
         <button type="button" class="cp-summary-btn" id="mapCollapseBtn"
                 title="{{ collapseMap|default('Hide map') }}" aria-label="{{ collapseMap|default('Hide map') }}">
@@ -503,7 +742,16 @@
 
       <!-- Via container -->
       {% if vehicle_type not in ('air', 'accommodation', 'poi', 'restaurant') %}
-      <div id="viaContainer"></div>
+      <div id="viaGroup">
+        <div id="viaSummary" class="via-summary" style="display:none" role="button" aria-expanded="false">
+          <i class="bi bi-signpost-2 via-compose-icon" aria-hidden="true"></i>
+          <span class="via-summary-text" id="viaSummaryText"></span>
+          <span class="via-summary-count" id="viaSummaryCount"></span>
+          <i class="bi bi-chevron-down via-summary-chevron" id="viaSummaryChevron"></i>
+          <button type="button" class="via-summary-clear" id="viaSummaryClear" title="{{ tsClearBtn }}">&times;</button>
+        </div>
+        <div id="viaContainer"></div>
+      </div>
       <button type="button" id="addViaBtn" class="btn btn-sm btn-outline-secondary mb-2" style="border-radius:8px; font-size:.78rem;">
         <i class="bi bi-plus"></i> {{ via|default('Via') }}
       </button>
@@ -516,6 +764,23 @@
         <div class="cp-station-wrap">
           <input type="text" id="destinationStation" class="form-control stationSearch" placeholder="{{ destinationTerminal }}">
           <span class="cp-station-dot" id="dot-dest"></span>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') %}
+      {# Direct services between the two stations around the chosen time, from MOTIS.
+         Filled by initMotisDepartures() below; hidden until there is something to say. #}
+      <div id="motisGroup" style="display:none">
+        <div class="dropdown">
+          <button type="button" id="motisToggle" class="motis-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+            <i class="fa-regular fa-clock motis-clock"></i>
+            <i class="fa-solid fa-circle-notch fa-spin motis-spinner" aria-hidden="true"></i>
+            <span class="motis-toggle-label" id="motisToggleLabel"></span>
+            <span class="motis-count" id="motisCount"></span>
+            <i class="bi bi-chevron-down" id="motisChevron"></i>
+          </button>
+          <ul class="dropdown-menu motis-menu" id="motisMenu" aria-labelledby="motisToggle"></ul>
         </div>
       </div>
       {% endif %}
@@ -660,6 +925,10 @@
       <div class="cp-input-row">
         <label>{{ lineName|default('Line') }}</label>
         <input type="text" name="lineName" id="lineName" class="form-control" placeholder="{{ lineName|default('Line') }}">
+        {# The platforms of a timetable run picked above (initMotisDepartures), saved as the trip's
+           departure_platform / arrival_platform; edited in the edit page's stops dialog. #}
+        <input type="hidden" name="departurePlatform" id="departurePlatform"/>
+        <input type="hidden" name="arrivalPlatform" id="arrivalPlatform"/>
       </div>
       {% endif %}
 
@@ -867,19 +1136,41 @@ var errorContent = '<h4>' + {{ (routingError|default("Routing error"))|tojson }}
 var saveErrorContent = '<h4>' + {{ (saveError|default("Save error"))|tojson }} +
   '</h4><p><button onclick="location.reload()">' + {{ (retry|default("Retry"))|tojson }} + '</button></p>';
 var texts = {
+  "freehandMode": {{ freehandMode|tojson }},
+  "waypointSoft": {{ waypointSoft|tojson }},
+  "waypointHard": {{ waypointHard|tojson }},
+  "waypointSoftHint": {{ waypointSoftHint|tojson }},
+  "waypointHardHint": {{ waypointHardHint|tojson }},
   routeTitle:             "{{ routeTitle|default('{origLabel} → {destLabel}') }}",
   fineTuneNote:           "{{ fineTuneNote|default('Drag waypoints to fine-tune the route.') }}",
+  fineTuneNoteNewRouter:  "{{ fineTuneNoteNewRouter }}",
+  motisTrack:             "{{ motisTrack }}",
   distanceTime:           "{{ distanceTime|default('{km} · {time}') }}",
   downloadGeoJSONButton:  "{{ downloadGeoJSONButton|default('Download GeoJSON') }}",
   saveTripButton:         "{{ submit|default('Save') }}",
   saveTripContinueButton: "{{ saveTripContinueButton|default('Save & continue') }}",
   remove:                 "{{ remove|default('Remove') }}",
   waypoint:               "{{ waypoint|default('Waypoint') }}",
-  useNewRouter:           "{{ useNewRouter|default('Use new router') }}",
+  useLegacyRouter:        "{{ useLegacyRouter }}",
+  allWaypointsExact:      "{{ allWaypointsExact }}",
+  allWaypointsExactHint:  "{{ allWaypointsExactHint }}",
   train:                  "{{ train|default('Train') }}",
   tram:                   "{{ tram|default('Tram') }}",
   metro:                  "{{ metro|default('Metro') }}",
-  all:                    "{{ all|default('All') }}"
+  all:                    "{{ all|default('All') }}",
+  // Read by routing.js's renderElecPreview() (electrification chip/bubble) — same
+  // keys routing.html/edit_copy.html pass it, missing here left explanation.replace()
+  // throwing on an undefined string, which renderElecPreview's caller (an async
+  // fetch .catch()) silently turned into a blank chip instead of a visible error.
+  electrificationOsm:         "{{ electrificationOsm|default('') }}",
+  electrificationEstimate:    "{{ electrificationEstimate|default('') }}",
+  electrificationTypeElectric: "{{ electrificationTypeElectric|default('') }}",
+  electrificationUserElectric: "{{ electrificationUserElectric|default('') }}",
+  electrificationUserThermic:  "{{ electrificationUserThermic|default('') }}",
+  powerType:               "{{ powerType|default('Power') }}",
+  auto:                    "{{ auto|default('Auto') }}",
+  electric:                "{{ electric|default('Electric') }}",
+  thermic:                 "{{ thermic|default('Diesel') }}"
 };
 
 // ── Global newTrip — routing.js reads/writes this (trip_length, estimated_trip_duration, details…) ──
@@ -919,11 +1210,37 @@ var map = createMap(null, [48, 8]);
 // used to push the save bar out of reach mid-edit; visualViewport is, so it wins where it
 // exists. The summary bar sticks below the header, whose height depends on its font and
 // on whether the FR24 button is in it, so that too is measured rather than assumed.
+//
+// While the on-screen keyboard is up, the map card shrinks (compose-kbd) so the field
+// being typed in has room above the keyboard. The keyboard is detected as the viewport
+// having lost a keyboard's worth of height while a text field has focus, measured against
+// the tallest viewport seen: iOS never shrinks innerHeight, and some Androids shrink it
+// along with the visual viewport, so neither can serve as the baseline.
 (function () {
   var wrap = document.querySelector('.compose-wrap');
   var header = document.querySelector('.cp-header');
+  var body = document.body;
   var vv = window.visualViewport;
   var queued = false;
+  var fullH = 0;
+  var kbd = false;
+  var TEXT_FIELD = 'textarea, [contenteditable="true"], input:not([type=checkbox]):not([type=radio])' +
+    ':not([type=button]):not([type=submit]):not([type=date]):not([type=time]):not([type=range]):not([type=file])';
+
+  function focusedField() {
+    var el = document.activeElement;
+    return el && el.matches && el.matches(TEXT_FIELD) ? el : null;
+  }
+
+  // Scroll the panel, not the page, to bring the field up. iOS pans the whole page to
+  // reveal a focused field, which on top of the viewport sizing above left the form
+  // scrolled off the top and blank space under it — so the page is put back afterwards.
+  function reveal(field) {
+    requestAnimationFrame(function () {
+      field.scrollIntoView({ block: 'center' });
+      window.scrollTo(0, 0);
+    });
+  }
 
   function sizeCompose() {
     queued = false;
@@ -935,8 +1252,26 @@ var map = createMap(null, [48, 8]);
       document.documentElement.style.setProperty(
         '--cp-header-h', Math.round(header.getBoundingClientRect().height) + 'px');
     }
+
+    fullH = Math.max(fullH, vh);
+    var field = focusedField();
+    var open = !!field && vh < fullH - 120;
+    if (open !== kbd) {
+      kbd = open;
+      body.classList.toggle('compose-kbd', open);
+      if (open) reveal(field);
+    } else if (kbd && (window.scrollY || (vv && vv.offsetTop))) {
+      window.scrollTo(0, 0);
+    }
+
     if (map && map.invalidateSize) map.invalidateSize();
   }
+
+  // Moving between fields with the keyboard already up resizes nothing, so nothing
+  // above would bring the next field into view.
+  document.addEventListener('focusin', function (e) {
+    if (kbd && e.target.matches && e.target.matches(TEXT_FIELD)) reveal(e.target);
+  });
   // The keyboard animating in fires resize per frame; one measurement per frame is enough.
   function scheduleSize() {
     if (queued) return;
@@ -946,8 +1281,11 @@ var map = createMap(null, [48, 8]);
 
   sizeCompose();
   window.addEventListener('resize', scheduleSize);
-  window.addEventListener('orientationchange', scheduleSize);
-  if (vv) vv.addEventListener('resize', scheduleSize);
+  window.addEventListener('orientationchange', function () { fullH = 0; scheduleSize(); });
+  if (vv) {
+    vv.addEventListener('resize', scheduleSize);
+    vv.addEventListener('scroll', scheduleSize);
+  }
   window.addEventListener('load', sizeCompose);   // webfonts can change the header height
 })();
 
@@ -1160,10 +1498,12 @@ function renderRouteSummary(state) {
             : (orig && dest ? (orig + ' → ' + dest) : (orig || dest));
 
   // No state given: keep whatever the routing events last established. A single-point
-  // type never routes, so picking its place is already the finished state.
+  // type never routes, so picking its place is already the finished state — and with
+  // only one of origin/destination set, startRouting() hasn't run yet, so there's no
+  // route in flight to report either.
   if (!state) {
     if (bar.dataset.state !== 'idle') state = bar.dataset.state;
-    else state = single ? 'ok' : 'routing';
+    else state = (single || !(orig && dest)) ? 'ok' : 'routing';
   }
   if (!route) state = 'idle';
 
@@ -1178,15 +1518,19 @@ function renderRouteSummary(state) {
     if (state === 'routing') {
       html = '<span class="cp-summary-spin"></span>' + html +
              '<span>' + escapeHtmlSummary(routeSummaryTexts.routing) + '</span>';
-    } else if (newTrip.trip_length) {
-      var meta = texts.distanceTime
-        .replace('{km}', mToKm(newTrip.trip_length))
-        .replace('{time}', secondsToDhm(newTrip.estimated_trip_duration || 0, "{{ langId|default('en') }}"));
-      html += '<span class="cp-summary-meta">' + meta + '</span>';
     }
   }
   bar.dataset.state = state;
   text.innerHTML = html;
+
+  var chips = document.getElementById('routeSummaryChips');
+  var showChips = state === 'ok' && !!newTrip.trip_length;
+  chips.hidden = !showChips;
+  document.getElementById('routeSummaryMeta').innerHTML = showChips
+    ? '<span class="cp-chip"><i class="bi bi-signpost-split"></i>' + mToKm(newTrip.trip_length) + ' km</span>' +
+      '<span class="cp-chip"><i class="bi bi-clock"></i>' +
+        secondsToDhm(newTrip.estimated_trip_duration || 0, "{{ langId|default('en') }}") + '</span>'
+    : '';
 }
 
 // Station names are user data (a manually named place is whatever was typed), and they go
@@ -1639,14 +1983,102 @@ function startRouting() {
   updateAirRoute();
   {% else %}
   wplist = [originEntry[0]].concat(viaStations.filter(Boolean).map(function(v) { return v[0]; })).concat([destEntry[0]]);
+  window.routingWaypointMeta = viaStations.filter(Boolean).map(function(v) { return { name: v[1], stop: v[2] }; });
   renderRouteSummary('routing');
   routing(map, false, vehicle_type);
   bindPlanSync();
   // routing() sets window.control before it returns, so the summary can subscribe to the
   // same route events the hidden sidebar would have used.
   bindRouteSummary(window.control);
+  {% if vehicle_type in ('train', 'metro', 'tram') %}
+  bindNewRouterToggle();
+  {% endif %}
   {% endif %}
 }
+
+{% if vehicle_type in ('train', 'metro', 'tram') %}
+// The sidebar routing.js would normally put this toggle in is hidden on this page (the
+// cp-summary bar replaces it), so it's wired here directly against the same
+// window.control/window.baseRouter routing() just set up.
+function bindNewRouterToggle() {
+  var toggle = document.getElementById('newRouterToggleCompose');
+  var profile = document.getElementById('newRouterProfileCompose');
+  if (!toggle || toggle._bound) return;
+  toggle._bound = true;
+  // The trip type is the segmented control's active button.
+  function profileValue() {
+    var active = profile.querySelector('.router-seg-btn.active');
+    return active ? active.dataset.profile : vehicle_type;
+  }
+
+  function applyNewRouterParams() {
+    if (!window.baseRouter) return;
+    var currentParams = window.baseRouter.options.requestParameters || {};
+    if (useNewRouter) {
+      currentParams.use_new_router = 'true';
+      currentParams.profile = profileValue();
+    } else {
+      delete currentParams.use_new_router;
+      delete currentParams.profile;
+    }
+    if (Object.keys(currentParams).length > 0) {
+      window.baseRouter.options.requestParameters = currentParams;
+    } else {
+      delete window.baseRouter.options.requestParameters;
+    }
+  }
+
+  function reroute() {
+    routeDetails = null;
+    if (newTrip.details) delete newTrip.details;
+    // Force refreshElecPreview() to hit the network again rather than replay the
+    // old router's cached percent — its own cache key is the route's coordinate
+    // array, which usually differs after a reroute, but the router switch itself
+    // isn't part of that key, so this is the one thing that reliably invalidates it.
+    lastElecPreview = null;
+    lastElecPreviewPath = null;
+    if (window.control && window.baseRouter) {
+      applyNewRouterParams();
+      window.control.route();
+    }
+  }
+
+  // routing() made the new router the default for rail types; the switch is "use the
+  // legacy router".
+  toggle.checked = !useNewRouter;
+  toggle.addEventListener('change', function() {
+    useNewRouter = !this.checked;
+    reroute();
+    updateMarkerVisuals();
+  });
+  profile.addEventListener('click', function(e) {
+    var btn = e.target.closest('.router-seg-btn');
+    if (!btn || btn.classList.contains('active') || !useNewRouter) return;
+    profile.querySelectorAll('.router-seg-btn').forEach(function (b) {
+      b.classList.toggle('active', b === btn);
+      b.setAttribute('aria-pressed', String(b === btn));
+    });
+    reroute();
+  });
+}
+
+// The bubble is a <details>, which stays open until re-clicked — close it on any click
+// outside so it behaves like a popover (same as routing.js's own route-hint bubbles).
+document.addEventListener('click', function (e) {
+  var d = document.getElementById('routerHint');
+  if (d && d.open && !d.contains(e.target)) d.removeAttribute('open');
+});
+{% endif %}
+
+{% if vehicle_type in ('train', 'metro', 'tram', 'funicular') %}
+// Same outside-click-close for the electrification info bubble routing.js writes into
+// #elecPreviewCompose (routing.js's own listener only covers its #sidebar copy).
+document.addEventListener('click', function (e) {
+  document.querySelectorAll('.elec-preview-mirror .route-hint[open]').forEach(function (d) {
+    if (!d.contains(e.target)) d.removeAttribute('open');
+  });
+});
+{% endif %}
 
 function onStationSelected(role, entry, dotId) {
   document.getElementById(dotId).classList.add('resolved');
@@ -1673,6 +2105,9 @@ function onStationSelected(role, entry, dotId) {
     }
     {% endif %}
   }
+  // Timetable departures for the new ends (and a picked run's stops dropped if they
+  // were for other ends) — last, so the route already ends at the new station.
+  if (window.motisSchedule) window.motisSchedule();
 }
 
 // autocompleteselect fires before value is written — defer one tick
@@ -1734,18 +2169,77 @@ function insertViaWaypoint(entry) {
   if (!routingStarted || !window.currentPlan) return;
   pendingRouteFit = true;   // a via can push the trip well outside the current frame
   var wps = window.currentPlan.getWaypoints();
-  wps.splice(wps.length - 1, 0, L.Routing.waypoint(L.latLng(entry[0][0], entry[0][1])));
+  wps.splice(wps.length - 1, 0, viaWaypoint(entry));
   window.currentPlan.setWaypoints(wps);
+}
+// Named, so its marker's popup shows the stop rather than "Waypoint #".
+// A timetable stop's record (entry[2]) rides along as the waypoint's `stop` (routing.js).
+function viaWaypoint(entry) {
+  return L.Routing.waypoint(L.latLng(entry[0][0], entry[0][1]), entry[1], entry[2] ? { stop: entry[2] } : {});
+}
+
+// Once there are vias, a summary row ("Renens VD · Morges · … · Coppet  12") heads
+// the list and folds it away on click.
+function setViaCollapsed(collapsed) {
+  var group = document.getElementById('viaGroup');
+  group.classList.toggle('via-collapsed', collapsed);
+  document.getElementById('viaSummary').setAttribute('aria-expanded', String(!collapsed));
+  var chevron = document.getElementById('viaSummaryChevron');
+  chevron.classList.toggle('bi-chevron-down', collapsed);
+  chevron.classList.toggle('bi-chevron-up', !collapsed);
+}
+function updateViaSummary() {
+  var group = document.getElementById('viaGroup'), summary = document.getElementById('viaSummary');
+  var names = viaRows.map(function (r) { return r.querySelector('input').value.trim(); }).filter(Boolean);
+  if (!viaRows.length) {
+    summary.style.display = 'none';
+    group.classList.remove('via-has-summary');
+    setViaCollapsed(false);
+    return;
+  }
+  group.classList.add('via-has-summary');
+  var shown = names.length > 3 ? names.slice(0, 2).concat(['\u2026', names[names.length - 1]]) : names;
+  document.getElementById('viaSummaryText').textContent = shown.join(' \u00b7 ');
+  document.getElementById('viaSummaryCount').textContent = viaRows.length;
+  summary.style.display = 'flex';
+}
+
+// Replace every via with these stops ([{entry, time}], a timetable run's) and route
+// through them in one go, rather than once per stop. Waypoints the user had placed on
+// the map go too: the run's stops say where it went.
+function setViaStops(stops, collapse) {
+  viaRows.forEach(function (r) { r.remove(); });
+  viaRows.length = 0; viaStations.length = 0;
+  stops.forEach(function (stop) { addViaRow(stop.entry, stop.label, stop.time, true); });
+  setViaCollapsed(!!collapse && stops.length > 0);
+  updateViaSummary();
+  if (routingStarted && window.currentPlan) {
+    var wps = window.currentPlan.getWaypoints();
+    freehandSegments.clear();   // indexed by waypoint, which all change
+    pendingRouteFit = true;
+    window.currentPlan.setWaypoints(
+      [wps[0]].concat(stops.map(function (stop) { return viaWaypoint(stop.entry); }), [wps[wps.length - 1]])
+    );
+  }
 }
 
 // entry/label are optional: passing them creates the row already filled in, which is
-// how the map's stop picker adds a via.
-function addViaRow(entry, label) {
+// how the map's stop picker adds a via. `time` ("07:22 – 07:23", a timetable stop's) is
+// shown at the end of the row until the stop is edited; `batch` leaves the route to the
+// caller (setViaStops).
+function addViaRow(entry, label, time, batch) {
   var row = document.createElement('div');
   row.className = 'via-compose-row';
   row.innerHTML = '<i class="bi bi-signpost-2 via-compose-icon" aria-hidden="true"></i>' +
     '<input type="text" class="form-control stationSearch viaStation" placeholder="{{ via|default("Via") }}">' +
     '<button type="button" class="via-compose-remove">&times;</button>';
+  if (time) {
+    row.classList.add('has-time');
+    var badge = document.createElement('span');
+    badge.className = 'via-compose-time';
+    badge.textContent = time;
+    row.insertBefore(badge, row.querySelector('.via-compose-remove'));
+  }
   document.getElementById('viaContainer').appendChild(row);
   viaRows.push(row);
   viaStations.push(entry || null);
@@ -1764,7 +2258,13 @@ function addViaRow(entry, label) {
       if (!picked) return;
       viaStations[idx()] = picked;
       insertViaWaypoint(picked);
+      updateViaSummary();
     }, 0);
+  });
+  input.addEventListener('input', function () {
+    row.classList.remove('has-time');
+    var badge = row.querySelector('.via-compose-time');
+    if (badge) badge.remove();
   });
   row.querySelector('.via-compose-remove').addEventListener('click', function() {
     var i = idx();
@@ -1781,15 +2281,345 @@ function addViaRow(entry, label) {
         window.currentPlan.spliceWaypoints(removeIdx, 1);
       }
     }
+    updateViaSummary();
   });
 
   if (entry) {
     input.value = label || entry[1];
-    insertViaWaypoint(entry);
+    if (!batch) insertViaWaypoint(entry);
   }
+  if (!batch) updateViaSummary();
   return row;
 }
-document.getElementById('addViaBtn').addEventListener('click', function() { addViaRow(null); });
+document.getElementById('addViaBtn').addEventListener('click', function() {
+  var row = addViaRow(null);
+  setViaCollapsed(false);   // show the list it is being added to
+  row.querySelector('input').focus();
+});
+document.getElementById('viaSummary').addEventListener('click', function () {
+  setViaCollapsed(!document.getElementById('viaGroup').classList.contains('via-collapsed'));
+});
+document.getElementById('viaSummaryClear').addEventListener('click', function (e) {
+  e.stopPropagation();
+  setViaStops([]);
+});
+{% endif %}
+
+{% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') %}
+// ── Timetable departures (MOTIS) ──
+//    Once both ends are known, list the direct services between them around the chosen
+//    start time; picking one fills in the times, line, operator and stops (the stops
+//    become the vias the route is drawn through). Same as new.html's.
+(function initMotisDepartures() {
+  var url = "{{ url_for('motis.motis_departures', username=username) }}";
+  var logosBase = "{{ url_for('static', filename='') }}";
+  var typeIcon = "{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}";
+  var texts = {
+    title: {{ motisDepartures|tojson }},
+    searching: {{ motisSearching|tojson }},
+    none: {{ motisNone|tojson }},
+    line: {{ motisLine|tojson }},
+    stops: {{ motisStops|tojson }},
+    track: {{ motisTrack|tojson }},
+    earlier: {{ motisEarlier|tojson }},
+    later: {{ motisLater|tojson }}
+  };
+  // Journey time in the page's language without a lang key: Intl's unit formats
+  // ("26 min", "1 h 05 min", "26分").
+  var hourFmt = new Intl.NumberFormat("{{ langId }}" || 'en', { style: 'unit', unit: 'hour', unitDisplay: 'short' });
+  var minFmt = new Intl.NumberFormat("{{ langId }}" || 'en', { style: 'unit', unit: 'minute', unitDisplay: 'short' });
+  function durationLabel(seconds) {
+    if (!seconds && seconds !== 0) return '';
+    var mins = Math.round(seconds / 60), h = Math.floor(mins / 60), m = mins % 60;
+    if (!h) return minFmt.format(m);
+    return m ? hourFmt.format(h) + ' ' + minFmt.format(m) : hourFmt.format(h);
+  }
+  // A bare line number or letter ("3", "50E", "7bis", "L") reads better as "Line 3";
+  // named services ("IR90 1808", "TGV INOUI 6643", "RER A") already say what they are.
+  function lineLabel(line) {
+    // A lone letter only: two-letter names are often service classes (IC, RE, EC).
+    return /^(\d+[a-z]{0,3}|[A-Z])$/i.test(line) ? texts.line.replace('{line}', line) : line;
+  }
+  // "Voie 4" / "Gl. 4" / "4番線" from a stop's platform; some feeds already put their own
+  // word in front ("Gl. 3" from DB), which goes so it isn't said twice.
+  function trackLabel(track) {
+    if (!track) return '';
+    var bare = String(track).replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '');
+    return texts.track.replace('{track}', bare || track);
+  }
+  var dayFmt = new Intl.DateTimeFormat("{{ langId }}" || 'en',
+    { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+  var $group = $('#motisGroup'), $toggle = $('#motisToggle'), $menu = $('#motisMenu');
+  var timer = null, xhr = null, lastKey = null, departures = [];
+  // The list's Earlier/Later buttons (loadMore): the request in flight, and what the
+  // current list was searched for, which they extend.
+  var moreXhr = null, searchParams = null;
+  // The run last picked, and what it put in the form (see forgetRun).
+  var applied = null;
+
+  function place(which) {
+    var entry = which === 'origin' ? originEntry : destEntry;
+    return entry ? entry[0] : null;
+  }
+
+  // The ends by name, not position: a pin dragged along its platform is still the
+  // same station, while picking another station (or the map's stop picker) is not.
+  function endsKey() {
+    return originEntry && destEntry ? originEntry[1] + '|' + destEntry[1] : null;
+  }
+
+  // Picked a run, then changed an end: what the run filled in was about another trip,
+  // so it goes — its stops (the vias still showing their times; ones added or edited by
+  // hand stay, though waypoints dragged onto the map for the old route don't), and the
+  // line, operator and delays unless changed since. The times stay: the next search
+  // starts from them.
+  function forgetRun() {
+    var run = applied;
+    applied = null;
+    var kept = [];
+    viaRows.forEach(function (row, i) {
+      if (!row.classList.contains('has-time') && viaStations[i]) {
+        kept.push({ entry: viaStations[i], label: row.querySelector('input').value });
+      }
+    });
+    setViaStops(kept);
+    if (run.line && $('#lineName').val() === run.line) $('#lineName').val('');
+    if (run.operator && $('#operator').val() === run.operator) setOperatorValue('');
+    $('#departurePlatform, #arrivalPlatform').val('');
+    if (run.delays) {
+      setDelay('departureDelayMinutes', 0);
+      setDelay('arrivalDelayMinutes', 0);
+    }
+    $menu.find('.motis-item').removeClass('active');
+  }
+
+  // What a search depends on, so the same lookup isn't repeated.
+  function formKey() {
+    var origin = place('origin'), destination = place('destination');
+    return origin && destination ? [origin.join(), destination.join(),
+      $('#newTripStartDate').val(), $('#newTripStartTime').val()].join('|') : null;
+  }
+
+  function setToggle(label, count, enabled, loading) {
+    $toggle.toggleClass('loading', !!loading).attr('aria-busy', loading ? 'true' : null);
+    $('#motisToggleLabel').text(label);
+    $('#motisCount').text(count || '').toggle(!!count);
+    $('#motisChevron').toggle(enabled);
+    $toggle.prop('disabled', !enabled);
+    $group.show();
+  }
+
+  function hide() {
+    if (xhr) xhr.abort();
+    if (moreXhr) moreXhr.abort();
+    departures = [];
+    $menu.empty();
+    $group.hide();
+  }
+
+  function search() {
+    var origin = place('origin'), destination = place('destination');
+    var date = $('#newTripStartDate').val(), time = $('#newTripStartTime').val();
+    if (!origin || !destination || !date || !$('#prec-precise').is(':checked')
+        || origin.join() === destination.join()) {
+      lastKey = null;
+      hide();
+      return;
+    }
+    var key = formKey();
+    if (key === lastKey) return;
+    lastKey = key;
+    if (xhr) xhr.abort();
+    setToggle(texts.searching, null, false, true);
+    if (moreXhr) moreXhr.abort();
+    searchParams = { from: origin.join(','), to: destination.join(','), type: vehicle_type };
+    xhr = $.getJSON(url, $.extend({ date: date, time: time }, searchParams)).done(function (res) {
+      // A date Transitous has no timetables for (a past year): nothing to offer, say nothing.
+      if (res.outside_timetable) { hide(); return; }
+      departures = res.departures || [];
+      render();
+    }).fail(function (_, status) {
+      if (status !== 'abort') { lastKey = null; hide(); }
+    });
+  }
+
+  function schedule() {
+    clearTimeout(timer);
+    if (applied && endsKey() !== applied.ends) forgetRun();
+    // A search for what the form no longer says is dropped straight away, not after
+    // the debounce (the server stops working on it once the request goes away).
+    if (xhr && formKey() !== lastKey) { xhr.abort(); xhr = null; lastKey = null; }
+    // Long enough for typing a time (each keystroke is a new form state).
+    timer = setTimeout(search, 800);
+  }
+  // onStationSelected calls this: the ends are picked from the list, the map or a fill,
+  // not always through a field's own events.
+  window.motisSchedule = schedule;
+
+  function dayLabel(isoDate) {
+    var p = isoDate.split('-').map(Number);
+    return dayFmt.format(new Date(Date.UTC(p[0], p[1] - 1, p[2])));
+  }
+
+  // One run, whichever page of the list it came from.
+  function runKey(d) {
+    return [d.departure, d.line, d.headsign, d.agency].join('|');
+  }
+
+  // "Earlier" / "Later" at the ends of the list.
+  function moreButton(direction) {
+    return $('<button type="button" class="motis-more">').attr('data-direction', direction)
+      .append($('<i class="fa-solid">').addClass(direction === 'earlier' ? 'fa-chevron-up' : 'fa-chevron-down'))
+      .append($('<span>').text(direction === 'earlier' ? texts.earlier : texts.later));
+  }
+
+  // Extend the list by a page: from its last departure on, or the stretch before its
+  // first one as long as the list already spans (a few minutes on a busy line, hours on
+  // a sparse one). New runs merge in; the menu stays open.
+  function loadMore(direction, $btn) {
+    if (!searchParams || !departures.length || moreXhr) return;
+    var first = departures[0].departure, last = departures[departures.length - 1].departure;
+    var at = direction === 'earlier' ? first : last;
+    var span = Math.max(10, Math.round((Date.parse(last) - Date.parse(first)) / 60000));
+    var key = lastKey;
+    $btn.prop('disabled', true).find('i').attr('class', 'fa-solid fa-circle-notch fa-spin');
+    moreXhr = $.getJSON(url, $.extend({
+      date: at.slice(0, 10), time: at.slice(11, 16), page: direction, span: span
+    }, searchParams)).done(function (res) {
+      if (key !== lastKey) return;   // the form has moved on
+      var known = {};
+      departures.forEach(function (d) { known[runKey(d)] = true; });
+      var added = (res.departures || []).filter(function (d) { return !known[runKey(d)]; });
+      departures = departures.concat(added).sort(function (a, b) {
+        return a.departure < b.departure ? -1 : a.departure > b.departure ? 1 : 0;
+      });
+      var scroll = $menu.scrollTop(), height = $menu[0].scrollHeight;
+      render();
+      // Earlier runs go above what was in view: keep it in view.
+      $menu.scrollTop(direction === 'earlier' ? scroll + $menu[0].scrollHeight - height : scroll);
+    }).always(function () {
+      moreXhr = null;
+      $btn.prop('disabled', false).find('i').attr('class', 'fa-solid ' + (direction === 'earlier' ? 'fa-chevron-up' : 'fa-chevron-down'));
+    });
+  }
+
+  function render() {
+    $menu.empty();
+    if (!departures.length) {
+      setToggle(texts.none, null, false);
+      return;
+    }
+    $('<li>').append(moreButton('earlier')).appendTo($menu);
+    departures.forEach(function (d, i) {
+      var depDate = d.departure.slice(0, 10), arrDate = d.arrival.slice(0, 10);
+      var dayDiff = Math.round((Date.parse(arrDate) - Date.parse(depDate)) / 86400000);
+      var $item = $('<a href="#" class="dropdown-item motis-item">').attr('data-i', i)
+        .attr('title', [d.from_name, d.to_name].filter(Boolean).join(' \u2192 '));
+      if (d.color) $item.css('--line-color', d.color);
+      if (applied && applied.key === runKey(d)) $item.addClass('active');
+      $('<img class="motis-logo" alt="">')
+        .attr('src', d.logo_url ? logosBase + d.logo_url : typeIcon)
+        .on('error', function () { if (this.src !== typeIcon) this.src = typeIcon; })
+        .appendTo($item);
+      $('<span class="motis-time">')
+        .text(d.departure.slice(11) + ' \u2192 ' + d.arrival.slice(11))
+        .append(dayDiff > 0 ? $('<sup>').text(' +' + dayDiff) : null)
+        .appendTo($item);
+      // "[Ligne 6] → Nation": the arrow follows the line it belongs to.
+      var $head = $('<span class="motis-head">').appendTo($item);
+      $('<span class="motis-line">').text(d.line ? lineLabel(d.line) : (d.operator || '')).appendTo($head);
+      if (d.headsign) $('<span class="motis-headsign">').text('\u2192 ' + d.headsign).attr('title', d.headsign).appendTo($head);
+      $('<span class="motis-day">').text(dayLabel(depDate)).appendTo($item);
+      // Journey time and stops on the way; the operator only when no logo names it.
+      $('<span class="motis-meta">')
+        .text([
+          durationLabel(d.duration),
+          d.stops.length ? pluralize(texts.stops, d.stops.length) : '',
+          d.logo_url ? '' : d.operator,
+        ].filter(Boolean).join(' \u00b7 '))
+        .appendTo($item);
+      $('<li>').append($item).appendTo($menu);
+    });
+    $('<li>').append(moreButton('later')).appendTo($menu);
+    $('<li class="motis-source">').html('<a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a>').appendTo($menu);
+    // A picked run keeps its "10:53 → 12:21 · IR35" (apply) when the list is extended.
+    setToggle(applied && applied.label || texts.title, departures.length, true);
+  }
+
+  // What the trip keeps of a stop of the picked run: the via entry's third item, carried
+  // to the routing page as its waypoint's `stop` and saved with it (routing.js). Times are
+  // UTC (scheduled), tz shows them locally again, lat/lng is the stop itself (the entry's
+  // own coordinates may have been moved onto the run's path); id and trip are Transitous's
+  // stop and run ids, to fetch the actual times once the run is over.
+  function stopRecord(stop, run) {
+    // Scheduled arr/dep/platform, and the live ones (*_rt) only where they differ.
+    var platform = stop[15] || stop[6];
+    var record = { name: stop[2], cc: stop[3], platform: platform, arr: stop[7], dep: stop[8],
+                  arr_rt: stop[13], dep_rt: stop[14], platform_rt: stop[6] !== platform ? stop[6] : null,
+                  tz: stop[9], lat: stop[10], lng: stop[11], id: stop[12], trip: run.trip_id };
+    Object.keys(record).forEach(function (k) { if (record[k] == null || record[k] === '') delete record[k]; });
+    return record;
+  }
+
+  function setDelay(minutesId, minutes) {
+    $('#' + minutesId).val(minutes || '').trigger('input');
+  }
+
+  function apply(d) {
+    var dep = d.departure.split('T'), arr = d.arrival.split('T');
+    $('#prec-precise').prop('checked', true).trigger('change');
+    $('#newTripStartDate').val(dep[0]);
+    $('#newTripStartTime').val(dep[1]);
+    $('#newTripEndDate').val(arr[0]).attr('min', dep[0]);
+    $('#newTripEndTime').val(arr[1]);
+    if (d.operator) setOperatorValue(d.operator);
+    if (d.line) $('#lineName').val(d.line);
+    $('#departurePlatform').val(d.from_platform || '');
+    $('#arrivalPlatform').val(d.to_platform || '');
+
+    // The service's stops become the via waypoints the route is drawn through.
+    setViaStops(d.stops.map(function (stop) {
+      var name = stop[2] || (stop[0] + ', ' + stop[1]);
+      // Same "🇨🇭 Name" shape as a station picked from the autocomplete.
+      var label = stop[3] && stop[3] !== 'UN' ? getFlagEmoji(stop[3]) + ' ' + name : name;
+      var entry = [[stop[0], stop[1]], label, stopRecord(stop, d)];
+      globalStationDict[label] = entry;
+      var arrival = stop[4], departure = stop[5];
+      var times = arrival && departure && arrival !== departure ? arrival + ' \u2013 ' + departure : (arrival || departure);
+      return { entry: entry, time: [times, trackLabel(stop[6])].filter(Boolean).join(' \u00b7 ') };
+    }), true);
+
+    // Real-time data on a run that has started: carry its delays over.
+    var delays = (d.departure_delay || d.arrival_delay) && $('#delayToggle').is(':visible');
+    if (delays) {
+      setDelay('departureDelayMinutes', d.departure_delay);
+      setDelay('arrivalDelayMinutes', d.arrival_delay);
+      $('#delayToggle').prop('checked', true).trigger('change');
+    }
+    applied = { ends: endsKey(), key: runKey(d), line: d.line, operator: d.operator, delays: !!delays };
+
+    // The form now reflects this departure; don't search again for its own time.
+    lastKey = formKey();
+    $menu.find('.motis-item').removeClass('active');
+    $menu.find('.motis-item[data-i="' + departures.indexOf(d) + '"]').addClass('active');
+    applied.label = dep[1] + ' \u2192 ' + arr[1] + (d.line ? ' \u00b7 ' + lineLabel(d.line) : '');
+    $('#motisToggleLabel').text(applied.label);
+  }
+
+  $menu.on('click', '.motis-more', function (e) {
+    e.preventDefault();
+    e.stopPropagation();   // Bootstrap would close the menu
+    loadMore($(this).attr('data-direction'), $(this));
+  });
+  $menu.on('click', '.motis-item', function (e) {
+    e.preventDefault();
+    apply(departures[+$(this).attr('data-i')]);
+  });
+
+  $('#newTripStartDate, #newTripStartTime').on('change', schedule);
+  $('input[name="precision"]').on('change', schedule);
+  schedule();
+})();
 {% endif %}
 
 // ── Right-click the map to list the stops around that point ──
@@ -2246,13 +3076,41 @@ updateTimingPanel();
 // ── Default dates ──
 (function() {
   var now = new Date();
-  var today = now.toISOString().slice(0, 10);
+  // toISOString() is UTC; shift by the offset so the date matches the local time below.
+  var today = new Date(now - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   document.getElementById('newTripStartDate').value = today;
   document.getElementById('newTripStartTime').value = now.toTimeString().slice(0, 5);
   document.getElementById('newTripEndDate').value = today;
   document.getElementById('onlyDate').value = today;
   document.getElementById('purchasing_date').value = today;
   document.getElementById('purchasing_date').max = today;
+})();
+
+// ── End date follows the start date ──
+//    Both default to today, so moving the start to a past trip's day used to leave the
+//    end on today. The end moves by as many days as the start did — an untouched end
+//    lands on the new start, an overnight arrival keeps its extra day — and never ends up
+//    before the start.
+(function () {
+  var start = document.getElementById('newTripStartDate');
+  var end = document.getElementById('newTripEndDate');
+  var prev = start.value;
+  function dayNum(v) { var p = v.split('-'); return Date.UTC(+p[0], p[1] - 1, +p[2]) / 864e5; }
+
+  // Fills (save & continue, FR24, the journey planner) set the start without an event,
+  // so pick up whatever it holds when the user starts editing it.
+  start.addEventListener('focus', function () { prev = start.value; });
+  start.addEventListener('change', function () {
+    var next = start.value;
+    if (!next) return;
+    var moved = end.value && prev
+      ? new Date((dayNum(end.value) + dayNum(next) - dayNum(prev)) * 864e5).toISOString().slice(0, 10)
+      : next;
+    end.value = moved < next ? next : moved;
+    end.min = next;
+    prev = next;
+    end.dispatchEvent(new Event('change', { bubbles: true }));   // delays read it back
+  });
 })();
 
 // ── Currency flags ──
@@ -2446,6 +3304,8 @@ function composeSave(continueTrip) {
   newTrip.newTripStartDate = document.getElementById('newTripStartDate').value;
   newTrip.newTripStartTime = document.getElementById('newTripStartTime').value;
   newTrip.newTripEndDate = document.getElementById('newTripEndDate').value;
+  newTrip.departurePlatform = document.getElementById('departurePlatform') ? document.getElementById('departurePlatform').value : '';
+  newTrip.arrivalPlatform = document.getElementById('arrivalPlatform') ? document.getElementById('arrivalPlatform').value : '';
   newTrip.newTripEndTime = document.getElementById('newTripEndTime').value;
   newTrip.onlyDate = document.getElementById('onlyDate').value;
   newTrip.unknownType = (document.querySelector('input[name="unknownType"]:checked') || {}).value || '';

@@ -668,7 +668,8 @@ body.markers-hidden .marker-numbered {
     <button class="control-button" id="markersToggle" onclick="toggleMarkers()" title="{{hideMarkers}}"><i class="fas fa-map-pin"></i></button>
   {# The poster is served only to the owner of every trip on the page (401 otherwise). #}
   {% set poster_url = (url_for('public_trip_period_poster', **period_args) if period_args else (url_for('public_trip_poster', tagId=tag_uuid) if tag_uuid else (url_for('public_trip_poster', tripIds=tripIdsParam) if tripIds else None))) if own_trips else None %}
-  {% if poster_url or show_ride_along or multitrip_url or plan_copy_url or plan_itinerary_url %}
+  {# Always rendered: the map background entry is available to everyone. #}
+  {% if True %}
     <div class="tripActions" id="tripActions">
       <button type="button" class="control-button" onclick="toggleTripActions(event)" title="{{ actions }}" aria-label="{{ actions }}">
         <i class="fa-solid fa-ellipsis"></i>
@@ -706,10 +707,15 @@ body.markers-hidden .marker-numbered {
           <i class="fa-solid fa-play"></i> {{ play_tag }}
         </a>
         {% endif %}
+        <button type="button" id="mapBgNav" class="tripActionBtn" style="display:none">
+          <i class="fa-solid fa-map"></i> {{ tilesetLabel }}
+        </button>
       </div>
     </div>
   {% endif %}
 </div>
+
+{% include "includes/map_background_modal.html" %}
 
 {% if planControls %}
 <style>
@@ -803,6 +809,7 @@ function planValidate() {
 <script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
 <script src="{{ url_for('static', filename='js/vehicle_display.js') }}"></script>
+<script src="{{ url_for('static', filename='js/trip_progress.js') }}"></script>
 <script src="https://unpkg.com/@maplibre/maplibre-gl-leaflet@0.0.20/leaflet-maplibre-gl.js"></script>
 
 <script>
@@ -1770,6 +1777,168 @@ function liveCandidates(trips) {
     });
 }
 
+// Moving dashes on the part still to travel: cycles through dash-array phases, as on the
+// live map. Only the layers of the types in progress are touched.
+const DASH_SEQ = [
+    [0,4,3],[0.5,4,2.5],[1,4,2],[1.5,4,1.5],[2,4,1],
+    [2.5,4,0.5],[3,4,0],[0,0.5,3,3.5],[0,1,3,3],
+    [0,1.5,3,2.5],[0,2,3,2],[0,2.5,3,1.5],[0,3,3,1],
+    [0,3.5,3,0.5],[0,4,3,0]
+];
+let dashStep = 0;
+function animateFutureDashes(ts) {
+    const step = Math.floor(ts / 50) % DASH_SEQ.length;
+    if (step !== dashStep) {
+        dashStep = step;
+        MapLibreUtils.MapConfig.transportTypes.forEach(type => {
+            const id = `current-${type.id}-future-overlay`;
+            try { if (map.getLayer(id)) map.setPaintProperty(id, 'line-dasharray', DASH_SEQ[step]); } catch (_) {}
+        });
+    }
+    requestAnimationFrame(animateFutureDashes);
+}
+
+// The timetable stops of the trip in progress (only those with a name and a time), as small
+// round bumps on its line: discreet, a hint that something is there, clickable for the
+// name and the times (delays included).
+function addCurrentStops(trips) {
+    const features = [];
+    trips.forEach(t => {
+        if (t.time !== 'current') return;
+        const typeDef = MapLibreUtils.MapConfig.transportTypes.find(x => x.id === t.trip.type);
+        // The line is drawn at 80% over its dark edge; an opaque dot in that same blend
+        // (colour darkened to 80%) is indistinguishable from it where the two meet.
+        const base = (typeDef ? typeDef.color : '#444444').replace('#', '');
+        const color = '#' + [0, 2, 4].map(i =>
+            Math.round(parseInt(base.substr(i, 2), 16) * 0.82).toString(16).padStart(2, '0')).join('');
+        TripProgress.timedStops(t.trip).forEach(s => features.push({
+            type: 'Feature',
+            geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
+            properties: Object.assign({}, s, { color: color, icon: typeDef ? typeDef.icon : 'fa-train' })
+        }));
+    });
+    if (!features.length || map.getSource('current-stops')) return;
+    map.addSource('current-stops', { type: 'geojson', data: { type: 'FeatureCollection', features } });
+    // The line has a dark edge (a black layer under the coloured one). The dot gets the same,
+    // 1 px wider all round, beneath the current lines so the two merge into one shape.
+    const firstCurrentLine = MapLibreUtils.MapConfig.transportTypes
+        .map(x => `current-${x.id}-past`).find(id => map.getLayer(id));
+    map.addLayer({
+        id: 'current-stops-shadow',
+        type: 'circle',
+        source: 'current-stops',
+        paint: {
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 3.4, 10, 4.3, 14, 5.5],
+            'circle-color': '#000000',
+            'circle-opacity': 0.8,
+            'circle-blur': 0.3
+        }
+    }, firstCurrentLine);
+    // Below the moving white dashes, so they run over the dot as they do over the line.
+    const firstOverlay = MapLibreUtils.MapConfig.transportTypes
+        .map(x => `current-${x.id}-future-overlay`).find(id => map.getLayer(id));
+    map.addLayer({
+        id: 'current-stops',
+        type: 'circle',
+        source: 'current-stops',
+        paint: {
+            // Just the trip's own colour, a little wider than the 3 px line: a bump in it.
+            'circle-radius': ['interpolate', ['linear'], ['zoom'], 4, 2.4, 10, 3.3, 14, 4.5],
+            'circle-color': ['coalesce', ['get', 'color'], '#444444'],
+            'circle-opacity': 1
+        }
+    }, firstOverlay);
+
+    const labels = { arrival: {{ arrival|tojson }}, departure: {{ departure|tojson }}, track: {{ motisTrack|tojson }} };
+    const clock = (ms, tz) => {
+        if (!isFinite(ms)) return '';
+        try {
+            return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', timeZone: tz || undefined }).format(new Date(ms));
+        } catch (e) { return ''; }
+    };
+    const el = (tag, css, text) => {
+        const n = document.createElement(tag);
+        if (css) n.style.cssText = css;
+        if (text != null) n.textContent = text;
+        return n;
+    };
+    // "<s>11:28</s> 11:36" when the actual minute differs from the timetabled one.
+    const timeCell = (actual, sched, tz) => {
+        const cell = el('span');
+        const a = clock(actual, tz), p = clock(sched, tz);
+        if (p && a && p !== a) {
+            cell.appendChild(el('s', 'color:#999;margin-right:4px', p));
+            cell.appendChild(el('span', 'color:' + (actual > sched ? '#dc3545' : '#28a745') + ';font-weight:600', a));
+        } else {
+            cell.textContent = a || p;
+        }
+        return cell;
+    };
+    // "Pl. 8", from the bare number whatever the source wrote ("Gleis 8", "Platform 8").
+    const track = v => {
+        const bare = String(v).replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '');
+        return labels.track.replace('{track}', bare || v);
+    };
+
+    map.on('click', 'current-stops', e => {
+        e.originalEvent.stopPropagation();
+        const p = e.features[0].properties;
+        const box = el('div', 'min-width:170px;font-size:0.92em;line-height:1.5');
+
+        const head = el('div', 'display:flex;align-items:center;gap:7px;font-weight:bold;font-size:1.05em;margin-bottom:5px');
+        const icon = el('i', 'color:' + p.color);
+        icon.className = 'fa-solid ' + p.icon;
+        head.appendChild(icon);
+        head.appendChild(el('span', null, p.name));
+        if (p.cc) head.appendChild(el('span', 'margin-left:auto;font-size:1.2em', getFlagEmoji(p.cc)));
+        box.appendChild(head);
+
+        const row = (label, actual, sched) => {
+            if (!isFinite(actual)) return;
+            const r = el('div', 'display:flex;gap:8px');
+            r.appendChild(el('span', 'color:#888;min-width:5.5em', label));
+            r.appendChild(timeCell(actual, sched, p.tz));
+            box.appendChild(r);
+        };
+        const same = Math.abs(p.arr - p.dep) < 60000;
+        if (same) {
+            row(labels.departure, p.dep, p.depSched);
+        } else {
+            row(labels.arrival, p.arr, p.arrSched);
+            row(labels.departure, p.dep, p.depSched);
+        }
+
+        const plat = p.platformRt || p.platform;
+        if (plat) {
+            const r = el('div', 'margin-top:3px;color:#555');
+            if (p.platformRt && p.platform && p.platformRt !== p.platform) {
+                r.appendChild(el('s', 'color:#999;margin-right:4px', track(p.platform)));
+                r.appendChild(el('span', 'color:#dc3545;font-weight:600', track(p.platformRt)));
+            } else {
+                r.textContent = track(plat);
+            }
+            box.appendChild(r);
+        }
+
+        showMapPopup(new maplibregl.Popup({ offset: 10, closeButton: false })
+            .setLngLat(e.features[0].geometry.coordinates).setDOMContent(box));
+    });
+    map.on('mouseenter', 'current-stops', () => { map.getCanvas().style.cursor = 'pointer'; });
+    map.on('mouseleave', 'current-stops', () => { map.getCanvas().style.cursor = ''; });
+}
+
+// The viewer's own position, next to the timetable one (the viewer may well be on the
+// train). Only offered once, and only where the browser can locate.
+let gpsMarker = null;
+function startGPSIndicator() {
+    if (!navigator.geolocation) return;
+    navigator.geolocation.watchPosition(pos => {
+        const lngLat = [pos.coords.longitude, pos.coords.latitude];
+        if (gpsMarker) gpsMarker.setLngLat(lngLat);
+        else gpsMarker = createCustomMarker(lngLat, 'gps', null, 0);
+    });
+}
+
 function buildCurrentTripFeatures(trips) {
     const features = [];
     trips.forEach(trip => {
@@ -1781,7 +1950,7 @@ function buildCurrentTripFeatures(trips) {
         const isTracked = !!(trip.liveTracked && trip.liveDestination && trip.livePath);
         // Convert to [lng, lat] and expand air routes to geodesic before splitting
         let fullCoords = (isTracked ? trip.livePath : trip.path).map(c => [c[1], c[0]]);
-        let splitIndex;
+        let splitIndex, splitPoint = null;
 
         if (isTracked && fullCoords.length >= 2) {
             // FR24's public track sometimes begins well into the climb-out rather than
@@ -1806,11 +1975,20 @@ function buildCurrentTripFeatures(trips) {
             if (trip.trip.type === 'air' && fullCoords.length === 2) {
                 fullCoords = MapLibreUtils.createGeodesicLine(fullCoords[0], fullCoords[1]);
             }
-            splitIndex = Math.floor(calculatePosition(trip) * fullCoords.length);
+            // Timetable position: stops, dwell times and delays included.
+            const pos = TripProgress.position(trip.trip, fullCoords);
+            if (pos) {
+                splitIndex = pos.index;
+                splitPoint = pos.point;
+            } else {
+                splitIndex = Math.floor(calculatePosition(trip) * fullCoords.length);
+            }
         }
 
-        const pastCoords = fullCoords.slice(0, splitIndex + 1);
-        const futureCoords = fullCoords.slice(splitIndex);
+        // The split point sits between two vertices: it ends the past and starts the future.
+        const tail = splitPoint ? [splitPoint] : [];
+        const pastCoords = fullCoords.slice(0, splitIndex + 1).concat(tail);
+        const futureCoords = tail.concat(fullCoords.slice(splitIndex + (splitPoint ? 1 : 0)));
 
         const props = (suffix, time) => ({
             id: trip.trip.uid + suffix,
@@ -1977,6 +2155,20 @@ function placePolylines(trips) {
     );
 
     startLiveTracking(trips, features);
+
+    // An in-progress trip moves with the clock: re-split its line and move its pin from
+    // the timetable position (stops, dwell times, delays) instead of only on load. It
+    // stops at the destination once the trip is over (the position is clamped there).
+    if (trips.some(t => t.time === 'current')) {
+        setInterval(() => {
+            const source = map.getSource('current-trips');
+            if (source) source.setData({ type: 'FeatureCollection', features: buildCurrentTripFeatures(trips) });
+        }, 5000);
+        requestAnimationFrame(animateFutureDashes);
+        // The viewer's location is for the owner's own /current page only: a shared trip
+        // link can be opened by anyone.
+        if ({{ 'true' if current_page else 'false' }}) startGPSIndicator();
+    }
 
     // Click an itinerary leg to highlight (and zoom to) that trip on the map.
     $('#itinerary').off('click.highlight').on('click.highlight', '.itinerary-trip', function() {
@@ -2313,13 +2505,13 @@ if (numberedMarkers.length > 0) {
                         ],
                         layout: { 
                             'line-join': 'round', 
-                            'line-cap': 'round',
+                            'line-cap': 'butt',
                             'visibility': 'visible'
                         },
                         paint: {
                             ...basePaint,
                             'line-color': '#ffffff',
-                            'line-dasharray': [3, 3]
+                            'line-dasharray': DASH_SEQ[0]
                         }
                     });
 
@@ -2336,6 +2528,7 @@ if (numberedMarkers.length > 0) {
                     });
                 }
             });
+            addCurrentStops(trips);
         }
 
     // Set view to show all trips
@@ -2416,12 +2609,21 @@ if (numberedMarkers.length > 0) {
 }
 
 // Show trip popup
+// One popup at a time on the line and its stops: a new one replaces the last.
+let mapClickPopup = null;
+function showMapPopup(popup) {
+    if (mapClickPopup) mapClickPopup.remove();
+    mapClickPopup = popup.addTo(map);
+}
+
 function showTripPopup(e) {
+    // A click on a stop also hits the line under it: the stop's popup wins.
+    if (map.getLayer('current-stops') &&
+        map.queryRenderedFeatures(e.point, { layers: ['current-stops'] }).length) return;
     const properties = e.features[0].properties;
-    new maplibregl.Popup({ offset: [0, -10] })
+    showMapPopup(new maplibregl.Popup({ offset: [0, -10] })
         .setLngLat(e.lngLat)
-        .setText(`${properties.origin} - ${properties.destination}`)
-        .addTo(map);
+        .setText(`${properties.origin} - ${properties.destination}`));
     // Reverse link: highlight the matching itinerary leg and scroll it into view.
     if (properties.id != null) {
         highlightTrip(properties.id, { scrollItinerary: true });
@@ -2616,6 +2818,11 @@ function createCustomMarker(coordinates, type, popupText, rotation) {
                 ? "url('{{ url_for('static',filename='images/icons/marker-icon-2x-purpleOrange.png') }}')"
                 : "url('{{ url_for('static',filename='images/icons/marker-icon-2x-redGreen.png') }}')";
             el.style.width = '46px';
+            el.style.height = '41px';
+            break;
+        case 'gps':
+            el.style.backgroundImage = "url('{{ url_for('static',filename='images/icons/satellite.png') }}')";
+            el.style.width = '25px';
             el.style.height = '41px';
             break;
         case 'calc':

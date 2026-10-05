@@ -19,5 +19,6 @@
 <script src="{{ url_for('static',filename='js/lib/leaflet-numbered-markers.js') }}"></script>
 <script>
     window.colorblindMode = {{ 'true' if colorblind else 'false' }};
+    window.exactWaypointsDefault = {{ 'true' if exact_waypoints_default else 'false' }};
 </script>
 <script src="{{ static_autoversion(filename='js/routing.js') }}"></script>

@@ -211,6 +211,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 5px; /* Adjust the gap as needed */
+  min-width: 0;
+  max-width: 100%;
 }
 
 .tag-blob {
@@ -222,7 +224,11 @@
   margin: 2px;
   user-select: none;
   text-decoration: none;
-  white-space: nowrap;
+  /* Long names shrink to the container width, then wrap onto extra lines */
+  max-width: 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
   box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 

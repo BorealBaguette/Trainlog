@@ -84,7 +84,9 @@ from py.coverage import (
     get_coverage_geojson_dict,
     has_coverage_file,
 )
-from src.currency import get_available_currencies, get_exchange_rate
+from src import openrailwaymap
+from src.router_regions import regions_geojson
+from src.currency import get_available_currencies, get_currency_leaderboard, get_exchange_rate
 from scripts.backfill_vessels import apply_plan as backfill_apply_plan
 from scripts.backfill_vessels import build_plan as backfill_build_plan
 from src.g_search import (
@@ -106,7 +108,6 @@ from src.sql.stations import (
 from src.sql.tags import get_tags_query
 from src.sql.tickets import get_ticket_query, get_tickets_query
 from src.sql.trips import (
-    delete_user_trips_query,
     get_duplicate_query,
     get_dynamic_user_trips_query,
     get_material_types_query,
@@ -177,6 +178,11 @@ from src.api.og import og_blueprint, og_image_url
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
+from src.discord_webhooks import (
+    discord_webhooks_blueprint,
+    enabled_webhooks,
+    list_webhooks,
+)
 from src.discord_bot import sync_discord_tier
 from src.api.carbon import carbon_blueprint
 from src.api.wrapped import wrapped_blueprint, DISTANCE_COMPARISONS, DURATION_COMPARISONS
@@ -191,6 +197,7 @@ from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
 from src.api.live_tracks import get_live_tracks, live_tracks_blueprint
 from src.api.wagon_leaderboard import wagon_leaderboard_blueprint
+from src.api.motis import motis_blueprint
 from src.consts import DbNames, TripTypes
 from src.global_map import (
     available_bins,
@@ -297,7 +304,9 @@ from src.plans.duplicate_plan import duplicate_plan
 from src.plans.validate_plan import validate_plan
 from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
-from src.users import User, Friendship, authDb
+from src.account_export import build_account_data_csvs
+from src.delete_account import delete_account_data
+from src.users import User, Friendship, authDb, exact_waypoints_context
 from src.email_parser import start_email_listener
 from src.trip_announcer import (
     announced_trip_ids,
@@ -340,6 +349,7 @@ app.register_blueprint(feature_requests_blueprint)
 app.register_blueprint(finance_blueprint)
 app.register_blueprint(bmc_blueprint)
 app.register_blueprint(discord_oauth_blueprint)
+app.register_blueprint(discord_webhooks_blueprint)
 app.register_blueprint(news_blueprint)
 app.register_blueprint(og_blueprint)
 app.register_blueprint(carbon_blueprint)
@@ -354,6 +364,7 @@ app.register_blueprint(trips_blueprint)
 app.register_blueprint(plans_api_blueprint)
 app.register_blueprint(live_tracks_blueprint)
 app.register_blueprint(wagon_leaderboard_blueprint)
+app.register_blueprint(motis_blueprint)
 
 app.config["CACHE_TYPE"] = "SimpleCache"
 app.config["CACHE_DEFAULT_TIMEOUT"] = 864000
@@ -921,6 +932,8 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         arrival_delay=sanitize_param(newTrip.get("arrival_delay")),
         power_type=newTrip.get("powerType"),
         co2_override=float(newTrip["co2Override"]) if newTrip.get("co2Override") else None,
+        departure_platform=newTrip.get("departurePlatform"),
+        arrival_platform=newTrip.get("arrivalPlatform"),
         altitude=altitude,
         timestamps=timestamps,
         route_source=newTrip.get("route_source") or "router",
@@ -1330,6 +1343,9 @@ def order_trip_types(types):
     return sorted(
         types, key=lambda t: TRIP_TYPE_SORT_KEY.get(t, len(TRIP_TYPE_SORT_KEY))
     )
+
+
+app.context_processor(exact_waypoints_context)
 
 
 @app.context_processor
@@ -3941,11 +3957,12 @@ def vector_style(language, style):
 
 @app.route("/getORMStyle/<style>.json")
 def orm_style(style):
-    allowed = {"standard", "speed", "signals", "electrification", "track", "operator"}
-    if style not in allowed:
+    if style not in openrailwaymap.PRESETS:
         return ("Not found", 404)
-    resp = requests.get(f"https://openrailwaymap.app/style/{style}.json", timeout=10)
-    return jsonify(resp.json())
+    try:
+        return jsonify(openrailwaymap.build_style(style))
+    except (requests.RequestException, ValueError):
+        return ("OpenRailwayMap style unavailable", 502)
 
 
 @app.route("/u/<username>/new_map")
@@ -4784,6 +4801,7 @@ def render_public_trip_page(
     template="public/public_trip.html",
     owner_only=False,
     period=None,
+    current_page=False,
 ):
     
     user_obj = None
@@ -5039,6 +5057,9 @@ def render_public_trip_page(
 
     return render_template(
         template,
+        # The owner's own /current page, not a shared link: only there may the page use the
+        # viewer's location (the pin marks the viewer, who is on the trip).
+        current_page=current_page,
         own_trips=own_trips,
         logosList=listOperatorsLogos(),
         tripIds=",".join(str(trip["uid"]) for trip in trip_list_sorted),
@@ -5522,17 +5543,14 @@ def download_path(trip_ids):
 @login_required
 def current(username):
     """
-    Current trip
+    Current trip: the regular trip page (itinerary + MapLibre map), whose in-progress
+    position moves with the clock. Back to the user's home when nothing is in progress.
     """
-    user_obj = User.query.filter_by(username=username).first()
-    colorblind = getattr(user_obj, "colorblind", False) if user_obj else False
-    return render_template(
-        "current.html",
-        title=lang[session["userinfo"]["lang"]]["current"],
-        username=username,
-        colorblind=colorblind,
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
+    trip_id = get_current_trip_id()
+    if trip_id is None:
+        return redirect(url_for("user_home", username=username))
+    return render_public_trip_page(
+        str(trip_id), template="public/new_trip.html", current_page=True
     )
 
 @app.route("/u/<username>/getStats/<tripType>", methods=["GET"])
@@ -6544,9 +6562,13 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
     # Routing waypoints are just the endpoints (+ any stored waypoints), NOT every geom
     # vertex — mirrors the normal trip editor (see the edit route's wplist logic).
     wplist = [coords[0], coords[-1]] if coords else [[0, 0], [0, 0]]
+    waypoint_meta = []
+    stored = []
     if pt["waypoints"]:
-        wp = [[p["lat"], p["lng"]] for p in json.loads(pt["waypoints"])]
+        stored = json.loads(pt["waypoints"])
+        wp = [[p["lat"], p["lng"]] for p in stored]
         wplist = [coords[0]] + wp + [coords[-1]]
+        waypoint_meta = _waypoint_meta(stored)
 
     sdt, edt = pt["start_datetime"], pt["end_datetime"]
     start_str = sdt.strftime("%Y-%m-%d %H:%M:%S") if sdt else ""
@@ -6625,6 +6647,8 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         tripType=pt["trip_type"],
         tripTicketId="",
         wplist=wplist,
+        waypoint_meta=waypoint_meta,
+        stored_waypoints=stored,
         raw_path=[],
         tripNotes=pt["notes"] or "",
         colorblind=colorblind,
@@ -7160,10 +7184,15 @@ def deleteTrip(username):
     return ""
 
 
-def _discord_linked(username):
-    """Whether this user has linked a Discord account, and so may post trips."""
-    user = User.query.filter_by(username=username).first()
-    return bool(user and user.discord_id)
+def _can_announce(user):
+    """Whether this user has somewhere to post trips: the main channel or a webhook."""
+    return bool(
+        user
+        and (
+            (user.discord_id and user.discord_main_enabled)
+            or enabled_webhooks(user.uid)
+        )
+    )
 
 
 @app.route("/u/<username>/postTripAnnouncement", methods=["POST"])
@@ -7182,11 +7211,15 @@ def post_trip_announcement(username):
 
     check_current_user_owns_trip(trip_id)
     user = User.query.filter_by(username=username).first()
-    if user is None or not user.discord_id:
+    if not _can_announce(user):
         abort(403)
 
     posted, reason = post_trip_now(
-        trip_id, user.uid, user.username, user.discord_id
+        trip_id,
+        user.uid,
+        user.username,
+        user.discord_id,
+        to_main=user.discord_main_enabled,
     )
     # The row's new state, so the page can swap the buttons over without
     # reloading itself.
@@ -7219,7 +7252,7 @@ def delete_trip_announcement(username):
     # being travelled — so the page is told, and offers it or does not.
     user = User.query.filter_by(username=username).first()
     postable = bool(
-        removed and user and user.discord_id and is_postable(trip_id, user.uid)
+        removed and _can_announce(user) and is_postable(trip_id, user.uid)
     )
     return jsonify({"ok": removed, "announced": not removed, "postable": postable})
 
@@ -7322,6 +7355,69 @@ def get_trip(trip_id):
         arrival_delay=trip.get("arrival_delay"),
         route_source=trip.get("route_source") or "router",
     )
+
+
+def _waypoint_meta(stored_waypoints):
+    """Name and hard/soft mode of each stored intermediate waypoint, for the routing
+    map (routing.js reads them as window.routingWaypointMeta)."""
+    # hard is True, False (made approximate by hand, which a later drag must not
+    # undo) or None (never set: approximate by default). stop is a timetable stop's
+    # record (name, UTC arr/dep, tz, platform, its own lat/lng); trips saved before
+    # those were kept have just a name.
+    return [
+        {
+            "name": p.get("name") or "",
+            "hard": p.get("hard") if isinstance(p.get("hard"), bool) else None,
+            "stop": p.get("stop") if isinstance(p.get("stop"), dict) else None,
+        }
+        for p in stored_waypoints
+    ]
+
+
+def _as_datetime(value):
+    """A trip datetime (datetime or 'YYYY-MM-DD HH:MM:SS'), or None for none / the
+    1 / -1 project and unknown-date sentinels."""
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None)
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+    return None
+
+
+def _shift_trip_stops(waypoints_json, old_start, new_start):
+    """The waypoints JSON with its timetable stops moved along with the trip's start.
+
+    Copying a past trip and setting today's date (a common way to log a trip taken
+    again) would otherwise keep the old day's stop times. The scheduled times move by
+    as much as the start did; what belonged to that day's run goes: its live times and
+    platforms (*_rt) and its Transitous id (no longer the run to refresh from).
+    Unchanged when the start didn't move, or either isn't a real date."""
+    old_start, new_start = _as_datetime(old_start), _as_datetime(new_start)
+    if not waypoints_json or not old_start or not new_start or old_start == new_start:
+        return waypoints_json
+    try:
+        waypoints = json.loads(waypoints_json)
+    except (TypeError, ValueError):
+        return waypoints_json
+    if not isinstance(waypoints, list) or not any(isinstance(w, dict) and isinstance(w.get("stop"), dict) for w in waypoints):
+        return waypoints_json
+    delta = new_start - old_start
+    for wp in waypoints:
+        stop = wp.get("stop") if isinstance(wp, dict) else None
+        if not isinstance(stop, dict):
+            continue
+        for field in ("arr", "dep"):
+            try:
+                when = datetime.strptime(stop[field], "%Y-%m-%dT%H:%M:%SZ")
+                stop[field] = (when + delta).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except (KeyError, TypeError, ValueError):
+                pass   # absent, or not a time we wrote: left as it is
+        for field in ("arr_rt", "dep_rt", "platform_rt", "trip"):
+            stop.pop(field, None)
+    return json.dumps(waypoints, ensure_ascii=False)
 
 
 def sanitize_param(param):
@@ -7429,7 +7525,19 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         material_type=sanitize_param(formData["material_type"]),
         material_type_advanced=sanitize_param(formData.get("material_type_advanced")),
         reg=sanitize_param(formData["reg"]),
-        waypoints=sanitize_param(formData.get("waypoints", original_trip.waypoints)),
+        # Stops move with the trip's start (a past trip copied to today: _shift_trip_stops).
+        # (UTC against UTC where both have it, else local against local; from the start
+        # the stops were last set for, stopsStart, when the page renewed them for another.)
+        waypoints=_shift_trip_stops(
+            sanitize_param(formData.get("waypoints", original_trip.waypoints)),
+            *(
+                (formData["stopsStart"] + ":00", start_datetime)
+                if formData.get("stopsStart")
+                else (original_trip.utc_start_datetime, utc_start_datetime)
+                if original_trip.utc_start_datetime and utc_start_datetime
+                else (original_trip.start_datetime, start_datetime)
+            ),
+        ),
         notes=sanitize_param(formData["notes"]),
         price=sanitize_param(formData["price"]),
         currency=sanitize_param(formData.get("currency"))
@@ -7446,6 +7554,8 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         arrival_delay=sanitize_param(formData.get("arrival_delay")),
         power_type=power_type,
         co2_override=co2_override,
+        departure_platform=formData.get("departurePlatform"),
+        arrival_platform=formData.get("arrivalPlatform"),
         # Re-drawing/importing sends a fresh source; plain metadata edits keep the stored one.
         route_source=formData.get("route_source") or original_trip.route_source,
     )
@@ -7817,6 +7927,14 @@ def stationAutocomplete():
     if responseJson is None:
         return "Photon Error", 500
     
+    # Unnamed features (a reverse lookup can return a bare platform or a building)
+    # can't be offered as a station, and everything below keys on the name.
+    responseJson["features"] = [
+        feature
+        for feature in responseJson.get("features") or []
+        if (feature.get("properties") or {}).get("name")
+    ]
+
     homonymy_filter = {}
     for index, result in enumerate(responseJson["features"]):
         props = result["properties"]
@@ -8390,30 +8508,8 @@ def delete_user(uid):
     if not user:
         return ""
 
-    user_id = get_user_id(user.username)
     try:
-        with pg_session() as pg:
-            idList = [
-                row["uid"]
-                for row in pg.execute(
-                    "SELECT trip_id AS uid FROM trips WHERE user_id = :user_id",
-                    {"user_id": user_id},
-                ).fetchall()
-            ]
-
-        with pg_session() as pg:
-            if idList:
-                pg.execute(
-                    "DELETE FROM paths WHERE trip_id = ANY(:ids)",
-                    {"ids": [int(i) for i in idList]},
-                )
-            pg.execute(delete_user_trips_query(), {"user_id": user_id})
-            pg.execute(
-                "DELETE FROM tag_members WHERE username = :username",
-                {"username": user.username},
-            )
-        authDb.session.delete(user)
-        authDb.session.commit()
+        delete_account_data(user)
         invalidate_admin_users_cache()
     except Exception as e:
         print(e)
@@ -8574,45 +8670,6 @@ def fetchUpdatedTrips(username, lastLocal, public):
 def get_updated_trips(username, lastLocal):
     result = fetchUpdatedTrips(username, lastLocal, public=0)
     return jsonify(result)
-
-
-@app.route("/u/<username>/getCurrentTrip", methods=["GET", "POST"])
-@login_required
-def get_current_trip_path(username):
-    trip_id = get_current_trip_id()
-    if trip_id is None:
-        return jsonify([])
-
-    trip_ids = [trip_id]
-
-    trip_list = []
-
-    with pg_session() as pg:
-        pathResult = pg.execute(
-            get_user_lines_query(), {"ids": [int(i) for i in trip_ids]}
-        ).fetchall()
-    paths = {}
-    for path in pathResult:
-        paths[path["trip_id"]] = path["path"]
-
-    for tripId in trip_ids:
-        trip = formatTrip(get_trip_pg(tripId))
-        user = User.query.filter_by(username=trip["username"]).first()
-        if not session.get(user.username) and not user.is_public():
-            abort(401)
-        trip_list.append(
-            {
-                "time": trip["time"],
-                "trip": dict(trip),
-                "path": json.loads(paths[trip["uid"]]),
-                "distances": getDistanceFromPath(json.loads(paths[trip["uid"]])),
-            }
-        )
-    sorted_trip_list = sorted(trip_list, key=lambda d: d["trip"]["uid"], reverse=True)
-    sorted_trip_list = sorted(
-        sorted_trip_list, key=lambda d: d["trip"]["start_datetime"], reverse=True
-    )
-    return jsonify(sorted_trip_list)
 
 
 def processPublicTrips(tripIds):
@@ -9722,6 +9779,7 @@ def admin_currency_test():
         isCurrent=has_current_trip(get_user_id()),
         currencyOptions=get_available_currencies(getUser()),
         todayDate=date.today().isoformat(),
+        currencyLeaderboard=get_currency_leaderboard(),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -9811,15 +9869,11 @@ def user_settings(username):
         params["default_landing"] = request.form["default_landing"]
         params["tileserver"] = request.form["tileserver"]
         params["globe"] = "globe" in request.form
+        params["exact_waypoints"] = "exact_waypoints" in request.form
         # Premium-only toggle: only honour it for premium users so a crafted POST
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
         params["live_tracking"] = ("live_tracking" in request.form) and bool(user.premium)
-        # Gated on a linked Discord account rather than premium: without one
-        # there is nobody to post as, and the announcer skips the user anyway.
-        params["discord_autopost"] = (
-            "discord_autopost" in request.form
-        ) and bool(user.discord_id)
 
         for param in params:
             if getattr(user, param) != params[param]:
@@ -9838,7 +9892,9 @@ def user_settings(username):
     colorblind_checked = "checked" if user.colorblind else ""
     flight_3d_checked = "checked" if user.flight_3d else ""
     live_tracking_checked = "checked" if user.live_tracking else ""
+    exact_waypoints_checked = "checked" if user.exact_waypoints else ""
     discord_autopost_checked = "checked" if user.discord_autopost else ""
+    discord_main_checked = "checked" if user.discord_main_enabled else ""
 
     return render_template(
         "user_settings.html",
@@ -9853,12 +9909,16 @@ def user_settings(username):
         colorblind_checked=colorblind_checked,
         flight_3d_checked=flight_3d_checked,
         live_tracking_checked=live_tracking_checked,
+        exact_waypoints_checked=exact_waypoints_checked,
         discord_autopost_checked=discord_autopost_checked,
+        discord_main_checked=discord_main_checked,
         user_currency=user.user_currency,
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
         user_globe=user.globe,
         discord_id=user.discord_id,
+        discord_webhooks=list_webhooks(user.uid),
+        discord_webhook_status=request.args.get("dw"),
         user_email=user.email,
         pending_email=user.pending_email,
         **lang[session["userinfo"]["lang"]],
@@ -10016,6 +10076,57 @@ def confirm_email_change(token):
     return redirect(url_for("user_settings", username=user.username))
 
 
+@app.route("/u/<username>/delete_account/verify_password", methods=["POST"])
+@login_required
+def verify_delete_account_password(username):
+    """Checked between the delete-account modal's two steps, so a wrong
+    password is caught before the destructive step is even shown — not only
+    after the final submit. That final submit still re-checks it itself
+    (see delete_account below); this is an added UX step, not a replacement,
+    since a forged request could skip straight past this endpoint."""
+    user = User.query.filter_by(username=username).first()
+    password = request.form.get("delete_confirm_secret", "")
+    valid = bool(password) and check_password_hash(user.pass_hash, password)
+    return jsonify({"valid": valid})
+
+
+@app.route("/u/<username>/delete_account", methods=["POST"])
+@login_required
+def delete_account(username):
+    """Self-service, permanent account deletion. Two things stand between this
+    and an accidental click: the current password (proves it's really the
+    account holder, not just a stolen/left-open session) and the username
+    typed back exactly (mirrored client-side in user_settings.html, but
+    re-checked here since the client can't be trusted). Neither check is
+    skippable by the browser sending an odd request.
+
+    The form fields are named delete_confirm_secret/delete_confirm_phrase
+    rather than password/username on purpose: a real name="password" input
+    gets its own save/fill prompt from the browser no matter what autocomplete
+    hints say, which fights the whole point of a confirmation step."""
+    user = User.query.filter_by(username=username).first()
+    user_lang = lang[session["userinfo"]["lang"]]
+
+    password = request.form.get("delete_confirm_secret", "")
+    confirm_username = request.form.get("delete_confirm_phrase", "").strip()
+
+    if confirm_username != username:
+        flash(user_lang["deleteAccountConfirmMismatch"], "error")
+        return redirect(url_for("user_settings", username=username))
+
+    if not password or not check_password_hash(user.pass_hash, password):
+        flash(user_lang["deleteAccountWrongPassword"], "error")
+        return redirect(url_for("user_settings", username=username))
+
+    delete_account_data(user)
+    invalidate_admin_users_cache()
+
+    session.pop(username, None)
+    session.pop("logged_in", None)
+    flash(user_lang["deleteAccountSuccess"], "success")
+    return redirect(url_for("login"))
+
+
 @app.route("/u/<username>/settings_app", methods=["GET", "POST"])
 @login_required
 def user_settings_app(username):
@@ -10103,7 +10214,7 @@ def dynamic_trips(username, time=None):
         discordAnnouncedIds=json.dumps(announced_trip_ids(get_user_id(username))),
         discordPostableIds=json.dumps(
             postable_trip_ids(get_user_id(username))
-            if _discord_linked(username)
+            if _can_announce(User.query.filter_by(username=username).first())
             else []
         ),
         **lang[session["userinfo"]["lang"]],
@@ -10193,11 +10304,13 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     unknownType = None
 
     wplist = [path[0], path[-1]]
+    waypoint_meta = []
+    stored = []
     if trip["waypoints"]:
-        waypoints_coords = [
-            [point["lat"], point["lng"]] for point in json.loads(trip["waypoints"])
-        ]
+        stored = json.loads(trip["waypoints"])
+        waypoints_coords = [[point["lat"], point["lng"]] for point in stored]
         wplist = [path[0]] + waypoints_coords + [path[-1]]
+        waypoint_meta = _waypoint_meta(stored)
 
     if trip["start_datetime"] in (1, -1):
         precision = "unknown"
@@ -10224,6 +10337,15 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     if edit_copy_type == "copy":
         tripDepartureDelay = ""
         tripArrivalDelay = ""
+        # A copy is almost always another day or time, so another train: its stops keep
+        # their timetable, not that train's live times and platforms, nor the run they
+        # came from (the stops dialog then finds the new one on Refresh).
+        for wp in stored:
+            stop = wp.get("stop") if isinstance(wp, dict) else None
+            if isinstance(stop, dict):
+                for field in ("arr_rt", "dep_rt", "platform_rt", "trip"):
+                    stop.pop(field, None)
+        waypoint_meta = _waypoint_meta(stored)
     else:
         tripDepartureDelay = int(trip["departure_delay"] / 60) if trip["departure_delay"] is not None else ""
         tripArrivalDelay = int(trip["arrival_delay"] / 60) if trip["arrival_delay"] is not None else ""
@@ -10260,6 +10382,9 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripType": tripType,
         "tripTicketId": tripTicketId or "",
         "wplist": wplist,
+        "waypoint_meta": waypoint_meta,
+        # As saved, for the stops editor: it writes them back with the stops edited.
+        "stored_waypoints": stored,
         "raw_path": raw_path,
         "route_source": trip.get("route_source") or "router",
         "tripNotes": tripNotes or "",
@@ -10268,6 +10393,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripArrivalDelay": tripArrivalDelay,
         "tripPowerType": trip.get("power_type"),
         "tripCo2Override": trip.get("co2_override"),
+        "tripDeparturePlatform": trip.get("departure_platform") or "",
+        "tripArrivalPlatform": trip.get("arrival_platform") or "",
     }
 
     if from_app:
@@ -10280,24 +10407,21 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     return render_template("edit_copy.html", **context)
 
 
-@app.route("/u/<username>/export")
-@login_required
-def export(username):
-    requestedTrips = request.args.get("trips", default=None)
-
+def _export_trips_csv_text(username, requested_trip_ids=None):
+    """The trips CSV shared by /export and /export_all. Kept in app.py because
+    it depends on adapt_pg_trip_row's legacy row shaping."""
     si = StringIO()
     cw = csv.writer(si)
     user_id = get_user_id(username)
     with pg_session() as pg:
-        if requestedTrips is None:
+        if requested_trip_ids is None:
             rows = pg.execute(
                 "SELECT * FROM trips WHERE user_id = :uid", {"uid": user_id}
             ).fetchall()
         else:
-            ids = [int(t) for t in requestedTrips.split(",")]
             rows = pg.execute(
                 "SELECT * FROM trips WHERE user_id = :uid AND trip_id = ANY(:ids)",
-                {"uid": user_id, "ids": ids},
+                {"uid": user_id, "ids": requested_trip_ids},
             ).fetchall()
     trips = [adapt_pg_trip_row(row._mapping, username) for row in rows]
 
@@ -10325,7 +10449,17 @@ def export(username):
         rowP.append(encoded)
         processedRows.append(rowP)
     cw.writerows(processedRows)
-    response = make_response(si.getvalue())
+    return si.getvalue()
+
+
+@app.route("/u/<username>/export")
+@login_required
+def export(username):
+    requestedTrips = request.args.get("trips", default=None)
+    ids = [int(t) for t in requestedTrips.split(",")] if requestedTrips else None
+
+    csv_text = _export_trips_csv_text(username, ids)
+    response = make_response(csv_text)
     response.headers["Content-Disposition"] = (
         "attachment; filename=trainlog_{}_{}.csv".format(
             username, datetime.strftime(datetime.now(), "%Y-%m-%d_%H%M%S")
@@ -10333,6 +10467,41 @@ def export(username):
     )
     response.headers["Content-type"] = "text/csv"
 
+    return response
+
+
+@app.route("/u/<username>/export_all")
+@login_required
+def export_all(username):
+    """GDPR-style "everything Trainlog has on you": the trips CSV plus every
+    other table a self-service account deletion would touch (see
+    src/account_export.py / src/delete_account.py, which cover the same set of
+    tables), bundled as one zip. Used both by the standalone download button in
+    settings and by the delete-account flow's export step."""
+    user = User.query.filter_by(username=username).first()
+
+    buf = BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("trips.csv", _export_trips_csv_text(username))
+        for filename, csv_text in build_account_data_csvs(user).items():
+            zf.writestr(filename, csv_text)
+        zf.writestr(
+            "README.txt",
+            "This archive contains every piece of data Trainlog stores about "
+            f"your account ({username}), as of "
+            f"{datetime.now().strftime('%Y-%m-%d %H:%M UTC')}. Each file is a "
+            "CSV export of one table; empty files mean that table has no rows "
+            "for your account.\n",
+        )
+    buf.seek(0)
+
+    response = make_response(buf.read())
+    response.headers["Content-Disposition"] = (
+        "attachment; filename=trainlog_full_export_{}_{}.zip".format(
+            username, datetime.strftime(datetime.now(), "%Y-%m-%d_%H%M%S")
+        )
+    )
+    response.headers["Content-type"] = "application/zip"
     return response
 
 
@@ -14243,6 +14412,7 @@ def router_status():
         latest_commit_display=latest_commit_dt.strftime("%Y-%m-%d %H:%M UTC"),
         latest_commit_ago=time_ago(latest_commit_dt),
         trip_seed=trip_seed,
+        router_regions=regions_geojson(),
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )
@@ -14652,6 +14822,13 @@ def ensure_auth_db_columns():
             )
         )
         authDb.session.commit()
+    if "exact_waypoints" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN exact_waypoints BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        authDb.session.commit()
     if "discord_id" not in existing:
         authDb.session.execute(
             sqlalchemy.text("ALTER TABLE user ADD COLUMN discord_id VARCHAR(30)")
@@ -14666,6 +14843,13 @@ def ensure_auth_db_columns():
         authDb.session.execute(
             sqlalchemy.text(
                 "ALTER TABLE user ADD COLUMN discord_autopost BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        authDb.session.commit()
+    if "discord_main_enabled" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN discord_main_enabled BOOLEAN NOT NULL DEFAULT 1"
             )
         )
         authDb.session.commit()

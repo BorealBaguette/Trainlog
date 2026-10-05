@@ -82,7 +82,50 @@
     </div>
 </div>
 
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
 <script>
+const routerRegions = {{ router_regions | tojson }};
+// Bus rows double as the legend for the coverage map: each one gets its
+// region's colour while the map is open.
+const busRegionColors = {"Europe": "#28a745", "Americas": "#007bff", "Rest of World": "#868e96"};
+
+let regionsMap = null;
+function initRegionsMap() {
+    regionsMap = new maplibregl.Map({
+        container: "router-regions-map",
+        style: "https://tiles.openfreemap.org/styles/positron",
+        center: [-20, 30],
+        zoom: 1,
+    });
+    regionsMap.on("load", () => {
+        regionsMap.addSource("world", {type: "geojson", data: {
+            type: "Feature", geometry: {type: "Polygon",
+                coordinates: [[[-180, -90], [180, -90], [180, 90], [-180, 90], [-180, -90]]]}}});
+        regionsMap.addLayer({id: "world-fill", type: "fill", source: "world",
+                             paint: {"fill-color": busRegionColors["Rest of World"], "fill-opacity": 0.2}});
+        regionsMap.addSource("regions", {type: "geojson", data: routerRegions});
+        for (const [name, region] of [["europe", "Europe"], ["americas", "Americas"]]) {
+            const filter = ["==", ["get", "name"], name];
+            regionsMap.addLayer({id: name + "-fill", type: "fill", source: "regions", filter,
+                                 paint: {"fill-color": busRegionColors[region], "fill-opacity": 0.3}});
+            regionsMap.addLayer({id: name + "-line", type: "line", source: "regions", filter,
+                                 paint: {"line-color": busRegionColors[region], "line-width": 2}});
+        }
+    });
+}
+
+function toggleRegionsMap() {
+    const row = document.getElementById("router-regions-row");
+    const open = row.hidden;
+    row.hidden = !open;
+    document.getElementById("router-status-tbody").classList.toggle("map-open", open);
+    if (open) {
+        if (!regionsMap) initRegionsMap();
+        else regionsMap.resize();
+    }
+}
+
 const photonInstances = {{ photon_instances | tojson }};
 
 function renderPhotonStatus() {
@@ -437,7 +480,7 @@ const routers = [
     {
         name: "Bus", 
         icon: "fa-solid fa-bus",
-        region: "North America", 
+        region: "Americas", 
         provider: "SeriousProtection", 
         url: "https://busrouter.jkimball.dev", 
         profile: "bus"
@@ -525,7 +568,7 @@ document.addEventListener("DOMContentLoaded", function() {
         // Add row with spinner for now
         const rowId = "router-row-" + idx;
         tbody.insertAdjacentHTML('beforeend', `
-          <tr id="${rowId}" class="${rowClass}">
+          <tr id="${rowId}" class="${rowClass}"${router.name === "Bus" ? ` data-bus-region="${escapeHTML(router.region)}" style="cursor: pointer" title="Show coverage map" onclick="toggleRegionsMap()"` : ""}>
             <td><i class="${router.icon}"></i> ${escapeHTML(router.name)}</td>
             <td>${escapeHTML(router.region)}</td>
             <td>${escapeHTML(router.provider)}</td>
@@ -549,6 +592,12 @@ document.addEventListener("DOMContentLoaded", function() {
                                       data-toggle="tooltip" title="Status check failed">ERROR</span>`;
           });
     });
+
+    // The map sits under the last bus row, hidden until a bus row is clicked
+    const lastBus = [...document.querySelectorAll("#router-status-tbody tr[data-bus-region]")].pop();
+    lastBus.insertAdjacentHTML("afterend",
+        `<tr id="router-regions-row" hidden><td colspan="4" class="p-0">
+            <div id="router-regions-map" style="height: 380px;"></div></td></tr>`);
 });
 </script>
 
@@ -581,6 +630,10 @@ document.addEventListener("DOMContentLoaded", function() {
     background-color: #ffc107;
     color: #212529;
 }
+
+.map-open tr[data-bus-region="Europe"] td:nth-child(2) { border-left: 6px solid #28a745; }
+.map-open tr[data-bus-region="Americas"] td:nth-child(2) { border-left: 6px solid #007bff; }
+.map-open tr[data-bus-region="Rest of World"] td:nth-child(2) { border-left: 6px solid #868e96; }
 
 .mode-alt {
     background-color: rgba(0, 0, 0, 0.03);

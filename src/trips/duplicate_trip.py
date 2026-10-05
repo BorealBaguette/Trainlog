@@ -2,6 +2,7 @@ import logging
 
 from src.operators import sync_trip_operators
 from src.pg import pg_session
+from src.utils import get_default_trip_visibility
 from src.sql.trips import duplicate_trip_new_user_query, duplicate_trip_query
 
 logger = logging.getLogger(__name__)
@@ -16,9 +17,17 @@ def duplicate_trips(trip_ids: list[int], owner_id: int) -> list[int]:
 
 def _duplicate_trip(trip_id: int, owner_id: int) -> int:
     with pg_session() as pg:
+        trip_type = pg.execute(
+            "SELECT trip_type FROM trips WHERE trip_id = :trip_id",
+            {"trip_id": trip_id},
+        ).fetchone()[0]
         new_trip_id = pg.execute(
             duplicate_trip_new_user_query(),
-            {"trip_id": trip_id, "new_user_id": owner_id},
+            {
+                "trip_id": trip_id,
+                "new_user_id": owner_id,
+                "visibility": get_default_trip_visibility(trip_type),
+            },
         ).fetchone()[0]
         pg.execute(
             "INSERT INTO paths (trip_id, geom, altitude, timestamps)"

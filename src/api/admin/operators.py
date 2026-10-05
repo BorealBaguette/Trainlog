@@ -43,17 +43,26 @@ def add_operator():
     operator_type = request.form.get("operator_type")
     logo = request.files.get("logo")
 
-    if not logo:
-        abort(400, description="logo is required")
+    # JSON rather than an abort HTML page, so the admin UI can show the reason inline.
+    def bad_request(message):
+        return jsonify({"status": "error", "message": message}), 400
 
     if operator_type not in OPERATOR_TYPES:
-        abort(400, description="invalid operator_type")
+        return bad_request("Invalid operator type.")
 
-    if len(short_name) == 0:
-        abort(400, description="short_name is required")
+    if not short_name:
+        return bad_request("Short name is required.")
 
-    if len(long_name) == 0:
-        abort(400, description="long_name is required")
+    if not long_name:
+        return bad_request("Long name is required.")
+
+    # The logo is optional: some operators have none findable online. An empty file
+    # field arrives as a FileStorage with no filename, which is falsy.
+    if logo:
+        try:
+            validate_png_file(logo)
+        except Exception as e:
+            return bad_request(f"Invalid logo: {e}")
 
     # A name identifies one operator per pool. Two real companies sharing a name must
     # be distinguished in the name itself ("Scottish Citylink"), so say so up front
@@ -73,19 +82,18 @@ def add_operator():
         ), 409
 
     try:
-        validate_png_file(logo)
-
         operator = OperatorsRepository.add(short_name, long_name, operator_type)
         operator_id = operator["operator_id"]
 
-        filename = secure_filename(
-            f"{operator_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
-        )
-        logo.save(os.path.join(LOGO_UPLOAD_FOLDER, filename))
+        if logo:
+            filename = secure_filename(
+                f"{operator_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
+            )
+            logo.save(os.path.join(LOGO_UPLOAD_FOLDER, filename))
 
-        OperatorsRepository.add_operator_logo(
-            operator_id, f"images/operator_logos/new/{filename}", None
-        )
+            OperatorsRepository.add_operator_logo(
+                operator_id, f"images/operator_logos/new/{filename}", None
+            )
 
         # Log the successful addition to the save log
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -156,13 +164,15 @@ def add_operator_logo(operator_id: int):
     logo = request.files.get("logo")
     effective_date = request.form.get("effective_date", type=parse_date)
 
-    logger.info(len(request.form.keys()))
     if not logo:
-        abort(400, description="logo is required")
+        return jsonify({"status": "error", "message": "A logo file is required."}), 400
 
     try:
         validate_png_file(logo)
+    except Exception as e:
+        return jsonify({"status": "error", "message": f"Invalid logo: {e}"}), 400
 
+    try:
         filename = secure_filename(
             f"{operator_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.png"
         )

@@ -1,6 +1,7 @@
 {% extends "bootstrap/layout.html" %}
 {% include "bootstrap/leafletLayout.html" %}
 {% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='styles/waypoint_popup.css') }}">
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lib/leaflet.geometryutil.js') }}"></script>
 <script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
@@ -12,6 +13,92 @@
 {% include "bootstrap/navigation.html"%}
 
 <style>
+    /* Stops dialog (initStopsEditor): the trip as a timeline, origin to destination.
+       Columns: line | name | arrival | departure | platform | reorder + remove */
+    #stopsModal .stops-head, #stopsModal .stop-row {
+        display: grid; grid-template-columns: 22px minmax(0, 1fr) 104px 104px 64px 58px;
+        column-gap: 8px; align-items: start;
+    }
+    #stopsModal .stops-head { font-size: .72rem; color: #9aa3af; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
+    /* Every row as tall, hint or not, so the columns stay in line */
+    #stopsModal .stop-row { min-height: 52px; }
+    #stopsModal .stop-row input { margin: 0; padding: 4px 8px; height: 32px; width: 100%; font-size: .875rem;
+        border: 1px solid #dfe3e8; border-radius: 6px; background: #fff; }
+    #stopsModal .stop-row input:focus { border-color: #86b7fe; outline: 0; box-shadow: 0 0 0 .15rem rgba(13,110,253,.12); }
+    #stopsModal .stop-row input:disabled { background: #f6f7f9; }
+    #stopsModal .stop-row.plain .stop-station { color: #6b7280; }
+    /* The line down the left, a dot per stop, a flag at each end */
+    #stopsModal .stop-track { position: relative; align-self: stretch; }
+    #stopsModal .stop-track::before {
+        content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #dfe3e8;
+    }
+    #stopsModal .stop-origin .stop-track::before { top: 16px; }
+    #stopsModal .stop-destination .stop-track::before { bottom: auto; height: 16px; }
+    #stopsModal .stop-dot {
+        position: absolute; left: 50%; top: 16px; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+        border-radius: 50%; background: #fff; border: 2px solid #9aa3af;
+    }
+    #stopsModal .stop-row.plain .stop-dot { width: 6px; height: 6px; margin: -3px 0 0 -3px; border-width: 0; background: #c4cad2; }
+    #stopsModal .stop-end .stop-dot {
+        width: 20px; height: 20px; margin: -10px 0 0 -10px; border: 0; background: #e8eefb; color: #3b63b8;
+        display: flex; align-items: center; justify-content: center; font-size: .65rem;
+    }
+    #stopsModal .stop-end-name { line-height: 32px; font-weight: 600; color: #1f2733; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #stopsModal .stop-cell { display: flex; flex-direction: column; min-width: 0; }
+    /* The day, in the origin's arrival / destination's departure slot */
+    #stopsModal .stop-end-date {
+        height: 32px; line-height: 32px; padding-left: 8px; font-size: .8rem; color: #9aa3af;
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    /* The scheduled value under the actual one, when they differ: "~~15:37~~ +12" */
+    #stopsModal .stop-sched { font-size: .72rem; color: #9aa3af; line-height: 1.5; padding-left: 4px; }
+    #stopsModal .stop-sched:empty { display: none; }
+    #stopsModal .stop-delay { font-weight: 600; color: #6b7280; }
+    #stopsModal .stop-delay.late { color: #c0392b; }
+    #stopsModal .stop-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 32px; }
+    #stopsModal .stop-move { display: flex; flex-direction: column; }
+    #stopsModal .stop-move button, #stopsModal .stop-remove {
+        border: 0; background: transparent; color: #9aa3af; padding: 0 4px; line-height: 1; cursor: pointer;
+    }
+    #stopsModal .stop-move button { font-size: .65rem; height: 15px; }
+    #stopsModal .stop-move button:disabled { visibility: hidden; }
+    #stopsModal .stop-remove { font-size: .95rem; height: 32px; }
+    #stopsModal .stop-move button:hover, #stopsModal .stop-remove:hover { color: #1f2733; }
+    #stopsModal .stops-note { font-size: .8rem; color: #8a5a00; margin: 8px 0 0; }
+    #stopsModal .stops-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-left: 30px; }
+    /* The runs to pick from (pickRun), as the new-trip form's timetable list */
+    #stopsModal .stops-runs { margin: 10px 0 0 30px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+    #stopsModal .stops-runs-title { padding: 6px 12px; font-size: .72rem; color: #9aa3af; text-transform: uppercase; letter-spacing: .04em; background: #f9fafb; }
+    #stopsModal #stopsRunsList { max-height: 40vh; overflow-y: auto; }
+    #stopsModal .stops-run {
+        display: grid; grid-template-columns: 30px auto minmax(0, 1fr) auto; align-items: center; gap: 2px 10px;
+        width: 100%; padding: 7px 12px 7px 10px; border: 0; border-top: 1px solid #f0f1f3; text-align: left;
+        border-left: 4px solid var(--line-color, transparent);
+        background: color-mix(in srgb, var(--line-color, transparent) 6%, #fff); font-size: .85rem; cursor: pointer;
+    }
+    #stopsModal .stops-run:hover { background: color-mix(in srgb, var(--line-color, #999) 14%, #fff); }
+    #stopsModal .stops-run.best { box-shadow: inset 0 0 0 2px #86b7fe; }
+    #stopsModal .stops-run img { grid-row: 1 / 3; width: 30px; height: 24px; object-fit: contain; }
+    #stopsModal .stops-run .run-time { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #stopsModal .stops-run .run-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    #stopsModal .stops-run .run-line {
+        flex: none; padding: 0 6px; border-radius: 4px; font-size: .78rem; font-weight: 600;
+        border: 1px solid var(--line-color, #ccc); background: color-mix(in srgb, var(--line-color, #ddd) 18%, #fff);
+    }
+    #stopsModal .stops-run .run-headsign { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #444; }
+    #stopsModal .stops-run .run-meta { grid-column: 2 / 4; font-size: .75rem; color: #777; }
+    #stopsModal .stops-run .run-delay { grid-row: 1 / 3; grid-column: 4; }
+    /* Station suggestions (jQuery UI, appended to body) above the dialog */
+    .ui-autocomplete { z-index: 6000 !important; }
+    @media (max-width: 576px) {
+        /* Name on its own line, then arrival | departure | platform | actions */
+        #stopsModal .stop-row { grid-template-columns: 22px 1fr 1fr 56px 52px; row-gap: 4px; }
+        #stopsModal .stops-head { grid-template-columns: 22px 1fr 1fr 56px 52px; }
+        #stopsModal .stops-head > :nth-child(2) { display: none; }
+        #stopsModal .stop-station, #stopsModal .stop-end-name { grid-column: 2 / -1; }
+        #stopsModal .stop-track { grid-row: span 2; }
+    }
+
     .fullscreen-modal-dialog {
         max-width: 100vw;
         height: 100vh;
@@ -82,12 +169,46 @@
         display: none;
     }
 
+    /* The ways to change the route: edit the path, edit the stops, import (GPX, FR24). */
     .path-import-buttons {
         display: flex;
-        gap: 10px;
+        gap: 8px;
         margin-bottom: 15px;
         flex-wrap: wrap;
     }
+    .path-import-buttons > .btn-labeled,
+    .path-import-buttons > div > .btn-labeled {
+        display: flex; align-items: center; gap: 10px;
+        margin: 0; min-height: 32px; padding: 0 12px 0 0; font-size: .9rem; line-height: 1.2;
+        overflow: hidden; text-align: left; white-space: nowrap;
+    }
+    /* Each as wide as its label, the rest of the line shared out between them, so every
+       line is filled edge to edge and no label is ever cut (a button that no longer fits
+       moves to the next line). */
+    .path-import-buttons > * { flex: 1 1 auto; min-width: max-content; }
+    .path-import-buttons > div > .btn-labeled { width: 100%; }
+    /* The icon in a darker strip on the left, centred with room around it */
+    .path-import-buttons .btn-label {
+        position: static; align-self: stretch; display: flex; align-items: center; justify-content: center;
+        width: 40px; padding: 0; border-radius: 3px 0 0 3px; background: rgba(0, 0, 0, 0.15);
+    }
+    .path-import-buttons .btn-label { flex: none; }
+    .path-import-buttons .btn-label-label { margin: 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+    /* The stop count stays whole at the right edge; the label gives way first */
+    .path-import-buttons .badge { flex: none; margin-left: auto !important; }
+    /* The secondary ways (stops, GPX): outlined, icon in a light strip. Only while grey:
+       a button turned green once its way was used (updatePathButtonSuccess) keeps the
+       solid look with its darker strip, as the blue ones do. */
+    .path-import-buttons .btn-labeled.btn-secondary {
+        background: #fff; color: #495057; border: 1px solid #ced4da;
+    }
+    .path-import-buttons .btn-labeled.btn-secondary:hover {
+        background: #f3f4f6; color: #1f2733;
+    }
+    .path-import-buttons .btn-labeled.btn-secondary .btn-label {
+        background: #e9ecef; color: #495057; border-right: 1px solid #ced4da;
+    }
+    .path-import-buttons .badge.bg-light { background: #e9ecef !important; }
 
     .progress-container {
         margin-top: 15px;
@@ -309,6 +430,7 @@
             </div>
         </div>
 
+
         <group id="operatorGroup">
             <div class="operatorLogoWrapper">
                 <img class="operatorLogo" />
@@ -324,6 +446,9 @@
         </group>
         <label for="lineName" class="sr-only">{{lineName}}</label>
         <input type="text" name="lineName" id="lineName" placeholder="{{lineName}}" value="{{tripLineName}}" />
+        {# Edited in the stops dialog (its origin and destination rows) #}
+        <input type="hidden" name="departurePlatform" id="departurePlatform" value="{{tripDeparturePlatform}}" />
+        <input type="hidden" name="arrivalPlatform" id="arrivalPlatform" value="{{tripArrivalPlatform}}" />
         <br class="non_poi">
 
         <fieldset>
@@ -366,9 +491,11 @@
             <label for="notes">{{notes}}</label>
             <input type="text" name="notes" id="notes" placeholder="{{notes}}" value="{{tripNotes}}">
 
-            <label for="tagSearchInput">{{tags|default('Tags')}}</label>
-            <input type="text" id="tagSearchInput" placeholder="{{select_tag|default('Add a tag…')}}" class="form-control form-control-sm" autocomplete="off" style="margin-bottom:.4rem;">
-            <div id="tagList" class="d-flex flex-wrap gap-1"></div>
+            <div id="tagsGroup"{% if plan_uuid %} style="display:none"{% endif %}>
+              <label for="tagSearchInput">{{tags|default('Tags')}}</label>
+              <input type="text" id="tagSearchInput" placeholder="{{select_tag|default('Add a tag…')}}" class="form-control form-control-sm" autocomplete="off" style="margin-bottom:.4rem;">
+              <div id="tagList" class="d-flex flex-wrap gap-1"></div>
+            </div>
 
         </fieldset>
 
@@ -644,6 +771,12 @@
                 id="mapModalButton">
                 <span class="btn-label"><i class="fa-solid fa-route"></i></span>{{editPath}}
             </span>
+            {% if tripType not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
+            <span class="btn btn-labeled btn-secondary" id="stopsModalButton" role="button">
+                <span class="btn-label"><i class="fa-solid fa-signs-post"></i></span><span class="btn-label-label">{{editStops}}</span>
+                <span class="badge rounded-pill bg-light text-dark ms-1" id="stopsCount"></span>
+            </span>
+            {% endif %}
             <span class="btn btn-labeled btn-secondary" data-bs-toggle="modal" data-bs-target="#gpxImportModal"
                 id="gpxImportButton">
                 <span class="btn-label"><i class="fa-solid fa-file-arrow-up"></i></span> <span
@@ -686,6 +819,44 @@
     </form>
 </div>
 
+{# Stops along the route (initStopsEditor) #}
+<div class="modal fade" id="stopsModal" tabindex="-1" aria-labelledby="stopsModalTitle" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="stopsModalTitle">{{tripStops}}</h5>
+                <button type="button" class="btn btn-sm btn-link text-secondary ms-auto me-1 p-1" id="stopsOther" style="display:none"></button>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{cancel}}"></button>
+            </div>
+            <div class="modal-body">
+                <div class="stops-head" aria-hidden="true">
+                    <span></span><span></span><span>{{stopArrival}}</span><span>{{stopDeparture}}</span><span>{{stopPlatform}}</span><span></span>
+                </div>
+                <div id="stopsRows"></div>
+                <div class="stops-actions">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="stopsAdd">
+                        <i class="fa-solid fa-plus"></i> {{addStop}}
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="stopsRefresh" style="display:none">
+                        <i class="fa-solid fa-rotate"></i> <span id="stopsRefreshLabel">{{stopsRefresh}}</span>
+                    </button>
+                </div>
+                <p class="stops-note" id="stopsRefreshNone" style="display:none">{{stopsRefreshNone}}</p>
+                {# The runs to pick the trip's from, when its stops don't say which (pickRun) #}
+                <div class="stops-runs" id="stopsRuns" style="display:none">
+                    <div class="stops-runs-title">{{motisDepartures}}</div>
+                    <div id="stopsRunsList"></div>
+                </div>
+                <p class="stops-note" id="stopsRouteNote" style="display:none">{{stopsRouteNote}}</p>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">{{cancel}}</button>
+                <button type="button" class="btn btn-primary" id="stopsSave">{{update}}</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="mapModal" tabindex="-1" role="dialog" aria-labelledby="mapModalLabel" aria-hidden="true" style="z-index:5000;">
     <div class="modal-dialog modal-lg modal-dialog-centered">
         <div class="modal-content">
@@ -705,7 +876,7 @@
                     <div class="form-check form-switch mb-0">
                         <input class="form-check-input" type="checkbox" id="newRouterToggleModal" style="cursor: pointer;">
                         <label class="form-check-label" for="newRouterToggleModal" style="cursor: pointer;">
-                            {{useNewRouter}} <small class="text-muted">ᵦ</small>
+                            {{useLegacyRouter}}
                         </label>
                     </div>
                     <select id="newRouterProfileModal" class="form-select form-select-sm" style="width: auto; display: none;">
@@ -714,6 +885,12 @@
                         <option value="metro">{{metro}}</option>
                         <option value="all">{{all}}</option>
                     </select>
+                    {# New router only, shown with the profile choice (see routerToggle below) #}
+                    <div class="form-check form-switch mb-0" id="allExactModalWrap" style="display: none;" title="{{allWaypointsExactHint}}">
+                        <input class="form-check-input all-exact-toggle" type="checkbox" id="allExactModal" style="cursor: pointer;"
+                               onchange="setAllWaypointsExact(this.checked)">
+                        <label class="form-check-label" for="allExactModal" style="cursor: pointer;">{{allWaypointsExact}}</label>
+                    </div>
                     {% endif %}
                     <div id="freehandToggleSlot"></div>
                     <div id="gpxToggleSlot"></div>
@@ -772,6 +949,11 @@
     var freehandActive = false;
     var routeSource = "{{ route_source|default('router') }}";
     var updatedPath = null;
+    // Set by the stops editor: the waypoints to save when the route itself wasn't edited,
+    // and the trip start ('YYYY-MM-DD HH:MM', local) those stops' times are for when it
+    // isn't the start loaded (a refresh renewed them for the new one): the server moves
+    // the stops by however far the start moved from there (_shift_trip_stops).
+    var editedStopsWaypoints = null, stopsStart = null;
     var updatedAltitude = null;    // FR24 altitude (m), parallel to updatedPath
     var updatedTimestamps = null;  // FR24 timestamps (epoch s), parallel to updatedPath
     var updatedRouteDetails = null;
@@ -779,6 +961,648 @@
     if (tripType == "air") {
         $("#mapModalButton").hide();
     }
+
+    // ---------- Stops along the route (the Edit stops button and dialog) ----------
+    // One row per intermediate waypoint, in route order: a timetable stop (its record in
+    // wp.stop: name, UTC arr/dep, tz, platform, own lat/lng, Transitous ids, see
+    // routing.js) or a plain routing point, which becomes a stop once given a time.
+    // Rename, retime, change the platform: saved as they are. Pick another station,
+    // add, remove or reorder: the route has to go through the new points, so the list goes
+    // to the map dialog, which reroutes through it for the user to check and confirm.
+    var globalStationDict = window.globalStationDict = window.globalStationDict || {};
+    (function initStopsEditor() {
+        var stored = {{ stored_waypoints|default([])|tojson }};
+        // Set here, before the rest of the page would: the map dialog's waypoints are built
+        // from it, and share their stop objects with `stored`.
+        var meta = window.routingWaypointMeta = window.routingWaypointMeta || {{ waypoint_meta|default([])|tojson }};
+        stored.forEach(function (wp, i) { if (wp && wp.stop && meta[i]) meta[i].stop = wp.stop; });
+        // A copy: the stops come without the copied train's live data (edit_copy_trip),
+        // and are saved that way even if the dialog is never opened.
+        if ({{ 'true' if edit_copy_type == 'copy' else 'false' }} && stored.some(function (wp) { return wp && wp.stop; })) {
+            editedStopsWaypoints = JSON.stringify(stored);
+        }
+
+        var stationUrls = {
+            train: "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
+            rail: "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
+            funicular: "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
+            tram: "/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station&osm_tag=railway:halt",
+            metro: "/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance",
+            bus: "/stationAutocomplete?osm_tag=amenity:bus_station&osm_tag=highway:bus_stop",
+            ferry: "/stationAutocomplete?osm_tag=amenity:ferry_terminal",
+            aerialway: "/stationAutocomplete?osm_tag=aerialway:station",
+            ski: "/stationAutocomplete?osm_tag=aerialway:station"
+        };
+        var stationUrl = stationUrls[tripType] || "/stationAutocomplete";
+        var stopsModal = new bootstrap.Modal(document.getElementById('stopsModal'));
+        var $rows = $('#stopsRows'), rows = [];
+        var showPlain = false;   // the route's other waypoints (no times): hidden until asked for
+        function hidden(r) { return !showPlain && !r.stop && !!r.source; }
+        // The origin and destination rows (working copy, applied on Update): the trip's
+        // own start/end, so their time is its start/end time plus its delay, and their
+        // platform the trip's departure/arrival platform.
+        var ends = null;
+
+        // ---- times: UTC ISO <-> wall clock at the stop
+        function parts(ms, tz) {
+            var p = {};
+            new Intl.DateTimeFormat('en-CA', {
+                timeZone: tz || undefined, year: 'numeric', month: '2-digit', day: '2-digit',
+                hour: '2-digit', minute: '2-digit', hourCycle: 'h23'
+            }).formatToParts(new Date(ms)).forEach(function (x) { p[x.type] = x.value; });
+            return p;
+        }
+        function toLocal(iso, tz) {
+            if (!iso) return null;
+            var p = parts(Date.parse(iso), tz);
+            return { date: p.year + '-' + p.month + '-' + p.day, time: p.hour + ':' + p.minute };
+        }
+        function toUtc(date, time, tz) {   // two passes settle DST changes
+            var d = date.split('-').map(Number), t = time.split(':').map(Number);
+            var wanted = Date.UTC(d[0], d[1] - 1, d[2], t[0], t[1]), guess = wanted;
+            for (var k = 0; k < 2; k++) {
+                var p = parts(guess, tz);
+                guess -= Date.UTC(+p.year, p.month - 1, +p.day, +p.hour, +p.minute) - wanted;
+            }
+            return new Date(guess).toISOString().replace(/\.\d{3}Z$/, 'Z');
+        }
+
+        // "🇨🇭 Olten" → { cc: 'CH', name: 'Olten' }
+        function splitFlag(label) {
+            var m = /^(\uD83C[\uDDE6-\uDDFF])(\uD83C[\uDDE6-\uDDFF])\s*/.exec(label || '');
+            if (!m) return { cc: null, name: (label || '').trim() };
+            var cc = String.fromCharCode(m[1].charCodeAt(1) - 0xDDE6 + 65, m[2].charCodeAt(1) - 0xDDE6 + 65);
+            return { cc: cc, name: label.slice(m[0].length).trim() };
+        }
+
+        // The waypoints as they stand: the map dialog's, once its route was confirmed
+        // (editPathButton syncs `stored`), else as saved.
+        function count() {
+            var n = stored.filter(function (wp) { return wp && wp.stop; }).length;
+            $('#stopsCount').text(n || '').toggle(n > 0);
+        }
+
+        // ---- the dialog: a working copy, applied on Update
+        function rowFor(wp) {
+            var stop = wp && wp.stop ? $.extend({}, wp.stop) : null;
+            return {
+                source: wp || null,           // the stored waypoint, or null for one added here
+                label: (wp && wp.name) || (stop && stop.name) || '',
+                lat: wp ? wp.lat : null, lng: wp ? wp.lng : null,
+                hard: wp ? wp.hard : undefined,
+                stop: stop,
+                moved: false                  // another station picked: a new position
+            };
+        }
+        function tzNear(i) {
+            for (var d = 0; d < rows.length; d++) {
+                var r = rows[i - d] || rows[i + d];
+                if (r && r.stop && r.stop.tz) return r.stop.tz;
+            }
+            return undefined;
+        }
+        function baseDate(i) {
+            for (var j = i; j >= 0; j--) {
+                var st = rows[j] && rows[j].stop, v = st && toLocal(st.arr || st.dep, st.tz);
+                if (v) return v.date;
+            }
+            return $('#newTripStartDate').val() || new Date().toISOString().slice(0, 10);
+        }
+        function structural() {
+            if (rows.length !== stored.length) return true;
+            return rows.some(function (r, i) { return r.source !== stored[i] || r.moved; });
+        }
+        function refreshNote() { $('#stopsRouteNote').toggle(structural()); }
+        // Under a time that differs from the schedule: "~~15:37~~ +12" (late in red)
+        function setHint($hint, scheduled, delay) {
+            $hint.empty();
+            if (!scheduled || !delay) return;
+            $hint.append($('<s>').text(scheduled), ' ',
+                $('<b class="stop-delay">').toggleClass('late', delay > 0).text((delay > 0 ? '+' : '') + Math.round(delay)));
+        }
+
+        function render() {
+            $rows.empty();
+            $rows.append(endRow('origin'));
+            var nPlain = rows.filter(function (r) { return !r.stop && r.source; }).length;
+            var otherLabel = (showPlain ? {{ stopsHideOther|tojson }} : {{ stopsShowOther|tojson }}) + ' (' + nPlain + ')';
+            $('#stopsOther').toggle(nPlain > 0).attr({ title: otherLabel, 'aria-label': otherLabel })
+                .html('<i class="fa-solid ' + (showPlain ? 'fa-eye-slash' : 'fa-eye') + '"></i>');
+            // Moving steps over the rows left out of view
+            function visibleFrom(i, dir) {
+                for (var j = i + dir; j >= 0 && j < rows.length; j += dir) if (!hidden(rows[j])) return j;
+                return -1;
+            }
+            function moveTo(i, j) { rows.splice(j, 0, rows.splice(i, 1)[0]); render(); }
+            rows.forEach(function (row, i) {
+                if (hidden(row)) return;
+                var stop = row.stop;
+                var up = visibleFrom(i, -1), down = visibleFrom(i, 1);
+                var $row = $('<div class="stop-row">').toggleClass('plain', !stop);
+                $('<span class="stop-track"><span class="stop-dot"></span></span>').appendTo($row);
+                var $move = $('<span class="stop-move">');
+                $('<button type="button"><i class="fa-solid fa-chevron-up"></i></button>')
+                    .attr('title', {{ moveUp|tojson }}).prop('disabled', up < 0)
+                    .on('click', function () { moveTo(i, up); })
+                    .appendTo($move);
+                $('<button type="button"><i class="fa-solid fa-chevron-down"></i></button>')
+                    .attr('title', {{ moveDown|tojson }}).prop('disabled', down < 0)
+                    .on('click', function () { moveTo(i, down); })
+                    .appendTo($move);
+
+                // Typing renames it; picking a station from the list puts it there instead.
+                var $station = $('<input type="text" class="stop-station">').val(row.label)
+                    .attr('placeholder', {{ via|tojson }}).appendTo($row);
+                stationSearchAutocomplete($station, {}, stationUrl, {{ manual|default('Manual')|tojson }});
+                $station.on('autocompleteselect', function (e, ui) {
+                    var input = this;
+                    setTimeout(function () {   // the value is written after the event
+                        var entry = globalStationDict[input.value];
+                        if (!entry) return;
+                        row.label = entry[1];
+                        row.lat = entry[0][0]; row.lng = entry[0][1];
+                        row.moved = true;
+                        if (row.stop) {
+                            var f = splitFlag(entry[1]);
+                            row.stop.name = f.name; if (f.cc) row.stop.cc = f.cc;
+                            row.stop.lat = row.lat; row.stop.lng = row.lng;
+                            delete row.stop.id;   // no longer Transitous's stop
+                        }
+                        refreshNote();
+                    }, 0);
+                }).on('input', function () { row.label = this.value; });
+
+                // The actual times and platform (live, or corrected here: *_rt) are what
+                // the fields edit; the scheduled ones show greyed under them when they
+                // differ. A stop with no schedule (added here) just takes what is typed.
+                function ensureStop() {
+                    if (row.stop) return row.stop;
+                    var f = splitFlag(row.label);   // a plain point given a time becomes a stop
+                    row.stop = { name: f.name, lat: row.lat, lng: row.lng, tz: tzNear(i) };
+                    if (f.cc) row.stop.cc = f.cc;
+                    $row.removeClass('plain');
+                    return row.stop;
+                }
+                function minutes(a, b) { return Math.round((Date.parse(a) - Date.parse(b)) / 60000); }
+                ['arr', 'dep'].forEach(function (field) {
+                    var rt = field + '_rt';
+                    var $cell = $('<span class="stop-cell">').appendTo($row);
+                    var $hint = $('<small class="stop-sched">');
+                    function showHint() {
+                        var st = row.stop, sched = st && st[field], actual = st && st[rt];
+                        setHint($hint, sched && actual ? toLocal(sched, st.tz).time : '',
+                                sched && actual ? minutes(actual, sched) : 0);
+                    }
+                    var current = stop && (stop[rt] || stop[field]);
+                    var local = current && toLocal(current, stop.tz);
+                    $('<input type="time">').val(local ? local.time : '')
+                        .attr('aria-label', field === 'arr' ? {{ stopArrival|tojson }} : {{ stopDeparture|tojson }})
+                        .on('change', function () {
+                            var v = this.value, st = ensureStop();
+                            if (!v) { delete st[field]; delete st[rt]; }
+                            else {
+                                var iso = toUtc((local && local.date) || baseDate(i), v, st.tz);
+                                if (!st[field]) st[field] = iso;          // nothing scheduled: it's the time
+                                else if (iso === st[field]) delete st[rt]; // back on schedule
+                                else st[rt] = iso;
+                            }
+                            showHint();
+                        }).appendTo($cell);
+                    $cell.append($hint);
+                    showHint();
+                });
+                (function () {
+                    var $cell = $('<span class="stop-cell">').appendTo($row);
+                    var $hint = $('<small class="stop-sched">');
+                    function showHint() {
+                        var st = row.stop;
+                        $hint.empty();
+                        if (st && st.platform && st.platform_rt) $hint.append($('<s>').text(st.platform));
+                    }
+                    $('<input type="text" maxlength="12">').val(stop && (stop.platform_rt || stop.platform) || '')
+                        .attr('aria-label', {{ stopPlatform|tojson }})
+                        .on('change', function () {
+                            var v = this.value.trim(), st = ensureStop();
+                            if (!v) { delete st.platform; delete st.platform_rt; }
+                            else if (!st.platform) st.platform = v;
+                            else if (v === st.platform) delete st.platform_rt;
+                            else st.platform_rt = v;
+                            showHint();
+                        }).appendTo($cell);
+                    $cell.append($hint);
+                    showHint();
+                })();
+                var $actions = $('<span class="stop-actions">').append($move).appendTo($row);
+                $('<button type="button" class="stop-remove"><i class="fa-regular fa-trash-can"></i></button>')
+                    .attr('title', {{ remove|tojson }})
+                    .on('click', function () { rows.splice(i, 1); render(); })
+                    .appendTo($actions);
+                $rows.append($row);
+            });
+            $rows.append(endRow('destination'));
+            refreshNote();
+        }
+
+        // ---- origin / destination rows
+        function readEnds() {
+            var delaysOn = $('#delayToggle').is(':checked');
+            function end(kind) {
+                var origin = kind === 'origin';
+                return {
+                    name: [$(origin ? '#originCountry' : '#destinationCountry').val(),
+                           $(origin ? '#originStation' : '#destinationStation').val()].join(' ').trim(),
+                    date: $(origin ? '#newTripStartDate' : '#newTripEndDate').val(),
+                    time: $(origin ? '#newTripStartTime' : '#newTripEndTime').val(),
+                    delay: delaysOn ? (parseFloat($(origin ? '#departureDelayMinutes' : '#arrivalDelayMinutes').val()) || 0) : 0,
+                    platform: $(origin ? '#departurePlatform' : '#arrivalPlatform').val() || ''
+                };
+            }
+            return { origin: end('origin'), destination: end('destination') };
+        }
+        // 'HH:MM' at scheduled date+time plus minutes
+        function shifted(date, time, minutes) {
+            if (!date || !time) return '';
+            var d = date.split('-').map(Number), t = time.split(':').map(Number);
+            var ms = Date.UTC(d[0], d[1] - 1, d[2], t[0], t[1]) + Math.round(minutes) * 60000;
+            return new Date(ms).toISOString().slice(11, 16);
+        }
+        // The delay that puts the scheduled time at the typed one: within -6 h…+18 h,
+        // so a run late past midnight still reads as late.
+        function delayFor(time, typed) {
+            var a = time.split(':').map(Number), b = typed.split(':').map(Number);
+            var m = (b[0] * 60 + b[1]) - (a[0] * 60 + a[1]);
+            while (m < -360) m += 1440;
+            while (m > 1080) m -= 1440;
+            return m;
+        }
+        var endDayFmt = new Intl.DateTimeFormat("{{ langId }}" || undefined,
+            { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+        function dayText(date) {
+            if (!date) return '';
+            var d = date.split('-').map(Number);
+            return endDayFmt.format(new Date(Date.UTC(d[0], d[1] - 1, d[2])));
+        }
+        function endRow(kind) {
+            var end = ends[kind], precise = $('#radioPreciseDates').is(':checked') && end.date && end.time;
+            var $row = $('<div class="stop-row stop-end">').addClass('stop-' + kind);
+            $('<span class="stop-track">').append($('<span class="stop-dot">').append(
+                $('<i class="fa-solid">').addClass(kind === 'origin' ? 'fa-flag' : 'fa-flag-checkered')
+            )).appendTo($row);
+            // The trip's own stations: named in the form, so shown, not edited, here.
+            $('<span class="stop-end-name">').text(end.name).attr('title', end.name).appendTo($row);
+            ['arr', 'dep'].forEach(function (field) {
+                var $cell = $('<span class="stop-cell">').appendTo($row);
+                // Only the departure at the origin, the arrival at the destination; the
+                // other slot shows the day, so a run past midnight reads at a glance.
+                if ((field === 'dep') !== (kind === 'origin')) {
+                    $cell.append($('<span class="stop-end-date">').text(dayText(end.date) || '\u2014'));
+                    return;
+                }
+                var $hint = $('<small class="stop-sched">');
+                function showHint() {
+                    setHint($hint, end.time, end.delay);
+                }
+                $('<input type="time">').val(precise ? shifted(end.date, end.time, end.delay) : '')
+                    .prop('disabled', !precise)
+                    .attr('aria-label', field === 'arr' ? {{ stopArrival|tojson }} : {{ stopDeparture|tojson }})
+                    .on('change', function () {
+                        end.delay = this.value ? delayFor(end.time, this.value) : 0;
+                        showHint();
+                    }).appendTo($cell);
+                $cell.append($hint);
+                showHint();
+            });
+            $('<span class="stop-cell">').append(
+                $('<input type="text" maxlength="12">').val(end.platform)
+                    .attr('aria-label', {{ stopPlatform|tojson }})
+                    .on('change', function () { end.platform = this.value.trim(); })
+            ).appendTo($row);
+            $('<span>').appendTo($row);
+            return $row;
+        }
+        // Into the form: platforms always, delays when the trip has precise times.
+        function applyEnds() {
+            if (!ends) return;
+            $('#departurePlatform').val(ends.origin.platform);
+            $('#arrivalPlatform').val(ends.destination.platform);
+            // A run refreshed ahead of time moved the trip's start/end (renewEnd)
+            if (ends.origin.renewed) {
+                stopsStart = ends.origin.date + ' ' + ends.origin.time;
+                $('#newTripStartDate').val(ends.origin.date).trigger('change');
+                $('#newTripStartTime').val(ends.origin.time).trigger('change');
+            }
+            if (ends.destination.renewed) {
+                $('#newTripEndDate').val(ends.destination.date).trigger('change');
+                $('#newTripEndTime').val(ends.destination.time).trigger('change');
+            }
+            if (!$('#radioPreciseDates').is(':checked') || !$('#delayToggle').length) return;
+            var dep = Math.round(ends.origin.delay), arr = Math.round(ends.destination.delay);
+            var on = $('#delayToggle').is(':checked');
+            if (!on && !dep && !arr) return;
+            $('#departureDelayMinutes').val(dep || '').trigger('input');
+            $('#arrivalDelayMinutes').val(arr || '').trigger('input');
+            if (!on) $('#delayToggle').prop('checked', true).trigger('change');
+        }
+
+        // The runs (Transitous ids) the rows' stops were picked from.
+        function runIds() {
+            var ids = {};
+            rows.forEach(function (r) { if (r.stop && r.stop.trip) ids[r.stop.trip] = true; });
+            return Object.keys(ids);
+        }
+
+        $('#stopsModalButton').on('click', function () {
+            rows = stored.map(rowFor);
+            showPlain = false;
+            ends = readEnds();
+            $('#stopsRuns').hide();
+            $('#stopsRefreshNone').hide();
+            render();
+            // Any timetabled trip, with stops or not (one logged by hand): without the run
+            // they came from, Refresh looks for the closest one first (findRun), and with
+            // no stops at all, it loads them (matchRunStops adds the run's).
+            var hasStops = rows.some(function (r) { return r.stop; });
+            $('#stopsRefreshLabel').text(hasStops ? {{ stopsRefresh|tojson }} : {{ stopsLoad|tojson }});
+            $('#stopsRefresh').toggle({{ 'true' if tripType in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') else 'false' }});
+            stopsModal.show();
+        });
+
+        // Ask Transitous for the run's current times (while it still has them) and put its
+        // live times and platforms on the matching stops (by stop id), and the trip's
+        // delays, from the run's stops nearest the route's two ends, ready for Update.
+        // Whether the stops' times are for the trip's day as the form now says: not when
+        // the trip was copied or moved to another day (they're shifted only on save), so
+        // the run they were picked from is another day's, not the one to refresh from.
+        function stopsOnFormDay() {
+            var date = $('#newTripStartDate').val(), time = $('#newTripStartTime').val();
+            var st = null;
+            rows.some(function (r) { if (r.stop && (r.stop.dep || r.stop.arr)) { st = r.stop; return true; } });
+            if (!st || !date || !time) return true;
+            var formStart = Date.parse(toUtc(date, time, st.tz));
+            return Math.abs(Date.parse(st.dep || st.arr) - formStart) <= 12 * 3600 * 1000;
+        }
+
+        $('#stopsRefresh').on('click', function () {
+            var $btn = $(this), ids = stopsOnFormDay() ? runIds() : [];
+            $btn.prop('disabled', true).find('i').addClass('fa-spin');
+            $('#stopsRefreshNone, #stopsRuns').hide();
+            if (ids.length) return refreshFrom(ids, $btn);
+            pickRun($btn);
+        });
+
+        // No run known: the departures between the trip's ends around its start, to pick
+        // the trip's from (as on the new-trip form). The closest on its line is marked.
+        var runsLogos = "{{ url_for('static', filename='') }}";
+        var runsLine = {{ motisLine|tojson }}, runsStops = {{ motisStops|tojson }};
+        var runsMin = new Intl.NumberFormat("{{ langId }}" || undefined, { style: 'unit', unit: 'minute', unitDisplay: 'short' });
+        var runsHour = new Intl.NumberFormat("{{ langId }}" || undefined, { style: 'unit', unit: 'hour', unitDisplay: 'short' });
+        function runDuration(sec) {
+            if (!sec && sec !== 0) return '';
+            var m = Math.round(sec / 60), h = Math.floor(m / 60);
+            return !h ? runsMin.format(m) : (m % 60 ? runsHour.format(h) + ' ' + runsMin.format(m % 60) : runsHour.format(h));
+        }
+        function runLine(line) {
+            return /^(\d+[a-z]{0,3}|[A-Z])$/i.test(line) ? runsLine.replace('{line}', line) : line;
+        }
+        function pickRun($btn) {
+            var date = $('#newTripStartDate').val(), time = $('#newTripStartTime').val();
+            if (typeof wplist === 'undefined' || !wplist || wplist.length < 2 || !date || !time) {
+                $('#stopsRefreshNone').show(); done($btn); return;
+            }
+            var a = wplist[0], b = wplist[wplist.length - 1];
+            $.getJSON("{{ url_for('motis.motis_departures', username=username) }}", {
+                from: a[0] + ',' + a[1], to: b[0] + ',' + b[1], date: date, time: time, type: tripType
+            }).done(function (res) {
+                var runs = (res && !res.outside_timetable && res.departures || []).filter(function (d) { return d.trip_id; });
+                if (!runs.length) { $('#stopsRefreshNone').show(); return; }
+                var wanted = Date.parse(date + 'T' + time), word = (($('#lineName').val() || '').split(/\s+/)[0] || '').toLowerCase();
+                var best = null;
+                runs.forEach(function (d) {
+                    var gap = Math.abs(Date.parse(d.departure) - wanted);
+                    var sameLine = !word || ((d.line || '').split(/\s+/)[0] || '').toLowerCase() === word;
+                    if (sameLine && gap <= 30 * 60000 && (!best || gap < best.gap)) best = { gap: gap, d: d };
+                });
+                var $list = $('#stopsRunsList').empty();
+                runs.forEach(function (d) {
+                    var $run = $('<button type="button" class="stops-run">').toggleClass('best', !!best && best.d === d);
+                    if (d.color) $run.css('--line-color', d.color);
+                    $('<img alt="">').attr('src', d.logo_url ? runsLogos + d.logo_url : "{{ url_for('static', filename='images/icons/trip_logos/' + tripType + '.png') }}")
+                        .appendTo($run);
+                    $('<span class="run-time">').text(d.departure.slice(11) + ' \u2192 ' + d.arrival.slice(11)).appendTo($run);
+                    var $head = $('<span class="run-head">').appendTo($run);
+                    $('<span class="run-line">').text(d.line ? runLine(d.line) : (d.operator || '')).appendTo($head);
+                    if (d.headsign) $('<span class="run-headsign">').text('\u2192 ' + d.headsign).appendTo($head);
+                    $('<span class="run-delay">').html(d.departure_delay ? '<span class="delay-badge ' +
+                        (d.departure_delay > 0 ? 'delay-late' : 'delay-early') + '">' + (d.departure_delay > 0 ? '+' : '') +
+                        d.departure_delay + "'</span>" : '').appendTo($run);
+                    $('<span class="run-meta">').text([d.departure.slice(0, 10), runDuration(d.duration),
+                        d.stops.length ? pluralize(runsStops, d.stops.length) : '', d.logo_url ? '' : d.operator]
+                        .filter(Boolean).join(' \u00b7 ')).appendTo($run);
+                    $run.on('click', function () {
+                        $('#stopsRuns').hide();
+                        // Kept on the stops, so a later refresh (and the saved trip) knows it.
+                        rows.forEach(function (r) { if (r.stop) r.stop.trip = d.trip_id; });
+                        $btn.prop('disabled', true).find('i').addClass('fa-spin');
+                        refreshFrom([d.trip_id], $btn);
+                    });
+                    $list.append($run);
+                });
+                $('#stopsRuns').show();
+                var $best = $list.find('.stops-run.best');
+                if ($best.length) $best[0].scrollIntoView({ block: 'nearest' });
+            }).fail(function () {
+                $('#stopsRefreshNone').show();
+            }).always(function () { done($btn); });
+        }
+        function done($btn) { $btn.prop('disabled', false).find('i').removeClass('fa-spin'); }
+
+        // The run's stops between the trip's ends (its stops nearest the route's two
+        // ends) become the trip's: one it calls at that isn't listed is added (also one
+        // deleted here), one listed that it no longer calls at goes. A listed stop keeps
+        // its row (name as edited, routing point). Points the user put in (plain ones,
+        // stops added by hand) stay where they were: after the stop they followed.
+        function nearestIndex(runStops, c) {
+            var best = null;
+            runStops.forEach(function (st, i) {
+                var m = L.latLng(c[0], c[1]).distanceTo([st.lat, st.lng]);
+                if (m <= 1500 && (!best || m < best.m)) best = { m: m, i: i };
+            });
+            return best ? best.i : null;
+        }
+        function matchRunStops(runStops, runId) {
+            if (typeof wplist === 'undefined' || !wplist || wplist.length < 2) return;
+            var board = nearestIndex(runStops, wplist[0]);
+            var alight = nearestIndex(runStops, wplist[wplist.length - 1]);
+            if (board == null || alight == null || alight <= board) return;
+            var between = runStops.slice(board + 1, alight), inRun = {};
+            between.forEach(function (st) { if (st.id) inRun[st.id] = true; });
+
+            var kept = {}, after = { '': [] }, last = '';
+            rows.forEach(function (row) {
+                var id = row.stop && row.stop.id;
+                if (id && inRun[id]) { kept[id] = row; last = id; after[id] = after[id] || []; }
+                else if (id) { /* a Transitous stop the run no longer calls at: goes */ }
+                else (after[last] = after[last] || []).push(row);   // the user's own
+            });
+            var next = after[''].slice();
+            between.forEach(function (st) {
+                var row = st.id && kept[st.id];
+                if (!row) {
+                    var flag = st.cc && st.cc !== 'UN' ? getFlagEmoji(st.cc) + ' ' : '';
+                    row = rowFor(null);
+                    row.label = flag + (st.name || '');
+                    row.lat = st.lat; row.lng = st.lng;
+                    row.stop = { name: st.name, lat: st.lat, lng: st.lng, id: st.id, trip: runId };
+                    if (st.cc) row.stop.cc = st.cc;
+                    if (st.tz) row.stop.tz = st.tz;
+                }
+                next.push(row);
+                if (st.id && after[st.id]) next = next.concat(after[st.id]);
+            });
+            rows = next;
+        }
+
+        function refreshFrom(ids, $btn) {
+            $.when.apply($, ids.map(function (id) {
+                return $.getJSON("{{ url_for('motis.motis_trip', username=username) }}", { id: id });
+            })).done(function () {
+                var answers = ids.length === 1 ? [arguments[0]] : Array.prototype.map.call(arguments, function (a) { return a[0]; });
+                var byId = {}, runStops = [], live = false;
+                answers.forEach(function (res) {
+                    (res && res.stops || []).forEach(function (st) { if (st.id) byId[st.id] = st; runStops.push(st); });
+                    live = live || !!(res && res.realtime);
+                });
+                if (!runStops.length) { $('#stopsRefreshNone').show(); return; }
+                // A run still hours from leaving can't be running late or early: what its
+                // live data changes is the timetable (DB publishes the coming days' changes
+                // that way), so its current times become the scheduled ones, and the trip's
+                // start and end move to them, rather than reading as a delay everywhere.
+                var first = runStops[0], leaves = first && (first.dep_rt || first.dep || first.arr);
+                var renew = !!leaves && Date.parse(leaves) - Date.now() > 3 * 3600 * 1000;
+                matchRunStops(runStops, ids[0]);
+                rows.forEach(function (r) {
+                    var st = r.stop, fresh = st && st.id && byId[st.id];
+                    if (!fresh) return;
+                    ['arr', 'dep'].forEach(function (f) {
+                        var current = fresh[f + '_rt'] || fresh[f];
+                        if (renew) {
+                            if (current) st[f] = current;
+                            delete st[f + '_rt'];
+                            return;
+                        }
+                        if (fresh[f]) st[f] = fresh[f];
+                        if (fresh[f + '_rt']) st[f + '_rt'] = fresh[f + '_rt']; else delete st[f + '_rt'];
+                    });
+                    if (renew && (fresh.platform_rt || fresh.platform)) {
+                        st.platform = fresh.platform_rt || fresh.platform;
+                        delete st.platform_rt;
+                    } else {
+                        if (fresh.platform) st.platform = fresh.platform;
+                        if (fresh.platform_rt && fresh.platform_rt !== st.platform) st.platform_rt = fresh.platform_rt;
+                        else delete st.platform_rt;
+                    }
+                    if (fresh.tz && !st.tz) st.tz = fresh.tz;
+                });
+                // The trip's own ends aren't stops: the run's stops nearest the route's ends.
+                function nearest(c) {
+                    var best = null;
+                    runStops.forEach(function (st) {
+                        var m = L.latLng(c[0], c[1]).distanceTo([st.lat, st.lng]);
+                        if (m <= 1500 && (!best || m < best.m)) best = { m: m, st: st };
+                    });
+                    return best && best.st;
+                }
+                function late(st, f) {
+                    return st && st[f] && st[f + '_rt'] ? Math.round((Date.parse(st[f + '_rt']) - Date.parse(st[f])) / 60000) : 0;
+                }
+                if (typeof wplist !== 'undefined' && wplist.length >= 2) {
+                    var startStop = nearest(wplist[0]), endStop = nearest(wplist[wplist.length - 1]);
+                    // Renewed: the trip's own start/end at the run's current times, on time.
+                    function renewEnd(end, st, f) {
+                        var at = toLocal(st[f + '_rt'] || st[f], st.tz);
+                        if (!at) return;
+                        end.date = at.date; end.time = at.time; end.delay = 0; end.renewed = true;
+                    }
+                    if (startStop) {
+                        if (renew) renewEnd(ends.origin, startStop, 'dep');
+                        else if (live) ends.origin.delay = late(startStop, 'dep');
+                        ends.origin.platform = startStop.platform_rt || startStop.platform || ends.origin.platform;
+                    }
+                    if (endStop) {
+                        if (renew) renewEnd(ends.destination, endStop, 'arr');
+                        else if (live) ends.destination.delay = late(endStop, 'arr');
+                        ends.destination.platform = endStop.platform_rt || endStop.platform || ends.destination.platform;
+                    }
+                }
+                render();
+            }).fail(function () {
+                $('#stopsRefreshNone').show();
+            }).always(function () { done($btn); });
+        }
+
+        $('#stopsOther').on('click', function () { showPlain = !showPlain; render(); });
+
+        $('#stopsAdd').on('click', function () {
+            rows.push(rowFor(null));
+            render();
+            $rows.find('.stop-station').last().focus();
+        });
+
+        $('#stopsSave').on('click', function () {
+            var route = structural();
+            // Rows without a place (an added one with no station picked) are dropped.
+            var next = rows.filter(function (r) { return r.lat != null && r.lng != null; }).map(function (r) {
+                var wp = $.extend({}, r.source || {}, { lat: r.lat, lng: r.lng });
+                if (r.label) wp.name = r.label; else delete wp.name;
+                var st = r.stop;
+                if (st && (st.arr || st.dep || st.arr_rt || st.dep_rt || st.platform || st.platform_rt)) wp.stop = st;
+                else delete wp.stop;   // no times or platform left: a plain point
+                return wp;
+            });
+            stopsModal.hide();
+            applyEnds();
+            commit(next, route);
+        });
+
+        // Make `next` the trip's waypoints: saved with the trip as they are, and the map
+        // dialog's from now on; with `route` (points changed), rerouted there to confirm.
+        function commit(next, route) {
+            stored = next;
+            editedStopsWaypoints = JSON.stringify(stored);
+            count();
+
+            // The map dialog builds (or rebuilds) its waypoints from these.
+            meta = window.routingWaypointMeta = stored.map(function (wp) {
+                return { name: wp.name || '', hard: typeof wp.hard === 'boolean' ? wp.hard : null, stop: wp.stop || null };
+            });
+            wplist = [wplist[0]].concat(stored.map(function (wp) { return [wp.lat, wp.lng]; }), [wplist[wplist.length - 1]]);
+            if (window.currentPlan) {
+                var wps = window.currentPlan.getWaypoints();
+                if (route) {
+                    freehandSegments.clear();
+                    window.currentPlan.setWaypoints([wps[0]].concat(stored.map(function (wp, i) {
+                        return waypointFromMeta([wp.lat, wp.lng], meta[i]);
+                    }), [wps[wps.length - 1]]));
+                } else {
+                    stored.forEach(function (wp, i) {   // same points: names and stops only
+                        var p = wps[i + 1];
+                        if (!p) return;
+                        p.name = wp.name || '';
+                        p.options = $.extend({}, p.options, { label: wp.name || undefined, stop: wp.stop || undefined });
+                    });
+                }
+            }
+            if (route) mapModal.show();   // reroute through the new points, to confirm
+        }
+
+        // The map dialog's route confirmed: its waypoints are the trip's now.
+        window.syncStopsFromRoute = function (waypointsJson) {
+            try { stored = JSON.parse(waypointsJson || '[]') || []; } catch (e) { return; }
+            editedStopsWaypoints = null;   // newTrip.waypoints carries them
+            count();
+        };
+        count();
+    })();
 
     var mapModal = new bootstrap.Modal(document.getElementById('mapModal'), {
         keyboard: false
@@ -790,9 +1614,13 @@
     const texts = {
         "routeTitle": "{{routeTitle}}",
         "fineTuneNote": "{{fineTuneNote}}",
+        "fineTuneNoteNewRouter": "{{fineTuneNoteNewRouter}}",
+        "motisTrack": "{{motisTrack}}",
         "distanceTime": "{{distanceTime}}",
-        "useNewRouter": "{{useNewRouter}}",
-        "useNewRouterHint": "{{useNewRouterHint}}",
+        "useLegacyRouter": "{{useLegacyRouter}}",
+        "useLegacyRouterHint": "{{useLegacyRouterHint}}",
+        "allWaypointsExact": "{{allWaypointsExact}}",
+        "allWaypointsExactHint": "{{allWaypointsExactHint}}",
         "train": "{{train}}",
         "tram": "{{tram}}",
         "metro": "{{metro}}",
@@ -809,10 +1637,20 @@
         "downloadGeoJSONButton": "{{downloadGeoJSONButton}}",
         "saveTripButton": "{{submit}}",
         "saveTripContinueButton": "{{saveTripContinueButton}}",
+        "waypoint": {{ waypoint|tojson }},
+        "freehandMode": {{ freehandMode|tojson }},
+        "remove": {{ remove|tojson }},
+        "waypointSoft": {{ waypointSoft|tojson }},
+        "waypointHard": {{ waypointHard|tojson }},
+        "waypointSoftHint": {{ waypointSoftHint|tojson }},
+        "waypointHardHint": {{ waypointHardHint|tojson }},
     };
 
 
     var wplist = JSON.parse("{{wplist}}");
+    // Name + hard/soft mode of each stored intermediate waypoint (see routing.js).
+    // (Already set by initStopsEditor, which shares its stop objects with the editor.)
+    window.routingWaypointMeta = window.routingWaypointMeta || {{ waypoint_meta|default([])|tojson }};
     // Original raw GPS trace (GPX imports only), preserved server-side (see
     // migration 0073) so it can be shown as a reference and optionally reselected
     // as the saved path instead of the routed/cleaned one.
@@ -886,10 +1724,12 @@
 
             if (routerToggle) {
                 routerToggle.addEventListener('change', function() {
-                    useNewRouter = this.checked;
+                    // The switch is "use the legacy router": the new one is the default.
+                    useNewRouter = !this.checked;
                     if (routerProfile) {
                         routerProfile.style.display = useNewRouter ? '' : 'none';
                     }
+                    document.getElementById('allExactModalWrap').style.display = useNewRouter ? '' : 'none';
 
                     // Show loading indicator
                     if (window.sidebar) {
@@ -908,8 +1748,13 @@
 
                         // Recompute the route
                         window.control.route();
+                        updateMarkerVisuals();
                     }
                 });
+                // routing() made the new router the default for rail types.
+                routerToggle.checked = !useNewRouter;
+                if (routerProfile) routerProfile.style.display = useNewRouter ? '' : 'none';
+                document.getElementById('allExactModalWrap').style.display = useNewRouter ? '' : 'none';
             }
             if (routerProfile) {
                 routerProfile.addEventListener('change', function() {
@@ -1128,6 +1973,8 @@
             routeDetails["powerType"] = $('input[name="powerType"]:checked').val();
             updatedRouteDetails = routeDetails;
             lastImportType = 'manual';
+            // The stops follow the confirmed route (a freehand one keeps none).
+            if (window.syncStopsFromRoute) window.syncStopsFromRoute(freehandActive ? '[]' : newTrip["waypoints"]);
             $('#mapModal').modal('hide');
             updatePathButtonSuccess('{{editedPath}}');
         });
@@ -1978,6 +2825,12 @@
         formData['origin_station'] = formData['originCountry'] + ' ' + formData['originStation'];
         formData['destination_station'] = formData['destinationCountry'] + ' ' + formData['destinationStation'];
 
+        // Stops edited without touching the route: the stored waypoints, stops edited.
+        // (With the route edited, newTrip.waypoints below carries the same edited stops.)
+        if (updatedPath == null && editedStopsWaypoints != null) {
+            formData["waypoints"] = editedStopsWaypoints;
+        }
+        if (stopsStart) formData["stopsStart"] = stopsStart;
         if (updatedPath != null) {
             formData["path"] = JSON.stringify(updatedPath);
             // Replace the 3D track together with the geom when re-imported from FR24.

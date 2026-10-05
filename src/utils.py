@@ -4,6 +4,7 @@ import os
 import re
 import smtplib
 import sqlite3
+import time
 from contextlib import contextmanager
 from datetime import UTC, datetime
 from email.mime.text import MIMEText
@@ -46,7 +47,66 @@ def readLang():
     return languages
 
 
-lang = readLang()
+class _LiveLang(dict):
+    """readLang() that picks up edited translation files without a restart.
+
+    The admin editor only writes the JSON file, and each gunicorn worker keeps
+    its own copy in memory, so nothing but a restart would show an edit. Instead
+    every read checks — at most once a second — whether any lang file changed
+    and reloads it in place, so the object other modules imported stays valid.
+    """
+
+    _INTERVAL = 1.0
+
+    def __init__(self):
+        super().__init__()
+        self._stamp = None
+        self._checked = 0.0
+        self._refresh()
+
+    def _refresh(self):
+        now = time.monotonic()
+        if now - self._checked < self._INTERVAL:
+            return
+        self._checked = now
+        stamp = max(os.stat(path).st_mtime_ns for path in glob("lang/*.json"))
+        if stamp == self._stamp:
+            return
+        try:
+            fresh = readLang()
+        except (OSError, ValueError):
+            # An editor save caught half-written: keep what is loaded and look
+            # again on the next read rather than fail the request.
+            return
+        self._stamp = stamp
+        super().update(fresh)
+
+    def __getitem__(self, key):
+        self._refresh()
+        return super().__getitem__(key)
+
+    def get(self, key, default=None):
+        self._refresh()
+        return super().get(key, default)
+
+    def __contains__(self, key):
+        self._refresh()
+        return super().__contains__(key)
+
+    def __iter__(self):
+        self._refresh()
+        return super().__iter__()
+
+    def keys(self):
+        self._refresh()
+        return super().keys()
+
+    def items(self):
+        self._refresh()
+        return super().items()
+
+
+lang = _LiveLang()
 
 
 @contextmanager

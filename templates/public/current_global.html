@@ -24,6 +24,7 @@
 
 <div id="map" class="mapIndiv"></div>
 
+<script src="{{ url_for('static', filename='js/trip_progress.js') }}"></script>
 <script>
 var logosList = {{logosList | safe}};
 var apiEndpoint = "{{ api_endpoint }}";  // Dynamic endpoint variable
@@ -270,8 +271,11 @@ function renderTrips(trips){
   trips.forEach(trip => {
     const type      = trip.trip.type;
     const fullPath  = densifyPath(trip.path, type);
-    const progress  = calculateProgress(trip);
-    const futureSeg = splitFuture(fullPath, progress);
+    // Timetable position (stops, dwell times and delays): trip_progress.js, [lat, lng] here.
+    const pos       = TripProgress.position(trip.trip, fullPath, { latFirst: true })
+                      || { index: 0, point: fullPath[0], progress: calculateProgress(trip) };
+    const progress  = pos.progress;
+    const futureSeg = [pos.point].concat(fullPath.slice(pos.index + 1));
 
     /*  Static polyline: goes over the ENTIRE trip  */
     tripsLayerGroup.addLayer(
@@ -292,7 +296,7 @@ function renderTrips(trips){
     }
 
     /*  Live-position marker (will "move" because we rebuild, not duplicate) */
-    const pegPos = fullPath[Math.floor(progress * (fullPath.length - 1))];
+    const pegPos = pos.point;
     tripsLayerGroup.addLayer(placePeg(pegPos, trip));
   });
 

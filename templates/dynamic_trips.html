@@ -4,6 +4,54 @@
 {% include nav %}
 
 <style>
+    /* Stops in the detail row (renderStops): folded, then a timeline like the edit
+       page's stops dialog — a line down the left, a dot per stop, the ends ringed. Plain
+       rows, nothing of the page's table chrome (no header bar, no borders, no stripes). */
+    /* The fold: its own ▸/▾ just before the count, so a caption put in front of it
+       (cards, processHiddenData) reads "STOPS: ▸ 1 stop" */
+    #dataTable td.child details.trip-stops > summary { cursor: pointer; list-style: none; user-select: none; }
+    #dataTable td.child details.trip-stops > summary::-webkit-details-marker { display: none; }
+    #dataTable td.child details.trip-stops .ts-toggle { color: #3b63b8; }
+    #dataTable td.child details.trip-stops .ts-toggle::before { content: "\25B8\00a0"; }
+    #dataTable td.child details.trip-stops[open] .ts-toggle::before { content: "\25BE\00a0"; }
+    #dataTable td.child tr.trip-stops-row details.trip-stops > summary > strong { margin-right: 10px; }
+    #dataTable td.child table.trip-stops-table {
+        border-collapse: collapse; margin: 4px 0 2px; width: auto; background: none;
+    }
+    #dataTable td.child table.trip-stops-table tr { background: none !important; }
+    #dataTable td.child table.trip-stops-table td {
+        padding: 2px 14px 2px 0; vertical-align: middle; border: 0 !important; background: none !important;
+        white-space: nowrap; font-size: 0.875rem; line-height: 1.5;
+    }
+    #dataTable td.child table.trip-stops-table td.ts-time { font-variant-numeric: tabular-nums; color: #374151; }
+    #dataTable td.child table.trip-stops-table td.ts-platform { color: #8a93a2; font-size: 0.8rem; }
+    #dataTable td.child table.trip-stops-table tr.ts-stop td.ts-name { color: #4b5563; }
+    #dataTable td.child table.trip-stops-table tr.ts-end td.ts-name { font-weight: 600; color: #1f2733; }
+    #dataTable td.child table.trip-stops-table td.ts-mark { position: relative; width: 14px; padding: 0 10px 0 0; }
+    #dataTable td.child table.trip-stops-table td.ts-mark::before {
+        content: ""; position: absolute; left: 6px; top: 0; bottom: 0; width: 2px; background: #e2e6eb;
+    }
+    #dataTable td.child table.trip-stops-table tbody tr:first-child td.ts-mark::before { top: 50%; }
+    #dataTable td.child table.trip-stops-table tbody tr:last-child td.ts-mark::before { bottom: 50%; }
+    #dataTable td.child table.trip-stops-table td.ts-mark > span {
+        position: relative; display: block; width: 6px; height: 6px; margin-left: 4px;
+        border-radius: 50%; background: #b3bac4;
+    }
+    #dataTable td.child table.trip-stops-table tr.ts-end td.ts-mark > span {
+        width: 10px; height: 10px; margin-left: 2px; background: #fff; border: 2px solid #3b63b8;
+    }
+    /* Station names wrap; times and platforms don't */
+    #dataTable td.child table.trip-stops-table td.ts-name { white-space: normal; }
+    /* Times and platforms stay on one line whatever the card's cell rules say */
+    #dataTable td.child table.trip-stops-table td.ts-time,
+    #dataTable td.child table.trip-stops-table td.ts-platform { white-space: nowrap !important; }
+    /* On a card: one cell across, caption above (processHiddenData), the timeline at
+       full width with the names taking what the times and platforms leave. */
+    #dataTable td.child tr.trip-stops-row > td { display: table-cell; }
+    #dataTable td.child tr.trip-stops-row table.trip-stops-table { width: 100%; }
+    #dataTable td.child tr.trip-stops-row table.trip-stops-table td { padding-right: 8px; }
+    #dataTable td.child tr.trip-stops-row table.trip-stops-table td.ts-name { width: 100%; }
+
     /* --- General UI --- */
     .ui-front { z-index: 9999999 !important; }
 
@@ -434,6 +482,19 @@
             align-items: center;
             justify-content: center;
             padding: 0 8px 40px;
+        }
+        /* A trip with no logo shows the operator's name instead: small, centred, and cut
+           to three lines so a long name cannot spill out of the gutter. */
+        .trip-card-host > #dataTable > tbody > tr > td.col-operator .operatorName {
+            font-size: 0.65rem;
+            line-height: 1.15;
+            text-align: center;
+            overflow-wrap: anywhere;
+            display: -webkit-box;
+            -webkit-box-orient: vertical;
+            -webkit-line-clamp: 3;
+            overflow: hidden;
+            max-width: 60px;
         }
         /* The operator cell carries logos sized for a full-height table row, and the
            multi-operator grid sizes its own box and items inline, so both the box and
@@ -1144,6 +1205,8 @@
                 <th data-orderable="false" class="none">{{seat}}</th>
                 <th data-orderable="false" class="none">{{notes}}</th>
                 <th data-orderable="false" class="none">{{tags}}</th>
+                {# Always in the detail row, and folded there too: renderStops #}
+                <th data-orderable="false" class="none">{{tripStops}}</th>
                 <th data-orderable="false" data-priority="1" data-orderable="false"></th>
             </tr>
         </thead>
@@ -1976,6 +2039,14 @@ function processHiddenData(rowIdx, columns){
                 : stationCols.indexOf(col.columnIndex) !== -1
                     ? stationsBelow
                     : (col.hidden || isEllipsisActive(tableObject.cell(rowIdx, col.columnIndex).node()));
+            // On a card the stops' timeline needs the card's width, not what the label
+            // column leaves of it: the caption above it instead, in one cell.
+            if (show && col.data != "" && cardMode && col.title == "{{tripStops}}") {
+                // The caption goes into the fold's own line: "STOPS: ▸ 1 stop".
+                return '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'" class="trip-stops-row">'+
+                    '<td colspan="2">'+displayData.replace('<summary>', '<summary><strong>'+label+':</strong> ')+'</td>'+
+                '</tr>';
+            }
             return show && col.data != ""?
             '<tr data-dt-row="'+col.rowIndex+'" data-dt-column="'+col.columnIndex+'">'+
                 '<td><strong>'+label+':</strong>'+'</td> '+
@@ -2050,6 +2121,81 @@ function renderDelayBadge(delaySecs) {
     const sign = minutes > 0 ? '+' : '';
     const cls = minutes > 0 ? 'delay-late' : minutes < 0 ? 'delay-early' : 'delay-ontime';
     return ` <span class="delay-badge ${cls}">${sign}${minutes}'</span>`;
+}
+
+// The stops of a trip picked from a timetable (its waypoints' `stop` records: name,
+// country, scheduled and live UTC times, time zone, platforms; see routing.js), as a
+// folded line in the detail row: "12 stops", opening onto a timeline from the origin to
+// the destination. Read like the row itself: the scheduled time (both, when it waits),
+// a delay badge, the platform; a flag only where the country changes. Nothing for trips
+// without stops, so the line isn't there at all.
+var STOPS_TEXT = {
+    count: {{ motisStops|tojson }},
+    track: {{ motisTrack|tojson }}
+};
+function escapeStopText(v) {
+    return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
+        return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+    });
+}
+function stopClock(iso, tz) {
+    if (!iso) return '';
+    try {
+        return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: tz || undefined })
+            .format(new Date(iso));
+    } catch (e) { return ''; }
+}
+function bareTrack(t) {
+    return String(t || '').replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '').trim();
+}
+// "Pl. 9", in red only when it really moved from the scheduled one
+function stopPlatformHtml(platform, live) {
+    var shown = bareTrack(live || platform);
+    if (!shown) return '';
+    var text = escapeStopText(STOPS_TEXT.track.replace('{track}', shown));
+    var moved = live && platform && bareTrack(live) !== bareTrack(platform);
+    return moved ? '<span class="delay-late">' + text + '</span>' : text;
+}
+// The leading flag of a station label ("🇩🇪 Berlin Hbf" → "🇩🇪")
+function labelFlag(label) {
+    var m = /^(\uD83C[\uDDE6-\uDDFF]){2}/.exec(label || '');
+    return m ? m[0] : '';
+}
+function renderStops(data, type, row) {
+    if (type !== 'display' || !data) return '';
+    var waypoints;
+    try { waypoints = typeof data === 'string' ? JSON.parse(data) : data; } catch (e) { return ''; }
+    var stops = (waypoints || []).filter(function (wp) { return wp && wp.stop; }).map(function (wp) { return wp.stop; });
+    if (!stops.length) return '';
+
+    function line(kind, name, time, platform) {
+        return '<tr class="ts-' + kind + '"><td class="ts-mark"><span></span></td>' +
+            '<td class="ts-name">' + name + '</td><td class="ts-time">' + time + '</td>' +
+            '<td class="ts-platform">' + platform + '</td></tr>';
+    }
+    function badge(secs) { return secs ? renderDelayBadge(secs) : ''; }
+
+    var lastFlag = labelFlag(row.origin_station);
+    var rows = [line('end', escapeStopText(row.origin_station),
+        escapeStopText(row.start_time || '') + badge(row.departure_delay), stopPlatformHtml(row.departure_platform))];
+    stops.forEach(function (st) {
+        var flag = st.cc && st.cc !== 'UN' && typeof getFlagEmoji === 'function' ? getFlagEmoji(st.cc) : '';
+        var showFlag = flag && flag !== lastFlag;
+        if (flag) lastFlag = flag;
+        var arr = stopClock(st.arr, st.tz), dep = stopClock(st.dep, st.tz);
+        var time = arr && dep && arr !== dep ? arr + '–' + dep : (dep || arr);
+        // The delay where it leaves (or arrives, at a stop it doesn't leave)
+        var rt = st.dep_rt || st.arr_rt, sched = st.dep_rt ? st.dep : st.arr;
+        var delay = rt && sched ? (Date.parse(rt) - Date.parse(sched)) / 1000 : 0;
+        rows.push(line('stop', escapeStopText((showFlag ? flag + ' ' : '') + (st.name || '')),
+            escapeStopText(time) + badge(delay), stopPlatformHtml(st.platform, st.platform_rt)));
+    });
+    rows.push(line('end', escapeStopText(row.destination_station),
+        escapeStopText(row.end_time || '') + badge(row.arrival_delay), stopPlatformHtml(row.arrival_platform)));
+
+    var count = typeof pluralize === 'function' ? pluralize(STOPS_TEXT.count, stops.length) : String(stops.length);
+    return '<details class="trip-stops"><summary><span class="ts-toggle">' + escapeStopText(count) + '</span></summary>' +
+        '<table class="trip-stops-table"><tbody>' + rows.join('') + '</tbody></table></details>';
 }
 
 function addSecsToDisplayTime(timeStr, secs) {
@@ -2639,6 +2785,7 @@ var table = $('#tripRows');
         { data: 'seat', render: renderPlainText },
         { data: 'notes', render: renderPlainText },
         { data: 'tags' },
+        { data: 'waypoints', render: renderStops, defaultContent: "" },
         {
             data: null,
             render: renderButton,

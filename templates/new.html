@@ -35,6 +35,117 @@
         color: #999; font-size: 1.2rem; line-height: 1; padding: 0;
     }
     .via-row .via-remove:hover { color: #333; }
+    .via-row .via-time {
+        position: absolute; top: 0; right: 32px; height: 32px; line-height: 32px;
+        font-size: 0.8rem; color: #888; font-variant-numeric: tabular-nums; pointer-events: none;
+    }
+    .via-row.has-time input.viaStation { padding-right: 175px; }  /* "10:58 – 10:59 · Voie 4" */
+
+    /* More than a few vias (a timetable service's stops): fold them into one summary row */
+    .via-summary {
+        display: flex; align-items: center; gap: 8px; margin-bottom: 0.6rem;
+        padding: 0 4px 0 16px; min-height: 32px; background-color: #f3f3f3;
+        font-size: 0.875rem; cursor: pointer; user-select: none;
+    }
+    .via-summary:hover { background-color: #e8e8e8; }
+    .via-summary .via-summary-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #555; }
+    .via-summary .via-summary-count { background: #888; color: #fff; border-radius: 10px; padding: 0 7px; font-size: 0.75rem; }
+    .via-summary .via-summary-clear {
+        border: 0; background: transparent; cursor: pointer; color: #999;
+        font-size: 1.2rem; line-height: 1; width: 28px; height: 32px; padding: 0;
+    }
+    .via-summary .via-summary-clear:hover { color: #333; }
+    #viaGroup.via-collapsed #viaContainer { display: none; }
+    /* Under the summary row, the stops read as its children: indented on a guide line */
+    #viaGroup.via-has-summary #viaContainer {
+        margin: -0.3rem 0 0.6rem 13px; padding: 0.3rem 0 0 14px; border-left: 2px solid #e2e2e2;
+    }
+
+    /* Timetable (MOTIS) departures between the chosen stations */
+    .via-motis-row { position: relative; display: flex; align-items: center; gap: 8px; margin-bottom: 1rem; }
+    .via-motis-row > .ts-btn { flex: none; min-height: 32px; }
+    #motisGroup { flex: 1; min-width: 0; }
+    #motisGroup .dropdown { position: static; }
+    #motisGroup .motis-menu { top: calc(100% + 4px); left: 0; right: 0; }
+    /* Same height, padding and icon column as the via summary row, 16px on the left like
+       the station fields and the Via button (style2.css, .ts-btn). */
+    #motisGroup .motis-toggle {
+        display: flex; align-items: center; gap: 8px; width: 100%; text-align: left;
+        padding: 0 4px 0 16px; min-height: 32px; border: 0; background-color: #f3f3f3; color: #333;
+        font-size: 0.875rem; line-height: 1.4; cursor: pointer;
+    }
+    .via-summary > .fa-route, #motisGroup .motis-clock, #motisGroup .motis-spinner { flex: none; width: 16px; text-align: center; }
+    #motisGroup #motisChevron { margin-right: 8px; }
+    #motisGroup .motis-toggle:hover { background-color: #e8e8e8; }
+    #motisGroup .motis-toggle[disabled] { cursor: default; color: #888; background-color: #f8f8f8; }
+    /* While searching: a spinner for the clock, and a bar sweeping along the bottom */
+    #motisGroup .motis-toggle { position: relative; overflow: hidden; }
+    #motisGroup .motis-toggle .motis-spinner { display: none; }
+    #motisGroup .motis-toggle.loading .motis-spinner { display: inline-block; }
+    #motisGroup .motis-toggle.loading .motis-clock { display: none; }
+    #motisGroup .motis-toggle.loading::after {
+        content: ""; position: absolute; left: 0; bottom: 0; height: 2px; width: 35%;
+        background: #4b78d6; animation: motis-sweep 1.2s ease-in-out infinite;
+    }
+    @keyframes motis-sweep { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+    @media (prefers-reduced-motion: reduce) {
+        #motisGroup .motis-toggle.loading::after { animation: none; width: 100%; opacity: .5; }
+    }
+    #motisGroup .motis-toggle-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #motisGroup .motis-count { background: #4b78d6; color: #fff; border-radius: 10px; padding: 0 7px; font-size: 0.75rem; }
+    #motisGroup .motis-menu { width: 100%; max-height: 55vh; overflow-y: auto; padding: 0; }
+    #motisGroup .motis-item {
+        display: grid; grid-template-columns: 34px auto 1fr; align-items: center; gap: 2px 10px;
+        padding: 7px 12px 7px 10px; white-space: normal;
+        border-left: 4px solid var(--line-color, transparent);
+        background-color: color-mix(in srgb, var(--line-color, transparent) 6%, transparent);
+    }
+    #motisGroup .motis-item + .motis-item { border-top: 1px solid #eee; }
+    #motisGroup .motis-item:hover, #motisGroup .motis-item:focus {
+        background-color: color-mix(in srgb, var(--line-color, #999) 14%, #fff);
+    }
+    #motisGroup .motis-item.active { color: inherit; background-color: color-mix(in srgb, var(--line-color, #4b78d6) 20%, #fff); }
+    #motisGroup .motis-logo { grid-row: 1 / 3; width: 34px; height: 26px; object-fit: contain; }
+    #motisGroup .motis-time { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #motisGroup .motis-time sup { font-weight: 400; color: #888; }
+    #motisGroup .motis-day { grid-column: 2; font-size: 0.75rem; color: #777; white-space: nowrap; }
+    #motisGroup .motis-line {
+        justify-self: start; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        padding: 0 6px; border-radius: 4px; font-size: 0.8rem; font-weight: 600;
+        border: 1px solid var(--line-color, #ccc);
+        background-color: color-mix(in srgb, var(--line-color, #ddd) 18%, #fff);
+    }
+    #motisGroup .motis-head { grid-column: 3; display: flex; align-items: center; gap: 6px; min-width: 0; }
+    #motisGroup .motis-head .motis-line { flex: none; max-width: 65%; }
+    #motisGroup .motis-headsign {
+        min-width: 0; font-size: 0.85rem; line-height: 1.2; color: #444; overflow: hidden;
+        /* Long termini wrap to a second line before being cut */
+        display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere;
+    }
+    #motisGroup .motis-meta { grid-column: 3; font-size: 0.75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #motisGroup .motis-more {
+        display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+        padding: 6px 12px; border: 0; background: #fafafa; color: #4b78d6;
+        font-size: 0.8rem; cursor: pointer;
+    }
+    #motisGroup .motis-more:hover { background: #f0f3fa; }
+    #motisGroup .motis-more[disabled] { color: #999; cursor: default; }
+    #motisGroup li:first-child > .motis-more { border-bottom: 1px solid #eee; }
+    #motisGroup li:nth-last-child(2) > .motis-more { border-top: 1px solid #eee; }
+    #motisGroup .motis-source { padding: 4px 12px; font-size: 0.7rem; color: #999; text-align: right; border-top: 1px solid #eee; }
+    /* Phones: the third column is too narrow for the line badge and headsign, so each
+       entry stacks into rows — times + journey info, then line → headsign at full
+       width, then the day. */
+    @media (max-width: 576px) {
+        #motisGroup .motis-item { grid-template-columns: 28px auto minmax(0, 1fr); gap: 2px 8px; padding: 8px 10px 8px 8px; }
+        #motisGroup .motis-logo { grid-row: 1 / 4; width: 28px; height: 22px; align-self: start; margin-top: 2px; }
+        #motisGroup .motis-time { grid-column: 2; grid-row: 1; }
+        #motisGroup .motis-meta { grid-column: 3; grid-row: 1; text-align: right; }
+        #motisGroup .motis-head { grid-column: 2 / 4; grid-row: 2; }
+        #motisGroup .motis-head .motis-line { max-width: 70%; }
+        #motisGroup .motis-day { grid-column: 2 / 4; grid-row: 3; }
+    }
+    #motisGroup .motis-source a { color: inherit; }
 </style>
 
 {% if vehicle_type == 'air' %}
@@ -178,9 +289,38 @@
 
       {% if vehicle_type != 'air' %}
       <group id="viaGroup" class="non_poi">
+        <div id="viaSummary" class="via-summary" style="display:none" role="button" aria-expanded="false">
+          <i class="fa-solid fa-route" style="color:#888"></i>
+          <span class="via-summary-text" id="viaSummaryText"></span>
+          <span class="via-summary-count" id="viaSummaryCount"></span>
+          <i class="fa-solid fa-chevron-down" id="viaSummaryChevron"></i>
+          <button type="button" class="via-summary-clear" id="viaSummaryClear" title="{{tsClearBtn}}">&times;</button>
+        </div>
         <div id="viaContainer"></div>
-        <button type="button" id="addViaBtn" class="ts-btn"><i class="fas fa-plus"></i> {{via}}</button>
       </group>
+
+      {# The Via button and, where there is a timetable, the departures bar share a row. #}
+      <div class="via-motis-row non_poi">
+        <button type="button" id="addViaBtn" class="ts-btn"><i class="fas fa-plus"></i> {{via}}</button>
+      {% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') %}
+      {# Direct services between the two stations around the chosen time, from MOTIS.
+         Filled by initMotisDepartures() below; hidden until there is something to say. #}
+      <group id="motisGroup" class="non_poi" style="display:none">
+        {# Static display: the list opens under the whole row (positioned on .via-motis-row),
+           not just under the bar. #}
+        <div class="dropdown">
+          <button type="button" id="motisToggle" class="motis-toggle" data-bs-toggle="dropdown" data-bs-display="static" aria-expanded="false">
+            <i class="fa-regular fa-clock motis-clock"></i>
+            <i class="fa-solid fa-circle-notch fa-spin motis-spinner" aria-hidden="true"></i>
+            <span class="motis-toggle-label" id="motisToggleLabel"></span>
+            <span class="motis-count" id="motisCount"></span>
+            <i class="fa-solid fa-chevron-down" id="motisChevron"></i>
+          </button>
+          <ul class="dropdown-menu motis-menu" id="motisMenu" aria-labelledby="motisToggle"></ul>
+        </div>
+      </group>
+      {% endif %}
+      </div>
       {% endif %}
 
       <br class="non_poi">
@@ -218,6 +358,10 @@
 
       <label for="lineName" class="sr-only">{{lineName}}</label>
       <input type="text" name="lineName" id="lineName" class="non_poi" placeholder="{{lineName}}"/>
+      {# The platforms of a timetable run picked above (initMotisDepartures), saved as the trip's
+         departure_platform / arrival_platform; edited in the edit page's stops dialog. #}
+      <input type="hidden" name="departurePlatform" id="departurePlatform"/>
+      <input type="hidden" name="arrivalPlatform" id="arrivalPlatform"/>
       <br class="non_poi">
 
       <label for="detailsToggle" class="checkboxLabel">{{details}}</label>
@@ -255,9 +399,11 @@
         <input type="hidden" name="seat_car" id="seat_car">
         <label for="notes" class="sr-only">{{notes}}</label>
         <input type="text" name="notes" id="notes" placeholder="{{notes}}">
-        <label for="tagSearchInput">{{tags|default('Tags')}}</label>
-        <input type="text" id="tagSearchInput" placeholder="{{select_tag}}" class="form-control" autocomplete="off" style="margin-bottom:.4rem;">
-        <div id="tagList" class="d-flex flex-wrap gap-1"></div>
+        <div id="tagsGroup"{% if plan_uuid %} style="display:none"{% endif %}>
+          <label for="tagSearchInput">{{tags|default('Tags')}}</label>
+          <input type="text" id="tagSearchInput" placeholder="{{select_tag}}" class="form-control" autocomplete="off" style="margin-bottom:.4rem;">
+          <div id="tagList" class="d-flex flex-wrap gap-1"></div>
+        </div>
 
         <!-- Price Details Subgroup -->
         <fieldset class="fieldset-fixed fieldset-price">
@@ -729,12 +875,16 @@
     }
   });
 
+  // The arrival can't be before the departure on the same day; on a later day
+  // (overnight) any time is fine.
   $("#newTripStartTime").on("focusout", function() {
-    if($("#newTripEndDate").val() == $("#newTripEndDate").val()){
+    if($("#newTripEndDate").val() == $("#newTripStartDate").val()){
       $("#newTripEndTime").attr({"min":$(this).val()});
       if ($("#newTripEndTime").val() < $(this).val()){
         $("#newTripEndTime").val($(this).val());
       }
+    } else {
+      $("#newTripEndTime").removeAttr("min");
     }
   });
   var URLs = {
@@ -777,22 +927,390 @@
 
   // ---------- Via (intermediate waypoint) stations ----------
   var viaPlaceholder = "{{via}}";
-  function addViaRow() {
+  // `time` is an optional "07:22 – 07:23" shown at the end of the row (timetable
+  // stops). It is display only and goes away once the station is changed.
+  function addViaRow(value, time) {
     var $row = $(
       '<div class="via-row">' +
         '<input type="text" class="stationSearch viaStation" placeholder="' + viaPlaceholder + '" />' +
-        '<button type="button" class="via-remove" title="Remove">&times;</button>' +
+        '<button type="button" class="via-remove" title="{{remove}}">&times;</button>' +
       '</div>'
     );
     $('#viaContainer').append($row);
     // Initialise autocomplete on the newly added input
     stationSearchAutocomplete($row.find('.viaStation'), visitedStations, stationSearchUrl, "{{manual}}");
-    $row.find('.viaStation').focus();
+    if (time) {
+      $row.addClass('has-time').append($('<span class="via-time">').text(time));
+    }
+    if (typeof value === 'string') {
+      $row.find('.viaStation').val(value);
+    } else {
+      // Adding one by hand: show the list it is being added to.
+      setViaCollapsed(false);
+      $row.find('.viaStation').focus();
+    }
+    updateViaSummary();
   }
-  $('#addViaBtn').on('click', addViaRow);
+
+  // Once there are vias, a summary row ("Renens VD · Morges · … · Coppet  12") heads
+  // the list and folds it away on click.
+  var VIA_FOLD_AFTER = 0;
+  function setViaCollapsed(collapsed) {
+    $('#viaGroup').toggleClass('via-collapsed', collapsed);
+    $('#viaSummary').attr('aria-expanded', String(!collapsed));
+    $('#viaSummaryChevron').toggleClass('fa-chevron-down', collapsed).toggleClass('fa-chevron-up', !collapsed);
+  }
+  function updateViaSummary() {
+    var names = $('#viaContainer .viaStation').map(function() { return $(this).val().trim(); }).get().filter(Boolean);
+    var count = $('#viaContainer .via-row').length;
+    if (count <= VIA_FOLD_AFTER) {
+      $('#viaSummary').hide();
+      $('#viaGroup').removeClass('via-has-summary');
+      setViaCollapsed(false);
+      return;
+    }
+    $('#viaGroup').addClass('via-has-summary');
+    var shown = names.length > 3 ? names.slice(0, 2).concat(['\u2026', names[names.length - 1]]) : names;
+    $('#viaSummaryText').text(shown.join(' \u00b7 '));
+    $('#viaSummaryCount').text(count);
+    $('#viaSummary').css('display', 'flex');
+  }
+  $('#addViaBtn').on('click', function() { addViaRow(); });
   $('#viaContainer').on('click', '.via-remove', function() {
     $(this).closest('.via-row').remove();
+    updateViaSummary();
   });
+  $('#viaContainer').on('change autocompleteselect', '.viaStation', function() {
+    setTimeout(updateViaSummary);
+  });
+  $('#viaContainer').on('input', '.viaStation', function() {
+    $(this).closest('.via-row').removeClass('has-time').find('.via-time').remove();
+  });
+  $('#viaSummary').on('click', function() {
+    setViaCollapsed(!$('#viaGroup').hasClass('via-collapsed'));
+  });
+  $('#viaSummaryClear').on('click', function(e) {
+    e.stopPropagation();
+    $('#viaContainer').empty();
+    updateViaSummary();
+  });
+{% endif %}
+
+{% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') %}
+  // ---------- Timetable departures (MOTIS) ----------
+  // Once both ends are known, list the direct services between them around the
+  // chosen start time; picking one fills in the times, line, operator and stops.
+  (function initMotisDepartures() {
+    var url = "{{ url_for('motis.motis_departures', username=username) }}";
+    var logosBase = "{{ url_for('static', filename='') }}";
+    var typeIcon = "{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}";
+    var texts = {
+      title: {{ motisDepartures|tojson }},
+      searching: {{ motisSearching|tojson }},
+      none: {{ motisNone|tojson }},
+      line: {{ motisLine|tojson }},
+      stops: {{ motisStops|tojson }},
+      track: {{ motisTrack|tojson }},
+      earlier: {{ motisEarlier|tojson }},
+      later: {{ motisLater|tojson }}
+    };
+    // Journey time in the page's language without a lang key: Intl's unit formats
+    // ("26 min", "1 h 05 min", "26分").
+    var hourFmt = new Intl.NumberFormat("{{ langId }}" || 'en', { style: 'unit', unit: 'hour', unitDisplay: 'short' });
+    var minFmt = new Intl.NumberFormat("{{ langId }}" || 'en', { style: 'unit', unit: 'minute', unitDisplay: 'short' });
+    function durationLabel(seconds) {
+      if (!seconds && seconds !== 0) return '';
+      var mins = Math.round(seconds / 60), h = Math.floor(mins / 60), m = mins % 60;
+      if (!h) return minFmt.format(m);
+      return m ? hourFmt.format(h) + ' ' + minFmt.format(m) : hourFmt.format(h);
+    }
+    // A bare line number or letter ("3", "50E", "7bis", "L") reads better as "Line 3";
+    // named services ("IR90 1808", "TGV INOUI 6643", "RER A") already say what they are.
+    function lineLabel(line) {
+      // A lone letter only: two-letter names are often service classes (IC, RE, EC).
+      return /^(\d+[a-z]{0,3}|[A-Z])$/i.test(line) ? texts.line.replace('{line}', line) : line;
+    }
+    // "Voie 4" / "Gl. 4" / "4番線" from a stop's platform; some feeds already put their own
+    // word in front ("Gl. 3" from DB), which goes so it isn't said twice.
+    function trackLabel(track) {
+      if (!track) return '';
+      var bare = String(track).replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '');
+      return texts.track.replace('{track}', bare || track);
+    }
+    var dayFmt = new Intl.DateTimeFormat("{{ langId }}" || 'en',
+      { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+    var $group = $('#motisGroup'), $toggle = $('#motisToggle'), $menu = $('#motisMenu');
+    var timer = null, xhr = null, lastKey = null, departures = [];
+    // The list's Earlier/Later buttons (loadMore): the request in flight, and what the
+    // current list was searched for, which they extend.
+    var moreXhr = null, searchParams = null;
+    // The run last picked, and what it put in the form (see forgetRun).
+    var applied = null;
+
+    function place(which) {
+      if ($('#' + which + 'ManualToggle').is(':checked')) {
+        var lat = parseFloat($('#' + which + 'ManualLat').val());
+        var lng = parseFloat($('#' + which + 'ManualLng').val());
+        return isFinite(lat) && isFinite(lng) ? [lat, lng] : null;
+      }
+      var entry = globalStationDict[$('#' + which + 'Station').val()];
+      return entry ? entry[0] : null;
+    }
+
+    function endsKey() {
+      var origin = place('origin'), destination = place('destination');
+      return origin && destination ? origin.join() + '|' + destination.join() : null;
+    }
+
+    // Picked a run, then changed an end: what the run filled in was about another
+    // trip, so it goes — its stops (the vias still showing their times; ones added or
+    // edited by hand stay), and the line, operator and delays unless changed since.
+    // The times stay: the next search starts from them.
+    function forgetRun() {
+      var run = applied;
+      applied = null;
+      $('#viaContainer .via-row.has-time').remove();
+      updateViaSummary();
+      if (run.line && $('#lineName').val() === run.line) $('#lineName').val('');
+      if (run.operator && $('#operator').val() === run.operator) setOperatorValue('');
+      $('#departurePlatform, #arrivalPlatform').val('');
+      if (run.delays) {
+        setDelay('departureDelayMinutes', 0);
+        setDelay('arrivalDelayMinutes', 0);
+      }
+      $menu.find('.motis-item').removeClass('active');
+    }
+
+    // What a search depends on, so the same lookup isn't repeated.
+    function formKey() {
+      var origin = place('origin'), destination = place('destination');
+      return origin && destination ? [origin.join(), destination.join(),
+        $('#newTripStartDate').val(), $('#newTripStartTime').val()].join('|') : null;
+    }
+
+    function setToggle(label, count, enabled, loading) {
+      $toggle.toggleClass('loading', !!loading).attr('aria-busy', loading ? 'true' : null);
+      $('#motisToggleLabel').text(label);
+      $('#motisCount').text(count || '').toggle(!!count);
+      $('#motisChevron').toggle(enabled);
+      $toggle.prop('disabled', !enabled);
+      $group.show();
+    }
+
+    function hide() {
+      if (xhr) xhr.abort();
+      if (moreXhr) moreXhr.abort();
+      departures = [];
+      $menu.empty();
+      $group.hide();
+    }
+
+    function search() {
+      var origin = place('origin'), destination = place('destination');
+      var date = $('#newTripStartDate').val(), time = $('#newTripStartTime').val();
+      if (!origin || !destination || !date || !$('#radioPreciseDates').is(':checked')
+          || origin.join() === destination.join()) {
+        lastKey = null;
+        hide();
+        return;
+      }
+      var key = formKey();
+      if (key === lastKey) return;
+      lastKey = key;
+      if (xhr) xhr.abort();
+      setToggle(texts.searching, null, false, true);
+      if (moreXhr) moreXhr.abort();
+      searchParams = { from: origin.join(','), to: destination.join(','), type: "{{ vehicle_type }}" };
+      xhr = $.getJSON(url, $.extend({ date: date, time: time }, searchParams)).done(function (res) {
+        // A date Transitous has no timetables for (a past year): nothing to offer, say nothing.
+        if (res.outside_timetable) { hide(); return; }
+        departures = res.departures || [];
+        render();
+      }).fail(function (_, status) {
+        if (status !== 'abort') { lastKey = null; hide(); }
+      });
+    }
+
+    function schedule() {
+      clearTimeout(timer);
+      if (applied && endsKey() !== applied.ends) forgetRun();
+      // A search for what the form no longer says is dropped straight away, not after
+      // the debounce (the server stops working on it once the request goes away).
+      if (xhr && formKey() !== lastKey) { xhr.abort(); xhr = null; lastKey = null; }
+      // Long enough for typing a time (each keystroke is a new form state).
+      timer = setTimeout(search, 800);
+    }
+
+    function dayLabel(isoDate) {
+      var p = isoDate.split('-').map(Number);
+      return dayFmt.format(new Date(Date.UTC(p[0], p[1] - 1, p[2])));
+    }
+
+    // One run, whichever page of the list it came from.
+    function runKey(d) {
+      return [d.departure, d.line, d.headsign, d.agency].join('|');
+    }
+
+    // "Earlier" / "Later" at the ends of the list.
+    function moreButton(direction) {
+      return $('<button type="button" class="motis-more">').attr('data-direction', direction)
+        .append($('<i class="fa-solid">').addClass(direction === 'earlier' ? 'fa-chevron-up' : 'fa-chevron-down'))
+        .append($('<span>').text(direction === 'earlier' ? texts.earlier : texts.later));
+    }
+
+    // Extend the list by a page: from its last departure on, or the stretch before its
+    // first one as long as the list already spans (a few minutes on a busy line, hours on
+    // a sparse one). New runs merge in; the menu stays open.
+    function loadMore(direction, $btn) {
+      if (!searchParams || !departures.length || moreXhr) return;
+      var first = departures[0].departure, last = departures[departures.length - 1].departure;
+      var at = direction === 'earlier' ? first : last;
+      var span = Math.max(10, Math.round((Date.parse(last) - Date.parse(first)) / 60000));
+      var key = lastKey;
+      $btn.prop('disabled', true).find('i').attr('class', 'fa-solid fa-circle-notch fa-spin');
+      moreXhr = $.getJSON(url, $.extend({
+        date: at.slice(0, 10), time: at.slice(11, 16), page: direction, span: span
+      }, searchParams)).done(function (res) {
+        if (key !== lastKey) return;   // the form has moved on
+        var known = {};
+        departures.forEach(function (d) { known[runKey(d)] = true; });
+        var added = (res.departures || []).filter(function (d) { return !known[runKey(d)]; });
+        departures = departures.concat(added).sort(function (a, b) {
+          return a.departure < b.departure ? -1 : a.departure > b.departure ? 1 : 0;
+        });
+        var scroll = $menu.scrollTop(), height = $menu[0].scrollHeight;
+        render();
+        // Earlier runs go above what was in view: keep it in view.
+        $menu.scrollTop(direction === 'earlier' ? scroll + $menu[0].scrollHeight - height : scroll);
+      }).always(function () {
+        moreXhr = null;
+        $btn.prop('disabled', false).find('i').attr('class', 'fa-solid ' + (direction === 'earlier' ? 'fa-chevron-up' : 'fa-chevron-down'));
+      });
+    }
+
+    function render() {
+      $menu.empty();
+      if (!departures.length) {
+        setToggle(texts.none, null, false);
+        return;
+      }
+      $('<li>').append(moreButton('earlier')).appendTo($menu);
+      departures.forEach(function (d, i) {
+        var depDate = d.departure.slice(0, 10), arrDate = d.arrival.slice(0, 10);
+        var dayDiff = Math.round((Date.parse(arrDate) - Date.parse(depDate)) / 86400000);
+        var $item = $('<a href="#" class="dropdown-item motis-item">').attr('data-i', i)
+          .attr('title', [d.from_name, d.to_name].filter(Boolean).join(' \u2192 '));
+        if (d.color) $item.css('--line-color', d.color);
+        if (applied && applied.key === runKey(d)) $item.addClass('active');
+        $('<img class="motis-logo" alt="">')
+          .attr('src', d.logo_url ? logosBase + d.logo_url : typeIcon)
+          .on('error', function () { if (this.src !== typeIcon) this.src = typeIcon; })
+          .appendTo($item);
+        $('<span class="motis-time">')
+          .text(d.departure.slice(11) + ' → ' + d.arrival.slice(11))
+          .append(dayDiff > 0 ? $('<sup>').text(' +' + dayDiff) : null)
+          .appendTo($item);
+        // "[Ligne 6] → Nation": the arrow follows the line it belongs to.
+        var $head = $('<span class="motis-head">').appendTo($item);
+        $('<span class="motis-line">').text(d.line ? lineLabel(d.line) : (d.operator || '')).appendTo($head);
+        if (d.headsign) $('<span class="motis-headsign">').text('→ ' + d.headsign).attr('title', d.headsign).appendTo($head);
+        $('<span class="motis-day">').text(dayLabel(depDate)).appendTo($item);
+        // Journey time and stops on the way; the operator only when no logo names it.
+        $('<span class="motis-meta">')
+          .text([
+            durationLabel(d.duration),
+            d.stops.length ? pluralize(texts.stops, d.stops.length) : '',
+            d.logo_url ? '' : d.operator,
+          ].filter(Boolean).join(' · '))
+          .appendTo($item);
+        $('<li>').append($item).appendTo($menu);
+      });
+      $('<li>').append(moreButton('later')).appendTo($menu);
+      $('<li class="motis-source">').html('<a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a>').appendTo($menu);
+      // A picked run keeps its "10:53 → 12:21 · IR35" (apply) when the list is extended.
+      setToggle(applied && applied.label || texts.title, departures.length, true);
+    }
+
+    // What the trip keeps of a stop of the picked run: the via entry's third item, carried
+    // to the routing page as its waypoint's `stop` and saved with it (routing.js). Times are
+    // UTC (scheduled), tz shows them locally again, lat/lng is the stop itself (the entry's
+    // own coordinates may have been moved onto the run's path); id and trip are Transitous's
+    // stop and run ids, to fetch the actual times once the run is over.
+    function stopRecord(stop, run) {
+      // Scheduled arr/dep/platform, and the live ones (*_rt) only where they differ.
+      var platform = stop[15] || stop[6];
+      var record = { name: stop[2], cc: stop[3], platform: platform, arr: stop[7], dep: stop[8],
+                    arr_rt: stop[13], dep_rt: stop[14], platform_rt: stop[6] !== platform ? stop[6] : null,
+                    tz: stop[9], lat: stop[10], lng: stop[11], id: stop[12], trip: run.trip_id };
+      Object.keys(record).forEach(function (k) { if (record[k] == null || record[k] === '') delete record[k]; });
+      return record;
+    }
+
+    function setDelay(minutesId, minutes) {
+      $('#' + minutesId).val(minutes || '').trigger('input');
+    }
+
+    function apply(d) {
+      var dep = d.departure.split('T'), arr = d.arrival.split('T');
+      $('#radioPreciseDates').prop('checked', true).trigger('change');
+      $('#newTripStartDate').val(dep[0]);
+      $('#newTripStartTime').val(dep[1]);
+      $('#newTripEndDate').val(arr[0]);
+      $('#newTripEndTime').val(arr[1]);
+      // Let the date pickers re-derive their min/max bounds as if typed.
+      $('#newTripStartDate, #newTripStartTime').trigger('focusout');
+      if (d.operator) setOperatorValue(d.operator);
+      if (d.line) $('#lineName').val(d.line);
+      $('#departurePlatform').val(d.from_platform || '');
+      $('#arrivalPlatform').val(d.to_platform || '');
+
+      // The service's stops become the via waypoints the route is drawn through.
+      $('#viaContainer').empty();
+      d.stops.forEach(function (stop) {
+        var name = stop[2] || (stop[0] + ', ' + stop[1]);
+        // Same "🇨🇭 Name" shape as a station picked from the autocomplete.
+        var label = stop[3] && stop[3] !== 'UN' ? getFlagEmoji(stop[3]) + ' ' + name : name;
+        globalStationDict[label] = [[stop[0], stop[1]], label, stopRecord(stop, d)];
+        var arr = stop[4], dep = stop[5];
+        var times = arr && dep && arr !== dep ? arr + ' \u2013 ' + dep : (arr || dep);
+        addViaRow(label, [times, trackLabel(stop[6])].filter(Boolean).join(' \u00b7 '));
+      });
+      setViaCollapsed(true);
+      updateViaSummary();
+
+      // Real-time data on a run that has started: carry its delays over.
+      var delays = (d.departure_delay || d.arrival_delay) && $('#delayToggle').is(':visible');
+      if (delays) {
+        setDelay('departureDelayMinutes', d.departure_delay);
+        setDelay('arrivalDelayMinutes', d.arrival_delay);
+        $('#delayToggle').prop('checked', true).trigger('change');
+      }
+      applied = { ends: endsKey(), key: runKey(d), line: d.line, operator: d.operator, delays: !!delays };
+
+      // The form now reflects this departure; don't search again for its own time.
+      lastKey = formKey();
+      $menu.find('.motis-item').removeClass('active');
+      $menu.find('.motis-item[data-i="' + departures.indexOf(d) + '"]').addClass('active');
+      applied.label = dep[1] + ' → ' + arr[1] + (d.line ? ' · ' + lineLabel(d.line) : '');
+      $('#motisToggleLabel').text(applied.label);
+    }
+
+    $menu.on('click', '.motis-more', function (e) {
+      e.preventDefault();
+      e.stopPropagation();   // Bootstrap would close the menu
+      loadMore($(this).attr('data-direction'), $(this));
+    });
+    $menu.on('click', '.motis-item', function (e) {
+      e.preventDefault();
+      apply(departures[+$(this).attr('data-i')]);
+    });
+
+    $('#originStation, #destinationStation').on('autocompleteselect autocompletechange change', schedule);
+    $('#newTripStartDate, #newTripStartTime, #originManualToggle, #destinationManualToggle, ' +
+      '#originManualLat, #originManualLng, #destinationManualLat, #destinationManualLng').on('change', schedule);
+    $('input[name="precision"]').on('change', schedule);
+    schedule();
+  })();
 {% endif %}
 
   enhanceCurrencySelect('currency');

@@ -49,6 +49,48 @@
   .settings2-toggle-row .form-check:last-child { margin-bottom: 0; }
   .settings2-save { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid #e9ecef; }
 
+
+  .dw-section { margin-top: 1.75rem; }
+  .dw-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin-bottom: 0.75rem; }
+  .dw-title { font-weight: 600; }
+  .dw-flash { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; padding: 0.55rem 0.8rem; border-radius: 10px; font-size: 0.85rem; background: #e8f5ee; color: #146c43; }
+  .dw-flash-error { background: #fdecea; color: #b02a37; }
+
+  .dw-list { border: 1px solid #e9ecef; border-radius: 14px; background: #fff; }
+  .dw-row { display: flex; align-items: center; gap: 0.85rem; padding: 0.8rem 0.9rem; }
+  .dw-row + .dw-row { border-top: 1px solid #f1f3f5; }
+  .dw-avatar { position: relative; width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #5865f2; color: #fff; font-size: 1.15rem; overflow: hidden; box-shadow: 0 0 0 1px rgba(0,0,0,0.06); transition: opacity .15s, filter .15s; }
+  .dw-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .dw-avatar-main { background: #fff; }
+  .dw-body { flex: 1; min-width: 0; transition: opacity .15s; }
+  .dw-name { display: flex; align-items: center; gap: 0.4rem; font-weight: 600; line-height: 1.3; }
+  .dw-name-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dw-badge { flex: none; padding: 0.05rem 0.45rem; border-radius: 999px; background: #e7f0ff; color: #0d6efd; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.02em; text-transform: uppercase; }
+  .dw-status { display: flex; align-items: center; gap: 0.35rem; margin-top: 0.15rem; font-size: 0.8rem; color: #6c757d; }
+  .dw-status-auto { color: #0d6efd; }
+  .dw-row-off .dw-avatar { opacity: 0.45; filter: grayscale(1); }
+  .dw-row-off .dw-name { color: #6c757d; }
+
+  .dw-switch { margin: 0; padding: 0; min-height: 0; display: flex; }
+  .dw-switch .form-check-input { float: none; margin: 0; width: 2.4em; height: 1.3em; cursor: pointer; }
+  .dw-more { width: 2rem; height: 2rem; flex: none; border: 0; border-radius: 8px; background: none; color: #6c757d; }
+  .dw-more:hover, .dw-more[aria-expanded="true"] { background: #f1f3f5; color: #212529; }
+  .dw-menu { width: 17rem; max-width: calc(100vw - 2rem); padding: 0.35rem; border: 1px solid #e9ecef; border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.08); }
+  .dw-menu .dropdown-item { display: flex; align-items: center; white-space: normal; line-height: 1.3; gap: 0.6rem; padding: 0.5rem 0.65rem; border-radius: 8px; font-size: 0.9rem; }
+  .dw-menu .dropdown-item i { flex: none; width: 1rem; text-align: center; color: #6c757d; }
+  .dw-menu .dropdown-item .dw-check { margin-left: auto; color: #0d6efd; }
+  .dw-menu .dropdown-item.text-danger i { color: inherit; }
+  .dw-menu .dropdown-item:disabled { opacity: 0.45; }
+
+  .dw-add-row { display: flex; align-items: center; gap: 0.85rem; width: 100%; padding: 0.75rem 0.9rem; border: 0; border-top: 1px solid #f1f3f5; border-radius: 0 0 14px 14px; background: none; color: #0d6efd; font-weight: 600; text-align: left; }
+  .dw-list:not(:has(.dw-row)) .dw-add-row { border-top: 0; border-radius: 14px; }
+  .dw-add-row:hover { background: #f8faff; }
+  .dw-add-icon { width: 40px; height: 40px; flex: none; display: flex; align-items: center; justify-content: center; border: 1.5px dashed #9ec5fe; border-radius: 50%; }
+
+  .dw-modal .modal-content { border: 0; border-radius: 16px; }
+  .dw-steps { margin: 0 0 1.25rem; padding: 0.75rem 0.9rem; border-radius: 12px; background: #f1f6ff; color: #495057; font-size: 0.85rem; }
+  .dw-steps i { color: #5865f2; }
+
   .settings2-integration-row {
     display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap;
     padding: 1rem 0;
@@ -60,6 +102,16 @@
     padding: 0.4rem 0.8rem; border-radius: 999px; color: #fff;
     font-size: 0.82rem; font-weight: 600;
   }
+
+  .settings2-danger-card { border-color: #f5c2c7; min-height: 0; }
+
+  /* Visually masked like a password field, but deliberately type="text" with a
+     non-"password"/"username" name — browsers offer to save/fill an actual
+     type="password" input no matter what else the page does to discourage it
+     (a longstanding, deliberate override), so the only reliable way to keep
+     this confirmation step from triggering the password manager UI at all is
+     to not look like a login field in the first place. */
+  .settings2-masked-field { -webkit-text-security: disc; }
 
   /* Searchable combo (custom dropdown): flag stays in the left icon box only,
      never in the collapsed button text; the open list shows a flag per row
@@ -208,9 +260,6 @@
               </div>
             </div>
 
-            <div class="settings2-save">
-              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
-            </div>
           </div>
         </div>
 
@@ -230,6 +279,10 @@
               <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="globe" name="globe" form="settingsForm" {% if user_globe %}checked{% endif %}>
                 <label class="form-check-label" for="globe">{{ globeLabel }}</label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="exact_waypoints" name="exact_waypoints" form="settingsForm" {{ exact_waypoints_checked }}>
+                <label class="form-check-label" for="exact_waypoints" title="{{ allWaypointsExactHint }}">{{ allWaypointsExact }}</label>
               </div>
             </div>
 
@@ -393,6 +446,169 @@
             </div>
             {% endif %}
           </div>
+
+          <div class="settings2-card settings2-danger-card mt-4">
+            <h3 class="settings2-card-title text-danger"><i class="fa-solid fa-triangle-exclamation"></i> {{ settingsDangerZoneTitle }}</h3>
+            <p class="settings2-hint mb-3">{{ deleteAccountWarning }}</p>
+            <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteAccountModal">
+              <i class="fa-solid fa-trash"></i> {{ deleteAccountButton }}
+            </button>
+          </div>
+
+          <div class="modal fade" id="deleteAccountModal" tabindex="-1" aria-labelledby="deleteAccountModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered">
+              <form method="POST" action="{{ url_for('delete_account', username=username) }}" class="modal-content" id="deleteAccountForm">
+                <div class="modal-header border-0 pb-0">
+                  <h5 class="modal-title text-danger" id="deleteAccountModalLabel"><i class="fa-solid fa-triangle-exclamation"></i> {{ deleteAccountModalTitle }}</h5>
+                  <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ cancel }}"></button>
+                </div>
+
+                <!-- Step 1: prove it's really you -->
+                <div class="modal-body" id="deleteAccountStep1">
+                  <p>{{ deleteAccountWarning }}</p>
+
+                  <label class="form-label small fw-semibold mt-2" for="deleteAccountSecret">{{ deleteAccountPasswordLabel }}</label>
+                  <input type="text" class="form-control settings2-masked-field" id="deleteAccountSecret" name="delete_confirm_secret" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                  <div class="text-danger small mt-1 d-none mb-2" id="deleteAccountSecretError">{{ deleteAccountWrongPassword }}</div>
+
+                  <label class="form-label small fw-semibold mt-3" for="deleteAccountConfirmPhrase">{{ deleteAccountConfirmLabel|replace("{username}", username) }}</label>
+                  <input type="text" class="form-control" id="deleteAccountConfirmPhrase" name="delete_confirm_phrase" required autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+                </div>
+                <div class="modal-footer border-0 pt-0" id="deleteAccountStep1Footer">
+                  <button type="button" class="btn btn-light" data-bs-dismiss="modal">{{ cancel }}</button>
+                  <button type="button" class="btn btn-danger" id="deleteAccountContinue" disabled>{{ deleteAccountContinueButton }}</button>
+                </div>
+
+                <!-- Step 2: last chance to grab a copy, then the real delete -->
+                <div class="modal-body d-none" id="deleteAccountStep2">
+                  <p class="settings2-hint">{{ deleteAccountDownloadHint }}</p>
+                  <button type="button" class="btn btn-outline-primary w-100 mb-2" id="deleteAccountDownloadBtn">
+                    <i class="fa-solid fa-file-zipper" id="deleteAccountDownloadIcon"></i> <span id="deleteAccountDownloadLabel">{{ deleteAccountDownloadButton }}</span>
+                  </button>
+                </div>
+                <div class="modal-footer border-0 pt-0 d-none" id="deleteAccountStep2Footer">
+                  <button type="button" class="btn btn-light" id="deleteAccountBack">{{ deleteAccountBackButton }}</button>
+                  <button type="submit" class="btn btn-danger">
+                    <i class="fa-solid fa-trash"></i> {{ deleteAccountConfirmButton }}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+
+          <script>
+            document.addEventListener('DOMContentLoaded', () => {
+              const usernameInput = document.getElementById('deleteAccountConfirmPhrase');
+              const secretInput = document.getElementById('deleteAccountSecret');
+              const secretError = document.getElementById('deleteAccountSecretError');
+              const continueBtn = document.getElementById('deleteAccountContinue');
+              const targetUsername = {{ username|tojson }};
+              const checkStep1 = () => {
+                continueBtn.disabled = !secretInput.value || usernameInput.value !== targetUsername;
+              };
+              if (usernameInput && continueBtn) {
+                usernameInput.addEventListener('input', checkStep1);
+                secretInput.addEventListener('input', () => {
+                  secretError.classList.add('d-none');
+                  checkStep1();
+                });
+              }
+
+              const step1 = document.getElementById('deleteAccountStep1');
+              const step1Footer = document.getElementById('deleteAccountStep1Footer');
+              const step2 = document.getElementById('deleteAccountStep2');
+              const step2Footer = document.getElementById('deleteAccountStep2Footer');
+
+              const showStep2 = () => {
+                step1.classList.add('d-none');
+                step1Footer.classList.add('d-none');
+                step2.classList.remove('d-none');
+                step2Footer.classList.remove('d-none');
+              };
+              const showStep1 = () => {
+                step2.classList.add('d-none');
+                step2Footer.classList.add('d-none');
+                step1.classList.remove('d-none');
+                step1Footer.classList.remove('d-none');
+              };
+
+              if (continueBtn) {
+                continueBtn.addEventListener('click', () => {
+                  continueBtn.disabled = true;
+
+                  const body = new URLSearchParams({ delete_confirm_secret: secretInput.value });
+                  fetch({{ url_for('verify_delete_account_password', username=username)|tojson }}, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                    body,
+                  })
+                    .then((resp) => resp.json())
+                    .then((data) => {
+                      if (data.valid) {
+                        showStep2();
+                      } else {
+                        secretError.classList.remove('d-none');
+                        secretInput.focus();
+                      }
+                    })
+                    .catch((err) => console.error('Password check failed', err))
+                    .finally(checkStep1);
+                });
+              }
+              const backBtn = document.getElementById('deleteAccountBack');
+              if (backBtn) backBtn.addEventListener('click', showStep1);
+
+              const downloadBtn = document.getElementById('deleteAccountDownloadBtn');
+              const downloadIcon = document.getElementById('deleteAccountDownloadIcon');
+              const downloadLabel = document.getElementById('deleteAccountDownloadLabel');
+              if (downloadBtn) {
+                downloadBtn.addEventListener('click', () => {
+                  const originalLabel = downloadLabel.textContent;
+                  downloadBtn.disabled = true;
+                  downloadIcon.classList.replace('fa-file-zipper', 'fa-spinner');
+                  downloadIcon.classList.add('fa-spin');
+                  downloadLabel.textContent = {{ preparingExportLabel|tojson }};
+
+                  fetchAndSaveFile(
+                    {{ url_for('export_all', username=username)|tojson }},
+                    'trainlog_full_export.zip'
+                  ).finally(() => {
+                    downloadBtn.disabled = false;
+                    downloadIcon.classList.replace('fa-spinner', 'fa-file-zipper');
+                    downloadIcon.classList.remove('fa-spin');
+                    downloadLabel.textContent = originalLabel;
+                  });
+                });
+              }
+
+              const deleteModalEl = document.getElementById('deleteAccountModal');
+              const deleteForm = document.getElementById('deleteAccountForm');
+
+              // Pressing Enter in a form field implicitly submits the form, and some
+              // browsers do that even while step 2's real submit button is hidden
+              // (d-none is just display:none, not guaranteed to be skipped) — which
+              // would delete the account straight from step 1. Redirect that to
+              // "Continue" instead; only a submit while step 2 is actually showing
+              // goes through for real.
+              if (deleteForm) {
+                deleteForm.addEventListener('submit', (e) => {
+                  if (step2.classList.contains('d-none')) {
+                    e.preventDefault();
+                    if (!continueBtn.disabled) showStep2();
+                  }
+                });
+              }
+
+              if (deleteModalEl) {
+                deleteModalEl.addEventListener('hidden.bs.modal', () => {
+                  deleteForm.reset();
+                  if (continueBtn) continueBtn.disabled = true;
+                  showStep1();
+                });
+              }
+            });
+          </script>
         </div>
 
         <!-- Integrations -->
@@ -418,20 +634,159 @@
               {% endif %}
             </div>
 
-            {# Only offered once Discord is linked: the announcer needs the id. #}
-            {% if discord_id %}
-            <div class="form-check form-switch mt-3">
-              <input class="form-check-input" type="checkbox" id="discord_autopost" name="discord_autopost" form="settingsForm" {{ discord_autopost_checked }}>
-              <label class="form-check-label" for="discord_autopost">
-                <i class="fa-brands fa-discord me-1"></i> {{ discordAutopostSetting }}
-              </label>
-              <div class="settings2-hint">{{ discordAutopostHint }}</div>
+            <div class="dw-section">
+              <div class="dw-head">
+                <div class="dw-title">{{ discordWebhooksTitle }}</div>
+                <div class="settings2-hint m-0">{{ discordAutopostHint }}</div>
+              </div>
+
+              {% set dw_messages = {
+                'added': discordWebhookMsgAdded, 'deleted': discordWebhookMsgDeleted,
+                'toggled': discordWebhookMsgToggled, 'tested': discordWebhookMsgTested,
+                'test_failed': discordWebhookMsgTestFailed, 'invalid': discordWebhookMsgInvalid,
+                'limit': discordWebhookMsgLimit } %}
+              {% set dw_error = discord_webhook_status in ('invalid', 'limit', 'test_failed') %}
+              {% if discord_webhook_status in dw_messages and discord_webhook_status not in ('invalid', 'limit') %}
+              <div class="dw-flash {{ 'dw-flash-error' if dw_error }}">
+                <i class="fa-solid {{ 'fa-circle-exclamation' if dw_error else 'fa-circle-check' }}"></i>
+                {{ dw_messages[discord_webhook_status] }}
+              </div>
+              {% endif %}
+
+              {% macro dw_status(enabled, auto) -%}
+                {% if not enabled %}
+                <div class="dw-status">{{ discordStatusOff }}</div>
+                {% elif auto %}
+                <div class="dw-status dw-status-auto"><i class="fa-solid fa-robot"></i> {{ discordStatusAuto }}</div>
+                {% else %}
+                <div class="dw-status"><i class="fa-solid fa-hand-pointer"></i> {{ discordStatusManual }}</div>
+                {% endif %}
+              {%- endmacro %}
+
+              {% macro dw_auto_item(action, enabled, auto) -%}
+                <li>
+                  <form method="POST" action="{{ action }}">
+                    <button type="submit" class="dropdown-item" {{ '' if enabled else 'disabled' }}>
+                      <i class="fa-solid fa-robot"></i> {{ discordAutoPublish }}
+                      {% if auto %}<i class="fa-solid fa-check dw-check"></i>{% endif %}
+                    </button>
+                  </form>
+                </li>
+              {%- endmacro %}
+
+              <div class="dw-list">
+                {# The Trainlog server: only once Discord is linked (the post needs the id). Can be switched off, not removed. #}
+                {% if discord_id %}
+                <div class="dw-row {{ '' if discord_main_checked else 'dw-row-off' }}">
+                  <span class="dw-avatar dw-avatar-main"><img src="{{ url_for('static', filename='images/logo_square.png') }}" alt=""></span>
+                  <div class="dw-body">
+                    <div class="dw-name"><span class="dw-name-text">{{ discordMainServer }}</span><span class="dw-badge">{{ discordOfficial }}</span></div>
+                    {{ dw_status(discord_main_checked, discord_autopost_checked) }}
+                  </div>
+                  <form method="POST" action="{{ url_for('discord_webhooks.main_toggle', username=username) }}" class="form-check form-switch dw-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" aria-label="{{ discordMainServer }}" onchange="this.form.submit()" {{ discord_main_checked }}>
+                  </form>
+                  <div class="dropdown">
+                    <button type="button" class="dw-more" data-bs-toggle="dropdown" aria-expanded="false" aria-label="{{ discordMoreActions }}"><i class="fa-solid fa-ellipsis"></i></button>
+                    <ul class="dropdown-menu dropdown-menu-end dw-menu">
+                      {{ dw_auto_item(url_for('discord_webhooks.main_autopost_toggle', username=username), discord_main_checked, discord_autopost_checked) }}
+                    </ul>
+                  </div>
+                </div>
+                {% endif %}
+
+                {% for hook in discord_webhooks %}
+                <div class="dw-row {{ '' if hook.enabled else 'dw-row-off' }}">
+                  <span class="dw-avatar" data-webhook-id="{{ hook.id }}"><i class="fa-brands fa-discord"></i></span>
+                  <div class="dw-body">
+                    <div class="dw-name"><span class="dw-name-text">{{ hook.label }}</span></div>
+                    {{ dw_status(hook.enabled, hook.autopost) }}
+                  </div>
+                  <form method="POST" action="{{ url_for('discord_webhooks.toggle', username=username, webhook_id=hook.id) }}" class="form-check form-switch dw-switch">
+                    <input class="form-check-input" type="checkbox" role="switch" aria-label="{{ hook.label }}" onchange="this.form.submit()" {{ 'checked' if hook.enabled }}>
+                  </form>
+                  <div class="dropdown">
+                    <button type="button" class="dw-more" data-bs-toggle="dropdown" aria-expanded="false" aria-label="{{ discordMoreActions }}"><i class="fa-solid fa-ellipsis"></i></button>
+                    <ul class="dropdown-menu dropdown-menu-end dw-menu">
+                      {{ dw_auto_item(url_for('discord_webhooks.autopost_toggle', username=username, webhook_id=hook.id), hook.enabled, hook.autopost) }}
+                      <li>
+                        <form method="POST" action="{{ url_for('discord_webhooks.test', username=username, webhook_id=hook.id) }}">
+                          <button type="submit" class="dropdown-item"><i class="fa-solid fa-paper-plane"></i> {{ discordWebhookSendTest }}</button>
+                        </form>
+                      </li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li>
+                        <form method="POST" action="{{ url_for('discord_webhooks.delete', username=username, webhook_id=hook.id) }}" onsubmit="return confirm({{ (discordWebhookConfirmDelete or "")|tojson }})">
+                          <button type="submit" class="dropdown-item text-danger"><i class="fa-solid fa-trash"></i> {{ discordWebhookDelete }}</button>
+                        </form>
+                      </li>
+                    </ul>
+                  </div>
+                </div>
+                {% endfor %}
+
+                <button type="button" class="dw-add-row" data-bs-toggle="modal" data-bs-target="#dwAddModal">
+                  <span class="dw-add-icon"><i class="fa-solid fa-plus"></i></span>
+                  {{ discordWebhookAddButton }}
+                </button>
+              </div>
             </div>
 
-            <div class="settings2-save">
-              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
+            <div class="modal fade dw-modal" id="dwAddModal" tabindex="-1" aria-labelledby="dwAddTitle" aria-hidden="true">
+              <div class="modal-dialog modal-dialog-centered">
+                <form method="POST" action="{{ url_for('discord_webhooks.add', username=username) }}" class="modal-content">
+                  <div class="modal-header border-0 pb-0">
+                    <h5 class="modal-title" id="dwAddTitle">{{ discordWebhookAddButton }}</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ cancel }}"></button>
+                  </div>
+                  <div class="modal-body">
+                    <div class="dw-steps"><i class="fa-brands fa-discord me-1"></i> {{ discordWebhooksHint }}</div>
+                    {% if discord_webhook_status in ('invalid', 'limit') %}
+                    <div class="dw-flash dw-flash-error"><i class="fa-solid fa-circle-exclamation"></i> {{ dw_messages[discord_webhook_status] }}</div>
+                    {% endif %}
+                    <label class="form-label small fw-semibold" for="dwLabel">{{ discordWebhookLabel }}</label>
+                    <input class="form-control mb-3" id="dwLabel" name="label" maxlength="50">
+                    <label class="form-label small fw-semibold" for="dwUrl">{{ discordWebhookUrl }}</label>
+                    <input class="form-control" id="dwUrl" name="url" required placeholder="https://discord.com/api/webhooks/…">
+                  </div>
+                  <div class="modal-footer border-0 pt-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">{{ cancel }}</button>
+                    <button type="submit" class="btn btn-primary">{{ discordWebhookAdd }}</button>
+                  </div>
+                </form>
+              </div>
             </div>
-            {% endif %}
+
+            <script>
+              document.addEventListener('DOMContentLoaded', () => {
+                // The status is only for the page it was redirected to; a reload should not repeat it.
+                const url = new URL(location.href);
+                const status = url.searchParams.get('dw');
+                if (status) {
+                  url.searchParams.delete('dw');
+                  history.replaceState(null, '', url);
+                }
+                if (status === 'invalid' || status === 'limit') {
+                  bootstrap.Modal.getOrCreateInstance(document.getElementById('dwAddModal')).show();
+                }
+              });
+              {% if discord_webhooks %}
+              fetch({{ url_for('discord_webhooks.avatars', username=username)|tojson }})
+                .then(r => r.json())
+                .then(avatars => {
+                  for (const [id, src] of Object.entries(avatars)) {
+                    const icon = document.querySelector(`.dw-avatar[data-webhook-id="${id}"]`);
+                    if (!icon) continue;
+                    const img = document.createElement('img');
+                    img.alt = '';
+                    img.src = src;
+                    icon.replaceChildren(img);
+                  }
+                })
+                .catch(() => {});
+              {% endif %}
+            </script>
+
           </div>
         </div>
 
@@ -445,6 +800,14 @@
                 <div class="fw-semibold"><i class="fa-solid fa-file-export me-1"></i> {{exportText}}</div>
               </div>
               <a class="btn btn-outline-primary btn-sm" href="{{ url_for('export', username=username)}}">{{export}}</a>
+            </div>
+
+            <div class="settings2-integration-row">
+              <div>
+                <div class="fw-semibold"><i class="fa-solid fa-file-zipper me-1"></i> {{ downloadAllDataButton }}</div>
+                <div class="settings2-hint">{{ downloadAllDataHint }}</div>
+              </div>
+              <button type="button" class="btn btn-outline-primary btn-sm" id="downloadAllDataBtn">{{ downloadAllDataButton }}</button>
             </div>
 
             <div class="settings2-integration-row">
@@ -479,6 +842,70 @@
 
 {% include "includes/import_modal.html" %}
 {% include "includes/tileserver_picker.html" %}
+
+<div class="modal fade" id="dataExportLoadingModal" tabindex="-1" aria-labelledby="dataExportLoadingLabel" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content">
+      <div class="modal-body d-flex align-items-center gap-3 py-4">
+        <div class="spinner-border text-primary" role="status" aria-hidden="true"></div>
+        <span id="dataExportLoadingLabel">{{ preparingExportLabel }}</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // Fetches the file ourselves (rather than a plain link) so callers can show
+  // their own loading state while the zip is being built server-side, which
+  // can take a while for a large account.
+  function fetchAndSaveFile(url, fallbackFilename) {
+    return fetch(url, { credentials: 'same-origin' })
+      .then((resp) => {
+        if (!resp.ok) throw new Error('export failed');
+        const disposition = resp.headers.get('Content-Disposition') || '';
+        const match = disposition.match(/filename="?([^";]+)"?/);
+        return resp.blob().then((blob) => ({ blob, filename: match ? match[1] : fallbackFilename }));
+      })
+      .then(({ blob, filename }) => {
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(objectUrl);
+      })
+      .catch((err) => console.error('Export download failed', err));
+  }
+
+  // Standalone use (Data tab): pops the blocking spinner modal. Not used from
+  // inside the delete-account modal — Bootstrap doesn't cleanly support one
+  // modal stacked on top of another (hiding the inner one gets confused by the
+  // outer modal's own backdrop/state and can get stuck open), so that flow
+  // shows an inline loading state on its own button instead (see below).
+  function downloadFileWithSpinner(url, fallbackFilename) {
+    const loadingModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('dataExportLoadingModal'));
+    loadingModal.show();
+    // On a small account the fetch can resolve before the modal's fade-in even
+    // finishes, hiding it again mid-transition (looks like it never showed, or
+    // flashes). The download itself isn't delayed — only hiding the modal waits
+    // on whichever of these two finishes last.
+    const minVisible = new Promise((resolve) => setTimeout(resolve, 400));
+
+    return Promise.all([fetchAndSaveFile(url, fallbackFilename), minVisible])
+      .finally(() => loadingModal.hide());
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const downloadAllBtn = document.getElementById('downloadAllDataBtn');
+    if (downloadAllBtn) {
+      downloadAllBtn.addEventListener('click', () => {
+        downloadFileWithSpinner({{ url_for('export_all', username=username)|tojson }}, 'trainlog_full_export.zip');
+      });
+    }
+  });
+</script>
 
 <script>
   // Searchable combo: flag box + button (closed state, no flag in the text)
