@@ -1383,6 +1383,8 @@
     "motisTrack": "Tee {track}",
     "motisEarlier": "Varasemad väljumised",
     "motisLater": "Hilisemad väljumised",
+    "ctNextStop": "Järgmine peatus",
+    "ctAtStop": "Praegu",
     "tripStops": "Peatused",
     "stopArrival": "Saabumine",
     "stopDeparture": "Väljumine",

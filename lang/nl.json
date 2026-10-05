@@ -1386,6 +1386,8 @@
     "motisTrack": "Spoor {track}",
     "motisEarlier": "Eerdere vertrekken",
     "motisLater": "Latere vertrekken",
+    "ctNextStop": "Volgende halte",
+    "ctAtStop": "Nu in",
     "tripStops": "Haltes",
     "stopArrival": "Aankomst",
     "stopDeparture": "Vertrek",

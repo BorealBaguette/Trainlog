@@ -1386,6 +1386,8 @@
     "motisTrack": "Bin. {track}",
     "motisEarlier": "Partenze precedenti",
     "motisLater": "Partenze successive",
+    "ctNextStop": "Prossima fermata",
+    "ctAtStop": "Ora a",
     "tripStops": "Fermate",
     "stopArrival": "Arrivo",
     "stopDeparture": "Partenza",

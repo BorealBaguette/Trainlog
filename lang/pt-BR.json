@@ -1386,6 +1386,8 @@
     "motisTrack": "Plat. {track}",
     "motisEarlier": "Partidas anteriores",
     "motisLater": "Partidas posteriores",
+    "ctNextStop": "Próxima parada",
+    "ctAtStop": "Agora em",
     "tripStops": "Paradas",
     "stopArrival": "Chegada",
     "stopDeparture": "Partida",

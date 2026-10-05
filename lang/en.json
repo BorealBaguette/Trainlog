@@ -1383,6 +1383,8 @@
     "motisTrack": "Pl. {track}",
     "motisEarlier": "Earlier departures",
     "motisLater": "Later departures",
+    "ctNextStop": "Next stop",
+    "ctAtStop": "Now at",
     "tripStops": "Stops",
     "stopArrival": "Arrival",
     "stopDeparture": "Departure",

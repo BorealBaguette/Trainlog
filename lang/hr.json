@@ -1390,6 +1390,8 @@
     "motisTrack": "Kol. {track}",
     "motisEarlier": "Raniji polasci",
     "motisLater": "Kasniji polasci",
+    "ctNextStop": "Sljedeća stanica",
+    "ctAtStop": "Trenutno u",
     "tripStops": "Stajališta",
     "stopArrival": "Dolazak",
     "stopDeparture": "Polazak",

@@ -1382,6 +1382,8 @@
     "motisTrack": "{track}번 선",
     "motisEarlier": "이전 출발",
     "motisLater": "이후 출발",
+    "ctNextStop": "다음 정류장",
+    "ctAtStop": "현재 정차 중",
     "tripStops": "정차역",
     "stopArrival": "도착",
     "stopDeparture": "출발",

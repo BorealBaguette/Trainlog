@@ -1384,6 +1384,8 @@
     "motisTrack": "Gl. {track}",
     "motisEarlier": "Früecheri Abfahrte",
     "motisLater": "Spöteri Abfahrte",
+    "ctNextStop": "Nächschte Halt",
+    "ctAtStop": "Jetzt in",
     "tripStops": "Halt",
     "stopArrival": "Aakunft",
     "stopDeparture": "Abfahrt",

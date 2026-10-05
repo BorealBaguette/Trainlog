@@ -1386,6 +1386,8 @@
     "motisTrack": "Gl. {track}",
     "motisEarlier": "Frühere Abfahrten",
     "motisLater": "Spätere Abfahrten",
+    "ctNextStop": "Nächster Halt",
+    "ctAtStop": "Aktuell in",
     "tripStops": "Halte",
     "stopArrival": "Ankunft",
     "stopDeparture": "Abfahrt",

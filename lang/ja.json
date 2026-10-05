@@ -1382,6 +1382,8 @@
     "motisTrack": "{track}番線",
     "motisEarlier": "これより前の出発",
     "motisLater": "これより後の出発",
+    "ctNextStop": "次の停車駅",
+    "ctAtStop": "現在停車中",
     "tripStops": "停車駅",
     "stopArrival": "到着",
     "stopDeparture": "出発",

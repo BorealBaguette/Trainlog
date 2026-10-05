@@ -1390,6 +1390,8 @@
     "motisTrack": "Путь {track}",
     "motisEarlier": "Более ранние отправления",
     "motisLater": "Более поздние отправления",
+    "ctNextStop": "Следующая остановка",
+    "ctAtStop": "Сейчас в",
     "tripStops": "Остановки",
     "stopArrival": "Прибытие",
     "stopDeparture": "Отправление",

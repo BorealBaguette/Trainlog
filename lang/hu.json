@@ -1382,6 +1382,8 @@
     "motisTrack": "{track}. vágány",
     "motisEarlier": "Korábbi indulások",
     "motisLater": "Későbbi indulások",
+    "ctNextStop": "Következő megálló",
+    "ctAtStop": "Most itt",
     "tripStops": "Megállók",
     "stopArrival": "Érkezés",
     "stopDeparture": "Indulás",

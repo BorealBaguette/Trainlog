@@ -1384,6 +1384,8 @@
     "motisTrack": "Raide {track}",
     "motisEarlier": "Aiemmat lähdöt",
     "motisLater": "Myöhemmät lähdöt",
+    "ctNextStop": "Seuraava pysäkki",
+    "ctAtStop": "Nyt",
     "tripStops": "Pysähdykset",
     "stopArrival": "Saapuminen",
     "stopDeparture": "Lähtö",

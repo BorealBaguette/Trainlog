@@ -1390,6 +1390,8 @@
     "motisTrack": "Колія {track}",
     "motisEarlier": "Раніші відправлення",
     "motisLater": "Пізніші відправлення",
+    "ctNextStop": "Наступна зупинка",
+    "ctAtStop": "Зараз у",
     "tripStops": "Зупинки",
     "stopArrival": "Прибуття",
     "stopDeparture": "Відправлення",

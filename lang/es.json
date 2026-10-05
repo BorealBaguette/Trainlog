@@ -1386,6 +1386,8 @@
     "motisTrack": "Vía {track}",
     "motisEarlier": "Salidas anteriores",
     "motisLater": "Salidas posteriores",
+    "ctNextStop": "Próxima parada",
+    "ctAtStop": "Ahora en",
     "tripStops": "Paradas",
     "stopArrival": "Llegada",
     "stopDeparture": "Salida",

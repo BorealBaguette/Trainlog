@@ -1390,6 +1390,8 @@
     "motisTrack": "Kol. {track}",
     "motisEarlier": "Dřívější odjezdy",
     "motisLater": "Pozdější odjezdy",
+    "ctNextStop": "Příští zastávka",
+    "ctAtStop": "Nyní v",
     "tripStops": "Zastávky",
     "stopArrival": "Příjezd",
     "stopDeparture": "Odjezd",

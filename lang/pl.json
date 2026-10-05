@@ -1390,6 +1390,8 @@
     "motisTrack": "Tor {track}",
     "motisEarlier": "Wcześniejsze odjazdy",
     "motisLater": "Późniejsze odjazdy",
+    "ctNextStop": "Następny przystanek",
+    "ctAtStop": "Teraz w",
     "tripStops": "Przystanki",
     "stopArrival": "Przyjazd",
     "stopDeparture": "Odjazd",

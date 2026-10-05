@@ -1383,6 +1383,8 @@
     "motisTrack": "Voie {track}",
     "motisEarlier": "Départs plus tôt",
     "motisLater": "Départs plus tard",
+    "ctNextStop": "Prochain arrêt",
+    "ctAtStop": "Actuellement à",
     "tripStops": "Arrêts",
     "stopArrival": "Arrivée",
     "stopDeparture": "Départ",

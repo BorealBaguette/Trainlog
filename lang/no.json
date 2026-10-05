@@ -1386,6 +1386,8 @@
     "motisTrack": "Spor {track}",
     "motisEarlier": "Tidligere avganger",
     "motisLater": "Senere avganger",
+    "ctNextStop": "Neste stopp",
+    "ctAtStop": "Nå ved",
     "tripStops": "Stopp",
     "stopArrival": "Ankomst",
     "stopDeparture": "Avgang",

@@ -1386,6 +1386,8 @@
     "motisTrack": "Spår {track}",
     "motisEarlier": "Tidigare avgångar",
     "motisLater": "Senare avgångar",
+    "ctNextStop": "Nästa hållplats",
+    "ctAtStop": "Nu vid",
     "tripStops": "Hållplatser",
     "stopArrival": "Ankomst",
     "stopDeparture": "Avgång",
