@@ -4745,8 +4745,8 @@ def split_trip_action(username, trip_id):
 
 def listOperatorsLogos(tripType=None):
     """
-    Return list of available logos for operators from the database.
-    If a tripType is provided, it will filter logos based on that type.
+    Return {alias: logo_url} for every operator spelling in the database, None
+    for operators without a logo. If a tripType is provided, only that type.
     """
     logo_types = {
         "operator": "Operator",
@@ -4770,12 +4770,15 @@ def listOperatorsLogos(tripType=None):
             # era (SNCF has seven, 1937 to 2011), and neither the stats chart nor the
             # autocomplete has a date to choose by — without this the last row to
             # arrive won, so the chart showed an arbitrary historical logo.
+            #
+            # LEFT JOIN keeps operators without a logo, so the autocomplete still
+            # offers them; consumers treat a None value like a missing key.
             rows = pg.execute(
                 """
                 SELECT DISTINCT ON (a.alias) a.alias, l.logo_url
                 FROM operators o
                 JOIN operator_aliases a ON a.operator_id = o.operator_id
-                JOIN operator_logos l ON o.operator_id = l.operator_id
+                LEFT JOIN operator_logos l ON o.operator_id = l.operator_id
                 WHERE o.operator_type = :logo_type
                 ORDER BY a.alias, l.effective_date DESC NULLS LAST, l.uid DESC
             """,
