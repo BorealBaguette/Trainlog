@@ -575,6 +575,19 @@
         table.search(normalizeForSearch(this.value)).draw();
     });
 
+    let onlyWithoutLogo = false;
+    $.fn.dataTable.ext.search.push((settings, data, index, row) =>
+        settings.nTable.id !== 'operatorTable' || !onlyWithoutLogo || !row.logo_url);
+    searchBox.prepend(
+        $('<button type="button" class="btn btn-outline-secondary btn-sm me-2" title="Show only operators without a logo">' +
+          '<i class="fa-regular fa-image me-1"></i>Without logo</button>')
+            .on('click', function () {
+                onlyWithoutLogo = !onlyWithoutLogo;
+                $(this).toggleClass('active', onlyWithoutLogo);
+                table.draw();
+            })
+    );
+
     // Bootstrap popovers are opt-in; nothing else on this page initialises them.
     document.querySelectorAll('[data-bs-toggle="popover"]')
         .forEach(el => new bootstrap.Popover(el, { container: 'body' }));
