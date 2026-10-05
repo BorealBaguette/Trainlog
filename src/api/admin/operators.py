@@ -231,6 +231,10 @@ def get_missing_operators():
                 WHERE tv.operator_id IS NULL
                   AND t.trip_type NOT IN
                       ('car', 'walk', 'cycle', 'poi', 'accommodation', 'restaurant')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM operator_dismissed_spellings d
+                      WHERE d.normalized = operator_normalize(tv.raw_name)
+                  )
             ),
             counts AS (
                 SELECT operator, trip_type, COUNT(*) AS occurrences
@@ -276,6 +280,9 @@ def get_missing_operators():
                    ON tt.operator = c.operator AND tt.trip_type = c.trip_type
             ORDER BY c.occurrences DESC
         """).fetchall()
+        dismissed_count = pg.execute(
+            "SELECT COUNT(*) AS n FROM operator_dismissed_spellings"
+        ).fetchone()["n"]
 
     by_type = {}
     total_occurrences = 0
@@ -297,8 +304,102 @@ def get_missing_operators():
             "missing_operators_by_type": by_type,
             "total_occurrences": total_occurrences,
             "unique_missing_operators": sum(len(ops) for ops in by_type.values()),
+            "dismissed_count": dismissed_count,
         }
     )
+
+
+@operators_api_blueprint.route("missing-operators/dismissed", methods=["GET"])
+@admin_required
+def get_dismissed_spellings():
+    """Spellings taken out of the queue, with how many trips still use them.
+
+    `occurrences` drops to 0 once the spelling resolves after all (e.g. it was
+    assigned as an alias since).
+    """
+    with pg_session() as pg:
+        rows = pg.execute("""
+            SELECT d.dismissed_id, d.spelling, d.reason, d.dismissed_by,
+                   d.dismissed_at,
+                   (SELECT COUNT(*) FROM trip_operators tv
+                    WHERE tv.operator_id IS NULL
+                      AND operator_normalize(tv.raw_name) = d.normalized
+                   ) AS occurrences
+            FROM operator_dismissed_spellings d
+            ORDER BY d.dismissed_at DESC
+        """).fetchall()
+
+    return jsonify(
+        {
+            "dismissed": [
+                {
+                    "dismissed_id": r["dismissed_id"],
+                    "spelling": r["spelling"],
+                    "reason": r["reason"],
+                    "dismissed_by": r["dismissed_by"],
+                    "dismissed_at": r["dismissed_at"].isoformat(),
+                    "occurrences": r["occurrences"],
+                }
+                for r in rows
+            ]
+        }
+    )
+
+
+@operators_api_blueprint.route("missing-operators/dismissed", methods=["POST"])
+@admin_required
+def dismiss_spelling():
+    payload = request.get_json(silent=True) or request.form
+    spelling = (payload.get("spelling") or "").strip()
+    reason = (payload.get("reason") or "").strip()
+
+    def bad_request(message):
+        return jsonify({"status": "error", "message": message}), 400
+
+    if not spelling:
+        return bad_request("A spelling is required.")
+    if not reason:
+        return bad_request("A reason is required.")
+
+    with pg_session() as pg:
+        if pg.execute(
+            "SELECT operator_normalize(:s) IS NULL AS empty", {"s": spelling}
+        ).fetchone()["empty"]:
+            return bad_request("The spelling has no letters or digits.")
+        # Dismissing again replaces the reason.
+        row = pg.execute(
+            """
+            INSERT INTO operator_dismissed_spellings (spelling, reason, dismissed_by)
+            VALUES (:spelling, :reason, :user)
+            ON CONFLICT (normalized) DO UPDATE
+                SET spelling = EXCLUDED.spelling,
+                    reason = EXCLUDED.reason,
+                    dismissed_by = EXCLUDED.dismissed_by,
+                    dismissed_at = now()
+            RETURNING dismissed_id
+            """,
+            {"spelling": spelling, "reason": reason, "user": getUser()},
+        ).fetchone()
+
+    logger.info("operator spelling %r dismissed by %s: %s", spelling, getUser(), reason)
+    return jsonify({"dismissed_id": row["dismissed_id"]}), 201
+
+
+@operators_api_blueprint.route(
+    "missing-operators/dismissed/<int:dismissed_id>", methods=["DELETE"]
+)
+@admin_required
+def restore_spelling(dismissed_id: int):
+    with pg_session() as pg:
+        row = pg.execute(
+            "DELETE FROM operator_dismissed_spellings WHERE dismissed_id = :id"
+            " RETURNING spelling",
+            {"id": dismissed_id},
+        ).fetchone()
+    if row is None:
+        abort(404, description="dismissed spelling not found")
+    logger.info("operator spelling %r restored by %s", row["spelling"], getUser())
+    return "", 204
 
 
 @operators_api_blueprint.route("suggest", methods=["GET"])

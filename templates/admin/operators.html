@@ -421,6 +421,30 @@
     </div>
   </div>
 
+  <!-- Take an unresolved spelling out of the queue for good -->
+  <div class="modal fade" id="dismissSpellingModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">Dismiss spelling</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <p>Remove <strong id="dismissSpellingName"></strong> from the unresolved queue.
+             Trips are not changed, and it can be restored later.</p>
+          <label for="dismissReasonInput" class="form-label">Why will it never resolve?</label>
+          <textarea class="form-control" id="dismissReasonInput" rows="3"
+                    placeholder="e.g. not an operator, users type it for private boats"></textarea>
+          <div id="dismissError"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-danger" onclick="dismissSpelling()">Dismiss</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
 <!-- JavaScript -->
 <script defer>
     let currentUid = null;
@@ -763,12 +787,19 @@
 
             return res.json();
         }).then((response) => {
+            const dismissedBtn = `
+                <button type="button" class="btn btn-sm btn-outline-secondary ms-2"
+                        onclick="loadDismissedSpellings()">
+                    <i class="fa-solid fa-eye-slash me-1"></i>Dismissed (${response.dismissed_count})
+                </button>`;
+
             if (response.unique_missing_operators === 0) {
                 $('#missingOperatorsContent').html(`
                     <div class="alert alert-success" role="alert">
                         <h4 class="alert-heading">Great!</h4>
                         <p>No missing operators found. All operators from your trips are already in the database.</p>
                     </div>
+                    ${response.dismissed_count ? dismissedBtn : ''}
                 `);
                 return;
             }
@@ -796,6 +827,7 @@
                         <div>
                             <span class="badge bg-primary">${response.unique_missing_operators} unique operators</span>
                             <span class="badge bg-secondary">${response.total_occurrences} total occurrences</span>
+                            ${dismissedBtn}
                         </div>
                     </div>
                 </div>
@@ -809,7 +841,7 @@
                 html += `
                     <div class="operator-list-item">
                         <div>
-                            <strong>${index + 1}. ${op.operator}</strong>
+                            <strong>${index + 1}. ${escapeHtml(op.operator)}</strong>
                             <span class="badge bg-light text-dark ms-2">${op.type}</span>
                         </div>
                         <span class="badge bg-warning text-dark">${op.occurrences} occurrences</span>
@@ -866,6 +898,9 @@
                                 <span class="badge bg-light text-dark">${op.occurrences} occurrences</span>
                                 <button class="btn btn-sm btn-outline-primary ms-2 assign-btn"
                                         data-operator="${escapeAttr(op.operator)}">Assign</button>
+                                <button class="btn btn-sm btn-outline-danger ms-1 dismiss-btn"
+                                        data-operator="${escapeAttr(op.operator)}"
+                                        title="Will never resolve: remove from this list">Dismiss</button>
                             </span>
                         </div>
                     `;
@@ -1300,6 +1335,158 @@ function assignToOperator(operatorId) {
     }).catch(err => {
         $('#assignError').html(`<div class="alert alert-danger py-2 mt-2">${escapeHtml(err.message)}</div>`);
     });
+}
+
+/* Dismissing spellings that will never resolve, and listing/restoring them. */
+let dismissSpellingValue = null;
+
+$(document).on('click', '#missingOperatorsContent .dismiss-btn', function() {
+    dismissSpellingValue = this.dataset.operator;
+    $('#dismissSpellingName').text(dismissSpellingValue);
+    $('#dismissReasonInput').val('');
+    $('#dismissError').empty();
+    $('#dismissSpellingModal').modal('show');
+});
+
+$('#dismissSpellingModal').on('shown.bs.modal', () => $('#dismissReasonInput').trigger('focus'));
+
+function dismissSpelling() {
+    const reason = $('#dismissReasonInput').val().trim();
+    if (!reason) {
+        $('#dismissError').html('<div class="alert alert-danger py-2 mt-2">A reason is required.</div>');
+        return;
+    }
+    fetch('/api/admin/operators/missing-operators/dismissed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spelling: dismissSpellingValue, reason })
+    }).then(async res => {
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.message || 'could not dismiss');
+        $('#dismissSpellingModal').modal('hide');
+        bootstrapToast(`"${escapeHtml(dismissSpellingValue)}" dismissed`);
+        loadMissingOperators();
+    }).catch(err => {
+        $('#dismissError').html(`<div class="alert alert-danger py-2 mt-2">${escapeHtml(err.message)}</div>`);
+    });
+}
+
+let dismissedSpellings = [];
+// Kept across reloads so a restore does not reset the view.
+const dismissedFilter = { q: '', by: '', usage: '', sort: 'trips' };
+
+function loadDismissedSpellings() {
+    $('#missingOperatorsContent').html(
+        '<div class="text-center"><div class="spinner-border" role="status"></div></div>');
+    fetch('/api/admin/operators/missing-operators/dismissed')
+        .then(res => res.json())
+        .then(({ dismissed }) => {
+            dismissedSpellings = dismissed;
+            const back = `
+                <button type="button" class="btn btn-sm btn-outline-secondary mb-3"
+                        onclick="loadMissingOperators()">
+                    <i class="fa-solid fa-arrow-left me-1"></i>Back to unresolved spellings
+                </button>`;
+            if (!dismissed.length) {
+                $('#missingOperatorsContent').html(back + '<p><em>Nothing dismissed.</em></p>');
+                return;
+            }
+            const admins = [...new Set(dismissed.map(d => d.dismissed_by))].sort();
+            if (!admins.includes(dismissedFilter.by)) dismissedFilter.by = '';
+            const option = (value, label, current) =>
+                `<option value="${escapeAttr(value)}" ${value === current ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+            $('#missingOperatorsContent').html(`
+                ${back}
+                <div class="row g-2 mb-2">
+                    <div class="col-md-5">
+                        <input type="search" class="form-control form-control-sm" id="dismissedSearch"
+                               placeholder="Search spelling or reason" value="${escapeAttr(dismissedFilter.q)}">
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select form-select-sm" id="dismissedBy" title="Dismissed by">
+                            ${option('', 'Anyone', dismissedFilter.by)}
+                            ${admins.map(a => option(a, a, dismissedFilter.by)).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <select class="form-select form-select-sm" id="dismissedUsage">
+                            ${option('', 'Any trips', dismissedFilter.usage)}
+                            ${option('used', 'Still on trips', dismissedFilter.usage)}
+                            ${option('unused', 'No trips left', dismissedFilter.usage)}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <select class="form-select form-select-sm" id="dismissedSort">
+                            ${option('trips', 'Most trips', dismissedFilter.sort)}
+                            ${option('newest', 'Newest first', dismissedFilter.sort)}
+                            ${option('oldest', 'Oldest first', dismissedFilter.sort)}
+                            ${option('alpha', 'Spelling A-Z', dismissedFilter.sort)}
+                        </select>
+                    </div>
+                </div>
+                <div class="small text-muted mb-1" id="dismissedCount"></div>
+                <table class="table table-sm align-middle">
+                    <thead><tr>
+                        <th>Spelling</th><th>Reason</th><th>Dismissed</th>
+                        <th title="Trips still using it unresolved">Trips</th><th></th>
+                    </tr></thead>
+                    <tbody id="dismissedRows"></tbody>
+                </table>`);
+            renderDismissedRows();
+        })
+        .catch(() => $('#missingOperatorsContent').html(
+            '<div class="alert alert-danger">Failed to load dismissed spellings.</div>'));
+}
+
+$(document).on('input change', '#dismissedSearch, #dismissedBy, #dismissedUsage, #dismissedSort', () => {
+    dismissedFilter.q = $('#dismissedSearch').val();
+    dismissedFilter.by = $('#dismissedBy').val();
+    dismissedFilter.usage = $('#dismissedUsage').val();
+    dismissedFilter.sort = $('#dismissedSort').val();
+    renderDismissedRows();
+});
+
+function renderDismissedRows() {
+    const q = dismissedFilter.q.trim().toLowerCase();
+    const sorters = {
+        newest: (a, b) => b.dismissed_at.localeCompare(a.dismissed_at),
+        oldest: (a, b) => a.dismissed_at.localeCompare(b.dismissed_at),
+        trips: (a, b) => b.occurrences - a.occurrences,
+        alpha: (a, b) => a.spelling.localeCompare(b.spelling),
+    };
+    const shown = dismissedSpellings
+        .filter(d => !q || d.spelling.toLowerCase().includes(q) || d.reason.toLowerCase().includes(q))
+        .filter(d => !dismissedFilter.by || d.dismissed_by === dismissedFilter.by)
+        .filter(d => dismissedFilter.usage === 'used' ? d.occurrences > 0
+                   : dismissedFilter.usage === 'unused' ? d.occurrences === 0 : true)
+        .sort(sorters[dismissedFilter.sort]);
+
+    $('#dismissedCount').text(`${shown.length} of ${dismissedSpellings.length}`);
+    $('#dismissedRows').html(shown.length ? shown.map(d => `
+        <tr>
+            <td><strong>${escapeHtml(d.spelling)}</strong></td>
+            <td style="white-space:pre-wrap">${escapeHtml(d.reason)}</td>
+            <td class="small text-muted">
+                ${escapeHtml(d.dismissed_by)}<br>
+                ${new Date(d.dismissed_at).toLocaleDateString()}
+            </td>
+            <td><span class="badge bg-light text-dark">${fmtNum(d.occurrences)} occurrences</span></td>
+            <td>
+                <button class="btn btn-sm btn-outline-primary"
+                        onclick="restoreSpelling(${d.dismissed_id})">Restore</button>
+            </td>
+        </tr>`).join('')
+        : '<tr><td colspan="5" class="text-muted"><em>No match</em></td></tr>');
+}
+
+function restoreSpelling(dismissedId) {
+    fetch(`/api/admin/operators/missing-operators/dismissed/${dismissedId}`, { method: 'DELETE' })
+        .then(res => {
+            if (!res.ok) throw new Error('could not restore');
+            bootstrapToast('Restored to the unresolved queue');
+            loadDismissedSpellings();
+        })
+        .catch(err => bootstrapToast(err.message, 'danger'));
 }
 
 /* Maintenance: trip_operators is derived, so it can be checked and rebuilt. */
