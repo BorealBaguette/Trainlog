@@ -7,6 +7,7 @@ from flask import Blueprint, jsonify, request
 from src.currency import get_exchange_rate
 from src.api.wrapped import get_wrapped_data
 from src.pg import pg_session
+from src.trips.utils import get_current_trip_id
 from src.users import Friendship, User
 from src.utils import get_user_id, login_required
 
@@ -28,6 +29,17 @@ def _cache_get(key):
 
 def _cache_set(key, data):
     _cache[key] = (time.time(), data)
+
+
+def to_utc_str(dt):
+    # utc_*_datetime may be timezone-aware or naive; normalise to strings
+    # that JS can parse as UTC by ensuring a trailing "Z".
+    if not dt:
+        return None
+    s = dt.isoformat()
+    if not s.endswith("Z") and "+" not in s and s[-6] not in ("+", "-"):
+        s += "Z"
+    return s
 
 
 @dashboard_blueprint.route("/u/<username>/dashboard_totals")
@@ -99,16 +111,6 @@ def dashboard_trips(username):
     user_id = get_user_id(username)
 
     def row_to_dict(r):
-        # utc_*_datetime may be timezone-aware or naive; normalise to strings
-        # that JS can parse as UTC by ensuring a trailing "Z".
-        def to_utc_str(dt):
-            if not dt:
-                return None
-            s = dt.isoformat()
-            if not s.endswith("Z") and "+" not in s and s[-6] not in ("+", "-"):
-                s += "Z"
-            return s
-
         return {
             "trip_id": r.trip_id,
             "origin": r.origin_station,
@@ -159,6 +161,43 @@ def dashboard_trips(username):
         {
             "upcoming": [row_to_dict(r) for r in upcoming_rows],
             "recent": [row_to_dict(r) for r in recent_rows],
+        }
+    )
+
+
+@dashboard_blueprint.route("/u/<username>/dashboard_current_trip")
+@login_required
+def dashboard_current_trip(username):
+    """The logged-in user's trip in progress, or null."""
+    trip_id = get_current_trip_id()
+    if trip_id is None:
+        return jsonify(None)
+    with pg_session() as pg:
+        r = pg.execute(
+            """
+            SELECT origin_station, destination_station, operator, line_name,
+                   trip_type, start_datetime, end_datetime,
+                   utc_start_datetime, utc_end_datetime,
+                   departure_delay, arrival_delay, waypoints
+            FROM trips
+            WHERE trip_id = :trip_id
+            """,
+            {"trip_id": trip_id},
+        ).fetchone()
+    return jsonify(
+        {
+            "origin_station": r.origin_station,
+            "destination_station": r.destination_station,
+            "operator": r.operator,
+            "line_name": r.line_name,
+            "type": r.trip_type,
+            "start_datetime": to_utc_str(r.start_datetime),
+            "end_datetime": to_utc_str(r.end_datetime),
+            "utc_start_datetime": to_utc_str(r.utc_start_datetime),
+            "utc_end_datetime": to_utc_str(r.utc_end_datetime),
+            "departure_delay": r.departure_delay,
+            "arrival_delay": r.arrival_delay,
+            "waypoints": r.waypoints,
         }
     )
 

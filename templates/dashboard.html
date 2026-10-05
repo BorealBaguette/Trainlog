@@ -153,6 +153,148 @@
     opacity: 0.7;
     margin-top: 0.4rem;
   }
+  .ct-stops {
+    display: none;
+    margin-top: 0.9rem;
+    padding-top: 0.8rem;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    font-size: 0.8rem;
+  }
+  .ct-line {
+    position: relative;
+    height: 28px;
+    margin: 0 13px;
+  }
+  .ct-line-track, .ct-line-fill {
+    position: absolute;
+    top: 13px;
+    left: 0;
+    height: 2px;
+    border-radius: 1px;
+  }
+  .ct-line-track { right: 0; background: rgba(255,255,255,0.25); }
+  .ct-line-fill { background: #34d399; }
+  .ct-dot {
+    position: absolute;
+    top: 14px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.7);
+    background: #065f46;
+    transform: translate(-50%, -50%);
+  }
+  .ct-dot.passed { background: #34d399; border-color: #34d399; }
+  .ct-marker {
+    position: absolute;
+    top: 14px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: white;
+    color: #065f46;
+    font-size: 0.75rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translate(-50%, -50%);
+    box-shadow: 0 0 0 4px rgba(52,211,153,0.35);
+    transition: left 0.5s ease;
+  }
+  .ct-marker.running { animation: ct-ring 1.5s infinite; }
+  .ct-badge {
+    position: absolute;
+    right: -4px;
+    bottom: -4px;
+    width: 13px;
+    height: 13px;
+    border-radius: 50%;
+    background: #fbbf24;
+    color: #064e3b;
+    font-size: 0.4rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  @keyframes ct-ring {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(52,211,153,0.5); }
+    50%      { box-shadow: 0 0 0 7px rgba(52,211,153,0.1); }
+  }
+  .ct-line-labels {
+    display: grid;
+    gap: 0.75rem;
+    margin-top: 0.35rem;
+  }
+  .ct-line-labels > div { min-width: 0; }
+  .ct-line-labels > div:first-child:not(:only-child) { text-align: left; }
+  .ct-line-labels > div:last-child:not(:only-child) { text-align: right; }
+  .ct-line-labels > div:not(:first-child):not(:last-child) { text-align: center; }
+  .ct-line-labels .past { opacity: 0.6; }
+  .ct-stop-name {
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .ct-stop-time { opacity: 0.8; }
+  .ct-expand {
+    display: block;
+    margin: 0.6rem auto 0;
+    background: rgba(255,255,255,0.12);
+    border: none;
+    border-radius: 999px;
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.8rem;
+  }
+  .ct-expand:hover { background: rgba(255,255,255,0.2); }
+  .ct-expand i { transition: transform 0.2s ease; margin-left: 0.3rem; }
+  .ct-expand.open i { transform: rotate(180deg); }
+  .ct-timeline {
+    list-style: none;
+    margin: 0.4rem 0 0;
+    /* room for the current dot's ring, which the scroll box would clip */
+    padding: 0.4rem 0 0 0.5rem;
+    max-height: 18rem;
+    overflow-y: auto;
+  }
+  .ct-timeline li {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    gap: 0.75rem;
+    padding: 0 0 0.7rem 1.6rem;
+  }
+  .ct-timeline li::before {
+    content: "";
+    position: absolute;
+    left: 5px;
+    top: 0.55rem;
+    bottom: -0.55rem;
+    width: 2px;
+    background: linear-gradient(#34d399 var(--f), rgba(255,255,255,0.25) var(--f));
+  }
+  .ct-timeline li:last-child::before { display: none; }
+  .ct-timeline .ct-dot { left: 6px; top: 0.55rem; }
+  .ct-timeline li.past > span:not(.ct-here):not(.ct-dot) { opacity: 0.6; }
+  .ct-dot.terminus { width: 16px; height: 16px; border-width: 3px; }
+  .ct-timeline li.terminus { font-weight: 700; font-size: 0.9rem; }
+  .ct-timeline li.terminus > span { opacity: 1 !important; }
+  .ct-timeline .ct-stop-name { min-width: 0; }
+  .ct-timeline li.current { font-weight: 700; }
+  .ct-timeline li.current .ct-dot { background: white; border-color: white; box-shadow: 0 0 0 4px rgba(52,211,153,0.35); }
+  .ct-timeline .ct-here {
+    position: absolute;
+    left: 6px;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    background: white;
+    transform: translate(-50%, -50%);
+    animation: ct-ring 1.5s infinite;
+    z-index: 1;
+  }
+  .ct-tl-time { white-space: nowrap; opacity: 0.85; }
 
   /* ── Trip list items ── */
   .trip-item {
@@ -600,6 +742,12 @@
         <span id="ct-start"></span>
         <span id="ct-end"></span>
       </div>
+      <div class="ct-stops" id="ct-stops">
+        <div class="ct-line" id="ct-line"></div>
+        <div class="ct-line-labels" id="ct-line-labels"></div>
+        <ol class="ct-timeline" id="ct-timeline" hidden></ol>
+        <button type="button" class="ct-expand" id="ct-expand" onclick="_toggleCurrentStops()"></button>
+      </div>
     </div>
 
     <!-- Row 1: Recent + Upcoming (past left → future right) -->
@@ -794,6 +942,7 @@
 <script id="dist-comps-data" type="application/json">{{ dist_comps_json | safe }}</script>
 <script id="dur-comps-data"  type="application/json">{{ dur_comps_json  | safe }}</script>
 
+<script src="{{ url_for('static', filename='js/trip_progress.js') }}"></script>
 <script>
 const username = "{{ username }}";
 const countriesBaseUrl = "{{ url_for('countries', username=username, cc='__CC__') }}";
@@ -960,21 +1109,110 @@ function _updateCurrentTripProgress() {
   };
   document.getElementById("ct-start").innerHTML = fmtActual(rawStart, depDelay);
   document.getElementById("ct-end").innerHTML   = fmtActual(rawEnd,   arrDelay);
+  _renderCurrentStops(trip, actualStart.getTime(), actualEnd.getTime(), now.getTime());
 }
 
-fetch(`/u/${username}/getCurrentTrip`)
+// Previous / current / next station on a short line, and every stop on a vertical one
+// when expanded, for trips saved with timetable stops.
+let _ctExpanded = false;
+
+function _toggleCurrentStops() {
+  _ctExpanded = !_ctExpanded;
+  _updateCurrentTripProgress();
+}
+
+function _renderCurrentStops(trip, start, end, now) {
+  const timed = TripProgress.timedStops(trip);
+  if (!timed.length) return;
+  const stops = [
+    { name: trip.origin_station, arr: start, dep: start },
+    ...timed,
+    { name: trip.destination_station, arr: end, dep: end },
+  ];
+  const last = stops.length - 1;
+  let i = 0;
+  while (i < last && stops[i + 1].arr <= now) i++;
+  const atStop = now < stops[i].dep || i === last;
+  // Share of the way from stop i to the next one, while running.
+  const f = atStop ? 0 : Math.min(1, (now - stops[i].dep) / Math.max(1, stops[i + 1].arr - stops[i].dep));
+
+  const rel = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
+  const fmt = (ms, sched, tz) => {
+    const t = new Date(ms).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", timeZone: tz || undefined });
+    const late = Math.round((ms - sched) / 60000);
+    return late > 0 ? `${t} <span style="color:#f87171;">+${late}'</span>` : t;
+  };
+  // With numeric "auto", 0 seconds reads "now"/"maintenant" where 0 minutes reads "this minute".
+  const inMin = ms => {
+    const m = Math.max(0, Math.round((ms - now) / 60000));
+    return m ? rel.format(m, "minute") : rel.format(0, "second");
+  };
+  const marker = `<div class="ct-marker${atStop ? "" : " running"}" style="left:__POS__">`
+    + `<i class="${tripIcon(trip.type)}"></i>`
+    + (atStop && i < last ? `<span class="ct-badge"><i class="fa-solid fa-pause"></i></span>` : "")
+    + `</div>`;
+  const name = s => s.cc ? `${getFlagEmoji(s.cc)} ${s.name}` : s.name;
+
+  // Short line: the stop just left (or the one before the current), the current, the next.
+  const k = atStop ? i : i + 0.5;
+  const shown = [Math.ceil(k) - 1, atStop ? i : null, Math.floor(k) + 1]
+    .filter(n => n !== null && n >= 0 && n <= last);
+  const pos = n => shown.length === 1 ? 50 : (shown.indexOf(n) / (shown.length - 1)) * 100;
+  const at = atStop ? pos(i) : pos(i) + (pos(i + 1) - pos(i)) * f;
+  document.getElementById("ct-line").innerHTML =
+    `<div class="ct-line-track"></div><div class="ct-line-fill" style="width:${at}%"></div>`
+    + shown.filter(n => !(atStop && n === i))
+        .map(n => `<div class="ct-dot${n <= i ? " passed" : ""}${n === 0 || n === last ? " terminus" : ""}" style="left:${pos(n)}%"></div>`).join("")
+    + marker.replace("__POS__", `${at}%`);
+
+  const labels = document.getElementById("ct-line-labels");
+  labels.style.gridTemplateColumns = `repeat(${shown.length}, 1fr)`;
+  labels.innerHTML = shown.map(n => {
+    const s = stops[n];
+    const time = n < i || (n === i && !atStop) ? fmt(s.dep, s.depSched, s.tz)
+      : n === i ? fmt(n === last ? s.arr : s.dep, n === last ? s.arrSched : s.depSched, s.tz)
+        + (n === last ? "" : " · " + inMin(s.dep))
+      : fmt(s.arr, s.arrSched, s.tz) + " · " + inMin(s.arr);
+    return `<div class="${n < i || (n === i && !atStop) ? "past" : ""}">`
+      + `<div class="ct-stop-name" title="${esc(s.name)}">${esc(name(s))}</div>`
+      + `<div class="ct-stop-time">${time}</div></div>`;
+  }).join("");
+
+  // Every stop.
+  const list = document.getElementById("ct-timeline");
+  list.hidden = !_ctExpanded;
+  if (_ctExpanded) {
+    list.innerHTML = stops.map((s, n) => {
+      const state = n < i || (n === i && !atStop) ? "past" : n === i ? "current" : "future";
+      const time = n === 0 ? fmt(s.dep, s.depSched, s.tz)
+        : n === last || Math.round(s.arr / 60000) === Math.round(s.dep / 60000) ? fmt(s.arr, s.arrSched, s.tz)
+        : `${fmt(s.arr, s.arrSched, s.tz)} – ${fmt(s.dep, s.depSched, s.tz)}`;
+      const fill = n < i ? 100 : n === i ? f * 100 : 0;
+      const terminus = n === 0 || n === last ? " terminus" : "";
+      return `<li class="${state}${terminus}" style="--f:${fill}%">`
+        + `<span class="ct-dot${n <= i ? " passed" : ""}${terminus}"></span>`
+        + (n === i && !(atStop && n === last) ? `<span class="ct-here" style="top:calc(0.55rem + ${fill}%)"></span>` : "")
+        + `<span class="ct-stop-name">${esc(name(s))}</span><span class="ct-tl-time">${time}</span></li>`;
+    }).join("");
+  }
+  const btn = document.getElementById("ct-expand");
+  btn.classList.toggle("open", _ctExpanded);
+  btn.innerHTML = `{{ tripStops }} (${stops.length})<i class="fa-solid fa-chevron-down"></i>`;
+  document.getElementById("ct-stops").style.display = "block";
+}
+
+fetch(`/u/${username}/dashboard_current_trip`)
   .then(r => r.json())
   .then(data => {
-    if (!data || !data.length) return;
-    _currentTrip = data[0].trip;
+    if (!data) return;
+    _currentTrip = data;
     const trip = _currentTrip;
     document.getElementById("ct-icon").innerHTML = `<i class="${tripIcon(trip.type || trip.trip_type)}"></i>`;
     document.getElementById("ct-route").textContent = `${trip.origin_station} → ${trip.destination_station}`;
     document.getElementById("ct-meta").textContent = [trip.operator, trip.line_name].filter(Boolean).join(" · ");
     document.getElementById("current-trip-card").style.display = "block";
     _updateCurrentTripProgress();
-    // Refresh progress every 30 seconds
-    setInterval(_updateCurrentTripProgress, 30000);
+    setInterval(_updateCurrentTripProgress, 5000);
   })
   .catch(() => {});
 
