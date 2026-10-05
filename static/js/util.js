@@ -1606,7 +1606,7 @@ function renderOperators(data, type, row) {
     }
 
     // Fallback to operator name
-    return sanitize(row.operator || '');
+    return row.operator ? `<span class="operatorName">${sanitize(row.operator)}</span>` : '';
 }
 
 // Function to calculate CO2 per kilometer

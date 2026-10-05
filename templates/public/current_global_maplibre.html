@@ -386,15 +386,15 @@ function getPopupContent(tripObj) {
   if (trip.multi_operators) {
     trip.multi_operators.forEach(op => {
       operatorParts.push(op.logo_url
-        ? `<img src="/static/${op.logo_url}" alt="${op.operator_name}" style="max-height:40px;max-width:120px;object-fit:contain;">`
+        ? `<div class="popupInfo operator_popupInfo" popupinfo_content="${op.operator_name}"><img src="/static/${op.logo_url}" alt="${op.operator_name}" style="max-height:40px;max-width:120px;object-fit:contain;"></div>`
         : `<span>${op.operator_name}</span>`);
     });
   } else if (trip.logo_url) {
-    operatorParts.push(`<img src="/static/${trip.logo_url}" alt="${trip.operator || ''}" style="max-height:40px;max-width:120px;object-fit:contain;">`);
+    operatorParts.push(`<div class="popupInfo operator_popupInfo" popupinfo_content="${trip.operator || ''}"><img src="/static/${trip.logo_url}" alt="${trip.operator || ''}" style="max-height:40px;max-width:120px;object-fit:contain;"></div>`);
   } else if (trip.operator) {
     String(trip.operator).split(',').map(s => s.trim()).forEach(op => {
       operatorParts.push(logosList[op]
-        ? `<img src="/static/${logosList[op]}" alt="${op}" style="max-height:40px;max-width:120px;object-fit:contain;">`
+        ? `<div class="popupInfo operator_popupInfo" popupinfo_content="${op}"><img src="/static/${logosList[op]}" alt="${op}" style="max-height:40px;max-width:120px;object-fit:contain;"></div>`
         : `<span>${op}</span>`);
     });
   }
