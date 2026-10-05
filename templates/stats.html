@@ -34,6 +34,7 @@
 
     <select id="statsSelectYear" class="form-select statsSelect mr-2">
         <option value="all" {% if not statYear %}selected{% endif %}>{{all}}</option>
+        <option value="past" {% if statYear == 'past' %}selected{% endif %}>{{past}}</option>
         {% for year in distinctStatYears %}
             <option value="{{ year }}" {% if year == statYear %}selected{% endif %}>{{ year }}</option>
         {% endfor %}
@@ -358,7 +359,7 @@
     var tripType = "{{tripType}}";
     var username = "{{username}}";
     var statYear = "{{statYear if statYear else ''}}";
-    var yearDefined = "{{ 'true' if statYear is not none else 'false' }}";
+    var yearDefined = "{{ 'true' if statYear not in (none, 'past') else 'false' }}";
 
     var isCombinedMode = tripType === 'combined';
     
