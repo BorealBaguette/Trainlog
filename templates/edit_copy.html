@@ -1436,6 +1436,15 @@
             if (board == null || alight == null || alight <= board) return;
             var between = runStops.slice(board + 1, alight), inRun = {};
             between.forEach(function (st) { if (st.id) inRun[st.id] = true; });
+            // A stop without a Transitous id at one of the run's (where merged trips met)
+            // is that stop, not one of the user's own.
+            rows.forEach(function (row) {
+                if (!row.stop || row.stop.id || row.stop.lat == null) return;
+                var st = between.filter(function (st) {
+                    return st.id && L.latLng(row.stop.lat, row.stop.lng).distanceTo([st.lat, st.lng]) <= 300;
+                })[0];
+                if (st) { row.stop.id = st.id; row.stop.trip = st.run; }
+            });
 
             var kept = {}, after = { '': [] }, last = '';
             rows.forEach(function (row) {
@@ -1452,7 +1461,7 @@
                     row = rowFor(null);
                     row.label = flag + (st.name || '');
                     row.lat = st.lat; row.lng = st.lng;
-                    row.stop = { name: st.name, lat: st.lat, lng: st.lng, id: st.id, trip: runId };
+                    row.stop = { name: st.name, lat: st.lat, lng: st.lng, id: st.id, trip: st.run || runId };
                     if (st.cc) row.stop.cc = st.cc;
                     if (st.tz) row.stop.tz = st.tz;
                 }
@@ -1462,16 +1471,34 @@
             rows = next;
         }
 
+        // A merged trip's next run (through coaches, a change of train) is joined where it
+        // last meets the one before: that one's stops after there, and its own before, aren't
+        // the trip's. The stop there arrives as the first run and leaves as the next.
+        function joinRuns(before, run) {
+            var join = null;
+            before.forEach(function (a, i) {
+                run.forEach(function (b, j) {
+                    var m = L.latLng(a.lat, a.lng).distanceTo([b.lat, b.lng]);
+                    if (m <= 300 && (!join || i > join.i || (i === join.i && m < join.m))) join = { i: i, j: j, m: m };
+                });
+            });
+            if (!join) return before.concat(run);
+            var at = $.extend({}, run[join.j], { arr: before[join.i].arr, arr_rt: before[join.i].arr_rt });
+            return before.slice(0, join.i).concat([at], run.slice(join.j + 1));
+        }
+
         function refreshFrom(ids, $btn) {
             $.when.apply($, ids.map(function (id) {
                 return $.getJSON("{{ url_for('motis.motis_trip', username=username) }}", { id: id });
             })).done(function () {
                 var answers = ids.length === 1 ? [arguments[0]] : Array.prototype.map.call(arguments, function (a) { return a[0]; });
                 var byId = {}, runStops = [], live = false;
-                answers.forEach(function (res) {
-                    (res && res.stops || []).forEach(function (st) { if (st.id) byId[st.id] = st; runStops.push(st); });
+                answers.forEach(function (res, k) {
+                    var run = (res && res.stops || []).map(function (st) { return $.extend({ run: ids[k] }, st); });
+                    runStops = joinRuns(runStops, run);
                     live = live || !!(res && res.realtime);
                 });
+                runStops.forEach(function (st) { if (st.id) byId[st.id] = st; });
                 if (!runStops.length) { $('#stopsRefreshNone').show(); return; }
                 // A run still hours from leaving can't be running late or early: what its
                 // live data changes is the timetable (DB publishes the coming days' changes

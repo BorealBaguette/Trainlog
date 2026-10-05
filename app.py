@@ -276,6 +276,7 @@ from src.trips.freehand_transform import (
     purge_expired_backups,
     revert_trip,
 )
+from src.trips.merge_trip import merged_stop_fields
 from src.trips.split_trip import get_split_data, split_trip
 from src.sql.plans import (
     insert_plan_query,
@@ -8971,7 +8972,6 @@ def mergeTrips(username, tripIds):
     # Merge all paths together
     merged_path = []
     for idx, trip_item in enumerate(sortedTripList):
-        print(trip_item["trip"]["origin_station"])
         trip_path = trip_item["path"]
         if idx == 0:
             merged_path = trip_path.copy()
@@ -9070,7 +9070,6 @@ def mergeTrips(username, tripIds):
     newTrip["seat"] = ""
     newTrip["material_type"] = ""
     newTrip["material_type_advanced"] = ""
-    newTrip["waypoints"] = ""
     newTrip["notes"] = ""
     newTrip["onlyDateDuration"] = ""
     newTrip["originManualLat"] = None
@@ -9078,6 +9077,7 @@ def mergeTrips(username, tripIds):
     newTrip["destinationManualLat"] = None
     newTrip["destinationManualLng"] = None
     newTrip["visibility"] = visibility
+    newTrip.update(merged_stop_fields(sortedTripList))
 
     try:
         saveTripToDb(username, newTrip, final_path, tripType)
