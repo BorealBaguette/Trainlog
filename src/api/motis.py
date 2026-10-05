@@ -649,7 +649,13 @@ def _quietly(search, *args):
 @motis_blueprint.route("/u/<username>/motis/departures")
 @login_required
 def motis_departures(username):
-    _, origin, destination, start, window, params, modes = _search(request.args)
+    return _departures_for(request.args)
+
+
+def _departures_for(args):
+    """The departures list for a search (from, to, date, time, type, page…), as the
+    JSON response the forms get."""
+    _, origin, destination, start, window, params, modes = _search(args)
     if _outside_timetable(start, window):
         return jsonify({"departures": [], "outside_timetable": True})
 
@@ -896,5 +902,46 @@ def motis_trip(username):
             "dep_rt": _live(place, "Departure"),
             "platform": (place.get("scheduledTrack") or place.get("track") or "").strip() or None,
             "platform_rt": (place.get("track") or "").strip() or None,
+            "tz": place.get("tz"),
+            "cc": getCountryFromCoordinates(place["lat"], place["lon"])["countryCode"],
         })
     return jsonify({"stops": stops, "realtime": bool(leg.get("realTime"))})
+
+
+# How far the run found for a trip may leave from the trip's own departure time.
+MATCH_WINDOW = timedelta(minutes=30)
+
+
+def _line_word(line):
+    return ((line or "").split() or [""])[0].lower()
+
+
+@motis_blueprint.route("/u/<username>/motis/match")
+@login_required
+def motis_match(username):
+    """The run a trip is most likely on, for refreshing stops that have no Transitous id
+    (a trip copied to another day, whose old run no longer applies): the departures
+    between its ends around its start (from, to, date, time, type), the one on its line
+    (line: same first word, ICE / RER A / 5…) leaving closest to that time, within
+    MATCH_WINDOW. Answers {"trip_id", "departure", "line"}, or {} when none fits."""
+    response = _departures_for(request.args)
+    data = (response[0] if isinstance(response, tuple) else response).get_json(silent=True) or {}
+    departures = data.get("departures") or []
+    try:
+        wanted = datetime.strptime(f"{request.args.get('date')} {request.args.get('time')}", "%Y-%m-%d %H:%M")
+    except ValueError:
+        abort(400)
+    line = _line_word(request.args.get("line"))
+    best = None
+    for d in departures:
+        if not d.get("trip_id") or not d.get("departure"):
+            continue
+        if line and _line_word(d.get("line")) != line:
+            continue
+        gap = abs(datetime.strptime(d["departure"], "%Y-%m-%dT%H:%M") - wanted)
+        if gap <= MATCH_WINDOW and (best is None or gap < best[0]):
+            best = (gap, d)
+    if not best:
+        return jsonify({})
+    d = best[1]
+    return jsonify({"trip_id": d["trip_id"], "departure": d["departure"], "line": d.get("line")})

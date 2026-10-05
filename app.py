@@ -7367,6 +7367,52 @@ def _waypoint_meta(stored_waypoints):
     ]
 
 
+def _as_datetime(value):
+    """A trip datetime (datetime or 'YYYY-MM-DD HH:MM:SS'), or None for none / the
+    1 / -1 project and unknown-date sentinels."""
+    if isinstance(value, datetime):
+        return value.replace(tzinfo=None)
+    if isinstance(value, str):
+        try:
+            return datetime.strptime(value[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+    return None
+
+
+def _shift_trip_stops(waypoints_json, old_start, new_start):
+    """The waypoints JSON with its timetable stops moved along with the trip's start.
+
+    Copying a past trip and setting today's date (a common way to log a trip taken
+    again) would otherwise keep the old day's stop times. The scheduled times move by
+    as much as the start did; what belonged to that day's run goes: its live times and
+    platforms (*_rt) and its Transitous id (no longer the run to refresh from).
+    Unchanged when the start didn't move, or either isn't a real date."""
+    old_start, new_start = _as_datetime(old_start), _as_datetime(new_start)
+    if not waypoints_json or not old_start or not new_start or old_start == new_start:
+        return waypoints_json
+    try:
+        waypoints = json.loads(waypoints_json)
+    except (TypeError, ValueError):
+        return waypoints_json
+    if not isinstance(waypoints, list) or not any(isinstance(w, dict) and isinstance(w.get("stop"), dict) for w in waypoints):
+        return waypoints_json
+    delta = new_start - old_start
+    for wp in waypoints:
+        stop = wp.get("stop") if isinstance(wp, dict) else None
+        if not isinstance(stop, dict):
+            continue
+        for field in ("arr", "dep"):
+            try:
+                when = datetime.strptime(stop[field], "%Y-%m-%dT%H:%M:%SZ")
+                stop[field] = (when + delta).strftime("%Y-%m-%dT%H:%M:%SZ")
+            except (KeyError, TypeError, ValueError):
+                pass   # absent, or not a time we wrote: left as it is
+        for field in ("arr_rt", "dep_rt", "platform_rt", "trip"):
+            stop.pop(field, None)
+    return json.dumps(waypoints, ensure_ascii=False)
+
+
 def sanitize_param(param):
     return param if param != "" else None
 
@@ -7472,7 +7518,19 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         material_type=sanitize_param(formData["material_type"]),
         material_type_advanced=sanitize_param(formData.get("material_type_advanced")),
         reg=sanitize_param(formData["reg"]),
-        waypoints=sanitize_param(formData.get("waypoints", original_trip.waypoints)),
+        # Stops move with the trip's start (a past trip copied to today: _shift_trip_stops).
+        # (UTC against UTC where both have it, else local against local; from the start
+        # the stops were last set for, stopsStart, when the page renewed them for another.)
+        waypoints=_shift_trip_stops(
+            sanitize_param(formData.get("waypoints", original_trip.waypoints)),
+            *(
+                (formData["stopsStart"] + ":00", start_datetime)
+                if formData.get("stopsStart")
+                else (original_trip.utc_start_datetime, utc_start_datetime)
+                if original_trip.utc_start_datetime and utc_start_datetime
+                else (original_trip.start_datetime, start_datetime)
+            ),
+        ),
         notes=sanitize_param(formData["notes"]),
         price=sanitize_param(formData["price"]),
         currency=sanitize_param(formData.get("currency"))
@@ -10311,6 +10369,15 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     if edit_copy_type == "copy":
         tripDepartureDelay = ""
         tripArrivalDelay = ""
+        # A copy is almost always another day or time, so another train: its stops keep
+        # their timetable, not that train's live times and platforms, nor the run they
+        # came from (the stops dialog then finds the new one on Refresh).
+        for wp in stored:
+            stop = wp.get("stop") if isinstance(wp, dict) else None
+            if isinstance(stop, dict):
+                for field in ("arr_rt", "dep_rt", "platform_rt", "trip"):
+                    stop.pop(field, None)
+        waypoint_meta = _waypoint_meta(stored)
     else:
         tripDepartureDelay = int(trip["departure_delay"] / 60) if trip["departure_delay"] is not None else ""
         tripArrivalDelay = int(trip["arrival_delay"] / 60) if trip["arrival_delay"] is not None else ""
