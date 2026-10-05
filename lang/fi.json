@@ -786,7 +786,7 @@
     "thermic": "Lämpövoima",
     "powerType": "Voimanlähde",
     "propulsion": "Voimanlähde",
-    "co2OverrideLabel": "Mukautettu päästökertoimen",
+    "co2OverrideLabel": "Mukautettu päästökerroin",
     "co2OverrideHint": "(g CO₂/matkustaja-km, ohittaa oletuksen)",
     "co2OverridePlaceholder": "esim. 45",
     "useOldRouter": "Vaihda perinteiseen reititysalgoritmiin",
