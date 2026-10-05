@@ -1396,8 +1396,11 @@
     "stopPlatform": "Kolej",
     "editStops": "Upravit zastávky",
     "addStop": "Přidat zastávku",
+    "stopsShowOther": "Zobrazit ostatní body trasy",
+    "stopsHideOther": "Skrýt ostatní body trasy",
     "stopsRouteNote": "Trasa se přepočítá přes tyto body: zkontrolujte ji na mapě a potvrďte.",
     "stopsRefresh": "Obnovit časy",
     "stopsRefreshNone": "Transitous už časy tohoto spoje nemá.",
+    "stopsLoad": "Načíst zastávky z jízdního řádu",
     "motisStops": {"one": "{n} zastávka", "few": "{n} zastávky", "many": "{n} zastávky", "other": "{n} zastávek"}
 }

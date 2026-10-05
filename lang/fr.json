@@ -1389,8 +1389,11 @@
     "stopPlatform": "Voie",
     "editStops": "Modifier les arrêts",
     "addStop": "Ajouter un arrêt",
+    "stopsShowOther": "Afficher les autres points de passage",
+    "stopsHideOther": "Masquer les autres points de passage",
     "stopsRouteNote": "Le trajet sera recalculé en passant par ces points : vérifiez-le sur la carte, puis validez.",
     "stopsRefresh": "Actualiser les horaires",
     "stopsRefreshNone": "Transitous n'a plus les horaires de ce trajet.",
+    "stopsLoad": "Charger les arrêts depuis les horaires",
     "motisStops": {"one": "{n} arrêt", "many": "{n} arrêts", "other": "{n} arrêts"}
 }

@@ -1388,8 +1388,11 @@
     "stopPlatform": "站台",
     "editStops": "编辑停靠站",
     "addStop": "添加停靠站",
+    "stopsShowOther": "显示其他途经点",
+    "stopsHideOther": "隐藏其他途经点",
     "stopsRouteNote": "路线将经过这些点重新计算：请在地图上检查后确认。",
     "stopsRefresh": "刷新时间",
     "stopsRefreshNone": "Transitous 已不再保存此班次的时间。",
+    "stopsLoad": "从时刻表加载停靠站",
     "motisStops": {"other": "{n}站"}
 }

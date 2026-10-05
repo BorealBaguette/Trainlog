@@ -1392,8 +1392,11 @@
     "stopPlatform": "Binario",
     "editStops": "Modifica fermate",
     "addStop": "Aggiungi una fermata",
+    "stopsShowOther": "Mostra gli altri punti di passaggio",
+    "stopsHideOther": "Nascondi gli altri punti di passaggio",
     "stopsRouteNote": "Il percorso verrà ricalcolato passando per questi punti: controllalo sulla mappa, poi conferma.",
     "stopsRefresh": "Aggiorna orari",
     "stopsRefreshNone": "Transitous non ha più gli orari di questa corsa.",
+    "stopsLoad": "Carica fermate dall'orario",
     "motisStops": {"one": "{n} fermata", "many": "{n} fermate", "other": "{n} fermate"}
 }

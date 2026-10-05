@@ -1390,8 +1390,11 @@
     "stopPlatform": "Raide",
     "editStops": "Muokkaa pysähdyksiä",
     "addStop": "Lisää pysähdys",
+    "stopsShowOther": "Näytä muut reittipisteet",
+    "stopsHideOther": "Piilota muut reittipisteet",
     "stopsRouteNote": "Reitti lasketaan uudelleen näiden pisteiden kautta: tarkista se kartalta ja vahvista.",
     "stopsRefresh": "Päivitä ajat",
     "stopsRefreshNone": "Transitousilla ei enää ole tämän vuoron aikoja.",
+    "stopsLoad": "Lataa pysähdykset aikataulusta",
     "motisStops": {"one": "{n} pysähdys", "other": "{n} pysähdystä"}
 }

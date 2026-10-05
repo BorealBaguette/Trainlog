@@ -66,6 +66,28 @@
     #stopsModal .stop-move button:hover, #stopsModal .stop-remove:hover { color: #1f2733; }
     #stopsModal .stops-note { font-size: .8rem; color: #8a5a00; margin: 8px 0 0; }
     #stopsModal .stops-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-left: 30px; }
+    /* The runs to pick from (pickRun), as the new-trip form's timetable list */
+    #stopsModal .stops-runs { margin: 10px 0 0 30px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
+    #stopsModal .stops-runs-title { padding: 6px 12px; font-size: .72rem; color: #9aa3af; text-transform: uppercase; letter-spacing: .04em; background: #f9fafb; }
+    #stopsModal #stopsRunsList { max-height: 40vh; overflow-y: auto; }
+    #stopsModal .stops-run {
+        display: grid; grid-template-columns: 30px auto minmax(0, 1fr) auto; align-items: center; gap: 2px 10px;
+        width: 100%; padding: 7px 12px 7px 10px; border: 0; border-top: 1px solid #f0f1f3; text-align: left;
+        border-left: 4px solid var(--line-color, transparent);
+        background: color-mix(in srgb, var(--line-color, transparent) 6%, #fff); font-size: .85rem; cursor: pointer;
+    }
+    #stopsModal .stops-run:hover { background: color-mix(in srgb, var(--line-color, #999) 14%, #fff); }
+    #stopsModal .stops-run.best { box-shadow: inset 0 0 0 2px #86b7fe; }
+    #stopsModal .stops-run img { grid-row: 1 / 3; width: 30px; height: 24px; object-fit: contain; }
+    #stopsModal .stops-run .run-time { font-weight: 600; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #stopsModal .stops-run .run-head { display: flex; align-items: center; gap: 6px; min-width: 0; }
+    #stopsModal .stops-run .run-line {
+        flex: none; padding: 0 6px; border-radius: 4px; font-size: .78rem; font-weight: 600;
+        border: 1px solid var(--line-color, #ccc); background: color-mix(in srgb, var(--line-color, #ddd) 18%, #fff);
+    }
+    #stopsModal .stops-run .run-headsign { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #444; }
+    #stopsModal .stops-run .run-meta { grid-column: 2 / 4; font-size: .75rem; color: #777; }
+    #stopsModal .stops-run .run-delay { grid-row: 1 / 3; grid-column: 4; }
     /* Station suggestions (jQuery UI, appended to body) above the dialog */
     .ui-autocomplete { z-index: 6000 !important; }
     @media (max-width: 576px) {
@@ -803,6 +825,7 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title" id="stopsModalTitle">{{tripStops}}</h5>
+                <button type="button" class="btn btn-sm btn-link text-secondary ms-auto me-1 p-1" id="stopsOther" style="display:none"></button>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{cancel}}"></button>
             </div>
             <div class="modal-body">
@@ -815,10 +838,15 @@
                         <i class="fa-solid fa-plus"></i> {{addStop}}
                     </button>
                     <button type="button" class="btn btn-sm btn-outline-secondary" id="stopsRefresh" style="display:none">
-                        <i class="fa-solid fa-rotate"></i> {{stopsRefresh}}
+                        <i class="fa-solid fa-rotate"></i> <span id="stopsRefreshLabel">{{stopsRefresh}}</span>
                     </button>
                 </div>
                 <p class="stops-note" id="stopsRefreshNone" style="display:none">{{stopsRefreshNone}}</p>
+                {# The runs to pick the trip's from, when its stops don't say which (pickRun) #}
+                <div class="stops-runs" id="stopsRuns" style="display:none">
+                    <div class="stops-runs-title">{{motisDepartures}}</div>
+                    <div id="stopsRunsList"></div>
+                </div>
                 <p class="stops-note" id="stopsRouteNote" style="display:none">{{stopsRouteNote}}</p>
             </div>
             <div class="modal-footer">
@@ -968,6 +996,8 @@
         var stationUrl = stationUrls[tripType] || "/stationAutocomplete";
         var stopsModal = new bootstrap.Modal(document.getElementById('stopsModal'));
         var $rows = $('#stopsRows'), rows = [];
+        var showPlain = false;   // the route's other waypoints (no times): hidden until asked for
+        function hidden(r) { return !showPlain && !r.stop && !!r.source; }
         // The origin and destination rows (working copy, applied on Update): the trip's
         // own start/end, so their time is its start/end time plus its delay, and their
         // platform the trip's departure/arrival platform.
@@ -1054,18 +1084,30 @@
         function render() {
             $rows.empty();
             $rows.append(endRow('origin'));
+            var nPlain = rows.filter(function (r) { return !r.stop && r.source; }).length;
+            var otherLabel = (showPlain ? {{ stopsHideOther|tojson }} : {{ stopsShowOther|tojson }}) + ' (' + nPlain + ')';
+            $('#stopsOther').toggle(nPlain > 0).attr({ title: otherLabel, 'aria-label': otherLabel })
+                .html('<i class="fa-solid ' + (showPlain ? 'fa-eye-slash' : 'fa-eye') + '"></i>');
+            // Moving steps over the rows left out of view
+            function visibleFrom(i, dir) {
+                for (var j = i + dir; j >= 0 && j < rows.length; j += dir) if (!hidden(rows[j])) return j;
+                return -1;
+            }
+            function moveTo(i, j) { rows.splice(j, 0, rows.splice(i, 1)[0]); render(); }
             rows.forEach(function (row, i) {
+                if (hidden(row)) return;
                 var stop = row.stop;
+                var up = visibleFrom(i, -1), down = visibleFrom(i, 1);
                 var $row = $('<div class="stop-row">').toggleClass('plain', !stop);
                 $('<span class="stop-track"><span class="stop-dot"></span></span>').appendTo($row);
                 var $move = $('<span class="stop-move">');
                 $('<button type="button"><i class="fa-solid fa-chevron-up"></i></button>')
-                    .attr('title', {{ moveUp|tojson }}).prop('disabled', i === 0)
-                    .on('click', function () { rows.splice(i - 1, 0, rows.splice(i, 1)[0]); render(); })
+                    .attr('title', {{ moveUp|tojson }}).prop('disabled', up < 0)
+                    .on('click', function () { moveTo(i, up); })
                     .appendTo($move);
                 $('<button type="button"><i class="fa-solid fa-chevron-down"></i></button>')
-                    .attr('title', {{ moveDown|tojson }}).prop('disabled', i === rows.length - 1)
-                    .on('click', function () { rows.splice(i + 1, 0, rows.splice(i, 1)[0]); render(); })
+                    .attr('title', {{ moveDown|tojson }}).prop('disabled', down < 0)
+                    .on('click', function () { moveTo(i, down); })
                     .appendTo($move);
 
                 // Typing renames it; picking a station from the list puts it there instead.
@@ -1271,32 +1313,23 @@
 
         $('#stopsModalButton').on('click', function () {
             rows = stored.map(rowFor);
+            showPlain = false;
             ends = readEnds();
+            $('#stopsRuns').hide();
             $('#stopsRefreshNone').hide();
             render();
-            // With stops, even without the run they came from (a copy to another day):
-            // Refresh then looks for the closest run first (findRun).
-            $('#stopsRefresh').toggle(rows.some(function (r) { return r.stop; }));
+            // Any timetabled trip, with stops or not (one logged by hand): without the run
+            // they came from, Refresh looks for the closest one first (findRun), and with
+            // no stops at all, it loads them (matchRunStops adds the run's).
+            var hasStops = rows.some(function (r) { return r.stop; });
+            $('#stopsRefreshLabel').text(hasStops ? {{ stopsRefresh|tojson }} : {{ stopsLoad|tojson }});
+            $('#stopsRefresh').toggle({{ 'true' if tripType in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') else 'false' }});
             stopsModal.show();
         });
 
         // Ask Transitous for the run's current times (while it still has them) and put its
         // live times and platforms on the matching stops (by stop id), and the trip's
         // delays, from the run's stops nearest the route's two ends, ready for Update.
-        // The run the trip is most likely on, when its stops don't say (a copy to another
-        // day drops the old run's id): its line leaving its ends closest to its start.
-        function findRun() {
-            var date = $('#newTripStartDate').val(), time = $('#newTripStartTime').val();
-            if (typeof wplist === 'undefined' || !wplist || wplist.length < 2 || !date || !time) {
-                return $.Deferred().resolve({}).promise();
-            }
-            var a = wplist[0], b = wplist[wplist.length - 1];
-            return $.getJSON("{{ url_for('motis.motis_match', username=username) }}", {
-                from: a[0] + ',' + a[1], to: b[0] + ',' + b[1], date: date, time: time,
-                type: tripType, line: $('#lineName').val() || ''
-            });
-        }
-
         // Whether the stops' times are for the trip's day as the form now says: not when
         // the trip was copied or moved to another day (they're shifted only on save), so
         // the run they were picked from is another day's, not the one to refresh from.
@@ -1312,15 +1345,75 @@
         $('#stopsRefresh').on('click', function () {
             var $btn = $(this), ids = stopsOnFormDay() ? runIds() : [];
             $btn.prop('disabled', true).find('i').addClass('fa-spin');
-            $('#stopsRefreshNone').hide();
+            $('#stopsRefreshNone, #stopsRuns').hide();
             if (ids.length) return refreshFrom(ids, $btn);
-            findRun().done(function (run) {
-                if (!run || !run.trip_id) { $('#stopsRefreshNone').show(); done($btn); return; }
-                // Kept on the stops, so a later refresh (and the saved trip) knows it.
-                rows.forEach(function (r) { if (r.stop) r.stop.trip = run.trip_id; });
-                refreshFrom([run.trip_id], $btn);
-            }).fail(function () { $('#stopsRefreshNone').show(); done($btn); });
+            pickRun($btn);
         });
+
+        // No run known: the departures between the trip's ends around its start, to pick
+        // the trip's from (as on the new-trip form). The closest on its line is marked.
+        var runsLogos = "{{ url_for('static', filename='') }}";
+        var runsLine = {{ motisLine|tojson }}, runsStops = {{ motisStops|tojson }};
+        var runsMin = new Intl.NumberFormat("{{ langId }}" || undefined, { style: 'unit', unit: 'minute', unitDisplay: 'short' });
+        var runsHour = new Intl.NumberFormat("{{ langId }}" || undefined, { style: 'unit', unit: 'hour', unitDisplay: 'short' });
+        function runDuration(sec) {
+            if (!sec && sec !== 0) return '';
+            var m = Math.round(sec / 60), h = Math.floor(m / 60);
+            return !h ? runsMin.format(m) : (m % 60 ? runsHour.format(h) + ' ' + runsMin.format(m % 60) : runsHour.format(h));
+        }
+        function runLine(line) {
+            return /^(\d+[a-z]{0,3}|[A-Z])$/i.test(line) ? runsLine.replace('{line}', line) : line;
+        }
+        function pickRun($btn) {
+            var date = $('#newTripStartDate').val(), time = $('#newTripStartTime').val();
+            if (typeof wplist === 'undefined' || !wplist || wplist.length < 2 || !date || !time) {
+                $('#stopsRefreshNone').show(); done($btn); return;
+            }
+            var a = wplist[0], b = wplist[wplist.length - 1];
+            $.getJSON("{{ url_for('motis.motis_departures', username=username) }}", {
+                from: a[0] + ',' + a[1], to: b[0] + ',' + b[1], date: date, time: time, type: tripType
+            }).done(function (res) {
+                var runs = (res && !res.outside_timetable && res.departures || []).filter(function (d) { return d.trip_id; });
+                if (!runs.length) { $('#stopsRefreshNone').show(); return; }
+                var wanted = Date.parse(date + 'T' + time), word = (($('#lineName').val() || '').split(/\s+/)[0] || '').toLowerCase();
+                var best = null;
+                runs.forEach(function (d) {
+                    var gap = Math.abs(Date.parse(d.departure) - wanted);
+                    var sameLine = !word || ((d.line || '').split(/\s+/)[0] || '').toLowerCase() === word;
+                    if (sameLine && gap <= 30 * 60000 && (!best || gap < best.gap)) best = { gap: gap, d: d };
+                });
+                var $list = $('#stopsRunsList').empty();
+                runs.forEach(function (d) {
+                    var $run = $('<button type="button" class="stops-run">').toggleClass('best', !!best && best.d === d);
+                    if (d.color) $run.css('--line-color', d.color);
+                    $('<img alt="">').attr('src', d.logo_url ? runsLogos + d.logo_url : "{{ url_for('static', filename='images/icons/trip_logos/' + tripType + '.png') }}")
+                        .appendTo($run);
+                    $('<span class="run-time">').text(d.departure.slice(11) + ' \u2192 ' + d.arrival.slice(11)).appendTo($run);
+                    var $head = $('<span class="run-head">').appendTo($run);
+                    $('<span class="run-line">').text(d.line ? runLine(d.line) : (d.operator || '')).appendTo($head);
+                    if (d.headsign) $('<span class="run-headsign">').text('\u2192 ' + d.headsign).appendTo($head);
+                    $('<span class="run-delay">').html(d.departure_delay ? '<span class="delay-badge ' +
+                        (d.departure_delay > 0 ? 'delay-late' : 'delay-early') + '">' + (d.departure_delay > 0 ? '+' : '') +
+                        d.departure_delay + "'</span>" : '').appendTo($run);
+                    $('<span class="run-meta">').text([d.departure.slice(0, 10), runDuration(d.duration),
+                        d.stops.length ? pluralize(runsStops, d.stops.length) : '', d.logo_url ? '' : d.operator]
+                        .filter(Boolean).join(' \u00b7 ')).appendTo($run);
+                    $run.on('click', function () {
+                        $('#stopsRuns').hide();
+                        // Kept on the stops, so a later refresh (and the saved trip) knows it.
+                        rows.forEach(function (r) { if (r.stop) r.stop.trip = d.trip_id; });
+                        $btn.prop('disabled', true).find('i').addClass('fa-spin');
+                        refreshFrom([d.trip_id], $btn);
+                    });
+                    $list.append($run);
+                });
+                $('#stopsRuns').show();
+                var $best = $list.find('.stops-run.best');
+                if ($best.length) $best[0].scrollIntoView({ block: 'nearest' });
+            }).fail(function () {
+                $('#stopsRefreshNone').show();
+            }).always(function () { done($btn); });
+        }
         function done($btn) { $btn.prop('disabled', false).find('i').removeClass('fa-spin'); }
 
         // The run's stops between the trip's ends (its stops nearest the route's two
@@ -1446,6 +1539,8 @@
                 $('#stopsRefreshNone').show();
             }).always(function () { done($btn); });
         }
+
+        $('#stopsOther').on('click', function () { showPlain = !showPlain; render(); });
 
         $('#stopsAdd').on('click', function () {
             rows.push(rowFor(null));

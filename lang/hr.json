@@ -1396,8 +1396,11 @@
     "stopPlatform": "Kolosijek",
     "editStops": "Uredi stajališta",
     "addStop": "Dodaj stajalište",
+    "stopsShowOther": "Prikaži ostale putne točke",
+    "stopsHideOther": "Sakrij ostale putne točke",
     "stopsRouteNote": "Ruta će se ponovno izračunati kroz ove točke: provjerite je na karti, a zatim potvrdite.",
     "stopsRefresh": "Osvježi vremena",
     "stopsRefreshNone": "Transitous više nema vremena ove vožnje.",
+    "stopsLoad": "Učitaj stajališta iz voznog reda",
     "motisStops": {"one": "{n} stanica", "few": "{n} stanice", "other": "{n} stanica"}
 }

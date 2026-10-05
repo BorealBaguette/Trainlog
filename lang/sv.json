@@ -1392,8 +1392,11 @@
     "stopPlatform": "Spår",
     "editStops": "Redigera hållplatser",
     "addStop": "Lägg till hållplats",
+    "stopsShowOther": "Visa övriga mellanpunkter",
+    "stopsHideOther": "Dölj övriga mellanpunkter",
     "stopsRouteNote": "Rutten beräknas om genom de här punkterna: kontrollera den på kartan och bekräfta.",
     "stopsRefresh": "Uppdatera tider",
     "stopsRefreshNone": "Transitous har inte längre tiderna för den här turen.",
+    "stopsLoad": "Hämta hållplatser från tidtabellen",
     "motisStops": {"one": "{n} hållplats", "other": "{n} hållplatser"}
 }

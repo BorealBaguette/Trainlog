@@ -1392,8 +1392,11 @@
     "stopPlatform": "Gleis",
     "editStops": "Halte bearbeiten",
     "addStop": "Halt hinzufügen",
+    "stopsShowOther": "Andere Wegpunkte anzeigen",
+    "stopsHideOther": "Andere Wegpunkte ausblenden",
     "stopsRouteNote": "Die Route wird über diese Punkte neu berechnet: prüfe sie auf der Karte und bestätige sie dann.",
     "stopsRefresh": "Zeiten aktualisieren",
     "stopsRefreshNone": "Transitous hat die Zeiten dieser Fahrt nicht mehr.",
+    "stopsLoad": "Halte aus dem Fahrplan laden",
     "motisStops": {"one": "{n} Halt", "other": "{n} Halte"}
 }

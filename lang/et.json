@@ -1389,8 +1389,11 @@
     "stopPlatform": "Tee",
     "editStops": "Muuda peatusi",
     "addStop": "Lisa peatus",
+    "stopsShowOther": "Näita teisi teepunkte",
+    "stopsHideOther": "Peida teised teepunktid",
     "stopsRouteNote": "Marsruut arvutatakse nende punktide kaudu uuesti: kontrolli seda kaardil ja kinnita.",
     "stopsRefresh": "Värskenda aegu",
     "stopsRefreshNone": "Transitousil pole enam selle reisi aegu.",
+    "stopsLoad": "Laadi peatused sõiduplaanist",
     "motisStops": {"one": "{n} peatus", "other": "{n} peatust"}
 }

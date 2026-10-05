@@ -14,129 +14,13 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
-        <ul class="nav nav-tabs mb-3" id="tileserverTabs" role="tablist">
-          <li class="nav-item" role="presentation">
-            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#ts-general" type="button">OpenStreetMap</button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ts-jawg" type="button">Jawg</button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ts-ofm" type="button">OpenFreeMap</button>
-          </li>
-          <li class="nav-item" role="presentation">
-            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ts-other" type="button">{{ other }}</button>
-          </li>
-        </ul>
-        <div class="tab-content">
-
-          <!-- OpenStreetMap tab -->
-          <div class="tab-pane fade show active" id="ts-general">
-            <div class="ts-grid">
-              <button type="button" class="ts-option" data-value="osm">
-                <i class="fa-solid fa-map"></i><span>{{ tileserver_default }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="de">
-                <i class="fa-solid fa-map"></i><span>{{ tileserver_de }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="fr">
-                <i class="fa-solid fa-map"></i><span>{{ tileserver_fr }}</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Jawg tab -->
-          <div class="tab-pane fade" id="ts-jawg">
-            <div class="ts-grid">
-              <button type="button" class="ts-option" data-value="jawg-streets">
-                <i class="fa-solid fa-road"></i><span>{{ tileserver_jawg_streets }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="jawg-light">
-                <i class="fa-solid fa-sun"></i><span>{{ tileserver_jawg_light }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="jawg-dark">
-                <i class="fa-solid fa-moon"></i><span>{{ tileserver_jawg_dark }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="jawg-sunny">
-                <i class="fa-solid fa-cloud-sun"></i><span>{{ tileserver_jawg_sunny }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="jawg-terrain">
-                <i class="fa-solid fa-mountain"></i><span>{{ tileserver_jawg_terrain }}</span>
-              </button>
-              <button type="button" class="ts-option" data-value="jawg-lagoon">
-                <i class="fa-solid fa-water"></i><span>{{ tileserver_jawg_lagoon }}</span>
-              </button>
-              {% if is_premium %}
-              <button type="button" class="ts-option ts-vector" data-value="jawg-streets-v2">
-                <i class="fa-solid fa-road"></i><i class="fa-solid fa-gem ts-gem"></i><span>Streets V2</span>
-              </button>
-              <button type="button" class="ts-option ts-vector" data-value="jawg-lagoon-v2">
-                <i class="fa-solid fa-water"></i><i class="fa-solid fa-gem ts-gem"></i><span>Lagoon V2</span>
-              </button>
-              {% endif %}
-            </div>
-          </div>
-
-          <!-- OpenFreeMap tab -->
-          <div class="tab-pane fade" id="ts-ofm">
-            <div class="ts-grid">
-              <button type="button" class="ts-option ts-vector" data-value="ofm-liberty">
-                <i class="fa-solid fa-map-location-dot"></i><span>Liberty</span>
-              </button>
-              <button type="button" class="ts-option ts-vector" data-value="ofm-bright">
-                <i class="fa-solid fa-map"></i><span>Bright</span>
-              </button>
-              <button type="button" class="ts-option ts-vector" data-value="ofm-positron">
-                <i class="fa-solid fa-circle-dot"></i><span>Positron</span>
-              </button>
-              <button type="button" class="ts-option ts-vector" data-value="dark-train">
-                <i class="fa-solid fa-moon"></i><span>Dark Train</span>
-              </button>
-            </div>
-          </div>
-
-          <!-- Other tab -->
-          <div class="tab-pane fade" id="ts-other">
-            <div class="ts-grid">
-              <button type="button" class="ts-option" data-value="none">
-                <i class="fa-solid fa-ban"></i><span>{{ none_t }}</span>
-              </button>
-            </div>
-          </div>
-
-        </div>
+        {% include "includes/tileserver_tabs.html" %}
       </div>
     </div>
   </div>
 </div>
 
-<style>
-  .ts-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-  }
-  .ts-option {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 6px;
-    padding: 12px 8px;
-    border: 2px solid #dee2e6;
-    border-radius: 8px;
-    background: white;
-    cursor: pointer;
-    transition: border-color 0.15s, background 0.15s;
-    font-size: 0.8rem;
-    color: #444;
-    position: relative;
-  }
-  .ts-option i:first-child { font-size: 1.3rem; color: #666; }
-  .ts-option:hover { border-color: #0d6efd; background: #f0f6ff; }
-  .ts-option.ts-selected { border-color: #0d6efd; background: #e7f0ff; color: #0d6efd; }
-  .ts-option.ts-selected i:first-child { color: #0d6efd; }
-  .ts-gem { position: absolute; top: 6px; right: 6px; font-size: 0.65rem !important; color: #00ced1 !important; }
-</style>
+
 
 <script>
   // ---- Tileserver picker (script scope so ORM handlers can access them) ----

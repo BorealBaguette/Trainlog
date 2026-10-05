@@ -1392,8 +1392,11 @@
     "stopPlatform": "Spor",
     "editStops": "Rediger stopp",
     "addStop": "Legg til stopp",
+    "stopsShowOther": "Vis andre veipunkter",
+    "stopsHideOther": "Skjul andre veipunkter",
     "stopsRouteNote": "Ruten beregnes på nytt gjennom disse punktene: sjekk den på kartet, og bekreft.",
     "stopsRefresh": "Oppdater tider",
     "stopsRefreshNone": "Transitous har ikke lenger tidene for denne avgangen.",
+    "stopsLoad": "Hent stopp fra rutetabellen",
     "motisStops": {"one": "{n} stopp", "other": "{n} stopp"}
 }

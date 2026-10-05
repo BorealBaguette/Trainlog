@@ -1392,8 +1392,11 @@
     "stopPlatform": "Spoor",
     "editStops": "Haltes bewerken",
     "addStop": "Halte toevoegen",
+    "stopsShowOther": "Andere waypoints tonen",
+    "stopsHideOther": "Andere waypoints verbergen",
     "stopsRouteNote": "De route wordt opnieuw berekend via deze punten: controleer hem op de kaart en bevestig.",
     "stopsRefresh": "Tijden bijwerken",
     "stopsRefreshNone": "Transitous heeft de tijden van deze rit niet meer.",
+    "stopsLoad": "Haltes uit de dienstregeling laden",
     "motisStops": {"one": "{n} halte", "other": "{n} haltes"}
 }

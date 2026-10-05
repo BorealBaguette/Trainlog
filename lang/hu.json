@@ -1388,8 +1388,11 @@
     "stopPlatform": "Vágány",
     "editStops": "Megállók szerkesztése",
     "addStop": "Megálló hozzáadása",
+    "stopsShowOther": "Egyéb útpontok megjelenítése",
+    "stopsHideOther": "Egyéb útpontok elrejtése",
     "stopsRouteNote": "Az útvonal ezeken a pontokon át újraszámolódik: ellenőrizze a térképen, majd erősítse meg.",
     "stopsRefresh": "Időpontok frissítése",
     "stopsRefreshNone": "A Transitous már nem tárolja ennek a járatnak az időpontjait.",
+    "stopsLoad": "Megállók betöltése a menetrendből",
     "motisStops": {"one": "{n} megálló", "other": "{n} megálló"}
 }

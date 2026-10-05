@@ -1388,8 +1388,11 @@
     "stopPlatform": "Peron",
     "editStops": "Durakları düzenle",
     "addStop": "Durak ekle",
+    "stopsShowOther": "Diğer ara noktaları göster",
+    "stopsHideOther": "Diğer ara noktaları gizle",
     "stopsRouteNote": "Rota bu noktalardan geçecek şekilde yeniden hesaplanacak: haritada kontrol edip onaylayın.",
     "stopsRefresh": "Saatleri yenile",
     "stopsRefreshNone": "Transitous'ta artık bu seferin saatleri yok.",
+    "stopsLoad": "Durakları tarifeden yükle",
     "motisStops": {"one": "{n} durak", "other": "{n} durak"}
 }

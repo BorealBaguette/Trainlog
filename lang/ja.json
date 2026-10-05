@@ -1388,8 +1388,11 @@
     "stopPlatform": "番線",
     "editStops": "停車駅を編集",
     "addStop": "停車駅を追加",
+    "stopsShowOther": "その他の経由地を表示",
+    "stopsHideOther": "その他の経由地を非表示",
     "stopsRouteNote": "ルートはこれらの地点を通るよう再計算されます。地図で確認してから確定してください。",
     "stopsRefresh": "時刻を更新",
     "stopsRefreshNone": "Transitousにはこの便の時刻がもうありません。",
+    "stopsLoad": "時刻表から停車駅を読み込む",
     "motisStops": {"other": "{n}駅"}
 }

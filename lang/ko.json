@@ -1388,8 +1388,11 @@
     "stopPlatform": "선로",
     "editStops": "정차역 편집",
     "addStop": "정차역 추가",
+    "stopsShowOther": "다른 경유지 표시",
+    "stopsHideOther": "다른 경유지 숨기기",
     "stopsRouteNote": "경로가 이 지점들을 지나도록 다시 계산됩니다. 지도에서 확인한 뒤 확정하세요.",
     "stopsRefresh": "시간 새로고침",
     "stopsRefreshNone": "Transitous에 더 이상 이 운행의 시간이 없습니다.",
+    "stopsLoad": "시간표에서 정차역 불러오기",
     "motisStops": {"other": "{n}개 정류장"}
 }

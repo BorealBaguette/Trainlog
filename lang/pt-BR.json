@@ -1392,8 +1392,11 @@
     "stopPlatform": "Plataforma",
     "editStops": "Editar paradas",
     "addStop": "Adicionar parada",
+    "stopsShowOther": "Mostrar outros pontos de passagem",
+    "stopsHideOther": "Ocultar outros pontos de passagem",
     "stopsRouteNote": "A rota será recalculada passando por estes pontos: confira no mapa e depois confirme.",
     "stopsRefresh": "Atualizar horários",
     "stopsRefreshNone": "O Transitous não tem mais os horários desta viagem.",
+    "stopsLoad": "Carregar paradas do horário",
     "motisStops": {"one": "{n} parada", "many": "{n} paradas", "other": "{n} paradas"}
 }

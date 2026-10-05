@@ -200,6 +200,9 @@
             <i class="bi bi-list"></i> {{manage_gpx_files}}
           </a>
           <div class="dropdown-divider"></div>
+          {% if request.endpoint != 'user_settings' %}
+          <a class="dropdown-item" href="#" id="mapBgNav" style="display:none"><i class="fa-solid fa-map"></i> {{ tilesetLabel }}</a>
+          {% endif %}
           <a class="dropdown-item" href="{{ url_for('live_map') }}"><i class="fa-solid fa-globe"></i> {{ live_map }}</a>
           <a class="dropdown-item" href="{{ url_for('timeline.timeline', username=username) }}"><i class="bi bi-calendar3"></i> {{ timeline }}</a>
           <a class="dropdown-item" href="{{ url_for('user_bounds', username=username) }}"><i class="fa-solid fa-arrows-to-circle"></i> {{ travel_bounds_header }}</a>
@@ -313,6 +316,7 @@
 
   </div>
 </nav>
+{% if request.endpoint != 'user_settings' %}{% include "includes/map_background_modal.html" %}{% endif %}
 
 <style>
   .scrollable-dropdown {

@@ -1396,8 +1396,11 @@
     "stopPlatform": "Tor",
     "editStops": "Edytuj przystanki",
     "addStop": "Dodaj przystanek",
+    "stopsShowOther": "Pokaż pozostałe punkty trasy",
+    "stopsHideOther": "Ukryj pozostałe punkty trasy",
     "stopsRouteNote": "Trasa zostanie przeliczona przez te punkty: sprawdź ją na mapie, a potem potwierdź.",
     "stopsRefresh": "Odśwież godziny",
     "stopsRefreshNone": "Transitous nie ma już godzin tego kursu.",
+    "stopsLoad": "Wczytaj przystanki z rozkładu",
     "motisStops": {"one": "{n} przystanek", "few": "{n} przystanki", "many": "{n} przystanków", "other": "{n} przystanku"}
 }

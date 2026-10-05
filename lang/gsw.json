@@ -1390,8 +1390,11 @@
     "stopPlatform": "Gleis",
     "editStops": "Halt bearbeite",
     "addStop": "Halt hinzuefüege",
+    "stopsShowOther": "Andere Wegpunkt aazeige",
+    "stopsHideOther": "Andere Wegpunkt verstecke",
     "stopsRouteNote": "D Route wird über die Pünkt neu berächnet: prüef si uf de Charte und bestätig si dänn.",
     "stopsRefresh": "Ziite aktualisiere",
     "stopsRefreshNone": "Transitous het d Ziite vo dere Fahrt nüme.",
+    "stopsLoad": "Halt us em Fahrplan lade",
     "motisStops": {"one": "{n} Halt", "other": "{n} Hält"}
 }

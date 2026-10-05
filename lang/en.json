@@ -1389,8 +1389,11 @@
     "stopPlatform": "Platform",
     "editStops": "Edit stops",
     "addStop": "Add a stop",
+    "stopsShowOther": "Show other waypoints",
+    "stopsHideOther": "Hide other waypoints",
     "stopsRouteNote": "The route will be recalculated through these points: check it on the map, then confirm.",
     "stopsRefresh": "Refresh times",
     "stopsRefreshNone": "Transitous no longer has this run's times.",
+    "stopsLoad": "Load stops from the timetable",
     "motisStops": {"one": "{n} stop", "other": "{n} stops"}
 }
