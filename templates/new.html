@@ -39,7 +39,7 @@
         position: absolute; top: 0; right: 32px; height: 32px; line-height: 32px;
         font-size: 0.8rem; color: #888; font-variant-numeric: tabular-nums; pointer-events: none;
     }
-    .via-row.has-time input.viaStation { padding-right: 130px; }
+    .via-row.has-time input.viaStation { padding-right: 175px; }  /* "10:58 – 10:59 · Voie 4" */
 
     /* More than a few vias (a timetable service's stops): fold them into one summary row */
     .via-summary {
@@ -123,6 +123,15 @@
         display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere;
     }
     #motisGroup .motis-meta { grid-column: 3; font-size: 0.75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #motisGroup .motis-more {
+        display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
+        padding: 6px 12px; border: 0; background: #fafafa; color: #4b78d6;
+        font-size: 0.8rem; cursor: pointer;
+    }
+    #motisGroup .motis-more:hover { background: #f0f3fa; }
+    #motisGroup .motis-more[disabled] { color: #999; cursor: default; }
+    #motisGroup li:first-child > .motis-more { border-bottom: 1px solid #eee; }
+    #motisGroup li:nth-last-child(2) > .motis-more { border-top: 1px solid #eee; }
     #motisGroup .motis-source { padding: 4px 12px; font-size: 0.7rem; color: #999; text-align: right; border-top: 1px solid #eee; }
     /* Phones: the third column is too narrow for the line badge and headsign, so each
        entry stacks into rows — times + journey info, then line → headsign at full
@@ -994,7 +1003,10 @@
       searching: {{ motisSearching|tojson }},
       none: {{ motisNone|tojson }},
       line: {{ motisLine|tojson }},
-      stops: {{ motisStops|tojson }}
+      stops: {{ motisStops|tojson }},
+      track: {{ motisTrack|tojson }},
+      earlier: {{ motisEarlier|tojson }},
+      later: {{ motisLater|tojson }}
     };
     // Journey time in the page's language without a lang key: Intl's unit formats
     // ("26 min", "1 h 05 min", "26分").
@@ -1012,10 +1024,20 @@
       // A lone letter only: two-letter names are often service classes (IC, RE, EC).
       return /^(\d+[a-z]{0,3}|[A-Z])$/i.test(line) ? texts.line.replace('{line}', line) : line;
     }
+    // "Voie 4" / "Gl. 4" / "4番線" from a stop's platform; some feeds already put their own
+    // word in front ("Gl. 3" from DB), which goes so it isn't said twice.
+    function trackLabel(track) {
+      if (!track) return '';
+      var bare = String(track).replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '');
+      return texts.track.replace('{track}', bare || track);
+    }
     var dayFmt = new Intl.DateTimeFormat("{{ langId }}" || 'en',
       { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
     var $group = $('#motisGroup'), $toggle = $('#motisToggle'), $menu = $('#motisMenu');
     var timer = null, xhr = null, lastKey = null, departures = [];
+    // The list's Earlier/Later buttons (loadMore): the request in flight, and what the
+    // current list was searched for, which they extend.
+    var moreXhr = null, searchParams = null;
     // The run last picked, and what it put in the form (see forgetRun).
     var applied = null;
 
@@ -1070,6 +1092,7 @@
 
     function hide() {
       if (xhr) xhr.abort();
+      if (moreXhr) moreXhr.abort();
       departures = [];
       $menu.empty();
       $group.hide();
@@ -1089,9 +1112,9 @@
       lastKey = key;
       if (xhr) xhr.abort();
       setToggle(texts.searching, null, false, true);
-      xhr = $.getJSON(url, {
-        from: origin.join(','), to: destination.join(','), date: date, time: time, type: "{{ vehicle_type }}"
-      }).done(function (res) {
+      if (moreXhr) moreXhr.abort();
+      searchParams = { from: origin.join(','), to: destination.join(','), type: "{{ vehicle_type }}" };
+      xhr = $.getJSON(url, $.extend({ date: date, time: time }, searchParams)).done(function (res) {
         // A date Transitous has no timetables for (a past year): nothing to offer, say nothing.
         if (res.outside_timetable) { hide(); return; }
         departures = res.departures || [];
@@ -1116,18 +1139,62 @@
       return dayFmt.format(new Date(Date.UTC(p[0], p[1] - 1, p[2])));
     }
 
+    // One run, whichever page of the list it came from.
+    function runKey(d) {
+      return [d.departure, d.line, d.headsign, d.agency].join('|');
+    }
+
+    // "Earlier" / "Later" at the ends of the list.
+    function moreButton(direction) {
+      return $('<button type="button" class="motis-more">').attr('data-direction', direction)
+        .append($('<i class="fa-solid">').addClass(direction === 'earlier' ? 'fa-chevron-up' : 'fa-chevron-down'))
+        .append($('<span>').text(direction === 'earlier' ? texts.earlier : texts.later));
+    }
+
+    // Extend the list by a page: from its last departure on, or the stretch before its
+    // first one as long as the list already spans (a few minutes on a busy line, hours on
+    // a sparse one). New runs merge in; the menu stays open.
+    function loadMore(direction, $btn) {
+      if (!searchParams || !departures.length || moreXhr) return;
+      var first = departures[0].departure, last = departures[departures.length - 1].departure;
+      var at = direction === 'earlier' ? first : last;
+      var span = Math.max(10, Math.round((Date.parse(last) - Date.parse(first)) / 60000));
+      var key = lastKey;
+      $btn.prop('disabled', true).find('i').attr('class', 'fa-solid fa-circle-notch fa-spin');
+      moreXhr = $.getJSON(url, $.extend({
+        date: at.slice(0, 10), time: at.slice(11, 16), page: direction, span: span
+      }, searchParams)).done(function (res) {
+        if (key !== lastKey) return;   // the form has moved on
+        var known = {};
+        departures.forEach(function (d) { known[runKey(d)] = true; });
+        var added = (res.departures || []).filter(function (d) { return !known[runKey(d)]; });
+        departures = departures.concat(added).sort(function (a, b) {
+          return a.departure < b.departure ? -1 : a.departure > b.departure ? 1 : 0;
+        });
+        var scroll = $menu.scrollTop(), height = $menu[0].scrollHeight;
+        render();
+        // Earlier runs go above what was in view: keep it in view.
+        $menu.scrollTop(direction === 'earlier' ? scroll + $menu[0].scrollHeight - height : scroll);
+      }).always(function () {
+        moreXhr = null;
+        $btn.prop('disabled', false).find('i').attr('class', 'fa-solid ' + (direction === 'earlier' ? 'fa-chevron-up' : 'fa-chevron-down'));
+      });
+    }
+
     function render() {
       $menu.empty();
       if (!departures.length) {
         setToggle(texts.none, null, false);
         return;
       }
+      $('<li>').append(moreButton('earlier')).appendTo($menu);
       departures.forEach(function (d, i) {
         var depDate = d.departure.slice(0, 10), arrDate = d.arrival.slice(0, 10);
         var dayDiff = Math.round((Date.parse(arrDate) - Date.parse(depDate)) / 86400000);
         var $item = $('<a href="#" class="dropdown-item motis-item">').attr('data-i', i)
           .attr('title', [d.from_name, d.to_name].filter(Boolean).join(' \u2192 '));
         if (d.color) $item.css('--line-color', d.color);
+        if (applied && applied.key === runKey(d)) $item.addClass('active');
         $('<img class="motis-logo" alt="">')
           .attr('src', d.logo_url ? logosBase + d.logo_url : typeIcon)
           .on('error', function () { if (this.src !== typeIcon) this.src = typeIcon; })
@@ -1151,8 +1218,10 @@
           .appendTo($item);
         $('<li>').append($item).appendTo($menu);
       });
+      $('<li>').append(moreButton('later')).appendTo($menu);
       $('<li class="motis-source">').html('<a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a>').appendTo($menu);
-      setToggle(texts.title, departures.length, true);
+      // A picked run keeps its "10:53 → 12:21 · IR35" (apply) when the list is extended.
+      setToggle(applied && applied.label || texts.title, departures.length, true);
     }
 
     function setDelay(minutesId, minutes) {
@@ -1179,7 +1248,8 @@
         var label = stop[3] && stop[3] !== 'UN' ? getFlagEmoji(stop[3]) + ' ' + name : name;
         globalStationDict[label] = [[stop[0], stop[1]], label];
         var arr = stop[4], dep = stop[5];
-        addViaRow(label, arr && dep && arr !== dep ? arr + ' \u2013 ' + dep : (arr || dep));
+        var times = arr && dep && arr !== dep ? arr + ' \u2013 ' + dep : (arr || dep);
+        addViaRow(label, [times, trackLabel(stop[6])].filter(Boolean).join(' \u00b7 '));
       });
       setViaCollapsed(true);
       updateViaSummary();
@@ -1191,15 +1261,21 @@
         setDelay('arrivalDelayMinutes', d.arrival_delay);
         $('#delayToggle').prop('checked', true).trigger('change');
       }
-      applied = { ends: endsKey(), line: d.line, operator: d.operator, delays: !!delays };
+      applied = { ends: endsKey(), key: runKey(d), line: d.line, operator: d.operator, delays: !!delays };
 
       // The form now reflects this departure; don't search again for its own time.
       lastKey = formKey();
       $menu.find('.motis-item').removeClass('active');
       $menu.find('.motis-item[data-i="' + departures.indexOf(d) + '"]').addClass('active');
-      $('#motisToggleLabel').text(dep[1] + ' → ' + arr[1] + (d.line ? ' · ' + lineLabel(d.line) : ''));
+      applied.label = dep[1] + ' → ' + arr[1] + (d.line ? ' · ' + lineLabel(d.line) : '');
+      $('#motisToggleLabel').text(applied.label);
     }
 
+    $menu.on('click', '.motis-more', function (e) {
+      e.preventDefault();
+      e.stopPropagation();   // Bootstrap would close the menu
+      loadMore($(this).attr('data-direction'), $(this));
+    });
     $menu.on('click', '.motis-item', function (e) {
       e.preventDefault();
       apply(departures[+$(this).attr('data-i')]);

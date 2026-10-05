@@ -1383,5 +1383,8 @@
     "waypointSoftHint": "Die Route muss nur in der Nähe dieses Punkts vorbeiführen.",
     "waypointHardHint": "Die Route führt genau durch diesen Punkt, auch wenn das einen Umweg bedeutet.",
     "motisLine": "Linie {line}",
+    "motisTrack": "Gl. {track}",
+    "motisEarlier": "Frühere Abfahrten",
+    "motisLater": "Spätere Abfahrten",
     "motisStops": {"one": "{n} Halt", "other": "{n} Halte"}
 }

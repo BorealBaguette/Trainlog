@@ -1379,5 +1379,8 @@
     "waypointSoftHint": "ルートはこの地点の近くを通れば十分です。",
     "waypointHardHint": "遠回りになっても、ルートはこの地点を正確に通ります。",
     "motisLine": "{line}号線",
+    "motisTrack": "{track}番線",
+    "motisEarlier": "これより前の出発",
+    "motisLater": "これより後の出発",
     "motisStops": {"other": "{n}駅"}
 }

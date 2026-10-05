@@ -1387,5 +1387,8 @@
     "waypointSoftHint": "Trasa musí jen projít poblíž tohoto bodu.",
     "waypointHardHint": "Trasa vede přesně tímto bodem, i kdyby to znamenalo objížďku.",
     "motisLine": "Linka {line}",
+    "motisTrack": "Kol. {track}",
+    "motisEarlier": "Dřívější odjezdy",
+    "motisLater": "Pozdější odjezdy",
     "motisStops": {"one": "{n} zastávka", "few": "{n} zastávky", "many": "{n} zastávky", "other": "{n} zastávek"}
 }

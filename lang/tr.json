@@ -1379,5 +1379,8 @@
     "waypointSoftHint": "Rotanın yalnızca bu noktanın yakınından geçmesi yeterli.",
     "waypointHardHint": "Rota, bir sapma gerektirse bile tam olarak bu noktadan geçer.",
     "motisLine": "{line} hattı",
+    "motisTrack": "Peron {track}",
+    "motisEarlier": "Daha erken kalkışlar",
+    "motisLater": "Daha geç kalkışlar",
     "motisStops": {"one": "{n} durak", "other": "{n} durak"}
 }

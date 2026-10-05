@@ -1379,5 +1379,8 @@
     "waypointSoftHint": "Az útvonalnak csak a pont közelében kell elhaladnia.",
     "waypointHardHint": "Az útvonal pontosan ezen a ponton halad át, akkor is, ha ez kerülőt jelent.",
     "motisLine": "{line}-es vonal",
+    "motisTrack": "{track}. vágány",
+    "motisEarlier": "Korábbi indulások",
+    "motisLater": "Későbbi indulások",
     "motisStops": {"one": "{n} megálló", "other": "{n} megálló"}
 }

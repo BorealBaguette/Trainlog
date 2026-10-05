@@ -1383,5 +1383,8 @@
     "waypointSoftHint": "Ruten trenger bare å passere nær dette punktet.",
     "waypointHardHint": "Ruten går nøyaktig gjennom dette punktet, selv om det betyr en omvei.",
     "motisLine": "Linje {line}",
+    "motisTrack": "Spor {track}",
+    "motisEarlier": "Tidligere avganger",
+    "motisLater": "Senere avganger",
     "motisStops": {"one": "{n} stopp", "other": "{n} stopp"}
 }

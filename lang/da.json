@@ -1383,5 +1383,8 @@
     "waypointSoftHint": "Ruten skal kun passere i nærheden af dette punkt.",
     "waypointHardHint": "Ruten går præcis gennem dette punkt, også selvom det betyder en omvej.",
     "motisLine": "Linje {line}",
+    "motisTrack": "Spor {track}",
+    "motisEarlier": "Tidligere afgange",
+    "motisLater": "Senere afgange",
     "motisStops": {"one": "{n} stop", "other": "{n} stop"}
 }

@@ -1387,5 +1387,8 @@
     "waypointSoftHint": "Ruta mora samo proći blizu ove točke.",
     "waypointHardHint": "Ruta prolazi točno kroz ovu točku, čak i ako to znači obilazak.",
     "motisLine": "Linija {line}",
+    "motisTrack": "Kol. {track}",
+    "motisEarlier": "Raniji polasci",
+    "motisLater": "Kasniji polasci",
     "motisStops": {"one": "{n} stanica", "few": "{n} stanice", "other": "{n} stanica"}
 }

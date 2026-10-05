@@ -1387,5 +1387,8 @@
     "waypointSoftHint": "Trasa musi jedynie przebiegać w pobliżu tego punktu.",
     "waypointHardHint": "Trasa przebiega dokładnie przez ten punkt, nawet jeśli oznacza to objazd.",
     "motisLine": "Linia {line}",
+    "motisTrack": "Tor {track}",
+    "motisEarlier": "Wcześniejsze odjazdy",
+    "motisLater": "Późniejsze odjazdy",
     "motisStops": {"one": "{n} przystanek", "few": "{n} przystanki", "many": "{n} przystanków", "other": "{n} przystanku"}
 }

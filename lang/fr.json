@@ -1380,5 +1380,8 @@
     "waypointSoftHint": "Le trajet doit seulement passer à proximité de ce point.",
     "waypointHardHint": "Le trajet passe exactement par ce point, même au prix d'un détour.",
     "motisLine": "Ligne {line}",
+    "motisTrack": "Voie {track}",
+    "motisEarlier": "Départs plus tôt",
+    "motisLater": "Départs plus tard",
     "motisStops": {"one": "{n} arrêt", "many": "{n} arrêts", "other": "{n} arrêts"}
 }

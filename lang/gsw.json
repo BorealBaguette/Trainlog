@@ -1381,5 +1381,8 @@
     "waypointSoftHint": "D Route mues nume i de Nöchi vo dem Punkt verbiifüere.",
     "waypointHardHint": "D Route füert gnau dur dä Punkt, au wänn das en Umwäg bedütet.",
     "motisLine": "Linie {line}",
+    "motisTrack": "Gl. {track}",
+    "motisEarlier": "Früecheri Abfahrte",
+    "motisLater": "Spöteri Abfahrte",
     "motisStops": {"one": "{n} Halt", "other": "{n} Hält"}
 }

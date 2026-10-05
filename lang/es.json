@@ -1383,5 +1383,8 @@
     "waypointSoftHint": "La ruta solo tiene que pasar cerca de este punto.",
     "waypointHardHint": "La ruta pasa exactamente por este punto, aunque suponga un desvío.",
     "motisLine": "Línea {line}",
+    "motisTrack": "Vía {track}",
+    "motisEarlier": "Salidas anteriores",
+    "motisLater": "Salidas posteriores",
     "motisStops": {"one": "{n} parada", "many": "{n} paradas", "other": "{n} paradas"}
 }

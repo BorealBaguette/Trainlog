@@ -1379,5 +1379,8 @@
     "waypointSoftHint": "路线只需从该点附近经过。",
     "waypointHardHint": "即使需要绕行，路线也会精确经过该点。",
     "motisLine": "{line}号线",
+    "motisTrack": "{track}站台",
+    "motisEarlier": "更早的班次",
+    "motisLater": "更晚的班次",
     "motisStops": {"other": "{n}站"}
 }

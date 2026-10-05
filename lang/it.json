@@ -1383,5 +1383,8 @@
     "waypointSoftHint": "Il percorso deve solo passare vicino a questo punto.",
     "waypointHardHint": "Il percorso passa esattamente per questo punto, anche a costo di una deviazione.",
     "motisLine": "Linea {line}",
+    "motisTrack": "Bin. {track}",
+    "motisEarlier": "Partenze precedenti",
+    "motisLater": "Partenze successive",
     "motisStops": {"one": "{n} fermata", "many": "{n} fermate", "other": "{n} fermate"}
 }

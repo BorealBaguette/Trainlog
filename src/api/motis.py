@@ -37,11 +37,15 @@ MOTIS_BOARD_URL = "https://api.transitous.org/api/v5/stoptimes"
 USER_AGENT = "Trainlog/1.0 (https://trainlog.me; admin@trainlog.me; trip form timetable suggestions)"
 
 # Search from a little before the time on the form to a few days after it: the form
-# time is often just "now" or a rough guess, and a service that doesn't run every day
+# time is often just "now" or a rough guess (the list's Earlier/Later buttons go further,
+# see page in _search), and a service that doesn't run every day
 # (a train a few days a week) should still show a couple of runs. Busy lines don't
 # fill those days: each search returns a count of results (below), so a metro line
 # stops after an hour or so, while Oslo–Bergen (6 a day) reaches 4 days ahead.
-WINDOW_BEFORE = timedelta(hours=1)
+# Not more: each search returns a count of results, which a busy line fills before even
+# reaching the form's time (Tallinn's buses, one every minute or two, ended at 14:15 for
+# 14:19 with an hour).
+WINDOW_BEFORE = timedelta(minutes=20)
 WINDOW_AHEAD = timedelta(days=4)
 WINDOW_LENGTH = WINDOW_BEFORE + WINDOW_AHEAD
 # The list is never cut before this (see _departures)...
@@ -94,9 +98,10 @@ _STOPS_CACHE_TTL = 24 * 3600
 _CACHE_MAX = 256
 _cache = {}
 
-# Searches start on the half hour before the form's time minus WINDOW_BEFORE, so moving
+# Searches start on the 10 minutes before the form's time minus WINDOW_BEFORE, so moving
 # the time by a few minutes asks Transitous the same thing again (and hits the cache).
-START_STEP = timedelta(minutes=30)
+# Not coarser: on a busy line every minute of lead is results that never reach the time.
+START_STEP = timedelta(minutes=10)
 
 # Transitous refuses bursts from one address: 6 plan requests at once got half of them a
 # 429 straight away (no Retry-After), while 3 at once or back to back went through. So
@@ -282,8 +287,9 @@ COORD_DIGITS = 6
 
 
 def _stop(stop):
-    """[lat, lng, name, country code, arrival 'HH:MM', departure 'HH:MM'] — the
-    country so the form can flag it like a picked station, the times as shown there."""
+    """[lat, lng, name, country code, arrival 'HH:MM', departure 'HH:MM', platform] — the
+    country so the form can flag it like a picked station, the times as shown there, the
+    platform (track) when the feed has it: the real-time one if it changed."""
     tz = ZoneInfo(stop["tz"]) if stop.get("tz") else _tz(stop["lat"], stop["lon"])
 
     def clock(field):
@@ -297,6 +303,7 @@ def _stop(stop):
         getCountryFromCoordinates(stop["lat"], stop["lon"])["countryCode"],
         clock("Arrival"),
         clock("Departure"),
+        (stop.get("track") or stop.get("scheduledTrack") or "").strip() or None,
     ]
 
 
@@ -491,11 +498,28 @@ def _search(args):
         abort(400)
     try:
         clock = datetime.strptime(args.get("time") or "", "%H:%M").time()
-        start, window = day.replace(hour=clock.hour, minute=clock.minute) - WINDOW_BEFORE, WINDOW_LENGTH
+        at = day.replace(hour=clock.hour, minute=clock.minute)
     except ValueError:
+        clock, at = None, day
+    page = args.get("page")
+    if page == "later":
+        # "Later" in the list: from its last departure (date/time), as far ahead as usual.
+        start, window = at, WINDOW_AHEAD
+    elif page == "earlier":
+        # "Earlier": the stretch just before its first departure (date/time), as long as
+        # the list already covers (span, minutes): a few minutes on a busy line, hours
+        # on a sparse one.
+        try:
+            span = timedelta(minutes=min(max(int(args.get("span") or 60), 10), 24 * 60))
+        except ValueError:
+            abort(400)
+        start, window = at - span, span - timedelta(minutes=1)
+    elif clock:
+        start, window = at - WINDOW_BEFORE, WINDOW_LENGTH
+        start = start.replace(minute=start.minute - start.minute % (START_STEP.seconds // 60))
+    else:
         # No time on the form: from the start of the day.
         start, window = day, WINDOW_AHEAD
-    start = start.replace(minute=start.minute - start.minute % (START_STEP.seconds // 60))
     start = start.replace(tzinfo=_tz(*origin)).astimezone(timezone.utc)
 
     params = {

@@ -1381,5 +1381,8 @@
     "waypointSoftHint": "Reitin tarvitsee vain kulkea tämän pisteen läheltä.",
     "waypointHardHint": "Reitti kulkee tarkalleen tämän pisteen kautta, vaikka se tarkoittaisi kiertotietä.",
     "motisLine": "Linja {line}",
+    "motisTrack": "Raide {track}",
+    "motisEarlier": "Aiemmat lähdöt",
+    "motisLater": "Myöhemmät lähdöt",
     "motisStops": {"one": "{n} pysähdys", "other": "{n} pysähdystä"}
 }

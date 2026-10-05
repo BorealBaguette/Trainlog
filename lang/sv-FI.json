@@ -1383,5 +1383,8 @@
     "waypointSoftHint": "Rutten behöver bara passera nära den här punkten.",
     "waypointHardHint": "Rutten går exakt genom den här punkten, även om det innebär en omväg.",
     "motisLine": "Linje {line}",
+    "motisTrack": "Spår {track}",
+    "motisEarlier": "Tidigare avgångar",
+    "motisLater": "Senare avgångar",
     "motisStops": {"one": "{n} hållplats", "other": "{n} hållplatser"}
 }

@@ -1383,5 +1383,8 @@
     "waypointSoftHint": "De route hoeft alleen in de buurt van dit punt te komen.",
     "waypointHardHint": "De route gaat precies door dit punt, ook als dat een omweg betekent.",
     "motisLine": "Lijn {line}",
+    "motisTrack": "Spoor {track}",
+    "motisEarlier": "Eerdere vertrekken",
+    "motisLater": "Latere vertrekken",
     "motisStops": {"one": "{n} halte", "other": "{n} haltes"}
 }

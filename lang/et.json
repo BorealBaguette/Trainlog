@@ -1380,5 +1380,8 @@
     "waypointSoftHint": "Marsruut peab läbima ainult selle punkti lähedalt.",
     "waypointHardHint": "Marsruut läbib täpselt seda punkti, isegi kui see tähendab ringteed.",
     "motisLine": "Liin {line}",
+    "motisTrack": "Tee {track}",
+    "motisEarlier": "Varasemad väljumised",
+    "motisLater": "Hilisemad väljumised",
     "motisStops": {"one": "{n} peatus", "other": "{n} peatust"}
 }
