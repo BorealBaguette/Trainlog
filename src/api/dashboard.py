@@ -168,8 +168,8 @@ def dashboard_trips(username):
 @dashboard_blueprint.route("/u/<username>/dashboard_current_trip")
 @login_required
 def dashboard_current_trip(username):
-    """The logged-in user's trip in progress, or null."""
-    trip_id = get_current_trip_id()
+    """The user's trip in progress, or null."""
+    trip_id = get_current_trip_id(username)
     if trip_id is None:
         return jsonify(None)
     with pg_session() as pg:
