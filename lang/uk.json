@@ -1390,6 +1390,8 @@
     "motisTrack": "Колія {track}",
     "motisEarlier": "Раніші відправлення",
     "motisLater": "Пізніші відправлення",
+    "motisReplacementBus": "Замісний автобус",
+    "motisReplacementBusNote": "Замісний автобус: маршрут дорогами, зберігається як поїздка автобусом.",
     "ctNextStop": "Наступна зупинка",
     "ctAtStop": "Зараз у",
     "tripStops": "Зупинки",

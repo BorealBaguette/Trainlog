@@ -1386,6 +1386,8 @@
     "motisTrack": "Linha {track}",
     "motisEarlier": "Partidas anteriores",
     "motisLater": "Partidas posteriores",
+    "motisReplacementBus": "Autocarro de substituição",
+    "motisReplacementBusNote": "Autocarro de substituição: traçado por estrada e guardado como viagem de autocarro.",
     "ctNextStop": "Próxima paragem",
     "ctAtStop": "Agora em",
     "tripStops": "Paragens",

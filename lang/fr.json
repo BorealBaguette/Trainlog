@@ -1383,6 +1383,8 @@
     "motisTrack": "Voie {track}",
     "motisEarlier": "Départs plus tôt",
     "motisLater": "Départs plus tard",
+    "motisReplacementBus": "Bus de substitution",
+    "motisReplacementBusNote": "Bus de substitution : tracé par la route et enregistré comme trajet en bus.",
     "ctNextStop": "Prochain arrêt",
     "ctAtStop": "Actuellement à",
     "tripStops": "Arrêts",

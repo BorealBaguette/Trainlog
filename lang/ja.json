@@ -1382,6 +1382,8 @@
     "motisTrack": "{track}番線",
     "motisEarlier": "これより前の出発",
     "motisLater": "これより後の出発",
+    "motisReplacementBus": "代行バス",
+    "motisReplacementBusNote": "代行バス：道路でルート検索し、バスの旅として保存します。",
     "ctNextStop": "次の停車駅",
     "ctAtStop": "現在停車中",
     "tripStops": "停車駅",

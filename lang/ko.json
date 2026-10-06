@@ -1382,6 +1382,8 @@
     "motisTrack": "{track}번 선",
     "motisEarlier": "이전 출발",
     "motisLater": "이후 출발",
+    "motisReplacementBus": "대체 버스",
+    "motisReplacementBusNote": "대체 버스: 도로로 경로를 잡고 버스 여행으로 저장합니다.",
     "ctNextStop": "다음 정류장",
     "ctAtStop": "현재 정차 중",
     "tripStops": "정차역",

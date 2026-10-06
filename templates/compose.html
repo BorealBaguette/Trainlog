@@ -361,6 +361,11 @@
     display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere;
   }
   #motisGroup .motis-meta { grid-column: 3; font-size: .75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #motisGroup .motis-bus { margin-left: 4px; color: #b45309; }
+  .cp-bus-note { display: none; margin: 0 0 .5rem; padding: 6px 10px; border-radius: 6px;
+                 font-size: .8rem; color: #92400e; background: #fef3c7; }
+  .replacement-bus .cp-bus-note { display: block; }
+  .replacement-bus #routerHint, .replacement-bus .elec-preview-mirror { display: none; }
   #motisGroup .motis-more {
     display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
     padding: 6px 12px; border: 0; background: #fafafa; color: #4b78d6;
@@ -783,6 +788,7 @@
           <ul class="dropdown-menu motis-menu" id="motisMenu" aria-labelledby="motisToggle"></ul>
         </div>
       </div>
+      <div class="cp-bus-note"><i class="fa-solid fa-bus"></i> {{ motisReplacementBusNote }}</div>
       {% endif %}
     </div>
 
@@ -1120,6 +1126,8 @@
 <script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
 <script>
 var vehicle_type = "{{ vehicle_type }}";
+// What the trip is saved as: "bus" while a rail replacement bus is picked (setReplacementBus).
+var tripType = vehicle_type;
 var saveURL = "{{ url_for('saveTrip', username=username) }}";
 var savePlanURL = "{{ url_for('savePlanTrip', username=username) }}";
 var plan_uuid = "{{ plan_uuid or '' }}";
@@ -2322,7 +2330,8 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
     stops: {{ motisStops|tojson }},
     track: {{ motisTrack|tojson }},
     earlier: {{ motisEarlier|tojson }},
-    later: {{ motisLater|tojson }}
+    later: {{ motisLater|tojson }},
+    replacementBus: {{ motisReplacementBus|tojson }}
   };
   // Journey time in the page's language without a lang key: Intl's unit formats
   // ("26 min", "1 h 05 min", "26分").
@@ -2382,6 +2391,7 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
         kept.push({ entry: viaStations[i], label: row.querySelector('input').value });
       }
     });
+    setReplacementBus(false);
     setViaStops(kept);
     if (run.line && $('#lineName').val() === run.line) $('#lineName').val('');
     if (run.operator && $('#operator').val() === run.operator) setOperatorValue('');
@@ -2537,6 +2547,7 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
           d.stops.length ? pluralize(texts.stops, d.stops.length) : '',
           d.logo_url ? '' : d.operator,
         ].filter(Boolean).join(' \u00b7 '))
+        .append(d.replacement_bus ? $('<i class="fa-solid fa-bus motis-bus">').attr('title', texts.replacementBus) : null)
         .appendTo($item);
       $('<li>').append($item).appendTo($menu);
     });
@@ -2565,6 +2576,34 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
     $('#' + minutesId).val(minutes || '').trigger('input');
   }
 
+  // A rail replacement bus picked on a rail page is routed on roads and saved as a bus.
+  // Only the router's settings change here: the stops set next reroute.
+  var railRouter = null;
+  function setReplacementBus(on) {
+    if (on === !!railRouter || !window.baseRouter) return;
+    var opts = window.baseRouter.options;
+    if (on) {
+      railRouter = { serviceUrl: opts.serviceUrl, profile: opts.profile,
+                     params: opts.requestParameters, useNew: useNewRouter };
+      opts.serviceUrl = location.origin + '/forwardRouting/bus/route/v1';
+      opts.profile = 'driving';
+      delete opts.requestParameters;
+      useNewRouter = false;
+    } else {
+      opts.serviceUrl = railRouter.serviceUrl;
+      opts.profile = railRouter.profile;
+      if (railRouter.params) opts.requestParameters = railRouter.params;
+      useNewRouter = railRouter.useNew;
+      railRouter = null;
+    }
+    tripType = on ? 'bus' : vehicle_type;
+    routeDetails = null;
+    delete newTrip.details;
+    $('body').toggleClass('replacement-bus', on);
+    $('#typeSwitchIcon img').attr('src', "{{ url_for('static', filename='images/icons/trip_logos/') }}" + tripType + '.png');
+    if (typeof updateMarkerVisuals === 'function') updateMarkerVisuals();
+  }
+
   function apply(d) {
     var dep = d.departure.split('T'), arr = d.arrival.split('T');
     $('#prec-precise').prop('checked', true).trigger('change');
@@ -2577,6 +2616,7 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
     $('#departurePlatform').val(d.from_platform || '');
     $('#arrivalPlatform').val(d.to_platform || '');
 
+    setReplacementBus(!!d.replacement_bus);
     // The service's stops become the via waypoints the route is drawn through.
     setViaStops(d.stops.map(function (stop) {
       var name = stop[2] || (stop[0] + ', ' + stop[1]);
@@ -3277,7 +3317,7 @@ function composeSave(continueTrip) {
   newTrip.originStation = originEntry;
   newTrip.destinationStation = destEntry || originEntry;
   newTrip.viaStations = viaStations.filter(Boolean);
-  newTrip.type = vehicle_type;
+  newTrip.type = tripType;
 
   // saveTrip stores a manual station for whichever end carries a *ManualToggle key —
   // presence is the whole test server-side, so an end that is no longer manual must

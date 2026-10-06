@@ -1386,6 +1386,8 @@
     "motisTrack": "Plat. {track}",
     "motisEarlier": "Partidas anteriores",
     "motisLater": "Partidas posteriores",
+    "motisReplacementBus": "Ônibus substituto",
+    "motisReplacementBusNote": "Ônibus substituto: traçado pelas estradas e salvo como viagem de ônibus.",
     "ctNextStop": "Próxima parada",
     "ctAtStop": "Agora em",
     "tripStops": "Paradas",

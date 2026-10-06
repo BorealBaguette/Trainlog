@@ -1382,6 +1382,8 @@
     "motisTrack": "{track}. vágány",
     "motisEarlier": "Korábbi indulások",
     "motisLater": "Későbbi indulások",
+    "motisReplacementBus": "Pótlóbusz",
+    "motisReplacementBusNote": "Pótlóbusz: közúton tervezve, buszútként mentve.",
     "ctNextStop": "Következő megálló",
     "ctAtStop": "Most itt",
     "tripStops": "Megállók",

@@ -1382,6 +1382,8 @@
     "motisTrack": "{track}站台",
     "motisEarlier": "更早的班次",
     "motisLater": "更晚的班次",
+    "motisReplacementBus": "替代巴士",
+    "motisReplacementBusNote": "替代巴士：按公路规划路线，并保存为巴士行程。",
     "ctNextStop": "下一站",
     "ctAtStop": "当前停靠",
     "tripStops": "停靠站",

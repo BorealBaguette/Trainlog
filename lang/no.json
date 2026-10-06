@@ -1386,6 +1386,8 @@
     "motisTrack": "Spor {track}",
     "motisEarlier": "Tidligere avganger",
     "motisLater": "Senere avganger",
+    "motisReplacementBus": "Buss for tog",
+    "motisReplacementBusNote": "Buss for tog: rutes langs veien og lagres som en bussreise.",
     "ctNextStop": "Neste stopp",
     "ctAtStop": "Nå ved",
     "tripStops": "Stopp",

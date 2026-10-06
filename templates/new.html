@@ -123,6 +123,7 @@
         display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow-wrap: anywhere;
     }
     #motisGroup .motis-meta { grid-column: 3; font-size: 0.75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #motisGroup .motis-bus { margin-left: 4px; color: #b45309; }
     #motisGroup .motis-more {
         display: flex; align-items: center; justify-content: center; gap: 6px; width: 100%;
         padding: 6px 12px; border: 0; background: #fafafa; color: #4b78d6;
@@ -671,7 +672,7 @@
         <input type="number" step="any" id="arrivalDelayMinutes" name="arrivalDelayMinutes" placeholder="{{arrival}}"/>
       </fieldset>
 
-      <button id=submit type="submit" onclick="toRouting($('form').serializeArray(), ['helicopter', 'air'].includes('{{vehicle_type}}') ? airRoutingURL : routingURL, '{{vehicle_type}}');">{{submit}}</button>
+      <button id=submit type="submit" onclick="toRouting($('form').serializeArray(), ['helicopter', 'air'].includes('{{vehicle_type}}') ? airRoutingURL : routingURL, routingType);">{{submit}}</button>
     </form>
   </div>
 </div>
@@ -764,6 +765,8 @@
   var visitedStations = {};
   var routingURL = "{{url_for('routing', username=username)}}";
   var airRoutingURL = "{{url_for('air_routing', username=username, type=('air' if vehicle_type == 'air' else 'helicopter'))}}";
+  // Becomes "bus" while a rail replacement bus is picked from the timetable.
+  var routingType = "{{ vehicle_type }}";
 
   $.get('{{url_for("getManAndOps", username=username, station_type=vehicle_type)}}', function(manAndOps, status){
     Object.assign(globalStationDict, manAndOps.manualStations);
@@ -1012,7 +1015,8 @@
       stops: {{ motisStops|tojson }},
       track: {{ motisTrack|tojson }},
       earlier: {{ motisEarlier|tojson }},
-      later: {{ motisLater|tojson }}
+      later: {{ motisLater|tojson }},
+      replacementBus: {{ motisReplacementBus|tojson }}
     };
     // Journey time in the page's language without a lang key: Intl's unit formats
     // ("26 min", "1 h 05 min", "26分").
@@ -1079,6 +1083,12 @@
         setDelay('arrivalDelayMinutes', 0);
       }
       $menu.find('.motis-item').removeClass('active');
+      setRoutingType("{{ vehicle_type }}");
+    }
+
+    function setRoutingType(type) {
+      routingType = type;
+      $('#typeSwitchIcon').attr('src', "{{ url_for('static', filename='images/icons/trip_logos/') }}" + type + '.png');
     }
 
     // What a search depends on, so the same lookup isn't repeated.
@@ -1222,6 +1232,7 @@
             d.stops.length ? pluralize(texts.stops, d.stops.length) : '',
             d.logo_url ? '' : d.operator,
           ].filter(Boolean).join(' · '))
+          .append(d.replacement_bus ? $('<i class="fa-solid fa-bus motis-bus">').attr('title', texts.replacementBus) : null)
           .appendTo($item);
         $('<li>').append($item).appendTo($menu);
       });
@@ -1285,6 +1296,7 @@
         setDelay('arrivalDelayMinutes', d.arrival_delay);
         $('#delayToggle').prop('checked', true).trigger('change');
       }
+      setRoutingType(d.replacement_bus ? 'bus' : "{{ vehicle_type }}");
       applied = { ends: endsKey(), key: runKey(d), line: d.line, operator: d.operator, delays: !!delays };
 
       // The form now reflects this departure; don't search again for its own time.

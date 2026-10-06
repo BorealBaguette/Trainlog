@@ -1390,6 +1390,8 @@
     "motisTrack": "Kol. {track}",
     "motisEarlier": "Dřívější odjezdy",
     "motisLater": "Pozdější odjezdy",
+    "motisReplacementBus": "Náhradní autobusová doprava",
+    "motisReplacementBusNote": "Náhradní autobusová doprava: trasa po silnici, uloží se jako cesta autobusem.",
     "ctNextStop": "Příští zastávka",
     "ctAtStop": "Nyní v",
     "tripStops": "Zastávky",

@@ -1383,6 +1383,8 @@
     "motisTrack": "Tee {track}",
     "motisEarlier": "Varasemad väljumised",
     "motisLater": "Hilisemad väljumised",
+    "motisReplacementBus": "Asendusbuss",
+    "motisReplacementBusNote": "Asendusbuss: marsruut maanteel, salvestatakse bussisõiduna.",
     "ctNextStop": "Järgmine peatus",
     "ctAtStop": "Praegu",
     "tripStops": "Peatused",

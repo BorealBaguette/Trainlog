@@ -123,6 +123,13 @@
     /* Dated future trips shown on the past page via the "show upcoming" toggle */
     tr.upcoming-trip > td { opacity: 0.65; }
 
+    tr.ongoing-trip > td.col-date::after {
+        content: ""; display: inline-block; width: 8px; height: 8px; margin-left: 6px;
+        border-radius: 50%; background: #2ecc71; vertical-align: middle;
+        animation: ongoing-pulse 1.6s ease-in-out infinite;
+    }
+    @keyframes ongoing-pulse { 50% { opacity: 0.3; } }
+
     /* Where that same listing crosses the present: the class goes on the first past
        row below an upcoming one. A hairline and nothing else — the timeline either
        side of it is continuous, so this is a seam to notice, not a section break.
@@ -2816,6 +2823,9 @@ var table = $('#tripRows');
         $(row).attr('id', data.uid).attr("origDest", `${data.origin_station} - ${data.destination_station}`);
         if (isPast && data.plannedFuture == 1) {
             $(row).addClass('upcoming-trip');
+        }
+        if (data.ongoing == 1) {
+            $(row).addClass('ongoing-trip');
         }
     },
     order: [],

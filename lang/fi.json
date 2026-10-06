@@ -1384,6 +1384,8 @@
     "motisTrack": "Raide {track}",
     "motisEarlier": "Aiemmat lähdöt",
     "motisLater": "Myöhemmät lähdöt",
+    "motisReplacementBus": "Korvaava bussi",
+    "motisReplacementBusNote": "Korvaava bussi: reititetään teitä pitkin ja tallennetaan bussimatkaksi.",
     "ctNextStop": "Seuraava pysäkki",
     "ctAtStop": "Nyt",
     "tripStops": "Pysähdykset",

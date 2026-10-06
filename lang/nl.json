@@ -1386,6 +1386,8 @@
     "motisTrack": "Spoor {track}",
     "motisEarlier": "Eerdere vertrekken",
     "motisLater": "Latere vertrekken",
+    "motisReplacementBus": "Vervangende bus",
+    "motisReplacementBusNote": "Vervangende bus: over de weg gerouteerd en opgeslagen als busrit.",
     "ctNextStop": "Volgende halte",
     "ctAtStop": "Nu in",
     "tripStops": "Haltes",

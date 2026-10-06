@@ -1390,6 +1390,8 @@
     "motisTrack": "Путь {track}",
     "motisEarlier": "Более ранние отправления",
     "motisLater": "Более поздние отправления",
+    "motisReplacementBus": "Замещающий автобус",
+    "motisReplacementBusNote": "Замещающий автобус: маршрут по дорогам, сохраняется как поездка на автобусе.",
     "ctNextStop": "Следующая остановка",
     "ctAtStop": "Сейчас в",
     "tripStops": "Остановки",

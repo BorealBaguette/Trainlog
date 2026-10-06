@@ -1386,6 +1386,8 @@
     "motisTrack": "Vía {track}",
     "motisEarlier": "Salidas anteriores",
     "motisLater": "Salidas posteriores",
+    "motisReplacementBus": "Autobús sustitutorio",
+    "motisReplacementBusNote": "Autobús sustitutorio: se traza por carretera y se guarda como viaje en autobús.",
     "ctNextStop": "Próxima parada",
     "ctAtStop": "Ahora en",
     "tripStops": "Paradas",

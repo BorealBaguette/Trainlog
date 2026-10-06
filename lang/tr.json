@@ -1382,6 +1382,8 @@
     "motisTrack": "Peron {track}",
     "motisEarlier": "Daha erken kalkışlar",
     "motisLater": "Daha geç kalkışlar",
+    "motisReplacementBus": "Yerine otobüs",
+    "motisReplacementBusNote": "Yerine otobüs: karayolundan yönlendirilir ve otobüs yolculuğu olarak kaydedilir.",
     "ctNextStop": "Sonraki durak",
     "ctAtStop": "Şu an",
     "tripStops": "Duraklar",

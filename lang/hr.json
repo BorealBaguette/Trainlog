@@ -1390,6 +1390,8 @@
     "motisTrack": "Kol. {track}",
     "motisEarlier": "Raniji polasci",
     "motisLater": "Kasniji polasci",
+    "motisReplacementBus": "Zamjenski autobus",
+    "motisReplacementBusNote": "Zamjenski autobus: ruta cestom, sprema se kao putovanje autobusom.",
     "ctNextStop": "Sljedeća stanica",
     "ctAtStop": "Trenutno u",
     "tripStops": "Stajališta",

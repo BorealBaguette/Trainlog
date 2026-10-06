@@ -1386,6 +1386,8 @@
     "motisTrack": "Spor {track}",
     "motisEarlier": "Tidligere afgange",
     "motisLater": "Senere afgange",
+    "motisReplacementBus": "Togbus",
+    "motisReplacementBusNote": "Togbus: føres ad vejene og gemmes som en bustur.",
     "ctNextStop": "Næste stop",
     "ctAtStop": "Nu ved",
     "tripStops": "Stop",

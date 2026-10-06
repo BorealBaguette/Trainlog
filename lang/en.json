@@ -1383,6 +1383,8 @@
     "motisTrack": "Pl. {track}",
     "motisEarlier": "Earlier departures",
     "motisLater": "Later departures",
+    "motisReplacementBus": "Replacement bus",
+    "motisReplacementBusNote": "Rail replacement bus: routed on roads and saved as a bus trip.",
     "ctNextStop": "Next stop",
     "ctAtStop": "Now at",
     "tripStops": "Stops",

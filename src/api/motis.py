@@ -76,6 +76,7 @@ TRANSIT_MODES = {
     "funicular": "FUNICULAR",
 }
 RAIL_MODES = set(TRANSIT_MODES["train"].split(","))
+BUS_MODES = set(TRANSIT_MODES["bus"].split(","))
 
 # How far the service's first/last stop may be from the stations on the form. OSM
 # station points and GTFS stops of a big station can sit a few hundred metres apart,
@@ -88,6 +89,16 @@ URBAN_MODES = {"SUBWAY", "METRO", "TRAM", "BUS", "COACH"}
 
 def _reach(modes):
     return URBAN_STOP_DISTANCE_M if modes <= URBAN_MODES else MAX_STOP_DISTANCE_M
+
+
+def _leg_reach(leg, modes):
+    """_reach for one service. Coaches (GTFS 200-299) and rail replacement buses (714)
+    call at train stations, whose stops sit as far apart as the station's own: SNCF's
+    replacement buses leave from its Montparnasse stop, not the bus stops on OSM."""
+    route_type = leg.get("routeType") or 0
+    return MAX_STOP_DISTANCE_M if 200 <= route_type < 300 or route_type == 714 else _reach(modes)
+
+
 # Fallback searches from timetable stops (see _stop_places): at most this many stops
 # per end, so at most (n + 1)^2 - 1 extra requests.
 MAX_FALLBACK_STOPS = 2
@@ -357,8 +368,8 @@ def _direct_leg(itinerary, modes, origin, destination):
         leg
         for leg in itinerary.get("legs", [])
         if leg.get("mode") in modes
-        and _distance_m(leg["from"]["lat"], leg["from"]["lon"], *origin) <= _reach(modes)
-        and _distance_m(leg["to"]["lat"], leg["to"]["lon"], *destination) <= _reach(modes)
+        and _distance_m(leg["from"]["lat"], leg["from"]["lon"], *origin) <= _leg_reach(leg, modes)
+        and _distance_m(leg["to"]["lat"], leg["to"]["lon"], *destination) <= _leg_reach(leg, modes)
     ]
     return legs[0] if len(legs) == 1 else None
 
@@ -391,7 +402,7 @@ def _board_legs(stop_id, modes, start, destination):
             for i, stop in enumerate(following)
             if stop.get("dropoffType") != "NOT_ALLOWED"
         ]
-        near = [(d, i) for d, i in near if d <= _reach(modes)]
+        near = [(d, i) for d, i in near if d <= _leg_reach(dep, modes)]
         arrival_at = min(near)[1] if near else None
         if arrival_at is None or dep.get("mode") not in modes:
             continue
@@ -399,7 +410,7 @@ def _board_legs(stop_id, modes, start, destination):
         legs.append(
             {
                 **{k: dep.get(k) for k in (
-                    "mode", "headsign", "displayName", "routeShortName", "tripShortName",
+                    "mode", "routeType", "headsign", "displayName", "routeShortName", "tripShortName",
                     "agencyName", "routeColor", "realTime", "tripId", "tripTo",
                 )},
                 "cancelled": dep.get("cancelled") or dep.get("tripCancelled"),
@@ -514,6 +525,12 @@ def _duration_s(leg):
 def _delay_minutes(actual, scheduled):
     a, s = _parse_utc(actual), _parse_utc(scheduled)
     return round((a - s).total_seconds() / 60) if a and s else 0
+
+
+def _rail_replacement(leg):
+    """A bus run as part of a rail service: GTFS's rail replacement bus type, or one of
+    SNCF's road services (its train runs are "…FERRE_…", its buses "…ROUTIER_…")."""
+    return leg.get("routeType") == 714 or "ROUTIER_" in (leg.get("tripId") or "")
 
 
 def _search(args):
@@ -656,7 +673,7 @@ def motis_departures(username):
 def _departures_for(args):
     """The departures list for a search (from, to, date, time, type, page…), as the
     JSON response the forms get."""
-    _, origin, destination, start, window, params, modes = _search(args)
+    trip_type, origin, destination, start, window, params, modes = _search(args)
     if _outside_timetable(start, window):
         return jsonify({"departures": [], "outside_timetable": True})
 
@@ -666,6 +683,18 @@ def _departures_for(args):
             leg
             for it in plan.get("itineraries", [])
             if (leg := _direct_leg(it, modes, origin, destination))
+        ]
+
+    # Rail replacement buses are buses in most feeds, so a train search looks for them
+    # among the buses too.
+    def replacement_legs(from_place, to_place):
+        plan = _fetch(MOTIS_PLAN_URL, dict(
+            params, fromPlace=from_place, toPlace=to_place, transitModes=TRANSIT_MODES["bus"]
+        ))
+        return [
+            dict(leg, replacementBus=True)
+            for it in plan.get("itineraries", [])
+            if (leg := _direct_leg(it, BUS_MODES, origin, destination)) and _rail_replacement(leg)
         ]
 
     points = (params["fromPlace"], params["toPlace"])
@@ -692,6 +721,7 @@ def _departures_for(args):
     try:
         # From the points, and at the same time look up the stops near them.
         from_points = submit(direct_legs, *points)
+        replacements = submit(_quietly, replacement_legs, *points) if trip_type == "train" else None
         from_stops = submit(_quietly, _stop_places, *origin, modes)
         to_stops = submit(_quietly, _stop_places, *destination, modes)
         from_stops, to_stops = result(from_stops), result(to_stops)
@@ -715,6 +745,8 @@ def _departures_for(args):
                 if (f, t) not in (points, nearest)
             ]
             searches = [result(f) for f in [submit(_quietly, direct_legs, *pair) for pair in pairs]]
+        if replacements:
+            searches.append(result(replacements))
     except OutsideTimetable:
         # A date outside the loaded timetables: nothing to look up, not a failure.
         return jsonify({"departures": [], "outside_timetable": True})
@@ -788,6 +820,9 @@ def _departures(searches, start, window, destination):
             "headsign": _headsign(leg),
             "agency": (leg.get("agencyName") or "").strip(),
             "mode": leg.get("mode"),
+            # Entur files its rail replacement buses under the train's route, as rail.
+            "replacement_bus": leg.get("replacementBus", False)
+            or ":ServiceJourney:BUS-" in (leg.get("tripId") or ""),
             # Transitous's id of the run, to fetch its actual times once it has run
             # (while the feed still has them): kept with each saved stop (stopRecord).
             "trip_id": leg.get("tripId"),

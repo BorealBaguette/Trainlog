@@ -1386,6 +1386,8 @@
     "motisTrack": "Bin. {track}",
     "motisEarlier": "Partenze precedenti",
     "motisLater": "Partenze successive",
+    "motisReplacementBus": "Bus sostitutivo",
+    "motisReplacementBusNote": "Bus sostitutivo: instradato su strada e salvato come viaggio in autobus.",
     "ctNextStop": "Prossima fermata",
     "ctAtStop": "Ora a",
     "tripStops": "Fermate",

@@ -174,6 +174,10 @@ FilteredTrips AS (
             WHEN sub.utc_filtered_start_datetime IS NULL AND sub.is_project
             THEN 1 ELSE 0
         END AS future,
+        CASE
+            WHEN NOW() BETWEEN sub.utc_filtered_start_datetime AND sub.utc_filtered_end_datetime
+            THEN 1 ELSE 0
+        END AS ongoing,
         trip_tags.tags AS tags
     FROM sub
     LEFT JOIN airliners ON sub.material_type = airliners.iata

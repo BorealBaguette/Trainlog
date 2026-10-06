@@ -1386,6 +1386,8 @@
     "motisTrack": "Gl. {track}",
     "motisEarlier": "Frühere Abfahrten",
     "motisLater": "Spätere Abfahrten",
+    "motisReplacementBus": "Schienenersatzverkehr",
+    "motisReplacementBusNote": "Schienenersatzverkehr: wird über die Straße geführt und als Busfahrt gespeichert.",
     "ctNextStop": "Nächster Halt",
     "ctAtStop": "Aktuell in",
     "tripStops": "Halte",

@@ -1386,6 +1386,8 @@
     "motisTrack": "Spår {track}",
     "motisEarlier": "Tidigare avgångar",
     "motisLater": "Senare avgångar",
+    "motisReplacementBus": "Ersättningsbuss",
+    "motisReplacementBusNote": "Ersättningsbuss: dras längs vägar och sparas som en bussresa.",
     "ctNextStop": "Nästa hållplats",
     "ctAtStop": "Nu vid",
     "tripStops": "Hållplatser",

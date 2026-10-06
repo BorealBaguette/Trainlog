@@ -1384,6 +1384,8 @@
     "motisTrack": "Gl. {track}",
     "motisEarlier": "Früecheri Abfahrte",
     "motisLater": "Spöteri Abfahrte",
+    "motisReplacementBus": "Schienenersatzverkehr",
+    "motisReplacementBusNote": "Schienenersatzverkehr: wird über d Strass gfüehrt und als Busfahrt gspeicheret.",
     "ctNextStop": "Nächschte Halt",
     "ctAtStop": "Jetzt in",
     "tripStops": "Halt",
