@@ -1245,7 +1245,7 @@ async function initializeMapAndTrips() {
     map.on('click', (e) => {
         if (highlightedTripUid == null) return;
         const onFeature = map.queryRenderedFeatures(e.point)
-            .some(f => ['trips', 'current-trips', 'numbered-markers'].includes(f.source));
+            .some(f => ['trips', 'current-trips', 'current-future', 'numbered-markers'].includes(f.source));
         if (!onFeature) clearHighlight();
     });
 
@@ -1939,6 +1939,17 @@ function startGPSIndicator() {
     });
 }
 
+// The moving dashes sit on a source of their own holding only the parts still to travel:
+// every dash step re-tiles the source of the layer it changes, and on `current-trips`
+// that meant the full lines twenty times a second.
+const futureOnly = features => features.filter(f => f.properties.time === 'plannedFuture');
+function setCurrentTripData(features) {
+    const current = map.getSource('current-trips');
+    if (current) current.setData({ type: 'FeatureCollection', features });
+    const future = map.getSource('current-future');
+    if (future) future.setData({ type: 'FeatureCollection', features: futureOnly(features) });
+}
+
 function buildCurrentTripFeatures(trips) {
     const features = [];
     trips.forEach(trip => {
@@ -2105,13 +2116,7 @@ function startLiveTracking(trips, features) {
                 if (tripsSource) tripsSource.setData({ type: 'FeatureCollection', features });
                 // ...and rebuilds the visible current-trip lines from the same data, so
                 // the two sources cannot disagree about where the aircraft is.
-                const currentSource = map.getSource('current-trips');
-                if (currentSource) {
-                    currentSource.setData({
-                        type: 'FeatureCollection',
-                        features: buildCurrentTripFeatures(trips)
-                    });
-                }
+                setCurrentTripData(buildCurrentTripFeatures(trips));
                 // The live feed is the first altitude this trip has ever had (a flight
                 // logged in advance is a flat 2-point line), so the 3D layer had nothing
                 // to draw at first render and has to be rebuilt now.
@@ -2160,10 +2165,7 @@ function placePolylines(trips) {
     // the timetable position (stops, dwell times, delays) instead of only on load. It
     // stops at the destination once the trip is over (the position is clamped there).
     if (trips.some(t => t.time === 'current')) {
-        setInterval(() => {
-            const source = map.getSource('current-trips');
-            if (source) source.setData({ type: 'FeatureCollection', features: buildCurrentTripFeatures(trips) });
-        }, 5000);
+        setInterval(() => setCurrentTripData(buildCurrentTripFeatures(trips)), 5000);
         requestAnimationFrame(animateFutureDashes);
         // The viewer's location is for the owner's own /current page only: a shared trip
         // link can be opened by anyone.
@@ -2418,6 +2420,13 @@ if (numberedMarkers.length > 0) {
                     features: currentTripFeatures
                 }
             });
+            map.addSource('current-future', {
+                type: 'geojson',
+                data: {
+                    type: 'FeatureCollection',
+                    features: futureOnly(currentTripFeatures)
+                }
+            });
 
             // Add layers for current trips. No beforeId: the pins are DOM markers
             // on top of the map canvas, so nothing added here can cover them.
@@ -2498,7 +2507,7 @@ if (numberedMarkers.length > 0) {
                     map.addLayer({
                         id: currentFutureOverlayId,
                         type: 'line',
-                        source: 'current-trips',
+                        source: 'current-future',
                         filter: ['all',
                             ['==', ['get', 'type'], type.id],
                             ['==', ['get', 'time'], 'plannedFuture']
