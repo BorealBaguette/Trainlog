@@ -120,6 +120,49 @@ def _split_dasharray(layer):
     return split
 
 
+LINE_WIDTH_SCALE = 2
+HALO_WIDTH = 1
+
+
+def _scale(expr, scale, extra=0):
+    if isinstance(expr, (int, float)):
+        return expr * scale + extra
+    # ["zoom"] may only feed a top-level interpolate/step, so scale its outputs rather than wrap it
+    if expr[0] == "interpolate":
+        return expr[:3] + [_scale(e, scale, extra) if i % 2 else e for i, e in enumerate(expr[3:])]
+    if expr[0] == "step":
+        return expr[:2] + [e if i % 2 else _scale(e, scale, extra) for i, e in enumerate(expr[2:])]
+    return ["+", extra, ["*", scale, expr]]
+
+
+def _widen(layer, bold):
+    if layer["type"] != "line" or "railway_line" not in layer.get("source-layer", ""):
+        return layer
+    scale = LINE_WIDTH_SCALE if bold else 1
+    paint = {**layer["paint"]}
+    if "_railing" in layer["id"]:
+        # Upstream railings are as thick as the line; keep them a thin stroke hugging the fill.
+        # Their line-width matches the fill's, so it sizes the gap
+        paint["line-gap-width"] = _scale(paint["line-width"], scale, 2 * HALO_WIDTH)
+        paint["line-width"] = 1
+        return {**layer, "paint": paint}
+    # Upstream lines are thin next to the old raster tiles; make them stand out over busy raster bases
+    if not bold:
+        return layer
+    if "_casing" not in layer["id"]:
+        paint["line-width"] = _scale(paint["line-width"], scale)
+        return {**layer, "paint": paint}
+    # Upstream casings stroke both sides of a line-gap-width, which breaks up at sharp vertices and
+    # on short low-zoom segments; draw a solid line wider than the fill underneath it instead.
+    # Their line-width matches the fill's, so scaling it like the fill keeps the two in step
+    paint.pop("line-gap-width", None)
+    paint["line-width"] = _scale(paint["line-width"], scale, 2 * HALO_WIDTH)
+    layout = {**layer["layout"], "line-join": "round"}
+    if "line-dasharray" not in paint:
+        layout["line-cap"] = "round"
+    return {**layer, "paint": paint, "layout": layout}
+
+
 def tiles_url():
     # Self-hosted Martin (trainlog_orm repo); upstream tiles rate-limit us
     url = load_config().get("openrailwaymap", {}).get("tiles_url") or "https://openrailwaymap.app"
@@ -140,7 +183,7 @@ def _absolute_sources(sources):
     return fixed
 
 
-def build_style(preset):
+def build_style(preset, bold=False):
     style = _upstream_style()
     state = {k: v["default"] for k, v in style["state"].items()}
     state.update(PRESETS[preset], bearing=0)
@@ -153,6 +196,6 @@ def build_style(preset):
             visibility = _evaluate(visibility)
             layer["layout"]["visibility"] = visibility
         if visibility != "none":
-            layers.extend(_split_dasharray(layer))
+            layers.extend(_split_dasharray(_widen(layer, bold)))
 
     return {**style, "sources": _absolute_sources(style["sources"]), "layers": layers, "state": {}}

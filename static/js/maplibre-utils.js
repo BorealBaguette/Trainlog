@@ -135,7 +135,7 @@ async function initializeMapLibre(options = {}) {
 
     // Add OpenRailwayMap vector overlay after style loads
     if (ormVectorBase) {
-        map.once('load', () => addOrmOverlay(map, ormVectorType));
+        map.once('load', () => addOrmOverlay(map, ormVectorType, ormVectorBase));
     }
 
     // Add navigation controls
@@ -146,7 +146,7 @@ async function initializeMapLibre(options = {}) {
 
 // Adds the OpenRailwayMap vector overlay under the base map's labels. What it adds is
 // remembered on map._ormIds so a background change can tell it apart from trip layers.
-async function addOrmOverlay(map, ormVectorType) {
+async function addOrmOverlay(map, ormVectorType, base) {
     const ormTypeMap = {
         standard:    'standard',
         maxspeed:    'speed',
@@ -158,7 +158,9 @@ async function addOrmOverlay(map, ormVectorType) {
 
     const ormIds = map._ormIds = { sources: [], layers: [] };
     try {
-        const ormStyleResp = await fetch(`/getORMStyle/${ormStyleName}.json`);
+        // Raster bases are busy: thicker lines with a casing keep the railways readable over them
+        const bold = !isVectorTileServer(base);
+        const ormStyleResp = await fetch(`/getORMStyle/${ormStyleName}.json${bold ? '?bold' : ''}`);
         const ormStyle = await ormStyleResp.json();
 
         const skipSources = new Set(['dem', 'search', 'route', 'route_stops', 'openhistoricalmap']);
@@ -195,14 +197,19 @@ async function addOrmOverlay(map, ormVectorType) {
         // Only look below the sentinel: after a background change trip layers sit above it
         const baseLayers = [];
         for (const l of map.getStyle().layers) { if (l.id === 'orm-sentinel') break; baseLayers.push(l); }
-        const firstSymbolId = baseLayers.find(l => l.type === 'symbol')?.id || 'orm-sentinel';
+        // First label, not first symbol: oneway arrow layers sit down among the tunnels and would bury it under the roads
+        const firstSymbolId = baseLayers.find(l => l.type === 'symbol' && l.layout?.['text-field'])?.id || 'orm-sentinel';
         for (const layer of ormStyle.layers) {
             if (skipLayers.has(layer.id) || !layer.source) continue;
             if (skipSources.has(layer.source) || !addedSources.has(layer.source)) continue;
             if (skipTypes.has(layer.type)) continue;
-            if (layer.id.includes('_casing') || layer.id.includes('_cover')) continue;
+            if (layer.id.includes('_cover')) continue;
+            if (layer.id.includes('_casing') && !bold) continue;
             try {
                 const newLayer = { ...layer, source: `orm_${layer.source}` };
+                if (layer.id.includes('_casing')) {
+                    newLayer.paint = { ...layer.paint, 'line-color': DARK_BASES.includes(base) ? 'rgba(255, 255, 255, 0.3)' : '#333' };
+                }
                 // Strip layout.visibility expressions — unsupported by MapLibre, default to visible
                 if (newLayer.layout?.visibility && typeof newLayer.layout.visibility !== 'string') {
                     newLayer.layout = { ...newLayer.layout, visibility: 'visible' };
@@ -249,7 +256,7 @@ async function changeBackground(map, tileserver, { useGlobe } = {}) {
         for (const [id, img] of images) {
             if (!map.hasImage(id)) map.addImage(id, img.data, { pixelRatio: img.pixelRatio, sdf: img.sdf });
         }
-        if (ormVectorBase) addOrmOverlay(map, ormVectorType);
+        if (ormVectorBase) addOrmOverlay(map, ormVectorType, ormVectorBase);
     });
 }
 
@@ -267,6 +274,8 @@ function isVectorTileServer(tileserver) {
     ];
     return vectorServers.includes(tileserver);
 }
+
+const DARK_BASES = ['jawg-dark'];
 
 // Styles served from OpenFreeMap tiles, whose per-language name fields let the
 // labels be localised client-side (Jawg instead gets its language server-side).
