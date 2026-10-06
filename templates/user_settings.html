@@ -305,11 +305,20 @@
             <div id="orm-options" class="mt-2 p-3 bg-light rounded" style="display: none;">
               <label class="settings2-label mt-0" for="orm-type">{{ ormLayerType }}</label>
               <select class="form-select" name="orm_type" id="orm-type" form="settingsForm">
-                <option value="standard">{{ ormLayerStandard }}</option>
-                <option value="maxspeed">{{ ormLayerMaxspeed }}</option>
-                <option value="signals">{{ ormLayerSignals }}</option>
-                <option value="electrified">{{ ormLayerElectrified }}</option>
-                <option value="gauge">{{ ormLayerGauge }}</option>
+                <optgroup label="Trainlog">
+                  <option value="standard">{{ ormLayerStandard }}</option>
+                  <option value="maxspeed">{{ ormLayerMaxspeed }}</option>
+                  <option value="signals">{{ ormLayerSignals }}</option>
+                  <option value="electrified">{{ ormLayerElectrified }}</option>
+                  <option value="gauge">{{ ormLayerGauge }}</option>
+                </optgroup>
+                <optgroup label="openrailwaymap.org">
+                  <option value="org-standard">{{ ormLayerStandard }}</option>
+                  <option value="org-maxspeed">{{ ormLayerMaxspeed }}</option>
+                  <option value="org-signals">{{ ormLayerSignals }}</option>
+                  <option value="org-electrification">{{ ormLayerElectrified }}</option>
+                  <option value="org-gauge">{{ ormLayerGauge }}</option>
+                </optgroup>
               </select>
             </div>
 

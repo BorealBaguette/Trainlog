@@ -135,7 +135,7 @@ async function initializeMapLibre(options = {}) {
 
     // Add OpenRailwayMap vector overlay after style loads
     if (ormVectorBase) {
-        map.once('load', () => addOrmOverlay(map, ormVectorType, ormVectorBase));
+        map.once('load', () => addOrmOverlay(map, ormVectorType));
     }
 
     // Add navigation controls
@@ -146,7 +146,7 @@ async function initializeMapLibre(options = {}) {
 
 // Adds the OpenRailwayMap vector overlay under the base map's labels. What it adds is
 // remembered on map._ormIds so a background change can tell it apart from trip layers.
-async function addOrmOverlay(map, ormVectorType, base) {
+async function addOrmOverlay(map, ormVectorType) {
     const ormTypeMap = {
         standard:    'standard',
         maxspeed:    'speed',
@@ -156,11 +156,32 @@ async function addOrmOverlay(map, ormVectorType, base) {
     };
     const ormStyleName = ormTypeMap[ormVectorType] || 'standard';
 
-    const ormIds = map._ormIds = { sources: [], layers: [] };
+    const ormIds = map._ormIds = { sources: [], layers: [], type: ormStyleName };
+
+    // "org-<style>" types: openrailwaymap.org's own raster tiles, offered as an alternative to
+    // ours now that it serves Trainlog again. It may block us again, hence kept separate
+    if (ormVectorType.startsWith('org-')) {
+        const id = 'orm-overlay_org';
+        map.addSource(id, {
+            type: 'raster',
+            tiles: [`https://tiles.openrailwaymap.org/${ormVectorType.slice(4)}/{z}/{x}/{y}.png`],
+            tileSize: 256,
+            maxzoom: 19,
+            attribution: '© <a href="https://www.openrailwaymap.org/" target="_blank">OpenRailwayMap</a>'
+        });
+        const baseLayers = [];
+        for (const l of map.getStyle().layers) { if (l.id === 'orm-sentinel') break; baseLayers.push(l); }
+        const firstLabelId = baseLayers.find(l => l.type === 'symbol' && l.layout?.['text-field'])?.id || 'orm-sentinel';
+        const anchorId = baseLayers.find(l => l.type === 'fill-extrusion' || l.id === firstLabelId)?.id || firstLabelId;
+        map.addLayer({ id, type: 'raster', source: id }, anchorId);
+        ormIds.sources.push(id);
+        ormIds.layers.push(id);
+        return;
+    }
+
+    setupOrmPopup(map);
     try {
-        // Raster bases are busy: thicker lines with a casing keep the railways readable over them
-        const bold = !isVectorTileServer(base);
-        const ormStyleResp = await fetch(`/getORMStyle/${ormStyleName}.json${bold ? '?bold' : ''}`);
+        const ormStyleResp = await fetch(`/getORMStyle/${ormStyleName}.json`);
         const ormStyle = await ormStyleResp.json();
 
         const skipSources = new Set(['dem', 'search', 'route', 'route_stops', 'openhistoricalmap']);
@@ -182,8 +203,9 @@ async function addOrmOverlay(map, ormVectorType, base) {
                 } else {
                     continue; // no tiles, skip
                 }
-                map.addSource(`orm_${name}`, fixedSource);
-                ormIds.sources.push(`orm_${name}`);
+                // Not orm_: Trainlog Rail has its own orm_high/orm_low sources
+                map.addSource(`orm-overlay_${name}`, fixedSource);
+                ormIds.sources.push(`orm-overlay_${name}`);
                 addedSources.add(name);
             } catch (e) {
                 console.warn(`[ORM] skipping source ${name}:`, e.message);
@@ -191,7 +213,7 @@ async function addOrmOverlay(map, ormVectorType, base) {
         }
 
         // Add all ORM line layers below text labels but above base map geometry
-        // Skip text/symbol/background layers — they cause gritty artifacts and CORS issues
+        // Skip symbol/background layers but the line labels — they cause gritty artifacts and CORS issues
         const skipLayers = new Set(['hillshade', 'route', 'route_text', 'route_stops', 'search']);
         const skipTypes = new Set(['symbol', 'background', 'raster']);
         // Only look below the sentinel: after a background change trip layers sit above it
@@ -199,22 +221,30 @@ async function addOrmOverlay(map, ormVectorType, base) {
         for (const l of map.getStyle().layers) { if (l.id === 'orm-sentinel') break; baseLayers.push(l); }
         // First label, not first symbol: oneway arrow layers sit down among the tunnels and would bury it under the roads
         const firstSymbolId = baseLayers.find(l => l.type === 'symbol' && l.layout?.['text-field'])?.id || 'orm-sentinel';
+        // Under 3D buildings too, where the base has them: drawn after them the lines showed through
+        const anchorId = baseLayers.find(l => l.type === 'fill-extrusion' || l.id === firstSymbolId)?.id || firstSymbolId;
+        // Labels along the lines ("25kV 50Hz", speeds, refs) need a font from the map's one glyph
+        // source: raster bases have none, so they get OpenFreeMap's
+        if (!map.getStyle().glyphs) map.setGlyphs(OFM_GLYPHS);
+        const labelFont = map.getStyle().glyphs.includes('jawg') ? ['Noto Bold'] : ['Noto Sans Bold'];
         for (const layer of ormStyle.layers) {
             if (skipLayers.has(layer.id) || !layer.source) continue;
             if (skipSources.has(layer.source) || !addedSources.has(layer.source)) continue;
-            if (skipTypes.has(layer.type)) continue;
+            const lineLabel = layer.type === 'symbol' && layer.id.endsWith('_text')
+                && layer.layout?.['symbol-placement'] === 'line';
+            // orm-raster: the overlay below zoom 6, as images (build_style)
+            if (skipTypes.has(layer.type) && !lineLabel && layer.id !== 'orm-raster') continue;
             if (layer.id.includes('_cover')) continue;
-            if (layer.id.includes('_casing') && !bold) continue;
+            // Dash lengths follow line-width, so a wider dashed casing drifts out of step with its fill
+            if (layer.id.includes('_casing') && layer.paint?.['line-dasharray']) continue;
             try {
-                const newLayer = { ...layer, source: `orm_${layer.source}` };
-                if (layer.id.includes('_casing')) {
-                    newLayer.paint = { ...layer.paint, 'line-color': DARK_BASES.includes(base) ? 'rgba(255, 255, 255, 0.3)' : '#333' };
-                }
+                const newLayer = { ...layer, source: `orm-overlay_${layer.source}` };
+                if (lineLabel) newLayer.layout = { ...layer.layout, 'text-font': labelFont };
                 // Strip layout.visibility expressions — unsupported by MapLibre, default to visible
                 if (newLayer.layout?.visibility && typeof newLayer.layout.visibility !== 'string') {
                     newLayer.layout = { ...newLayer.layout, visibility: 'visible' };
                 }
-                map.addLayer(newLayer, firstSymbolId);
+                map.addLayer(newLayer, anchorId);
                 ormIds.layers.push(newLayer.id);
             } catch (e) {
                 console.warn(`[ORM] skipping layer ${layer.id}:`, e.message);
@@ -223,6 +253,52 @@ async function addOrmOverlay(map, ormVectorType, base) {
     } catch (e) {
         console.error('[ORM] failed to load style:', e);
     }
+}
+
+// What an overlay line's colour stands for in each mode, from the tile properties behind it
+function describeOrmLine(p, type) {
+    const list = (...values) => values.filter(v => v != null && v !== '');
+    switch (type) {
+        case 'speed':
+            return p.maxspeed != null ? `${p.maxspeed} km/h` : null;
+        case 'electrification':
+            if (!p.voltage) return p.electrification_state || null;
+            return `${p.voltage >= 1000 ? `${p.voltage / 1000} kV` : `${p.voltage} V`} ${p.frequency ? `${p.frequency} Hz` : 'DC'}`;
+        case 'signals':
+            return list(p.train_protection0, p.train_protection1, p.train_protection2).join(', ').toUpperCase() || null;
+        case 'track':
+            return String(p.gauges || p.gauge0 || '').split(/[;,]\s*/).filter(Boolean)
+                .map(g => /^\d+$/.test(g) ? `${g} mm` : g).join(' / ') || null;
+        default:
+            return list(p.usage, p.highspeed ? 'HSL' : null).join(' · ') || null;
+    }
+}
+
+// Clicking an overlay line tells what its colour means. Anything the page draws above the
+// sentinel (trips, stops) has its own click, so a hit on one of those within reach wins
+function setupOrmPopup(map) {
+    if (map._ormPopup) return;
+    map._ormPopup = true;
+    map.on('click', (e) => {
+        const orm = map._ormIds;
+        if (!orm?.layers.length || e.originalEvent.target !== map.getCanvas()) return;
+        // Lines are a few px wide: search around the click rather than under it
+        const box = [[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]];
+        const ids = map.getStyle().layers.map(l => l.id);
+        const pageLayers = ids.slice(ids.indexOf('orm-sentinel') + 1);
+        if (pageLayers.length && map.queryRenderedFeatures(box, { layers: pageLayers }).length) return;
+        const line = map.queryRenderedFeatures(box, { layers: orm.layers })
+            .find(f => f.sourceLayer?.includes('railway_line'));
+        // Lines not in service carry no speed, voltage…: their state is what sets them apart
+        const meaning = line && (describeOrmLine(line.properties, orm.type)
+            ?? (line.properties.state !== 'present' ? line.properties.state : null));
+        if (!meaning) return;
+        const el = document.createElement('div');
+        el.style.whiteSpace = 'pre-line';
+        const title = [line.properties.ref, line.properties.name].filter(Boolean).join(' ');
+        el.textContent = title ? `${title}\n${meaning}` : meaning;
+        new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat).setDOMContent(el).addTo(map);
+    });
 }
 
 // Swaps the background of a live map, keeping everything the page added on top
@@ -256,7 +332,7 @@ async function changeBackground(map, tileserver, { useGlobe } = {}) {
         for (const [id, img] of images) {
             if (!map.hasImage(id)) map.addImage(id, img.data, { pixelRatio: img.pixelRatio, sdf: img.sdf });
         }
-        if (ormVectorBase) addOrmOverlay(map, ormVectorType, ormVectorBase);
+        if (ormVectorBase) addOrmOverlay(map, ormVectorType);
     });
 }
 
@@ -275,10 +351,10 @@ function isVectorTileServer(tileserver) {
     return vectorServers.includes(tileserver);
 }
 
-const DARK_BASES = ['jawg-dark'];
-
 // Styles served from OpenFreeMap tiles, whose per-language name fields let the
 // labels be localised client-side (Jawg instead gets its language server-side).
+const OFM_GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf';
+
 const OFM_SOURCED_STYLES = ['dark-train', 'trainlog-rail', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
 
 function applyStyleLanguage(style, userLanguage) {

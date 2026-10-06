@@ -70,11 +70,20 @@
           <input type="checkbox" class="mbg-switch" id="mapBgOrmEnabled">
         </label>
         <select class="mbg-select" id="mapBgOrmType" style="display: none;">
-          <option value="standard">{{ ormLayerStandard }}</option>
-          <option value="maxspeed">{{ ormLayerMaxspeed }}</option>
-          <option value="signals">{{ ormLayerSignals }}</option>
-          <option value="electrified">{{ ormLayerElectrified }}</option>
-          <option value="gauge">{{ ormLayerGauge }}</option>
+          <optgroup label="Trainlog">
+            <option value="standard">{{ ormLayerStandard }}</option>
+            <option value="maxspeed">{{ ormLayerMaxspeed }}</option>
+            <option value="signals">{{ ormLayerSignals }}</option>
+            <option value="electrified">{{ ormLayerElectrified }}</option>
+            <option value="gauge">{{ ormLayerGauge }}</option>
+          </optgroup>
+          <optgroup label="openrailwaymap.org">
+            <option value="org-standard">{{ ormLayerStandard }}</option>
+            <option value="org-maxspeed">{{ ormLayerMaxspeed }}</option>
+            <option value="org-signals">{{ ormLayerSignals }}</option>
+            <option value="org-electrification">{{ ormLayerElectrified }}</option>
+            <option value="org-gauge">{{ ormLayerGauge }}</option>
+          </optgroup>
         </select>
         {% endif %}
       </div>

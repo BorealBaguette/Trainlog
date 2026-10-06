@@ -3956,7 +3956,9 @@ def orm_style(style):
     if style not in openrailwaymap.PRESETS:
         return ("Not found", 404)
     try:
-        return jsonify(openrailwaymap.build_style(style, bold="bold" in request.args))
+        if "render" in request.args:
+            return jsonify(openrailwaymap.render_style(style))
+        return jsonify(openrailwaymap.build_style(style))
     except (requests.RequestException, ValueError):
         return ("OpenRailwayMap style unavailable", 502)
 

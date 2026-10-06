@@ -19,7 +19,7 @@
     "orm_high": {
       "type": "vector",
       "tiles": [
-        "{{ormTilesUrl}}/railway_line_high/{z}/{x}/{y}"
+        "{{ormTilesUrl}}/railway_line_high,railway_text_km/{z}/{x}/{y}"
       ],
       "minzoom": 7,
       "maxzoom": 14,
@@ -3900,7 +3900,7 @@
       "source": "orm_low",
       "source-layer": "standard_railway_line_low",
       "minzoom": 3,
-      "maxzoom": 7,
+      "maxzoom": 8,
       "filter": [
         "all",
         [
