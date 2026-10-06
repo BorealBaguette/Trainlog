@@ -2,6 +2,8 @@ import time
 
 import requests
 
+from py.utils import load_config
+
 # Mirrors knownStyles in https://openrailwaymap.app/js/ui.js
 PRESETS = {
     "standard": {
@@ -44,9 +46,15 @@ _cache = {"style": None, "fetched": 0}
 
 def _upstream_style():
     if _cache["style"] is None or time.time() - _cache["fetched"] > _CACHE_TTL:
-        resp = requests.get("https://openrailwaymap.app/style.json", timeout=10)
-        resp.raise_for_status()
-        _cache["style"] = resp.json()
+        try:
+            resp = requests.get(f"{tiles_url()}/style.json", timeout=10)
+            resp.raise_for_status()
+            _cache["style"] = resp.json()
+        except (requests.RequestException, ValueError):
+            # Keep serving the last good style; retry on the next request
+            if _cache["style"] is None:
+                raise
+            return _cache["style"]
         _cache["fetched"] = time.time()
     return _cache["style"]
 
@@ -112,6 +120,26 @@ def _split_dasharray(layer):
     return split
 
 
+def tiles_url():
+    # Self-hosted Martin (trainlog_orm repo); upstream tiles rate-limit us
+    url = load_config().get("openrailwaymap", {}).get("tiles_url") or "https://openrailwaymap.app"
+    return url.rstrip("/")
+
+
+def _absolute_sources(sources):
+    # Upstream sources are relative TileJSON paths ("/railway_line_high,railway_text_km");
+    # turn them into tile URLs on our host so the browser never asks openrailwaymap.app
+    host = tiles_url()
+    fixed = {}
+    for name, source in sources.items():
+        url = source.get("url")
+        if isinstance(url, str) and url.startswith("/"):
+            source = {k: v for k, v in source.items() if k != "url"}
+            source["tiles"] = [f"{host}{url}/{{z}}/{{x}}/{{y}}"]
+        fixed[name] = source
+    return fixed
+
+
 def build_style(preset):
     style = _upstream_style()
     state = {k: v["default"] for k, v in style["state"].items()}
@@ -127,4 +155,4 @@ def build_style(preset):
         if visibility != "none":
             layers.extend(_split_dasharray(layer))
 
-    return {**style, "layers": layers, "state": {}}
+    return {**style, "sources": _absolute_sources(style["sources"]), "layers": layers, "state": {}}

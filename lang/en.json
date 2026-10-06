@@ -1399,5 +1399,12 @@
     "stopsRefresh": "Refresh times",
     "stopsRefreshNone": "Transitous no longer has this run's times.",
     "stopsLoad": "Load stops from the timetable",
-    "motisStops": {"one": "{n} stop", "other": "{n} stops"}
+    "motisStops": {"one": "{n} stop", "other": "{n} stops"},
+    "ormOverlayEnable": "Enable OpenRailwayMap overlay",
+    "ormLayerType": "Railway layer type",
+    "ormLayerStandard": "Standard",
+    "ormLayerMaxspeed": "Max speed",
+    "ormLayerSignals": "Signals",
+    "ormLayerElectrified": "Electrification",
+    "ormLayerGauge": "Track gauge"
 }

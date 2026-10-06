@@ -36,6 +36,7 @@
     'jawg-terrain':     { label: '{{ tileserver_jawg_terrain }}',icon: 'fa-mountain',         tab: 'ts-jawg' },
     'jawg-lagoon':      { label: '{{ tileserver_jawg_lagoon }}', icon: 'fa-water',            tab: 'ts-jawg' },
     'dark-train':       { label: 'Dark Train',                   icon: 'fa-moon',             tab: 'ts-ofm',  vector: true },
+    'trainlog-rail':    { label: 'Trainlog Rail (beta)',         icon: 'fa-train',            tab: 'ts-ofm',  vector: true },
     'jawg-streets-v2':  { label: 'Streets V2',                   icon: 'fa-road',             tab: 'ts-jawg', vector: true },
     'jawg-lagoon-v2':   { label: 'Lagoon V2',                    icon: 'fa-water',            tab: 'ts-jawg', vector: true },
     'ofm-liberty':      { label: 'Liberty',                      icon: 'fa-map-location-dot', tab: 'ts-ofm',  vector: true },
@@ -123,13 +124,9 @@
     function updateORMValue() {
         if (!$('#orm-enabled').is(':checked')) return;
         const baseMap = $('#tileserver').data('base-map') || 'osm';
-        const isVector = !!(TS_META[baseMap] && TS_META[baseMap].vector);
         const ormType = $('#orm-type').val() || 'standard';
-        if (isVector) {
-            $('#tileserver').val(`orm-vector-${ormType}.${baseMap}`);
-        } else {
-            $('#tileserver').val(`openrailwaymap-${ormType}.${baseMap}`);
-        }
+        // The vector overlay works over raster bases too
+        $('#tileserver').val(`orm-vector-${ormType}.${baseMap}`);
     }
   {% endif %}
 </script>

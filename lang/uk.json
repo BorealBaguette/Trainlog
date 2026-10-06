@@ -1406,5 +1406,12 @@
     "stopsRefresh": "Оновити час",
     "stopsRefreshNone": "У Transitous більше немає часу цього рейсу.",
     "stopsLoad": "Завантажити зупинки з розкладу",
-    "motisStops": {"one": "{n} зупинка", "few": "{n} зупинки", "many": "{n} зупинок", "other": "{n} зупинки"}
+    "motisStops": {"one": "{n} зупинка", "few": "{n} зупинки", "many": "{n} зупинок", "other": "{n} зупинки"},
+    "ormOverlayEnable": "Увімкнути шар OpenRailwayMap",
+    "ormLayerType": "Тип залізничного шару",
+    "ormLayerStandard": "Стандартний",
+    "ormLayerMaxspeed": "Максимальна швидкість",
+    "ormLayerSignals": "Сигнали",
+    "ormLayerElectrified": "Електрифікація",
+    "ormLayerGauge": "Ширина колії"
 }

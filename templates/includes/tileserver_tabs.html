@@ -1,6 +1,7 @@
 {#
   Shared tileserver tabs + option styles (modal body). Option buttons carry
-  data-value; vector ones also get .ts-vector. Used by tileserver_picker.html
+  data-value; vector ones also get .ts-vector. Each option shows a raster/vector badge
+  (CSS below; "none" is neither). Used by tileserver_picker.html
   (settings) and map_background_modal.html (navbar). Needs is_premium in context.
 #}
 <ul class="nav nav-tabs mb-3" id="tileserverTabs" role="tablist">
@@ -81,6 +82,10 @@
       <button type="button" class="ts-option ts-vector" data-value="dark-train">
         <i class="fa-solid fa-moon"></i><span>Dark Train</span>
       </button>
+      <button type="button" class="ts-option ts-vector" data-value="trainlog-rail">
+        <i class="fa-solid fa-train"></i><span>Trainlog Rail</span>
+        <span class="ts-beta">Beta</span>
+      </button>
     </div>
   </div>
 
@@ -120,5 +125,20 @@
   .ts-option:hover { border-color: #0d6efd; background: #f0f6ff; }
   .ts-option.ts-selected { border-color: #0d6efd; background: #e7f0ff; color: #0d6efd; }
   .ts-option.ts-selected i:first-child { color: #0d6efd; }
+  /* Raster/vector badge, top-left (gem and beta take top-right). Font Awesome 6 glyphs:
+     image for raster tiles, bezier-curve for vector styles */
+  .ts-option:not([data-value="none"])::before {
+    content: "\f03e";
+    position: absolute; top: 5px; left: 7px;
+    font-family: "Font Awesome 6 Free"; font-weight: 900;
+    font-size: 0.6rem; color: #adb5bd;
+  }
+  .ts-option.ts-vector:not([data-value="none"])::before { content: "\f55b"; }
   .ts-gem { position: absolute; top: 6px; right: 6px; font-size: 0.65rem !important; color: #00ced1 !important; }
+  .ts-beta {
+    position: absolute; top: 5px; right: 5px;
+    padding: 0 5px; border-radius: 8px;
+    background: #fd7e14; color: white;
+    font-size: 0.6rem; font-weight: 600; line-height: 1.5; text-transform: uppercase;
+  }
 </style>

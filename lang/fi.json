@@ -1400,5 +1400,12 @@
     "stopsRefresh": "Päivitä ajat",
     "stopsRefreshNone": "Transitousilla ei enää ole tämän vuoron aikoja.",
     "stopsLoad": "Lataa pysähdykset aikataulusta",
-    "motisStops": {"one": "{n} pysähdys", "other": "{n} pysähdystä"}
+    "motisStops": {"one": "{n} pysähdys", "other": "{n} pysähdystä"},
+    "ormOverlayEnable": "Ota OpenRailwayMap-taso käyttöön",
+    "ormLayerType": "Rautatietason tyyppi",
+    "ormLayerStandard": "Perus",
+    "ormLayerMaxspeed": "Suurin nopeus",
+    "ormLayerSignals": "Opastimet",
+    "ormLayerElectrified": "Sähköistys",
+    "ormLayerGauge": "Raideleveys"
 }

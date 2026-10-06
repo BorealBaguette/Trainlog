@@ -1398,5 +1398,12 @@
     "stopsRefresh": "Időpontok frissítése",
     "stopsRefreshNone": "A Transitous már nem tárolja ennek a járatnak az időpontjait.",
     "stopsLoad": "Megállók betöltése a menetrendből",
-    "motisStops": {"one": "{n} megálló", "other": "{n} megálló"}
+    "motisStops": {"one": "{n} megálló", "other": "{n} megálló"},
+    "ormOverlayEnable": "OpenRailwayMap réteg bekapcsolása",
+    "ormLayerType": "Vasúti réteg típusa",
+    "ormLayerStandard": "Alap",
+    "ormLayerMaxspeed": "Legnagyobb sebesség",
+    "ormLayerSignals": "Jelzők",
+    "ormLayerElectrified": "Villamosítás",
+    "ormLayerGauge": "Nyomtávolság"
 }

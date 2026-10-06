@@ -298,18 +298,18 @@
             <div class="form-check form-switch mt-3">
               <input class="form-check-input" type="checkbox" id="orm-enabled" name="orm_enabled" form="settingsForm">
               <label class="form-check-label" for="orm-enabled">
-                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> Enable OpenRailwayMap overlay
+                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ ormOverlayEnable }}
               </label>
             </div>
 
             <div id="orm-options" class="mt-2 p-3 bg-light rounded" style="display: none;">
-              <label class="settings2-label mt-0" for="orm-type">Railway Layer Type</label>
+              <label class="settings2-label mt-0" for="orm-type">{{ ormLayerType }}</label>
               <select class="form-select" name="orm_type" id="orm-type" form="settingsForm">
-                <option value="standard">Standard</option>
-                <option value="maxspeed">Max Speed</option>
-                <option value="signals">Signals</option>
-                <option value="electrified">Electrified</option>
-                <option value="gauge">Track Gauge</option>
+                <option value="standard">{{ ormLayerStandard }}</option>
+                <option value="maxspeed">{{ ormLayerMaxspeed }}</option>
+                <option value="signals">{{ ormLayerSignals }}</option>
+                <option value="electrified">{{ ormLayerElectrified }}</option>
+                <option value="gauge">{{ ormLayerGauge }}</option>
               </select>
             </div>
 

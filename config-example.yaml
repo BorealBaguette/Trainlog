@@ -78,6 +78,11 @@ api_ninjas:
 jawg:
   api_key: JAWG_API_KEY
 
+# OpenRailwayMap overlay tiles (self-hosted Martin, see the trainlog_orm repo)
+# Leave unset to use https://openrailwaymap.app (rate-limited)
+openrailwaymap:
+  tiles_url: https://orm.srv.trainlog.me
+
 # Thunderforest Maps (specific map tilesets)
 thunderforest:
   api_key: THUNDER_API_KEY

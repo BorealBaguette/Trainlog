@@ -1406,5 +1406,12 @@
     "stopsRefresh": "Osvježi vremena",
     "stopsRefreshNone": "Transitous više nema vremena ove vožnje.",
     "stopsLoad": "Učitaj stajališta iz voznog reda",
-    "motisStops": {"one": "{n} stanica", "few": "{n} stanice", "other": "{n} stanica"}
+    "motisStops": {"one": "{n} stanica", "few": "{n} stanice", "other": "{n} stanica"},
+    "ormOverlayEnable": "Uključi sloj OpenRailwayMap",
+    "ormLayerType": "Vrsta željezničkog sloja",
+    "ormLayerStandard": "Standardno",
+    "ormLayerMaxspeed": "Najveća brzina",
+    "ormLayerSignals": "Signali",
+    "ormLayerElectrified": "Elektrifikacija",
+    "ormLayerGauge": "Širina kolosijeka"
 }

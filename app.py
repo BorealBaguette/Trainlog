@@ -3944,6 +3944,7 @@ def vector_style(language, style):
         final_url = template_url.replace("{language}", language)
         file_contents = file_contents.replace("{{tileServerUrl}}", final_url)
         file_contents = file_contents.replace("{{language}}", language)
+        file_contents = file_contents.replace("{{ormTilesUrl}}", openrailwaymap.tiles_url())
         vectorStyle = json.loads(file_contents)
 
     # Return as proper JSON response

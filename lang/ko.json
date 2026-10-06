@@ -1400,5 +1400,12 @@
     "stopsLoad": "시간표에서 정차역 불러오기",
     "motisStops": {
         "other": "{n}개 정류장"
-    }
+    },
+    "ormOverlayEnable": "OpenRailwayMap 오버레이 사용",
+    "ormLayerType": "철도 레이어 유형",
+    "ormLayerStandard": "기본",
+    "ormLayerMaxspeed": "최고 속도",
+    "ormLayerSignals": "신호",
+    "ormLayerElectrified": "전철화",
+    "ormLayerGauge": "궤간"
 }

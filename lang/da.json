@@ -1402,5 +1402,12 @@
     "stopsRefresh": "Opdater tider",
     "stopsRefreshNone": "Transitous har ikke længere tiderne for denne afgang.",
     "stopsLoad": "Hent stop fra køreplanen",
-    "motisStops": {"one": "{n} stop", "other": "{n} stop"}
+    "motisStops": {"one": "{n} stop", "other": "{n} stop"},
+    "ormOverlayEnable": "Aktivér OpenRailwayMap-overlay",
+    "ormLayerType": "Type af jernbanelag",
+    "ormLayerStandard": "Standard",
+    "ormLayerMaxspeed": "Maksimal hastighed",
+    "ormLayerSignals": "Signaler",
+    "ormLayerElectrified": "Elektrificering",
+    "ormLayerGauge": "Sporvidde"
 }

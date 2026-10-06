@@ -1398,5 +1398,12 @@
     "stopsRefresh": "刷新时间",
     "stopsRefreshNone": "Transitous 已不再保存此班次的时间。",
     "stopsLoad": "从时刻表加载停靠站",
-    "motisStops": {"other": "{n}站"}
+    "motisStops": {"other": "{n}站"},
+    "ormOverlayEnable": "启用 OpenRailwayMap 叠加层",
+    "ormLayerType": "铁路图层类型",
+    "ormLayerStandard": "标准",
+    "ormLayerMaxspeed": "最高速度",
+    "ormLayerSignals": "信号",
+    "ormLayerElectrified": "电气化",
+    "ormLayerGauge": "轨距"
 }

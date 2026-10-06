@@ -1399,5 +1399,12 @@
     "stopsRefresh": "Actualiser les horaires",
     "stopsRefreshNone": "Transitous n'a plus les horaires de ce trajet.",
     "stopsLoad": "Charger les arrêts depuis les horaires",
-    "motisStops": {"one": "{n} arrêt", "many": "{n} arrêts", "other": "{n} arrêts"}
+    "motisStops": {"one": "{n} arrêt", "many": "{n} arrêts", "other": "{n} arrêts"},
+    "ormOverlayEnable": "Activer la surcouche OpenRailwayMap",
+    "ormLayerType": "Type de couche ferroviaire",
+    "ormLayerStandard": "Standard",
+    "ormLayerMaxspeed": "Vitesse maximale",
+    "ormLayerSignals": "Signalisation",
+    "ormLayerElectrified": "Électrification",
+    "ormLayerGauge": "Écartement des voies"
 }

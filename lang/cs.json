@@ -1406,5 +1406,12 @@
     "stopsRefresh": "Obnovit časy",
     "stopsRefreshNone": "Transitous už časy tohoto spoje nemá.",
     "stopsLoad": "Načíst zastávky z jízdního řádu",
-    "motisStops": {"one": "{n} zastávka", "few": "{n} zastávky", "many": "{n} zastávky", "other": "{n} zastávek"}
+    "motisStops": {"one": "{n} zastávka", "few": "{n} zastávky", "many": "{n} zastávky", "other": "{n} zastávek"},
+    "ormOverlayEnable": "Zapnout vrstvu OpenRailwayMap",
+    "ormLayerType": "Typ železniční vrstvy",
+    "ormLayerStandard": "Standardní",
+    "ormLayerMaxspeed": "Maximální rychlost",
+    "ormLayerSignals": "Návěstidla",
+    "ormLayerElectrified": "Elektrizace",
+    "ormLayerGauge": "Rozchod koleje"
 }

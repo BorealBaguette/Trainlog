@@ -1402,5 +1402,12 @@
     "stopsRefresh": "Uppdatera tider",
     "stopsRefreshNone": "Transitous har inte längre tiderna för den här turen.",
     "stopsLoad": "Hämta hållplatser från tidtabellen",
-    "motisStops": {"one": "{n} hållplats", "other": "{n} hållplatser"}
+    "motisStops": {"one": "{n} hållplats", "other": "{n} hållplatser"},
+    "ormOverlayEnable": "Aktivera OpenRailwayMap-överlägg",
+    "ormLayerType": "Typ av järnvägslager",
+    "ormLayerStandard": "Standard",
+    "ormLayerMaxspeed": "Största hastighet",
+    "ormLayerSignals": "Signaler",
+    "ormLayerElectrified": "Elektrifiering",
+    "ormLayerGauge": "Spårvidd"
 }

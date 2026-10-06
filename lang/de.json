@@ -1402,5 +1402,12 @@
     "stopsRefresh": "Zeiten aktualisieren",
     "stopsRefreshNone": "Transitous hat die Zeiten dieser Fahrt nicht mehr.",
     "stopsLoad": "Halte aus dem Fahrplan laden",
-    "motisStops": {"one": "{n} Halt", "other": "{n} Halte"}
+    "motisStops": {"one": "{n} Halt", "other": "{n} Halte"},
+    "ormOverlayEnable": "OpenRailwayMap-Overlay aktivieren",
+    "ormLayerType": "Art der Bahnebene",
+    "ormLayerStandard": "Standard",
+    "ormLayerMaxspeed": "Höchstgeschwindigkeit",
+    "ormLayerSignals": "Signale",
+    "ormLayerElectrified": "Elektrifizierung",
+    "ormLayerGauge": "Spurweite"
 }

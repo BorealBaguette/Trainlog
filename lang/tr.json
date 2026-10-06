@@ -1398,5 +1398,12 @@
     "stopsRefresh": "Saatleri yenile",
     "stopsRefreshNone": "Transitous'ta artık bu seferin saatleri yok.",
     "stopsLoad": "Durakları tarifeden yükle",
-    "motisStops": {"one": "{n} durak", "other": "{n} durak"}
+    "motisStops": {"one": "{n} durak", "other": "{n} durak"},
+    "ormOverlayEnable": "OpenRailwayMap katmanını etkinleştir",
+    "ormLayerType": "Demiryolu katmanı türü",
+    "ormLayerStandard": "Standart",
+    "ormLayerMaxspeed": "Azami hız",
+    "ormLayerSignals": "Sinyaller",
+    "ormLayerElectrified": "Elektrifikasyon",
+    "ormLayerGauge": "Ray açıklığı"
 }

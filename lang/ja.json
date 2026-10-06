@@ -1398,5 +1398,12 @@
     "stopsRefresh": "時刻を更新",
     "stopsRefreshNone": "Transitousにはこの便の時刻がもうありません。",
     "stopsLoad": "時刻表から停車駅を読み込む",
-    "motisStops": {"other": "{n}駅"}
+    "motisStops": {"other": "{n}駅"},
+    "ormOverlayEnable": "OpenRailwayMap オーバーレイを有効にする",
+    "ormLayerType": "鉄道レイヤーの種類",
+    "ormLayerStandard": "標準",
+    "ormLayerMaxspeed": "最高速度",
+    "ormLayerSignals": "信号",
+    "ormLayerElectrified": "電化",
+    "ormLayerGauge": "軌間"
 }

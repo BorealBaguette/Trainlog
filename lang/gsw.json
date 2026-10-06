@@ -1400,5 +1400,12 @@
     "stopsRefresh": "Ziite aktualisiere",
     "stopsRefreshNone": "Transitous het d Ziite vo dere Fahrt nüme.",
     "stopsLoad": "Halt us em Fahrplan lade",
-    "motisStops": {"one": "{n} Halt", "other": "{n} Hält"}
+    "motisStops": {"one": "{n} Halt", "other": "{n} Hält"},
+    "ormOverlayEnable": "OpenRailwayMap-Overlay aktiviere",
+    "ormLayerType": "Art vo de Bahnebeni",
+    "ormLayerStandard": "Standard",
+    "ormLayerMaxspeed": "Höchstgschwindigkeit",
+    "ormLayerSignals": "Signal",
+    "ormLayerElectrified": "Elektrifizierig",
+    "ormLayerGauge": "Spurwiiti"
 }

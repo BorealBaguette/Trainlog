@@ -1402,5 +1402,12 @@
     "stopsRefresh": "Tijden bijwerken",
     "stopsRefreshNone": "Transitous heeft de tijden van deze rit niet meer.",
     "stopsLoad": "Haltes uit de dienstregeling laden",
-    "motisStops": {"one": "{n} halte", "other": "{n} haltes"}
+    "motisStops": {"one": "{n} halte", "other": "{n} haltes"},
+    "ormOverlayEnable": "OpenRailwayMap-overlay inschakelen",
+    "ormLayerType": "Type spoorlaag",
+    "ormLayerStandard": "Standaard",
+    "ormLayerMaxspeed": "Maximumsnelheid",
+    "ormLayerSignals": "Seinen",
+    "ormLayerElectrified": "Elektrificatie",
+    "ormLayerGauge": "Spoorwijdte"
 }

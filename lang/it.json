@@ -1402,5 +1402,12 @@
     "stopsRefresh": "Aggiorna orari",
     "stopsRefreshNone": "Transitous non ha più gli orari di questa corsa.",
     "stopsLoad": "Carica fermate dall'orario",
-    "motisStops": {"one": "{n} fermata", "many": "{n} fermate", "other": "{n} fermate"}
+    "motisStops": {"one": "{n} fermata", "many": "{n} fermate", "other": "{n} fermate"},
+    "ormOverlayEnable": "Attiva il livello OpenRailwayMap",
+    "ormLayerType": "Tipo di livello ferroviario",
+    "ormLayerStandard": "Standard",
+    "ormLayerMaxspeed": "Velocità massima",
+    "ormLayerSignals": "Segnali",
+    "ormLayerElectrified": "Elettrificazione",
+    "ormLayerGauge": "Scartamento"
 }

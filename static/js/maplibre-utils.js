@@ -29,6 +29,7 @@ const MapConfig = {
         "jawg-lagoon-v2":'/getVectorStyle/{language}/jawg-lagoon.json',
         "trainlog-lagoon-v2":'/getVectorStyle/{language}/trainlog-lagoon.json',
         "dark-train":       '/getVectorStyle/{language}/trainlog-dark.json',
+        "trainlog-rail":    '/getVectorStyle/{language}/trainlog-rail.json',
         "ofm-liberty": 'https://tiles.openfreemap.org/styles/liberty',
         "ofm-bright": 'https://tiles.openfreemap.org/styles/bright',
         "ofm-positron": 'https://tiles.openfreemap.org/styles/positron'
@@ -39,11 +40,13 @@ const MapConfig = {
 async function resolveBackground(tileserver, { styleUrl = null, userLanguage = 'en', useGlobe = false } = {}) {
     let mapStyle;
 
-    // Parse orm-vector overlay
+    // Parse the OpenRailwayMap overlay. It is always the vector one, over raster and vector
+    // bases alike; openrailwaymap-<type>.<base> is the old raster overlay, still saved in
+    // some users' settings, with the same type names
     let ormVectorBase = null;
     let ormVectorType = 'standard';
     let effectiveTileserver = tileserver;
-    const ormVectorMatch = tileserver && tileserver.match(/^orm-vector-([^.]+)\.(.+)$/);
+    const ormVectorMatch = tileserver && tileserver.match(/^(?:orm-vector-|openrailwaymap-)([^.]+)\.(.+)$/);
     if (ormVectorMatch) {
         ormVectorType = ormVectorMatch[1];
         ormVectorBase = ormVectorMatch[2];
@@ -217,10 +220,13 @@ async function addOrmOverlay(map, ormVectorType) {
 
 // Swaps the background of a live map, keeping everything the page added on top
 // (trip sources/layers, the sentinel, images). Not persisted anywhere.
-async function changeBackground(map, tileserver) {
+async function changeBackground(map, tileserver, { useGlobe } = {}) {
     const o = map._tlOptions;
     map._currentTileserver = tileserver;
-    const { mapStyle, ormVectorBase, ormVectorType } = await resolveBackground(tileserver, o);
+    // The globe can be switched with the background (map background modal); otherwise keep the current one
+    if (useGlobe !== undefined) map._currentGlobe = useGlobe;
+    const globe = map._currentGlobe ?? o.useGlobe;
+    const { mapStyle, ormVectorBase, ormVectorType } = await resolveBackground(tileserver, { ...o, useGlobe: globe });
     const orm = map._ormIds || { sources: [], layers: [] };
     const baseSources = new Set(map._baseIds.sources);
     const baseLayers = new Set(map._baseIds.layers);
@@ -254,6 +260,7 @@ function isVectorTileServer(tileserver) {
         'jawg-lagoon-v2',
         'trainlog-lagoon-v2',
         'dark-train',
+        'trainlog-rail',
         'ofm-liberty',
         'ofm-bright',
         'ofm-positron'
@@ -263,7 +270,7 @@ function isVectorTileServer(tileserver) {
 
 // Styles served from OpenFreeMap tiles, whose per-language name fields let the
 // labels be localised client-side (Jawg instead gets its language server-side).
-const OFM_SOURCED_STYLES = ['dark-train', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
+const OFM_SOURCED_STYLES = ['dark-train', 'trainlog-rail', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
 
 function applyStyleLanguage(style, userLanguage) {
     const code = userLanguage === 'gsw' ? 'de' : userLanguage.split('-')[0];
@@ -339,20 +346,11 @@ function getTileServerConfig(serverType, userLanguage) {
             } else if (serverType === 'thunderforest-transport') {
                 tileUrl = `https://tiles.trainlog.me/tile/${serverType}/{x}/{y}/{z}`;
                 attribution = '© Thunderforest, © OpenStreetMap contributors';
-            } else if (serverType && serverType.startsWith("orm-vector-")) {
-                // Vector ORM is handled by initializeMapLibre; fall back to base raster
-                const m = serverType.match(/^orm-vector-([^.]+)\.(.+)$/);
+            } else if (serverType && /^(orm-vector-|openrailwaymap-)/.test(serverType)) {
+                // The ORM overlay is added by resolveBackground; here just the base raster
+                const m = serverType.match(/^(?:orm-vector-|openrailwaymap-)([^.]+)\.(.+)$/);
                 serverType = (m ? m[2] : null) || "osm";
                 return getTileServerConfig(serverType, userLanguage);
-            } else if (serverType && serverType.startsWith("openrailwaymap-")) {
-                var baseStyle = "osm"; // default
-                if (serverType.includes(".")) {
-                    var parts = serverType.split(".");
-                    serverType = parts[0];
-                    baseStyle = parts[1];
-                }
-                tileUrl = `https://tiles.trainlog.me/tile/${serverType}/{x}/{y}/{z}?base_style=${baseStyle}`;
-                attribution = '© Openrailwaymap, © OpenStreetMap contributors, © Jawg';
             }
     }
 

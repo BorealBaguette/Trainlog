@@ -1402,5 +1402,12 @@
     "stopsRefresh": "Atualizar horários",
     "stopsRefreshNone": "O Transitous já não tem os horários desta viagem.",
     "stopsLoad": "Carregar paragens do horário",
-    "motisStops": {"one": "{n} paragem", "many": "{n} paragens", "other": "{n} paragens"}
+    "motisStops": {"one": "{n} paragem", "many": "{n} paragens", "other": "{n} paragens"},
+    "ormOverlayEnable": "Ativar sobreposição do OpenRailwayMap",
+    "ormLayerType": "Tipo de camada ferroviária",
+    "ormLayerStandard": "Padrão",
+    "ormLayerMaxspeed": "Velocidade máxima",
+    "ormLayerSignals": "Sinalização",
+    "ormLayerElectrified": "Eletrificação",
+    "ormLayerGauge": "Bitola"
 }

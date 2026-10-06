@@ -1402,5 +1402,12 @@
     "stopsRefresh": "Actualizar horarios",
     "stopsRefreshNone": "Transitous ya no tiene los horarios de este trayecto.",
     "stopsLoad": "Cargar paradas del horario",
-    "motisStops": {"one": "{n} parada", "many": "{n} paradas", "other": "{n} paradas"}
+    "motisStops": {"one": "{n} parada", "many": "{n} paradas", "other": "{n} paradas"},
+    "ormOverlayEnable": "Activar la capa de OpenRailwayMap",
+    "ormLayerType": "Tipo de capa ferroviaria",
+    "ormLayerStandard": "Estándar",
+    "ormLayerMaxspeed": "Velocidad máxima",
+    "ormLayerSignals": "Señales",
+    "ormLayerElectrified": "Electrificación",
+    "ormLayerGauge": "Ancho de vía"
 }

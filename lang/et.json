@@ -1399,5 +1399,12 @@
     "stopsRefresh": "Värskenda aegu",
     "stopsRefreshNone": "Transitousil pole enam selle reisi aegu.",
     "stopsLoad": "Laadi peatused sõiduplaanist",
-    "motisStops": {"one": "{n} peatus", "other": "{n} peatust"}
+    "motisStops": {"one": "{n} peatus", "other": "{n} peatust"},
+    "ormOverlayEnable": "Lülita sisse OpenRailwayMapi kiht",
+    "ormLayerType": "Raudteekihi tüüp",
+    "ormLayerStandard": "Tavaline",
+    "ormLayerMaxspeed": "Suurim kiirus",
+    "ormLayerSignals": "Signaalid",
+    "ormLayerElectrified": "Elektrifitseerimine",
+    "ormLayerGauge": "Rööpmelaius"
 }
