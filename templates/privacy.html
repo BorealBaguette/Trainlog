@@ -7,12 +7,7 @@
     {% include "bootstrap/no_user_nav.html" %}
 {% endif %}
 
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>{{ privacy_title }}</title>
-    <style>
+<style>
         .section-title {
             margin-top: 2rem;
             border-bottom: 2px solid #dee2e6;
@@ -35,8 +30,6 @@
             border-radius: 0.25rem;
         }
     </style>
-</head>
-<body>
 
 <div class="content-wrapper">
     <h1 class="mb-4">{{ privacy_title }}</h1>
@@ -100,8 +93,5 @@
     <h2 class="section-title">{{ privacy_section_contact_title }}</h2>
     <p>{{ privacy_section_contact_content|safe }}</p>
 </div>
-
-</body>
-</html>
 
 {% endblock %}
