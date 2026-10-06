@@ -163,6 +163,15 @@
     border-radius: 8px;
     transition: width 0.5s ease;
   }
+  /* Live delays from the runs' GTFS-RT: shown only when there are any to load */
+  .ct-live {
+    display: none; border: 0; background: none; color: inherit; padding: 0 0.15rem;
+    margin-left: 0.4rem; opacity: 0.55; font-size: 0.9rem; line-height: 1; cursor: pointer;
+  }
+  .ct-live:hover:not(:disabled) { opacity: 1; }
+  .ct-live:disabled { cursor: default; }
+  .ct-live.spinning i { display: inline-block; animation: ct-spin 0.8s linear infinite; }
+  @keyframes ct-spin { to { transform: rotate(360deg); } }
   .current-trip-times {
     display: flex;
     justify-content: space-between;
@@ -757,7 +766,12 @@
         </div>
       </div>
       <button type="button" class="ct-status" id="ct-status" onclick="_toggleCurrentStops()" hidden></button>
-      <div id="ct-pct" style="grid-area:pct; font-size:1rem; font-weight:700; opacity:0.85; white-space:nowrap; padding-top:0.2rem;"></div>
+      <div style="grid-area:pct; display:flex; align-items:center; justify-content:flex-end; padding-top:0.2rem;">
+        <span id="ct-pct" style="font-size:1rem; font-weight:700; opacity:0.85; white-space:nowrap;"></span>
+        <button type="button" class="ct-live" id="ct-live" title="{{ stopsRefresh }}" aria-label="{{ stopsRefresh }}">
+          <i class="bi bi-arrow-clockwise"></i>
+        </button>
+      </div>
       <div class="progress-track" style="grid-area:bar;">
         <div class="progress-fill" id="ct-progress" style="width:0%"></div>
       </div>
@@ -1367,8 +1381,35 @@ fetch(`/u/${username}/dashboard_current_trip`)
     document.getElementById("current-trip-card").style.display = "grid";
     _updateCurrentTripProgress();
     setInterval(_updateCurrentTripProgress, 5000);
+    if (trip.live_refresh) _offerLiveDelays();
   })
   .catch(() => {});
+
+// Stops picked from the timetable name their Transitous run: when it has live data
+// (GTFS-RT), a discreet refresh loads its delays into the trip.
+function _offerLiveDelays() {
+  const btn = document.getElementById("ct-live");
+  const url = `/u/${username}/current/live`;
+  fetch(url)
+    .then(r => r.json())
+    .then(d => { if (d && d.available) btn.style.display = "inline-block"; })
+    .catch(() => {});
+  btn.addEventListener("click", () => {
+    btn.disabled = true;
+    btn.classList.add("spinning");
+    fetch(url, { method: "POST", headers: { "X-Requested-With": "XMLHttpRequest" } })
+      .then(r => r.json())
+      .then(d => {
+        if (!d || !d.available) { btn.style.display = "none"; return; }
+        _currentTrip.departure_delay = d.departure_delay;
+        _currentTrip.arrival_delay = d.arrival_delay;
+        _currentTrip.waypoints = d.waypoints;
+        _updateCurrentTripProgress();
+      })
+      .catch(() => {})
+      .finally(() => { btn.disabled = false; btn.classList.remove("spinning"); });
+  });
+}
 
 // ─── Trips (upcoming / recent) ───────────────────────────────────────────────
 

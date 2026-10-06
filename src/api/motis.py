@@ -7,6 +7,7 @@ operator resolved to a Trainlog operator so its logo can be shown.
 """
 
 import contextvars
+import json
 import logging
 import math
 import re
@@ -857,35 +858,19 @@ def _departures(searches, start, window, destination):
 _TRIP_CACHE_TTL = 30
 
 
-@motis_blueprint.route("/u/<username>/motis/trip")
-@login_required
-def motis_trip(username):
-    """A run's stops with their current times, by the Transitous id saved with a trip's
-    stops (stopRecord in new.html): what the stops dialog of the edit page refreshes the
-    live times and platforms from, while Transitous still has the run (usually not long
-    after it ends). Every stop of the run, first to last, scheduled and live."""
-    trip_id = (request.args.get("id") or "").strip()
-    if not trip_id or len(trip_id) > 300:
-        abort(400)
+def _run_stops(trip_id):
+    """A run's stops, first to last, scheduled and live, and whether Transitous has live
+    data for it. Raises what _fetch raises; an id it doesn't know (left the feed) is
+    no stops."""
     try:
         trip = _fetch(MOTIS_TRIP_URL, {"tripId": trip_id}, ttl=_TRIP_CACHE_TTL)
-    except RateLimited:
-        return jsonify({"error": "rate_limited", "stops": []}), 503
-    except OutsideTimetable:
-        return jsonify({"stops": []})
     except requests.HTTPError as e:
-        # Unknown id: the run has left the feed (or never was in this one).
         if e.response is not None and e.response.status_code in (400, 404, 422):
-            return jsonify({"stops": []})
-        logger.warning("MOTIS trip request failed: %s", e)
-        return jsonify({"error": "unavailable", "stops": []}), 502
-    except (requests.RequestException, ValueError) as e:
-        logger.warning("MOTIS trip request failed: %s", e)
-        return jsonify({"error": "unavailable", "stops": []}), 502
-
+            return [], False
+        raise
     legs = [leg for leg in trip.get("legs") or [] if leg.get("mode") != "WALK"]
     if not legs:
-        return jsonify({"stops": []})
+        return [], False
     leg = legs[0]
     stops = []
     for place in [leg.get("from") or {}, *(leg.get("intermediateStops") or []), leg.get("to") or {}]:
@@ -905,4 +890,159 @@ def motis_trip(username):
             "tz": place.get("tz"),
             "cc": getCountryFromCoordinates(place["lat"], place["lon"])["countryCode"],
         })
-    return jsonify({"stops": stops, "realtime": bool(leg.get("realTime"))})
+    return stops, bool(leg.get("realTime"))
+
+
+@motis_blueprint.route("/u/<username>/motis/trip")
+@login_required
+def motis_trip(username):
+    """A run's stops with their current times, by the Transitous id saved with a trip's
+    stops (stopRecord in new.html): what the stops dialog of the edit page refreshes the
+    live times and platforms from, while Transitous still has the run (usually not long
+    after it ends). Every stop of the run, first to last, scheduled and live."""
+    trip_id = (request.args.get("id") or "").strip()
+    if not trip_id or len(trip_id) > 300:
+        abort(400)
+    try:
+        stops, realtime = _run_stops(trip_id)
+    except RateLimited:
+        return jsonify({"error": "rate_limited", "stops": []}), 503
+    except OutsideTimetable:
+        return jsonify({"stops": []})
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("MOTIS trip request failed: %s", e)
+        return jsonify({"error": "unavailable", "stops": []}), 502
+    return jsonify({"stops": stops, "realtime": realtime})
+
+
+def trip_runs(waypoints_json):
+    """The Transitous runs a trip's stops were picked from, when every stop says which
+    (a stop typed in by hand has none: its times can't be refreshed, so neither can the
+    trip's); else []."""
+    try:
+        waypoints = json.loads(waypoints_json or "[]")
+    except (TypeError, ValueError):
+        return []
+    if not isinstance(waypoints, list):
+        return []
+    stops = [wp["stop"] for wp in waypoints if isinstance(wp, dict) and isinstance(wp.get("stop"), dict)]
+    if not stops or not all(st.get("trip") for st in stops):
+        return []
+    return list(dict.fromkeys(st["trip"] for st in stops))
+
+
+def _seconds_between(actual, scheduled):
+    if not actual or not scheduled:
+        return None
+    return int((_parse_utc(actual) - _parse_utc(scheduled)).total_seconds())
+
+
+def _live_update(trip_row, path):
+    """What the runs' live data says now about a trip in progress: its delays at its two
+    ends (the runs' stops nearest them), platforms there, and its stops' live times.
+    None when there is nothing live to go by."""
+    runs = trip_runs(trip_row["waypoints"])
+    if not runs or len(path) < 2:
+        return None
+    run_stops, live = [], False
+    by_id = {}
+    for run in runs:
+        stops, realtime = _run_stops(run)
+        live = live or realtime
+        run_stops.extend(stops)
+        by_id.update({(run, st["id"]): st for st in stops if st.get("id")})
+    if not live or not run_stops:
+        return None
+
+    def nearest(point):
+        found = min(
+            ((_distance_m(st["lat"], st["lng"], *point), i) for i, st in enumerate(run_stops)),
+            default=None,
+        )
+        return run_stops[found[1]] if found and found[0] <= 1500 else None
+
+    start, end = nearest(path[0]), nearest(path[-1])
+    if not start and not end:
+        return None
+    waypoints = json.loads(trip_row["waypoints"])
+    for wp in waypoints:
+        stop = wp.get("stop") if isinstance(wp, dict) else None
+        fresh = isinstance(stop, dict) and by_id.get((stop.get("trip"), stop.get("id")))
+        if not fresh:
+            continue
+        for field in ("arr", "dep"):
+            if fresh[field]:
+                stop[field] = fresh[field]
+            if fresh[field + "_rt"]:
+                stop[field + "_rt"] = fresh[field + "_rt"]
+            else:
+                stop.pop(field + "_rt", None)
+        if fresh["platform"]:
+            stop["platform"] = fresh["platform"]
+        if fresh["platform_rt"] and fresh["platform_rt"] != stop.get("platform"):
+            stop["platform_rt"] = fresh["platform_rt"]
+        else:
+            stop.pop("platform_rt", None)
+
+    def platform(st):
+        return st and (st["platform_rt"] or st["platform"])
+
+    dep = start and _seconds_between(start["dep_rt"], start["dep"])
+    arr = end and _seconds_between(end["arr_rt"], end["arr"])
+    return {
+        "departure_delay": dep if dep is not None else trip_row["departure_delay"],
+        "arrival_delay": arr if arr is not None else trip_row["arrival_delay"],
+        "departure_platform": platform(start) or trip_row["departure_platform"],
+        "arrival_platform": platform(end) or trip_row["arrival_platform"],
+        "waypoints": json.dumps(waypoints, ensure_ascii=False),
+    }
+
+
+@motis_blueprint.route("/u/<username>/current/live", methods=["GET", "POST"])
+@login_required
+def current_trip_live(username):
+    """The trip in progress against its runs' live data (GTFS-RT through Transitous):
+    GET says whether there is any, and the delays it gives; POST also saves them (and
+    the stops' live times and the platforms) to the trip. The dashboard's refresh."""
+    from src.trips.utils import get_current_trip_id  # noqa: PLC0415 (import cycle)
+
+    trip_id = get_current_trip_id(username)
+    if trip_id is None:
+        return jsonify({"available": False})
+    with pg_session() as pg:
+        row = pg.execute(
+            """SELECT t.waypoints, t.departure_delay, t.arrival_delay,
+                      t.departure_platform, t.arrival_platform,
+                      (SELECT json_agg(json_build_array(ST_Y(dp.geom), ST_X(dp.geom)) ORDER BY dp.path)
+                       FROM paths p, ST_DumpPoints(p.geom) AS dp WHERE p.trip_id = t.trip_id) AS path
+               FROM trips t WHERE t.trip_id = :trip_id""",
+            {"trip_id": trip_id},
+        ).fetchone()
+    if row is None:
+        return jsonify({"available": False})
+    row = row._mapping
+    try:
+        update = _live_update(row, row["path"] or [])
+    except RateLimited:
+        return jsonify({"available": False, "error": "rate_limited"}), 503
+    except (requests.RequestException, ValueError) as e:
+        logger.warning("MOTIS live refresh failed: %s", e)
+        return jsonify({"available": False, "error": "unavailable"}), 502
+    if update is None:
+        return jsonify({"available": False})
+    if request.method == "POST":
+        with pg_session() as pg:
+            pg.execute(
+                """UPDATE trips SET departure_delay = :departure_delay, arrival_delay = :arrival_delay,
+                          departure_platform = :departure_platform, arrival_platform = :arrival_platform,
+                          waypoints = :waypoints, last_modified = :last_modified
+                   WHERE trip_id = :trip_id""",
+                {**update, "trip_id": trip_id, "last_modified": datetime.now()},
+            )
+    return jsonify({
+        "available": True,
+        "saved": request.method == "POST",
+        "departure_delay": update["departure_delay"],
+        "arrival_delay": update["arrival_delay"],
+        "waypoints": update["waypoints"],
+    })

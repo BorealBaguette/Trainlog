@@ -5,6 +5,7 @@ from datetime import date, datetime
 from flask import Blueprint, jsonify, request
 
 from src.currency import get_exchange_rate
+from src.api.motis import trip_runs
 from src.api.wrapped import get_wrapped_data
 from src.pg import pg_session
 from src.trips.utils import get_current_trip_id
@@ -198,6 +199,9 @@ def dashboard_current_trip(username):
             "departure_delay": r.departure_delay,
             "arrival_delay": r.arrival_delay,
             "waypoints": r.waypoints,
+            # Every stop names its Transitous run: its live delays can be loaded
+            # (/current/live).
+            "live_refresh": bool(trip_runs(r.waypoints)),
         }
     )
 
