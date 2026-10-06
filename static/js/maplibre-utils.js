@@ -141,6 +141,17 @@ async function initializeMapLibre(options = {}) {
     // Add navigation controls
     map.addControl(new maplibregl.NavigationControl(), 'top-right');
 
+    // Zoom readout, for the owner only (TRAINLOG_OWNER, set by the layouts)
+    if (window.TRAINLOG_OWNER) {
+        const zoomBox = document.createElement('div');
+        zoomBox.style.cssText = 'position:absolute;left:50%;top:8px;transform:translateX(-50%);z-index:5;padding:2px 6px;'
+            + 'background:rgba(0,0,0,.6);color:#fff;font:12px monospace;border-radius:4px;pointer-events:none';
+        map.getContainer().appendChild(zoomBox);
+        const showZoom = () => { zoomBox.textContent = `z${map.getZoom().toFixed(2)}`; };
+        map.on('zoom', showZoom);
+        showZoom();
+    }
+
     return map;
 }
 
@@ -274,30 +285,53 @@ function describeOrmLine(p, type) {
     }
 }
 
-// Clicking an overlay line tells what its colour means. Anything the page draws above the
-// sentinel (trips, stops) has its own click, so a hit on one of those within reach wins
+// The overlay line under a point and what to tell about it, or null. Anything the page draws
+// above the sentinel (trips, stops) has its own click and cursor, so a hit on one of those wins
+function ormLineAt(map, point) {
+    const orm = map._ormIds;
+    if (!orm?.layers.length) return null;
+    // Lines are a few px wide: search around the point rather than under it
+    const box = [[point.x - 6, point.y - 6], [point.x + 6, point.y + 6]];
+    const order = map.getLayersOrder();
+    const pageLayers = order.slice(order.indexOf('orm-sentinel') + 1);
+    if (pageLayers.length && map.queryRenderedFeatures(box, { layers: pageLayers }).length) return null;
+    for (const f of map.queryRenderedFeatures(box, { layers: orm.layers })) {
+        if (!f.sourceLayer?.includes('railway_line')) continue;
+        const p = f.properties;
+        // Lines not in service carry no speed, voltage…: their state is what sets them apart
+        const meaning = describeOrmLine(p, orm.type) ?? (p.state !== 'present' ? p.state : null);
+        const title = [p.ref, p.name].filter(Boolean).join(' ');
+        const text = [title, meaning].filter(Boolean).join('\n');
+        if (text) return text;
+    }
+    return null;
+}
+
+// Clicking an overlay line tells what its colour means; hovering one shows the pointer
 function setupOrmPopup(map) {
     if (map._ormPopup) return;
     map._ormPopup = true;
     map.on('click', (e) => {
-        const orm = map._ormIds;
-        if (!orm?.layers.length || e.originalEvent.target !== map.getCanvas()) return;
-        // Lines are a few px wide: search around the click rather than under it
-        const box = [[e.point.x - 6, e.point.y - 6], [e.point.x + 6, e.point.y + 6]];
-        const ids = map.getStyle().layers.map(l => l.id);
-        const pageLayers = ids.slice(ids.indexOf('orm-sentinel') + 1);
-        if (pageLayers.length && map.queryRenderedFeatures(box, { layers: pageLayers }).length) return;
-        const line = map.queryRenderedFeatures(box, { layers: orm.layers })
-            .find(f => f.sourceLayer?.includes('railway_line'));
-        // Lines not in service carry no speed, voltage…: their state is what sets them apart
-        const meaning = line && (describeOrmLine(line.properties, orm.type)
-            ?? (line.properties.state !== 'present' ? line.properties.state : null));
-        if (!meaning) return;
+        if (e.originalEvent.target !== map.getCanvas()) return;
+        const text = ormLineAt(map, e.point);
+        if (!text) return;
         const el = document.createElement('div');
         el.style.whiteSpace = 'pre-line';
-        const title = [line.properties.ref, line.properties.name].filter(Boolean).join(' ');
-        el.textContent = title ? `${title}\n${meaning}` : meaning;
+        el.textContent = text;
         new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat).setDOMContent(el).addTo(map);
+    });
+    // Once per frame at most, and the cursor is only reset when set here: trip layers set theirs
+    let pending = null, pointing = false;
+    map.on('mousemove', (e) => {
+        if (pending) { pending = e.point; return; }
+        pending = e.point;
+        requestAnimationFrame(() => {
+            const over = !!ormLineAt(map, pending);
+            pending = null;
+            if (over === pointing) return;
+            pointing = over;
+            map.getCanvas().style.cursor = over ? 'pointer' : '';
+        });
     });
 }
 

@@ -2,6 +2,7 @@
 <html lang="{{ langId }}">
 
 <head>
+  {% if session.get("userinfo", {}).get("is_owner") %}<script>window.TRAINLOG_OWNER = true;</script>{% endif %}
   <title>Train log</title>
   <meta charset="utf-8">
   
