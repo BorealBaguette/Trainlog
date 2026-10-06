@@ -1595,11 +1595,12 @@
                 return $.getJSON("{{ url_for('motis.motis_trip', username=username) }}", { id: id });
             })).done(function () {
                 var answers = ids.length === 1 ? [arguments[0]] : Array.prototype.map.call(arguments, function (a) { return a[0]; });
-                var byId = {}, runStops = [], live = false;
+                var byId = {}, runStops = [], live = false, liveRun = {};
                 answers.forEach(function (res, k) {
                     var run = (res && res.stops || []).map(function (st) { return $.extend({ run: ids[k] }, st); });
                     runStops = joinRuns(runStops, run);
-                    live = live || !!(res && res.realtime);
+                    liveRun[ids[k]] = !!(res && res.realtime);
+                    live = live || liveRun[ids[k]];
                 });
                 runStops.forEach(function (st) { if (st.id) byId[st.id] = st; });
                 if (!runStops.length) { $('#stopsRefreshNone').show(); return; }
@@ -1613,6 +1614,9 @@
                 rows.forEach(function (r) {
                     var st = r.stop, fresh = st && st.id && byId[st.id];
                     if (!fresh) return;
+                    // No live data (a run that's over: Transitous only has its timetable now)
+                    // says nothing about how it ran: the live times and platform stay.
+                    var freshLive = liveRun[fresh.run];
                     ['arr', 'dep'].forEach(function (f) {
                         var current = fresh[f + '_rt'] || fresh[f];
                         if (renew) {
@@ -1621,7 +1625,7 @@
                             return;
                         }
                         if (fresh[f]) st[f] = fresh[f];
-                        if (fresh[f + '_rt']) st[f + '_rt'] = fresh[f + '_rt']; else delete st[f + '_rt'];
+                        if (fresh[f + '_rt']) st[f + '_rt'] = fresh[f + '_rt']; else if (freshLive) delete st[f + '_rt'];
                     });
                     if (renew && (fresh.platform_rt || fresh.platform)) {
                         st.platform = fresh.platform_rt || fresh.platform;
@@ -1629,7 +1633,7 @@
                     } else {
                         if (fresh.platform) st.platform = fresh.platform;
                         if (fresh.platform_rt && fresh.platform_rt !== st.platform) st.platform_rt = fresh.platform_rt;
-                        else delete st.platform_rt;
+                        else if (freshLive || st.platform_rt === st.platform) delete st.platform_rt;
                     }
                     if (fresh.tz && !st.tz) st.tz = fresh.tz;
                 });

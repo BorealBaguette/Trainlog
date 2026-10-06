@@ -26,13 +26,22 @@ import json
 import logging
 import re
 
+import requests
 from flask import Blueprint, Response, request
+from werkzeug.exceptions import HTTPException
 
 import uuid as _uuid
 from datetime import datetime
 
 from py.utils import getCountriesFromPath, getCountryFromCoordinates
 from src.ai import create_trip_from_parsed, enrich_parsed_trip
+from src.api.motis import (
+    TRANSIT_MODES,
+    OutsideTimetable,
+    RateLimited,
+    departures_payload,
+    run_segment,
+)
 from src.consts import TripTypes
 from src.paths import geom_geojson_to_coords
 from src.photon import photonRequest
@@ -280,12 +289,55 @@ def _build_tools() -> list:
             "inputSchema": {"type": "object", "properties": {}, "required": []},
         },
         {
+            "name": "search_departures",
+            "description": (
+                "Find the actual scheduled services between two stations in the "
+                "public-transport timetables (Transitous / MOTIS): direct runs only, "
+                "no changes. The same list the website shows on its new-trip form. "
+                "Use it for train/tram/metro/bus/ferry/aerialway/funicular trips "
+                "whenever the user gives a date (and ideally a time or a train "
+                "number): pick the run that matches, then pass its `trip_id` to "
+                "add_trip as `transitous_trip_id`, so the trip gets the real times, "
+                "operator, line, platforms and every intermediate stop.\n\n"
+                "Get the coordinates from search_stations first. Runs are listed "
+                "from about 20 minutes before `time` (or the start of `date`) "
+                "onwards; times are local at each stop (YYYY-MM-DDTHH:MM). Only "
+                "dates inside the loaded timetables (roughly the coming weeks) "
+                "have results; `outside_timetable: true` means none can be found."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "default": "train",
+                        "enum": sorted(TRANSIT_MODES),
+                    },
+                    "origin_lat": {"type": "number"},
+                    "origin_lng": {"type": "number"},
+                    "destination_lat": {"type": "number"},
+                    "destination_lng": {"type": "number"},
+                    "date": {"type": "string", "description": "Departure date YYYY-MM-DD (local)."},
+                    "time": {"type": "string", "description": "Local departure time HH:MM to search around."},
+                    "limit": {"type": "integer", "description": "Max runs to return (default 15, max 60)."},
+                },
+                "required": ["origin_lat", "origin_lng", "destination_lat",
+                             "destination_lng", "date"],
+            },
+        },
+        {
             "name": "add_trip",
             "description": (
                 "Create a new trip. One trip = ONE segment (a flight with a "
                 "connection is two trips). Trainlog geocodes the stations, routes "
                 "the path, splits distance across countries and resolves "
                 "timezones for you, so you only supply the facts below.\n\n"
+                "For a scheduled public-transport service, call search_departures "
+                "first and pass the matching run's `trip_id` as "
+                "`transitous_trip_id`: Trainlog then takes the departure/arrival "
+                "times, line, operator, platforms and intermediate stops from the "
+                "timetable (date/time fields are ignored; operator/line_name you "
+                "pass still win) and routes the path through the stops.\n\n"
                 "ALWAYS provide origin_lat/lng and destination_lat/lng. Get them "
                 "by calling search_stations FIRST (with the same `type`) and using "
                 "the matching result's coordinates; only estimate coordinates from "
@@ -319,6 +371,14 @@ def _build_tools() -> list:
                     "arrival_date": {"type": "string", "description": "Arrival date YYYY-MM-DD (overnight trips)."},
                     "time_departure": {"type": "string", "description": "Local departure time HH:MM."},
                     "time_arrival": {"type": "string", "description": "Local arrival time HH:MM."},
+                    "transitous_trip_id": {
+                        "type": "string",
+                        "description": (
+                            "trip_id of the run picked from search_departures. The "
+                            "origin/destination coordinates select where it is "
+                            "boarded and left (the run's stops nearest them)."
+                        ),
+                    },
                     "operator": {"type": "string", "description": "Operating company."},
                     "line_name": {"type": "string", "description": "Flight number / train number / line."},
                     "price": {"type": "number"},
@@ -771,6 +831,105 @@ def _search_stations(query: str, trip_type: str, limit: int) -> list[dict]:
 # ── tool implementations ──────────────────────────────────────────────────────
 
 
+def _search_departures(args: dict) -> dict:
+    """search_departures: the new trip form's timetable list, trimmed for an LLM."""
+    trip_type = args.get("type", "train")
+    if trip_type not in TRANSIT_MODES:
+        raise ValueError(f"No timetables for trip type {trip_type!r}; use one of {sorted(TRANSIT_MODES)}.")
+    try:
+        query = {
+            "type": trip_type,
+            "from": f"{float(args['origin_lat'])},{float(args['origin_lng'])}",
+            "to": f"{float(args['destination_lat'])},{float(args['destination_lng'])}",
+            "date": datetime.strptime(args.get("date") or "", "%Y-%m-%d").strftime("%Y-%m-%d"),
+        }
+        if args.get("time"):
+            query["time"] = datetime.strptime(args["time"], "%H:%M").strftime("%H:%M")
+        payload, _ = departures_payload(query)
+    except (KeyError, TypeError) as e:
+        raise ValueError(f"Missing or invalid coordinates: {e}")
+    except HTTPException:
+        raise ValueError("Invalid search: check the coordinates, the date (YYYY-MM-DD) and time (HH:MM).")
+    if payload is None or payload.get("error") == "unavailable":
+        raise ValueError("The timetable service (Transitous) is unavailable right now. Try again later.")
+    if payload.get("error") == "rate_limited":
+        raise ValueError("The timetable service (Transitous) is rate-limiting; wait a minute and retry.")
+    if payload.get("outside_timetable"):
+        return {"outside_timetable": True, "departures": []}
+
+    limit = max(1, min(int(args.get("limit") or 15), 60))
+    departures = []
+    for d in payload["departures"][:limit]:
+        stops = [
+            " ".join(filter(None, [
+                stop[4] or stop[5],
+                stop[2],
+                f"(pl. {stop[6]})" if stop[6] else None,
+            ]))
+            for stop in d["stops"]
+        ]
+        departures.append({k: v for k, v in {
+            "trip_id": d["trip_id"],
+            "departure": d["departure"],
+            "arrival": d["arrival"],
+            "duration_min": round(d["duration"] / 60) if d.get("duration") else None,
+            "line": d["line"] or None,
+            "headsign": d["headsign"] or None,
+            "operator": d.get("operator") or None,
+            "mode": d["mode"],
+            "replacement_bus": d["replacement_bus"] or None,
+            "from_stop": d["from_name"],
+            "to_stop": d["to_name"],
+            "from_platform": d["from_platform"],
+            "to_platform": d["to_platform"],
+            "departure_delay_min": d["departure_delay"] or None,
+            "arrival_delay_min": d["arrival_delay"] or None,
+            "intermediate_stops": stops,
+        }.items() if v not in (None, [])})
+    return {"departures": departures, "more": len(payload["departures"]) > limit}
+
+
+def _run_fields(run_id: str, trip_type: str, args: dict) -> dict:
+    """add_trip with a Transitous run: what a departure picked on the new trip form
+    fills in (times, line, operator, platforms, stops), as create_trip_from_parsed
+    fields."""
+    if trip_type not in TRANSIT_MODES:
+        raise ValueError(f"transitous_trip_id only works for {sorted(TRANSIT_MODES)} trips.")
+    try:
+        origin = (float(args["origin_lat"]), float(args["origin_lng"]))
+        destination = (float(args["destination_lat"]), float(args["destination_lng"]))
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("origin_lat/lng and destination_lat/lng are required with transitous_trip_id.")
+    try:
+        segment = run_segment(run_id, origin, destination)
+    except (RateLimited, OutsideTimetable, requests.RequestException) as e:
+        raise ValueError(f"Could not fetch the run from Transitous ({e}). Try again later.")
+    board, alight = segment["board"], segment["alight"]
+    start, end = board["dep"] or board["arr"], alight["arr"] or alight["dep"]
+    if not start or not end:
+        raise ValueError("The run has no times at those stops.")
+
+    def utc(value):
+        return datetime.strptime(value, "%Y-%m-%dT%H:%M:%SZ")
+
+    def delay(live, scheduled):
+        return int((utc(live) - utc(scheduled)).total_seconds()) if live and scheduled else None
+
+    return {
+        # Timing from the run replaces date/time_departure/time_arrival.
+        "utc_start_datetime": utc(start),
+        "utc_end_datetime": utc(end),
+        "operator": args.get("operator") or segment["operator"],
+        "line_name": args.get("line_name") or segment["line"] or None,
+        "departure_platform": board["platform_rt"] or board["platform"],
+        "arrival_platform": alight["platform_rt"] or alight["platform"],
+        "departure_delay": delay(board["dep_rt"], board["dep"]),
+        "arrival_delay": delay(alight["arr_rt"], alight["arr"]),
+        "_via": [{"lat": wp["lat"], "lng": wp["lng"]} for wp in segment["stops"]],
+        "_waypoints": json.dumps(segment["stops"], ensure_ascii=False) if segment["stops"] else None,
+    }
+
+
 def _call_tool(name: str, args: dict, user) -> str:
     uid = user.uid
 
@@ -869,6 +1028,9 @@ def _call_tool(name: str, args: dict, user) -> str:
         )
         return json.dumps(sorted(u.username for u in friends), indent=2)
 
+    if name == "search_departures":
+        return json.dumps(_search_departures(args), indent=2, ensure_ascii=False)
+
     if name == "add_trip":
         trip_type = args.get("type", "train")
         if trip_type not in TRIP_TYPE_VALUES:
@@ -902,6 +1064,9 @@ def _call_tool(name: str, args: dict, user) -> str:
             "cabin_class": args.get("cabin_class"),
             "notes": args.get("notes"),
         }
+        run_id = (args.get("transitous_trip_id") or "").strip()
+        if run_id:
+            parsed.update(_run_fields(run_id, trip_type, args))
         trip = create_trip_from_parsed(user, parsed, source="mcp")
         if trip is None:
             raise ValueError(
@@ -913,7 +1078,10 @@ def _call_tool(name: str, args: dict, user) -> str:
             "id": trip.trip_id,
             "origin": trip.origin_station,
             "destination": trip.destination_station,
-        })
+            "start": _iso(trip.start_datetime),
+            "end": _iso(trip.end_datetime),
+            "distance_km": round(trip.trip_length / 1000, 1) if trip.trip_length else None,
+        }, ensure_ascii=False)
 
     if name == "delete_trip":
         with pg_session() as pg:

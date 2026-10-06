@@ -24,7 +24,7 @@ import polyline
 import requests
 from flask import Blueprint, abort, jsonify, request
 
-from py.utils import getCountryFromCoordinates
+from py.utils import get_flag_emoji, getCountryFromCoordinates
 from src.pg import pg_session
 from src.utils import _timezone_finder, login_required
 
@@ -673,9 +673,17 @@ def motis_departures(username):
 def _departures_for(args):
     """The departures list for a search (from, to, date, time, type, page…), as the
     JSON response the forms get."""
+    payload, status = departures_payload(args)
+    return (jsonify(payload), status) if payload is not None else ("", status)
+
+
+def departures_payload(args):
+    """The departures list for a search, as (payload, HTTP status): payload None when
+    nobody waits for it any more (cancelled). Also what the MCP's search_departures
+    answers from."""
     trip_type, origin, destination, start, window, params, modes = _search(args)
     if _outside_timetable(start, window):
-        return jsonify({"departures": [], "outside_timetable": True})
+        return {"departures": [], "outside_timetable": True}, 200
 
     def direct_legs(from_place, to_place):
         plan = _fetch(MOTIS_PLAN_URL, dict(params, fromPlace=from_place, toPlace=to_place))
@@ -749,21 +757,21 @@ def _departures_for(args):
             searches.append(result(replacements))
     except OutsideTimetable:
         # A date outside the loaded timetables: nothing to look up, not a failure.
-        return jsonify({"departures": [], "outside_timetable": True})
+        return {"departures": [], "outside_timetable": True}, 200
     except Cancelled:
         # Nobody is waiting for this answer any more.
-        return "", 204
+        return None, 204
     except RateLimited:
-        return jsonify({"error": "rate_limited", "departures": []}), 503
+        return {"error": "rate_limited", "departures": []}, 503
     except (requests.RequestException, ValueError) as e:
         logger.warning("MOTIS request failed: %s", e)
-        return jsonify({"error": "unavailable", "departures": []}), 502
+        return {"error": "unavailable", "departures": []}, 502
     finally:
         # Don't wait for requests already sent: they finish in the background, and
         # whatever hasn't started yet is dropped.
         pool.shutdown(wait=False, cancel_futures=True)
 
-    return jsonify({"departures": _departures(searches, start, window, destination)})
+    return {"departures": _departures(searches, start, window, destination)}, 200
 
 
 def _departures(searches, start, window, destination):
@@ -893,39 +901,121 @@ def _departures(searches, start, window, destination):
 _TRIP_CACHE_TTL = 30
 
 
-def _run_stops(trip_id):
-    """A run's stops, first to last, scheduled and live, and whether Transitous has live
-    data for it. Raises what _fetch raises; an id it doesn't know (left the feed) is
-    no stops."""
+def _run_leg(trip_id):
+    """A run's leg, as /api/v5/trip gives it, or None for an id Transitous doesn't know
+    (left the feed). Raises what _fetch raises."""
     try:
         trip = _fetch(MOTIS_TRIP_URL, {"tripId": trip_id}, ttl=_TRIP_CACHE_TTL)
     except requests.HTTPError as e:
         if e.response is not None and e.response.status_code in (400, 404, 422):
-            return [], False
+            return None
         raise
     legs = [leg for leg in trip.get("legs") or [] if leg.get("mode") != "WALK"]
-    if not legs:
+    return legs[0] if legs else None
+
+
+def _run_places(leg):
+    return [
+        place
+        for place in [leg.get("from") or {}, *(leg.get("intermediateStops") or []), leg.get("to") or {}]
+        if place.get("lat") is not None
+    ]
+
+
+def _place_record(place):
+    return {
+        "id": place.get("stopId"),
+        "name": place.get("name"),
+        "lat": round(place["lat"], COORD_DIGITS),
+        "lng": round(place["lon"], COORD_DIGITS),
+        "arr": _utc(place.get("scheduledArrival")),
+        "dep": _utc(place.get("scheduledDeparture")),
+        "arr_rt": _live(place, "Arrival"),
+        "dep_rt": _live(place, "Departure"),
+        "platform": (place.get("scheduledTrack") or place.get("track") or "").strip() or None,
+        "platform_rt": (place.get("track") or "").strip() or None,
+        "tz": place.get("tz"),
+        "cc": getCountryFromCoordinates(place["lat"], place["lon"])["countryCode"],
+    }
+
+
+def _run_stops(trip_id):
+    """A run's stops, first to last, scheduled and live, and whether Transitous has live
+    data for it. Raises what _fetch raises; an id it doesn't know (left the feed) is
+    no stops."""
+    leg = _run_leg(trip_id)
+    if not leg:
         return [], False
-    leg = legs[0]
-    stops = []
-    for place in [leg.get("from") or {}, *(leg.get("intermediateStops") or []), leg.get("to") or {}]:
-        if place.get("lat") is None:
-            continue
-        stops.append({
-            "id": place.get("stopId"),
-            "name": place.get("name"),
-            "lat": round(place["lat"], COORD_DIGITS),
-            "lng": round(place["lon"], COORD_DIGITS),
-            "arr": _utc(place.get("scheduledArrival")),
-            "dep": _utc(place.get("scheduledDeparture")),
-            "arr_rt": _live(place, "Arrival"),
-            "dep_rt": _live(place, "Departure"),
-            "platform": (place.get("scheduledTrack") or place.get("track") or "").strip() or None,
-            "platform_rt": (place.get("track") or "").strip() or None,
-            "tz": place.get("tz"),
-            "cc": getCountryFromCoordinates(place["lat"], place["lon"])["countryCode"],
+    return [_place_record(place) for place in _run_places(leg)], bool(leg.get("realTime"))
+
+
+# How far the stops a run is boarded and left at can be from the trip's two ends.
+RUN_END_MAX_M = 1500
+
+
+def run_segment(trip_id, origin, destination):
+    """The part of a run ridden from origin to destination ((lat, lng) each): the stops
+    nearest them, in that order, within RUN_END_MAX_M. What a departure picked on the
+    new trip form fills in, for a trip made elsewhere (the MCP's add_trip):
+
+    {"line", "agency", "operator", "board", "alight", "stops"}, where board and alight
+    are the two end stops' records and stops the via waypoints between them, as the form
+    saves them ({lat, lng, name, stop}, the stop record as stopRecord() makes it).
+    Raises ValueError for a run Transitous doesn't know or that doesn't pass there."""
+    leg = _run_leg(trip_id)
+    if not leg:
+        raise ValueError("Transitous doesn't know this run (anymore). Search departures again.")
+    places = _run_places(leg)
+
+    def nearest(point, candidates):
+        return min(
+            ((_distance_m(places[i]["lat"], places[i]["lon"], *point), i) for i in candidates),
+            default=(None, None),
+        )
+
+    # Boarding can't be the last stop, nor alighting before it.
+    board_m, board = nearest(origin, range(len(places) - 1))
+    alight_m, alight = nearest(destination, range(board + 1, len(places))) if board is not None else (None, None)
+    if board is None or alight is None or board_m > RUN_END_MAX_M or alight_m > RUN_END_MAX_M:
+        raise ValueError(
+            "That run doesn't call near both the origin and the destination "
+            "(in that order). Check the coordinates or pick another run."
+        )
+
+    stops = [_stop(place) for place in places[board + 1:alight]]
+    _snap_stops(stops, _leg_path(leg))
+    waypoints = []
+    for stop in stops:
+        record = {
+            "name": stop[2], "cc": stop[3], "platform": stop[15] or stop[6],
+            "arr": stop[7], "dep": stop[8], "arr_rt": stop[13], "dep_rt": stop[14],
+            "platform_rt": stop[6] if stop[6] != (stop[15] or stop[6]) else None,
+            "tz": stop[9], "lat": stop[10], "lng": stop[11], "id": stop[12], "trip": trip_id,
+        }
+        name = stop[2] or f"{stop[0]}, {stop[1]}"
+        flag = get_flag_emoji(stop[3]) if stop[3] and stop[3] != "UN" else None
+        waypoints.append({
+            "lat": stop[0],
+            "lng": stop[1],
+            "name": f"{flag} {name}" if flag else name,
+            "stop": {k: v for k, v in record.items() if v not in (None, "")},
         })
-    return stops, bool(leg.get("realTime"))
+
+    agency = (leg.get("agencyName") or "").strip()
+    try:
+        departure = _parse_utc(places[board].get("scheduledDeparture") or places[board].get("departure"))
+        operator = _resolve_operators({agency}, departure.date()).get(agency, {}).get("operator") if agency else None
+    except Exception:
+        logger.exception("Operator lookup for a MOTIS agency failed")
+        operator = None
+    return {
+        "line": _line_name(leg),
+        "agency": agency,
+        "operator": operator or agency or None,
+        "board": _place_record(places[board]),
+        "alight": _place_record(places[alight]),
+        "stops": waypoints,
+    }
 
 
 @motis_blueprint.route("/u/<username>/motis/trip")
