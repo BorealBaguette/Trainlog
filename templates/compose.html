@@ -163,7 +163,7 @@
   /* Driven by the switch's own state rather than JS, so it can't fall out of sync: the
      trip type and "every point exact" belong to the new router, i.e. the switch ("use
      legacy router") off. */
-  .cp-bubble.cp-router { width: min(340px, calc(100vw - 32px)); }
+  .cp-bubble.cp-router { width: min(340px, calc(100vw - 32px)); max-height: 70vh; overflow-y: auto; }
   #newRouterProfileCompose, .cp-bubble .cp-all-exact { display: none; }
   .cp-bubble:has(#newRouterToggleCompose:not(:checked)) #newRouterProfileCompose { display: flex; }
   .cp-bubble:has(#newRouterToggleCompose:not(:checked)) .cp-all-exact { display: flex; }
@@ -699,6 +699,8 @@
            the new router; the legacy router is the fallback, last. #}
         <div class="cp-bubble cp-router">
           <div class="cp-bubble-title">{{ routerMode|default('Router') }}</div>
+          <div id="routerTrayHeaderCompose"></div>
+          <div class="router-advanced" style="display: none;">
           <div class="router-seg" id="newRouterProfileCompose" role="group">
             {% for value, label, icon in [('train', train|default('Train'), 'fa-train'), ('tram', tram|default('Tram'), 'fa-train-tram'),
                                           ('metro', metro|default('Metro'), 'fa-train-subway'), ('all', all|default('All'), 'fa-layer-group')] %}
@@ -712,11 +714,13 @@
             <input type="checkbox" class="router-switch all-exact-toggle" id="allExactCompose"
                    onchange="setAllWaypointsExact(this.checked)">
           </label>
+          <div id="routeFiltersCompose"></div>
           <label class="router-row" title="{{ useLegacyRouterHint }}">
             <i class="fa-solid fa-clock-rotate-left router-row-icon"></i>
             <span class="router-row-label">{{ useLegacyRouter }}</span>
             <input type="checkbox" class="router-switch" role="switch" id="newRouterToggleCompose">
           </label>
+          </div>
         </div>
       </details>
       {% endif %}
@@ -1162,6 +1166,14 @@ var texts = {
   useLegacyRouter:        "{{ useLegacyRouter }}",
   allWaypointsExact:      "{{ allWaypointsExact }}",
   allWaypointsExactHint:  "{{ allWaypointsExactHint }}",
+  routeFiltersAdvanced: {{ (routeFiltersAdvanced|default(""))|tojson }},
+  routeFilterAny: {{ (routeFilterAny|default(""))|tojson }},
+  routeFilterAvoidHighspeed: {{ (routeFilterAvoidHighspeed|default(""))|tojson }},
+  routeFilterMaxSpeed: {{ (routeFilterMaxSpeed|default(""))|tojson }},
+  routeFilterElectrifiedOnly: {{ (routeFilterElectrifiedOnly|default(""))|tojson }},
+  routeFilterPower: {{ (routeFilterPower|default(""))|tojson }},
+  routeFilterGauge: {{ (routeFilterGauge|default(""))|tojson }},
+  routeFiltersNoRoute: {{ (routeFiltersNoRoute|default(""))|tojson }},
   train:                  "{{ train|default('Train') }}",
   tram:                   "{{ tram|default('Tram') }}",
   metro:                  "{{ metro|default('Metro') }}",
@@ -1520,7 +1532,7 @@ function renderRouteSummary(state) {
     html = '<span class="cp-summary-route">' + escapeHtmlSummary(routeSummaryTexts.idle) + '</span>';
   } else if (state === 'error') {
     html = '<span class="cp-summary-route">' + escapeHtmlSummary(route) + '</span>' +
-           '<span>' + escapeHtmlSummary(routeSummaryTexts.error) + '</span>';
+           '<span>' + escapeHtmlSummary(routeFiltersActive() ? texts.routeFiltersNoRoute : routeSummaryTexts.error) + '</span>';
   } else {
     html = '<span class="cp-summary-route">' + escapeHtmlSummary(route) + '</span>';
     if (state === 'routing') {
@@ -2013,6 +2025,8 @@ function bindNewRouterToggle() {
   var profile = document.getElementById('newRouterProfileCompose');
   if (!toggle || toggle._bound) return;
   toggle._bound = true;
+  document.getElementById('routerTrayHeaderCompose').innerHTML = buildRouterTrayHeaderHtml();
+  document.getElementById('routeFiltersCompose').innerHTML = buildRouteFiltersHtml();
   // The trip type is the segmented control's active button.
   function profileValue() {
     var active = profile.querySelector('.router-seg-btn.active');
@@ -2056,6 +2070,7 @@ function bindNewRouterToggle() {
   toggle.checked = !useNewRouter;
   toggle.addEventListener('change', function() {
     useNewRouter = !this.checked;
+    syncRouteFiltersVisibility();
     reroute();
     updateMarkerVisuals();
   });
@@ -2066,6 +2081,8 @@ function bindNewRouterToggle() {
       b.classList.toggle('active', b === btn);
       b.setAttribute('aria-pressed', String(b === btn));
     });
+    newRouterProfile = btn.dataset.profile;   // routing.js offers track filters on train only
+    syncRouteFiltersVisibility();
     reroute();
   });
 }

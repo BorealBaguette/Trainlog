@@ -348,9 +348,9 @@ function switchRouter() {
 }
 
 function buildNewRouterToggleHtml() {
-  // Styled in waypoint_popup.css (.router-box). The trip-type choice and "every point
-  // exact" belong to the new router, so they show only while it is in use; the legacy
-  // router is the fallback, last.
+  // Styled in waypoint_popup.css (.router-box), all of it in the options tray. The
+  // trip-type choice and "every point exact" belong to the new router, so they show
+  // only while it is in use; the legacy router is the fallback, last.
   var profiles = [
     ["train", texts.train, "fa-train"], ["tram", texts.tram, "fa-train-tram"],
     ["metro", texts.metro, "fa-train-subway"], ["all", texts.all, "fa-layer-group"]
@@ -362,6 +362,8 @@ function buildNewRouterToggleHtml() {
 
   return `
     <div class="router-box">
+      ${buildRouterTrayHeaderHtml()}
+      <div class="router-advanced" style="${routerAdvancedOpen ? '' : 'display: none;'}">
       <div class="router-seg" id="newRouterProfile" role="group" style="${useNewRouter ? '' : 'display: none;'}">
         ${profiles}
       </div>
@@ -371,6 +373,7 @@ function buildNewRouterToggleHtml() {
         <input type="checkbox" class="router-switch all-exact-toggle" onchange="setAllWaypointsExact(this.checked)"
                ${allWaypointsExact ? 'checked' : ''}>
       </label>
+      ${buildRouteFiltersHtml()}
       <div class="router-row">
         <i class="fa-solid fa-clock-rotate-left router-row-icon"></i>
         <span class="router-row-label">
@@ -380,6 +383,7 @@ function buildNewRouterToggleHtml() {
         </span>
         <input type="checkbox" class="router-switch" id="newRouterToggle" onchange="switchRouter()"
                ${useNewRouter ? '' : 'checked'}>
+      </div>
       </div>
     </div>
   `;
@@ -640,6 +644,139 @@ function applyWaypointModes(router, waypoints) {
   }).join(',');
 }
 
+// The router options sit in a tray, closed by default to keep the sidebar short on
+// phones; closing it only hides them. The track filters among them are only taken by
+// the new router's train profile (src/routing.py turns them into its custom_model).
+var routerAdvancedOpen = false;
+var routeFilters = {};
+var ROUTE_FILTER_KEYS = ['avoid_highspeed', 'max_speed', 'electrified', 'power', 'gauge'];
+var routeFilterTimer = null;
+var routeFiltersNoRoute = false;   // the last request found nothing that passes them
+
+function routeFiltersAvailable() {
+  return useNewRouter && newRouterProfile === 'train';
+}
+
+function routeFiltersActive() {
+  return routeFiltersAvailable() && Object.keys(routeFilters).length > 0;
+}
+
+function applyRouteFilters(router) {
+  var params = router.options.requestParameters;
+  if (!params) return;
+  ROUTE_FILTER_KEYS.forEach(function (k) { delete params[k]; });
+  if (routeFiltersActive()) Object.assign(params, routeFilters);
+}
+
+function buildRouteFiltersHtml() {
+  function row(icon, label, control) {
+    return `<label class="router-row"><i class="fa-solid ${icon} router-row-icon"></i>
+              <span class="router-row-label">${label}</span>${control}</label>`;
+  }
+  function select(key, choices) {
+    return `<select class="router-select" onchange="setRouteFilter('${key}', this.value)">` +
+      [['', texts.routeFilterAny]].concat(choices).map(function (c) {
+        return `<option value="${c[0]}"${(routeFilters[key] || '') === c[0] ? ' selected' : ''}>${c[1]}</option>`;
+      }).join('') + '</select>';
+  }
+  var power = (routeFilters.power || '').split(',');
+  var powerButtons = [
+    ['25kv', '25 kV', '25 kV 50 Hz'], ['15kv', '15 kV', '15 kV 16.7 Hz'], ['3kv', '3 kV', '3 kV DC'],
+    ['1.5kv', '1.5 kV', '1.5 kV DC'], ['750v', '750 V', '750 V DC']
+  ].map(function (p) {
+    var on = power.includes(p[0]);
+    return `<button type="button" class="router-seg-btn${on ? ' active' : ''}" aria-pressed="${on}" title="${p[2]}"
+              onclick="toggleRoutePower(this, '${p[0]}')"><span>${p[1]}</span></button>`;
+  }).join('');
+
+  return `
+    <div class="route-filters-box" style="${routeFiltersAvailable() ? '' : 'display: none;'}">
+      <div class="route-filters">
+        ${row('fa-gauge-high', texts.routeFilterAvoidHighspeed,
+              `<input type="checkbox" class="router-switch" onchange="setRouteFilter('avoid_highspeed', this.checked ? '1' : '')"
+                      ${routeFilters.avoid_highspeed ? 'checked' : ''}>`)}
+        ${row('fa-gauge', texts.routeFilterMaxSpeed,
+              select('max_speed', [120, 160, 200].map(function (v) { return [String(v), v + ' km/h']; })))}
+        ${row('fa-bolt', texts.routeFilterElectrifiedOnly,
+              `<input type="checkbox" class="router-switch" onchange="setRouteFilter('electrified', this.checked ? 'yes' : '')"
+                      ${routeFilters.electrified ? 'checked' : ''}>`)}
+        <div class="router-row"><i class="fa-solid fa-plug router-row-icon"></i>
+          <span class="router-row-label">${texts.routeFilterPower}</span></div>
+        <div class="router-seg">${powerButtons}</div>
+        ${row('fa-ruler-horizontal', texts.routeFilterGauge,
+              select('gauge', ['1435', '1520', '1668', '1000', '1067'].map(function (v) { return [v, v + ' mm']; })))}
+      </div>
+    </div>
+  `;
+}
+
+// The tray's header, with the count of filters still applied while it is closed, and
+// the no-route message outside the tray so it shows either way.
+function buildRouterTrayHeaderHtml() {
+  return `
+    <button type="button" class="router-tray-toggle${routerAdvancedOpen ? ' open' : ''}" aria-expanded="${routerAdvancedOpen}"
+            onclick="toggleRouterAdvanced()">
+      <i class="fa-solid fa-sliders router-row-icon"></i>
+      <span class="router-row-label">${texts.routeFiltersAdvanced}</span>
+      <span class="router-filter-count">${activeFilterCount() || ''}</span>
+      <i class="fa-solid fa-chevron-down router-tray-chevron"></i>
+    </button>
+    <div class="route-filters-error" style="${routeFiltersNoRoute ? '' : 'display: none;'}">
+      <i class="fa-solid fa-triangle-exclamation"></i> ${texts.routeFiltersNoRoute}</div>
+  `;
+}
+
+function activeFilterCount() {
+  return routeFiltersAvailable() ? Object.keys(routeFilters).length : 0;
+}
+
+// Shown or hidden in place where the page doesn't re-render its router box (compose).
+function syncRouteFiltersVisibility() {
+  document.querySelectorAll('.route-filters-box').forEach(function (el) {
+    el.style.display = routeFiltersAvailable() ? '' : 'none';
+  });
+  document.querySelectorAll('.router-filter-count').forEach(function (el) { el.textContent = activeFilterCount() || ''; });
+}
+
+function toggleRouterAdvanced() {
+  routerAdvancedOpen = !routerAdvancedOpen;
+  document.querySelectorAll('.router-advanced').forEach(function (el) { el.style.display = routerAdvancedOpen ? '' : 'none'; });
+  document.querySelectorAll('.router-tray-toggle').forEach(function (el) {
+    el.classList.toggle('open', routerAdvancedOpen);
+    el.setAttribute('aria-expanded', String(routerAdvancedOpen));
+  });
+}
+
+function setRouteFilter(key, value) {
+  if (value) routeFilters[key] = value;
+  else delete routeFilters[key];
+  document.querySelectorAll('.router-filter-count').forEach(function (el) { el.textContent = activeFilterCount() || ''; });
+  rerouteForFilters();
+}
+
+function toggleRoutePower(btn, value) {
+  var on = !btn.classList.contains('active');
+  btn.classList.toggle('active', on);
+  btn.setAttribute('aria-pressed', String(on));
+  var power = (routeFilters.power ? routeFilters.power.split(',') : []).filter(function (p) { return p !== value; });
+  if (on) power.push(value);
+  setRouteFilter('power', power.join(','));
+}
+
+// Debounced: a filter forcing a detour takes seconds to route, so a few quick changes
+// make one request. The sidebar keeps the controls meanwhile (no spinner swap).
+function rerouteForFilters() {
+  clearTimeout(routeFilterTimer);
+  document.querySelectorAll('.route-filters-box').forEach(function (el) { el.classList.add('loading'); });
+  routeFilterTimer = setTimeout(function () {
+    routeDetails = null;
+    delete newTrip.details;
+    lastElecPreview = null;
+    lastElecPreviewPath = null;
+    window.control.route();
+  }, 600);
+}
+
 // Custom router that handles freehand segments
 function createCustomRouter(baseRouter, freehandSegments) {
   return {
@@ -777,6 +914,7 @@ function createCustomRouter(baseRouter, freehandSegments) {
         } else {
           // Handle routed segment
           applyWaypointModes(baseRouter, segment.waypoints);
+          applyRouteFilters(baseRouter);
           baseRouter.route(segment.waypoints, function(err, routes) {
             if (err) {
               hasError = true;
@@ -1639,11 +1777,13 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
           newTrip["freehandSegments"] = JSON.stringify(Array.from(freehandSegments));
       }
     }).on('routingerror', function(){
-      var errorContentWithToggle = errorContent;
-      
+      // Strict filters often leave no route at all: the filter box says so (see below)
+      // rather than "routing failed"
+      var errorContentWithToggle = routeFiltersActive() ? '' : errorContent;
+
       // Add router selector for train, tram, metro even on error
       if(["train", "tram", "metro", "funicular"].includes(type)){
-        errorContentWithToggle = buildNewRouterToggleHtml() + errorContent;
+        errorContentWithToggle = buildNewRouterToggleHtml() + errorContentWithToggle;
         flutterBridge.routingError('Routing failed');
         flutterBridge.loading(false);
       }
@@ -1708,6 +1848,13 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
 
     // Store control globally: window.control for switchRouter, window.currentControl for toggleFreehand
     window.control = control;
+    control.on('routesfound routingerror', function (e) {
+      routeFiltersNoRoute = e.type === 'routingerror' && routeFiltersActive();
+      document.querySelectorAll('.route-filters-box.loading').forEach(function (el) { el.classList.remove('loading'); });
+      document.querySelectorAll('.route-filters-error').forEach(function (el) {
+        el.style.display = routeFiltersNoRoute ? '' : 'none';
+      });
+    });
     window.currentControl = control;
   }
 

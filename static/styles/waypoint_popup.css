@@ -260,3 +260,52 @@
 .router-switch:checked { background: #3b63b8; }
 .router-switch:checked::after { transform: translateX(14px); }
 .router-switch:focus-visible { outline: 2px solid #86b7fe; outline-offset: 2px; }
+
+/* Track filters (routing.js buildRouteFiltersHtml) */
+.route-filters-box.loading { opacity: .6; transition: opacity .2s; }
+.route-filters { margin: 4px 0; padding: 4px 0; border-block: 1px solid #e3e6ea; }
+.route-filters .router-seg { flex-wrap: wrap; }
+.route-filters .router-seg-btn { flex: 1 0 auto; }
+#sidebar .router-box .route-filters button.router-seg-btn.active, .route-filters .router-seg-btn.active { cursor: pointer; }
+.router-select {
+  flex: none;
+  max-width: 50%;
+  padding: 2px 4px;
+  border: 1px solid #d5d9df;
+  border-radius: 6px;
+  background: #fff;
+  font: inherit;
+  color: inherit;
+}
+.route-filters-error { margin: 4px 0 2px; padding: 6px 8px; border-radius: 8px; background: #fdecec; color: #b42318; }
+
+/* Router options tray (routing.js buildRouterTrayHeaderHtml) */
+#sidebar .router-box button.router-tray-toggle, .router-tray-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  margin: 0;
+  padding: 2px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.router-tray-toggle + .route-filters-error, .router-advanced { margin-top: 6px; }
+.router-filter-count:empty { display: none; }
+.router-filter-count {
+  min-width: 18px;
+  padding: 0 5px;
+  border-radius: 9px;
+  background: #3b63b8;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+}
+.router-tray-chevron { flex: none; font-size: 11px; color: #6b7280; transition: transform .2s; }
+.router-tray-toggle.open .router-tray-chevron { transform: rotate(180deg); }
