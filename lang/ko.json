@@ -1397,7 +1397,7 @@
     "waypointHard": "정확",
     "waypointSoftHint": "경로가 이 지점 근처만 지나가면 됩니다.",
     "waypointHardHint": "우회하더라도 경로가 이 지점을 정확히 지나갑니다.",
-    "motisLine": "{line}번",
+    "motisLine": "{line}호선",
     "motisTrack": "{track}번 선",
     "motisEarlier": "이전 출발",
     "motisLater": "이후 출발",
