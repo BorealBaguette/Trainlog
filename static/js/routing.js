@@ -374,6 +374,7 @@ function buildNewRouterToggleHtml() {
                ${allWaypointsExact ? 'checked' : ''}>
       </label>
       ${buildRouteFiltersHtml()}
+      ${buildOrmOverlayHtml()}
       <div class="router-row">
         <i class="fa-solid fa-clock-rotate-left router-row-icon"></i>
         <span class="router-row-label">
@@ -650,6 +651,15 @@ function applyWaypointModes(router, waypoints) {
 var routerAdvancedOpen = false;
 var routeFilters = {};
 var ROUTE_FILTER_KEYS = ['avoid_highspeed', 'max_speed', 'electrified', 'power', 'gauge'];
+// Widest first: value, text key of its name, width shown, width drawn by gaugeGlyph.
+// Every gauge of 1067 mm or less is the one narrow choice. Kept in step with GAUGES in
+// src/routing.py.
+var ROUTE_GAUGES = [
+  ['1676', 'routeGaugeIndian', '1676 mm', 1676], ['1668', 'routeGaugeIberian', '1668 mm', 1668],
+  ['1600', 'routeGaugeIrish', '1600 mm', 1600], ['1524', 'routeGaugeFinnish', '1524 mm', 1524],
+  ['1520', 'routeGaugeRussian', '1520 mm', 1520], ['1435', 'routeGaugeStandard', '1435 mm', 1435],
+  ['narrow', 'routeGaugeNarrow', '≤ 1067 mm', 1000]
+];
 var routeFilterTimer = null;
 var routeFiltersNoRoute = false;   // the last request found nothing that passes them
 
@@ -673,21 +683,11 @@ function buildRouteFiltersHtml() {
     return `<label class="router-row"><i class="fa-solid ${icon} router-row-icon"></i>
               <span class="router-row-label">${label}</span>${control}</label>`;
   }
-  function select(key, choices) {
-    return `<select class="router-select" onchange="setRouteFilter('${key}', this.value)">` +
-      [['', texts.routeFilterAny]].concat(choices).map(function (c) {
-        return `<option value="${c[0]}"${(routeFilters[key] || '') === c[0] ? ' selected' : ''}>${c[1]}</option>`;
-      }).join('') + '</select>';
-  }
-  var power = (routeFilters.power || '').split(',');
-  var powerButtons = [
-    ['25kv', '25 kV', '25 kV 50 Hz'], ['15kv', '15 kV', '15 kV 16.7 Hz'], ['3kv', '3 kV', '3 kV DC'],
-    ['1.5kv', '1.5 kV', '1.5 kV DC'], ['750v', '750 V', '750 V DC']
-  ].map(function (p) {
-    var on = power.includes(p[0]);
-    return `<button type="button" class="router-seg-btn${on ? ' active' : ''}" aria-pressed="${on}" title="${p[2]}"
-              onclick="toggleRoutePower(this, '${p[0]}')"><span>${p[1]}</span></button>`;
-  }).join('');
+  // AC as a sine, DC as its symbol (a line over a dashed one)
+  var ac = '<svg viewBox="0 0 22 16" width="22" height="16" aria-hidden="true"><path d="M3 8C5.5 2 8.5 2 11 8S16.5 14 19 8" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>';
+  var dc = '<svg viewBox="0 0 22 16" width="22" height="16" aria-hidden="true"><path d="M3 5.5H19M3 10.5H6.5M9.25 10.5H12.75M15.5 10.5H19" stroke="currentColor" stroke-width="1.8"/></svg>';
+  // No filter: worded per row, to agree with each label
+  var anyItem = function (text) { return ['', text, '', '']; };
 
   return `
     <div class="route-filters-box" style="${routeFiltersAvailable() ? '' : 'display: none;'}">
@@ -695,19 +695,166 @@ function buildRouteFiltersHtml() {
         ${row('fa-gauge-high', texts.routeFilterAvoidHighspeed,
               `<input type="checkbox" class="router-switch" onchange="setRouteFilter('avoid_highspeed', this.checked ? '1' : '')"
                       ${routeFilters.avoid_highspeed ? 'checked' : ''}>`)}
-        ${row('fa-gauge', texts.routeFilterMaxSpeed,
-              select('max_speed', [120, 160, 200].map(function (v) { return [String(v), v + ' km/h']; })))}
+        ${buildRouterPickerHtml('fa-gauge', texts.routeFilterMaxSpeed,
+              [anyItem(texts.routeFilterSpeedAny)].concat([120, 160, 200].map(function (v) { return [String(v), v + ' km/h', '', '']; })),
+              routeFilters.max_speed || '', 'setRouteMaxSpeed')}
         ${row('fa-bolt', texts.routeFilterElectrifiedOnly,
               `<input type="checkbox" class="router-switch" onchange="setRouteFilter('electrified', this.checked ? 'yes' : '')"
                       ${routeFilters.electrified ? 'checked' : ''}>`)}
-        <div class="router-row"><i class="fa-solid fa-plug router-row-icon"></i>
-          <span class="router-row-label">${texts.routeFilterPower}</span></div>
-        <div class="router-seg">${powerButtons}</div>
-        ${row('fa-ruler-horizontal', texts.routeFilterGauge,
-              select('gauge', ['1435', '1520', '1668', '1000', '1067'].map(function (v) { return [v, v + ' mm']; })))}
+        ${buildRouterPickerHtml('fa-plug', texts.routeFilterPower, [anyItem(texts.routeFilterPowerAny),
+              ['25kv', '25 kV', ac, '50 Hz'], ['15kv', '15 kV', ac, '16.7 Hz'], ['3kv', '3 kV', dc, 'DC'],
+              ['1.5kv', '1.5 kV', dc, 'DC'], ['750v', '750 V', dc, 'DC']
+            ], routeFilters.power || '', 'setRoutePower', true)}
+        ${buildRouterPickerHtml('fa-ruler-horizontal', texts.routeFilterGauge,
+              [anyItem(texts.routeFilterGaugeAny)].concat(ROUTE_GAUGES.map(function (g) {
+                return [g[0], texts[g[1]], gaugeGlyph(g[3]), g[2], g[2]];
+              })), routeFilters.gauge || '', 'setRouteGauge')}
       </div>
     </div>
   `;
+}
+
+function setRouteGauge(value) { setRouteFilter('gauge', value); }
+function setRouteMaxSpeed(value) { setRouteFilter('max_speed', value); }
+function setRoutePower(value) { setRouteFilter('power', value); }
+
+// A track seen from above: two rails across three sleepers, to scale (the widest gauge
+// spans 16 of the 22 units).
+function gaugeGlyph(mm) {
+  var half = mm / 1676 * 16 / 2, l = 11 - half, r = 11 + half;
+  return `<svg class="gauge-glyph" viewBox="0 0 22 16" width="22" height="16" aria-hidden="true">
+            <path d="M${l - 2.5} 3H${r + 2.5}M${l - 2.5} 8H${r + 2.5}M${l - 2.5} 13H${r + 2.5}" stroke="currentColor" stroke-opacity=".35" stroke-width="1.6"/>
+            <path d="M${l} 0V16M${r} 0V16" stroke="currentColor" stroke-width="2"/></svg>`;
+}
+
+// A choice whose options show more than a <select> can: each item is
+// [value, name, glyph html, side text, text shown closed (defaults to the name)].
+// The list opens in place under its row, as a floating one would be cut off by
+// compose's scrolling bubble. onPick names a global function given the value. A multi
+// picker takes and gives its values comma-separated, stays open while they are ticked,
+// and its '' item (none) clears them.
+function buildRouterPickerHtml(icon, label, items, value, onPick, multi) {
+  var picked = multi ? (value ? value.split(',') : []) : [value];
+  if (!multi && !items.some(function (i) { return i[0] === value; })) picked = [items[0][0]];
+  var isOn = function (i) { return multi && i[0] === '' ? picked.length === 0 : picked.includes(i[0]); };
+  var options = items.map(function (i) {
+    var on = isOn(i);
+    return `<button type="button" role="option" class="router-picker-opt${on ? ' active' : ''}" aria-selected="${on}"
+              data-value="${i[0]}" data-short="${i[4] || i[1]}" onclick="pickRouterOption(this)">
+              <span class="router-picker-glyph">${i[2]}</span><span class="router-picker-name">${i[1]}</span>
+              <span class="router-picker-side">${i[3]}</span><i class="fa-solid fa-check router-picker-check"></i></button>`;
+  }).join('');
+  var current = items.filter(isOn);
+  return `
+    <div class="router-picker" data-on-pick="${onPick}"${multi ? ' data-multi="1"' : ''}>
+      <button type="button" class="router-row router-picker-toggle" aria-expanded="false" onclick="toggleRouterPicker(this)">
+        <i class="fa-solid ${icon} router-row-icon"></i>
+        <span class="router-row-label">${label}</span>
+        ${pickerCurrentHtml(current.map(function (i) { return i[4] || i[1]; }))}
+        <i class="fa-solid fa-chevron-down router-tray-chevron"></i>
+      </button>
+      <div class="router-picker-list" role="listbox" aria-label="${label}"${multi ? ' aria-multiselectable="true"' : ''}
+           hidden onkeydown="routerPickerKey(event, this)">${options}</div>
+    </div>`;
+}
+
+// The closed picker's summary: the short texts of its picked items (no glyph: the
+// row's icon already tells what it is).
+function pickerCurrentHtml(labels) {
+  return `<span class="router-picker-current">${labels.join(' · ')}</span>`;
+}
+
+function toggleRouterPicker(toggle, open) {
+  var list = toggle.nextElementSibling;
+  if (open === undefined) open = list.hidden;
+  list.hidden = !open;
+  toggle.classList.toggle('open', open);
+  toggle.setAttribute('aria-expanded', String(open));
+  if (open) (list.querySelector('.active') || list.firstElementChild).focus();
+}
+
+function pickRouterOption(opt) {
+  var picker = opt.closest('.router-picker');
+  var toggle = picker.querySelector('.router-picker-toggle');
+  var opts = Array.prototype.slice.call(picker.querySelectorAll('.router-picker-opt'));
+  var multi = !!picker.dataset.multi;
+  opts.forEach(function (o) {
+    var on = !multi ? o === opt
+      : opt.dataset.value === '' ? o === opt
+      : o.dataset.value === '' ? false
+      : o === opt ? !o.classList.contains('active') : o.classList.contains('active');
+    o.classList.toggle('active', on);
+    o.setAttribute('aria-selected', String(on));
+  });
+  var picked = opts.filter(function (o) { return o.dataset.value !== '' && o.classList.contains('active'); });
+  if (multi && !picked.length) {
+    opts[0].classList.add('active');
+    opts[0].setAttribute('aria-selected', 'true');
+  }
+  var active = opts.filter(function (o) { return o.classList.contains('active'); });
+  picker.querySelector('.router-picker-current').outerHTML =
+    pickerCurrentHtml(active.map(function (o) { return o.dataset.short; }));
+  if (!multi) {
+    toggleRouterPicker(toggle, false);
+    toggle.focus();
+  }
+  window[picker.dataset.onPick](multi ? picked.map(function (o) { return o.dataset.value; }).join(',') : opt.dataset.value);
+}
+
+function routerPickerKey(e, list) {
+  var opts = Array.prototype.slice.call(list.children), i = opts.indexOf(document.activeElement);
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    toggleRouterPicker(list.previousElementSibling, false);
+    list.previousElementSibling.focus();
+  } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    opts[(i + (e.key === 'ArrowDown' ? 1 : opts.length - 1)) % opts.length].focus();
+  }
+}
+
+// OpenRailwayMap over the routing map, to see which lines a filter keeps (premium, as
+// on the other maps). openrailwaymap.org's raster tiles: ours are vector ones, which
+// Leaflet can't draw. The choice is remembered on this browser only.
+var ORM_OVERLAYS = [
+  ['standard', 'ormLayerStandard', 'fa-train'], ['maxspeed', 'ormLayerMaxspeed', 'fa-gauge-high'],
+  ['electrification', 'ormLayerElectrified', 'fa-bolt'], ['gauge', 'ormLayerGauge', 'fa-ruler-horizontal'],
+  ['signals', 'ormLayerSignals', 'fa-traffic-light']
+];
+var ormOverlayLayer = null;
+var ormOverlayType = '';
+try { ormOverlayType = localStorage.getItem('routeOrmOverlay') || ''; } catch (e) {}
+
+function ormOverlayEnabled() {
+  return typeof ormOverlayAllowed !== 'undefined' && ormOverlayAllowed;
+}
+
+function buildOrmOverlayHtml() {
+  if (!ormOverlayEnabled()) return '';
+  return buildRouterPickerHtml('fa-layer-group', 'OpenRailwayMap',
+    [['', texts.routeOverlayNone, '<i class="fa-solid fa-ban"></i>', '']].concat(ORM_OVERLAYS.map(function (o) {
+      return [o[0], texts[o[1]], `<i class="fa-solid ${o[2]}"></i>`, ''];
+    })), ormOverlayType, 'setOrmOverlay');
+}
+
+function setOrmOverlay(type) {
+  ormOverlayType = ORM_OVERLAYS.some(function (o) { return o[0] === type; }) ? type : '';
+  try {
+    if (ormOverlayType) localStorage.setItem('routeOrmOverlay', ormOverlayType);
+    else localStorage.removeItem('routeOrmOverlay');
+  } catch (e) {}
+  applyOrmOverlay();
+}
+
+function applyOrmOverlay() {
+  if (typeof map === 'undefined' || !map) return;
+  if (ormOverlayLayer) map.removeLayer(ormOverlayLayer);
+  ormOverlayLayer = null;
+  if (!ormOverlayEnabled() || !ormOverlayType) return;
+  ormOverlayLayer = L.tileLayer(`https://tiles.openrailwaymap.org/${ormOverlayType}/{z}/{x}/{y}.png`, {
+    maxZoom: 19, zIndex: 5,
+    attribution: '&copy; <a href="https://www.openrailwaymap.org/" target="_blank">OpenRailwayMap</a>'
+  }).addTo(map);
 }
 
 // The tray's header, with the count of filters still applied while it is closed, and
@@ -752,15 +899,6 @@ function setRouteFilter(key, value) {
   else delete routeFilters[key];
   document.querySelectorAll('.router-filter-count').forEach(function (el) { el.textContent = activeFilterCount() || ''; });
   rerouteForFilters();
-}
-
-function toggleRoutePower(btn, value) {
-  var on = !btn.classList.contains('active');
-  btn.classList.toggle('active', on);
-  btn.setAttribute('aria-pressed', String(on));
-  var power = (routeFilters.power ? routeFilters.power.split(',') : []).filter(function (p) { return p !== value; });
-  if (on) power.push(value);
-  setRouteFilter('power', power.join(','));
 }
 
 // Debounced: a filter forcing a detour takes seconds to route, so a few quick changes
@@ -1848,6 +1986,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
 
     // Store control globally: window.control for switchRouter, window.currentControl for toggleFreehand
     window.control = control;
+    applyOrmOverlay();
     control.on('routesfound routingerror', function (e) {
       routeFiltersNoRoute = e.type === 'routingerror' && routeFiltersActive();
       document.querySelectorAll('.route-filters-box.loading').forEach(function (el) { el.classList.remove('loading'); });

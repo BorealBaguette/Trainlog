@@ -264,9 +264,6 @@
 /* Track filters (routing.js buildRouteFiltersHtml) */
 .route-filters-box.loading { opacity: .6; transition: opacity .2s; }
 .route-filters { margin: 4px 0; padding: 4px 0; border-block: 1px solid #e3e6ea; }
-.route-filters .router-seg { flex-wrap: wrap; }
-.route-filters .router-seg-btn { flex: 1 0 auto; }
-#sidebar .router-box .route-filters button.router-seg-btn.active, .route-filters .router-seg-btn.active { cursor: pointer; }
 .router-select {
   flex: none;
   max-width: 50%;
@@ -309,3 +306,77 @@
 }
 .router-tray-chevron { flex: none; font-size: 11px; color: #6b7280; transition: transform .2s; }
 .router-tray-toggle.open .router-tray-chevron { transform: rotate(180deg); }
+
+/* Pickers in the router tray (routing.js buildRouterPickerHtml): a row that opens its
+   list in place, under it */
+#sidebar .router-box button.router-picker-toggle, .router-picker-toggle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0;
+  padding: 6px 2px;
+  border-radius: 0;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+.router-picker-current {
+  flex: none;
+  max-width: 55%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 2px 8px;
+  border: 1px solid #d5d9df;
+  border-radius: 6px;
+  background: #fff;
+  font-variant-numeric: tabular-nums;
+}
+.router-picker-toggle.open .router-tray-chevron { transform: rotate(180deg); }
+.router-picker-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin: 2px 0 6px;
+  padding: 3px;
+  border-radius: 8px;
+  background: #e7eaee;
+}
+.router-picker-list[hidden] { display: none; }
+#sidebar .router-box button.router-picker-opt, .router-picker-opt {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  min-height: 30px;
+  height: auto;
+  margin: 0;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #1f2733;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+#sidebar .router-box button.router-picker-opt:hover, .router-picker-opt:hover,
+.router-picker-opt:focus-visible { background: rgba(255, 255, 255, .6); outline: none; }
+#sidebar .router-box button.router-picker-opt.active, .router-picker-opt.active {
+  background: #fff;
+  color: #3b63b8;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(17, 24, 39, .15);
+}
+.router-picker-glyph { flex: none; display: inline-flex; justify-content: center; width: 22px; color: #6b7280; }
+.router-picker-opt.active .router-picker-glyph { color: #3b63b8; }
+.router-picker-name { flex: 1; min-width: 0; }
+.router-picker-side { flex: none; color: #6b7280; font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; }
+.router-picker-side:empty { display: none; }
+.router-picker-check { flex: none; width: 12px; font-size: 11px; visibility: hidden; }
+.router-picker-opt.active .router-picker-check { visibility: visible; }

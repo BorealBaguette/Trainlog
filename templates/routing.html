@@ -34,6 +34,8 @@ var id = getGetParams().get("id");
 var newTrip = null;
 var currentRoute;
 var routeDetails = null;
+// The OpenRailwayMap overlay is a premium feature, as on the other maps
+var ormOverlayAllowed = {{ 'true' if is_premium else 'false' }};
 const texts = {
   "routeTitle": "{{routeTitle}}",
   "ferrySplitNote": {{ ferrySplitNote | tojson }},
@@ -69,13 +71,28 @@ const texts = {
   "allWaypointsExact": "{{allWaypointsExact}}",
   "allWaypointsExactHint": "{{allWaypointsExactHint}}",
   "routeFiltersAdvanced": {{ (routeFiltersAdvanced|default(""))|tojson }},
-  "routeFilterAny": {{ (routeFilterAny|default(""))|tojson }},
+  "routeFilterSpeedAny": {{ (routeFilterSpeedAny|default(""))|tojson }},
+  "routeFilterPowerAny": {{ (routeFilterPowerAny|default(""))|tojson }},
+  "routeFilterGaugeAny": {{ (routeFilterGaugeAny|default(""))|tojson }},
   "routeFilterAvoidHighspeed": {{ (routeFilterAvoidHighspeed|default(""))|tojson }},
   "routeFilterMaxSpeed": {{ (routeFilterMaxSpeed|default(""))|tojson }},
   "routeFilterElectrifiedOnly": {{ (routeFilterElectrifiedOnly|default(""))|tojson }},
   "routeFilterPower": {{ (routeFilterPower|default(""))|tojson }},
   "routeFilterGauge": {{ (routeFilterGauge|default(""))|tojson }},
+  "routeGaugeIndian": {{ (routeGaugeIndian|default(""))|tojson }},
+  "routeGaugeIberian": {{ (routeGaugeIberian|default(""))|tojson }},
+  "routeGaugeIrish": {{ (routeGaugeIrish|default(""))|tojson }},
+  "routeGaugeFinnish": {{ (routeGaugeFinnish|default(""))|tojson }},
+  "routeGaugeRussian": {{ (routeGaugeRussian|default(""))|tojson }},
+  "routeGaugeStandard": {{ (routeGaugeStandard|default(""))|tojson }},
+  "routeGaugeNarrow": {{ (routeGaugeNarrow|default(""))|tojson }},
   "routeFiltersNoRoute": {{ (routeFiltersNoRoute|default(""))|tojson }},
+  "ormLayerStandard": {{ (ormLayerStandard|default(""))|tojson }},
+  "ormLayerMaxspeed": {{ (ormLayerMaxspeed|default(""))|tojson }},
+  "ormLayerSignals": {{ (ormLayerSignals|default(""))|tojson }},
+  "ormLayerElectrified": {{ (ormLayerElectrified|default(""))|tojson }},
+  "ormLayerGauge": {{ (ormLayerGauge|default(""))|tojson }},
+  "routeOverlayNone": {{ (routeOverlayNone|default(""))|tojson }},
   "train": "{{train}}",
   "tram": "{{tram}}",
   "metro": "{{metro}}",

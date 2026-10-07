@@ -696,11 +696,10 @@
                  aria-label="{{ routerMode|default('Router') }}"><i class="fas fa-route"></i></summary>
         {# Same controls as the routing page's sidebar (routing.js buildNewRouterToggleHtml,
            styled in waypoint_popup.css): the trip type and "every point exact" belong to
-           the new router; the legacy router is the fallback, last. #}
+           the new router; the legacy router is the fallback, last. No options tray here:
+           the bubble is already behind a button, and the summary bar shows "no route". #}
         <div class="cp-bubble cp-router">
           <div class="cp-bubble-title">{{ routerMode|default('Router') }}</div>
-          <div id="routerTrayHeaderCompose"></div>
-          <div class="router-advanced" style="display: none;">
           <div class="router-seg" id="newRouterProfileCompose" role="group">
             {% for value, label, icon in [('train', train|default('Train'), 'fa-train'), ('tram', tram|default('Tram'), 'fa-train-tram'),
                                           ('metro', metro|default('Metro'), 'fa-train-subway'), ('all', all|default('All'), 'fa-layer-group')] %}
@@ -715,12 +714,12 @@
                    onchange="setAllWaypointsExact(this.checked)">
           </label>
           <div id="routeFiltersCompose"></div>
+          <div id="ormOverlayCompose"></div>
           <label class="router-row" title="{{ useLegacyRouterHint }}">
             <i class="fa-solid fa-clock-rotate-left router-row-icon"></i>
             <span class="router-row-label">{{ useLegacyRouter }}</span>
             <input type="checkbox" class="router-switch" role="switch" id="newRouterToggleCompose">
           </label>
-          </div>
         </div>
       </details>
       {% endif %}
@@ -1147,6 +1146,8 @@ var errorContent = '<h4>' + {{ (routingError|default("Routing error"))|tojson }}
   '</h4><p><button onclick="location.reload()">' + {{ (retry|default("Retry"))|tojson }} + '</button></p>';
 var saveErrorContent = '<h4>' + {{ (saveError|default("Save error"))|tojson }} +
   '</h4><p><button onclick="location.reload()">' + {{ (retry|default("Retry"))|tojson }} + '</button></p>';
+// The OpenRailwayMap overlay is a premium feature, as on the other maps
+var ormOverlayAllowed = {{ 'true' if is_premium else 'false' }};
 var texts = {
   "freehandMode": {{ freehandMode|tojson }},
   "waypointSoft": {{ waypointSoft|tojson }},
@@ -1167,13 +1168,28 @@ var texts = {
   allWaypointsExact:      "{{ allWaypointsExact }}",
   allWaypointsExactHint:  "{{ allWaypointsExactHint }}",
   routeFiltersAdvanced: {{ (routeFiltersAdvanced|default(""))|tojson }},
-  routeFilterAny: {{ (routeFilterAny|default(""))|tojson }},
+  routeFilterSpeedAny: {{ (routeFilterSpeedAny|default(""))|tojson }},
+  routeFilterPowerAny: {{ (routeFilterPowerAny|default(""))|tojson }},
+  routeFilterGaugeAny: {{ (routeFilterGaugeAny|default(""))|tojson }},
   routeFilterAvoidHighspeed: {{ (routeFilterAvoidHighspeed|default(""))|tojson }},
   routeFilterMaxSpeed: {{ (routeFilterMaxSpeed|default(""))|tojson }},
   routeFilterElectrifiedOnly: {{ (routeFilterElectrifiedOnly|default(""))|tojson }},
   routeFilterPower: {{ (routeFilterPower|default(""))|tojson }},
   routeFilterGauge: {{ (routeFilterGauge|default(""))|tojson }},
+  routeGaugeIndian: {{ (routeGaugeIndian|default(""))|tojson }},
+  routeGaugeIberian: {{ (routeGaugeIberian|default(""))|tojson }},
+  routeGaugeIrish: {{ (routeGaugeIrish|default(""))|tojson }},
+  routeGaugeFinnish: {{ (routeGaugeFinnish|default(""))|tojson }},
+  routeGaugeRussian: {{ (routeGaugeRussian|default(""))|tojson }},
+  routeGaugeStandard: {{ (routeGaugeStandard|default(""))|tojson }},
+  routeGaugeNarrow: {{ (routeGaugeNarrow|default(""))|tojson }},
   routeFiltersNoRoute: {{ (routeFiltersNoRoute|default(""))|tojson }},
+  ormLayerStandard: {{ (ormLayerStandard|default(""))|tojson }},
+  ormLayerMaxspeed: {{ (ormLayerMaxspeed|default(""))|tojson }},
+  ormLayerSignals: {{ (ormLayerSignals|default(""))|tojson }},
+  ormLayerElectrified: {{ (ormLayerElectrified|default(""))|tojson }},
+  ormLayerGauge: {{ (ormLayerGauge|default(""))|tojson }},
+  routeOverlayNone: {{ (routeOverlayNone|default(""))|tojson }},
   train:                  "{{ train|default('Train') }}",
   tram:                   "{{ tram|default('Tram') }}",
   metro:                  "{{ metro|default('Metro') }}",
@@ -2025,8 +2041,8 @@ function bindNewRouterToggle() {
   var profile = document.getElementById('newRouterProfileCompose');
   if (!toggle || toggle._bound) return;
   toggle._bound = true;
-  document.getElementById('routerTrayHeaderCompose').innerHTML = buildRouterTrayHeaderHtml();
   document.getElementById('routeFiltersCompose').innerHTML = buildRouteFiltersHtml();
+  document.getElementById('ormOverlayCompose').innerHTML = buildOrmOverlayHtml();
   // The trip type is the segmented control's active button.
   function profileValue() {
     var active = profile.querySelector('.router-seg-btn.active');

@@ -20,7 +20,13 @@ POWER_SYSTEMS = {
     "1.5kv": "voltage >= 1400 && voltage <= 1600 && frequency == 0",
     "750v": "voltage >= 700 && voltage <= 800 && frequency == 0",
 }
-GAUGES = ("1435", "1520", "1668", "1000", "1067")
+# A gauge choice takes any track within GAUGE_TOLERANCE mm of it, so 1520 and 1524 run
+# together (trains cross between Finland and Russia) while 1668 and 1676 stay apart.
+# Narrow gauges are one choice, any track of 1067 mm or less. Kept in step with
+# ROUTE_GAUGES in routing.js.
+GAUGES = ("1676", "1668", "1600", "1524", "1520", "1435")
+GAUGE_TOLERANCE = 5
+NARROW_GAUGE_MAX = 1067
 
 
 def filter_conditions(query):
@@ -38,8 +44,11 @@ def filter_conditions(query):
         conditions.append("electrified == NO")
     if power:
         conditions.append("!(" + " || ".join(f"({p})" for p in power) + " || voltage == 0)")
-    if get("gauge") in GAUGES:
-        conditions.append(f"gauge != 0 && gauge != {get('gauge')}")
+    if get("gauge") == "narrow":
+        conditions.append(f"gauge > {NARROW_GAUGE_MAX}")
+    elif get("gauge") in GAUGES:
+        gauge = int(get("gauge"))
+        conditions.append(f"gauge != 0 && (gauge < {gauge - GAUGE_TOLERANCE} || gauge > {gauge + GAUGE_TOLERANCE})")
     return conditions, max_speed
 
 
