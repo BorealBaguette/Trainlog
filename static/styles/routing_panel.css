@@ -175,6 +175,8 @@
 /* Tucked into the panel's corner so it covers neither the title nor the box below it; the
    title leaves it room instead. */
 .leaflet-sidebar .close { top: 9px; right: 11px; width: 26px; height: 26px; font-size: 20px; line-height: 26px; }
+/* On desktop the panel floats 10px in from the container the button is placed against */
+@media (min-width: 768px) { .leaflet-sidebar .close { top: 19px; right: 21px; } }
 #sidebar h4 { padding-right: 28px; }
 
 /* ── Mobile ──────────────────────────────────────────────────────────────────
@@ -193,17 +195,15 @@
 
 /* Desktop routing page: the panel is a column whose route timeline takes whatever height
    the other blocks leave (more when the options tray is closed), scrolling if it is long.
-   The title is the timeline's own first and last rows. */
+   */
 /* Not on a phone, where it would take too much of the map */
 #sidebar .route-timeline { display: none; }
 
 @media (min-width: 768px) {
   #sidebar:has(.route-timeline) { display: flex; flex-direction: column; }
-  #sidebar:has(.route-timeline) > h4 { display: none; }
-  .leaflet-sidebar > .leaflet-control#sidebar:has(.route-timeline) { padding-top: 38px; }   /* the close button's row, without the title */
   #sidebar:has(.route-timeline) > * { flex: 0 0 auto; }
   #sidebar .route-timeline {
-    flex: 1 1 0; min-height: 90px; overflow-y: auto; margin: 0 0 11px; padding: 4px 0;
+    flex: 1 1 0; min-height: 90px; overflow-y: auto; margin: 0 0 11px; padding: 4px 14px 4px 0;  /* right: clear of its scrollbar */
     list-style: none; display: flex; flex-direction: column; justify-content: flex-start;
   }
   #sidebar:has(.route-timeline) > .route-timeline { flex: 1 1 0; order: 1; }  /* last: options, buttons, then the timeline */
