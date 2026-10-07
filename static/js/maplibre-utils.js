@@ -670,7 +670,9 @@ function buildTripLayers(map, trips, transportTypes, options = {}) {
                     id: trip.trip.uid,
                     type: trip.trip.type,
                     time: trip.time,
-                    year: trip.trip.start_datetime !== 1 && trip.trip.start_datetime !== -1
+                    // -1 = undated past trip, matched by the 'undated' pseudo-year
+                    year: trip.trip.start_datetime === -1 ? 'undated'
+                        : trip.trip.start_datetime !== 1
                         ? trip.trip.start_datetime.substring(0, 4)
                         : null,
                     origin: trip.trip.origin_station,

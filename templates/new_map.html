@@ -35,7 +35,13 @@
     </div>
 
     <div class="control-group" id="yearSelector" style="display: none;">
-        <label class="control-label">{{ selectYears }}</label>
+        <div class="control-label year-label-row">
+            <label for="yearSelect">{{ selectYears }}</label>
+            <span class="year-bulk">
+                <button type="button" onclick="selectAllYears()">{{ all }}</button>
+                <button type="button" onclick="clearYears()">{{ tsClearBtn }}</button>
+            </span>
+        </div>
         <div class="select-wrapper">
             <select id="yearSelect" onchange="addYear()">
                 <option value="">{{ addYear }}...</option>
@@ -317,6 +323,7 @@ function processTrips() {
     }
 
     const years = new Set();
+    let hasUndatedPast = false;
     const visibleTypes = new Set();
 
     // Process trips to extract years and visible types
@@ -328,7 +335,9 @@ function processTrips() {
             checkbox.parentElement.style.display = 'flex';
             visibleTypes.add(trip.trip.type);
         }
-        if (trip.trip.start_datetime !== 1 && trip.trip.start_datetime !== -1)
+        if (trip.trip.start_datetime === -1)
+            hasUndatedPast = true;
+        else if (trip.trip.start_datetime !== 1)
             years.add(trip.trip.start_datetime.substring(0, 4));
     });
     
@@ -341,6 +350,12 @@ function processTrips() {
         option.textContent = year;
         yearSelect.appendChild(option);
     });
+    if (hasUndatedPast) {
+        const option = document.createElement('option');
+        option.value = 'undated';
+        option.textContent = yearLabel('undated');
+        yearSelect.appendChild(option);
+    }
 
     // Load preferences BEFORE building layers
     loadPreferences();
@@ -484,16 +499,21 @@ function addYear() {
     select.value = '';
 }
 
+function yearLabel(year) {
+    return year === 'undated' ? {{ undatedPast|tojson }} : year;
+}
+
 // Update selected years display
 function updateSelectedYears() {
     const container = document.getElementById('selectedYears');
     container.innerHTML = '';
     
-    Array.from(selectedYears).sort().reverse().forEach(year => {
+    // Newest first, the 'undated' pseudo-year last
+    Array.from(selectedYears).sort((a, b) => (a === 'undated') - (b === 'undated') || b.localeCompare(a)).forEach(year => {
         const tag = document.createElement('div');
         tag.className = 'year-tag';
         tag.innerHTML = `
-            ${year}
+            ${yearLabel(year)}
             <button onclick="removeYear('${year}')">
                 <i class="fas fa-times"></i>
             </button>
@@ -502,6 +522,21 @@ function updateSelectedYears() {
     });
     
     activeFilters.years = Array.from(selectedYears);
+}
+
+// Select every year in the dropdown, so unwanted ones can then be removed one by one
+function selectAllYears() {
+    Array.from(document.getElementById('yearSelect').options).forEach(opt => {
+        if (opt.value) selectedYears.add(opt.value);
+    });
+    updateSelectedYears();
+    updateFilters();
+}
+
+function clearYears() {
+    selectedYears.clear();
+    updateSelectedYears();
+    updateFilters();
 }
 
 // Remove year from selection

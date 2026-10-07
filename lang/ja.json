@@ -145,6 +145,7 @@
     "showProjects": "記録予定",
     "showPlanned": "記録計画済",
     "showPast": "過去",
+    "undatedPast": "日付なし（過去）",
     "routes": "移動経路",
     "stations": "訪問駅",
     "shareTrip": "リンクを作成",
