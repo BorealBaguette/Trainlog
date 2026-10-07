@@ -172,6 +172,10 @@
 /* close (x) */
 .leaflet-sidebar .close { font-size: 22px; color: #9ca3af; }
 .leaflet-sidebar .close:hover { color: #4b5563; }
+/* Tucked into the panel's corner so it covers neither the title nor the box below it; the
+   title leaves it room instead. */
+.leaflet-sidebar .close { top: 9px; right: 11px; width: 26px; height: 26px; font-size: 20px; line-height: 26px; }
+#sidebar h4 { padding-right: 28px; }
 
 /* ── Mobile ──────────────────────────────────────────────────────────────────
    The plugin makes the panel a cramped 20%-tall band at the top; give it room to fit its
@@ -185,4 +189,39 @@
   }
   #sidebar h4 { margin-bottom: 9px; font-size: .96rem; }
   #sidebar .submit-main, #sidebar .submit-continue { padding: 12px 14px; }
+}
+
+/* Desktop routing page: the panel is a column whose route timeline takes whatever height
+   the other blocks leave (more when the options tray is closed), scrolling if it is long.
+   The title is the timeline's own first and last rows. */
+/* Not on a phone, where it would take too much of the map */
+#sidebar .route-timeline { display: none; }
+
+@media (min-width: 768px) {
+  #sidebar:has(.route-timeline) { display: flex; flex-direction: column; }
+  #sidebar:has(.route-timeline) > h4 { display: none; }
+  .leaflet-sidebar > .leaflet-control#sidebar:has(.route-timeline) { padding-top: 38px; }   /* the close button's row, without the title */
+  #sidebar:has(.route-timeline) > * { flex: 0 0 auto; }
+  #sidebar .route-timeline {
+    flex: 1 1 0; min-height: 90px; overflow-y: auto; margin: 0 0 11px; padding: 4px 0;
+    list-style: none; display: flex; flex-direction: column; justify-content: flex-start;
+  }
+  #sidebar:has(.route-timeline) > .route-timeline { flex: 1 1 0; order: 1; }  /* last: options, buttons, then the timeline */
+  #sidebar .rt-item { position: relative; display: flex; align-items: baseline; gap: 8px; padding: 5px 0 5px 28px; color: #4b5563; font-size: .9em; }
+  #sidebar .rt-item::before {   /* the line */
+    content: ""; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: #e2e6eb;
+  }
+  #sidebar .rt-item:first-child::before { top: 50%; }
+  #sidebar .rt-item:last-child::before { bottom: 50%; }
+  #sidebar .rt-item::after {    /* the ball */
+    content: ""; position: absolute; left: 6px; top: 50%; width: 6px; height: 6px; margin-top: -3px;
+    border-radius: 50%; background: #b3bac4; box-sizing: content-box;
+  }
+  #sidebar .rt-unnamed { color: #9ca3af; font-variant-numeric: tabular-nums; }
+  #sidebar .rt-end { padding: 10px 0 10px 28px; font-size: 1.02rem; font-weight: 700; color: #111827; }
+  #sidebar .rt-end::after {
+    left: 2px; width: 8px; height: 8px; margin-top: -7px; background: #fff; border: 3px solid #3b63b8;
+  }
+  #sidebar .rt-name { min-width: 0; overflow-wrap: anywhere; }
+  #sidebar .rt-time { color: #8a93a2; font-weight: 400; white-space: nowrap; margin-left: auto; }
 }

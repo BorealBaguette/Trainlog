@@ -653,7 +653,8 @@ function applyWaypointModes(router, waypoints) {
 // The router options sit in a tray, closed by default to keep the sidebar short on
 // phones; closing it only hides them. The track filters among them are only taken by
 // the new router's train profile (src/routing.py turns them into its custom_model).
-var routerAdvancedOpen = false;
+// On desktop there is room for it, so it starts open.
+var routerAdvancedOpen = window.matchMedia('(min-width: 768px)').matches;
 var routeFilters = {};
 var ROUTE_FILTER_KEYS = ['avoid_highspeed', 'max_speed', 'electrified', 'power', 'gauge'];
 // Widest first: value, text key of its name, width shown, width drawn by gaugeGlyph.
@@ -876,6 +877,36 @@ function buildRouterTrayHeaderHtml() {
     <div class="route-filters-error" style="${routeFiltersNoRoute ? '' : 'display: none;'}">
       <i class="fa-solid fa-triangle-exclamation"></i> ${texts.routeFiltersNoRoute}</div>
   `;
+}
+
+// Desktop only (the panel is short on a phone), and only on the routing page: the route as
+// a timeline, origin and destination large, the points between them smaller, with their
+// times when they are timetable stops. Rebuilt with the rest of the panel on every
+// reroute, so it follows each added, moved or removed point.
+function buildRouteTimelineHtml(wps) {
+  if (!window.matchMedia('(min-width: 768px)').matches || !wps || wps.length < 2) return '';
+  function esc(t) { return String(t).replace(/[&<>"]/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
+  function item(cls, name, times) {
+    return '<li class="rt-item ' + cls + '"><span class="rt-name">' + esc(name) + '</span>'
+      + (times ? '<small class="rt-time">' + esc(times) + '</small>' : '') + '</li>';
+  }
+  var last = wps.length - 1;
+  // The trip's own start and end, when it has them: a stop's times win where there are some
+  function tripTime(v, planned) {
+    if (v && v.length === 16) return v.slice(11);
+    return /^\d{1,2}:\d{2}$/.test(planned || '') ? planned : '';
+  }
+  var startTime = tripTime(newTrip.newTripStart, newTrip.planStartTime);
+  var endTime = tripTime(newTrip.newTripEnd, newTrip.planEndTime);
+  var items = wps.map(function(wp, i) {
+    var stop = wp.options && wp.options.stop;
+    var times = stop && typeof stop === 'object' ? stopTimesLabel(stop) : '';
+    if (i === 0) return item('rt-end', waypointLabel(wp) || origLabel, times || startTime);
+    if (i === last) return item('rt-end', waypointLabel(wp) || destLabel, times || endTime);
+    var name = waypointLabel(wp);
+    return item('rt-via' + (name ? '' : ' rt-unnamed'), name || (wp.latLng.lat.toFixed(3) + ', ' + wp.latLng.lng.toFixed(3)), times);
+  }).join('');
+  return '<ol class="route-timeline">' + items + '</ol>';
 }
 
 function activeFilterCount() {
@@ -1797,6 +1828,8 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
         hintHtml = busRouterHint();
       }
       
+      if (allowFerrySplit && window.currentPlan) content += buildRouteTimelineHtml(window.currentPlan.getWaypoints());
+
       // Add note about freehand segments if any exist
       if (freehandSegments.size > 0) {
         content += `<p><small>⚠️ Route includes ${freehandSegments.size} freehand segment(s) shown as orange dashed lines</small></p>`;
