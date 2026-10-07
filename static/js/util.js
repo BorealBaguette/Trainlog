@@ -584,9 +584,58 @@ function toRouting(data, routingUrl, type){
     var id = performance.now().toString(36)+Math.random().toString(36).replace(/\./g,"");
     // Store data locally with ID
     sessionStorage.setItem(id, JSON.stringify(newTrip));
+    sessionStorage.setItem("lastNewTripId", id);
+    try {
+      if (window.motisState) sessionStorage.setItem("lastMotis", JSON.stringify(window.motisState.get()));
+    } catch (e) {}
     // Redirect with ID as param
     location.href = `${routingUrl}?id=${id}&type=${type}`;
   } 
+}
+
+// On browser Back from the routing page, refill the new-trip form from the trip
+// toRouting() stashed in sessionStorage.
+function restoreNewTripForm(){
+  var nav = performance.getEntriesByType("navigation")[0];
+  if (!nav || nav.type !== "back_forward") return;
+  var id = sessionStorage.getItem("lastNewTripId");
+  var t = id && JSON.parse(sessionStorage.getItem(id) || "null");
+  if (!t) return;
+  var $f = $('#newTripForm');
+
+  // Radios and checkboxes first so dependent panels are shown before values land.
+  $f.find(':radio, :checkbox').each(function(){
+    var on = this.type === 'radio' ? t[this.name] === this.value : this.name in t;
+    this.checked = on;
+    if (on || this.type === 'checkbox') $(this).trigger('change');
+  });
+  $f.find(':input').not(':radio, :checkbox, :button').each(function(){
+    var v = t[this.name];
+    if (this.name && (typeof v === 'string' || typeof v === 'number')) {
+      $(this).val(v);
+      if (this.tagName === 'SELECT') $(this).trigger('change');
+    }
+  });
+
+  [["origin", t.originStation], ["destination", t.destinationStation]].forEach(function(p){
+    if (p[1] && !(("" + p[0] + "ManualToggle") in t)) {
+      globalStationDict[p[1][1]] = p[1];
+      $('#' + p[0] + 'Station').val(p[1][1]);
+    }
+  });
+  if (typeof addViaRow === "function") {
+    (t.viaStations || []).forEach(function(v){
+      globalStationDict[v[1]] = v;
+      addViaRow(v[1]);
+    });
+    setViaCollapsed(true);
+    updateViaSummary();
+  }
+  try {
+    var m = JSON.parse(sessionStorage.getItem("lastMotis") || "null");
+    if (m && m.departures && m.departures.length && window.motisState) window.motisState.set(m);
+  } catch (e) {}
+  window.restoredTagIds = t.tag_ids || [];
 }
 
 function getCountriesCodeList(lang = 'en') {
@@ -1401,6 +1450,10 @@ function setupTagAutocomplete(url, tripId, createOpts) {
     .then(response => response.json())
     .then(data => {
       tags = data.tags;
+      (window.restoredTagIds || []).forEach(uid => {
+        const t = tags.find(x => String(x.uid) === String(uid));
+        if (t) $('#tagList').append(makeTagChip(t));
+      });
       if (tripId != null) {
         tags.filter(t => {
           const ids = t.trip_ids ? t.trip_ids.split(',') : [];

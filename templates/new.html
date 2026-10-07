@@ -1321,6 +1321,16 @@
     $('#newTripStartDate, #newTripStartTime, #originManualToggle, #destinationManualToggle, ' +
       '#originManualLat, #originManualLng, #destinationManualLat, #destinationManualLng').on('change', schedule);
     $('input[name="precision"]').on('change', schedule);
+    // Lets the routing round trip (toRouting / restoreNewTripForm) keep the list and the picked run.
+    window.motisState = {
+      get: function () { return { departures: departures, applied: applied, searchParams: searchParams, routingType: routingType }; },
+      set: function (s) {
+        departures = s.departures; applied = s.applied; searchParams = s.searchParams;
+        lastKey = formKey();
+        setRoutingType(s.routingType);
+        render();
+      }
+    };
     schedule();
   })();
 {% endif %}
@@ -1912,6 +1922,8 @@
   // vessel_field.js), with the ship named on the hint line under it.
   initVesselField('#reg', '#regVesselName', "{{ url_for('vesselAutocomplete') }}");
 {% endif %}
+
+  restoreNewTripForm();
 </script>
 
 {% if vehicle_type in ('train', 'metro', 'tram') %}
