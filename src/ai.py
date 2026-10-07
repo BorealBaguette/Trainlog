@@ -82,17 +82,17 @@ class FakeRequest:
 
 # The trip types the website routes with the new (GraphHopper) router by default
 # (NEW_ROUTER_TYPES in routing.js).
-NEW_ROUTER_TYPES = {"train", "tram", "metro", "funicular"}
+NEW_ROUTER_TYPES = {"train", "tram", "metro", "funicular", "rail"}
 
 def _routed(points, trip_type, use_new_router):
     """(path, duration seconds, routing details) from one router, or (None, None, None)."""
-    routing_type_map = {"tram": "train", "metro": "train", "funicular": "train"}
+    routing_type_map = {"tram": "train", "metro": "train", "funicular": "train", "rail": "train"}
     routing_type = routing_type_map.get(trip_type, trip_type)
     coords = ";".join(f"{p['lng']},{p['lat']}" for p in points)
     path = f"route/v1/{'driving' if routing_type in ('bus', 'car') else routing_type}/{coords}"
 
     try:
-        # The trip type itself, so the new router picks its tram/metro profile.
+        # The trip type itself, so the new router picks its tram/metro/all profile.
         result = forward_routing_core(trip_type if use_new_router else routing_type, path, FakeRequest(use_new_router))
         if hasattr(result, 'get_json'):
             data = result.get_json()
@@ -121,7 +121,7 @@ def route_via(points, trip_type):
     """Route through points (origin, any vias, destination), as the website would:
     rail on the new router, falling back to the old one. Returns (path, duration
     seconds, routing details); details (electrification) only from the new router."""
-    routable_types = {"train", "tram", "metro", "funicular", "ferry", "aerialway", "bus", "car", "walk", "cycle"}
+    routable_types = {"train", "tram", "metro", "funicular", "rail", "ferry", "aerialway", "bus", "car", "walk", "cycle"}
     if trip_type not in routable_types:
         return None, None, None
     if trip_type in NEW_ROUTER_TYPES:

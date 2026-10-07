@@ -690,7 +690,8 @@
           {% endif %}
         </div>
       </div>
-      {% if vehicle_type in ('train', 'metro', 'tram') %}
+      {% if vehicle_type in ('train', 'metro', 'tram', 'funicular', 'rail') %}
+      {% set default_profile = vehicle_type if vehicle_type in ('train', 'tram', 'metro') else 'all' %}
       <details class="cp-hint" id="routerHint">
         <summary class="cp-summary-btn" title="{{ routerMode|default('Router') }}"
                  aria-label="{{ routerMode|default('Router') }}"><i class="fas fa-route"></i></summary>
@@ -703,8 +704,8 @@
           <div class="router-seg" id="newRouterProfileCompose" role="group">
             {% for value, label, icon in [('train', train|default('Train'), 'fa-train'), ('tram', tram|default('Tram'), 'fa-train-tram'),
                                           ('metro', metro|default('Metro'), 'fa-train-subway'), ('all', all|default('All'), 'fa-layer-group')] %}
-            <button type="button" class="router-seg-btn{% if value == vehicle_type %} active{% endif %}" data-profile="{{ value }}"
-                    aria-pressed="{{ 'true' if value == vehicle_type else 'false' }}"><i class="fa-solid {{ icon }}" aria-hidden="true"></i><span>{{ label }}</span></button>
+            <button type="button" class="router-seg-btn{% if value == default_profile %} active{% endif %}" data-profile="{{ value }}"
+                    aria-pressed="{{ 'true' if value == default_profile else 'false' }}"><i class="fa-solid {{ icon }}" aria-hidden="true"></i><span>{{ label }}</span></button>
             {% endfor %}
           </div>
           <label class="router-row cp-all-exact" title="{{ allWaypointsExactHint }}">
@@ -2026,13 +2027,13 @@ function startRouting() {
   // routing() sets window.control before it returns, so the summary can subscribe to the
   // same route events the hidden sidebar would have used.
   bindRouteSummary(window.control);
-  {% if vehicle_type in ('train', 'metro', 'tram') %}
+  {% if vehicle_type in ('train', 'metro', 'tram', 'funicular', 'rail') %}
   bindNewRouterToggle();
   {% endif %}
   {% endif %}
 }
 
-{% if vehicle_type in ('train', 'metro', 'tram') %}
+{% if vehicle_type in ('train', 'metro', 'tram', 'funicular', 'rail') %}
 // The sidebar routing.js would normally put this toggle in is hidden on this page (the
 // cp-summary bar replaces it), so it's wired here directly against the same
 // window.control/window.baseRouter routing() just set up.
@@ -2046,7 +2047,7 @@ function bindNewRouterToggle() {
   // The trip type is the segmented control's active button.
   function profileValue() {
     var active = profile.querySelector('.router-seg-btn.active');
-    return active ? active.dataset.profile : vehicle_type;
+    return active ? active.dataset.profile : newRouterProfile;
   }
 
   function applyNewRouterParams() {

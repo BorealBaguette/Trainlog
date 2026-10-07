@@ -54,7 +54,7 @@ def filter_conditions(query):
 
 def forward_routing_core(routingType, path, flask_request, extra_args=None):
     # GraphHopper profile matching the original (pre-normalization) trip type
-    gh_profile = {"tram": "tram", "metro": "metro"}.get(routingType, "train" if routingType in ("train", "rail", "funicular") else "all")
+    gh_profile = {"train": "train", "tram": "tram", "metro": "metro"}.get(routingType, "all")
 
     # Normalize routing type
     if routingType in ("train", "tram", "metro", "funicular", "rail"):

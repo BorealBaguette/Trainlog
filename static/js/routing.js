@@ -56,6 +56,11 @@ antpathStyles =  {
 // first time it runs (alongside newRouterProfile), then kept across re-renders.
 var useNewRouter = false;
 var NEW_ROUTER_TYPES = ["train", "tram", "metro", "funicular", "rail"];
+// The new router's profile a trip type starts on: funiculars and other rail (monorails,
+// suspension railways) aren't in the train graph.
+function defaultRouterProfile(t) {
+  return ["train", "tram", "metro"].includes(t) ? t : "all";
+}
 // Persists the ferry-split checkbox's state across re-renders (routeWhileDragging
 // fires routeselected repeatedly, which fully re-creates the sidebar HTML — without
 // this, an unchecked box would silently reset to checked on the next drag/reroute).
@@ -1341,7 +1346,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
   }
   else{
     if (newRouterProfile === null) {
-      newRouterProfile = ["train", "tram", "metro"].includes(type) ? type : "train";
+      newRouterProfile = defaultRouterProfile(type);
       useNewRouter = NEW_ROUTER_TYPES.includes(type);
     }
 
@@ -1781,7 +1786,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       var trainCount = window.modeSegments ? window.modeSegments.filter(function(s) { return s.mode === 'train'; }).length : 0;
 
       // Add router selector for train, tram, metro
-      if(["train", "tram", "metro", "funicular"].includes(type)){
+      if(NEW_ROUTER_TYPES.includes(type)){
         content += buildNewRouterToggleHtml();
         // Tuck the routing hint behind a small info icon (rendered inline with distance):
         // what the new router prefers, or for the legacy one that it treats every rail
@@ -1920,7 +1925,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
       var errorContentWithToggle = routeFiltersActive() ? '' : errorContent;
 
       // Add router selector for train, tram, metro even on error
-      if(["train", "tram", "metro", "funicular"].includes(type)){
+      if(NEW_ROUTER_TYPES.includes(type)){
         errorContentWithToggle = buildNewRouterToggleHtml() + errorContentWithToggle;
         flutterBridge.routingError('Routing failed');
         flutterBridge.loading(false);

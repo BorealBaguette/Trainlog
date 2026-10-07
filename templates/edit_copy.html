@@ -904,26 +904,57 @@
                 <!-- Router Toggle (train, tram, metro). The power selector now lives
                      on the main form, since power no longer requires re-routing.
                      The freehand toggle sits on the same row (see #freehandToggleSlot). -->
+                <style>
+                    .router-pop { position: relative; }
+                    .router-pop > summary { list-style: none; }
+                    .router-pop > summary::-webkit-details-marker { display: none; }
+                    .router-pop > summary::marker { content: ""; }
+                    .router-pop[open] > summary { background: #e8eeff; border-color: #c7d6f5; color: #3b63b8; }
+                    /* Highlighted while off the default, i.e. on the legacy router */
+                    .router-pop:has(#newRouterToggleModal:checked) > summary { background: #4b78d6; border-color: #4b78d6; color: #fff; }
+                    .router-pop:has(.router-filter-count:not(:empty)) > summary { border-color: #3b63b8; color: #3b63b8; }
+                    .router-pop.no-route > summary { border-color: #b42318; color: #b42318; }
+                    .router-pop-bubble {
+                        position: absolute; top: calc(100% + 8px); left: 0; z-index: 1200;
+                        width: min(340px, calc(100vw - 32px)); max-height: 60vh; overflow-y: auto; margin: 0;
+                        background: #fff; border: 1px solid #e5e7eb;
+                        box-shadow: 0 10px 30px rgba(17, 24, 39, .14), 0 2px 6px rgba(17, 24, 39, .06);
+                    }
+                </style>
                 <div class="mb-3 d-flex align-items-center gap-3 flex-wrap">
-                    {% if tripType in ('train', 'tram', 'metro') %}
-                    <div class="form-check form-switch mb-0">
-                        <input class="form-check-input" type="checkbox" id="newRouterToggleModal" style="cursor: pointer;">
-                        <label class="form-check-label" for="newRouterToggleModal" style="cursor: pointer;">
-                            {{useLegacyRouter}}
-                        </label>
-                    </div>
-                    <select id="newRouterProfileModal" class="form-select form-select-sm" style="width: auto; display: none;">
-                        <option value="train">{{train}}</option>
-                        <option value="tram">{{tram}}</option>
-                        <option value="metro">{{metro}}</option>
-                        <option value="all">{{all}}</option>
-                    </select>
-                    {# New router only, shown with the profile choice (see routerToggle below) #}
-                    <div class="form-check form-switch mb-0" id="allExactModalWrap" style="display: none;" title="{{allWaypointsExactHint}}">
-                        <input class="form-check-input all-exact-toggle" type="checkbox" id="allExactModal" style="cursor: pointer;"
-                               onchange="setAllWaypointsExact(this.checked)">
-                        <label class="form-check-label" for="allExactModal" style="cursor: pointer;">{{allWaypointsExact}}</label>
-                    </div>
+                    {% if tripType in ('train', 'tram', 'metro', 'funicular', 'rail') %}
+                    {# The routing page's router options (routing.js buildNewRouterToggleHtml) as a
+                       popover over the map: the trip type and "every point exact" belong to the
+                       new router, the track filters to its train profile, the legacy router is the
+                       fallback, last. The badge counts the filters applied. #}
+                    <details class="router-pop" id="routerTrayModal">
+                        <summary class="freehand-toggle-btn">
+                            <i class="fa-solid fa-sliders fh-ico"></i><span>{{routeFiltersAdvanced}}</span>
+                            <span class="router-filter-count"></span>
+                        </summary>
+                        <div class="router-box router-pop-bubble">
+                            <div class="route-filters-error" style="display: none;"><i class="fa-solid fa-triangle-exclamation"></i> {{routeFiltersNoRoute}}</div>
+                            <div class="router-seg" id="newRouterProfileModal" role="group">
+                                {% for value, label, icon in [('train', train, 'fa-train'), ('tram', tram, 'fa-train-tram'),
+                                                              ('metro', metro, 'fa-train-subway'), ('all', all, 'fa-layer-group')] %}
+                                <button type="button" class="router-seg-btn" data-profile="{{ value }}" aria-pressed="false"><i class="fa-solid {{ icon }}" aria-hidden="true"></i><span>{{ label }}</span></button>
+                                {% endfor %}
+                            </div>
+                            <label class="router-row" id="allExactModalWrap" title="{{allWaypointsExactHint}}">
+                                <i class="fa-solid fa-crosshairs router-row-icon"></i>
+                                <span class="router-row-label">{{allWaypointsExact}}</span>
+                                <input type="checkbox" class="router-switch all-exact-toggle" id="allExactModal"
+                                       onchange="setAllWaypointsExact(this.checked)">
+                            </label>
+                            <div id="routeFiltersModal"></div>
+                            <div id="ormOverlayModal"></div>
+                            <label class="router-row" title="{{useLegacyRouterHint}}">
+                                <i class="fa-solid fa-clock-rotate-left router-row-icon"></i>
+                                <span class="router-row-label">{{useLegacyRouter}}</span>
+                                <input type="checkbox" class="router-switch" role="switch" id="newRouterToggleModal">
+                            </label>
+                        </div>
+                    </details>
                     {% endif %}
                     <div id="freehandToggleSlot"></div>
                     <div id="gpxToggleSlot"></div>
@@ -1745,6 +1776,7 @@
     });
 
     var routerurl = `${window.location.origin}/forwardRouting/${tripType}/route/v1`;
+    var ormOverlayAllowed = {{ 'true' if is_premium else 'false' }};
 
 
     const texts = {
@@ -1757,6 +1789,29 @@
         "useLegacyRouterHint": "{{useLegacyRouterHint}}",
         "allWaypointsExact": "{{allWaypointsExact}}",
         "allWaypointsExactHint": "{{allWaypointsExactHint}}",
+        "routeFiltersAdvanced": {{ (routeFiltersAdvanced|default(""))|tojson }},
+        "routeFilterSpeedAny": {{ (routeFilterSpeedAny|default(""))|tojson }},
+        "routeFilterPowerAny": {{ (routeFilterPowerAny|default(""))|tojson }},
+        "routeFilterGaugeAny": {{ (routeFilterGaugeAny|default(""))|tojson }},
+        "routeFilterAvoidHighspeed": {{ (routeFilterAvoidHighspeed|default(""))|tojson }},
+        "routeFilterMaxSpeed": {{ (routeFilterMaxSpeed|default(""))|tojson }},
+        "routeFilterElectrifiedOnly": {{ (routeFilterElectrifiedOnly|default(""))|tojson }},
+        "routeFilterPower": {{ (routeFilterPower|default(""))|tojson }},
+        "routeFilterGauge": {{ (routeFilterGauge|default(""))|tojson }},
+        "routeGaugeIndian": {{ (routeGaugeIndian|default(""))|tojson }},
+        "routeGaugeIberian": {{ (routeGaugeIberian|default(""))|tojson }},
+        "routeGaugeIrish": {{ (routeGaugeIrish|default(""))|tojson }},
+        "routeGaugeFinnish": {{ (routeGaugeFinnish|default(""))|tojson }},
+        "routeGaugeRussian": {{ (routeGaugeRussian|default(""))|tojson }},
+        "routeGaugeStandard": {{ (routeGaugeStandard|default(""))|tojson }},
+        "routeGaugeNarrow": {{ (routeGaugeNarrow|default(""))|tojson }},
+        "routeFiltersNoRoute": {{ (routeFiltersNoRoute|default(""))|tojson }},
+        "ormLayerStandard": {{ (ormLayerStandard|default(""))|tojson }},
+        "ormLayerMaxspeed": {{ (ormLayerMaxspeed|default(""))|tojson }},
+        "ormLayerSignals": {{ (ormLayerSignals|default(""))|tojson }},
+        "ormLayerElectrified": {{ (ormLayerElectrified|default(""))|tojson }},
+        "ormLayerGauge": {{ (ormLayerGauge|default(""))|tojson }},
+        "routeOverlayNone": {{ (routeOverlayNone|default(""))|tojson }},
         "train": "{{train}}",
         "tram": "{{tram}}",
         "metro": "{{metro}}",
@@ -1832,11 +1887,25 @@
             routing(map, false, tripType);
             
             // Set up router toggle handler for the modal
-            {% if tripType in ['train', 'tram', 'metro'] %}
+            {% if tripType in ['train', 'tram', 'metro', 'funicular', 'rail'] %}
             const routerToggle = document.getElementById('newRouterToggleModal');
             const routerProfile = document.getElementById('newRouterProfileModal');
-            if (routerProfile) {
-                routerProfile.value = tripType;
+            const routerTray = document.getElementById('routerTrayModal');
+            document.getElementById('routeFiltersModal').innerHTML = buildRouteFiltersHtml();
+            document.getElementById('ormOverlayModal').innerHTML = buildOrmOverlayHtml();
+
+            function showProfile(value) {
+                routerProfile.querySelectorAll('.router-seg-btn').forEach(function (b) {
+                    var on = b.dataset.profile === value;
+                    b.classList.toggle('active', on);
+                    b.setAttribute('aria-pressed', String(on));
+                });
+            }
+            // The new router's own options show only while it is in use
+            function syncRouterTray() {
+                routerProfile.style.display = useNewRouter ? '' : 'none';
+                document.getElementById('allExactModalWrap').style.display = useNewRouter ? '' : 'none';
+                syncRouteFiltersVisibility();
             }
 
             function applyNewRouterParams() {
@@ -1845,7 +1914,7 @@
 
                 if (useNewRouter) {
                     currentParams.use_new_router = 'true';
-                    currentParams.profile = routerProfile ? routerProfile.value : tripType;
+                    currentParams.profile = newRouterProfile;
                 } else {
                     delete currentParams.use_new_router;
                     delete currentParams.profile;
@@ -1858,56 +1927,51 @@
                 }
             }
 
-            if (routerToggle) {
-                routerToggle.addEventListener('change', function() {
-                    // The switch is "use the legacy router": the new one is the default.
-                    useNewRouter = !this.checked;
-                    if (routerProfile) {
-                        routerProfile.style.display = useNewRouter ? '' : 'none';
-                    }
-                    document.getElementById('allExactModalWrap').style.display = useNewRouter ? '' : 'none';
-
-                    // Show loading indicator
-                    if (window.sidebar) {
-                        window.sidebar.setContent(spinnerContent);
-                    }
-
-                    // Clear route details when switching routers
-                    routeDetails = null;
-                    if (newTrip["details"]) {
-                        delete newTrip["details"];
-                    }
-
-                    // Update the router
-                    if (window.control && window.baseRouter) {
-                        applyNewRouterParams();
-
-                        // Recompute the route
-                        window.control.route();
-                        updateMarkerVisuals();
-                    }
-                });
-                // routing() made the new router the default for rail types.
-                routerToggle.checked = !useNewRouter;
-                if (routerProfile) routerProfile.style.display = useNewRouter ? '' : 'none';
-                document.getElementById('allExactModalWrap').style.display = useNewRouter ? '' : 'none';
+            function reroute() {
+                if (window.sidebar) {
+                    window.sidebar.setContent(spinnerContent);
+                }
+                // Clear route details when switching routers
+                routeDetails = null;
+                if (newTrip["details"]) {
+                    delete newTrip["details"];
+                }
+                if (window.control && window.baseRouter) {
+                    applyNewRouterParams();
+                    window.control.route();
+                }
             }
-            if (routerProfile) {
-                routerProfile.addEventListener('change', function() {
-                    if (!useNewRouter) return;
-                    if (window.sidebar) {
-                        window.sidebar.setContent(spinnerContent);
-                    }
-                    routeDetails = null;
-                    if (newTrip["details"]) {
-                        delete newTrip["details"];
-                    }
-                    if (window.control && window.baseRouter) {
-                        applyNewRouterParams();
-                        window.control.route();
-                    }
-                });
-            }
+
+            routerToggle.addEventListener('change', function() {
+                // The switch is "use the legacy router": the new one is the default.
+                useNewRouter = !this.checked;
+                syncRouterTray();
+                reroute();
+                updateMarkerVisuals();
+            });
+            routerProfile.addEventListener('click', function(e) {
+                var btn = e.target.closest('.router-seg-btn');
+                if (!btn || btn.classList.contains('active') || !useNewRouter) return;
+                newRouterProfile = btn.dataset.profile;   // routing.js offers track filters on train only
+                showProfile(newRouterProfile);
+                syncRouterTray();
+                reroute();
+            });
+
+            // routing() made the new router the default for rail types and picked the profile.
+            routerToggle.checked = !useNewRouter;
+            showProfile(newRouterProfile);
+            syncRouterTray();
+
+            // Flagged on the button too, as the bubble's own message is hidden while closed
+            // (routing.js's handler, registered first, has set routeFiltersNoRoute)
+            window.control.on('routesfound routingerror', function () {
+                routerTray.classList.toggle('no-route', routeFiltersNoRoute);
+            });
+            // A popover: closes on any click outside it
+            document.addEventListener('click', function (e) {
+                if (routerTray.open && !routerTray.contains(e.target)) routerTray.removeAttribute('open');
+            });
             {% endif %}
 
             // ── Freehand inline toggle (opens straight into freehand for freehand trips) ──
@@ -1958,13 +2022,12 @@
     });
 
     {% if tripType not in ('air', 'helicopter', 'accommodation', 'poi', 'restaurant') %}
-    // The router-choice switch is meaningless while hand-drawing — disable it in freehand mode.
+    // The router options are meaningless while hand-drawing — hidden in freehand mode.
     function setRouterToggleDisabled(disabled) {
-        var rt = document.getElementById('newRouterToggleModal');
-        if (!rt) return;
-        rt.disabled = disabled;
-        var wrap = rt.closest('.form-check');
-        if (wrap) wrap.style.opacity = disabled ? '0.5' : '';
+        var tray = document.getElementById('routerTrayModal');
+        if (!tray) return;
+        if (disabled) tray.removeAttribute('open');
+        tray.style.display = disabled ? 'none' : '';
     }
     function startFreehandEditor(origin, dest, waypoints) {
         setRouterToggleDisabled(true);
