@@ -72,6 +72,8 @@ var newRouterProfile = null;
 var markergroup = new L.featureGroup(markerIconStart, markerIconEnd);
 
 var routeDetails = null;
+// [from, to, ms] per stretch of the last routed line (point indexes), new router only
+var routeTimeDetail = null;
 
 // Bumped on every reroute so a slow /api/electrification-preview response from an
 // earlier route can't overwrite the sidebar after a newer one has already resolved.
@@ -170,6 +172,10 @@ document.addEventListener('toggle', function (e) {
             var response = JSON.parse(self.responseText);
             if (response.routes && response.routes[0] && response.routes[0].details) {
               routeDetails = response.routes[0].details;
+              // The new router's travel time per stretch of the line, for the timeline's
+              // estimates: kept apart so it isn't saved with the trip's details.
+              routeTimeDetail = routeDetails.time || null;
+              delete routeDetails.time;
             }
           } catch(e) {
             console.error('Error parsing OSRM response:', e);
@@ -819,9 +825,8 @@ function routerPickerKey(e, list) {
   }
 }
 
-// OpenRailwayMap over the routing map, to see which lines a filter keeps (premium, as
-// on the other maps). openrailwaymap.org's raster tiles: ours are vector ones, which
-// Leaflet can't draw. The choice is remembered on this browser only.
+// OpenRailwayMap over the routing map, to see which lines a filter keeps.
+// openrailwaymap.org's raster tiles: ours are vector ones, which Leaflet can't draw. The choice is remembered on this browser only.
 var ORM_OVERLAYS = [
   ['standard', 'ormLayerStandard', 'fa-train'], ['maxspeed', 'ormLayerMaxspeed', 'fa-gauge-high'],
   ['electrification', 'ormLayerElectrified', 'fa-bolt'], ['gauge', 'ormLayerGauge', 'fa-ruler-horizontal'],
@@ -831,12 +836,7 @@ var ormOverlayLayer = null;
 var ormOverlayType = '';
 try { ormOverlayType = localStorage.getItem('routeOrmOverlay') || ''; } catch (e) {}
 
-function ormOverlayEnabled() {
-  return typeof ormOverlayAllowed !== 'undefined' && ormOverlayAllowed;
-}
-
 function buildOrmOverlayHtml() {
-  if (!ormOverlayEnabled()) return '';
   return buildRouterPickerHtml('fa-layer-group', 'OpenRailwayMap',
     [['', texts.routeOverlayNone, '<i class="fa-solid fa-ban"></i>', '']].concat(ORM_OVERLAYS.map(function (o) {
       return [o[0], texts[o[1]], `<i class="fa-solid ${o[2]}"></i>`, ''];
@@ -856,7 +856,7 @@ function applyOrmOverlay() {
   if (typeof map === 'undefined' || !map) return;
   if (ormOverlayLayer) map.removeLayer(ormOverlayLayer);
   ormOverlayLayer = null;
-  if (!ormOverlayEnabled() || !ormOverlayType) return;
+  if (!ormOverlayType) return;
   ormOverlayLayer = L.tileLayer(`https://tiles.openrailwaymap.org/${ormOverlayType}/{z}/{x}/{y}.png`, {
     maxZoom: 19, zIndex: 5,
     attribution: '&copy; <a href="https://www.openrailwaymap.org/" target="_blank">OpenRailwayMap</a>'
@@ -879,11 +879,87 @@ function buildRouterTrayHeaderHtml() {
   `;
 }
 
+// A stop's departure ('dep') or arrival ('arr') as minutes since midnight at the stop.
+function stopClockMinutes(stop, which) {
+  var iso = stop[which + '_rt'] || stop[which] || stop[which === 'dep' ? 'arr' : 'dep'];
+  if (!iso) return null;
+  try {
+    var parts = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: stop.tz || undefined })
+      .formatToParts(new Date(iso));
+    var h = 0, m = 0;
+    parts.forEach(function(x) { if (x.type === 'hour') h = +x.value; else if (x.type === 'minute') m = +x.value; });
+    return h * 60 + m;
+  } catch (e) { return null; }
+}
+
+// Rough times for the points between two timed ones: where each lies along the route in
+// the router's own travel time, spread over the gap between the nearest timed points
+// either side. Only for the points without a time; a few array passes over the route.
+// Returns {index: minutes since midnight}, possibly past 1440 after midnight.
+function estimateWaypointMinutes(wps, leave, reach, route) {
+  var anchors = leave;   // when each timed point is left; `reach` is when it is arrived at
+  var coords = route && route.coordinates, instr = route && route.instructions;
+  if (!coords || coords.length < 2) return {};
+  var last = wps.length - 1, pending = false;
+  for (var i = 1; i < last; i++) if (anchors[i] == null) { pending = true; break; }
+  if (!pending || anchors[0] == null || anchors[last] == null) return {};
+
+  // Router time at points along the line: from the new router's time per stretch when it
+  // covers this very line (not with freehand parts, which change the point list), else
+  // from the steps of the legacy one. Interpolated between those, by point.
+  var starts = [], cums = [], cum = 0;
+  var tl = routeTimeDetail;
+  if (tl && tl.length && tl[tl.length - 1][1] === coords.length - 1) {
+    tl.forEach(function(t) { starts.push(t[0]); cums.push(cum); cum += t[2]; });
+    starts.push(coords.length - 1); cums.push(cum);
+  } else if (instr && instr.length && instr.some(function(it) { return it.time; })) {
+    instr.forEach(function(it) { starts.push(it.index); cums.push(cum); cum += it.time || 0; });
+    starts.push(coords.length - 1); cums.push(cum);
+  } else return {};
+  var k = 0;
+  function timeAt(idx) {
+    while (k < starts.length - 2 && idx >= starts[k + 1]) k++;
+    var span = starts[k + 1] - starts[k];
+    return span > 0 ? cums[k] + (cums[k + 1] - cums[k]) * (idx - starts[k]) / span : cums[k];
+  }
+
+  // Each waypoint's coordinate on the route, searched forward from the previous one
+  var at = [], from = 0;
+  wps.forEach(function(wp) {
+    var cos = Math.cos(wp.latLng.lat * Math.PI / 180), best = from, bestD = Infinity;
+    for (var j = from; j < coords.length; j++) {
+      var dy = coords[j].lat - wp.latLng.lat, dx = (coords[j].lng - wp.latLng.lng) * cos, d = dx * dx + dy * dy;
+      if (d < bestD) { bestD = d; best = j; }
+    }
+    at.push(timeAt(best)); from = best;
+  });
+
+  // Unrolled across midnight so the anchors only ever increase
+  var abs = [], absReach = [], prev = -Infinity;
+  anchors.forEach(function(m, i) {
+    if (m == null) { abs.push(null); absReach.push(null); return; }
+    var r = reach[i] != null ? reach[i] : m;
+    while (r < prev) r += 1440;
+    while (m < r) m += 1440;
+    absReach.push(r); abs.push(m); prev = m;
+  });
+  var out = {}, before = 0;
+  for (var w = 1; w < last; w++) {
+    if (abs[w] != null) { before = w; continue; }
+    var after = w + 1;
+    while (abs[after] == null) after++;
+    var gap = at[after] - at[before];
+    if (gap <= 0) continue;
+    out[w] = abs[before] + (absReach[after] - abs[before]) * (at[w] - at[before]) / gap;
+  }
+  return out;
+}
+
 // Desktop only (the panel is short on a phone), and only on the routing page: the route as
 // a timeline, origin and destination large, the points between them smaller, with their
-// times when they are timetable stops. Rebuilt with the rest of the panel on every
-// reroute, so it follows each added, moved or removed point.
-function buildRouteTimelineHtml(wps) {
+// times when they are timetable stops (or a "~" estimate, on a timed trip). Rebuilt with
+// the rest of the panel on every reroute, so it follows each added, moved or removed point.
+function buildRouteTimelineHtml(wps, route) {
   if (!window.matchMedia('(min-width: 768px)').matches || !wps || wps.length < 2) return '';
   function esc(t) { return String(t).replace(/[&<>"]/g, function(c) { return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]; }); }
   function item(cls, name, times) {
@@ -896,14 +972,35 @@ function buildRouteTimelineHtml(wps) {
     if (v && v.length === 16) return v.slice(11);
     return /^\d{1,2}:\d{2}$/.test(planned || '') ? planned : '';
   }
+  function toMinutes(t) { var p = t.split(':'); return +p[0] * 60 + +p[1]; }
   var startTime = tripTime(newTrip.newTripStart, newTrip.planStartTime);
   var endTime = tripTime(newTrip.newTripEnd, newTrip.planEndTime);
+
+  // The minutes each point is known to be left (dep) or arrived at (arr): a stop's own times
+  function anchor(which) {
+    return wps.map(function(wp, i) {
+      var stop = wp.options && wp.options.stop;
+      if (stop && typeof stop === 'object') {
+        var m = stopClockMinutes(stop, which);
+        if (m != null) return m;
+      }
+      if (i === 0 && startTime) return toMinutes(startTime);
+      if (i === last && endTime) return toMinutes(endTime);
+      return null;
+    });
+  }
+  var guessed = estimateWaypointMinutes(wps, anchor('dep'), anchor('arr'), route);
+
   var items = wps.map(function(wp, i) {
     var stop = wp.options && wp.options.stop;
     var times = stop && typeof stop === 'object' ? stopTimesLabel(stop) : '';
     if (i === 0) return item('rt-end', waypointLabel(wp) || origLabel, times || startTime);
     if (i === last) return item('rt-end', waypointLabel(wp) || destLabel, times || endTime);
     var name = waypointLabel(wp);
+    if (!times && guessed[i] != null) {
+      var g = Math.round(guessed[i]) % 1440;
+      times = '~' + String(Math.floor(g / 60)).padStart(2, '0') + ':' + String(g % 60).padStart(2, '0');
+    }
     return item('rt-via' + (name ? '' : ' rt-unnamed'), name || (wp.latLng.lat.toFixed(3) + ', ' + wp.latLng.lng.toFixed(3)), times);
   }).join('');
   return '<ol class="route-timeline">' + items + '</ol>';
@@ -1828,7 +1925,7 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
         hintHtml = busRouterHint();
       }
       
-      if (allowFerrySplit && window.currentPlan) content += buildRouteTimelineHtml(window.currentPlan.getWaypoints());
+      if (allowFerrySplit && window.currentPlan) content += buildRouteTimelineHtml(window.currentPlan.getWaypoints(), this._selectedRoute);
 
       // Add note about freehand segments if any exist
       if (freehandSegments.size > 0) {

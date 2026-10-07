@@ -170,7 +170,7 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
 
         full_url = (
             f"{base_url}/route?"
-            f"{point_params}&type=json&profile={gh_profile}&details=electrified&details=distance"
+            f"{point_params}&type=json&profile={gh_profile}&details=electrified&details=distance&details=time"
         )
         if waypoint_modes:
             full_url += f"&waypoint_modes={waypoint_modes}"
@@ -185,7 +185,7 @@ def forward_routing_core(routingType, path, flask_request, extra_args=None):
         body = {
             "profile": gh_profile,
             "points": [[float(c) for c in coord.split(",")] for coord in path.split("/")[-1].split(";")],
-            "details": ["electrified", "distance"],
+            "details": ["electrified", "distance", "time"],
             "ch.disable": True,
             "custom_model": {"priority": [{"if": c, "multiply_by": "0"} for c in filters]},
         }

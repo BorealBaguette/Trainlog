@@ -1147,8 +1147,6 @@ var errorContent = '<h4>' + {{ (routingError|default("Routing error"))|tojson }}
   '</h4><p><button onclick="location.reload()">' + {{ (retry|default("Retry"))|tojson }} + '</button></p>';
 var saveErrorContent = '<h4>' + {{ (saveError|default("Save error"))|tojson }} +
   '</h4><p><button onclick="location.reload()">' + {{ (retry|default("Retry"))|tojson }} + '</button></p>';
-// The OpenRailwayMap overlay is a premium feature, as on the other maps
-var ormOverlayAllowed = {{ 'true' if is_premium else 'false' }};
 var texts = {
   "freehandMode": {{ freehandMode|tojson }},
   "waypointSoft": {{ waypointSoft|tojson }},

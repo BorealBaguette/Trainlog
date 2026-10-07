@@ -34,8 +34,6 @@ var id = getGetParams().get("id");
 var newTrip = null;
 var currentRoute;
 var routeDetails = null;
-// The OpenRailwayMap overlay is a premium feature, as on the other maps
-var ormOverlayAllowed = {{ 'true' if is_premium else 'false' }};
 const texts = {
   "routeTitle": "{{routeTitle}}",
   "ferrySplitNote": {{ ferrySplitNote | tojson }},
