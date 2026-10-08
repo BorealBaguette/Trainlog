@@ -721,69 +721,202 @@ function getCompositeScore(station, term) {
   return (occurrenceScore * 0.3) + (similarityScore * 0.5) + (positionScore * 0.8);
 }
 
+// The numbered tracks and the lines of each station picked from the autocomplete, by label:
+// [{ref, lat, lng, on_track}] (lines also have colour), from quai. Empty when the source
+// has none.
+var globalStationTracks = {};
+var globalStationLines = {};
+
+// Stations asked for first (enough to fill the list), then at a time, and at most (quai
+// answers 50 at most): nearing the end of the list asks for the next ones.
+var STATION_SEARCH_FIRST = 20;
+var STATION_SEARCH_PAGE = 10;
+var STATION_SEARCH_MAX = 50;
+
 function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
-  var currentXhr = null;
-  
+  // The first `limit` stations named like `term`, as autocomplete items, given to done(items,
+  // count) with how many the server sent. One request at a time per input.
+  function fetchStations(widget, term, limit, done) {
+    var inputElement = widget.element;
+    if (widget.stationXhr) {
+      widget.stationXhr.abort();
+    }
+    inputElement.addClass("spinning loading");
+    // A page may give a point to search around (window.stationSearchBias(input) -> [lat, lng]),
+    // such as the trip's other end: of the stops sharing a name, the nearby ones come first.
+    var query = { q: term, limit: limit };
+    var bias = typeof window.stationSearchBias === 'function' ? window.stationSearchBias(inputElement) : null;
+    if (bias) { query.lat = bias[0]; query.lon = bias[1]; }
+    widget.stationXhr = $.ajax({
+      url: url,
+      dataType: "json",
+      data: query,
+      // Cleared first, as done() may already ask for more (loadMore).
+      success: function (data, status, xhr) {
+        if (widget.stationXhr === xhr) {
+          widget.stationXhr = null;
+        }
+        var stationList = [];
+        data.features.forEach(function (item) {
+          // What a station is across requests, as its label can change: a homonym coming
+          // with more results gets it a place or a letter.
+          var id = item.properties.station_key
+            || (item.properties.osm_type ? item.properties.osm_type + item.properties.osm_id : null)
+            || item.geometry.coordinates.join(",");
+          flag = getFlagEmoji(item.properties.countrycode);
+          label = `${flag} ${item.properties.name}`;
+          disambiguation = item.properties.homonymy_order ? [item.properties.street, item.properties.locality, item.properties.district, item.properties.city].filter(e => (e)).join(", ") : null;
+          // A quai station's place, shown in the list only (not part of its name), unless
+          // the name says it already ("Lyon Part-Dieu", "Poste (Villepinte)").
+          if (item.properties.source === 'quai') {
+            var place = item.properties.city || item.properties.state;
+            disambiguation = place && item.properties.name.toLowerCase().indexOf(place.toLowerCase()) === -1 ? place : null;
+          }
+          displayLabel = label + (item.properties.homonymy_order ? item.properties.homonymy_order : "");
+          stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation,
+                             "source": item.properties.source, "tier": item.properties.tier, "id": id });
+          globalStationDict[displayLabel] = [item.geometry.coordinates.reverse(), label];
+          globalStationTracks[displayLabel] = item.properties.tracks || [];
+          globalStationLines[displayLabel] = item.properties.lines || [];
+        });
+        inputElement.removeClass("spinning");
+        done(stationList, data.features.length);
+      },
+      error: function (xhr, status) {
+        if (widget.stationXhr === xhr) {
+          widget.stationXhr = null;
+        }
+        inputElement.removeClass("spinning");
+        if (status !== 'abort') {
+          inputElement.addClass("error");
+        }
+      }
+    });
+  }
+
+  // The stations in the order to show them, after the user's manual stations matching `term`.
+  function rankStations(stationList, manStationList, term) {
+    // Add occurrences, similarity, and position scores to station objects
+    function score(station) {
+      station.occurrences = visitedStations[station.label] || 0;
+      station.similarity = getSimilarity(term, station.label);
+      station.positionScore = getPositionScore(term, station.label);
+      station.compositeScore = getCompositeScore(station, term);
+    }
+    function byScore(a, b) { return b.compositeScore - a.compositeScore; }
+    var combinedList;
+    if (stationList.length && stationList.every(function (s) { return s.source === 'quai'; })) {
+      // quai ranks by how well the name matches, then by importance and distance: its
+      // order stays, but for the stations the user has been to, which go first among
+      // those matching as well (same tier). Their own manual stations lead.
+      manStationList.forEach(score);
+      manStationList.sort(byScore);
+      stationList.forEach(function (station, i) {
+        station.rank = i;
+        station.occurrences = visitedStations[station.label] || 0;
+      });
+      stationList.sort(function (a, b) {
+        return (a.tier - b.tier) || (b.occurrences - a.occurrences) || (a.rank - b.rank);
+      });
+      combinedList = manStationList.concat(stationList);
+    } else {
+      // Photon's order is no use as it is: sort by composite score
+      combinedList = manStationList.concat(stationList);
+      combinedList.forEach(score);
+      combinedList.sort(byScore);
+    }
+    return combinedList;
+  }
+
+  // Whether a request for `limit` stations that brought `count` (`previous` before it) got
+  // them all: quai sends as many as there are up to the limit, Photon fewer once its
+  // duplicates are dropped, so for it only a request bringing nothing new tells.
+  function gotAll(stationList, count, previous, limit) {
+    var allQuai = stationList.every(function (s) { return s.source === 'quai'; });
+    return limit >= STATION_SEARCH_MAX || count <= previous || (allQuai && count < limit);
+  }
+
+  // The next stations, once the list is scrolled to within a screen of its end (or does not
+  // fill its height), so that they are there before it is reached: those shown keep their
+  // place, the new ones follow.
+  function loadMore(widget) {
+    var ul = widget.menu.element;
+    if (!widget.stationTerm || widget.stationAll || widget.stationXhr || !ul.is(":visible")) {
+      return;
+    }
+    if (ul[0].scrollTop + 2 * ul[0].clientHeight < ul[0].scrollHeight) {
+      return;
+    }
+    var term = widget.stationTerm;
+    var limit = Math.min(widget.stationLimit + STATION_SEARCH_PAGE, STATION_SEARCH_MAX);
+    fetchStations(widget, term, limit, function (stationList, count) {
+      if (widget.stationTerm !== term) {
+        return;
+      }
+      var ranked = rankStations(stationList, [], term);
+      var fresh = {};
+      ranked.forEach(function (s) { fresh[s.id] = s; });
+      var shown = {};
+      var relabelled = false;
+      var kept = widget.stationItems.map(function (s) {
+        if (s.id === undefined) {
+          return s;
+        }
+        shown[s.id] = true;
+        relabelled = relabelled || (fresh[s.id] && fresh[s.id].label !== s.label);
+        return fresh[s.id] || s;
+      });
+      var added = ranked.filter(function (s) { return !shown[s.id]; });
+      widget.stationAll = gotAll(stationList, count, widget.stationCount, limit);
+      widget.stationLimit = limit;
+      widget.stationCount = count;
+      widget.stationItems = kept.concat(added);
+      if (relabelled) {
+        // Redrawn where it was, with the same item active for the keyboard.
+        var scrollTop = ul.scrollTop();
+        var active = widget.menu.active ? widget.menu.active.index() : -1;
+        widget._suggest(widget.stationItems);
+        if (active >= 0) {
+          widget.menu.focus(null, ul.children().eq(active));
+        }
+        ul.scrollTop(scrollTop);
+      } else if (added.length) {
+        // Only the new ones drawn, below the others, which stay as they are.
+        added.forEach(function (item) { widget._renderItemData(ul, item); });
+        widget.menu.refresh();
+      }
+      loadMore(widget);
+    });
+  }
+
   $(autoClass).autocomplete({
     minLength: 2,
     delay: 300,
     source: function (request, response) {
-      var inputElement = this.element;
-      
-      // Abort previous request
-      if (currentXhr) {
-        currentXhr.abort();
-      }
-      
-      // Show spinner
-      inputElement.addClass("spinning loading");
+      var widget = this;
       var manStationList = $.ui.autocomplete.filter(manualStationsList, request.term);
-      currentXhr = $.ajax({
-        url: url,
-        dataType: "json",
-        data: {
-          q: request.term
-        },
-        success: function (data) {
-          var stationList = [];
-          data.features.forEach(function (item) {
-            flag = getFlagEmoji(item.properties.countrycode);
-            label = `${flag} ${item.properties.name}`;
-            disambiguation = item.properties.homonymy_order ? [item.properties.street, item.properties.locality, item.properties.district, item.properties.city].filter(e => (e)).join(", ") : null;
-            displayLabel = label + (item.properties.homonymy_order ? item.properties.homonymy_order : "");
-            stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation });
-            globalStationDict[displayLabel] = [item.geometry.coordinates.reverse(), label];
-          });
-          // Combine manual stations and fetched stations
-          var combinedList = manStationList.concat(stationList);
-          // Add occurrences, similarity, and position scores to station objects
-          combinedList.forEach(function (station) {
-            station.occurrences = visitedStations[station.label] || 0;
-            station.similarity = getSimilarity(request.term, station.label);
-            station.positionScore = getPositionScore(request.term, station.label);
-            station.compositeScore = getCompositeScore(station, request.term);
-          });
-          // Sort the list by composite score
-          combinedList.sort(function (a, b) {
-            return b.compositeScore - a.compositeScore;
-          });
-          // Limit the results to a maximum of 20 elements
-          var limitedList = combinedList.slice(0, 20);
-          // Hide spinner
-          inputElement.removeClass("spinning");
-          response(limitedList);
-        },
-        error: function (xhr, status) {
-          // Hide spinner on error (optional)
-          inputElement.removeClass("spinning");
-          if (status !== 'abort') {
-            inputElement.addClass("error");
-          }
+      widget.stationTerm = request.term;
+      widget.stationLimit = STATION_SEARCH_FIRST;
+      widget.stationAll = false;
+      fetchStations(widget, request.term, STATION_SEARCH_FIRST, function (stationList, count) {
+        if (widget.stationTerm !== request.term) {
+          return;
         }
+        widget.stationAll = gotAll(stationList, count, 0, STATION_SEARCH_FIRST);
+        widget.stationCount = count;
+        widget.stationItems = rankStations(stationList, manStationList, request.term);
+        response(widget.stationItems);
       });
     },
+    open: function () {
+      loadMore($(this).autocomplete("instance"));
+    },
   }).each(function() {
-    $(this).data("ui-autocomplete")._renderItem = function(ul, item) {
+    var widget = $(this).autocomplete("instance");
+    widget.menu.element.addClass("stationSearchMenu").on("scroll", function () {
+      loadMore(widget);
+    });
+    widget._renderItem = function(ul, item) {
       if ('manual' in item) {
         return $("<li>")
           .addClass("manualStationSelect")
@@ -795,7 +928,11 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
         if (item.disambiguation) {
           disambiguation = " <span class='disambiguation'>" + sanitize(item.disambiguation) + "</span>"
         }
+        // Where the result comes from, faintly (style2.css): quai's stations, else Photon.
+        var source = item.source === 'quai' ? 'quai' : 'photon';
         return $("<li>")
+          .addClass("stationSource-" + source)
+          .attr("title", source)
           .append("<div>" + sanitize(item.label) + disambiguation + "</div>")
           .appendTo(ul);
       }

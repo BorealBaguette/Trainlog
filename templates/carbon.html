@@ -175,11 +175,11 @@ const vehicleTypes = {
 
 /* Search endpoints */
 const stationURLs = {
-  'bus':   '/stationAutocomplete?osm_tag=amenity:bus_station&osm_tag=highway:bus_stop',
-  'train': '/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station',
-  'tram':  '/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station',
-  'metro': '/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance',
-  'ferry': '/stationAutocomplete?osm_tag=amenity:ferry_terminal',
+  'bus':   '/stationAutocomplete?osm_tag=amenity:bus_station&osm_tag=highway:bus_stop&type=bus',
+  'train': '/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station&type=train',
+  'tram':  '/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station&type=tram',
+  'metro': '/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance&type=metro',
+  'ferry': '/stationAutocomplete?osm_tag=amenity:ferry_terminal&type=ferry',
   'air':   '/api/airportAutocomplete/',
   'car':   '/stationAutocomplete',
   'walk':  '/stationAutocomplete',

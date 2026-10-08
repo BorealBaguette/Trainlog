@@ -1482,9 +1482,13 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     // hard/soft mode (a reopened trip) and a timetable stop's record (stop: name,
     // UTC arr/dep, tz, platform, the stop's own lat/lng), given by the page as
     // window.routingWaypointMeta, one {name, hard, stop} per intermediate point.
+    // The two ends may likewise come as exact (window.routingEndpointMeta, [origin, destination]).
     var wpMeta = window.routingWaypointMeta || [];
+    var endMeta = window.routingEndpointMeta || [];
     var planWaypoints = wplist.map(function(c, i) {
-      return waypointFromMeta(c, (i > 0 && i < wplist.length - 1 && wpMeta[i - 1]) || {});
+      if (i === 0) return waypointFromMeta(c, endMeta[0] || {});
+      if (i === wplist.length - 1) return waypointFromMeta(c, endMeta[1] || {});
+      return waypointFromMeta(c, wpMeta[i - 1] || {});
     });
 
     var plan = new L.Routing.Plan(planWaypoints, {

@@ -318,6 +318,7 @@ from src.trip_announcer import (
     start_trip_announcer,
 )
 from src.photon import photonInstances, photonRequest, photonRequestSingle
+from src.quai import QUAI_MODES, search_stations, stations_at
 from src.routing import forward_routing_core
 from src.gpx_import import (
     GpxIngestError,
@@ -7911,12 +7912,45 @@ def placeAutocomplete():
     return jsonify(response_json)
 
 
+@app.route("/stationTracks", methods=["POST"])
+def stationTracks():
+    """The station at each timetable stop, with its tracks and lines: {type, stops: [{lat,
+    lng, platform?}]} gives {stops: [{station, station_key, tracks, lines, track} or null]}
+    (see src/quai.py)."""
+    body = request.get_json(silent=True) or {}
+    stops = body.get("stops") or []
+    if not isinstance(stops, list) or len(stops) > 200:
+        return jsonify(error="stops must be a list of at most 200"), 400
+    stops = [s if isinstance(s, dict) else {} for s in stops]
+    return jsonify(stops=stations_at(body.get("type"), stops))
+
+
 @app.route("/stationAutocomplete")
 def stationAutocomplete():
     # Check if this is a reverse geocoding request
     params = request.args.to_dict(flat=False)
-    is_reverse = params.get("lat") and params.get("lon")
+    # lat/lon alone ask what is there; with q, they only bias the search towards them.
+    is_reverse = params.get("lat") and params.get("lon") and not params.get("q")
     endpoint = "/reverse" if is_reverse else "/api"
+
+    # Stations of public transport modes come from quai; Photon stays the fallback, and
+    # answers everything else (addresses, POIs...). It rejects unknown parameters.
+    trip_type = (params.pop("type", None) or [None])[0]
+    if trip_type in QUAI_MODES:
+        features = search_stations(
+            trip_type,
+            q=None if is_reverse else request.args.get("q", ""),
+            lat=request.args.get("lat", type=float),
+            lon=request.args.get("lon", type=float),
+            radius_km=request.args.get("radius", type=float),
+            limit=request.args.get("limit", 10, type=int),
+        )
+        if features or (features is not None and is_reverse):
+            return jsonify({"type": "FeatureCollection", "features": features})
+    if not is_reverse:
+        # The position only biases quai's ranking; Photon answers fewer results with it.
+        params.pop("lat", None)
+        params.pop("lon", None)
 
     params.setdefault("lang", ["en"])
 

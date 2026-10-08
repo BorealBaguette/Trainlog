@@ -658,6 +658,21 @@ body::before {
   background-color: #ffb4b43b;
 }
 
+/* Which search answered (stationSearchAutocomplete): a faint edge, to spot a fallback. */
+.ui-autocomplete .stationSource-quai{
+  box-shadow: inset 3px 0 0 rgba(34, 139, 84, 0.35);
+}
+.ui-autocomplete .stationSource-photon{
+  box-shadow: inset 3px 0 0 rgba(214, 140, 30, 0.35);
+}
+
+/* Scrolls, as reaching its end loads the next stations (stationSearchAutocomplete). */
+.ui-autocomplete.stationSearchMenu{
+  max-height: min(24em, 50vh);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
 .ui-autocomplete .disambiguation{
   opacity: 0.5;
   font-size: 75%;
