@@ -288,7 +288,8 @@ class OperatorsRepository:
                            WHERE operator_id IN (
                                SELECT operator_id FROM operators WHERE group_id = o.group_id
                            )
-                       ) END AS group_trip_count
+                       ) END AS group_trip_count,
+                       o.note
                 FROM operators o
                 LEFT JOIN operator_logos ol ON ol.operator_id = o.operator_id AND ol.uid = (SELECT MAX(uid) FROM operator_logos WHERE operator_id=o.operator_id)
                 ORDER BY o.short_name DESC
@@ -304,6 +305,7 @@ class OperatorsRepository:
                 "group_with",
                 "trip_count",
                 "group_trip_count",
+                "note",
             ]
             return [dict(zip(columns, row)) for row in result.fetchall()]
 
@@ -317,7 +319,13 @@ class OperatorsRepository:
             return result is not None
 
     @classmethod
-    def add(cls, short_name: str, long_name: str, operator_type: str):
+    def add(
+        cls,
+        short_name: str,
+        long_name: str,
+        operator_type: str,
+        note: str | None = None,
+    ):
         """Create an operator, with the slug and alias rows it needs to be usable.
 
         An operator is only ever found through operator_aliases, so creating one
@@ -339,8 +347,8 @@ class OperatorsRepository:
 
             result = pg.execute(
                 """
-                INSERT INTO operators (short_name, long_name, operator_type, slug)
-                VALUES (:short_name, :long_name, :operator_type, :slug)
+                INSERT INTO operators (short_name, long_name, operator_type, slug, note)
+                VALUES (:short_name, :long_name, :operator_type, :slug, :note)
                 RETURNING operator_id, short_name, long_name, operator_type, slug
             """,
                 {
@@ -348,6 +356,7 @@ class OperatorsRepository:
                     "long_name": long_name,
                     "operator_type": operator_type,
                     "slug": slug,
+                    "note": note or None,
                 },
             )
             columns = [
@@ -406,7 +415,7 @@ class OperatorsRepository:
     def update_operator_field(
         cls,
         operator_id: int,
-        field: Literal["short_name", "long_name", "operator_type"],
+        field: Literal["short_name", "long_name", "operator_type", "note"],
         value: str,
     ) -> UpdateOperatorFieldResult:
         if (field == "short_name" or field == "long_name") and len(value) == 0:
@@ -449,7 +458,11 @@ class OperatorsRepository:
 
             pg.execute(
                 f"UPDATE operators SET {field} = :value WHERE operator_id = :operator_id",
-                {"value": value, "operator_id": operator_id},
+                {
+                    # An emptied note is stored as NULL, not ''.
+                    "value": (value or None) if field == "note" else value,
+                    "operator_id": operator_id,
+                },
             )
 
             if field in ("short_name", "long_name"):
@@ -732,7 +745,7 @@ class OperatorsRepository:
         the unique index means a spelling cannot simply be aliased onto a second
         operator while the first still owns it.
 
-        The source's logos and aliases move to the target, so no spelling and no
+        The source's logos, aliases and note move to the target, so no spelling and no
         artwork is lost, then the source row goes away and its trips re-resolve.
         """
         with pg_session() as pg:
@@ -775,6 +788,15 @@ class OperatorsRepository:
             )
             pg.execute(
                 "DELETE FROM operator_aliases WHERE operator_id = :s", {"s": source_id}
+            )
+            pg.execute(
+                """
+                UPDATE operators t
+                SET note = concat_ws(E'\\n\\n', t.note, s.note)
+                FROM operators s
+                WHERE t.operator_id = :t AND s.operator_id = :s AND s.note IS NOT NULL
+                """,
+                {"s": source_id, "t": target_id},
             )
             pg.execute(
                 "DELETE FROM operators WHERE operator_id = :s", {"s": source_id}

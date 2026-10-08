@@ -41,6 +41,7 @@ def add_operator():
     short_name = request.form.get("short_name")
     long_name = request.form.get("long_name")
     operator_type = request.form.get("operator_type")
+    note = (request.form.get("note") or "").strip()
     logo = request.files.get("logo")
 
     # JSON rather than an abort HTML page, so the admin UI can show the reason inline.
@@ -82,7 +83,7 @@ def add_operator():
         ), 409
 
     try:
-        operator = OperatorsRepository.add(short_name, long_name, operator_type)
+        operator = OperatorsRepository.add(short_name, long_name, operator_type, note)
         operator_id = operator["operator_id"]
 
         if logo:
@@ -114,12 +115,12 @@ def add_operator():
 
 
 @operators_api_blueprint.route(
-    "<int:operator_id>/<any(short_name, long_name, operator_type):field>",
+    "<int:operator_id>/<any(short_name, long_name, operator_type, note):field>",
     methods=["PUT"],
 )
 @admin_required
 def update_operator_field(
-    operator_id: int, field: Literal["short_name", "long_name", "operator_type"]
+    operator_id: int, field: Literal["short_name", "long_name", "operator_type", "note"]
 ):
     new_value = request.get_data(as_text=True)
     if not OperatorsRepository.operator_exists(operator_id):
