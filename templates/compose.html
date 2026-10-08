@@ -3492,11 +3492,20 @@ function composeSave(continueTrip) {
     success: onSaveSuccess, error: onSaveError
   });
   {% else %}
-  if (!currentRoute || currentRoute.length < 2) {
+  {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
+  // One point is the whole trip: no router runs, so there is no currentRoute to read.
+  // The server takes the first and last path points, which are this same place.
+  var currentRoute = [{ lat: originEntry[0][0], lng: originEntry[0][1] }];
+  newTrip.trip_length = 0;
+  newTrip.estimated_trip_duration = 0;
+  var routeDetails = null;
+  {% else %}
+  if (typeof currentRoute === 'undefined' || !currentRoute || currentRoute.length < 2) {
     composeSaveBusy(false);
     alert({{ (pleaseWaitRoute|default("Please wait for the route to load."))|tojson }});
     return;
   }
+  {% endif %}
   newTrip.details = routeDetails;
   if (freehandActive && freehandEditor) {
     newTrip.route_source = 'freehand';
