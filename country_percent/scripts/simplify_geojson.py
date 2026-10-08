@@ -10,7 +10,7 @@ Simplify a processed GeoJSON file by:
 8. failing on very tiny or invalid polygons.
 
 Usage:
-    python simplify_geojson.py <COUNTRY_CODE>
+    python scripts/simplify_geojson.py <COUNTRY_CODE>
 
 The script reads from:
     countries/processed/<COUNTRY_CODE>.geojson
