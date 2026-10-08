@@ -465,8 +465,10 @@ function getFlagEmojiListNew(countriesString, tripType, powerType){
   // metro/tram/aerialway/funicular have no power_type and are always electric
   // (matching force_electric=True in carbon.py), so force ⚡ for them.
   var alwaysElectric = ['metro', 'tram', 'aerialway', 'funicular'].includes(tripType);
+  // Muscle-powered types are never 🛢️, whatever power_type got stored with them.
+  var humanPowered = ['walk', 'cycle', 'scooter'].includes(tripType);
   var powerIcon = (powerType === 'electric' || alwaysElectric) ? '⚡'
-                : powerType === 'manual'   ? '🦵'
+                : (powerType === 'manual' || humanPowered) ? '🦵'
                 : powerType === 'thermic'  ? '🛢️'
                 : null;
   function totalMeters(d) {
@@ -496,7 +498,7 @@ function getFlagEmojiListNew(countriesString, tripType, powerType){
             parts.push(`⚡${mToKm(countryData.elec)}km`);
           }
           if (countryData.nonelec) {
-            var nonelecIcon = (tripType === 'cycle' || tripType === 'scooter') ? '🦵' : '🛢️';
+            var nonelecIcon = humanPowered ? '🦵' : '🛢️';
             parts.push(`${nonelecIcon}${mToKm(countryData.nonelec)}km`);
           }
           title = `${CountryName} - ${parts.join(' ')}`;

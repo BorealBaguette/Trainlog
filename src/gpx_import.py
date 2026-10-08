@@ -18,7 +18,7 @@ import gpxpy
 from werkzeug.datastructures import FileStorage
 
 from py.gps_cleaner import clean_gps_route
-from py.utils import get_flag_emoji, getDistance
+from py.utils import get_flag_emoji, getCountryFromCoordinates, getDistance
 from src.pg import pg_session
 from src.photon import photonRequest
 from src.routing import forward_routing_core
@@ -46,6 +46,8 @@ def getAddressFromCoords(lat, lng):
 
     props = response_json["features"][0]["properties"]
     country_code = props.get("countrycode", "").upper()
+    if country_code in ("CN", "FI", "ES"):
+        country_code = getCountryFromCoordinates(lat, lng)["countryCode"]
     city = props.get("city") or props.get("county") or ""
     suburb = props.get("suburb") or props.get("district") or ""
 

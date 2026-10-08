@@ -7937,7 +7937,7 @@ def stationAutocomplete():
     for index, result in enumerate(responseJson["features"]):
         props = result["properties"]
         # Special country handling
-        special_countries = ["CN", "FI"]
+        special_countries = ["CN", "FI", "ES"]
         if props.get("countrycode") in special_countries:
             lon, lat = result["geometry"]["coordinates"]
             manual_country = getCountryFromCoordinates(lat, lon)

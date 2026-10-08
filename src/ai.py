@@ -246,7 +246,7 @@ def geocode_station(query, trip_type="train", fallback_coords=None, city_fallbac
                     continue
 
             country_code = props.get("countrycode", "")
-            if not country_code or country_code in ["CN", "FI"]:
+            if not country_code or country_code in ["CN", "FI", "ES"]:
                 country = getCountryFromCoordinates(lat, lng)
                 country_code = country.get("countryCode", "")
 
