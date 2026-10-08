@@ -1660,19 +1660,19 @@ var fhToggle = addFreehandToggle(map, {
 
 // ── Station search URLs ──
 var stationSearchURLs = {
-  "bus":           "/stationAutocomplete?osm_tag=amenity:bus_station&osm_tag=highway:bus_stop",
-  "train":         "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
-  "tram":          "/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station&osm_tag=railway:halt",
-  "metro":         "/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance",
-  "funicular":     "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
-  "rail":          "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
-  "ferry":         "/stationAutocomplete?osm_tag=amenity:ferry_terminal",
+  "bus":           "/stationAutocomplete?osm_tag=amenity:bus_station&osm_tag=highway:bus_stop&type=bus",
+  "train":         "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station&type=train",
+  "tram":          "/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station&osm_tag=railway:halt&type=tram",
+  "metro":         "/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance&type=metro",
+  "funicular":     "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station&type=funicular",
+  "rail":          "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station&type=rail",
+  "ferry":         "/stationAutocomplete?osm_tag=amenity:ferry_terminal&type=ferry",
   "helicopter":    "/stationAutocomplete?osm_tag=aeroway:helipad&osm_tag=aeroway:heliport",
   "accommodation": "/stationAutocomplete?osm_tag=tourism:hotel&osm_tag=tourism:hostel&osm_tag=tourism:motel&osm_tag=tourism:guest_house",
   "poi":           "/stationAutocomplete?osm_tag=tourism",
   "restaurant":    "/stationAutocomplete?osm_tag=amenity:restaurant&osm_tag=amenity:cafe&osm_tag=amenity:pub",
-  "aerialway":     "/stationAutocomplete?osm_tag=aerialway:station",
-  "ski":           "/stationAutocomplete?osm_tag=aerialway:station",
+  "aerialway":     "/stationAutocomplete?osm_tag=aerialway:station&type=aerialway",
+  "ski":           "/stationAutocomplete?osm_tag=aerialway:station&type=ski",
 };
 var stationSearchUrl = stationSearchURLs[vehicle_type] || "/stationAutocomplete";
 

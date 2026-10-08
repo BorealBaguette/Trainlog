@@ -1,8 +1,12 @@
+import json
 import logging
 
-from flask import Blueprint, render_template, request, session
+from flask import Blueprint, jsonify, render_template, request, session
 
 from py.utils import get_all_countries, get_flag_emoji
+from src.pg import pg_session
+from src.quai import QUAI_MODES, apply_overrides, quai_get, station_label
+from src.users import User
 from src.suspicious_activity import list_denied_logins, list_suspicious_activity
 from src.utils import admin_required, getUser, has_current_trip, lang, owner_required
 
@@ -92,6 +96,134 @@ def trainsets_admin():
         **session["userinfo"],
         **lang[session["userinfo"]["lang"]],
     )
+
+
+@admin_blueprint.route("/station_explorer")
+@admin_required
+def station_explorer():
+    user = User.query.filter_by(username=getUser()).first()
+    return render_template(
+        "admin/station_explorer.html",
+        nav="bootstrap/navigation.html",
+        username=getUser(),
+        tileserver=user.tileserver if user else "default",
+        isCurrent=has_current_trip(),
+        modes=sorted(set(QUAI_MODES.values())),
+        **session["userinfo"],
+        **lang[session["userinfo"]["lang"]],
+    )
+
+
+@admin_blueprint.route("/station_explorer/search")
+@admin_required
+def station_explorer_search():
+    data = quai_get("search", {
+        "q": request.args.get("q", ""),
+        "mode": request.args.get("mode") or None,
+        "lang": request.args.get("lang") or None,
+        "limit": 20,
+    })
+    if data is None:
+        return jsonify(error="quai unavailable"), 502
+    return jsonify(data)
+
+
+@admin_blueprint.route("/station_explorer/station/<mode>/<key>")
+@admin_required
+def station_explorer_station(mode, key):
+    data = quai_get(f"station/{mode}/{key}", {
+        "objects": 1,
+        "lang": request.args.get("lang") or None,
+    })
+    if data is None:
+        return jsonify(error="quai unavailable"), 502
+    if not data:
+        return jsonify(error="unknown station"), 404
+    # quai's position, before an override moves it, then Trainlog's name for the station.
+    station = data["station"]
+    station["osm_lat"], station["osm_lng"] = station["lat"], station["lng"]
+    station["osm_tracks"] = station.get("tracks") or []
+    apply_overrides([station])
+    station["trainlog_name"] = station_label(station)
+    return jsonify(data)
+
+
+@admin_blueprint.route("/station_explorer/station/<mode>/<key>/line")
+@admin_required
+def station_explorer_line(mode, key):
+    data = quai_get(f"station/{mode}/{key}/line", {"ref": request.args.get("ref", "")})
+    if data is None:
+        return jsonify(error="quai unavailable"), 502
+    return jsonify(data)
+
+
+@admin_blueprint.route("/station_explorer/station/<mode>/<key>/services")
+@admin_required
+def station_explorer_services(mode, key):
+    data = quai_get(f"station/{mode}/{key}/services")
+    if data is None:
+        return jsonify(error="quai unavailable"), 502
+    return jsonify(data)
+
+
+@admin_blueprint.route("/station_explorer/route/<int:relation_id>")
+@admin_required
+def station_explorer_route(relation_id):
+    data = quai_get(f"route/{relation_id}")
+    if data is None:
+        return jsonify(error="quai unavailable"), 502
+    return jsonify(data)
+
+
+@admin_blueprint.route("/station_explorer/override/<mode>/<key>", methods=["POST"])
+@admin_required
+def station_explorer_override(mode, key):
+    """Sets the name, position and tracks Trainlog uses for a quai station ({name, lat, lng,
+    tracks}, any of them empty; tracks as merge_tracks takes them); with all of them empty,
+    removes the override."""
+    body = request.get_json(silent=True) or {}
+    name = (body.get("name") or "").strip() or None
+    try:
+        lat = float(body["lat"]) if body.get("lat") not in (None, "") else None
+        lng = float(body["lng"]) if body.get("lng") not in (None, "") else None
+    except (TypeError, ValueError):
+        return jsonify(error="lat and lng must be numbers"), 400
+    if (lat is None) != (lng is None) or (lat is not None and not (-90 <= lat <= 90 and -180 <= lng <= 180)):
+        return jsonify(error="give both lat and lng, or neither"), 400
+    tracks = []
+    for t in body.get("tracks") or []:
+        ref = str((t or {}).get("ref") or "").strip()
+        if not ref or len(ref) > 10:
+            return jsonify(error="each track needs a ref of at most 10 characters"), 400
+        if t.get("hidden"):
+            tracks.append({"ref": ref, "hidden": True})
+            continue
+        try:
+            t_lat, t_lng = float(t["lat"]), float(t["lng"])
+        except (KeyError, TypeError, ValueError):
+            return jsonify(error=f"track {ref} needs a position"), 400
+        if not (-90 <= t_lat <= 90 and -180 <= t_lng <= 180):
+            return jsonify(error=f"track {ref}: position out of range"), 400
+        tracks.append({"ref": ref, "lat": t_lat, "lng": t_lng, "on_track": bool(t.get("on_track"))})
+    with pg_session() as pg:
+        if name is None and lat is None and not tracks:
+            pg.execute(
+                "DELETE FROM station_overrides WHERE mode = :mode AND station_key = :key",
+                {"mode": mode, "key": key},
+            )
+        else:
+            pg.execute(
+                """
+                INSERT INTO station_overrides (mode, station_key, name, lat, lng, tracks, updated_by)
+                VALUES (:mode, :key, :name, :lat, :lng, CAST(:tracks AS jsonb), :user)
+                ON CONFLICT (mode, station_key) DO UPDATE SET
+                    name = EXCLUDED.name, lat = EXCLUDED.lat, lng = EXCLUDED.lng,
+                    tracks = EXCLUDED.tracks, updated_by = EXCLUDED.updated_by, updated_on = now()
+                """,
+                {"mode": mode, "key": key, "name": name, "lat": lat, "lng": lng,
+                 "tracks": json.dumps(tracks) if tracks else None, "user": getUser()},
+            )
+    return jsonify(ok=True)
 
 
 @admin_blueprint.route("/vagonweb")

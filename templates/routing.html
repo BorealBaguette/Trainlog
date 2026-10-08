@@ -130,8 +130,16 @@ var origLabel = newTrip["originStation"][1];
 var destLabel = newTrip["destinationStation"][1];
 var viaStations = newTrip["viaStations"] || [];
 var wplist = [origCoord].concat(viaStations.map(function(v){ return v[0]; })).concat([destCoord]);
-// Via stations name their waypoints (routing.js); all start soft.
-window.routingWaypointMeta = viaStations.map(function(v){ return { name: v[1], stop: v[2] }; });
+// Via stations name their waypoints (routing.js). They start soft, but for timetable stops
+// placed on their platform's track (new.html's matchStopTracks), which are exact.
+window.routingWaypointMeta = viaStations.map(function(v){
+  return v[3] === true ? { name: v[1], stop: v[2], hard: true } : { name: v[1], stop: v[2] };
+});
+// Ends picked on a station's track or line are stop positions on the track: exact (new.html).
+window.routingEndpointMeta = [
+  newTrip["originExact"] === "1" ? { hard: true } : {},
+  newTrip["destinationExact"] === "1" ? { hard: true } : {}
+];
 var spinnerContent = '<div class="spinner-container"><div class="lds-spinner"><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div><div></div></div></div>';
 var errorContent = '<h4 id="routing-error">{{routingError}}<h4><p>{{routingErrorDetails}}</p><p><button onclick=\"location.reload()\">{{retry}}</button></p>';
 var saveErrorContent = '<h4 id="save-error">{{saveError}}</h4><p>{{saveErrorDetails}}</p><p><button onclick=\"location.reload();\">{{retry}}</button></p>';

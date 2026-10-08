@@ -83,6 +83,11 @@ jawg:
 openrailwaymap:
   tiles_url: https://orm.srv.trainlog.me
 
+# Station search (trainlog_quai repo). Leave unset for https://quai.srv.trainlog.me; empty
+# to search stations with Photon only. From a container on trainlog_network: http://quai:5000
+quai:
+  url: https://quai.srv.trainlog.me
+
 # Thunderforest Maps (specific map tilesets)
 thunderforest:
   api_key: THUNDER_API_KEY

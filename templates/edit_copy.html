@@ -1047,15 +1047,15 @@
         }
 
         var stationUrls = {
-            train: "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
-            rail: "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
-            funicular: "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station",
-            tram: "/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station&osm_tag=railway:halt",
-            metro: "/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance",
-            bus: "/stationAutocomplete?osm_tag=amenity:bus_station&osm_tag=highway:bus_stop",
-            ferry: "/stationAutocomplete?osm_tag=amenity:ferry_terminal",
-            aerialway: "/stationAutocomplete?osm_tag=aerialway:station",
-            ski: "/stationAutocomplete?osm_tag=aerialway:station"
+            train: "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station&type=train",
+            rail: "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station&type=rail",
+            funicular: "/stationAutocomplete?osm_tag=railway:halt&osm_tag=railway:station&type=funicular",
+            tram: "/stationAutocomplete?osm_tag=railway:tram_stop&osm_tag=railway:station&osm_tag=railway:halt&type=tram",
+            metro: "/stationAutocomplete?osm_tag=railway:station&osm_tag=railway:subway_entrance&type=metro",
+            bus: "/stationAutocomplete?osm_tag=amenity:bus_station&osm_tag=highway:bus_stop&type=bus",
+            ferry: "/stationAutocomplete?osm_tag=amenity:ferry_terminal&type=ferry",
+            aerialway: "/stationAutocomplete?osm_tag=aerialway:station&type=aerialway",
+            ski: "/stationAutocomplete?osm_tag=aerialway:station&type=ski"
         };
         var stationUrl = stationUrls[tripType] || "/stationAutocomplete";
         var stopsModal = new bootstrap.Modal(document.getElementById('stopsModal'));

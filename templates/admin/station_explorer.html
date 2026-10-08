@@ -1,0 +1,683 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+
+<link href="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.6.0/dist/maplibre-gl.js"></script>
+<script src="{{ url_for('static', filename='js/maplibre-utils.js') }}"></script>
+
+<style>
+  #se-wrap { --se-border: #e5e7eb; --se-muted: #6b7280; --se-soft: #f6f7f9; --se-accent: #2563eb;
+    display: flex; gap: 12px; padding: 12px; height: calc(100vh - 70px); min-height: 520px; }
+  #se-side { width: 420px; flex-shrink: 0; display: flex; flex-direction: column; gap: 10px; min-height: 0;
+    position: relative; }
+
+  /* Search: one bar, results floating over the panel */
+  #se-form { display: flex; align-items: center; gap: 6px; background: #fff; border: 1px solid var(--se-border);
+    border-radius: 10px; padding: 4px 6px 4px 10px; box-shadow: 0 1px 2px rgba(0,0,0,.04); }
+  #se-form:focus-within { border-color: var(--se-accent); box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+  #se-form .bi-search { color: var(--se-muted); }
+  #se-form input[name=q] { flex: 1; border: 0; outline: 0; box-shadow: none; padding: 4px; font-size: .9rem; min-width: 0; }
+  #se-form select, #se-form input[name=lang] { width: auto; border: 0; background-color: var(--se-soft);
+    border-radius: 6px; font-size: .8rem; }
+  #se-form input[name=lang] { width: 56px; }
+  #se-results { position: absolute; top: 46px; left: 0; right: 0; z-index: 10; list-style: none; margin: 0;
+    padding: 4px; max-height: 50vh; overflow-y: auto; background: #fff; border: 1px solid var(--se-border);
+    border-radius: 10px; box-shadow: 0 8px 24px rgba(0,0,0,.12); }
+  #se-results:empty, #se-results[hidden] { display: none; }
+  #se-results li { padding: 6px 10px; cursor: pointer; border-radius: 6px; font-size: .88rem; }
+  #se-results li:hover, #se-results li.active { background: #eef3fc; }
+  #se-results .sub { display: block; color: var(--se-muted); font-size: .74rem; }
+
+  /* The station: cards */
+  #se-detail { flex: 1; overflow-y: auto; font-size: .84rem; display: flex; flex-direction: column; gap: 10px;
+    padding-right: 2px; }
+  #se-detail.empty { color: var(--se-muted); justify-content: center; text-align: center; padding: 2rem; }
+  #se-detail.empty .bi { font-size: 2rem; display: block; margin-bottom: .5rem; opacity: .4; }
+  .se-card { background: #fff; border: 1px solid var(--se-border); border-radius: 10px; padding: 10px 12px; }
+  .se-card > h3 { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--se-muted); margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
+  .se-card > h3 .count, details.se-card > summary .count { background: var(--se-soft); color: var(--se-muted);
+    border-radius: 8px; padding: 0 6px; font-weight: 600; letter-spacing: 0; }
+  .se-head h2 { font-size: 1.2rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 6px; }
+  .se-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 8px; }
+  .se-badge { background: var(--se-soft); color: #374151; border-radius: 6px; padding: 1px 8px; font-size: .74rem; }
+  .se-badge.edited { background: #dbeafe; color: #1d4ed8; }
+  .se-trainlog { display: flex; align-items: center; justify-content: space-between; gap: 8px;
+    background: var(--se-soft); border-radius: 8px; padding: 6px 10px; }
+  .se-trainlog .label { font-size: .7rem; color: var(--se-muted); text-transform: uppercase; letter-spacing: .04em; }
+  .se-trainlog .name { font-weight: 600; }
+
+  /* The override editor, folded until wanted */
+  .se-edit-toggle { border: 1px solid var(--se-border); background: #fff; border-radius: 6px; padding: 2px 10px;
+    font-size: .78rem; white-space: nowrap; }
+  .se-edit-toggle:hover { border-color: var(--se-accent); color: var(--se-accent); }
+  .se-override { display: none; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px;
+    border-top: 1px dashed var(--se-border); }
+  .se-override.open { display: flex; }
+  .se-field label { display: block; font-size: .72rem; color: var(--se-muted); margin-bottom: 2px; }
+  .se-inline { display: flex; gap: 4px; align-items: center; }
+  .se-inline input { flex: 1; min-width: 0; }
+  .se-icon-btn { border: 1px solid var(--se-border); background: #fff; border-radius: 6px; width: 30px; height: 30px;
+    display: inline-flex; align-items: center; justify-content: center; color: #374151; flex-shrink: 0; }
+  .se-icon-btn:hover { border-color: var(--se-accent); color: var(--se-accent); }
+  .se-icon-btn.danger:hover { border-color: #dc2626; color: #dc2626; }
+  .se-track-rows { display: flex; flex-direction: column; gap: 4px; }
+  .se-track-row { display: grid; grid-template-columns: 52px 1fr auto auto 30px 30px; gap: 4px; align-items: center;
+    background: var(--se-soft); border-radius: 8px; padding: 4px; }
+  .se-track-row label { font-size: .7rem; white-space: nowrap; display: flex; align-items: center; gap: 3px;
+    color: #374151; margin: 0 2px; }
+  .se-actions { display: flex; align-items: center; gap: 6px; }
+  .se-actions .status { font-size: .74rem; color: var(--se-muted); flex: 1; }
+  .se-hint { font-size: .72rem; color: var(--se-muted); }
+
+  /* Facts */
+  .se-facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; }
+  .se-facts dt { color: var(--se-muted); font-weight: 400; }
+  .se-facts dd { margin: 0; word-break: break-word; }
+  .se-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  .se-chip { display: inline-flex; align-items: center; min-width: 26px; justify-content: center; padding: 1px 7px;
+    border-radius: 6px; font-weight: 600; font-size: .76rem; border: 1px solid #d1d5db; background: #fff; }
+  .se-track-chip, .se-line-chip { cursor: pointer; }
+  .se-service-list { display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; }
+  .se-service { display: flex; align-items: baseline; gap: 6px; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
+  .se-service:hover { background: #eef3fc; }
+  .se-service.active { background: #dbeafe; }
+  .se-service .ref { font-weight: 600; font-size: .76rem; min-width: 52px; }
+  .se-service .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .se-service .kind { color: var(--se-muted); font-size: .7rem; }
+  .se-line-chip.active { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--se-accent); }
+  .se-track-chip:hover { box-shadow: 0 0 0 2px rgba(37,99,235,.2); }
+  .se-track-chip.override { border-style: dashed !important; }
+  .se-flag { font-family: 'FlagEmojis', sans-serif; }
+  .se-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
+  .se-tags { width: 100%; font-size: .8rem; }
+  .se-tags td { padding: 1px 4px; vertical-align: top; word-break: break-word; }
+  .se-tags td:first-child { font-family: monospace; color: var(--se-muted); white-space: nowrap; width: 1%; }
+  details.se-card > summary { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+    color: var(--se-muted); cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
+  details.se-card > summary::before { content: '\25B8'; transition: transform .15s; }
+  details.se-card[open] > summary::before { transform: rotate(90deg); }
+  details.se-card[open] > summary { margin-bottom: 8px; }
+
+  /* OSM objects */
+  .se-objects { display: flex; flex-direction: column; }
+  .se-object { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+  .se-object:hover { background: #eef3fc; }
+  .se-object .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .se-object .kind { color: var(--se-muted); font-size: .72rem; }
+  .se-object a { font-family: monospace; font-size: .74rem; }
+  .se-as-track { border: 1px solid var(--se-border); background: #fff; border-radius: 6px; font-size: .7rem;
+    padding: 0 6px; color: var(--se-accent); white-space: nowrap; }
+  .se-as-track:hover { border-color: var(--se-accent); }
+
+  /* Map */
+  #se-map-wrap { position: relative; flex: 1; display: flex; min-height: 0; }
+  #se-map { flex: 1; border-radius: 10px; min-height: 0; }
+  #se-legend { position: absolute; bottom: 24px; left: 10px; z-index: 2; background: rgba(255,255,255,.95);
+    border-radius: 8px; padding: 6px 10px; font-size: .72rem; line-height: 1.7; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+  #se-picking { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 3;
+    background: #1f2937; color: #fff; border-radius: 8px; padding: 6px 12px; font-size: .8rem;
+    box-shadow: 0 4px 12px rgba(0,0,0,.2); }
+  #se-picking[hidden] { display: none; }
+  .se-track { padding: 1px 6px; border-radius: 10px; font-size: 11px; font-weight: 700; color: #fff;
+    background: #15803d; border: 1.5px solid #fff; cursor: default; white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .se-track.platform { background: #ca8a04; }
+  .se-track.override { background: var(--se-accent); }
+  .se-line { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; color: #fff;
+    border: 1.5px solid #fff; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
+  .se-override-pin { width: 18px; height: 18px; border-radius: 50%; border: 3px solid #dc2626;
+    background: rgba(255,255,255,.75); box-shadow: 0 1px 4px rgba(0,0,0,.3); }
+  .se-labels { display: flex; gap: 2px; align-items: center; }
+  .maplibregl-popup-content { max-height: 320px; overflow-y: auto; font-size: .75rem; border-radius: 8px; }
+  @media (max-width: 800px) {
+    #se-wrap { flex-direction: column; height: auto; }
+    #se-side { width: 100%; }
+    #se-map-wrap { height: 60vh; flex: none; }
+  }
+</style>
+
+<div id="se-wrap">
+  <div id="se-side">
+    <form id="se-form" autocomplete="off">
+      <i class="bi bi-search"></i>
+      <input name="q" placeholder="Search a station…" autofocus>
+      <select class="form-select form-select-sm" name="mode">
+        <option value="">all modes</option>
+        {% for mode in modes %}<option value="{{ mode }}" {{ 'selected' if mode == 'train' }}>{{ mode }}</option>{% endfor %}
+      </select>
+      <input class="form-control form-control-sm" name="lang" placeholder="lang" title="Label language, e.g. zh">
+    </form>
+    <ul id="se-results"></ul>
+    <div id="se-detail" class="empty"><div><i class="bi bi-signpost-split"></i>Search quai, the station
+      index, and pick a result to see every OSM object it was built from, its tracks and lines.</div></div>
+  </div>
+  <div id="se-map-wrap">
+    <div id="se-map"></div>
+    <div id="se-picking" hidden><i class="bi bi-crosshair"></i> Click the map to place it · Esc to cancel</div>
+    <div id="se-legend"></div>
+  </div>
+</div>
+
+<script>
+// Kinds of OSM object in a station, in the order the legend lists them.
+const KINDS = [
+  ['station', 'Station', '#dc2626'],
+  ['stop_position', 'Stop position', '#2563eb'],
+  ['platform', 'Platform', '#f59e0b'],
+  ['other', 'Other', '#9333ea'],
+];
+const KIND_COLOUR = Object.fromEntries(KINDS.map(k => [k[0], k[2]]));
+
+function kindOf(o) {
+  const t = o.tags || {};
+  if (t.public_transport === 'stop_position') return 'stop_position';
+  if (t.public_transport === 'platform' || t.railway === 'platform') return 'platform';
+  if (o.is_primary) return 'station';
+  return 'other';
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+}
+
+// The country's flag (util.js; the layout's FlagEmojis font draws it where the system cannot).
+function flag(country) {
+  return country && /^[A-Za-z]{2}$/.test(country)
+    ? `<span class="se-flag" title="${esc(country)}">${getFlagEmoji(country)}</span>` : '';
+}
+
+function osmLink(type, id) {
+  const kind = { N: 'node', W: 'way', R: 'relation' }[type] || type;
+  return `<a href="https://www.openstreetmap.org/${kind}/${id}" target="_blank" rel="noopener">${type}${id}</a>`;
+}
+
+function tagsTable(tags) {
+  return '<table class="se-tags">' + Object.keys(tags || {}).sort().map(k =>
+    `<tr><td>${esc(k)}</td><td>${esc(tags[k])}</td></tr>`).join('') + '</table>';
+}
+
+const form = document.getElementById('se-form');
+const resultsEl = document.getElementById('se-results');
+const detailEl = document.getElementById('se-detail');
+document.getElementById('se-legend').innerHTML =
+  KINDS.map(k => `<div style="display:flex;align-items:center"><span class="se-dot" style="background:${k[2]}"></span>${k[1]}</div>`).join('') +
+  '<div><span class="se-track">7</span> track (stop position)</div>' +
+  '<div><span class="se-track platform">7</span> track (platform only)</div>' +
+  '<div><span class="se-track override">7</span> track (set in Trainlog)</div>';
+
+let map, markers = [], popup;
+const mapReady = (async () => {
+  // The user's own map, as on the main map; ?tileserver= overrides it.
+  map = await MapLibreUtils.initializeMapLibre({
+    container: 'se-map',
+    tileserver: new URLSearchParams(location.search).get('tileserver') || {{ tileserver|tojson }},
+    userLanguage: {{ langId|tojson }},
+    center: [2.35, 48.85], zoom: 5,
+  });
+  await new Promise(resolve => map.loaded() ? resolve() : map.once('load', resolve));
+  // A line of the station, when its chip is clicked (showLine), under the station's objects.
+  map.addSource('line', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({
+    id: 'line-path', type: 'line', source: 'line', filter: ['==', ['geometry-type'], 'LineString'],
+    paint: { 'line-color': ['get', 'colour'], 'line-width': 4, 'line-opacity': .8 },
+    layout: { 'line-join': 'round', 'line-cap': 'round' },
+  });
+  map.addLayer({
+    id: 'line-stops', type: 'circle', source: 'line', filter: ['==', ['geometry-type'], 'Point'],
+    paint: { 'circle-radius': 4, 'circle-color': '#fff', 'circle-stroke-color': ['get', 'colour'],
+             'circle-stroke-width': 2 },
+  });
+  map.on('click', 'line-stops', e => {
+    if (picking) return;
+    new maplibregl.Popup({ closeButton: false }).setLngLat(e.lngLat)
+      .setText(e.features[0].properties.name || 'Unnamed stop').addTo(map);
+  });
+  map.addSource('objects', { type: 'geojson', data: { type: 'FeatureCollection', features: [] } });
+  map.addLayer({
+    id: 'objects', type: 'circle', source: 'objects',
+    paint: {
+      'circle-radius': ['case', ['get', 'primary'], 8, 5],
+      'circle-color': ['get', 'colour'],
+      'circle-stroke-color': '#fff', 'circle-stroke-width': 1.5,
+    },
+  });
+  map.on('click', 'objects', e => { if (!picking) showObject(JSON.parse(e.features[0].properties.object)); });
+  map.on('click', e => {
+    if (!picking) return;
+    picking.value = `${e.lngLat.lat.toFixed(6)}, ${e.lngLat.lng.toFixed(6)}`;
+    stopPicking('Picked: save to keep it');
+  });
+  map.on('mouseenter', 'objects', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'objects', () => map.getCanvas().style.cursor = '');
+})();
+
+function showObject(o) {
+  if (popup) popup.remove();
+  popup = new maplibregl.Popup({ maxWidth: '340px' })
+    .setLngLat([o.lng, o.lat])
+    .setHTML(`<div><b>${osmLink(o.osm_type, o.osm_id)}</b> ${o.is_primary ? '(primary)' : ''}</div>` + tagsTable(o.tags))
+    .addTo(map);
+}
+
+// ── Search ──
+let searchXhr, searchTimer;
+function search() {
+  const params = new URLSearchParams(new FormData(form));
+  if ((params.get('q') || '').trim().length < 2) { resultsEl.innerHTML = ''; return; }
+  if (searchXhr) searchXhr.abort();
+  searchXhr = new AbortController();
+  fetch('{{ url_for("admin.station_explorer_search") }}?' + params, { signal: searchXhr.signal })
+    .then(r => r.json())
+    .then(data => {
+      if (data.error) { resultsEl.innerHTML = `<li class="text-danger">${esc(data.error)}</li>`; return; }
+      resultsEl.innerHTML = data.stations.map(s => `
+        <li data-mode="${esc(s.mode)}" data-key="${esc(s.station_key)}">
+          ${flag(s.country)} ${esc(s.label)} <span class="sub">${esc(s.mode)} ·
+          ${esc((s.city || {}).name || s.region || '')} · w ${(s.weight || 0).toFixed(1)}
+          ${s.matched && s.matched !== s.label ? '· matched “' + esc(s.matched) + '”' : ''}</span>
+        </li>`).join('') || '<li class="sub">No station</li>';
+    })
+    .catch(e => { if (e.name !== 'AbortError') resultsEl.innerHTML = '<li class="text-danger">Search failed</li>'; });
+}
+form.addEventListener('input', () => {
+  resultsEl.hidden = false;
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(search, 250);
+});
+form.elements.q.addEventListener('focus', () => { resultsEl.hidden = false; });
+form.addEventListener('submit', e => { e.preventDefault(); search(); });
+resultsEl.addEventListener('click', e => {
+  const li = e.target.closest('li[data-key]');
+  if (!li) return;
+  resultsEl.querySelectorAll('li.active').forEach(x => x.classList.remove('active'));
+  li.classList.add('active');
+  resultsEl.hidden = true;   // folded away until the search is used again
+  const hash = `#${li.dataset.mode}/${li.dataset.key}`;
+  if (location.hash === hash) loadStation(); else location.hash = hash;
+});
+
+// ── One station ──
+// The hash (#train/Q747541) holds the station, so a view can be linked and reloaded.
+async function loadStation() {
+  const [mode, key] = decodeURIComponent(location.hash.slice(1)).split('/');
+  if (!mode || !key) return;
+  detailEl.classList.add('empty');
+  detailEl.innerHTML = '<div><span class="spinner-border spinner-border-sm"></span></div>';
+  const lang = form.elements.lang.value;
+  const resp = await fetch(`{{ url_for("admin.station_explorer") }}/station/${encodeURIComponent(mode)}/` +
+    `${encodeURIComponent(key)}` + (lang ? `?lang=${encodeURIComponent(lang)}` : ''));
+  const data = await resp.json();
+  if (!data.station) { detailEl.innerHTML = `<div>${esc(data.error || 'Not found')}</div>`; return; }
+  await mapReady;
+  render(data.station);
+}
+window.addEventListener('hashchange', loadStation);
+loadStation();
+
+// The name, position and tracks Trainlog uses for the station, set here when OSM's are
+// wrong or missing. A position is typed ("lat, lng") or picked by clicking the map. A track
+// row adds a track, or moves or hides (by its ref) one of OSM's.
+let picking = null;
+let addTrackRow = () => {};
+const pickingBanner = document.getElementById('se-picking');
+function stopPicking(message) {
+  picking = null;
+  pickingBanner.hidden = true;
+  map.getCanvas().style.cursor = '';
+  const status = document.querySelector('#se-override .status');
+  if (status) status.textContent = message || '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && picking) stopPicking(); });
+function parsePosition(text) {
+  const [lat, lng] = text.trim().split(/[,\s]+/).map(Number);
+  return text.trim() && !isNaN(lat) && !isNaN(lng) ? [lat, lng] : null;
+}
+function bindOverride(s) {
+  const f = document.getElementById('se-override');
+  const status = f.querySelector('.status');
+  const rows = f.querySelector('.se-track-rows');
+  function startPicking(input) {
+    picking = input;
+    pickingBanner.hidden = false;
+    status.textContent = '';
+    map.getCanvas().style.cursor = 'crosshair';
+  }
+  // Folded until wanted, open when the station has an override to see.
+  const open = (on) => { f.classList.toggle('open', on); };
+  document.querySelector('.se-edit-toggle').addEventListener('click', () => open(!f.classList.contains('open')));
+  if (s.override) open(true);
+  addTrackRow = (t = {}) => {
+    const row = document.createElement('div');
+    row.className = 'se-track-row';
+    row.innerHTML = `
+      <input class="form-control form-control-sm" name="ref" placeholder="Track" value="${esc(t.ref || '')}">
+      <input class="form-control form-control-sm" name="tposition" placeholder="lat, lng"
+        value="${t.lat != null ? `${t.lat}, ${t.lng}` : ''}">
+      <label title="A stop position on the track: the point is exact">
+        <input type="checkbox" name="on_track" ${t.on_track === false ? '' : 'checked'}> on track</label>
+      <label title="Hide OSM's track of this ref"><input type="checkbox" name="hidden" ${t.hidden ? 'checked' : ''}> hide</label>
+      <button type="button" class="se-icon-btn" data-action="pick-track" title="Pick on the map"><i class="bi bi-crosshair"></i></button>
+      <button type="button" class="se-icon-btn danger" data-action="remove-track" title="Remove"><i class="bi bi-trash"></i></button>`;
+    row.querySelector('[data-action=pick-track]').addEventListener('click',
+      () => startPicking(row.querySelector('[name=tposition]')));
+    row.querySelector('[data-action=remove-track]').addEventListener('click', () => row.remove());
+    rows.appendChild(row);
+    open(true);
+    row.querySelector('[name=ref]').focus();
+  };
+  ((s.override || {}).tracks || []).forEach(t => addTrackRow(t));
+  f.querySelector('[data-action=add-track]').addEventListener('click', () => addTrackRow());
+  async function save(body) {
+    status.textContent = 'Saving…';
+    const resp = await fetch(`{{ url_for("admin.station_explorer") }}/override/` +
+      `${encodeURIComponent(s.mode)}/${encodeURIComponent(s.station_key)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) { status.textContent = data.error || 'Failed'; return; }
+    loadStation();
+  }
+  f.addEventListener('submit', e => {
+    e.preventDefault();
+    const pos = f.elements.position.value.trim();
+    const point = pos ? parsePosition(pos) : [null, null];
+    if (!point) { status.textContent = 'Position: "lat, lng"'; return; }
+    const tracks = [];
+    for (const row of rows.querySelectorAll('.se-track-row')) {
+      const ref = row.querySelector('[name=ref]').value.trim();
+      if (!ref) continue;
+      if (row.querySelector('[name=hidden]').checked) { tracks.push({ ref, hidden: true }); continue; }
+      const at = parsePosition(row.querySelector('[name=tposition]').value);
+      if (!at) { status.textContent = `Track ${ref}: position "lat, lng"`; return; }
+      tracks.push({ ref, lat: at[0], lng: at[1], on_track: row.querySelector('[name=on_track]').checked });
+    }
+    save({ name: f.elements.name.value, lat: point[0], lng: point[1], tracks });
+  });
+  f.querySelector('[data-action=clear]').addEventListener('click', () => save({}));
+  f.querySelector('[data-action=pick]').addEventListener('click', () => startPicking(f.elements.position));
+}
+
+// Where a line of the station goes: each of its route variants calling there, as its stops in
+// order, drawn in the line's colour; the map fits it. null hides it, back on the station.
+async function showLine(s, line) {
+  if (!line) { drawRoutes(null); return; }
+  const resp = await fetch(`{{ url_for("admin.station_explorer") }}/station/${encodeURIComponent(s.mode)}/` +
+    `${encodeURIComponent(s.station_key)}/line?ref=${encodeURIComponent(line.ref)}`);
+  drawRoutes((await resp.json()).routes || [], line.colour);
+}
+
+// A service (a route relation not counted as a line: "TER 876206"), drawn the same way.
+async function showService(service) {
+  if (!service) { drawRoutes(null); return; }
+  const resp = await fetch(`{{ url_for("admin.station_explorer") }}/route/${service.relation_id}`);
+  drawRoutes((await resp.json()).routes || [], service.colour);
+}
+
+// Routes ({stops: [[lat, lng, name]], colour}) on the map, which fits them; null clears them
+// and goes back to the station.
+// Drawn straight from stop to stop at once, then along the tracks as the train router (the
+// new one, its stops as soft waypoints) answers for each route; a route it cannot join stays
+// straight. drawn counts the drawings, so a slow answer for an earlier one is dropped.
+let drawn = 0;
+function drawRoutes(routes, defaultColour) {
+  const drawing = ++drawn;
+  if (!routes) {
+    map.getSource('line').setData({ type: 'FeatureCollection', features: [] });
+    fitStation();
+    return;
+  }
+  routes = routes.filter(r => r.stops.length > 1);
+  const colour = defaultColour || '#374151';
+  const paths = routes.map(r => ({ type: 'Feature', properties: { colour: r.colour || colour },
+    geometry: { type: 'LineString', coordinates: r.stops.map(p => [p[1], p[0]]) } }));
+  const stops = routes.flatMap(r => r.stops.map(p => ({ type: 'Feature',
+    properties: { colour: r.colour || colour, name: p[2] || '' },
+    geometry: { type: 'Point', coordinates: [p[1], p[0]] } })));
+  const update = () => map.getSource('line').setData({ type: 'FeatureCollection', features: [...paths, ...stops] });
+  update();
+  const points = routes.flatMap(r => r.stops.map(p => [p[1], p[0]]));
+  if (points.length) {
+    map.fitBounds(points.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(points[0], points[0])),
+                  { padding: 60, duration: 600 });
+  }
+  routes.forEach(async (r, i) => {
+    const coords = r.stops.map(p => `${p[1]},${p[0]}`).join(';');
+    try {
+      const resp = await fetch(`/forwardRouting/train/route/v1/train/${coords}?overview=full&use_new_router=true`);
+      const geometry = (((await resp.json()).routes || [])[0] || {}).geometry;
+      if (drawing !== drawn || typeof geometry !== 'string') return;
+      paths[i].geometry.coordinates = decodePolyline(geometry);
+      update();
+    } catch (e) { /* stays straight */ }
+  });
+}
+
+// An encoded polyline (precision 5, as the router gives) as [lng, lat] pairs.
+function decodePolyline(text) {
+  const points = [];
+  let i = 0, lat = 0, lng = 0;
+  while (i < text.length) {
+    for (const axis of [0, 1]) {
+      let shift = 0, value = 0, byte;
+      do { byte = text.charCodeAt(i++) - 63; value |= (byte & 0x1f) << shift; shift += 5; } while (byte >= 0x20);
+      const delta = value & 1 ? ~(value >> 1) : value >> 1;
+      if (axis === 0) lat += delta; else lng += delta;
+    }
+    points.push([lng / 1e5, lat / 1e5]);
+  }
+  return points;
+}
+
+// The station's services, listed when its card is first opened.
+function loadServices(s, unpickRoutes) {
+  const card = detailEl.querySelector('.se-services');
+  if (!card || card.hidden) return;
+  card.addEventListener('toggle', async () => {
+    if (!card.open || card.dataset.loaded) return;
+    card.dataset.loaded = '1';
+    const list = card.querySelector('.se-service-list');
+    const resp = await fetch(`{{ url_for("admin.station_explorer") }}/station/${encodeURIComponent(s.mode)}/` +
+      `${encodeURIComponent(s.station_key)}/services`);
+    const services = (await resp.json()).services || [];
+    card.querySelector('.count').textContent = services.length;
+    list.classList.toggle('se-hint', !services.length);
+    list.innerHTML = services.map((x, i) => `
+      <div class="se-service" data-i="${i}" title="${esc(x.name || '')}">
+        <span class="ref">${esc(x.ref || '—')}</span>
+        <span class="name">${esc((x.name || '').replace(/^[^:]*:\s*/, '') || x.network || '')}</span>
+        ${x.service ? `<span class="kind">${esc(x.service)}</span>` : ''}
+      </div>`).join('') || 'None';
+    list.querySelectorAll('.se-service').forEach(row => row.addEventListener('click', () => {
+      const active = row.classList.contains('active');
+      unpickRoutes();
+      if (active) { showService(null); return; }
+      row.classList.add('active');
+      showService(services[row.dataset.i]);
+    }));
+  });
+}
+
+let fitStation = () => {};
+function render(s) {
+  const objects = s.osm_objects || [];
+  const tracks = s.tracks || [];
+  const lines = s.lines || [];
+  const names = s.names || {};
+  const place = [(s.city || {}).name, s.region].filter(Boolean).join(', ');
+
+  detailEl.classList.remove('empty');
+  detailEl.innerHTML = `
+    <div class="se-card se-head">
+      <h2>${flag(s.country)} ${esc(s.label)}</h2>
+      <div class="se-badges">
+        <span class="se-badge">${esc(s.mode)}</span>
+        ${place ? `<span class="se-badge"><i class="bi bi-geo-alt"></i> ${esc(place)}</span>` : ''}
+        ${s.override ? '<span class="se-badge edited"><i class="bi bi-pencil"></i> edited in Trainlog</span>' : ''}
+      </div>
+      <div class="se-trainlog">
+        <div><div class="label">Name in Trainlog</div><div class="name">${esc(s.trainlog_name)}</div></div>
+        <button type="button" class="se-edit-toggle"><i class="bi bi-pencil"></i> Edit</button>
+      </div>
+      <form id="se-override" class="se-override" autocomplete="off">
+        <div class="se-field">
+          <label>Name</label>
+          <input class="form-control form-control-sm" name="name" placeholder="${esc(s.trainlog_name)}"
+            value="${esc((s.override || {}).name || '')}">
+        </div>
+        <div class="se-field">
+          <label>Position</label>
+          <div class="se-inline">
+            <input class="form-control form-control-sm" name="position" placeholder="${s.osm_lat.toFixed(6)}, ${s.osm_lng.toFixed(6)}"
+              value="${(s.override || {}).lat != null ? `${s.override.lat}, ${s.override.lng}` : ''}">
+            <button type="button" class="se-icon-btn" data-action="pick" title="Pick on the map"><i class="bi bi-crosshair"></i></button>
+          </div>
+        </div>
+        <div class="se-field">
+          <label>Tracks</label>
+          <div class="se-track-rows"></div>
+          <div class="se-inline" style="margin-top: 4px;">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="add-track"><i class="bi bi-plus"></i> Track</button>
+            <span class="se-hint">or click a track, or "→ track" on an object, below</span>
+          </div>
+        </div>
+        <div class="se-actions">
+          <span class="status"></span>
+          <button type="button" class="btn btn-sm btn-outline-danger" data-action="clear">Clear</button>
+          <button type="submit" class="btn btn-sm btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+    <div class="se-card">
+      <h3>Tracks <span class="count">${tracks.length}</span></h3>
+      <div class="se-chips">${tracks.map((t, i) => `<span class="se-chip se-track-chip${t.override ? ' override' : ''}" data-i="${i}"
+        title="${t.override ? 'set in Trainlog' : t.on_track ? 'stop position' : 'platform only'}: click to move or hide"
+        style="border-color:${t.override ? '#2563eb' : t.on_track ? '#15803d' : '#ca8a04'}">${esc(t.ref)}</span>`).join('') || '<span class="se-hint">none mapped</span>'}</div>
+      ${lines.length ? `<h3 style="margin-top: 10px;">Lines <span class="count">${lines.length}</span></h3>
+      <div class="se-chips">${lines.map((l, i) => `<span class="se-chip se-line-chip" data-i="${i}" title="Show where the line goes"
+        style="background:${esc(l.colour || '#fff')}; color:${l.colour ? '#fff' : 'inherit'};
+        border-color:${esc(l.colour || '#d1d5db')}">${esc(l.ref)}</span>`).join('')}</div>` : ''}
+    </div>
+    <details class="se-card se-services" ${s.mode === 'train' || s.mode === 'metro' || s.mode === 'tram' ? '' : 'hidden'}>
+      <summary>Services <span class="count">…</span></summary>
+      <div class="se-service-list se-hint">Loading…</div>
+    </details>
+    <div class="se-card">
+      <h3>Identity</h3>
+      <dl class="se-facts">
+        <dt>station_key</dt><dd><code>${esc(s.station_key)}</code></dd>
+        <dt>name</dt><dd>${esc(s.name)}</dd>
+        ${s.latin !== s.name ? `<dt>latin</dt><dd>${esc(s.latin)}</dd>` : ''}
+        <dt>OSM</dt><dd>${osmLink(s.osm_type, s.osm_id)}</dd>
+        ${s.wikidata ? `<dt>wikidata</dt><dd><a href="https://www.wikidata.org/wiki/${esc(s.wikidata)}" target="_blank" rel="noopener">${esc(s.wikidata)}</a></dd>` : ''}
+        ${s.uic_ref ? `<dt>uic_ref</dt><dd>${esc(s.uic_ref)}</dd>` : ''}
+        <dt>weight</dt><dd>${(s.weight || 0).toFixed(2)}</dd>
+        <dt>position</dt><dd>${s.osm_lat.toFixed(6)}, ${s.osm_lng.toFixed(6)}</dd>
+      </dl>
+    </div>
+    <details class="se-card">
+      <summary>Names <span class="count">${Object.keys(names).length}</span></summary>
+      ${tagsTable(names)}
+    </details>
+    <div class="se-card">
+      <h3>OSM objects <span class="count">${objects.length}</span></h3>
+      <div class="se-objects">${objects.map((o, i) => `
+        <div class="se-object" data-i="${i}">
+          <span class="se-dot" style="background:${KIND_COLOUR[kindOf(o)]}"></span>
+          <span class="what">${esc(o.tags.name || o.tags['railway:track_ref'] || o.tags.local_ref || o.tags.ref || '—')}
+            <span class="kind">${esc(o.tags.public_transport || o.tags.railway || o.tags.highway || o.tags.amenity || '')}</span></span>
+          ${['platform', 'stop_position'].includes(kindOf(o))
+            ? `<button type="button" class="se-as-track" data-i="${i}" title="Make this object one of the station's tracks">→ track</button>` : ''}
+          ${osmLink(o.osm_type, o.osm_id)}
+        </div>`).join('')}
+      </div>
+    </div>`;
+  bindOverride(s);
+  // An object OSM names wrongly (a "Gare SNCF" where quay 5 is) made into a track, at its point.
+  detailEl.querySelectorAll('.se-as-track').forEach(btn => btn.addEventListener('click', e => {
+    e.stopPropagation();
+    const o = objects[btn.dataset.i];
+    addTrackRow({ ref: o.tags.local_ref || '', lat: +o.lat.toFixed(7), lng: +o.lng.toFixed(7),
+                  on_track: kindOf(o) === 'stop_position' });
+  }));
+  // One line or service drawn at a time: picking one unpicks the others.
+  const unpickRoutes = () => detailEl.querySelectorAll('.se-line-chip.active, .se-service.active')
+    .forEach(c => c.classList.remove('active'));
+  detailEl.querySelectorAll('.se-line-chip').forEach(chip => chip.addEventListener('click', () => {
+    const active = chip.classList.contains('active');
+    unpickRoutes();
+    if (active) { showLine(s, null); return; }
+    chip.classList.add('active');
+    showLine(s, lines[chip.dataset.i]);
+  }));
+  loadServices(s, unpickRoutes);
+  detailEl.querySelectorAll('.se-track-chip').forEach(chip => chip.addEventListener('click', () => {
+    const t = tracks[chip.dataset.i];
+    addTrackRow({ ref: t.ref, lat: t.lat, lng: t.lng, on_track: t.on_track });
+  }));
+  detailEl.querySelectorAll('.se-object').forEach(row => row.addEventListener('click', e => {
+    if (e.target.closest('a, button')) return;
+    const o = objects[row.dataset.i];
+    map.easeTo({ center: [o.lng, o.lat], zoom: Math.max(map.getZoom(), 17) });
+    showObject(o);
+  }));
+
+  map.getSource('objects').setData({
+    type: 'FeatureCollection',
+    features: objects.map(o => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [o.lng, o.lat] },
+      properties: { colour: KIND_COLOUR[kindOf(o)], primary: o.is_primary, object: JSON.stringify(o) },
+    })),
+  });
+
+  markers.forEach(m => m.remove());
+  markers = [];
+  // Where an override places the station, instead of OSM's point.
+  if (s.override && s.override.lat != null) {
+    const pin = document.createElement('div');
+    pin.className = 'se-override-pin';
+    pin.title = 'Position set in Trainlog';
+    markers.push(new maplibregl.Marker({ element: pin }).setLngLat([s.override.lng, s.override.lat]).addTo(map));
+  }
+  // Labels at one point share a marker rather than piling up. Lines are shown for metro and
+  // tram, where a line says which platforms (its point is between its tracks); a train
+  // station's lines are regional routes, calling at any of its tracks.
+  const labelsAt = new Map();
+  const labelAt = (lat, lng) => {
+    const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
+    if (!labelsAt.has(key)) {
+      const el = document.createElement('div');
+      el.className = 'se-labels';
+      labelsAt.set(key, el);
+      markers.push(new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map));
+    }
+    return labelsAt.get(key);
+  };
+  tracks.forEach(t => {
+    const el = document.createElement('span');
+    el.className = 'se-track' + (t.override ? ' override' : t.on_track ? '' : ' platform');
+    el.textContent = t.ref;
+    el.title = `Track ${t.ref}` + (t.on_track ? '' : ' (platform only)');
+    labelAt(t.lat, t.lng).appendChild(el);
+  });
+  if (s.mode !== 'train') lines.forEach(l => {
+    const el = document.createElement('span');
+    el.className = 'se-line';
+    el.style.background = l.colour || '#374151';
+    el.textContent = l.ref;
+    el.title = `Line ${l.ref}`;
+    labelAt(l.lat, l.lng).appendChild(el);
+  });
+
+  map.getSource('line').setData({ type: 'FeatureCollection', features: [] });
+  const points = [[s.lng, s.lat], ...objects.map(o => [o.lng, o.lat]), ...tracks.map(t => [t.lng, t.lat])];
+  const bounds = points.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(points[0], points[0]));
+  fitStation = () => map.fitBounds(bounds, { padding: 60, maxZoom: 18, duration: 600 });
+  fitStation();
+}
+</script>
+{% endblock %}
