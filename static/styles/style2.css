@@ -936,6 +936,17 @@ body::before {
   appearance: none;
 }
 
+#form textarea {
+  width: 100%;
+  padding: 6px 16px;
+  border: 0;
+  background-color: #f3f3f3;
+  margin: 0 0 1rem;
+  color: black;
+  font: inherit;
+  resize: vertical;
+}
+
 #form input[type=float] {
   width: 100%;
   height: 32px;

@@ -2494,6 +2494,11 @@ function renderPlainText(data, type, row) {
     return data;
 }
 
+function renderNotes(data, type, row) {
+    if (type === 'display') return `<span style="white-space: pre-line">${sanitize(data || '')}</span>`;
+    return data;
+}
+
 /* A ferry's `reg` holds whatever identified the ship to the user — its name, its IMO
    or its MMSI. It always reads as the name: `vessel_name` is resolved server-side from
    all three (migration 0054) and is absent only for a vessel we hold no record of,
@@ -2790,7 +2795,7 @@ var table = $('#tripRows');
         },
         { data: 'reg', render: renderReg },
         { data: 'seat', render: renderPlainText },
-        { data: 'notes', render: renderPlainText },
+        { data: 'notes', render: renderNotes },
         { data: 'tags' },
         { data: 'waypoints', render: renderStops, defaultContent: "" },
         {
