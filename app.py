@@ -186,7 +186,12 @@ from src.discord_webhooks import (
 from src.discord_bot import sync_discord_tier
 from src.api.carbon import carbon_blueprint
 from src.api.wrapped import wrapped_blueprint, DISTANCE_COMPARISONS, DURATION_COMPARISONS
-from src.api.stats import stats_blueprint, fetch_stats, get_distinct_stat_years
+from src.api.stats import (
+    PAST as STATS_PAST,
+    stats_blueprint,
+    fetch_stats,
+    get_distinct_stat_years,
+)
 from src.api.ai import ai_blueprint
 from src.api.mcp import blueprint as mcp_blueprint
 from src.api.trainset import public_trainset_info, trainset_blueprint
@@ -5622,7 +5627,7 @@ def public_stats(username, tripType=None, year=None, metric=None):
             )
         )
     distinctStatYears = get_distinct_stat_years(username, tripType)
-    if year is not None and year not in distinctStatYears:
+    if year is not None and year not in (*distinctStatYears, STATS_PAST):
         return redirect(
             url_for(
                 "public_stats",
@@ -5674,7 +5679,7 @@ def admin_stats(tripType=None, year=None, metric=None):
         )
 
     distinctStatYears = get_distinct_stat_years(None, tripType)  # Pass None for admin
-    if year is not None and year not in distinctStatYears:
+    if year is not None and year not in (*distinctStatYears, STATS_PAST):
         return redirect(
             url_for("admin_stats", tripType=tripType, year="all", metric=metric)
         )
@@ -5712,7 +5717,7 @@ def stats(username, tripType=None, year=None, metric=None):
             )
         )
     distinctStatYears = get_distinct_stat_years(username, tripType)
-    if year is not None and year not in distinctStatYears:
+    if year is not None and year not in (*distinctStatYears, STATS_PAST):
         return redirect(
             url_for(
                 "stats",
