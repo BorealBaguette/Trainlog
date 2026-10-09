@@ -1448,5 +1448,6 @@
     "motisStand": "Stand {track}",
     "stopStand": "Stand",
     "motisPier": "Pier {track}",
-    "stopPier": "Pier"
+    "stopPier": "Pier",
+    "swapEnds": "Swap origin and destination"
 }

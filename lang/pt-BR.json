@@ -1451,5 +1451,6 @@
     "motisStand": "Plat. {track}",
     "stopStand": "Plataforma",
     "motisPier": "Píer {track}",
-    "stopPier": "Píer"
+    "stopPier": "Píer",
+    "swapEnds": "Inverter origem e destino"
 }

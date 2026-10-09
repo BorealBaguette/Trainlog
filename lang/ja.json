@@ -1447,5 +1447,6 @@
     "motisStand": "{track}番のりば",
     "stopStand": "のりば",
     "motisPier": "{track}番桟橋",
-    "stopPier": "桟橋"
+    "stopPier": "桟橋",
+    "swapEnds": "出発地と到着地を入れ替え"
 }

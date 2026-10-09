@@ -2101,3 +2101,12 @@ html, body {
 .end-mode-toggle[hidden] { display: none; }
 .end-mode-toggle:hover { color: #4b78d6; }
 .end-mode-toggle.searching { color: #4b78d6; }
+
+/* The new-trip form's swap of its two ends, at the right of the gap between them */
+#form .swap-ends { position: relative; height: 0; }
+#form .swap-ends button {
+  position: absolute; right: 0; top: -14px; width: 28px; height: 28px; padding: 0;
+  border: 1px solid #d0d5db; border-radius: 50%; background: #fff; color: #888; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; z-index: 1;
+}
+#form .swap-ends button:hover { color: #4b78d6; border-color: #4b78d6; }

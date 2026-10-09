@@ -547,9 +547,10 @@ function toRouting(data, routingUrl, type){
   // Collect intermediate "via" waypoints (resolved label -> [coord, label])
   newTrip["viaStations"] = [];
   $(".viaStation").each(function(){
-    var val = $(this).val();
-    if (val && globalStationDict[val]){
-      newTrip["viaStations"].push(globalStationDict[val]);
+    // A timetable's stop has its own entry (two stops of a run can share a name).
+    var val = $(this).val(), entry = $(this).data('stationEntry') || globalStationDict[val];
+    if (val && entry){
+      newTrip["viaStations"].push(entry);
     }
   });
   // Carry FR24-imported flight data through (set by the FR24 import on the air form)
@@ -634,7 +635,7 @@ function restoreNewTripForm(){
   if (typeof addViaRow === "function") {
     (t.viaStations || []).forEach(function(v){
       globalStationDict[v[1]] = v;
-      addViaRow(v[1]);
+      addViaRow(v[1], undefined, undefined, v);
     });
     setViaCollapsed(true);
     updateViaSummary();

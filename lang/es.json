@@ -1451,5 +1451,6 @@
     "motisStand": "Andén {track}",
     "stopStand": "Andén",
     "motisPier": "Muelle {track}",
-    "stopPier": "Muelle"
+    "stopPier": "Muelle",
+    "swapEnds": "Intercambiar origen y destino"
 }

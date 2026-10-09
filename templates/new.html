@@ -289,6 +289,10 @@
         <input type="float" class="" name="originManualLng" id="originManualLng" placeholder="Lng" />
       </group>
 
+      {# Swaps the two ends: for the way back. Over the gap between them, taking no room. #}
+      <div class="swap-ends non_poi">
+        <button type="button" id="swapEnds" title="{{swapEnds}}" aria-label="{{swapEnds}}"><i class="bi bi-arrow-down-up"></i></button>
+      </div>
       <label id="destinationManualToggleLabel" for="destinationManualToggle" class="checkboxLabel non_poi non_manual">{{manDestination}}</label>
       <input type="checkbox" id="destinationManualToggle" name="destinationManualToggle" class="non_poi non_manual"/>
 
@@ -959,13 +963,14 @@
     origin: stopSlot({
       $input: $('#originStation'), $dropdown: $('#originTracks'), fillsLine: true,
       setPlatform: function (ref) { $('#departurePlatform').val(ref || ''); },
-      setExact: function (on) { $('#originExact').val(on ? '1' : ''); },
+      // '1' made exact by the user, 'auto' by the page (checked by the router, routing.js).
+      setExact: function (on, auto) { $('#originExact').val(on ? (auto ? 'auto' : '1') : ''); },
       shown: function (on) { $('#originStation').toggleClass('has-stops', on); }
     }),
     destination: stopSlot({
       $input: $('#destinationStation'), $dropdown: $('#destinationTracks'), fillsLine: true,
       setPlatform: function (ref) { $('#arrivalPlatform').val(ref || ''); },
-      setExact: function (on) { $('#destinationExact').val(on ? '1' : ''); },
+      setExact: function (on, auto) { $('#destinationExact').val(on ? (auto ? 'auto' : '1') : ''); },
       shown: function (on) { $('#destinationStation').toggleClass('has-stops', on); }
     })
   };
@@ -975,12 +980,36 @@
   watchStopSlot(endSlots.origin);
   watchStopSlot(endSlots.destination);
 
+  // The way back: the two ends swapped, stations or points entered by hand. Not their tracks
+  // or platforms (where one leaves A is not where one arrives at it), nor a point put on one
+  // direction's stop position (back on the station's own). Vias added by hand go the other
+  // way round; a run picked goes, its stops with it (the ends changed, see forgetRun).
+  $('#swapEnds').on('click', function () {
+    function swap(a, b) { var x = $(a).val(); $(a).val($(b).val()); $(b).val(x); }
+    ['origin', 'destination'].forEach(function (end) {
+      var slot = endSlots[end], entry = globalStationDict[slot.$input.val()];
+      if (entry && entry.stationPoint) entry[0] = entry.stationPoint;
+      forgetStop(slot);
+    });
+    swap('#originStation', '#destinationStation');
+    ['ManualName', 'ManualLat', 'ManualLng'].forEach(function (f) { swap('#origin' + f, '#destination' + f); });
+    var originManual = $('#originManualToggle').prop('checked');
+    $('#originManualToggle').prop('checked', $('#destinationManualToggle').prop('checked'));
+    $('#destinationManualToggle').prop('checked', originManual);
+    $('#viaContainer').append($('#viaContainer .via-row').get().reverse());
+    updateViaSummary();
+    renderStops(endSlots.origin);
+    renderStops(endSlots.destination);
+    $('#originStation, #destinationStation, #originManualToggle').trigger('change');
+  });
+
   // ---------- Via (intermediate waypoint) stations ----------
   var viaPlaceholder = "{{via}}";
   // `time` is an optional "07:22 – 07:23" shown at the end of the row (timetable
   // stops), followed by `track` ("Voie 4") unless the track dropdown shows it. Display only:
   // both go once the station is changed. Returns the row.
-  function addViaRow(value, time, track) {
+  // `entry` is the row's own station entry, a timetable's stop's (see stopSlotEntry).
+  function addViaRow(value, time, track, entry) {
     var $row = $(
       '<div class="via-row">' +
         '<input type="text" class="stationSearch viaStation" placeholder="' + viaPlaceholder + '" />' +
@@ -1010,19 +1039,22 @@
     var slot = stopSlot({
       $input: $row.find('.viaStation'), $dropdown: $row.find('.track-dropdown'),
       setPlatform: function (ref) {
-        var record = (globalStationDict[slot.$input.val()] || [])[2];
+        var record = (stopSlotEntry(slot) || [])[2];
         // Already the platform the stop is at: its scheduled / live pair stays as it is.
         if (!record || (ref && stopKey(ref) === stopKey(record.platform_rt || record.platform))) return;
         delete record.platform_rt;
         if (ref) record.platform = ref; else delete record.platform;
       },
-      setExact: function (on) {
-        var entry = globalStationDict[slot.$input.val()];
-        if (entry) entry[3] = on;
+      setExact: function (on, auto) {
+        var entry = stopSlotEntry(slot);
+        if (entry) { entry[3] = on; entry[4] = on && auto ? 'auto' : undefined; }
       },
       shown: function (on) { $row.toggleClass('has-stops', on); showTime(); }
     });
     $row.data('stopSlot', slot);
+    // Its own entry until another station is typed or picked there.
+    if (entry) slot.$input.data('stationEntry', entry);
+    slot.$input.on('input autocompleteselect', function () { slot.$input.removeData('stationEntry'); });
     watchStopSlot(slot);
     if (typeof value === 'string') {
       $row.find('.viaStation').val(value);
@@ -1137,8 +1169,10 @@
         var lng = parseFloat($('#' + which + 'ManualLng').val());
         return isFinite(lat) && isFinite(lng) ? [lat, lng] : null;
       }
+      // The station's own point: not where a track, or the run picked (its direction's stop
+      // position), moved it, which would read as another end and drop the run for a new search.
       var entry = globalStationDict[$('#' + which + 'Station').val()];
-      return entry ? entry[0] : null;
+      return entry ? (entry.stationPoint || entry[0]) : null;
     }
 
     function endsKey() {
@@ -1347,9 +1381,11 @@
     // which moves the point onto that track (exact when it is a stop position). A stop
     // whose station has no such track keeps the timetable's point, approximate.
     function matchStopTracks(d, $rows) {
-      var ends = [['origin', d.from_platform], ['destination', d.to_platform]].map(function (end) {
+      var ends = [['origin', d.from_platform, d.from_point], ['destination', d.to_platform, d.to_point]].map(function (end) {
         var slot = endSlots[end[0]], entry = globalStationDict[slot.$input.val()];
-        var point = entry && (entry.stationPoint || entry[0]);
+        // Where the run is boarded or left (on its track), for the end to be put there as its
+        // stops are; else the station's point.
+        var point = end[2] || (entry && (entry.stationPoint || entry[0]));
         // Its name, without the flag, for quai to pick the station of that name nearby.
         var name = slot.$input.val().replace(/^\S*[\u{1F1E6}-\u{1F1FF}]{2}\s*/u, '');
         return { slot: slot, platform: end[1], point: point, name: name };
@@ -1371,7 +1407,7 @@
             var place = places[i], slot = place.slot;
             if (!station || !slot) return;
             var label = slot.$input.val();
-            if (!globalStationDict[label]) return;
+            if (!stopSlotEntry(slot)) return;
             // A station picked by hand already has its own (quai's, or none from Photon).
             if (!(globalStationTracks[label] || []).length && !(globalStationLines[label] || []).length) {
               globalStationTracks[label] = station.tracks;
@@ -1381,6 +1417,17 @@
             if (station.alike && !globalStationKeys[label]) globalStationKeys[label] = station.station_key;
             var platform = slot.selected || place.platform;
             if (platform) pickStop(slot, 'track', platform); else renderStops(slot);
+            // Not placed on a track of the station's: where the line stops there going this
+            // way, from OSM's route relations (one per direction), exact, so that the route
+            // takes that direction's track and not the other's a few metres off (Bordeaux's,
+            // Brest's trams; src/quai.py, stops_by_direction).
+            var placed = platform && findStop(globalStationTracks[label], platform);
+            var entry = stopSlotEntry(slot);
+            if (!placed && station.snap && entry) {
+              if (!entry.stationPoint) entry.stationPoint = entry[0];
+              entry[0] = station.snap;
+              slot.setExact(true, true);
+            }
           });
         }
       });
@@ -1416,10 +1463,11 @@
         var name = stop[2] || (stop[0] + ', ' + stop[1]);
         // Same "🇨🇭 Name" shape as a station picked from the autocomplete.
         var label = stop[3] && stop[3] !== 'UN' ? getFlagEmoji(stop[3]) + ' ' + name : name;
-        globalStationDict[label] = [[stop[0], stop[1]], label, stopRecord(stop, d)];
+        // Each stop its own entry: a run can call at a stop twice (a loop line).
+        var entry = globalStationDict[label] = [[stop[0], stop[1]], label, stopRecord(stop, d)];
         var arr = stop[4], dep = stop[5];
         var times = arr && dep && arr !== dep ? arr + ' \u2013 ' + dep : (arr || dep);
-        $rows.push(addViaRow(label, times, trackLabel(stop[6])));
+        $rows.push(addViaRow(label, times, trackLabel(stop[6]), entry));
       });
       setViaCollapsed(true);
       updateViaSummary();

@@ -1451,5 +1451,6 @@
     "motisStand": "Stallo {track}",
     "stopStand": "Stallo",
     "motisPier": "Pontile {track}",
-    "stopPier": "Pontile"
+    "stopPier": "Pontile",
+    "swapEnds": "Scambia partenza e arrivo"
 }
