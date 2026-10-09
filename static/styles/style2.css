@@ -673,6 +673,34 @@ body::before {
   overflow-x: hidden;
 }
 
+/* A quai station's place, at the end of its row: a hint, not part of what is saved. */
+.ui-autocomplete .station-item{
+  display: flex;
+  align-items: baseline;
+  gap: 1em;
+}
+.ui-autocomplete .station-item .station-name{
+  flex: 0 1 auto;
+  min-width: 0;
+}
+/* Gives way to the name first: shrinks, then is cut short */
+.ui-autocomplete .station-place{
+  flex: 0 1000 auto;
+  min-width: 3em;
+  margin-left: auto;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 75%;
+  font-style: italic;
+  color: #888;
+}
+/* On the highlighted row, the row's own colour (white on blue), faded. */
+.ui-autocomplete .ui-state-active .station-place{
+  color: inherit;
+  opacity: 0.8;
+}
+
 .ui-autocomplete .disambiguation{
   opacity: 0.5;
   font-size: 75%;
@@ -2033,3 +2061,43 @@ html, body {
 .currency-combo-empty { padding: 10px; color: #6c757d; font-size: 0.85rem; text-align: center; }
 .currency-combo-flag-inline { flex: none; line-height: 1; }
 .currency-combo-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* A station's tracks or lines, in a dropdown at the end of its field (static/js/stop_slots.js):
+   shown once a station that has some is picked, without moving anything around it */
+.track-dropdown { position: absolute; top: 0; right: 0; height: 32px; }
+.track-dropdown[hidden] { display: none; }
+.track-toggle {
+    height: 32px; max-width: 76px; padding: 0 10px; border: 0; background: transparent;
+    color: #888; font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden;
+    display: flex; align-items: center; gap: 4px; cursor: pointer;
+}
+.track-toggle:hover, .track-toggle.exact { color: #4b78d6; }
+/* On its platform beside the track (approximate); a timetable's platform OSM lacks */
+.track-toggle.placed { color: #555; }
+.track-toggle.unmapped { color: #aaa; font-style: italic; }
+.track-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.track-menu { padding: 8px; max-width: 280px; }
+.track-menu-title { font-size: .75rem; color: #888; margin: 0 2px 6px; }
+.track-menu-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.track-chip {
+    min-width: 30px; padding: 0 6px; border: 1px solid #d0d5db; border-radius: 4px;
+    background: #fff; font-size: .8rem; font-weight: 600; line-height: 24px; color: #444; cursor: pointer;
+}
+.track-chip:hover { background: #f1f3f6; }
+.track-chip.active { background: #4b78d6; border-color: #4b78d6; color: #fff; }
+
+/* The edit page's origin and destination: the name, then at its end the station's tracks and
+   whether typing renames it or searches for another station (inside the field, so they line up
+   with it whatever margin the form gives its inputs) */
+.end-station-field { position: relative; flex: 1; min-width: 0; margin-left: 5px; }
+#originGroup .flagDropdownWrapper, #destinationGroup .flagDropdownWrapper { flex: none; }
+#form .end-station-field input { width: 100%; margin-left: 0; padding-right: 40px; text-overflow: ellipsis; }
+#form .end-station-field input.has-stops { padding-right: 112px; }
+.end-station-field .track-dropdown { right: 32px; }
+.end-mode-toggle {
+  position: absolute; top: 0; right: 0; width: 32px; height: 32px; padding: 0;
+  border: 0; background: transparent; color: #999; cursor: pointer;
+}
+.end-mode-toggle[hidden] { display: none; }
+.end-mode-toggle:hover { color: #4b78d6; }
+.end-mode-toggle.searching { color: #4b78d6; }

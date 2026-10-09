@@ -5,6 +5,7 @@
 <script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
 {% endif %}
 <script src="{{ url_for('static', filename='js/currency_combo.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/stop_slots.js') }}"></script>
 
 {% include "bootstrap/navigation.html"%}
 
@@ -159,27 +160,6 @@
        that has some is picked, without moving anything around it */
     #originStationAuto, #destinationStationAuto { position: relative; }
     #form input.has-stops { padding-right: 76px; text-overflow: ellipsis; }
-    .track-dropdown { position: absolute; top: 0; right: 0; height: 32px; }
-    .track-dropdown[hidden] { display: none; }
-    .track-toggle {
-        height: 32px; max-width: 76px; padding: 0 10px; border: 0; background: transparent;
-        color: #888; font-size: .8rem; font-weight: 600; white-space: nowrap; overflow: hidden;
-        display: flex; align-items: center; gap: 4px; cursor: pointer;
-    }
-    .track-toggle:hover, .track-toggle.exact { color: #4b78d6; }
-    /* On its platform beside the track (approximate); a timetable's platform OSM lacks */
-    .track-toggle.placed { color: #555; }
-    .track-toggle.unmapped { color: #aaa; font-style: italic; }
-    .track-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-    .track-menu { padding: 8px; max-width: 280px; }
-    .track-menu-title { font-size: .75rem; color: #888; margin: 0 2px 6px; }
-    .track-menu-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-    .track-chip {
-        min-width: 30px; padding: 0 6px; border: 1px solid #d0d5db; border-radius: 4px;
-        background: #fff; font-size: .8rem; font-weight: 600; line-height: 24px; color: #444; cursor: pointer;
-    }
-    .track-chip:hover { background: #f1f3f6; }
-    .track-chip.active { background: #4b78d6; border-color: #4b78d6; color: #fff; }
 </style>
 
 {% if vehicle_type == 'air' %}
@@ -816,6 +796,7 @@
   $.get('{{url_for("getManAndOps", username=username, station_type=vehicle_type)}}', function(manAndOps, status){
     Object.assign(globalStationDict, manAndOps.manualStations);
     Object.assign(visitedStations, manAndOps.visitedStations);
+    Object.assign(visitedStationKeys, manAndOps.visitedKeys || {});
   
     Object.keys(manAndOps.manualStations).forEach(function (station){
       manualStationsList.push({"label":station, "value":station, "manual":true})
@@ -970,18 +951,10 @@
   };
   stationSearchAutocomplete(".stationSearch", visitedStations, stationSearchUrl, "{{manual}}");
 
-  // ---------- Tracks and lines ----------
-  // A station from quai comes with its numbered tracks and its lines, each with a point
-  // where it stops. Picking one at the origin, the destination or a via moves its point
-  // there, exact when it is a stop position on the track. A track is also saved as the
-  // platform, and a line at either end fills the line field if it is empty. Picking it again
-  // goes back to the station's own point. Metro and tram trips offer the station's lines,
-  // which is how they are known; other trips its tracks, which is what timetables give.
-  // Each place a choice can be made is a slot: the field, its dropdown, and where the choice
-  // goes (setPlatform, setExact; shown(on) when the dropdown appears or goes).
-  function stopSlot(o) {
-    return $.extend({ selected: null, lineFilled: null, fillsLine: false }, o);
-  }
+  // ---------- Tracks and lines (static/js/stop_slots.js) ----------
+  var preferLines = ['metro', 'tram'].indexOf("{{ vehicle_type }}") !== -1;
+  window.stopSlotOptions = { preferLines: preferLines,
+                            texts: { track: {{ platform_text(vehicle_type, 'word')|tojson }}, line: {{ lineName|tojson }} } };
   var endSlots = {
     origin: stopSlot({
       $input: $('#originStation'), $dropdown: $('#originTracks'), fillsLine: true,
@@ -996,111 +969,9 @@
       shown: function (on) { $('#destinationStation').toggleClass('has-stops', on); }
     })
   };
-  var preferLines = ['metro', 'tram'].indexOf("{{ vehicle_type }}") !== -1;
-
-  // "Gleis 7", "Voie 7" and "7" are the same track.
-  function stopKey(ref) {
-    return String(ref || '').trim().toLowerCase()
-      .replace(/^(voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron)\s*/, '');
-  }
-
-  // Which of the station's stops to offer: 'line' or 'track', or null. Metro and tram trips
-  // fall back on tracks; the others never offer lines, which for a train are regional routes,
-  // not something one boards at.
-  function stopKind(label) {
-    var tracks = (globalStationTracks[label] || []).length, lines = (globalStationLines[label] || []).length;
-    if (preferLines) return lines ? 'line' : (tracks ? 'track' : null);
-    return tracks ? 'track' : null;
-  }
-
-  // The dropdown at the end of the field: the chosen track or line on its button (else an
-  // icon), the station's others in its menu. Hidden when the station has none. `label` is
-  // the station's, when the field does not hold it yet (an autocomplete pick).
-  function renderStops(slot, label) {
-    label = label || slot.$input.val();
-    var kind = stopKind(label);
-    if (!globalStationDict[label] || !kind) { hideStops(slot); return; }
-    var title = kind === 'track' ? {{ stopPlatform|tojson }} : {{ lineName|tojson }};
-    var current = stopKey(slot.selected);
-    var chosen = null;
-    var $chips = $('<div class="track-menu-chips">');
-    (kind === 'track' ? globalStationTracks : globalStationLines)[label].forEach(function (c) {
-      var active = current !== '' && stopKey(c.ref) === current;
-      if (active) chosen = c;
-      var $chip = $('<button type="button" class="track-chip">').text(c.ref).toggleClass('active', active)
-        .on('click', function () { pickStop(slot, kind, active ? '' : c.ref); });
-      if (c.colour) {
-        $chip.css(active ? { background: c.colour, borderColor: c.colour, color: '#fff' }
-                         : { borderColor: c.colour, boxShadow: 'inset 3px 0 0 ' + c.colour });
-      }
-      $chips.append($chip);
-    });
-    slot.$dropdown.find('.track-menu').empty()
-      .append($('<div class="track-menu-title">').text(title), $chips);
-    // The button says how good the point is: blue on the track (exact), grey on a platform
-    // beside it, and light grey for a timetable's platform the station does not map, which
-    // leaves the point at the station.
-    var shown = chosen ? chosen.ref : slot.selected || '';
-    var $toggle = slot.$dropdown.find('.track-toggle').empty().attr('title', title)
-      .toggleClass('exact', !!(chosen && chosen.on_track))
-      .toggleClass('placed', !!(chosen && !chosen.on_track))
-      .toggleClass('unmapped', !chosen && !!shown);
-    $toggle.append($('<i>').addClass(kind === 'track' ? 'bi bi-signpost-split' : 'bi bi-diagram-3'));
-    // A line's colour as a dot, so that its number keeps the colour saying how exact it is.
-    if (chosen && chosen.colour) $toggle.append($('<span class="track-dot">').css('background', chosen.colour));
-    if (shown) $toggle.append($('<span>').text(shown));
-    slot.$dropdown.prop('hidden', false);
-    slot.shown(true);
-  }
-
-  function hideStops(slot) {
-    slot.$dropdown.prop('hidden', true);
-    slot.shown(false);
-  }
-
-  // Picks the track or line `ref` ('' unpicks it). A track the station does not have is
-  // still saved as the platform, with the station's own point.
-  function pickStop(slot, kind, ref) {
-    var label = slot.$input.val();
-    var entry = globalStationDict[label];
-    var choice = ref ? ((kind === 'track' ? globalStationTracks : globalStationLines)[label] || [])
-      .find(function (c) { return stopKey(c.ref) === stopKey(ref); }) : null;
-    if (entry) {
-      if (!entry.stationPoint) entry.stationPoint = entry[0];
-      entry[0] = choice ? [choice.lat, choice.lng] : entry.stationPoint;
-    }
-    slot.setExact(!!(choice && choice.on_track));
-    slot.selected = ref || null;
-    if (kind === 'track') {
-      slot.setPlatform(ref || '');
-    } else if (slot.fillsLine) {
-      if (slot.lineFilled && $('#lineName').val() === slot.lineFilled) $('#lineName').val('');
-      slot.lineFilled = null;
-      if (choice && !$('#lineName').val()) $('#lineName').val(slot.lineFilled = choice.ref);
-    }
-    renderStops(slot, label);
-  }
   // The timetable picker's way in: the platform a departure gives at either end.
   function pickTrack(role, ref) { pickStop(endSlots[role], 'track', ref); }
 
-  // A new or retyped station: whatever was picked at the old one no longer applies.
-  function forgetStop(slot) {
-    if (slot.lineFilled && $('#lineName').val() === slot.lineFilled) $('#lineName').val('');
-    slot.lineFilled = slot.selected = null;
-    slot.setPlatform('');
-    slot.setExact(false);
-  }
-
-  function watchStopSlot(slot) {
-    slot.$input.on('autocompleteselect', function (e, ui) {
-      forgetStop(slot);
-      renderStops(slot, ui.item.value);
-    });
-    slot.$input.on('input', function () {
-      forgetStop(slot);
-      hideStops(slot);
-    });
-  }
   watchStopSlot(endSlots.origin);
   watchStopSlot(endSlots.destination);
 
@@ -1222,7 +1093,7 @@
       none: {{ motisNone|tojson }},
       line: {{ motisLine|tojson }},
       stops: {{ motisStops|tojson }},
-      track: {{ motisTrack|tojson }},
+      track: {{ platform_text(vehicle_type)|tojson }},
       earlier: {{ motisEarlier|tojson }},
       later: {{ motisLater|tojson }},
       replacementBus: {{ motisReplacementBus|tojson }}
@@ -1479,17 +1350,20 @@
       var ends = [['origin', d.from_platform], ['destination', d.to_platform]].map(function (end) {
         var slot = endSlots[end[0]], entry = globalStationDict[slot.$input.val()];
         var point = entry && (entry.stationPoint || entry[0]);
-        return { slot: slot, platform: end[1], point: point };
+        // Its name, without the flag, for quai to pick the station of that name nearby.
+        var name = slot.$input.val().replace(/^\S*[\u{1F1E6}-\u{1F1FF}]{2}\s*/u, '');
+        return { slot: slot, platform: end[1], point: point, name: name };
       });
       var places = ends.slice(0, 1).concat(d.stops.map(function (stop, i) {
         // The platform it calls at: the live one (stop[6]), else the scheduled one.
-        return { slot: $rows[i] && $rows[i].data('stopSlot'), platform: stop[6] || stop[15], point: [stop[0], stop[1]] };
+        return { slot: $rows[i] && $rows[i].data('stopSlot'), platform: stop[6] || stop[15],
+                 point: [stop[0], stop[1]], name: stop[2] || null };
       }), ends.slice(1));
       var key = runKey(d);
       $.ajax({
         url: '/stationTracks', method: 'POST', contentType: 'application/json', dataType: 'json',
         data: JSON.stringify({ type: routingType, stops: places.map(function (p) {
-          return p.point ? { lat: p.point[0], lng: p.point[1], platform: p.platform || null } : {};
+          return p.point ? { lat: p.point[0], lng: p.point[1], platform: p.platform || null, name: p.name || null } : {};
         }) }),
         success: function (data) {
           if (!applied || applied.key !== key) return;   // another run picked meanwhile
@@ -1503,6 +1377,8 @@
               globalStationTracks[label] = station.tracks;
               globalStationLines[label] = station.lines;
             }
+            // The trip is saved as at that station only when it is named alike, not just near.
+            if (station.alike && !globalStationKeys[label]) globalStationKeys[label] = station.station_key;
             var platform = slot.selected || place.platform;
             if (platform) pickStop(slot, 'track', platform); else renderStops(slot);
           });

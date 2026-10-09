@@ -519,6 +519,12 @@ function toRouting(data, routingUrl, type){
 
   newTrip = processFormDates(newTrip);
 
+  // Manual ends are no quai station.
+  ["origin", "destination"].forEach(function (end) {
+    var manual = (end + "ManualToggle") in newTrip && (newTrip[end + "ManualName"] || "").trim() != "";
+    newTrip[end + "StationKey"] = manual ? "" : (globalStationKeys[newTrip[end + "Station"]] || "");
+  });
+
   if ("originManualToggle" in  newTrip && newTrip["originManualName"].trim()!=""){
     label = newTrip["originManualName"];
     newTrip["originStation"] = [[Number(newTrip["originManualLat"]), Number(newTrip["originManualLng"])], label];
@@ -726,6 +732,12 @@ function getCompositeScore(station, term) {
 // has none.
 var globalStationTracks = {};
 var globalStationLines = {};
+// The quai station each label stands for, saved with the trip so it stays tied to the
+// station whatever it is called.
+var globalStationKeys = {};
+// How many of the user's trips start or end at each quai station, by key (getManAndOps): a
+// station they know comes first among those matching alike, whatever their trips called it.
+var visitedStationKeys = {};
 
 // Stations asked for first (enough to fill the list), then at a time, and at most (quai
 // answers 50 at most): nearing the end of the list asks for the next ones.
@@ -778,6 +790,11 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
           globalStationDict[displayLabel] = [item.geometry.coordinates.reverse(), label];
           globalStationTracks[displayLabel] = item.properties.tracks || [];
           globalStationLines[displayLabel] = item.properties.lines || [];
+          if (item.properties.source === 'quai' && item.properties.station_key) {
+            globalStationKeys[displayLabel] = item.properties.station_key;
+          } else {
+            delete globalStationKeys[displayLabel];
+          }
         });
         inputElement.removeClass("spinning");
         done(stationList, data.features.length);
@@ -813,7 +830,9 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
       manStationList.sort(byScore);
       stationList.forEach(function (station, i) {
         station.rank = i;
-        station.occurrences = visitedStations[station.label] || 0;
+        // By name, or by station for trips saved with one: the same trips, so the larger.
+        station.occurrences = Math.max(visitedStations[station.label] || 0,
+                                       (station.source === 'quai' && visitedStationKeys[station.id]) || 0);
       });
       stationList.sort(function (a, b) {
         return (a.tier - b.tier) || (b.occurrences - a.occurrences) || (a.rank - b.rank);
@@ -894,7 +913,9 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
     delay: 300,
     source: function (request, response) {
       var widget = this;
-      var manStationList = $.ui.autocomplete.filter(manualStationsList, request.term);
+      // The user's manual stations, on the pages that load them (not the edit page).
+      var manStationList = $.ui.autocomplete.filter(
+        typeof manualStationsList !== 'undefined' ? manualStationsList : [], request.term);
       widget.stationTerm = request.term;
       widget.stationLimit = STATION_SEARCH_FIRST;
       widget.stationAll = false;
@@ -924,16 +945,25 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
           .append("<div>" + sanitize(item.label) + "</div>")
           .appendTo(ul);
       } else {
-        var disambiguation = "";
-        if (item.disambiguation) {
-          disambiguation = " <span class='disambiguation'>" + sanitize(item.disambiguation) + "</span>"
-        }
         // Where the result comes from, faintly (style2.css): quai's stations, else Photon.
         var source = item.source === 'quai' ? 'quai' : 'photon';
+        var $row;
+        if (item.disambiguation && source === 'quai') {
+          // A quai station's place is only a hint, not part of the name saved: on the same
+          // line, small and faint, and cut short (whole in its tooltip) where the name leaves
+          // too little room, never pushed onto the next result's line.
+          $row = $("<div class='station-item'>").append(
+            $("<span class='station-name'>").text(item.label),
+            $("<span class='station-place'>").text(item.disambiguation).attr("title", item.disambiguation));
+        } else {
+          // Photon's homonyms keep their own line, which tells them apart.
+          $row = $("<div>" + sanitize(item.label) + (item.disambiguation
+            ? " <span class='disambiguation'>" + sanitize(item.disambiguation) + "</span>" : "") + "</div>");
+        }
         return $("<li>")
           .addClass("stationSource-" + source)
           .attr("title", source)
-          .append("<div>" + sanitize(item.label) + disambiguation + "</div>")
+          .append($row)
           .appendTo(ul);
       }
     };

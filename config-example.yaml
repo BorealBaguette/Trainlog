@@ -85,8 +85,11 @@ openrailwaymap:
 
 # Station search (trainlog_quai repo). Leave unset for https://quai.srv.trainlog.me; empty
 # to search stations with Photon only. From a container on trainlog_network: http://quai:5000
+# Station searches never fall back on Photon when quai is slow or down: they wait up to
+# `timeout` seconds (default 10, enough while quai rebuilds) and then fail.
 quai:
   url: https://quai.srv.trainlog.me
+  # timeout: 10
 
 # Thunderforest Maps (specific map tilesets)
 thunderforest:
