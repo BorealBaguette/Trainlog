@@ -128,7 +128,9 @@ function hideStops(slot) {
 
 // Picks the track or line `ref` ('' unpicks it). A track the station does not have is
 // still saved as the platform, with the station's own point.
-function pickStop(slot, kind, ref) {
+// `auto`: picked by the page for the timetable's platform, not by the user: an exact point
+// then the router keeps only where it does not lengthen the route (routing.js).
+function pickStop(slot, kind, ref, auto) {
   var label = stopSlotLabel(slot);
   var entry = stopSlotEntry(slot);
   var choice = ref ? findStop((kind === 'track' ? globalStationTracks : globalStationLines)[label], ref) : null;
@@ -138,7 +140,7 @@ function pickStop(slot, kind, ref) {
     // A page whose route is already drawn redraws it from there (the edit page).
     if (slot.moved) slot.moved(entry[0], !!(choice && choice.on_track));
   }
-  slot.setExact(!!(choice && choice.on_track));
+  slot.setExact(!!(choice && choice.on_track), auto);
   slot.selected = ref || null;
   if (kind === 'track') {
     slot.setPlatform(ref || '');
