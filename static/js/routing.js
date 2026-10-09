@@ -1068,7 +1068,43 @@ function rerouteForFilters() {
 // mapped on the wrong way) sends the route past it to turn back, hundreds of metres to
 // kilometres longer. In metres, not a share of the route: Köln-Mülheim's turn back added 2km
 // to a route ten times as long.
-var AUTO_EXACT_MARGIN_M = 300, AUTO_EXACT_PER_POINT_M = 50;
+var AUTO_EXACT_MARGIN_M = 300, AUTO_EXACT_PER_POINT_M = 15;
+
+// Where a route turns back on itself: its direction flips by more than TURN_BACK_DEG between
+// points TURN_STEP_M apart. A train reverses at a terminus it stops at, the turn then at the
+// point itself (within TURN_AT_POINT_M); one turning back between that and TURN_NEAR_M from a
+// point the page made exact went past it to come back: that point is on the wrong track.
+var TURN_BACK_DEG = 150, TURN_STEP_M = 20, TURN_AT_POINT_M = 30, TURN_NEAR_M = 1500;
+
+function turnBacks(coordinates) {
+  var pts = [];
+  (coordinates || []).forEach(function (c) {
+    var p = L.latLng(c.lat, c.lng);
+    if (!pts.length || pts[pts.length - 1].distanceTo(p) >= TURN_STEP_M) pts.push(p);
+  });
+  function heading(a, b) {
+    var k = Math.cos(a.lat * Math.PI / 180);
+    return Math.atan2(b.lat - a.lat, (b.lng - a.lng) * k);
+  }
+  var found = [];
+  for (var i = 1; i < pts.length - 1; i++) {
+    var turn = Math.abs(heading(pts[i - 1], pts[i]) - heading(pts[i], pts[i + 1])) * 180 / Math.PI;
+    if (turn > 180) turn = 360 - turn;
+    if (turn > TURN_BACK_DEG) found.push(pts[i]);
+  }
+  return found;
+}
+
+// The points the page made exact that the route turns back near, not at (see TURN_*).
+function turnedBackAt(points, coordinates) {
+  var turns = turnBacks(coordinates);
+  return points.filter(function (wp) {
+    return turns.some(function (t) {
+      var m = wp.latLng.distanceTo(t);
+      return m > TURN_AT_POINT_M && m <= TURN_NEAR_M;
+    });
+  });
+}
 
 function createCustomRouter(baseRouter, freehandSegments) {
   return {
@@ -1087,7 +1123,16 @@ function createCustomRouter(baseRouter, freehandSegments) {
         var exact = results.exact, loose = results.loose;
         var length = function (r) { return r && !r.err && r.routes && r.routes[0] ? r.routes[0].summary.totalDistance : null; };
         var e = length(exact), l = length(loose);
-        if (l != null && (e == null || e > l + AUTO_EXACT_MARGIN_M + AUTO_EXACT_PER_POINT_M * auto.length)) {
+        // The points the exact route turns back near are on the wrong track: those alone
+        // turn approximate, and the route is asked for again with the others.
+        var wrong = e != null ? turnedBackAt(auto, exact.routes[0].coordinates) : [];
+        if (wrong.length && wrong.length < auto.length) {
+          wrong.forEach(function (wp) { wp.options = L.extend({}, wp.options, { hard: false, autoHard: false }); });
+          updateMarkerVisuals();
+          self.route(waypoints, callback, context, options);
+          return;
+        }
+        if (wrong.length || (l != null && (e == null || e > l + AUTO_EXACT_MARGIN_M + AUTO_EXACT_PER_POINT_M * auto.length))) {
           auto.forEach(function (wp) { wp.options = L.extend({}, wp.options, { hard: false, autoHard: false }); });
           updateMarkerVisuals();
           callback.call(context, loose.err, loose.routes);
