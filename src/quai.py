@@ -392,8 +392,10 @@ def _fold(text):
 
 def name_likeness(name, station):
     """How much a name ("Bergen - Strandkaiterminalen båtkai", Entur's "Bryggen") is this
-    station's, 0 to 1: 1 where one of its names is it, contains it or is contained in it,
-    else how alike the closest of them is spelt."""
+    station's, 0 to 1: 1 where one of its names is it; 0.95 where one contains it or is
+    contained in it, a little less, so that the station of that very name wins ("Lausanne" is
+    Lausanne, not Lausanne-Flon nearer the timetable's point); else how alike the closest
+    of them is spelt."""
     wanted = _fold(name)
     if not wanted:
         return 0
@@ -403,8 +405,11 @@ def name_likeness(name, station):
         have = _fold(candidate)
         if not have:
             continue
-        if have == wanted or f" {wanted} " in f" {have} " or f" {have} " in f" {wanted} ":
+        if have == wanted:
             return 1
+        if f" {wanted} " in f" {have} " or f" {have} " in f" {wanted} ":
+            best = max(best, 0.95)
+            continue
         best = max(best, difflib.SequenceMatcher(None, wanted, have).ratio())
     return best
 
@@ -414,9 +419,38 @@ def name_likeness(name, station):
 NAME_LIKENESS = 0.75
 
 
-def _names_alike(name, station):
-    """Whether a name is this station's (see name_likeness)."""
-    return name_likeness(name, station) >= NAME_LIKENESS
+# Stations about as near as the nearest, between which a name may decide: within this many
+# times its distance, or this many metres further. Beyond, the nearest is the one, whatever
+# the names say: "Lausanne" on Lausanne's platform 1 is not Lausanne-Flon, 400m off, which
+# a name containing it would have made "alike".
+NEAR_TIE_FACTOR = 1.5
+NEAR_TIE_M = 30
+# Beyond this, a station is only the one if named as the stop, not merely alike: where the
+# right station is missing from quai (as Lausanne's was), Lausanne-Flon 439m off is no answer
+# for "Lausanne". And a timetable's stop takes no station at all that far and not so named.
+FAR_M = 150
+
+
+def station_by_place(name, nearby):
+    """Of `nearby` stations (nearest first, with distance_m), the one a stop or trip end is at,
+    and whether it is named alike: the nearest, unless another about as near (NEAR_TIE_*) is
+    named more like it (Bryggen's point 38m from Bryggen and 39m from another stop;
+    Strandterminalen 141m off and Strandkaiterminalen 145m). (None, False) if none."""
+    if not nearby:
+        return None, False
+    nearest = nearby[0]
+    limit = max(nearest.get("distance_m", 0) * NEAR_TIE_FACTOR, nearest.get("distance_m", 0) + NEAR_TIE_M)
+    close = [s for s in nearby if s.get("distance_m", 0) <= limit]
+    if not name:
+        return nearest, False
+    def alike(s, likeness):
+        return likeness >= NAME_LIKENESS and (likeness == 1 or s.get("distance_m", 0) <= FAR_M)
+
+    likeness, _, station = max(((name_likeness(name, s), -i, s) for i, s in enumerate(close)),
+                               key=lambda t: t[:2])
+    if alike(station, likeness):
+        return station, True
+    return nearest, alike(nearest, name_likeness(name, nearest))
 
 
 # Modes whose stops are placed by direction (stops_by_direction): where a line's two
@@ -458,9 +492,15 @@ def stations_at(trip_type, stops, radius_km=0.5):
             data = quai_get("reverse", {"lat": stop["lat"], "lon": stop["lng"], "mode": mode,
                                         "radius": radius_km, "limit": 5}, timeout=2)
             nearby = (data or {}).get("stations") or []
-            alike = next((s for s in nearby if stop.get("key") and s["station_key"] == stop["key"]),
-                         None) or next((s for s in nearby if _names_alike(stop.get("name"), s)), None)
-            nearest = alike or (nearby[0] if nearby else None)
+            # The station of that key; else by place, a name only deciding between stations
+            # about as near (station_by_place).
+            nearest = next((s for s in nearby if stop.get("key") and s["station_key"] == stop["key"]), None)
+            alike = nearest
+            if nearest is None:
+                nearest, named = station_by_place(stop.get("name"), nearby)
+                alike = nearest if named else None
+                if not named and nearest and nearest.get("distance_m", 0) > FAR_M:
+                    nearest = None   # far, and not named as the stop: not its station
             if nearest:
                 apply_overrides([nearest])
                 ref = track_key(stop.get("platform"))

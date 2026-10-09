@@ -915,6 +915,13 @@ body::before {
   font-family: Twemoji !important;
   -webkit-appearance: none;
   appearance: none; /* Remove default dropdown arrow */
+  /* Only the flag shows: the option's text ("🇳🇴 NO") is transparent, as its country code
+     otherwise peeks out past the 35px box at some sizes (a sliver of black). The flag, a
+     colour glyph, keeps its colours; the open list its text. */
+  color: transparent;
+}
+.flagDropdownWrapper select option {
+  color: #212529;
 }
 
 /* The input field next to the flag select, similar to #operator */
