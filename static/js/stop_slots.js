@@ -31,7 +31,8 @@ function stopSlotEntry(slot) {
 // "Gleis 7", "Voie 7" and "7" are the same track.
 function stopKey(ref) {
   return String(ref || '').trim().toLowerCase()
-    .replace(/^(voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron)\s*/, '');
+    .replace(/^(voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron|путь|платформа|第)\s*/, '')
+    .replace(/\s*(号?站台|號?月台|番線|番のりば|번\s*(승강장|홈)?)$/, '');
 }
 
 // Which of the station's stops to offer: 'line' or 'track', or null. Metro and tram trips

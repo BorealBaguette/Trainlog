@@ -374,12 +374,13 @@ def quai_get(path, params=None, timeout=5):
 
 
 TRACK_WORDS = re.compile(
-    r"^(voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron)\s*", re.IGNORECASE
+    r"^(voie|gleis|gl\.?|track|platform|quai|binario|v[ií]a|spoor|tor|peron|путь|платформа|第)\s*"
+    r"|\s*(号?站台|號?月台|番線|番のりば|번\s*(승강장|홈)?)$", re.IGNORECASE
 )
 
 
 def track_key(ref):
-    """"Gleis 7", "Voie 7" and "7" are the same track. Mirrors stopKey() in new.html."""
+    """"Gleis 7", "Voie 7", "7站台" and "7" are the same track. Mirrors stopKey() in stop_slots.js."""
     return TRACK_WORDS.sub("", str(ref or "").strip().lower())
 
 
