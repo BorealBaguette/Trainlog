@@ -49,6 +49,17 @@
   .se-trainlog .label { font-size: .7rem; color: var(--se-muted); text-transform: uppercase; letter-spacing: .04em; }
   .se-trainlog .name { font-weight: 600; }
 
+  /* A station merged into another, or others merged into it */
+  .se-merge-note { margin-top: 8px; padding: 6px 10px; border-radius: 6px; background: #eef4ff; color: #1e3a8a;
+    font-size: .88rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .se-merge-note a { font-weight: 600; }
+  .se-merge-note button { margin-left: auto; }
+  .se-merge-results { list-style: none; margin: 4px 0 0; padding: 0; max-height: 180px; overflow-y: auto;
+    border: 1px solid #e5e7eb; border-radius: 6px; }
+  .se-merge-results:empty { display: none; }
+  .se-merge-results li { padding: 4px 8px; cursor: pointer; font-size: .88rem; }
+  .se-merge-results li:hover { background: #f1f3f6; }
+  .se-merge-results .sub { color: #6b7280; font-size: .78rem; }
   /* The override editor, folded until wanted */
   .se-edit-toggle { border: 1px solid var(--se-border); background: #fff; border-radius: 6px; padding: 2px 10px;
     font-size: .78rem; white-space: nowrap; }
@@ -501,6 +512,51 @@ function loadServices(s, unpickRoutes) {
   });
 }
 
+// Merging: a station OSM maps as two that are one for travellers (Berlin Hauptbahnhof and
+// its "(tief)" level) taken by Trainlog as the other, which gains its tracks and lines.
+function bindMerge(s) {
+  const f = document.getElementById('se-override');
+  const input = f.elements.merge, list = f.querySelector('.se-merge-results');
+  const status = f.querySelector('.status');
+  async function merge(into) {
+    status.textContent = 'Saving…';
+    const resp = await fetch(`{{ url_for("admin.station_explorer") }}/merge/` +
+      `${encodeURIComponent(s.mode)}/${encodeURIComponent(s.station_key)}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ into }),
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) { status.textContent = data.error || 'Failed'; return; }
+    loadStation();
+  }
+  const undo = detailEl.querySelector('[data-action=unmerge]');
+  if (undo) undo.addEventListener('click', () => merge(null));
+  let timer, xhr;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      const q = input.value.trim();
+      if (q.length < 2) { list.innerHTML = ''; return; }
+      if (xhr) xhr.abort();
+      xhr = new AbortController();
+      fetch('{{ url_for("admin.station_explorer_search") }}?' + new URLSearchParams({ q, mode: s.mode }),
+            { signal: xhr.signal })
+        .then(r => r.json())
+        .then(data => {
+          list.innerHTML = (data.stations || []).filter(o => o.station_key !== s.station_key).map(o => `
+            <li data-key="${esc(o.station_key)}" data-label="${esc(o.label)}">${flag(o.country)} ${esc(o.label)}
+              <span class="sub">${esc((o.city || {}).name || o.region || '')} · ${esc(o.station_key)}</span></li>`).join('')
+            || '<li class="sub">No station</li>';
+        })
+        .catch(() => {});
+    }, 250);
+  });
+  list.addEventListener('click', e => {
+    const li = e.target.closest('li[data-key]');
+    if (!li) return;
+    if (confirm(`Merge ${s.label} into ${li.dataset.label}? Trainlog will take it as that station.`)) merge(li.dataset.key);
+  });
+}
+
 let fitStation = () => {};
 function render(s) {
   const objects = s.osm_objects || [];
@@ -518,6 +574,13 @@ function render(s) {
         ${place ? `<span class="se-badge"><i class="bi bi-geo-alt"></i> ${esc(place)}</span>` : ''}
         ${s.override ? '<span class="se-badge edited"><i class="bi bi-pencil"></i> edited in Trainlog</span>' : ''}
       </div>
+      ${s.merged_into ? `<div class="se-merge-note"><i class="bi bi-box-arrow-in-right"></i>
+        Merged into <a href="#${encodeURIComponent(s.mode)}/${encodeURIComponent(s.merged_into.station_key)}">${esc(s.merged_into.name)}</a>:
+        Trainlog takes it as that station
+        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="unmerge">Undo</button></div>` : ''}
+      ${(s.merged_from || []).length ? `<div class="se-merge-note"><i class="bi bi-diagram-2"></i> Includes
+        ${s.merged_from.map(m => `<a href="#${encodeURIComponent(s.mode)}/${encodeURIComponent(m.station_key)}">${esc(m.name)}</a>`).join(', ')}
+        (their tracks and lines too)</div>` : ''}
       <div class="se-trainlog">
         <div><div class="label">Name in Trainlog</div><div class="name">${esc(s.trainlog_name)}</div></div>
         <button type="button" class="se-edit-toggle"><i class="bi bi-pencil"></i> Edit</button>
@@ -543,6 +606,11 @@ function render(s) {
             <button type="button" class="btn btn-sm btn-outline-secondary" data-action="add-track"><i class="bi bi-plus"></i> Track</button>
             <span class="se-hint">or click a track, or "→ track" on an object, below</span>
           </div>
+        </div>
+        <div class="se-field">
+          <label>Merge into</label>
+          <input class="form-control form-control-sm" name="merge" placeholder="Another ${esc(s.mode)} station this one is part of">
+          <ul class="se-merge-results"></ul>
         </div>
         <div class="se-actions">
           <span class="status"></span>
@@ -596,6 +664,7 @@ function render(s) {
       </div>
     </div>`;
   bindOverride(s);
+  bindMerge(s);
   // An object OSM names wrongly (a "Gare SNCF" where quay 5 is) made into a track, at its point.
   detailEl.querySelectorAll('.se-as-track').forEach(btn => btn.addEventListener('click', e => {
     e.stopPropagation();

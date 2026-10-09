@@ -22,7 +22,7 @@ import sys
 import time
 
 from src.pg import pg_session
-from src.quai import QUAI_MODES, nearest_stations
+from src.quai import QUAI_MODES, nearest_stations, resolve_key
 from src.station_cleanup import CANDIDATES, END_RADIUS_M, station_of_end
 
 logger = logging.getLogger(__name__)
@@ -69,7 +69,8 @@ def station_usage(min_users=MIN_USERS):
                                                candidates=CANDIDATES, timeout=300)))
         for end in mode_ends:
             nearby = at[(end.lat, end.lng)]
-            station, alike = station_of_end(end.label, end.station_key, nearby) if nearby else (None, False)
+            key = end.station_key and resolve_key(mode, end.station_key)
+            station, alike = station_of_end(end.label, key, nearby) if nearby else (None, False)
             if not alike:
                 untied += end.trips
                 continue

@@ -5,7 +5,15 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from py.utils import get_all_countries, get_flag_emoji
 from src.pg import pg_session
-from src.quai import QUAI_MODES, apply_overrides, quai_get, station_label
+from src.quai import (
+    QUAI_MODES,
+    apply_overrides,
+    forget_station_merges,
+    quai_get,
+    quai_station,
+    station_label,
+    station_merges,
+)
 from src.users import User
 from src.suspicious_activity import list_denied_logins, list_suspicious_activity
 from src.utils import admin_required, getUser, has_current_trip, lang, owner_required
@@ -140,11 +148,23 @@ def station_explorer_station(mode, key):
     if not data:
         return jsonify(error="unknown station"), 404
     # quai's position, before an override moves it, then Trainlog's name for the station.
+    # Shown as it is, not as the station it may be merged into, with what it is merged into
+    # and what is merged into it.
     station = data["station"]
     station["osm_lat"], station["osm_lng"] = station["lat"], station["lng"]
     station["osm_tracks"] = station.get("tracks") or []
-    apply_overrides([station])
+    apply_overrides([station], follow_merges=False)
     station["trainlog_name"] = station_label(station)
+
+    def named(key):
+        other = quai_station(mode, key)
+        return {"station_key": key, "name": station_label(other) if other else key}
+
+    merges = station_merges()
+    target = merges.get((mode, station["station_key"]))
+    station["merged_into"] = named(target) if target else None
+    station["merged_from"] = [named(k) for (m, k), t in merges.items()
+                              if m == mode and t == station["station_key"]]
     return jsonify(data)
 
 
@@ -173,6 +193,45 @@ def station_explorer_route(relation_id):
     if data is None:
         return jsonify(error="quai unavailable"), 502
     return jsonify(data)
+
+
+@admin_blueprint.route("/station_explorer/merge/<mode>/<key>", methods=["POST"])
+@admin_required
+def station_explorer_merge(mode, key):
+    """Merges a quai station into another of its mode ({into: station_key}), which Trainlog
+    then takes it as everywhere (src/quai.py, apply_overrides); {into: null} undoes it."""
+    into = ((request.get_json(silent=True) or {}).get("into") or "").strip() or None
+    if into == key:
+        return jsonify(error="a station cannot be merged into itself"), 400
+    if into:
+        if not quai_station(mode, into):
+            return jsonify(error="unknown station"), 404
+        # One step only: not into a station itself merged, nor one others are merged into.
+        merges = station_merges()
+        if (mode, into) in merges:
+            return jsonify(error="that station is itself merged into another"), 400
+        if any(m == mode and t == key for (m, _), t in merges.items()):
+            return jsonify(error="other stations are merged into this one: undo those first"), 400
+    with pg_session() as pg:
+        pg.execute(
+            """
+            INSERT INTO station_overrides (mode, station_key, merged_into, updated_by)
+            VALUES (:mode, :key, :into, :user)
+            ON CONFLICT (mode, station_key) DO UPDATE SET
+                merged_into = EXCLUDED.merged_into, updated_by = EXCLUDED.updated_by,
+                updated_on = now()
+            """,
+            {"mode": mode, "key": key, "into": into, "user": getUser()},
+        )
+        pg.execute(
+            """
+            DELETE FROM station_overrides WHERE mode = :mode AND station_key = :key
+              AND name IS NULL AND lat IS NULL AND tracks IS NULL AND merged_into IS NULL
+            """,
+            {"mode": mode, "key": key},
+        )
+    forget_station_merges()
+    return jsonify(ok=True)
 
 
 @admin_blueprint.route("/station_explorer/override/<mode>/<key>", methods=["POST"])
@@ -207,8 +266,19 @@ def station_explorer_override(mode, key):
         tracks.append({"ref": ref, "lat": t_lat, "lng": t_lng, "on_track": bool(t.get("on_track"))})
     with pg_session() as pg:
         if name is None and lat is None and not tracks:
+            # Cleared: gone, unless it still says what the station is merged into.
             pg.execute(
-                "DELETE FROM station_overrides WHERE mode = :mode AND station_key = :key",
+                """
+                UPDATE station_overrides SET name = NULL, lat = NULL, lng = NULL, tracks = NULL
+                WHERE mode = :mode AND station_key = :key
+                """,
+                {"mode": mode, "key": key},
+            )
+            pg.execute(
+                """
+                DELETE FROM station_overrides WHERE mode = :mode AND station_key = :key
+                  AND merged_into IS NULL
+                """,
                 {"mode": mode, "key": key},
             )
         else:

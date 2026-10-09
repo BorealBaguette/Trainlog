@@ -5,9 +5,11 @@ none of the deduplication Photon's do. Results are returned as Photon-shaped fea
 callers and the frontend treat both sources alike.
 """
 
+import copy
 import difflib
 import logging
 import re
+import time
 import unicodedata
 
 import requests
@@ -116,7 +118,7 @@ def station_overrides(stations):
         with pg_session() as pg:
             rows = pg.execute(
                 """
-                SELECT mode, station_key, name, lat, lng, tracks FROM station_overrides
+                SELECT mode, station_key, name, lat, lng, tracks, merged_into FROM station_overrides
                 WHERE (mode, station_key) IN (SELECT * FROM unnest(:modes, :keys))
                 """,
                 {"modes": [k[0] for k in keys], "keys": [k[1] for k in keys]},
@@ -125,7 +127,8 @@ def station_overrides(stations):
         logger.warning(f"Station overrides unavailable: {e}")
         return {}
     return {
-        (r.mode, r.station_key): {"name": r.name, "lat": r.lat, "lng": r.lng, "tracks": r.tracks}
+        (r.mode, r.station_key): {"name": r.name, "lat": r.lat, "lng": r.lng, "tracks": r.tracks,
+                                  "merged_into": r.merged_into}
         for r in rows
     }
 
@@ -146,8 +149,95 @@ def merge_tracks(tracks, overrides):
     return sorted(by_ref.values(), key=lambda t: (len(t["ref"]), t["ref"]))
 
 
-def apply_overrides(stations):
-    """quai stations with the names and positions set for them by hand, in place."""
+# Merges change seldom and are looked up on every search: kept a minute, and dropped as soon
+# as one is set (forget_station_merges).
+MERGES_TTL_S = 60
+_merges = {"at": None, "map": {}}
+
+
+def station_merges():
+    """{(mode, station_key): station_key it is merged into} (station_overrides.merged_into).
+    The last known if the database cannot be read."""
+    if _merges["at"] is None or time.monotonic() - _merges["at"] > MERGES_TTL_S:
+        try:
+            with pg_session() as pg:
+                rows = pg.execute(
+                    "SELECT mode, station_key, merged_into FROM station_overrides "
+                    "WHERE merged_into IS NOT NULL"
+                ).fetchall()
+            _merges["map"] = {(r.mode, r.station_key): r.merged_into for r in rows}
+            _merges["at"] = time.monotonic()
+        except Exception as e:
+            logger.warning(f"Station merges unavailable: {e}")
+    return _merges["map"]
+
+
+def forget_station_merges():
+    _merges["at"] = None
+
+
+def resolve_key(mode, key):
+    """The station a key stands for in Trainlog: the one it is merged into, if any."""
+    return station_merges().get((mode, key), key)
+
+
+# quai's stations by key, for merges: what a merged station is replaced by, and what its
+# target gains. Kept ten minutes.
+_station_cache = {}
+STATION_CACHE_TTL_S = 600
+
+
+def quai_station(mode, key):
+    """quai's station of `mode` with that key (redirects followed), or None."""
+    cached = _station_cache.get((mode, key))
+    if cached and time.monotonic() - cached[0] < STATION_CACHE_TTL_S:
+        return copy.deepcopy(cached[1])
+    station = (quai_get(f"station/{mode}/{key}") or {}).get("station")
+    if station:
+        _station_cache[(mode, key)] = (time.monotonic(), station)
+    return copy.deepcopy(station) if station else None
+
+
+def _merge_stations(stations):
+    """In place: each station merged into another (station_merges) becomes that one, keeping
+    what the request found about it (distance, tier); and each station others are merged
+    into gains their tracks and lines. Positions in the list are kept, so a station can then
+    appear twice."""
+    merges = station_merges()
+    if not merges:
+        return
+    for station in stations:
+        target = merges.get((station.get("mode"), station.get("station_key")))
+        found = target and quai_station(station["mode"], target)
+        if found:
+            kept = {k: station[k] for k in ("distance_m", "distance_km", "tier", "score", "matched")
+                    if k in station}
+            station.clear()
+            station.update(found, **kept)
+    into = {}
+    for (mode, key), target in merges.items():
+        into.setdefault((mode, target), []).append(key)
+    for station in stations:
+        for key in into.get((station.get("mode"), station.get("station_key")), []):
+            merged = quai_station(station["mode"], key)
+            if not merged:
+                continue
+            tracks = {track_key(t["ref"]): t for t in station.get("tracks") or []}
+            for t in merged.get("tracks") or []:
+                tracks.setdefault(track_key(t["ref"]), t)
+            station["tracks"] = sorted(tracks.values(), key=lambda t: (len(t["ref"]), t["ref"]))
+            lines = {line.get("ref"): line for line in station.get("lines") or []}
+            for line in merged.get("lines") or []:
+                lines.setdefault(line.get("ref"), line)
+            station["lines"] = list(lines.values())
+
+
+def apply_overrides(stations, follow_merges=True):
+    """quai stations as Trainlog takes them, in place: merged into another where set (unless
+    follow_merges is False: the station explorer shows a station as it is), and with the
+    names and positions set for them by hand."""
+    if follow_merges:
+        _merge_stations(stations)
     overrides = station_overrides(stations)
     for station in stations:
         override = overrides.get((station.get("mode"), station.get("station_key")))
@@ -164,6 +254,12 @@ def apply_overrides(stations):
 def _features(stations):
     """quai stations as Photon features, with homonyms told apart by city, else region."""
     apply_overrides(stations)
+    # Once merged, a station and the one it is merged into are the same: listed once, where
+    # the first of them came.
+    seen = set()
+    stations = [s for s in stations
+                if (s.get("mode"), s.get("station_key")) not in seen
+                and not seen.add((s.get("mode"), s.get("station_key")))]
     features = [
         {
             "type": "Feature",
