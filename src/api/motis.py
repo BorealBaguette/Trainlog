@@ -103,6 +103,11 @@ def _leg_reach(leg, modes):
 # per end, so at most (n + 1)^2 - 1 extra requests.
 MAX_FALLBACK_STOPS = 2
 
+# A departure-board run's stop counts as the destination only this much further from it than
+# its nearest timetable stop: within reach, a tram stop of another line can be the next one
+# (Ancienne Synagogue, 267 m from Alt Winmärik, whose own stop is 16 m off).
+NEAREST_STOP_SLACK_M = 150
+
 # The same lookup is fired again whenever the user nudges the date or time back and
 # forth, so keep answers for a few minutes rather than asking Transitous each time.
 _CACHE_TTL = 300
@@ -374,9 +379,10 @@ def _direct_leg(itinerary, modes, origin, destination):
     return legs[0] if len(legs) == 1 else None
 
 
-def _board_legs(stop_id, modes, start, destination):
+def _board_legs(stop_id, modes, start, destination, nearest_m=None):
     """Direct services from the origin stop's departure board: those that later call
-    within reach (_reach) of the destination, shaped like plan legs.
+    within reach (_reach) of the destination, and about as near it as its nearest stop
+    (nearest_m, NEAREST_STOP_SLACK_M), shaped like plan legs.
 
     The planner only returns the best journeys, and drops a direct service whenever
     another way is faster: Opéra → République on metro line 8 comes back as "ride to
@@ -402,7 +408,10 @@ def _board_legs(stop_id, modes, start, destination):
             for i, stop in enumerate(following)
             if stop.get("dropoffType") != "NOT_ALLOWED"
         ]
-        near = [(d, i) for d, i in near if d <= _leg_reach(dep, modes)]
+        reach = _leg_reach(dep, modes)
+        if nearest_m is not None:
+            reach = min(reach, nearest_m + NEAREST_STOP_SLACK_M)
+        near = [(d, i) for d, i in near if d <= reach]
         arrival_at = min(near)[1] if near else None
         if arrival_at is None or dep.get("mode") not in modes:
             continue
@@ -427,14 +436,15 @@ def _board_legs(stop_id, modes, start, destination):
 
 
 def _stop_places(lat, lng, modes):
-    """IDs of the timetable stops near a point served by one of `modes`, nearest first.
+    """The timetable stops near a point served by one of `modes`, nearest first, as
+    {id, distance_m}.
 
     Searching from a point relies on MOTIS walking to a stop, and some stops are cut
     off from its footpath network: the SNCF stop at Paris Austerlitz, 160 m from the
     station, is only "reachable" by bus, so nothing direct is found from the station.
     Searching from the stop itself does not need that walk."""
     stops = [
-        stop
+        {"id": stop["id"], "distance_m": _distance_m(stop["lat"], stop["lon"], lat, lng)}
         for stop in _fetch(
             MOTIS_STOPS_URL,
             {"place": f"{lat:.6f},{lng:.6f}", "type": "STOP"},
@@ -445,8 +455,8 @@ def _stop_places(lat, lng, modes):
         and modes & set(stop.get("modes") or ())
         and _distance_m(stop["lat"], stop["lon"], lat, lng) <= _reach(modes)
     ]
-    stops.sort(key=lambda stop: _distance_m(stop["lat"], stop["lon"], lat, lng))
-    return [stop["id"] for stop in stops[:MAX_FALLBACK_STOPS]]
+    stops.sort(key=lambda stop: stop["distance_m"])
+    return stops[:MAX_FALLBACK_STOPS]
 
 
 # A stop is moved onto the run's path only when this close: further than that, the path is
@@ -733,13 +743,15 @@ def departures_payload(args):
         from_stops = submit(_quietly, _stop_places, *origin, modes)
         to_stops = submit(_quietly, _stop_places, *destination, modes)
         from_stops, to_stops = result(from_stops), result(to_stops)
+        to_nearest_m = to_stops[0]["distance_m"] if to_stops else None
+        from_stops, to_stops = [s["id"] for s in from_stops], [s["id"] for s in to_stops]
         # Always also from the nearest stop at each end: walking from the point can
         # reach only some of a big station's platforms (Oslo S: RE11 and L1 are
         # missing from the point search, there from the stop's).
         nearest = (from_stops[0] if from_stops else points[0], to_stops[0] if to_stops else points[1])
         from_nearest = submit(_quietly, direct_legs, *nearest) if nearest != points else None
         board = (
-            submit(_quietly, _board_legs, from_stops[0], modes, start, destination)
+            submit(_quietly, _board_legs, from_stops[0], modes, start, destination, to_nearest_m)
             if from_stops else None
         )
         searches = [result(f) for f in (from_points, from_nearest, board) if f]
