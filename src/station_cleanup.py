@@ -12,7 +12,7 @@ import datetime
 
 from py.utils import get_flag_emoji
 from src.pg import pg_session
-from src.quai import NAME_LIKENESS, QUAI_MODES, name_likeness, nearest_stations, place_of, resolve_key
+from src.quai import QUAI_MODES, nearest_stations, place_of, resolve_key, station_by_place
 
 END_RADIUS_M = 400
 # How many of the stations nearest an end to choose among by name.
@@ -45,17 +45,14 @@ def station_label_with_flag(station):
 
 
 def station_of_end(label, station_key, nearby):
-    """The station a trip's end is at, of the `nearby` ones (nearest first), and whether it is
-    named alike: the one the trip was saved at; else the one of that name; else the nearest,
-    not alike. Stations stand close together (Strandkaiterminalen båtkai 145m,
-    Strandterminalen 141m)."""
+    """The station a trip's end is at, of the `nearby` ones (nearest first, with distance_m),
+    and whether it is named alike: the one the trip was saved at; else by place, its name only
+    deciding between stations about as near (station_by_place: Strandkaiterminalen båtkai
+    145m off, Strandterminalen 141m)."""
     station = next((s for s in nearby if station_key and s["station_key"] == station_key), None)
     if station is not None:
         return station, True
-    likeness, station = max(((name_likeness(label, s), s) for s in nearby), key=lambda pair: pair[0])
-    if likeness >= NAME_LIKENESS:
-        return station, True
-    return nearby[0], False
+    return station_by_place(label, nearby)
 
 
 def station_groups(user_id):
