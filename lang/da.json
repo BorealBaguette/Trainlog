@@ -1430,6 +1430,7 @@
     "ormLayerElectrified": "Elektrificering",
     "ormLayerGauge": "Sporvidde",
     "tidyStations": "Ryd op i stationer",
+    "stationExplorer": "Stationsudforsker",
     "tidyStationsIntro": "Med årene kan den samme station ende med flere navne i dine rejser. Her er start- og slutpunkterne for dine rejser grupperet efter den station, de faktisk ligger ved, med det navn den har i dag, så du kan give dem alle det navn.",
     "tidyStationsError": "Stationsindekset kan ikke nås lige nu. Prøv igen senere.",
     "tidyStationsToTidy": "Skal ryddes op",

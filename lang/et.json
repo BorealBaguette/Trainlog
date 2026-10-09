@@ -1427,6 +1427,7 @@
     "ormLayerElectrified": "Elektrifitseerimine",
     "ormLayerGauge": "Rööpmelaius",
     "tidyStations": "Korrasta jaamad",
+    "stationExplorer": "Jaamade uurija",
     "tidyStationsIntro": "Aastate jooksul võib sama jaam sinu reisides saada mitu nime. Siin on sinu reiside algus- ja lõpp-punktid rühmitatud selle jaama järgi, kus need tegelikult asuvad, koos jaama praeguse nimega, et saaksid neile kõigile selle nime anda.",
     "tidyStationsError": "Jaamade indeksiga ei saa praegu ühendust. Proovi hiljem uuesti.",
     "tidyStationsToTidy": "Korrastada",

@@ -1434,6 +1434,7 @@
     "ormLayerElectrified": "Elektrifikacija",
     "ormLayerGauge": "Širina kolosijeka",
     "tidyStations": "Uredi stanice",
+    "stationExplorer": "Preglednik stanica",
     "tidyStationsIntro": "Tijekom godina ista stanica može u vašim putovanjima završiti pod više imena. Ovdje su krajevi vaših putovanja grupirani prema stanici na kojoj se zaista nalaze, s imenom koje danas nosi, kako biste im svima mogli dati to ime.",
     "tidyStationsError": "Indeks stanica trenutno nije dostupan. Pokušajte ponovno kasnije.",
     "tidyStationsToTidy": "Za urediti",

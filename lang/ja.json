@@ -1426,6 +1426,7 @@
     "ormLayerElectrified": "電化",
     "ormLayerGauge": "軌間",
     "tidyStations": "駅を整理",
+    "stationExplorer": "駅エクスプローラー",
     "tidyStationsIntro": "年月とともに、同じ駅が旅行の中で複数の名前で記録されることがあります。ここでは旅行の始点と終点を実際の駅ごとにまとめ、その駅の現在の名前を表示しています。すべてをこの名前にそろえることができます。",
     "tidyStationsError": "駅インデックスに現在接続できません。しばらくしてからもう一度お試しください。",
     "tidyStationsToTidy": "整理が必要",

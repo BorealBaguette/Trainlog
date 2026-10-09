@@ -1430,6 +1430,7 @@
     "ormLayerElectrified": "Elektrificatie",
     "ormLayerGauge": "Spoorwijdte",
     "tidyStations": "Stations opruimen",
+    "stationExplorer": "Stationsverkenner",
     "tidyStationsIntro": "In de loop der jaren kan hetzelfde station onder verschillende namen in je reizen terechtkomen. Hier zijn de begin- en eindpunten van je reizen gegroepeerd per station waar ze echt liggen, met de naam die het nu heeft, zodat je ze allemaal die naam kunt geven.",
     "tidyStationsError": "De stationsindex is nu niet bereikbaar. Probeer het later opnieuw.",
     "tidyStationsToTidy": "Op te ruimen",

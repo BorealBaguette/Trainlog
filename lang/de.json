@@ -1430,6 +1430,7 @@
     "ormLayerElectrified": "Elektrifizierung",
     "ormLayerGauge": "Spurweite",
     "tidyStations": "Bahnhöfe aufräumen",
+    "stationExplorer": "Bahnhofs-Explorer",
     "tidyStationsIntro": "Im Lauf der Jahre kann derselbe Bahnhof in deinen Fahrten unter mehreren Namen landen. Hier sind die Start- und Endpunkte deiner Fahrten nach dem Bahnhof gruppiert, an dem sie wirklich liegen, mit seinem heutigen Namen – so kannst du ihnen allen diesen Namen geben.",
     "tidyStationsError": "Der Bahnhofsindex ist gerade nicht erreichbar. Bitte versuche es später erneut.",
     "tidyStationsToTidy": "Aufzuräumen",

@@ -1426,6 +1426,7 @@
     "ormLayerElectrified": "Villamosítás",
     "ormLayerGauge": "Nyomtávolság",
     "tidyStations": "Állomások rendezése",
+    "stationExplorer": "Állomásböngésző",
     "tidyStationsIntro": "Az évek során ugyanaz az állomás több néven is szerepelhet az utazásaidban. Itt az utazásaid végpontjai aszerint vannak csoportosítva, hogy valójában melyik állomáson vannak, az állomás mai nevével, így mindegyiknek ezt a nevet adhatod.",
     "tidyStationsError": "Az állomásindex jelenleg nem érhető el. Próbáld újra később.",
     "tidyStationsToTidy": "Rendezendő",

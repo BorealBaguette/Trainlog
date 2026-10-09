@@ -1427,6 +1427,7 @@
     "ormLayerElectrified": "Électrification",
     "ormLayerGauge": "Écartement des voies",
     "tidyStations": "Ranger les gares",
+    "stationExplorer": "Explorateur de gares",
     "tidyStationsIntro": "Au fil des années, une même gare peut se retrouver sous plusieurs noms dans vos trajets. Ici, les extrémités de vos trajets sont regroupées selon la gare où elles se trouvent vraiment, avec le nom qu'elle porte aujourd'hui, pour leur donner à toutes ce nom.",
     "tidyStationsError": "L'index des gares est injoignable pour le moment. Réessayez plus tard.",
     "tidyStationsToTidy": "À ranger",

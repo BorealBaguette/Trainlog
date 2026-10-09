@@ -1428,6 +1428,7 @@
     "ormLayerElectrified": "Sähköistys",
     "ormLayerGauge": "Raideleveys",
     "tidyStations": "Siivoa asemat",
+    "stationExplorer": "Asemaselain",
     "tidyStationsIntro": "Vuosien mittaan sama asema voi päätyä matkoihisi useilla nimillä. Tässä matkojesi päätepisteet on ryhmitelty sen aseman mukaan, jolla ne todella ovat, ja asemalla on sen nykyinen nimi, jotta voit antaa kaikille tämän nimen.",
     "tidyStationsError": "Asemahakemistoon ei saada juuri nyt yhteyttä. Yritä myöhemmin uudelleen.",
     "tidyStationsToTidy": "Siivottavat",

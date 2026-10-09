@@ -1427,6 +1427,7 @@
     "ormLayerElectrified": "Electrification",
     "ormLayerGauge": "Track gauge",
     "tidyStations": "Tidy stations",
+    "stationExplorer": "Station explorer",
     "tidyStationsIntro": "Over the years, one station can end up with several names in your trips. Here your trips' ends are grouped by the station they are really at, with the name it has today, so you can give them all that name.",
     "tidyStationsError": "The station index can't be reached right now. Please try again later.",
     "tidyStationsToTidy": "To tidy",

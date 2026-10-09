@@ -1434,6 +1434,7 @@
     "ormLayerElectrified": "Elektrizace",
     "ormLayerGauge": "Rozchod koleje",
     "tidyStations": "Uklidit stanice",
+    "stationExplorer": "Průzkumník stanic",
     "tidyStationsIntro": "Během let se stejná stanice může ve vašich cestách objevit pod několika názvy. Zde jsou konce vašich cest seskupeny podle stanice, u které skutečně leží, s názvem, který má dnes, abyste jim všem mohli dát tento název.",
     "tidyStationsError": "Index stanic je teď nedostupný. Zkuste to prosím později.",
     "tidyStationsToTidy": "K úklidu",

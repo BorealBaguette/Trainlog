@@ -1430,6 +1430,7 @@
     "ormLayerElectrified": "Elektrifiering",
     "ormLayerGauge": "Spårvidd",
     "tidyStations": "Städa stationer",
+    "stationExplorer": "Stationsutforskare",
     "tidyStationsIntro": "Med åren kan samma station få flera namn i dina resor. Här är start- och slutpunkterna för dina resor grupperade efter den station de faktiskt ligger vid, med det namn den har i dag, så att du kan ge dem alla det namnet.",
     "tidyStationsError": "Stationsindexet går inte att nå just nu. Försök igen senare.",
     "tidyStationsToTidy": "Att städa",

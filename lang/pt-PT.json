@@ -1430,6 +1430,7 @@
     "ormLayerElectrified": "Eletrificação",
     "ormLayerGauge": "Bitola",
     "tidyStations": "Arrumar estações",
+    "stationExplorer": "Explorador de estações",
     "tidyStationsIntro": "Com o passar dos anos, uma mesma estação pode acabar com vários nomes nas suas viagens. Aqui, os extremos das suas viagens estão agrupados pela estação onde realmente ficam, com o nome que tem hoje, para lhes dar a todos esse nome.",
     "tidyStationsError": "O índice de estações não está acessível neste momento. Tente novamente mais tarde.",
     "tidyStationsToTidy": "Por arrumar",

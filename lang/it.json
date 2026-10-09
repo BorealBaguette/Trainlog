@@ -1430,6 +1430,7 @@
     "ormLayerElectrified": "Elettrificazione",
     "ormLayerGauge": "Scartamento",
     "tidyStations": "Riordina le stazioni",
+    "stationExplorer": "Esplora stazioni",
     "tidyStationsIntro": "Con gli anni, la stessa stazione può finire con più nomi nei tuoi viaggi. Qui gli estremi dei tuoi viaggi sono raggruppati per la stazione in cui si trovano davvero, con il nome che ha oggi, così puoi dare a tutti quel nome.",
     "tidyStationsError": "L'indice delle stazioni non è raggiungibile al momento. Riprova più tardi.",
     "tidyStationsToTidy": "Da riordinare",

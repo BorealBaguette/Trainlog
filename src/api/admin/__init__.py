@@ -5,16 +5,8 @@ from flask import Blueprint, jsonify, render_template, request, session
 
 from py.utils import get_all_countries, get_flag_emoji
 from src.pg import pg_session
-from src.quai import (
-    QUAI_MODES,
-    apply_overrides,
-    forget_station_merges,
-    quai_get,
-    quai_station,
-    station_label,
-    station_merges,
-)
-from src.users import User
+from src.api.station_explorer import explorer_page
+from src.quai import forget_station_merges, quai_station, station_merges
 from src.suspicious_activity import list_denied_logins, list_suspicious_activity
 from src.utils import admin_required, getUser, has_current_trip, lang, owner_required
 
@@ -109,90 +101,7 @@ def trainsets_admin():
 @admin_blueprint.route("/station_explorer")
 @admin_required
 def station_explorer():
-    user = User.query.filter_by(username=getUser()).first()
-    return render_template(
-        "admin/station_explorer.html",
-        nav="bootstrap/navigation.html",
-        username=getUser(),
-        tileserver=user.tileserver if user else "default",
-        isCurrent=has_current_trip(),
-        modes=sorted(set(QUAI_MODES.values())),
-        **session["userinfo"],
-        **lang[session["userinfo"]["lang"]],
-    )
-
-
-@admin_blueprint.route("/station_explorer/search")
-@admin_required
-def station_explorer_search():
-    data = quai_get("search", {
-        "q": request.args.get("q", ""),
-        "mode": request.args.get("mode") or None,
-        "lang": request.args.get("lang") or None,
-        "limit": 20,
-    })
-    if data is None:
-        return jsonify(error="quai unavailable"), 502
-    return jsonify(data)
-
-
-@admin_blueprint.route("/station_explorer/station/<mode>/<key>")
-@admin_required
-def station_explorer_station(mode, key):
-    data = quai_get(f"station/{mode}/{key}", {
-        "objects": 1,
-        "lang": request.args.get("lang") or None,
-    })
-    if data is None:
-        return jsonify(error="quai unavailable"), 502
-    if not data:
-        return jsonify(error="unknown station"), 404
-    # quai's position, before an override moves it, then Trainlog's name for the station.
-    # Shown as it is, not as the station it may be merged into, with what it is merged into
-    # and what is merged into it.
-    station = data["station"]
-    station["osm_lat"], station["osm_lng"] = station["lat"], station["lng"]
-    station["osm_tracks"] = station.get("tracks") or []
-    apply_overrides([station], follow_merges=False)
-    station["trainlog_name"] = station_label(station)
-
-    def named(key):
-        other = quai_station(mode, key)
-        return {"station_key": key, "name": station_label(other) if other else key}
-
-    merges = station_merges()
-    target = merges.get((mode, station["station_key"]))
-    station["merged_into"] = named(target) if target else None
-    station["merged_from"] = [named(k) for (m, k), t in merges.items()
-                              if m == mode and t == station["station_key"]]
-    return jsonify(data)
-
-
-@admin_blueprint.route("/station_explorer/station/<mode>/<key>/line")
-@admin_required
-def station_explorer_line(mode, key):
-    data = quai_get(f"station/{mode}/{key}/line", {"ref": request.args.get("ref", "")})
-    if data is None:
-        return jsonify(error="quai unavailable"), 502
-    return jsonify(data)
-
-
-@admin_blueprint.route("/station_explorer/station/<mode>/<key>/services")
-@admin_required
-def station_explorer_services(mode, key):
-    data = quai_get(f"station/{mode}/{key}/services")
-    if data is None:
-        return jsonify(error="quai unavailable"), 502
-    return jsonify(data)
-
-
-@admin_blueprint.route("/station_explorer/route/<int:relation_id>")
-@admin_required
-def station_explorer_route(relation_id):
-    data = quai_get(f"route/{relation_id}")
-    if data is None:
-        return jsonify(error="quai unavailable"), 502
-    return jsonify(data)
+    return explorer_page(editable=True)
 
 
 @admin_blueprint.route("/station_explorer/merge/<mode>/<key>", methods=["POST"])

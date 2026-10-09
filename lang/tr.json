@@ -1426,6 +1426,7 @@
     "ormLayerElectrified": "Elektrifikasyon",
     "ormLayerGauge": "Ray açıklığı",
     "tidyStations": "İstasyonları düzenle",
+    "stationExplorer": "İstasyon gezgini",
     "tidyStationsIntro": "Yıllar içinde aynı istasyon yolculuklarınızda birkaç farklı adla yer alabilir. Burada yolculuklarınızın uç noktaları gerçekte bulundukları istasyona göre, istasyonun bugünkü adıyla gruplanmıştır; böylece hepsine bu adı verebilirsiniz.",
     "tidyStationsError": "İstasyon dizinine şu anda ulaşılamıyor. Lütfen daha sonra tekrar deneyin.",
     "tidyStationsToTidy": "Düzenlenecek",

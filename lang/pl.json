@@ -1434,6 +1434,7 @@
     "ormLayerElectrified": "Elektryfikacja",
     "ormLayerGauge": "Rozstaw toru",
     "tidyStations": "Porządkuj stacje",
+    "stationExplorer": "Przeglądarka stacji",
     "tidyStationsIntro": "Z biegiem lat ta sama stacja może trafić do Twoich podróży pod kilkoma nazwami. Tutaj końce Twoich podróży są pogrupowane według stacji, na której naprawdę się znajdują, z nazwą, którą ma dziś, abyś mógł nadać im wszystkim tę nazwę.",
     "tidyStationsError": "Indeks stacji jest teraz niedostępny. Spróbuj ponownie później.",
     "tidyStationsToTidy": "Do uporządkowania",
