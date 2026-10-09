@@ -1318,14 +1318,32 @@
       });
     }
 
+    // The lines picked at the ends (a tram or metro station's), each ref a word of the run's
+    // line ("B" of "CTS B").
+    function pickedLines() {
+      return ['origin', 'destination'].map(function (end) {
+        var slot = endSlots[end];
+        return stopKind(stopSlotLabel(slot)) === 'line' && slot.selected;
+      }).filter(Boolean);
+    }
+    function onLines(d, lines) {
+      var words = (d.line || '').toLowerCase().split(/\s+/);
+      return lines.every(function (ref) { return words.indexOf(ref.toLowerCase()) >= 0; });
+    }
+
     function render() {
       $menu.empty();
       if (!departures.length) {
         setToggle(texts.none, null, false);
         return;
       }
+      // Only the picked line's runs, where the timetable has any.
+      var lines = pickedLines();
+      var shown = lines.length && departures.some(function (d) { return onLines(d, lines); })
+        ? departures.filter(function (d) { return onLines(d, lines); }) : departures;
       $('<li>').append(moreButton('earlier')).appendTo($menu);
       departures.forEach(function (d, i) {
+        if (shown.indexOf(d) < 0) return;
         var depDate = d.departure.slice(0, 10), arrDate = d.arrival.slice(0, 10);
         var dayDiff = Math.round((Date.parse(arrDate) - Date.parse(depDate)) / 86400000);
         var $item = $('<a href="#" class="dropdown-item motis-item">').attr('data-i', i)
@@ -1359,7 +1377,7 @@
       $('<li>').append(moreButton('later')).appendTo($menu);
       $('<li class="motis-source">').html('<a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a>').appendTo($menu);
       // A picked run keeps its "10:53 → 12:21 · IR35" (apply) when the list is extended.
-      setToggle(applied && applied.label || texts.title, departures.length, true);
+      setToggle(applied && applied.label || texts.title, shown.length, true);
     }
 
     // What the trip keeps of a stop of the picked run: the via entry's third item, carried
@@ -1510,6 +1528,7 @@
     });
 
     $('#originStation, #destinationStation').on('autocompleteselect autocompletechange change', schedule);
+    $('#originStation, #destinationStation').on('stoppicked', function () { if (departures.length) render(); });
     $('#newTripStartDate, #newTripStartTime, #originManualToggle, #destinationManualToggle, ' +
       '#originManualLat, #originManualLng, #destinationManualLat, #destinationManualLng').on('change', schedule);
     $('input[name="precision"]').on('change', schedule);
