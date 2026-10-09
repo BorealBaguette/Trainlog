@@ -1033,6 +1033,7 @@
         $row.hasClass('has-stops') || !track ? time : [time, track].filter(Boolean).join(' \u00b7 '));
     }
     if (time) $row.addClass('has-time');
+    $row.data('viaText', { time: time, track: track });
     showTime();
     // A via's choice goes with its station: the platform into a timetable stop's record (the
     // one picked by hand over the timetable's), exact as the 4th item (see routing.html).

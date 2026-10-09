@@ -519,8 +519,13 @@ function toRouting(data, routingUrl, type){
 
   newTrip = processFormDates(newTrip);
 
+  // What the station fields held (the trip keeps the entries instead), for Back.
+  var stationState = {};
   // Manual ends are no quai station.
   ["origin", "destination"].forEach(function (end) {
+    var label = newTrip[end + "Station"], entry = globalStationDict[label] || {};
+    stationState[end] = { value: label, key: globalStationKeys[label], tracks: globalStationTracks[label],
+                          lines: globalStationLines[label], point: entry.stationPoint };
     var manual = (end + "ManualToggle") in newTrip && (newTrip[end + "ManualName"] || "").trim() != "";
     newTrip[end + "StationKey"] = manual ? "" : (globalStationKeys[newTrip[end + "Station"]] || "");
   });
@@ -546,11 +551,16 @@ function toRouting(data, routingUrl, type){
   }
   // Collect intermediate "via" waypoints (resolved label -> [coord, label])
   newTrip["viaStations"] = [];
+  var viaState = [];
   $(".viaStation").each(function(){
     // A timetable's stop has its own entry (two stops of a run can share a name).
     var val = $(this).val(), entry = $(this).data('stationEntry') || globalStationDict[val];
     if (val && entry){
       newTrip["viaStations"].push(entry);
+      // The row's times and tracks, for Back.
+      var $row = $(this).closest('.via-row');
+      viaState.push({ time: $row.hasClass('has-time') ? $row.data('viaText') : null, tracks: globalStationTracks[val],
+                      lines: globalStationLines[val], point: entry.stationPoint });
     }
   });
   // Carry FR24-imported flight data through (set by the FR24 import on the air form)
@@ -596,6 +606,8 @@ function toRouting(data, routingUrl, type){
     sessionStorage.setItem("lastNewTripId", id);
     try {
       if (window.motisState) sessionStorage.setItem("lastMotis", JSON.stringify(window.motisState.get()));
+      sessionStorage.setItem("lastStations", JSON.stringify(stationState));
+      sessionStorage.setItem("lastVias", JSON.stringify(viaState));
     } catch (e) {}
     // Redirect with ID as param
     location.href = `${routingUrl}?id=${id}&type=${type}`;
@@ -626,16 +638,37 @@ function restoreNewTripForm(){
     }
   });
 
-  [["origin", t.originStation], ["destination", t.destinationStation]].forEach(function(p){
-    if (p[1] && !(("" + p[0] + "ManualToggle") in t)) {
-      globalStationDict[p[1][1]] = p[1];
-      $('#' + p[0] + 'Station').val(p[1][1]);
+  var st = {};
+  try { st = JSON.parse(sessionStorage.getItem("lastStations") || "{}"); } catch (e) {}
+  ["origin", "destination"].forEach(function(end){
+    var entry = t[end + "Station"];
+    if (!entry || (end + "ManualToggle") in t) return;
+    var s = st[end] || {}, label = s.value || entry[1];
+    if (s.point) entry.stationPoint = s.point;
+    globalStationDict[label] = entry;
+    if (s.key) globalStationKeys[label] = s.key;
+    globalStationTracks[label] = s.tracks || [];
+    globalStationLines[label] = s.lines || [];
+    $('#' + end + 'Station').val(label);
+    // The track (or line) dropdown, with what was picked.
+    if (typeof endSlots !== "undefined") {
+      var slot = endSlots[end];
+      slot.selected = (stopKind(label) === 'track' ? t[end === 'origin' ? 'departurePlatform' : 'arrivalPlatform'] : t.lineName) || null;
+      renderStops(slot, label);
     }
   });
   if (typeof addViaRow === "function") {
-    (t.viaStations || []).forEach(function(v){
-      globalStationDict[v[1]] = v;
-      addViaRow(v[1], undefined, undefined, v);
+    var viaState = [];
+    try { viaState = JSON.parse(sessionStorage.getItem("lastVias") || "[]"); } catch (e) {}
+    (t.viaStations || []).forEach(function(v, i){
+      var vs = viaState[i] || {}, time = vs.time || {}, label = v[1];
+      if (vs.point) v.stationPoint = vs.point;
+      globalStationDict[label] = v;
+      globalStationTracks[label] = vs.tracks || [];
+      globalStationLines[label] = vs.lines || [];
+      var slot = addViaRow(label, time.time, time.track, v).data('stopSlot');
+      if (stopKind(label) === 'track') slot.selected = (v[2] && (v[2].platform_rt || v[2].platform)) || null;
+      renderStops(slot, label);
     });
     setViaCollapsed(true);
     updateViaSummary();
