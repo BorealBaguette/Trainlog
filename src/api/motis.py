@@ -331,7 +331,7 @@ def _stop(stop):
         getCountryFromCoordinates(stop["lat"], stop["lon"])["countryCode"],
         clock("Arrival"),
         clock("Departure"),
-        (stop.get("track") or stop.get("scheduledTrack") or "").strip() or None,
+        _tracks(stop)[0] or _tracks(stop)[1],
         _utc(stop.get("scheduledArrival") or stop.get("arrival")),
         _utc(stop.get("scheduledDeparture") or stop.get("departure")),
         getattr(tz, "key", None),
@@ -340,7 +340,7 @@ def _stop(stop):
         stop.get("stopId"),
         _live(stop, "Arrival"),
         _live(stop, "Departure"),
-        (stop.get("scheduledTrack") or "").strip() or None,
+        _tracks(stop)[1],
     ]
 
 
@@ -869,8 +869,8 @@ def _departures(searches, start, window, destination):
             "to_id": to.get("stopId"),
             # Where it leaves from and arrives (the live platform if it was changed): the
             # trip's departure_platform / arrival_platform when picked.
-            "from_platform": (frm.get("track") or frm.get("scheduledTrack") or "").strip() or None,
-            "to_platform": (to.get("track") or to.get("scheduledTrack") or "").strip() or None,
+            "from_platform": _tracks(frm)[0] or _tracks(frm)[1],
+            "to_platform": _tracks(to)[0] or _tracks(to)[1],
             "stops": [_stop(s) for s in stops],
             "_sort": dep_utc,
             "_path": _leg_path(leg),
@@ -955,6 +955,25 @@ def _run_places(leg):
     ]
 
 
+# A stop's description naming its track, as DELFI's do ("Bahnsteig Gleis 2", where the feed's
+# own platform code is "75", its transport association's numbering): that number is the track.
+TRACK_IN_DESCRIPTION = re.compile(
+    r"\b(?:gleis|voie|track|binario|spor|spår|vía|perron|platform)\s+([0-9]+[a-z]?(?:\s*[-/]\s*[0-9]+[a-z]?)?)\b",
+    re.IGNORECASE)
+
+
+def _tracks(place):
+    """A stop's (live, scheduled) track, each or None: the one its description names where it
+    names one (DELFI) and the live track has not changed (the description is the scheduled
+    stop point's), else the feed's own."""
+    live = (place.get("track") or "").strip() or None
+    scheduled = (place.get("scheduledTrack") or "").strip() or None
+    named = TRACK_IN_DESCRIPTION.search(place.get("description") or "")
+    if named and (live is None or scheduled is None or live == scheduled):
+        return named.group(1), named.group(1)
+    return live, scheduled
+
+
 def _place_record(place):
     return {
         "id": place.get("stopId"),
@@ -965,8 +984,8 @@ def _place_record(place):
         "dep": _utc(place.get("scheduledDeparture")),
         "arr_rt": _live(place, "Arrival"),
         "dep_rt": _live(place, "Departure"),
-        "platform": (place.get("scheduledTrack") or place.get("track") or "").strip() or None,
-        "platform_rt": (place.get("track") or "").strip() or None,
+        "platform": _tracks(place)[1] or _tracks(place)[0],
+        "platform_rt": _tracks(place)[0],
         "tz": place.get("tz"),
         "cc": getCountryFromCoordinates(place["lat"], place["lon"])["countryCode"],
     }
