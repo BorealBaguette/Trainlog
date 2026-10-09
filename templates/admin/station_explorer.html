@@ -518,7 +518,7 @@ function bindMerge(s) {
   const f = document.getElementById('se-override');
   const input = f.elements.merge, list = f.querySelector('.se-merge-results');
   const status = f.querySelector('.status');
-  async function merge(into) {
+  async function merge(into, label) {
     status.textContent = 'Saving…';
     const resp = await fetch(`{{ url_for("admin.station_explorer") }}/merge/` +
       `${encodeURIComponent(s.mode)}/${encodeURIComponent(s.station_key)}`, {
@@ -526,7 +526,11 @@ function bindMerge(s) {
     });
     const data = await resp.json().catch(() => ({}));
     if (!resp.ok) { status.textContent = data.error || 'Failed'; return; }
-    loadStation();
+    if (!into) { loadStation(); return; }
+    form.elements.q.value = label;
+    resultsEl.hidden = false;
+    search();
+    location.hash = `#${s.mode}/${into}`;
   }
   const undo = detailEl.querySelector('[data-action=unmerge]');
   if (undo) undo.addEventListener('click', () => merge(null));
@@ -553,7 +557,7 @@ function bindMerge(s) {
   list.addEventListener('click', e => {
     const li = e.target.closest('li[data-key]');
     if (!li) return;
-    if (confirm(`Merge ${s.label} into ${li.dataset.label}? Trainlog will take it as that station.`)) merge(li.dataset.key);
+    if (confirm(`Merge ${s.label} into ${li.dataset.label}? Trainlog will take it as that station.`)) merge(li.dataset.key, li.dataset.label);
   });
 }
 
