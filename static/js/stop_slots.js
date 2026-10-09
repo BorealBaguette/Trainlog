@@ -38,8 +38,8 @@ function stopKind(label) {
 
 // The track (or line) `ref` names among the station's `list`: as written; else, for "6" where
 // the station has "6a" and "6b" (one platform face in two halves, Birmingham New Street), the
-// halves as one, at their middle, exact if both are on the track; else, for "6a" where it
-// has only "6", that. Null if none.
+// halves as one, at their middle, exact if both are on the track; else, for "5-6", the
+// platform between those tracks; else, for "6a" where it has only "6", that. Null if none.
 function findStop(list, ref) {
   var key = stopKey(ref);
   if (!key || !list) return null;
@@ -53,6 +53,19 @@ function findStop(list, ref) {
     var mean = function (f) { return parts.reduce(function (t, c) { return t + c[f]; }, 0) / parts.length; };
     return { ref: ref, lat: mean('lat'), lng: mean('lng'), parts: parts,
              on_track: parts.every(function (c) { return c.on_track; }) };
+  }
+  // "5-6" (or "5/6"): the platform between tracks 5 and 6, either side, as the timetable
+  // does not say which (Schiphol): between the two, so never exact.
+  var pair = /^(\w+)\s*[-\/]\s*(\w+)$/.exec(key);
+  if (pair) {
+    var sides = [pair[1], pair[2]].map(function (k) {
+      return list.find(function (c) { return stopKey(c.ref) === k; });
+    }).filter(Boolean);
+    if (sides.length === 1) return sides[0];
+    if (sides.length === 2) {
+      return { ref: ref, lat: (sides[0].lat + sides[1].lat) / 2, lng: (sides[0].lng + sides[1].lng) / 2,
+               parts: sides, on_track: false };
+    }
   }
   var whole = key.replace(/(\d)[a-z]$/, '$1');
   return whole !== key ? list.find(function (c) { return stopKey(c.ref) === whole; }) || null : null;
