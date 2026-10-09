@@ -1381,25 +1381,26 @@
     // which moves the point onto that track (exact when it is a stop position). A stop
     // whose station has no such track keeps the timetable's point, approximate.
     function matchStopTracks(d, $rows) {
-      var ends = [['origin', d.from_platform, d.from_point], ['destination', d.to_platform, d.to_point]].map(function (end) {
+      var ends = [['origin', d.from_platform, d.from_point, d.from_id], ['destination', d.to_platform, d.to_point, d.to_id]].map(function (end) {
         var slot = endSlots[end[0]], entry = globalStationDict[slot.$input.val()];
         // Where the run is boarded or left (on its track), for the end to be put there as its
         // stops are; else the station's point.
         var point = end[2] || (entry && (entry.stationPoint || entry[0]));
         // Its name, without the flag, for quai to pick the station of that name nearby.
         var name = slot.$input.val().replace(/^\S*[\u{1F1E6}-\u{1F1FF}]{2}\s*/u, '');
-        return { slot: slot, platform: end[1], point: point, name: name };
+        return { slot: slot, platform: end[1], point: point, name: name, id: end[3] || null };
       });
       var places = ends.slice(0, 1).concat(d.stops.map(function (stop, i) {
         // The platform it calls at: the live one (stop[6]), else the scheduled one.
         return { slot: $rows[i] && $rows[i].data('stopSlot'), platform: stop[6] || stop[15],
-                 point: [stop[0], stop[1]], name: stop[2] || null };
+                 point: [stop[0], stop[1]], name: stop[2] || null, id: stop[12] || null };
       }), ends.slice(1));
       var key = runKey(d);
       $.ajax({
         url: '/stationTracks', method: 'POST', contentType: 'application/json', dataType: 'json',
         data: JSON.stringify({ type: routingType, stops: places.map(function (p) {
-          return p.point ? { lat: p.point[0], lng: p.point[1], platform: p.platform || null, name: p.name || null } : {};
+          return p.point ? { lat: p.point[0], lng: p.point[1], platform: p.platform || null, name: p.name || null,
+                             id: p.id || null } : {};
         }) }),
         success: function (data) {
           if (!applied || applied.key !== key) return;   // another run picked meanwhile
@@ -1415,7 +1416,10 @@
             }
             // The trip is saved as at that station only when it is named alike, not just near.
             if (station.alike && !globalStationKeys[label]) globalStationKeys[label] = station.station_key;
-            var platform = slot.selected || place.platform;
+            // The platform the timetable's stop id names, as OSM numbers it ("2", where the
+            // feed says "75"), over the timetable's own, unless another was picked by hand.
+            var byHand = slot.selected && stopKey(slot.selected) !== stopKey(place.platform);
+            var platform = (!byHand && station.platform) || slot.selected || place.platform;
             if (platform) pickStop(slot, 'track', platform); else renderStops(slot);
             // Not placed on a track of the station's: where the line stops there going this
             // way, from OSM's route relations (one per direction), exact, so that the route

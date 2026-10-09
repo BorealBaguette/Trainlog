@@ -863,6 +863,10 @@ def _departures(searches, start, window, destination):
             # (on the track it takes, as its stops are moved, _snap_stops), else the stops'.
             "from_point": [round(frm["lat"], COORD_DIGITS), round(frm["lon"], COORD_DIGITS)],
             "to_point": [round(to["lat"], COORD_DIGITS), round(to["lon"], COORD_DIGITS)],
+            # Transitous's ids of the stops it is boarded and left at, as the stops' (the
+            # platform's own id in some feeds: DELFI's DHIDs, see src/quai.py stop_point_id).
+            "from_id": frm.get("stopId"),
+            "to_id": to.get("stopId"),
             # Where it leaves from and arrives (the live platform if it was changed): the
             # trip's departure_platform / arrival_platform when picked.
             "from_platform": (frm.get("track") or frm.get("scheduledTrack") or "").strip() or None,

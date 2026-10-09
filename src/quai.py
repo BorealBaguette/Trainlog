@@ -475,9 +475,35 @@ def stops_by_direction(mode, keys, timeout=5):
         return [None] * len(keys)
 
 
+def stop_point_id(transitous_id):
+    """The official id of a timetable's stop point in Transitous's id for it, as OSM tags it
+    (ref:IFOPT): Germany's DHID "de:05315:16101:7:72" in DELFI's "de-DELFI_de:05315:16101:7:72",
+    Switzerland's SLOID "ch:1:sloid:1120:0:668579". None for ids that are not one."""
+    if not transitous_id or "_" not in transitous_id:
+        return None
+    point = transitous_id.split("_", 1)[1]
+    # country:...:... with at least three parts, the shape of IFOPT ids.
+    return point if re.match(r"^[a-z]{2}:[^:]+:[^:]+", point) else None
+
+
+def quay_of(stations, point_id):
+    """The station and its object carrying the stop-point id `point_id` (ref:IFOPT), from
+    /reverse's quays: a stop position on the track rather than a platform beside it, where
+    both carry it. (None, None) if none."""
+    best = (None, None)
+    for station in stations:
+        for quay in station.get("quays") or []:
+            if point_id in (quay.get("ids") or []):
+                if quay.get("on_track"):
+                    return station, quay
+                best = best if best[1] else (station, quay)
+    return best
+
+
 def stations_at(trip_type, stops, radius_km=0.5):
-    """The station at each timetable stop {lat, lng, platform?, name?, key?}: of the trip type's
-    mode within `radius_km`, the one of that station key (a trip's saved end), else the nearest
+    """The station at each timetable stop {lat, lng, platform?, name?, key?, id?}: of the trip
+    type's mode within `radius_km`, the one holding the stop point its Transitous id names
+    (stop_point_id: then its very platform, `platform` its own track, and point, `snap`), the one of that station key (a trip's saved end), else the nearest
     named alike, else the nearest, as {station, station_key, alike, tracks, lines, track, snap},
     or None. `track` is the stop's platform among the station's tracks, or None. `snap`, for
     stops given in the order travelled, is where the line stops there going that way
@@ -490,11 +516,14 @@ def stations_at(trip_type, stops, radius_km=0.5):
         station = None
         if mode and stop.get("lat") is not None and stop.get("lng") is not None:
             data = quai_get("reverse", {"lat": stop["lat"], "lon": stop["lng"], "mode": mode,
-                                        "radius": radius_km, "limit": 5}, timeout=2)
+                                        "radius": radius_km, "limit": 5, "quays": 1}, timeout=2)
             nearby = (data or {}).get("stations") or []
-            # The station of that key; else by place, a name only deciding between stations
-            # about as near (station_by_place).
-            nearest = next((s for s in nearby if stop.get("key") and s["station_key"] == stop["key"]), None)
+            # The station holding the stop point the timetable names; else that of the key;
+            # else by place, a name only deciding between stations about as near
+            # (station_by_place).
+            point_station, quay = quay_of(nearby, stop_point_id(stop.get("id")))
+            nearest = point_station or next(
+                (s for s in nearby if stop.get("key") and s["station_key"] == stop["key"]), None)
             alike = nearest
             if nearest is None:
                 nearest, named = station_by_place(stop.get("name"), nearby)
@@ -513,11 +542,21 @@ def stations_at(trip_type, stops, radius_km=0.5):
                     "lines": nearest.get("lines") or [],
                     "track": next((t for t in tracks if ref and track_key(t["ref"]) == ref), None),
                     "snap": None,
+                    "platform": None,
                 }
+                if quay and point_station is nearest:
+                    # The very platform: its own track, not the timetable's numbering, and
+                    # its point (on the track, for a stop position).
+                    own = ((quay.get("ref") or "").split(";") or [""])[0].strip() or None
+                    station["platform"] = own
+                    station["track"] = next((t for t in tracks if own and track_key(t["ref"]) == track_key(own)),
+                                            station["track"])
+                    station["snap"] = [quay["lat"], quay["lng"]]
+                    station["quay"] = True
         found.append(station)
     if mode in SNAP_MODES:
         keys = [station and station["station_key"] for station in found]
         for station, position in zip(found, stops_by_direction(mode, keys)):
-            if station and position:
+            if station and position and not station.get("quay"):
                 station["snap"] = position
     return found
