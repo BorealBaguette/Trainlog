@@ -173,6 +173,9 @@
 </div>
 
 <script>
+const API = {{ url_for("station_explorer.station_explorer")|tojson }};
+const EDITABLE = {{ editable|tojson }};
+
 // Kinds of OSM object in a station, in the order the legend lists them.
 const KINDS = [
   ['station', 'Station', '#dc2626'],
@@ -281,7 +284,7 @@ function search() {
   if ((params.get('q') || '').trim().length < 2) { resultsEl.innerHTML = ''; return; }
   if (searchXhr) searchXhr.abort();
   searchXhr = new AbortController();
-  fetch('{{ url_for("admin.station_explorer_search") }}?' + params, { signal: searchXhr.signal })
+  fetch(`${API}/search?` + params, { signal: searchXhr.signal })
     .then(r => r.json())
     .then(data => {
       if (data.error) { resultsEl.innerHTML = `<li class="text-danger">${esc(data.error)}</li>`; return; }
@@ -319,7 +322,7 @@ async function loadStation() {
   detailEl.classList.add('empty');
   detailEl.innerHTML = '<div><span class="spinner-border spinner-border-sm"></span></div>';
   const lang = form.elements.lang.value;
-  const resp = await fetch(`{{ url_for("admin.station_explorer") }}/station/${encodeURIComponent(mode)}/` +
+  const resp = await fetch(`${API}/station/${encodeURIComponent(mode)}/` +
     `${encodeURIComponent(key)}` + (lang ? `?lang=${encodeURIComponent(lang)}` : ''));
   const data = await resp.json();
   if (!data.station) { detailEl.innerHTML = `<div>${esc(data.error || 'Not found')}</div>`; return; }
@@ -416,7 +419,7 @@ function bindOverride(s) {
 // order, drawn in the line's colour; the map fits it. null hides it, back on the station.
 async function showLine(s, line) {
   if (!line) { drawRoutes(null); return; }
-  const resp = await fetch(`{{ url_for("admin.station_explorer") }}/station/${encodeURIComponent(s.mode)}/` +
+  const resp = await fetch(`${API}/station/${encodeURIComponent(s.mode)}/` +
     `${encodeURIComponent(s.station_key)}/line?ref=${encodeURIComponent(line.ref)}`);
   drawRoutes((await resp.json()).routes || [], line.colour);
 }
@@ -424,7 +427,7 @@ async function showLine(s, line) {
 // A service (a route relation not counted as a line: "TER 876206"), drawn the same way.
 async function showService(service) {
   if (!service) { drawRoutes(null); return; }
-  const resp = await fetch(`{{ url_for("admin.station_explorer") }}/route/${service.relation_id}`);
+  const resp = await fetch(`${API}/route/${service.relation_id}`);
   drawRoutes((await resp.json()).routes || [], service.colour);
 }
 
@@ -491,7 +494,7 @@ function loadServices(s, unpickRoutes) {
     if (!card.open || card.dataset.loaded) return;
     card.dataset.loaded = '1';
     const list = card.querySelector('.se-service-list');
-    const resp = await fetch(`{{ url_for("admin.station_explorer") }}/station/${encodeURIComponent(s.mode)}/` +
+    const resp = await fetch(`${API}/station/${encodeURIComponent(s.mode)}/` +
       `${encodeURIComponent(s.station_key)}/services`);
     const services = (await resp.json()).services || [];
     card.querySelector('.count').textContent = services.length;
@@ -542,7 +545,7 @@ function bindMerge(s) {
       if (q.length < 2) { list.innerHTML = ''; return; }
       if (xhr) xhr.abort();
       xhr = new AbortController();
-      fetch('{{ url_for("admin.station_explorer_search") }}?' + new URLSearchParams({ q, mode: s.mode }),
+      fetch(`${API}/search?` + new URLSearchParams({ q, mode: s.mode }),
             { signal: xhr.signal })
         .then(r => r.json())
         .then(data => {
@@ -581,15 +584,15 @@ function render(s) {
       ${s.merged_into ? `<div class="se-merge-note"><i class="bi bi-box-arrow-in-right"></i>
         Merged into <a href="#${encodeURIComponent(s.mode)}/${encodeURIComponent(s.merged_into.station_key)}">${esc(s.merged_into.name)}</a>:
         Trainlog takes it as that station
-        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="unmerge">Undo</button></div>` : ''}
+        {% if editable %}<button type="button" class="btn btn-sm btn-outline-secondary" data-action="unmerge">Undo</button>{% endif %}</div>` : ''}
       ${(s.merged_from || []).length ? `<div class="se-merge-note"><i class="bi bi-diagram-2"></i> Includes
         ${s.merged_from.map(m => `<a href="#${encodeURIComponent(s.mode)}/${encodeURIComponent(m.station_key)}">${esc(m.name)}</a>`).join(', ')}
         (their tracks and lines too)</div>` : ''}
       <div class="se-trainlog">
         <div><div class="label">Name in Trainlog</div><div class="name">${esc(s.trainlog_name)}</div></div>
-        <button type="button" class="se-edit-toggle"><i class="bi bi-pencil"></i> Edit</button>
+        {% if editable %}<button type="button" class="se-edit-toggle"><i class="bi bi-pencil"></i> Edit</button>{% endif %}
       </div>
-      <form id="se-override" class="se-override" autocomplete="off">
+      {% if editable %}<form id="se-override" class="se-override" autocomplete="off">
         <div class="se-field">
           <label>Name</label>
           <input class="form-control form-control-sm" name="name" placeholder="${esc(s.trainlog_name)}"
@@ -621,12 +624,12 @@ function render(s) {
           <button type="button" class="btn btn-sm btn-outline-danger" data-action="clear">Clear</button>
           <button type="submit" class="btn btn-sm btn-primary">Save</button>
         </div>
-      </form>
+      </form>{% endif %}
     </div>
     <div class="se-card">
       <h3>Tracks <span class="count">${tracks.length}</span></h3>
       <div class="se-chips">${tracks.map((t, i) => `<span class="se-chip se-track-chip${t.override ? ' override' : ''}" data-i="${i}"
-        title="${t.override ? 'set in Trainlog' : t.on_track ? 'stop position' : 'platform only'}: click to move or hide"
+        title="${t.override ? 'set in Trainlog' : t.on_track ? 'stop position' : 'platform only'}{{ ': click to move or hide' if editable }}"
         style="border-color:${t.override ? '#2563eb' : t.on_track ? '#15803d' : '#ca8a04'}">${esc(t.ref)}</span>`).join('') || '<span class="se-hint">none mapped</span>'}</div>
       ${lines.length ? `<h3 style="margin-top: 10px;">Lines <span class="count">${lines.length}</span></h3>
       <div class="se-chips">${lines.map((l, i) => `<span class="se-chip se-line-chip" data-i="${i}" title="Show where the line goes"
@@ -661,14 +664,16 @@ function render(s) {
           <span class="se-dot" style="background:${KIND_COLOUR[kindOf(o)]}"></span>
           <span class="what">${esc(o.tags.name || o.tags['railway:track_ref'] || o.tags.local_ref || o.tags.ref || '—')}
             <span class="kind">${esc(o.tags.public_transport || o.tags.railway || o.tags.highway || o.tags.amenity || '')}</span></span>
-          ${['platform', 'stop_position'].includes(kindOf(o))
+          ${EDITABLE && ['platform', 'stop_position'].includes(kindOf(o))
             ? `<button type="button" class="se-as-track" data-i="${i}" title="Make this object one of the station's tracks">→ track</button>` : ''}
           ${osmLink(o.osm_type, o.osm_id)}
         </div>`).join('')}
       </div>
     </div>`;
-  bindOverride(s);
-  bindMerge(s);
+  if (EDITABLE) {
+    bindOverride(s);
+    bindMerge(s);
+  }
   // An object OSM names wrongly (a "Gare SNCF" where quay 5 is) made into a track, at its point.
   detailEl.querySelectorAll('.se-as-track').forEach(btn => btn.addEventListener('click', e => {
     e.stopPropagation();
@@ -687,7 +692,7 @@ function render(s) {
     showLine(s, lines[chip.dataset.i]);
   }));
   loadServices(s, unpickRoutes);
-  detailEl.querySelectorAll('.se-track-chip').forEach(chip => chip.addEventListener('click', () => {
+  if (EDITABLE) detailEl.querySelectorAll('.se-track-chip').forEach(chip => chip.addEventListener('click', () => {
     const t = tracks[chip.dataset.i];
     addTrackRow({ ref: t.ref, lat: t.lat, lng: t.lng, on_track: t.on_track });
   }));
