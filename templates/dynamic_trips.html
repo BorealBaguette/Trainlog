@@ -2138,7 +2138,10 @@ function renderDelayBadge(delaySecs) {
 // without stops, so the line isn't there at all.
 var STOPS_TEXT = {
     count: {{ motisStops|tojson }},
-    track: {{ motisTrack|tojson }}
+    // A stop's platform: a track by train, a stand by bus, a pier by ferry.
+    track: {{ platform_text('train')|tojson }},
+    bus: {{ platform_text('bus')|tojson }},
+    ferry: {{ platform_text('ferry')|tojson }}
 };
 function escapeStopText(v) {
     return String(v == null ? '' : v).replace(/[&<>"']/g, function (c) {
@@ -2156,10 +2159,11 @@ function bareTrack(t) {
     return String(t || '').replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '').trim();
 }
 // "Pl. 9", in red only when it really moved from the scheduled one
-function stopPlatformHtml(platform, live) {
+function stopPlatformHtml(platform, live, type) {
     var shown = bareTrack(live || platform);
     if (!shown) return '';
-    var text = escapeStopText(STOPS_TEXT.track.replace('{track}', shown));
+    var pattern = (type === 'bus' || type === 'ferry') ? STOPS_TEXT[type] : STOPS_TEXT.track;
+    var text = escapeStopText(pattern.replace('{track}', shown));
     var moved = live && platform && bareTrack(live) !== bareTrack(platform);
     return moved ? '<span class="delay-late">' + text + '</span>' : text;
 }
@@ -2184,7 +2188,7 @@ function renderStops(data, type, row) {
 
     var lastFlag = labelFlag(row.origin_station);
     var rows = [line('end', escapeStopText(row.origin_station),
-        escapeStopText(row.start_time || '') + badge(row.departure_delay), stopPlatformHtml(row.departure_platform))];
+        escapeStopText(row.start_time || '') + badge(row.departure_delay), stopPlatformHtml(row.departure_platform, null, row.type))];
     stops.forEach(function (st) {
         var flag = st.cc && st.cc !== 'UN' && typeof getFlagEmoji === 'function' ? getFlagEmoji(st.cc) : '';
         var showFlag = flag && flag !== lastFlag;
@@ -2195,10 +2199,10 @@ function renderStops(data, type, row) {
         var rt = st.dep_rt || st.arr_rt, sched = st.dep_rt ? st.dep : st.arr;
         var delay = rt && sched ? (Date.parse(rt) - Date.parse(sched)) / 1000 : 0;
         rows.push(line('stop', escapeStopText((showFlag ? flag + ' ' : '') + (st.name || '')),
-            escapeStopText(time) + badge(delay), stopPlatformHtml(st.platform, st.platform_rt)));
+            escapeStopText(time) + badge(delay), stopPlatformHtml(st.platform, st.platform_rt, row.type)));
     });
     rows.push(line('end', escapeStopText(row.destination_station),
-        escapeStopText(row.end_time || '') + badge(row.arrival_delay), stopPlatformHtml(row.arrival_platform)));
+        escapeStopText(row.end_time || '') + badge(row.arrival_delay), stopPlatformHtml(row.arrival_platform, null, row.type)));
 
     var count = typeof pluralize === 'function' ? pluralize(STOPS_TEXT.count, stops.length) : String(stops.length);
     return '<details class="trip-stops"><summary><span class="ts-toggle">' + escapeStopText(count) + '</span></summary>' +

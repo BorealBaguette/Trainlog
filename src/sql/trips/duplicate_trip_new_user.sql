@@ -21,6 +21,8 @@ INSERT INTO trips (
     -- The same train: where it left from and arrived (migration 0076), and how late
     departure_platform,
     arrival_platform,
+    origin_station_key,
+    destination_station_key,
     departure_delay,
     arrival_delay,
     visibility
@@ -47,6 +49,8 @@ SELECT
     waypoints,
     departure_platform,
     arrival_platform,
+    origin_station_key,
+    destination_station_key,
     departure_delay,
     arrival_delay,
     :visibility

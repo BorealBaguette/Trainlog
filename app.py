@@ -28,6 +28,7 @@ import git
 import gpxpy
 
 # Third-Party Imports
+import jinja2
 import polyline
 import pytz
 import requests
@@ -112,6 +113,7 @@ from src.sql.trips import (
     get_dynamic_user_trips_query,
     get_material_types_query,
     get_number_stations_query,
+    get_station_key_counts_query,
     get_operators_query,
     get_trip_query,
     get_trips_by_ids_query,
@@ -192,6 +194,7 @@ from src.api.mcp import blueprint as mcp_blueprint
 from src.api.trainset import public_trainset_info, trainset_blueprint
 from src.api.dashboard import dashboard_blueprint
 from src.api.timeline import timeline_blueprint
+from src.api.station_cleanup import station_cleanup_blueprint
 from src import visualisations as viz_module
 from src.api.plans import plans_api_blueprint
 from src.api.trips import trips_blueprint
@@ -318,7 +321,7 @@ from src.trip_announcer import (
     start_trip_announcer,
 )
 from src.photon import photonInstances, photonRequest, photonRequestSingle
-from src.quai import QUAI_MODES, search_stations, stations_at
+from src.quai import QUAI_MODES, quai_url, search_stations, stations_at
 from src.routing import forward_routing_core
 from src.gpx_import import (
     GpxIngestError,
@@ -362,6 +365,7 @@ app.register_blueprint(mcp_blueprint)
 app.register_blueprint(trainset_blueprint)
 app.register_blueprint(dashboard_blueprint)
 app.register_blueprint(timeline_blueprint)
+app.register_blueprint(station_cleanup_blueprint)
 app.register_blueprint(trips_blueprint)
 app.register_blueprint(plans_api_blueprint)
 app.register_blueprint(live_tracks_blueprint)
@@ -779,6 +783,25 @@ def get_country_codes_from_files(immediate_only=False):
 app.jinja_env.globals.update(get_country_codes_from_files=get_country_codes_from_files)
 
 
+# What a stop's numbered place is called, by mode: a train's platform or track (Voie, Gleis),
+# a bus station's stand (Quai, Steig), a ferry's pier (Quai, Anleger).
+PLATFORM_TEXT_KEYS = {
+    "bus": ("motisStand", "stopStand"),
+    "ferry": ("motisPier", "stopPier"),
+}
+
+
+@jinja2.pass_context
+def platform_text(context, trip_type, which="label"):
+    """The page's text for a stop's platform on a trip of `trip_type`: 'label' is the
+    "Voie {track}" pattern, 'word' the bare word (a column heading)."""
+    keys = PLATFORM_TEXT_KEYS.get(trip_type, ("motisTrack", "stopPlatform"))
+    return context[keys[0] if which == "label" else keys[1]]
+
+
+app.jinja_env.globals.update(platform_text=platform_text)
+
+
 @app.route("/api/localtime", methods=["GET"])
 def get_local_time():
     try:
@@ -930,6 +953,8 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         co2_override=float(newTrip["co2Override"]) if newTrip.get("co2Override") else None,
         departure_platform=newTrip.get("departurePlatform"),
         arrival_platform=newTrip.get("arrivalPlatform"),
+        origin_station_key=newTrip.get("originStationKey"),
+        destination_station_key=newTrip.get("destinationStationKey"),
         altitude=altitude,
         timestamps=timestamps,
         route_source=newTrip.get("route_source") or "router",
@@ -7353,6 +7378,8 @@ def get_trip(trip_id):
         departure_delay=trip.get("departure_delay"),
         arrival_delay=trip.get("arrival_delay"),
         route_source=trip.get("route_source") or "router",
+        origin_station_key=trip.get("origin_station_key"),
+        destination_station_key=trip.get("destination_station_key"),
     )
 
 
@@ -7555,6 +7582,12 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         co2_override=co2_override,
         departure_platform=formData.get("departurePlatform"),
         arrival_platform=formData.get("arrivalPlatform"),
+        # The edit page sends the ends' quai stations, cleared when an end is retyped; a
+        # client sending none (an older page) leaves them as they were.
+        origin_station_key=formData["originStationKey"] if "originStationKey" in formData
+        else original_trip.origin_station_key,
+        destination_station_key=formData["destinationStationKey"] if "destinationStationKey" in formData
+        else original_trip.destination_station_key,
         # Re-drawing/importing sends a fresh source; plain metadata edits keep the stored one.
         route_source=formData.get("route_source") or original_trip.route_source,
     )
@@ -7915,7 +7948,7 @@ def placeAutocomplete():
 @app.route("/stationTracks", methods=["POST"])
 def stationTracks():
     """The station at each timetable stop, with its tracks and lines: {type, stops: [{lat,
-    lng, platform?}]} gives {stops: [{station, station_key, tracks, lines, track} or null]}
+    lng, platform?, name?, key?}]} gives {stops: [{station, station_key, tracks, lines, track} or null]}
     (see src/quai.py)."""
     body = request.get_json(silent=True) or {}
     stops = body.get("stops") or []
@@ -7933,10 +7966,12 @@ def stationAutocomplete():
     is_reverse = params.get("lat") and params.get("lon") and not params.get("q")
     endpoint = "/reverse" if is_reverse else "/api"
 
-    # Stations of public transport modes come from quai; Photon stays the fallback, and
-    # answers everything else (addresses, POIs...). It rejects unknown parameters.
+    # Stations of public transport modes come from quai alone: no falling back on Photon,
+    # whose answers (several objects per station, other names) would then be saved as
+    # stations. Photon answers everything else (addresses, POIs...); it rejects unknown
+    # parameters.
     trip_type = (params.pop("type", None) or [None])[0]
-    if trip_type in QUAI_MODES:
+    if trip_type in QUAI_MODES and quai_url():
         features = search_stations(
             trip_type,
             q=None if is_reverse else request.args.get("q", ""),
@@ -7945,8 +7980,9 @@ def stationAutocomplete():
             radius_km=request.args.get("radius", type=float),
             limit=request.args.get("limit", 10, type=int),
         )
-        if features or (features is not None and is_reverse):
-            return jsonify({"type": "FeatureCollection", "features": features})
+        if features is None:
+            return jsonify(error="station search unavailable"), 503
+        return jsonify({"type": "FeatureCollection", "features": features})
     if not is_reverse:
         # The position only biases quai's ranking; Photon answers fewer results with it.
         params.pop("lat", None)
@@ -8043,6 +8079,14 @@ def getManAndOps(username, station_type):
             {"trip_type": station_type, "user_id": user_id},
         ).fetchall():
             visitedStations[station["station"]] = station["total_occurrences"]
+        # The same by quai station, for trips saved with one, whatever they named it.
+        visitedKeys = {
+            row["station_key"]: row["total_occurrences"]
+            for row in pg.execute(
+                get_station_key_counts_query(),
+                {"trip_type": station_type, "user_id": user_id},
+            ).fetchall()
+        }
     tripType = station_type
     if tripType not in ["accommodation", "poi", "car"]:
         tripType = "operator"
@@ -8090,6 +8134,7 @@ def getManAndOps(username, station_type):
         "manualStations": manualStations,
         "materialTypes": material_types,
         "visitedStations": visitedStations,
+        "visitedKeys": visitedKeys,
     }
     return jsonify(manAndOps)
 
@@ -10426,6 +10471,8 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripCo2Override": trip.get("co2_override"),
         "tripDeparturePlatform": trip.get("departure_platform") or "",
         "tripArrivalPlatform": trip.get("arrival_platform") or "",
+        "tripOriginStationKey": trip.get("origin_station_key") or "",
+        "tripDestinationStationKey": trip.get("destination_station_key") or "",
     }
 
     if from_app:

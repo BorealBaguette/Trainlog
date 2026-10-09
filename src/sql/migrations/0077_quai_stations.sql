@@ -15,3 +15,10 @@ CREATE TABLE IF NOT EXISTS station_overrides (
     PRIMARY KEY (mode, station_key),
     CONSTRAINT station_overrides_position_check CHECK ((lat IS NULL) = (lng IS NULL))
 );
+
+-- The quai station (src/quai.py) a trip left from and arrived at: its station_key, unique
+-- within the trip type's mode. Names change, as OSM's do and as Trainlog names stations;
+-- the key says which station it was, so that a trip's ends can be grouped, tidied and
+-- counted by station. NULL for an end entered by hand, or logged before keys were kept.
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS origin_station_key TEXT;
+ALTER TABLE trips ADD COLUMN IF NOT EXISTS destination_station_key TEXT;

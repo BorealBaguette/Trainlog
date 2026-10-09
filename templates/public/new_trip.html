@@ -1814,7 +1814,8 @@ function addCurrentStops(trips) {
         TripProgress.timedStops(t.trip).forEach(s => features.push({
             type: 'Feature',
             geometry: { type: 'Point', coordinates: [s.lng, s.lat] },
-            properties: Object.assign({}, s, { color: color, icon: typeDef ? typeDef.icon : 'fa-train' })
+            properties: Object.assign({}, s, { color: color, icon: typeDef ? typeDef.icon : 'fa-train',
+                                               tripType: t.trip.type })
         }));
     });
     if (!features.length || map.getSource('current-stops')) return;
@@ -1849,7 +1850,10 @@ function addCurrentStops(trips) {
         }
     }, firstOverlay);
 
-    const labels = { arrival: {{ arrival|tojson }}, departure: {{ departure|tojson }}, track: {{ motisTrack|tojson }} };
+    // A stop's platform is a track by train, a stand by bus, a pier by ferry.
+    const labels = { arrival: {{ arrival|tojson }}, departure: {{ departure|tojson }},
+                     track: {{ platform_text('train')|tojson }},
+                     bus: {{ platform_text('bus')|tojson }}, ferry: {{ platform_text('ferry')|tojson }} };
     const clock = (ms, tz) => {
         if (!isFinite(ms)) return '';
         try {
@@ -1875,9 +1879,9 @@ function addCurrentStops(trips) {
         return cell;
     };
     // "Pl. 8", from the bare number whatever the source wrote ("Gleis 8", "Platform 8").
-    const track = v => {
+    const track = (v, type) => {
         const bare = String(v).replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '');
-        return labels.track.replace('{track}', bare || v);
+        return (labels[type] || labels.track).replace('{track}', bare || v);
     };
 
     map.on('click', 'current-stops', e => {
@@ -1912,10 +1916,10 @@ function addCurrentStops(trips) {
         if (plat) {
             const r = el('div', 'margin-top:3px;color:#555');
             if (p.platformRt && p.platform && p.platformRt !== p.platform) {
-                r.appendChild(el('s', 'color:#999;margin-right:4px', track(p.platform)));
-                r.appendChild(el('span', 'color:#dc3545;font-weight:600', track(p.platformRt)));
+                r.appendChild(el('s', 'color:#999;margin-right:4px', track(p.platform, p.tripType)));
+                r.appendChild(el('span', 'color:#dc3545;font-weight:600', track(p.platformRt, p.tripType)));
             } else {
-                r.textContent = track(plat);
+                r.textContent = track(plat, p.tripType);
             }
             box.appendChild(r);
         }

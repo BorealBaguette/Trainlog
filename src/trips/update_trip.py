@@ -63,6 +63,8 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
                 "co2_override": trip.co2_override,
                 "departure_platform": trip.departure_platform,
                 "arrival_platform": trip.arrival_platform,
+                "origin_station_key": trip.origin_station_key,
+                "destination_station_key": trip.destination_station_key,
                 "route_source": trip.route_source,
             },
         )

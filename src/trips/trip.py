@@ -55,6 +55,8 @@ class Trip:
         co2_override=None,
         departure_platform=None,
         arrival_platform=None,
+        origin_station_key=None,
+        destination_station_key=None,
         altitude=None,
         timestamps=None,
         route_source="router",
@@ -104,6 +106,9 @@ class Trip:
         # The platform it left from / arrived at (migration 0076), free text.
         self.departure_platform = (_strip_tags(departure_platform) or "").strip()[:20] or None
         self.arrival_platform = (_strip_tags(arrival_platform) or "").strip()[:20] or None
+        # The quai station of each end (migration 0078), or None for a manual one.
+        self.origin_station_key = (origin_station_key or "").strip()[:100] or None
+        self.destination_station_key = (destination_station_key or "").strip()[:100] or None
         # Optional 3D flight track (JSON-string arrays, parallel to the geom
         # vertices): altitude in metres, timestamps in epoch seconds.
         self.altitude = altitude

@@ -559,13 +559,17 @@ function stopTimesLabel(stop) {
   }
   var arr = clock(stop.arr_rt || stop.arr), dep = clock(stop.dep_rt || stop.dep);
   var times = arr && dep && arr !== dep ? arr + ' \u2013 ' + dep : (arr || dep);
-  var platform = '';
-  var track = stop.platform_rt || stop.platform;
-  if (track && texts.motisTrack) {
-    var bare = String(track).replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '');
-    platform = texts.motisTrack.replace('{track}', bare || track);
-  }
-  return [times, platform].filter(Boolean).join(' \u00b7 ');
+  return [times, trackLabel(stop.platform_rt || stop.platform)].filter(Boolean).join(' \u00b7 ');
+}
+
+// "Pl. 8" for a platform as given ("Gleis 8", "8"), or '' without one: a track by train, a
+// stand by bus (texts.motisStand), a pier by ferry (texts.motisPier), where the page has them.
+var routingTripType = null;   // as given to routing()
+function trackLabel(track) {
+  var pattern = ({ bus: texts.motisStand, ferry: texts.motisPier })[routingTripType] || texts.motisTrack;
+  if (!track || !pattern) return '';
+  var bare = String(track).replace(/^(gl\.?|gleis|voie|quai|track|platform|pl\.?|spor|spår|bstg\.?|bin\.?)\s*/i, '');
+  return pattern.replace('{track}', bare || track);
 }
 
 // "Every point exact" (setAllWaypointsExact) overrides that while it is on, for places
@@ -994,8 +998,10 @@ function buildRouteTimelineHtml(wps, route) {
   var items = wps.map(function(wp, i) {
     var stop = wp.options && wp.options.stop;
     var times = stop && typeof stop === 'object' ? stopTimesLabel(stop) : '';
-    if (i === 0) return item('rt-end', waypointLabel(wp) || origLabel, times || startTime);
-    if (i === last) return item('rt-end', waypointLabel(wp) || destLabel, times || endTime);
+    // The ends' platforms are the trip's own (picked on the form), not the stop's.
+    function withTrack(t, track) { return [t, trackLabel(track)].filter(Boolean).join(' \u00b7 '); }
+    if (i === 0) return item('rt-end', waypointLabel(wp) || origLabel, times || withTrack(startTime, newTrip.departurePlatform));
+    if (i === last) return item('rt-end', waypointLabel(wp) || destLabel, times || withTrack(endTime, newTrip.arrivalPlatform));
     var name = waypointLabel(wp);
     if (!times && guessed[i] != null) {
       var g = Math.round(guessed[i]) % 1440;
@@ -1406,6 +1412,7 @@ function sidebarPadding(map) {
 }
 
 function routing(map, showSidebar=true, type, allowFerrySplit=false){
+  routingTripType = type;
   flutterBridge.loading(true);
 
   sidebar = L.control.sidebar('sidebar', {

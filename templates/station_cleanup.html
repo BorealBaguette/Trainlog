@@ -1,0 +1,172 @@
+{% extends "bootstrap/layout.html" %}
+{% block content %}
+
+{% include nav %}
+
+<style>
+  #tidy { max-width: 820px; margin: 0 auto; padding: 16px 12px 40px; }
+  #tidy h1 { font-size: 1.6rem; margin: 8px 0 4px; }
+  #tidy .intro { color: #6b7280; margin-bottom: 16px; }
+  .tidy-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+  .tidy-tabs { display: flex; background: #f1f3f6; border-radius: 8px; padding: 3px; }
+  .tidy-tabs button { border: 0; background: transparent; border-radius: 6px; padding: 4px 12px; font-size: .9rem; color: #4b5563; }
+  .tidy-tabs button.active { background: #fff; color: #111827; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+  .tidy-tabs .count { color: #6b7280; margin-left: 4px; }
+  .tidy-bar input { flex: 1; min-width: 160px; }
+  .tidy-list { display: flex; flex-direction: column; gap: 8px; }
+  .tidy-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 10px 14px;
+    display: flex; gap: 12px; align-items: flex-start; }
+  .tidy-card.done { opacity: .6; }
+  .tidy-card .icon { color: #9ca3af; width: 18px; text-align: center; margin-top: 3px; }
+  .tidy-card .body { flex: 1; min-width: 0; }
+  .tidy-card .name { font-weight: 600; }
+  .tidy-card .place { color: #6b7280; font-size: .8rem; }
+  .tidy-names { list-style: none; margin: 6px 0 0; padding: 0; font-size: .88rem; }
+  .tidy-names li { display: flex; gap: 8px; align-items: baseline; padding: 1px 0; }
+  .tidy-names li.other .label { color: #9a3412; }
+  .tidy-names li.current .label { color: #15803d; }
+  .tidy-names .n { color: #6b7280; font-size: .78rem; white-space: nowrap; }
+  .tidy-names .tidy-pick { margin: 0 4px 0 0; vertical-align: -2px; float: none; }
+  .tidy-card .action { flex-shrink: 0; align-self: center; }
+  .tidy-card .renamed { color: #15803d; font-size: .85rem; white-space: nowrap; }
+  .tidy-empty, .tidy-note { color: #6b7280; text-align: center; padding: 24px 0; }
+  .tidy-note { padding: 12px 0 0; font-size: .85rem; }
+</style>
+
+<div id="tidy">
+  <h1>{{ tidyStations }}</h1>
+  <p class="intro">{{ tidyStationsIntro }}</p>
+  <div class="tidy-bar">
+    <div class="tidy-tabs">
+      <button type="button" data-show="untidy" class="active">{{ tidyStationsToTidy }}<span class="count" id="tidyCountUntidy"></span></button>
+      <button type="button" data-show="all">{{ all }}<span class="count" id="tidyCountAll"></span></button>
+    </div>
+    <input type="search" class="form-control form-control-sm" id="tidyFilter" placeholder="{{ tidyStationsSearch }}">
+  </div>
+  <div class="tidy-list" id="tidyList">
+    <div class="tidy-empty"><span class="spinner-border spinner-border-sm"></span> {{ loading }}</div>
+  </div>
+  <div class="tidy-note" id="tidyUnmatched" hidden></div>
+</div>
+
+<script>
+(function () {
+  const texts = {
+    trips: {{ posterTripCount|tojson }},
+    renamed: {{ tidyStationsRenamed|tojson }},
+    unmatched: {{ tidyStationsUnmatched|tojson }},
+    confirm: {{ tidyStationsConfirm|tojson }},
+    useName: {{ tidyStationsUseName|tojson }},
+    nothing: {{ tidyStationsNothing|tojson }},
+    error: {{ tidyStationsError|tojson }},
+  };
+  const base = {{ url_for('station_cleanup.tidy_stations', username=username)|tojson }};
+  const ICONS = { train: 'fa-solid fa-train', tram: 'fa-solid fa-train-tram', metro: 'fa-solid fa-train-subway',
+                  bus: 'fa-solid fa-bus', ferry: 'fa-solid fa-ship', funicular: 'fa-solid fa-mountain',
+                  aerialway: 'fa-solid fa-cable-car' };
+  const list = document.getElementById('tidyList');
+  const filter = document.getElementById('tidyFilter');
+  let groups = [], show = 'untidy';
+
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  }
+  const tripsOf = n => n.origin.length + n.destination.length;
+
+  function render() {
+    const q = filter.value.trim().toLowerCase();
+    const shown = groups.filter(g => (show === 'all' || !g.tidy || g.renamed) &&
+      (!q || g.name.toLowerCase().includes(q) || g.names.some(n => n.label.toLowerCase().includes(q))));
+    document.getElementById('tidyCountUntidy').textContent = groups.filter(g => !g.tidy).length;
+    document.getElementById('tidyCountAll').textContent = groups.length;
+    if (!shown.length) {
+      list.innerHTML = `<div class="tidy-empty">${esc(show === 'untidy' && !q ? texts.nothing : '—')}</div>`;
+      return;
+    }
+    list.innerHTML = shown.map(g => `
+      <div class="tidy-card${g.tidy ? ' done' : ''}" data-i="${groups.indexOf(g)}">
+        <div class="icon"><i class="${ICONS[g.mode] || 'fa-solid fa-location-dot'}"></i></div>
+        <div class="body">
+          <div class="name">${esc(g.name)}</div>
+          ${g.city ? `<div class="place">${esc(g.city)}</div>` : ''}
+          <ul class="tidy-names">${g.names.map((n, j) => `
+            <li class="${n.label === g.name ? 'current' : 'other'}">
+              <span class="label">${n.label === g.name
+                ? '<i class="bi bi-check2"></i>'
+                : `<input type="checkbox" class="form-check-input tidy-pick" data-j="${j}" ${picked(n) ? 'checked' : ''}${g.renamed ? ' disabled' : ''}>`}
+                ${esc(n.label)}</span>
+              <span class="n">${esc(pluralize(texts.trips, tripsOf(n)))}</span>
+            </li>`).join('')}
+          </ul>
+        </div>
+        <div class="action">${g.renamed
+          ? `<span class="renamed"><i class="bi bi-check-circle"></i> ${esc(pluralize(texts.renamed, g.renamed))}</span>`
+          : g.tidy ? '' : `<button type="button" class="btn btn-sm btn-primary" data-rename${
+              g.names.some(n => n.label !== g.name && picked(n)) ? '' : ' disabled'}>${esc(texts.useName)}</button>`}</div>
+      </div>`).join('');
+  }
+
+  // A name is renamed if ticked: by default those alike the station's, not those put there by
+  // place only (a quay that is no stop).
+  const picked = n => n.picked === undefined ? n.alike : n.picked;
+
+  async function rename(g, button) {
+    if (!confirm(texts.confirm.replace('{name}', g.name))) return;
+    const others = g.names.filter(n => n.label !== g.name && picked(n));
+    // Those already bearing its name are tied to the station too.
+    const tied = others.concat(g.names.filter(n => n.label === g.name));
+    button.disabled = true;
+    const resp = await fetch(base + '/rename', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        to: g.name,
+        station_key: g.station_key,
+        labels: tied.map(n => n.label),
+        origin_ids: tied.flatMap(n => n.origin),
+        destination_ids: tied.flatMap(n => n.destination),
+      }),
+    });
+    if (!resp.ok) { button.disabled = false; alert(texts.error); return; }
+    const data = await resp.json();
+    // The renamed names join the station's; those left unticked stay as they are.
+    const kept = g.names.filter(n => n.label !== g.name && !others.includes(n));
+    const current = g.names.filter(n => n.label === g.name || others.includes(n));
+    g.names = [{ label: g.name, alike: true, origin: current.flatMap(n => n.origin),
+                 destination: current.flatMap(n => n.destination) }, ...kept];
+    g.tidy = !kept.length;
+    g.renamed = data.renamed;
+    render();
+  }
+
+  list.addEventListener('change', e => {
+    const box = e.target.closest('.tidy-pick');
+    if (!box) return;
+    const g = groups[box.closest('.tidy-card').dataset.i];
+    g.names[box.dataset.j].picked = box.checked;
+    box.closest('.tidy-card').querySelector('[data-rename]').disabled =
+      !g.names.some(n => n.label !== g.name && picked(n));
+  });
+  list.addEventListener('click', e => {
+    const button = e.target.closest('[data-rename]');
+    if (button) rename(groups[button.closest('.tidy-card').dataset.i], button);
+  });
+  document.querySelectorAll('.tidy-tabs button').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('.tidy-tabs button').forEach(x => x.classList.toggle('active', x === b));
+    show = b.dataset.show;
+    render();
+  }));
+  filter.addEventListener('input', render);
+
+  fetch(base + '/data').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
+    groups = data.groups;
+    if (data.unmatched) {
+      const note = document.getElementById('tidyUnmatched');
+      note.textContent = pluralize(texts.unmatched, data.unmatched);
+      note.hidden = false;
+    }
+    render();
+  }).catch(() => { list.innerHTML = `<div class="tidy-empty">${esc(texts.error)}</div>`; });
+})();
+</script>
+{% endblock %}

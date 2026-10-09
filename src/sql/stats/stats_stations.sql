@@ -2,8 +2,11 @@
 {time_categories}
 
 , stations AS (
+    -- A station is its quai key where the trip has one (whatever it was called then),
+    -- else its name.
     SELECT 
         origin_station AS station, 
+        COALESCE(origin_station_key, origin_station) AS station_id,
         is_past, 
         is_planned_future, 
         trip_length,
@@ -15,6 +18,7 @@
     UNION ALL
     SELECT 
         destination_station AS station, 
+        COALESCE(destination_station_key, destination_station) AS station_id,
         is_past, 
         is_planned_future, 
         trip_length,
@@ -25,7 +29,8 @@
     FROM time_categories
 )
 SELECT 
-    station,
+    -- Shown by the name most trips there bear.
+    mode() WITHIN GROUP (ORDER BY station) AS station,
     SUM(is_past) AS "pastTrips",
     SUM(is_planned_future) AS "plannedFutureTrips",
     SUM(is_past + is_planned_future) AS "count",
@@ -40,7 +45,7 @@ SELECT
     SUM((COALESCE(arrival_delay, 0) - COALESCE(departure_delay, 0)) * is_past) AS "pastDelayAccumulated",
     SUM((COALESCE(arrival_delay, 0) - COALESCE(departure_delay, 0)) * is_planned_future) AS "plannedFutureDelayAccumulated"
 FROM stations
-GROUP BY station
+GROUP BY station_id
 ORDER BY count DESC
 -- Capped well below the old 10000: the page charts the top 10 and the
 -- fullscreen view scrolls 20 rows at a time, so 1000 is ~50 screens of

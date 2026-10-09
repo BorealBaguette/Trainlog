@@ -258,6 +258,11 @@ def split_trip(trip_id, split_index, mid_station, user_id):
                 "arrival_delay": None,
                 "power_type": trip["power_type"],
                 "co2_override": trip["co2_override"],
+                # The cut is a name typed, not a station picked: no platform or key there.
+                "departure_platform": trip.get("departure_platform"),
+                "arrival_platform": None,
+                "origin_station_key": trip.get("origin_station_key"),
+                "destination_station_key": None,
                 "route_source": trip["route_source"],
             },
         )
@@ -302,6 +307,10 @@ def split_trip(trip_id, split_index, mid_station, user_id):
                 "arrival_delay": trip["arrival_delay"],
                 "power_type": trip["power_type"],
                 "co2_override": trip["co2_override"],
+                "departure_platform": None,
+                "arrival_platform": trip.get("arrival_platform"),
+                "origin_station_key": None,
+                "destination_station_key": trip.get("destination_station_key"),
                 "route_source": trip["route_source"],
             },
         ).fetchone()[0]

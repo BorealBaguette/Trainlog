@@ -1157,6 +1157,8 @@ var texts = {
   fineTuneNote:           "{{ fineTuneNote|default('Drag waypoints to fine-tune the route.') }}",
   fineTuneNoteNewRouter:  "{{ fineTuneNoteNewRouter }}",
   motisTrack:             "{{ motisTrack }}",
+  motisStand:             {{ motisStand|tojson }},
+  motisPier:              {{ motisPier|tojson }},
   distanceTime:           "{{ distanceTime|default('{km} · {time}') }}",
   downloadGeoJSONButton:  "{{ downloadGeoJSONButton|default('Download GeoJSON') }}",
   saveTripButton:         "{{ submit|default('Save') }}",
@@ -1688,6 +1690,7 @@ function setOperatorValue(value) {
 $.get('{{ url_for("getManAndOps", username=username, station_type=vehicle_type) }}', function(manAndOps) {
   Object.assign(globalStationDict, manAndOps.manualStations);
   Object.assign(visitedStations, manAndOps.visitedStations);
+  Object.assign(visitedStationKeys, manAndOps.visitedKeys || {});
   Object.keys(manAndOps.manualStations).forEach(function(s) {
     manualStationsList.push({ label: s, value: s, manual: true });
   });
@@ -2360,7 +2363,7 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
     none: {{ motisNone|tojson }},
     line: {{ motisLine|tojson }},
     stops: {{ motisStops|tojson }},
-    track: {{ motisTrack|tojson }},
+    track: {{ platform_text(vehicle_type)|tojson }},
     earlier: {{ motisEarlier|tojson }},
     later: {{ motisLater|tojson }},
     replacementBus: {{ motisReplacementBus|tojson }}
@@ -3365,6 +3368,9 @@ function composeSave(continueTrip) {
       delete newTrip[side + 'ManualLat'];
       delete newTrip[side + 'ManualLng'];
     }
+    // The quai station picked for this end, if any (none for a hand-placed point).
+    var input = document.getElementById(side + 'Station');
+    newTrip[side + 'StationKey'] = !point && input && globalStationKeys[input.value] || '';
   });
   {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
   // The one point is both ends; only file it once.

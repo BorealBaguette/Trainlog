@@ -64,6 +64,8 @@ def merged_stop_fields(trip_items):
         "waypoints": json.dumps(waypoints),
         "departurePlatform": first["departure_platform"],
         "arrivalPlatform": last["arrival_platform"],
+        "originStationKey": first.get("origin_station_key"),
+        "destinationStationKey": last.get("destination_station_key"),
         "departure_delay": first["departure_delay"],
         "arrival_delay": last["arrival_delay"],
     }

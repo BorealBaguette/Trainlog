@@ -1,10 +1,13 @@
 {% extends "bootstrap/layout.html" %}
 {% include "bootstrap/leafletLayout.html" %}
 {% block content %}
+{# The trip types whose ends can search for another station (the stops editor's stationUrls) #}
+{% set end_search_types = ['train', 'rail', 'funicular', 'tram', 'metro', 'bus', 'ferry', 'aerialway', 'ski'] %}
 <link rel="stylesheet" href="{{ url_for('static', filename='styles/waypoint_popup.css') }}">
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lib/leaflet.geometryutil.js') }}"></script>
 <script src="{{ url_for('static', filename='js/freehand.js') }}"></script>
+<script src="{{ static_autoversion(filename='js/stop_slots.js') }}"></script>
 {% if tripType == 'ferry' %}
 <script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
 {% endif %}
@@ -436,8 +439,17 @@
                     </select>
                 </div>
                 <label for="originStation" class="sr-only">{{originTerminal}}</label>
+                <span class="end-station-field">
                 <input type="text" id="originStation" name="originStation" placeholder="{{originTerminal}}"
                     class="originInput" value="{{ origin.split(' ', 1)[1] }}" />
+                <div class="dropdown track-dropdown" id="originTracks" hidden>
+                    <button type="button" class="track-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>
+                    <div class="dropdown-menu dropdown-menu-end track-menu"></div>
+                </div>
+                {% if tripType in end_search_types %}
+                <button type="button" class="end-mode-toggle" id="originModeToggle" data-end="origin" hidden></button>
+                {% endif %}
+                </span>
             </div>
         </div>
 
@@ -454,9 +466,18 @@
                     </select>
                 </div>
                 <label for="destinationStation" class="sr-only">{{originTerminal}}</label>
+                <span class="end-station-field">
                 <input type="text" id="destinationStation" name="destinationStation"
                     placeholder="{{destinationTerminal}}" class="destinationInput"
                     value="{{ destination.split(' ', 1)[1] }}" />
+                <div class="dropdown track-dropdown" id="destinationTracks" hidden>
+                    <button type="button" class="track-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>
+                    <div class="dropdown-menu dropdown-menu-end track-menu"></div>
+                </div>
+                {% if tripType in end_search_types %}
+                <button type="button" class="end-mode-toggle" id="destinationModeToggle" data-end="destination" hidden></button>
+                {% endif %}
+                </span>
             </div>
         </div>
 
@@ -479,6 +500,9 @@
         {# Edited in the stops dialog (its origin and destination rows) #}
         <input type="hidden" name="departurePlatform" id="departurePlatform" value="{{tripDeparturePlatform}}" />
         <input type="hidden" name="arrivalPlatform" id="arrivalPlatform" value="{{tripArrivalPlatform}}" />
+        {# The quai stations the ends are at: a name typed keeps it, a station picked sets its own #}
+        <input type="hidden" name="originStationKey" id="originStationKey" value="{{tripOriginStationKey}}" />
+        <input type="hidden" name="destinationStationKey" id="destinationStationKey" value="{{tripDestinationStationKey}}" />
         <br class="non_poi">
 
         <fieldset>
@@ -860,7 +884,7 @@
             </div>
             <div class="modal-body">
                 <div class="stops-head" aria-hidden="true">
-                    <span></span><span></span><span>{{stopArrival}}</span><span>{{stopDeparture}}</span><span>{{stopPlatform}}</span><span></span>
+                    <span></span><span></span><span>{{stopArrival}}</span><span>{{stopDeparture}}</span><span>{{ platform_text(tripType, 'word') }}</span><span></span>
                 </div>
                 <div id="stopsRows"></div>
                 {# The runs to pick the trip's from, when its stops don't say which (pickRun) #}
@@ -1034,6 +1058,9 @@
     // add, remove or reorder: the route has to go through the new points, so the list goes
     // to the map dialog, which reroutes through it for the user to check and confirm.
     var globalStationDict = window.globalStationDict = window.globalStationDict || {};
+    // The route's points, origin to destination: set before the stops editor, which reads
+    // the ends from it as the page opens.
+    var wplist = JSON.parse("{{wplist}}");
     (function initStopsEditor() {
         var stored = {{ stored_waypoints|default([])|tojson }};
         // Set here, before the rest of the page would: the map dialog's waypoints are built
@@ -1244,7 +1271,7 @@
                         if (st && st.platform && st.platform_rt) $hint.append($('<s>').text(st.platform));
                     }
                     $('<input type="text" maxlength="12">').val(stop && (stop.platform_rt || stop.platform) || '')
-                        .attr('aria-label', {{ stopPlatform|tojson }})
+                        .attr('aria-label', {{ platform_text(tripType, 'word')|tojson }})
                         .on('change', function () {
                             var v = this.value.trim(), st = ensureStop();
                             if (!v) { delete st.platform; delete st.platform_rt; }
@@ -1338,7 +1365,7 @@
             });
             $('<span class="stop-cell">').append(
                 $('<input type="text" maxlength="12">').val(end.platform)
-                    .attr('aria-label', {{ stopPlatform|tojson }})
+                    .attr('aria-label', {{ platform_text(tripType, 'word')|tojson }})
                     .on('change', function () { end.platform = this.value.trim(); })
             ).appendTo($row);
             $('<span>').appendTo($row);
@@ -1349,6 +1376,10 @@
             if (!ends) return;
             $('#departurePlatform').val(ends.origin.platform);
             $('#arrivalPlatform').val(ends.destination.platform);
+            ['origin', 'destination'].forEach(function (end) {   // the fields' track dropdowns
+                var slot = endSlots[end];
+                if (slot) { slot.selected = ends[end].platform || null; renderStops(slot); }
+            });
             // A run refreshed ahead of time moved the trip's start/end (renewEnd)
             if (ends.origin.renewed) {
                 stopsStart = ends.origin.date + ' ' + ends.origin.time;
@@ -1769,6 +1800,153 @@
             count();
         };
         count();
+
+        // ---- the trip's own ends, on the form, as for a stop. Each has its station's tracks
+        // (stop_slots.js), from quai: picking one moves the end onto it. And it either renames
+        // (as it opens): typing changes the name, the end stays at its station; or searches:
+        // a station picked from the list moves the end there, with that station's flag, key
+        // and tracks, and no platform yet. One of the trip's stops picked so becomes the end
+        // (boarded or left there instead), as that stop: at its point, with its platform and
+        // time, the stops beyond it dropped. A moved end has the route redrawn from it in the
+        // map dialog, to confirm. The button shows what clicking it does.
+        window.stopSlotOptions = { preferLines: ['metro', 'tram'].indexOf(tripType) !== -1,
+                                   texts: { track: {{ platform_text(tripType, 'word')|tojson }}, line: {{ lineName|tojson }} } };
+        // Searched around the trip's other end.
+        window.stationSearchBias = function ($input) {
+            return $input.is('#originStation') ? wplist[wplist.length - 1] : wplist[0];
+        };
+        var modeTexts = { rename: {{ endModeRename|tojson }}, search: {{ endModeSearch|tojson }} };
+        var endSlots = {};
+        if (stationUrls[tripType]) ['origin', 'destination'].forEach(function (end) {
+            var origin = end === 'origin';
+            var $name = $('#' + end + 'Station'), $country = $('#' + end + 'Country');
+            var $toggle = $('#' + end + 'ModeToggle');
+            var $platform = $(origin ? '#departurePlatform' : '#arrivalPlatform');
+            var endIndex = function () { return origin ? 0 : wplist.length - 1; };
+            var slot = endSlots[end] = stopSlot({
+                $input: $name, $dropdown: $('#' + end + 'Tracks'), fillsLine: true,
+                stationLabel: ($country.val() + ' ' + $name.val()).trim(),
+                setPlatform: function (ref) { $platform.val(ref || ''); },
+                setExact: function (on) { slot.exact = on; },
+                shown: function (on) { $name.toggleClass('has-stops', on); },
+                moved: function (point, exact) { moveEnd(point, exact); }
+            });
+            slot.selected = $platform.val() || null;
+            // The end as saved: its point the route's, its tracks asked of quai below.
+            globalStationDict[slot.stationLabel] = [wplist[endIndex()].slice(0, 2), slot.stationLabel];
+
+            function moveEnd(point, exact, quietly) {
+                wplist[endIndex()] = point;
+                var meta = { name: slot.stationLabel, hard: exact };
+                window.routingEndpointMeta = window.routingEndpointMeta || [{}, {}];
+                window.routingEndpointMeta[origin ? 0 : 1] = meta;
+                if (origin) origLabel = slot.stationLabel; else destLabel = slot.stationLabel;
+                if (window.currentPlan) {
+                    var wps = window.currentPlan.getWaypoints();
+                    freehandSegments.clear();
+                    window.currentPlan.spliceWaypoints(origin ? 0 : wps.length - 1, 1, waypointFromMeta(point, meta));
+                }
+                if (!quietly) mapModal.show();
+            }
+
+            // The trip's stop at the station picked, if it is one: the nearest within 400 m.
+            function stopAt(point) {
+                var best = -1, bestM = 400;
+                stored.forEach(function (wp, i) {
+                    if (!wp || !wp.stop) return;
+                    var m = L.latLng(point[0], point[1]).distanceTo(
+                        L.latLng(wp.stop.lat != null ? wp.stop.lat : wp.lat, wp.stop.lng != null ? wp.stop.lng : wp.lng));
+                    if (m < bestM) { best = i; bestM = m; }
+                });
+                return best;
+            }
+
+            // The trip starts (or ends) at its stop `i` instead: that stop's point, platform
+            // and time, the stops before it (after it) dropped, the route redrawn through the rest.
+            function becomeStop(i) {
+                var wp = stored[i], st = wp.stop;
+                var platform = st.platform_rt || st.platform || '';
+                $platform.val(platform);
+                slot.selected = platform || null;
+                renderStops(slot);
+                var sched = origin ? st.dep || st.arr : st.arr || st.dep;
+                var actual = origin ? st.dep_rt || st.arr_rt : st.arr_rt || st.dep_rt;
+                var local = sched && toLocal(sched, st.tz);
+                if (local && $('#radioPreciseDates').is(':checked')) {
+                    $(origin ? '#newTripStartDate' : '#newTripEndDate').val(local.date).trigger('change');
+                    $(origin ? '#newTripStartTime' : '#newTripEndTime').val(local.time).trigger('change');
+                    // The stops' times are for this start now: not to be shifted by its change.
+                    if (origin) stopsStart = local.date + ' ' + local.time;
+                    else if (!stopsStart) stopsStart = $('#newTripStartDate').val() + ' ' + $('#newTripStartTime').val();
+                    if ($('#delayToggle').length) {
+                        var delay = actual ? Math.round((Date.parse(actual) - Date.parse(sched)) / 60000) : 0;
+                        var on = $('#delayToggle').is(':checked');
+                        if (on || delay) {
+                            $(origin ? '#departureDelayMinutes' : '#arrivalDelayMinutes').val(delay || '').trigger('input');
+                            if (!on) $('#delayToggle').prop('checked', true).trigger('change');
+                        }
+                    }
+                }
+                moveEnd([wp.lat, wp.lng], wp.hard === true, true);
+                commit(origin ? stored.slice(i + 1) : stored.slice(0, i), true);
+            }
+
+            stationSearchAutocomplete($name, {}, stationUrl, {{ manual|default('Manual')|tojson }});
+            function setMode(searching) {
+                $name.autocomplete(searching ? 'enable' : 'disable');
+                // What a click does: search while renaming, rename while searching.
+                var next = searching ? modeTexts.rename : modeTexts.search;
+                $toggle.toggleClass('searching', searching)
+                    .attr({ title: next, 'aria-label': next, 'aria-pressed': String(searching) })
+                    .html('<i class="bi ' + (searching ? 'bi-pencil' : 'bi-search') + '"></i>');
+            }
+            setMode(false);
+            $toggle.prop('hidden', false).on('click', function () {
+                var searching = !$toggle.hasClass('searching');
+                setMode(searching);
+                if (searching) $name.trigger('focus').trigger('select');
+            });
+            $name.on('autocompleteselect', function (e, ui) {
+                var value = ui.item.value;
+                setTimeout(function () {   // the value is written after the event
+                    var entry = globalStationDict[value];
+                    if (!entry) return;
+                    var f = splitFlag(entry[1]), $flag = $country.find('option[data-code="' + f.cc + '"]');
+                    $name.val(f.name);
+                    if ($flag.length) $country.val($flag.val());
+                    $('#' + end + 'StationKey').val(globalStationKeys[value] || '');
+                    forgetStop(slot);
+                    slot.stationLabel = value;
+                    renderStops(slot);
+                    setMode(false);
+                    var point = [entry[0][0], entry[0][1]], at = stopAt(point);
+                    if (at >= 0) becomeStop(at);
+                    else moveEnd(point, false);
+                }, 0);
+            });
+        });
+
+        // The saved ends' tracks: their station by its key, else the one of that name nearby
+        // (not merely the nearest), which a trip saved before keys then gets too.
+        if (stationUrls[tripType]) $.ajax({
+            url: '/stationTracks', method: 'POST', contentType: 'application/json', dataType: 'json',
+            data: JSON.stringify({ type: tripType, stops: ['origin', 'destination'].map(function (end) {
+                var slot = endSlots[end], point = globalStationDict[slot.stationLabel][0];
+                return { lat: point[0], lng: point[1], platform: slot.selected,
+                         name: $('#' + end + 'Station').val(), key: $('#' + end + 'StationKey').val() || null };
+            }) }),
+            success: function (data) {
+                ['origin', 'destination'].forEach(function (end, i) {
+                    var station = (data.stops || [])[i], slot = endSlots[end];
+                    if (!station || !station.alike) return;
+                    var $key = $('#' + end + 'StationKey');
+                    if (!$key.val()) $key.val(station.station_key);
+                    globalStationTracks[slot.stationLabel] = station.tracks;
+                    globalStationLines[slot.stationLabel] = station.lines;
+                    renderStops(slot);
+                });
+            }
+        });
     })();
 
     var mapModal = new bootstrap.Modal(document.getElementById('mapModal'), {
@@ -1783,6 +1961,8 @@
         "fineTuneNote": "{{fineTuneNote}}",
         "fineTuneNoteNewRouter": "{{fineTuneNoteNewRouter}}",
         "motisTrack": "{{motisTrack}}",
+        "motisStand": {{ motisStand|tojson }},
+        "motisPier": {{ motisPier|tojson }},
         "distanceTime": "{{distanceTime}}",
         "useLegacyRouter": "{{useLegacyRouter}}",
         "useLegacyRouterHint": "{{useLegacyRouterHint}}",
@@ -1837,7 +2017,6 @@
     };
 
 
-    var wplist = JSON.parse("{{wplist}}");
     // Name + hard/soft mode of each stored intermediate waypoint (see routing.js).
     // (Already set by initStopsEditor, which shares its stop objects with the editor.)
     window.routingWaypointMeta = window.routingWaypointMeta || {{ waypoint_meta|default([])|tojson }};

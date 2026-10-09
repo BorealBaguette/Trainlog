@@ -13,6 +13,7 @@ get_dynamic_user_trips_query = SqlTemplate("src/sql/trips/get_dynamic_user_trips
 get_operators_query = SqlTemplate("src/sql/trips/get_operators.sql")
 get_material_types_query = SqlTemplate("src/sql/trips/get_material_types.sql")
 get_number_stations_query = SqlTemplate("src/sql/trips/get_number_stations.sql")
+get_station_key_counts_query = SqlTemplate("src/sql/trips/get_station_key_counts.sql")
 get_trips_country_query = SqlTemplate("src/sql/trips/get_trips_country.sql")
 get_unique_user_trips_query = SqlTemplate("src/sql/trips/get_unique_user_trips.sql")
 get_updated_user_trips_query = SqlTemplate("src/sql/trips/get_updated_user_trips.sql")
