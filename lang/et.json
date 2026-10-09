@@ -1443,5 +1443,6 @@
     "motisStand": "Perroon {track}",
     "stopStand": "Perroon",
     "motisPier": "Kai {track}",
-    "stopPier": "Kai"
+    "stopPier": "Kai",
+    "swapEnds": "Vaheta algus- ja sihtpunkt"
 }

@@ -1446,5 +1446,6 @@
     "motisStand": "Plattform {track}",
     "stopStand": "Plattform",
     "motisPier": "Kai {track}",
-    "stopPier": "Kai"
+    "stopPier": "Kai",
+    "swapEnds": "Bytt avreise og ankomst"
 }

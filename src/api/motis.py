@@ -774,6 +774,26 @@ def departures_payload(args):
     return {"departures": _departures(searches, start, window, destination)}, 200
 
 
+# A stop this close to where a run was boarded is the same stop (the other direction's side).
+SAME_STOP_M = 150
+
+
+def _passes_again(leg):
+    """Whether the run comes back through where it was boarded before arriving: out to the
+    terminus and back (Brest's tram A, Place de Strasbourg → Porte de Gouesnou → Place de
+    Strasbourg → Jean Jaurès). Nobody rides that; the same vehicle boarded as it comes back
+    is a departure of its own."""
+    frm = leg.get("from") or {}
+    if frm.get("lat") is None or frm.get("lon") is None:
+        return False
+    return any(
+        (stop.get("name") and stop.get("name") == frm.get("name"))
+        or (stop.get("lat") is not None and stop.get("lon") is not None
+            and _distance_m(stop["lat"], stop["lon"], frm["lat"], frm["lon"]) <= SAME_STOP_M)
+        for stop in leg.get("intermediateStops") or []
+    )
+
+
 def _departures(searches, start, window, destination):
     """The form's departure list from the direct legs each search found."""
     legs = [leg for found in searches for leg in found]
@@ -793,7 +813,7 @@ def _departures(searches, start, window, destination):
         end = min(end, max(min(horizons), start + WINDOW_BEFORE + MIN_HORIZON))
     departures, seen = [], {}
     for leg in legs:
-        if not leg or leg.get("cancelled"):
+        if not leg or leg.get("cancelled") or _passes_again(leg):
             continue
         dep_utc = _departure_utc(leg)
         if not dep_utc or not (start <= dep_utc <= end):
@@ -807,8 +827,10 @@ def _departures(searches, start, window, destination):
         # The line's first word too: RER A and RER E share the agency name "RER" and can
         # leave the same minute; the SNCF and Trenitalia copies of a Frecciarossa still
         # agree on it ("FR 6441" / "FR").
+        # The agency's first word only: two feeds can name it differently ("Bibus" and
+        # "Bibus (Brest Métropole)" for Brest's trams).
         trip_key = (
-            (leg.get("agencyName") or "").strip().lower(),
+            ((leg.get("agencyName") or "").strip().lower().split() or [""])[0],
             leg.get("scheduledStartTime"),
             ((leg.get("displayName") or leg.get("routeShortName") or "").split() or [""])[0].lower(),
         )
@@ -837,6 +859,10 @@ def _departures(searches, start, window, destination):
             "color": _hex_colour(leg.get("routeColor")),
             "from_name": frm.get("name"),
             "to_name": to.get("name"),
+            # Where the run is boarded and left, [lat, lng]: its path's ends where it has one
+            # (on the track it takes, as its stops are moved, _snap_stops), else the stops'.
+            "from_point": [round(frm["lat"], COORD_DIGITS), round(frm["lon"], COORD_DIGITS)],
+            "to_point": [round(to["lat"], COORD_DIGITS), round(to["lon"], COORD_DIGITS)],
             # Where it leaves from and arrives (the live platform if it was changed): the
             # trip's departure_platform / arrival_platform when picked.
             "from_platform": (frm.get("track") or frm.get("scheduledTrack") or "").strip() or None,
@@ -880,6 +906,9 @@ def _departures(searches, start, window, destination):
         d.pop("_dest_m")
         path = d.pop("_path")
         _snap_stops(d["stops"], path)
+        if path and len(path) >= 2:
+            d["from_point"] = [round(path[0][0], COORD_DIGITS), round(path[0][1], COORD_DIGITS)]
+            d["to_point"] = [round(path[-1][0], COORD_DIGITS), round(path[-1][1], COORD_DIGITS)]
 
     if departures:
         try:

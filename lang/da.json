@@ -1446,5 +1446,6 @@
     "motisStand": "Perron {track}",
     "stopStand": "Perron",
     "motisPier": "Kaj {track}",
-    "stopPier": "Kaj"
+    "stopPier": "Kaj",
+    "swapEnds": "Byt om på start og destination"
 }

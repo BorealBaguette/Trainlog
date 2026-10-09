@@ -1446,5 +1446,6 @@
     "motisStand": "Cais {track}",
     "stopStand": "Cais",
     "motisPier": "Cais {track}",
-    "stopPier": "Cais"
+    "stopPier": "Cais",
+    "swapEnds": "Trocar origem e destino"
 }

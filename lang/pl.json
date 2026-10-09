@@ -1450,5 +1450,6 @@
     "motisStand": "Stan. {track}",
     "stopStand": "Stanowisko",
     "motisPier": "Nabrz. {track}",
-    "stopPier": "Nabrzeże"
+    "stopPier": "Nabrzeże",
+    "swapEnds": "Zamień start i cel"
 }

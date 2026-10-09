@@ -1442,5 +1442,6 @@
     "motisStand": "{track}. kocsiállás",
     "stopStand": "Kocsiállás",
     "motisPier": "{track}. kikötő",
-    "stopPier": "Kikötő"
+    "stopPier": "Kikötő",
+    "swapEnds": "Indulás és érkezés felcserélése"
 }

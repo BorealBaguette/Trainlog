@@ -1444,5 +1444,6 @@
     "motisStand": "Laituri {track}",
     "stopStand": "Laituri",
     "motisPier": "Laituri {track}",
-    "stopPier": "Laituri"
+    "stopPier": "Laituri",
+    "swapEnds": "Vaihda lähtö ja määränpää"
 }

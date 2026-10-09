@@ -1442,5 +1442,6 @@
     "motisStand": "Peron {track}",
     "stopStand": "Peron",
     "motisPier": "İskele {track}",
-    "stopPier": "İskele"
+    "stopPier": "İskele",
+    "swapEnds": "Kalkış ve varışı değiştir"
 }

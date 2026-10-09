@@ -1446,5 +1446,6 @@
     "motisStand": "Läge {track}",
     "stopStand": "Läge",
     "motisPier": "Kaj {track}",
-    "stopPier": "Kaj"
+    "stopPier": "Kaj",
+    "swapEnds": "Byt avgång och ankomst"
 }

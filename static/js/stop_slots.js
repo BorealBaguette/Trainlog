@@ -21,6 +21,13 @@ function stopSlotLabel(slot) {
   return slot.stationLabel || slot.$input.val();
 }
 
+// The slot's station entry ([point, label, record?, exact?]): the field's own where it has one
+// (a timetable's stop, whose label another stop of the run can share: out and back through
+// Kerlaurent), else the one of its label.
+function stopSlotEntry(slot) {
+  return slot.$input.data('stationEntry') || globalStationDict[stopSlotLabel(slot)];
+}
+
 // "Gleis 7", "Voie 7" and "7" are the same track.
 function stopKey(ref) {
   return String(ref || '').trim().toLowerCase()
@@ -77,7 +84,7 @@ function findStop(list, ref) {
 function renderStops(slot, label) {
   label = label || stopSlotLabel(slot);
   var kind = stopKind(label);
-  if (!globalStationDict[label] || !kind) { hideStops(slot); return; }
+  if (!(stopSlotEntry(slot) || globalStationDict[label]) || !kind) { hideStops(slot); return; }
   var texts = (window.stopSlotOptions || {}).texts || {};
   var title = kind === 'track' ? texts.track : texts.line;
   var list = (kind === 'track' ? globalStationTracks : globalStationLines)[label];
@@ -123,7 +130,7 @@ function hideStops(slot) {
 // still saved as the platform, with the station's own point.
 function pickStop(slot, kind, ref) {
   var label = stopSlotLabel(slot);
-  var entry = globalStationDict[label];
+  var entry = stopSlotEntry(slot);
   var choice = ref ? findStop((kind === 'track' ? globalStationTracks : globalStationLines)[label], ref) : null;
   if (entry) {
     if (!entry.stationPoint) entry.stationPoint = entry[0];

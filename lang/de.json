@@ -1446,5 +1446,6 @@
     "motisStand": "Steig {track}",
     "stopStand": "Steig",
     "motisPier": "Anleger {track}",
-    "stopPier": "Anleger"
+    "stopPier": "Anleger",
+    "swapEnds": "Start und Ziel tauschen"
 }

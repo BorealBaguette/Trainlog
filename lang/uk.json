@@ -1450,5 +1450,6 @@
     "motisStand": "Платф. {track}",
     "stopStand": "Платформа",
     "motisPier": "Причал {track}",
-    "stopPier": "Причал"
+    "stopPier": "Причал",
+    "swapEnds": "Поміняти відправлення і прибуття"
 }

@@ -1444,5 +1444,6 @@
     "motisStand": "Steig {track}",
     "stopStand": "Steig",
     "motisPier": "Steg {track}",
-    "stopPier": "Steg"
+    "stopPier": "Steg",
+    "swapEnds": "Start und Ziil tuusche"
 }

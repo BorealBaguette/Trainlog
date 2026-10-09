@@ -1450,5 +1450,6 @@
     "motisStand": "Peron {track}",
     "stopStand": "Peron",
     "motisPier": "Gat {track}",
-    "stopPier": "Gat"
+    "stopPier": "Gat",
+    "swapEnds": "Zamijeni polazište i odredište"
 }

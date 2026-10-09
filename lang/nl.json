@@ -1446,5 +1446,6 @@
     "motisStand": "Perron {track}",
     "stopStand": "Perron",
     "motisPier": "Steiger {track}",
-    "stopPier": "Steiger"
+    "stopPier": "Steiger",
+    "swapEnds": "Vertrek en aankomst omwisselen"
 }

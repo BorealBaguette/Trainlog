@@ -1443,5 +1443,6 @@
     "motisStand": "Quai {track}",
     "stopStand": "Quai",
     "motisPier": "Quai {track}",
-    "stopPier": "Quai"
+    "stopPier": "Quai",
+    "swapEnds": "Inverser départ et arrivée"
 }

@@ -1444,5 +1444,6 @@
     "motisStand": "{track}번 승차장",
     "stopStand": "승차장",
     "motisPier": "{track}번 부두",
-    "stopPier": "부두"
+    "stopPier": "부두",
+    "swapEnds": "출발지와 도착지 바꾸기"
 }

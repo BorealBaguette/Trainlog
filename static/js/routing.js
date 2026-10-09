@@ -524,7 +524,10 @@ window.removeFreehandOverlay = function(element) { setMarkerBadge(element, 'free
 // hard: false (not just absent) is a point made approximate by hand (see saving).
 function waypointFromMeta(c, meta) {
   meta = meta || {};
-  var options = { hard: meta.hard === true, modeSet: meta.hard === false };
+  // auto: made exact by the page, not by the user (a timetable's stop put on its direction's
+  // stop position): kept exact only where that does not lengthen the route (createCustomRouter).
+  var options = { hard: meta.hard === true, modeSet: meta.hard === false,
+                  autoHard: meta.hard === true && meta.auto === true };
   if (meta.name) options.label = meta.name;
   if (meta.stop && typeof meta.stop === 'object') options.stop = meta.stop;
   return L.Routing.waypoint(L.latLng(c[0], c[1]), meta.name || '', options);
@@ -578,9 +581,13 @@ function trackLabel(track) {
 // Starts on for users who chose that in their settings; a point made approximate by
 // hand (modeSet) stays approximate then, as it was saved.
 var allWaypointsExact = !!window.exactWaypointsDefault;
+// Set while the comparison route (createCustomRouter) is requested: the points made exact by the
+// page count as approximate for it.
+var relaxAutoExact = false;
 function isHardWaypoint(wp) {
   if (!wp) return false;
   var o = wp.options || {};
+  if (relaxAutoExact && o.autoHard) return false;
   return o.modeSet ? !!o.hard : (allWaypointsExact || !!o.hard);
 }
 
@@ -607,7 +614,7 @@ window.setWaypointHard = function(index, hard) {
     syncAllExactToggles();
   }
   // modeSet: chosen by hand, so dragging the point later leaves it as it is.
-  wps[index].options = L.extend({}, wps[index].options, { hard: !!hard, modeSet: true });
+  wps[index].options = L.extend({}, wps[index].options, { hard: !!hard, modeSet: true, autoHard: false });
   updateMarkerVisuals();
   refreshWaypointPopup(index);
   if (window.currentControl) window.currentControl.route();
@@ -1055,9 +1062,47 @@ function rerouteForFilters() {
 }
 
 // Custom router that handles freehand segments
+// How much longer than with them approximate a route may be with the points the page made
+// exact (autoHard), and still keep them: an exact point on the wrong track (the other
+// direction's, a line crossing at another level, a stop mapped on the wrong way) sends the
+// route round to turn back, kilometres longer; right, it changes the length by metres.
+var AUTO_EXACT_SLACK = 1.1, AUTO_EXACT_MARGIN_M = 300;
+
 function createCustomRouter(baseRouter, freehandSegments) {
   return {
+    // The route, with the points the page made exact checked: asked for twice at once, with
+    // them exact and approximate, and the approximate kept (they turn approximate) where the
+    // exact is much longer. The user's own exact points are never second-guessed.
     route: function(waypoints, callback, context, options) {
+      var self = this;
+      var auto = (waypoints || []).filter(function (wp) {
+        return wp.options && wp.options.autoHard && isHardWaypoint(wp);
+      });
+      if (!auto.length || !useNewRouter) return self.routeOnce(waypoints, callback, context, options);
+      var results = {}, pending = 2;
+      function settle() {
+        if (--pending) return;
+        var exact = results.exact, loose = results.loose;
+        var length = function (r) { return r && !r.err && r.routes && r.routes[0] ? r.routes[0].summary.totalDistance : null; };
+        var e = length(exact), l = length(loose);
+        if (l != null && (e == null || e > l * AUTO_EXACT_SLACK + AUTO_EXACT_MARGIN_M)) {
+          auto.forEach(function (wp) { wp.options = L.extend({}, wp.options, { hard: false, autoHard: false }); });
+          updateMarkerVisuals();
+          callback.call(context, loose.err, loose.routes);
+        } else {
+          callback.call(context, exact.err, exact.routes);
+        }
+      }
+      self.routeOnce(waypoints, function (err, routes) { results.exact = { err: err, routes: routes }; settle(); }, context, options);
+      // The segment requests are built as they are sent, so the flag holds for them all.
+      relaxAutoExact = true;
+      try {
+        self.routeOnce(waypoints, function (err, routes) { results.loose = { err: err, routes: routes }; settle(); }, context, options);
+      } finally {
+        relaxAutoExact = false;
+      }
+    },
+    routeOnce: function(waypoints, callback, context, options) {
       // Clear previous freehand click-intercept layers
       freehandLines.forEach(function(line) { map.removeLayer(line); });
       freehandLines = [];
@@ -2089,6 +2134,8 @@ function routing(map, showSidebar=true, type, allowFerrySplit=false){
     // before any dragend listener of ours would run.
     plan.on('waypointdragstart', function(e) {
       var wp = plan.getWaypoints()[e.index];
+      // Placed by hand now: the user's, no longer one the page made exact.
+      if (wp && wp.options && wp.options.autoHard) wp.options = L.extend({}, wp.options, { autoHard: false });
       if (!placedExactly() || isHardWaypoint(wp) || (wp.options && wp.options.modeSet)) return;
       wp.options = L.extend({}, wp.options, { hard: true });
       updateMarkerVisuals();

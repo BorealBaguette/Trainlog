@@ -1442,5 +1442,6 @@
     "motisStand": "{track}号站台",
     "stopStand": "站台",
     "motisPier": "{track}号码头",
-    "stopPier": "码头"
+    "stopPier": "码头",
+    "swapEnds": "交换出发地和目的地"
 }

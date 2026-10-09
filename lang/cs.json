@@ -1450,5 +1450,6 @@
     "motisStand": "Stan. {track}",
     "stopStand": "Stanoviště",
     "motisPier": "Molo {track}",
-    "stopPier": "Molo"
+    "stopPier": "Molo",
+    "swapEnds": "Prohodit start a cíl"
 }
