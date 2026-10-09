@@ -12,7 +12,7 @@ import datetime
 
 from py.utils import get_flag_emoji
 from src.pg import pg_session
-from src.quai import NAME_LIKENESS, QUAI_MODES, name_likeness, nearest_stations, place_of
+from src.quai import NAME_LIKENESS, QUAI_MODES, name_likeness, nearest_stations, place_of, resolve_key
 
 END_RADIUS_M = 400
 # How many of the stations nearest an end to choose among by name.
@@ -79,7 +79,9 @@ def station_groups(user_id):
             if not nearby:
                 unmatched += len(end.trip_ids)
                 continue
-            station, alike = station_of_end(end.label, end.station_key, nearby)
+            # A trip saved at a station since merged into another is at that one.
+            key = end.station_key and resolve_key(mode, end.station_key)
+            station, alike = station_of_end(end.label, key, nearby)
             group = groups.get((mode, station["station_key"]))
             if group is None:
                 group = groups[(mode, station["station_key"])] = {

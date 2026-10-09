@@ -15,6 +15,10 @@ CREATE TABLE IF NOT EXISTS station_overrides (
     PRIMARY KEY (mode, station_key),
     CONSTRAINT station_overrides_position_check CHECK ((lat IS NULL) = (lng IS NULL))
 );
+-- A station OSM maps as two that are one for travellers (Berlin Hauptbahnhof and its deep
+-- level, "(tief)"): the quai station_key, of the same mode, it is taken as instead, which
+-- gains its tracks and lines.
+ALTER TABLE station_overrides ADD COLUMN IF NOT EXISTS merged_into TEXT;
 
 -- The quai station (src/quai.py) a trip left from and arrived at: its station_key, unique
 -- within the trip type's mode. Names change, as OSM's do and as Trainlog names stations;
