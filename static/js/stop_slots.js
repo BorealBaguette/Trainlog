@@ -150,6 +150,7 @@ function pickStop(slot, kind, ref, auto) {
     if (choice && !$('#lineName').val()) $('#lineName').val(slot.lineFilled = choice.ref);
   }
   renderStops(slot, label);
+  slot.$input.trigger('stoppicked');
 }
 // A new or retyped station: whatever was picked at the old one no longer applies.
 function forgetStop(slot) {
