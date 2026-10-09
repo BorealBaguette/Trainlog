@@ -975,7 +975,7 @@
     })
   };
   // The timetable picker's way in: the platform a departure gives at either end.
-  function pickTrack(role, ref) { pickStop(endSlots[role], 'track', ref); }
+  function pickTrack(role, ref) { pickStop(endSlots[role], 'track', ref, true); }
 
   watchStopSlot(endSlots.origin);
   watchStopSlot(endSlots.destination);
@@ -1420,7 +1420,9 @@
             // feed says "75"), over the timetable's own, unless another was picked by hand.
             var byHand = slot.selected && stopKey(slot.selected) !== stopKey(place.platform);
             var platform = (!byHand && station.platform) || slot.selected || place.platform;
-            if (platform) pickStop(slot, 'track', platform); else renderStops(slot);
+            // The timetable's (or its stop id's) track: the page's choice, checked by the
+            // router; one picked by hand stays the user's.
+            if (platform) pickStop(slot, 'track', platform, !byHand); else renderStops(slot);
             // Not placed on a track of the station's: where the line stops there going this
             // way, from OSM's route relations (one per direction), exact, so that the route
             // takes that direction's track and not the other's a few metres off (Bordeaux's,

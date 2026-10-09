@@ -1063,10 +1063,12 @@ function rerouteForFilters() {
 
 // Custom router that handles freehand segments
 // How much longer than with them approximate a route may be with the points the page made
-// exact (autoHard), and still keep them: an exact point on the wrong track (the other
-// direction's, a line crossing at another level, a stop mapped on the wrong way) sends the
-// route round to turn back, kilometres longer; right, it changes the length by metres.
-var AUTO_EXACT_SLACK = 1.1, AUTO_EXACT_MARGIN_M = 300;
+// exact (autoHard), and still keep them: right, they change its length by a few metres each;
+// one on the wrong track (the other direction's, a line crossing at another level, a stop
+// mapped on the wrong way) sends the route past it to turn back, hundreds of metres to
+// kilometres longer. In metres, not a share of the route: Köln-Mülheim's turn back added 2km
+// to a route ten times as long.
+var AUTO_EXACT_MARGIN_M = 300, AUTO_EXACT_PER_POINT_M = 50;
 
 function createCustomRouter(baseRouter, freehandSegments) {
   return {
@@ -1085,7 +1087,7 @@ function createCustomRouter(baseRouter, freehandSegments) {
         var exact = results.exact, loose = results.loose;
         var length = function (r) { return r && !r.err && r.routes && r.routes[0] ? r.routes[0].summary.totalDistance : null; };
         var e = length(exact), l = length(loose);
-        if (l != null && (e == null || e > l * AUTO_EXACT_SLACK + AUTO_EXACT_MARGIN_M)) {
+        if (l != null && (e == null || e > l + AUTO_EXACT_MARGIN_M + AUTO_EXACT_PER_POINT_M * auto.length)) {
           auto.forEach(function (wp) { wp.options = L.extend({}, wp.options, { hard: false, autoHard: false }); });
           updateMarkerVisuals();
           callback.call(context, loose.err, loose.routes);
