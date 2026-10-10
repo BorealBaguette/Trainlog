@@ -67,7 +67,7 @@ class User(authDb.Model):
     # How stations are named in searches (src/quai.py): "" in the user's language, "local" as
     # written where they are (北京南), "int" in Latin letters (Beijingnan); and whether always
     # in the script of the user's language, transliterated where OSM has no name in it.
-    station_names = authDb.Column(authDb.String(10), nullable=False, default="")
+    station_names = authDb.Column(authDb.String(10), nullable=False, default="int")
     station_script = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Discord user id, set via the /discord/connect OAuth flow. Used to grant/revoke
     # the premium role automatically when membership status changes.
@@ -199,7 +199,7 @@ def station_names_context():
 def ensure_station_name_columns(db_session):
     """The station naming settings' columns, on an auth.db made before them."""
     existing = {row[1] for row in db_session.execute(sqlalchemy.text("PRAGMA table_info(user)"))}
-    for column, definition in (("station_names", "VARCHAR(10) NOT NULL DEFAULT ''"),
+    for column, definition in (("station_names", "VARCHAR(10) NOT NULL DEFAULT 'int'"),
                                ("station_script", "BOOLEAN NOT NULL DEFAULT 0")):
         if column not in existing:
             db_session.execute(sqlalchemy.text(f"ALTER TABLE user ADD COLUMN {column} {definition}"))
@@ -207,12 +207,12 @@ def ensure_station_name_columns(db_session):
 
 
 def station_name_settings():
-    """The logged-in user's (station_names, station_script), read once per request; ("",
+    """The logged-in user's (station_names, station_script), read once per request; ("int",
     False) for a visitor."""
     if "station_name_settings" not in g:
         user = User.query.filter_by(username=session.get("logged_in")).first() \
             if session.get("logged_in") else None
-        g.station_name_settings = (user.station_names, user.station_script) if user else ("", False)
+        g.station_name_settings = (user.station_names, user.station_script) if user else ("int", False)
     return g.station_name_settings
 
 
