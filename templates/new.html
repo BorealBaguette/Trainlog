@@ -1470,7 +1470,7 @@
       var key = runKey(d);
       $.ajax({
         url: '/stationTracks', method: 'POST', contentType: 'application/json', dataType: 'json',
-        data: JSON.stringify({ type: routingType, stops: places.map(function (p) {
+        data: JSON.stringify({ type: routingType, line: d.line || null, stops: places.map(function (p) {
           return p.point ? { lat: p.point[0], lng: p.point[1], platform: p.platform || null, name: p.name || null,
                              id: p.id || null } : {};
         }) }),

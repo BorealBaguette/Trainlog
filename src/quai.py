@@ -676,14 +676,14 @@ def station_by_place(name, nearby):
 SNAP_MODES = ("tram", "metro", "bus")
 
 
-def stops_by_direction(mode, keys, timeout=5):
+def stops_by_direction(mode, keys, line=None, timeout=5):
     """Where each station of a journey (quai keys, in the order travelled, None for none) is
-    stopped at going that way: [[lat, lng] or None, ...], from OSM's route relations (quai's
-    /directions). All None if quai cannot be reached."""
+    stopped at going that way on `line` (its ref, if known): [[lat, lng] or None, ...], from
+    OSM's route relations (quai's /directions). All None if quai cannot be reached."""
     if not any(keys):
         return [None] * len(keys)
     try:
-        resp = requests.post(f"{quai_url()}/directions", json={"mode": mode, "keys": keys},
+        resp = requests.post(f"{quai_url()}/directions", json={"mode": mode, "keys": keys, "ref": line},
                              timeout=timeout)
         resp.raise_for_status()
         return resp.json()["positions"]
@@ -717,13 +717,13 @@ def quay_of(stations, point_id):
     return best
 
 
-def stations_at(trip_type, stops, radius_km=0.5):
+def stations_at(trip_type, stops, line=None, radius_km=0.5):
     """The station at each timetable stop {lat, lng, platform?, name?, key?, id?}: of the trip
     type's mode within `radius_km`, the one holding the stop point its Transitous id names
     (stop_point_id: then its very platform, `platform` its own track, and point, `snap`), the one of that station key (a trip's saved end), else the nearest
     named alike, else the nearest, as {station, station_key, alike, tracks, lines, track, snap},
     or None. `track` is the stop's platform among the station's tracks, or None. `snap`, for
-    stops given in the order travelled, is where the line stops there going that way
+    stops given in the order travelled, is where `line` (its ref, if known) stops there going that way
     (stops_by_direction), [lat, lng], or None. By name first, as points are rough: Bryggen's is 38m from Bryggen and
     39m from another stop.
     """
@@ -773,7 +773,7 @@ def stations_at(trip_type, stops, radius_km=0.5):
         found.append(station)
     if mode in SNAP_MODES:
         keys = [station and station["station_key"] for station in found]
-        for station, position in zip(found, stops_by_direction(mode, keys)):
+        for station, position in zip(found, stops_by_direction(mode, keys, line)):
             if station and position and not station.get("quay"):
                 station["snap"] = position
     return found
