@@ -700,6 +700,18 @@ body::before {
   color: inherit;
   opacity: 0.8;
 }
+/* A name or place ICU wrote in the user's script (none in OSM), or one set in Trainlog. */
+.ui-autocomplete .transliterated{
+  color: #b45309;
+}
+.ui-autocomplete .named-in-trainlog{
+  color: #15803d;
+}
+.ui-autocomplete .ui-state-active .transliterated,
+.ui-autocomplete .ui-state-active .named-in-trainlog{
+  color: inherit;
+  text-decoration: underline dotted;
+}
 
 .ui-autocomplete .disambiguation{
   opacity: 0.5;
@@ -1098,6 +1110,59 @@ input[type=number] {
   display: block;
   clear: both;
 }
+
+/* Testing how stations are named (new.html, ?stationnames), over the user's settings. */
+.station-names-panel{
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+  padding: 8px 12px 10px;
+  border: 1px dashed #c7cdd6;
+  border-radius: 10px;
+  background: rgba(37, 99, 235, 0.04);
+  font-size: 0.9rem;
+}
+.station-names-panel .station-names-title{
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.station-names-panel .station-names-reset{
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.station-names-panel .form-check{
+  margin: 0;
+}
+/* What the colours of station names mean (includes/station_script_switch.html). */
+.station-names-colours{
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 4px 0 0;
+  font-size: 0.8rem;
+}
+.station-names-colours[hidden]{
+  display: none;
+}
+.station-names-colour::before{
+  content: "";
+  display: inline-block;
+  width: 0.6em;
+  height: 0.6em;
+  margin-right: 0.4em;
+  border-radius: 50%;
+  background: currentColor;
+}
+.station-names-colour.transliterated{ color: #b45309; }
+.station-names-colour.named-in-trainlog{ color: #15803d; }
 
 #form label.checkboxLabel {
   display: inline;

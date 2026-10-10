@@ -311,7 +311,8 @@ from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
 from src.account_export import build_account_data_csvs
 from src.delete_account import delete_account_data
-from src.users import User, Friendship, authDb, exact_waypoints_context
+from src.users import (User, Friendship, authDb, ensure_station_name_columns,
+                       exact_waypoints_context, station_names_context, valid_station_names)
 from src.email_parser import start_email_listener
 from src.trip_announcer import (
     announced_trip_ids,
@@ -1369,6 +1370,7 @@ def order_trip_types(types):
 
 
 app.context_processor(exact_waypoints_context)
+app.context_processor(station_names_context)
 
 
 @app.context_processor
@@ -9948,6 +9950,9 @@ def user_settings(username):
         params["tileserver"] = request.form["tileserver"]
         params["globe"] = "globe" in request.form
         params["exact_waypoints"] = "exact_waypoints" in request.form
+        if valid_station_names(request.form.get("station_names", "")):
+            params["station_names"] = request.form.get("station_names", "")
+        params["station_script"] = "station_script" in request.form
         # Premium-only toggle: only honour it for premium users so a crafted POST
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
@@ -9994,6 +9999,8 @@ def user_settings(username):
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
         user_globe=user.globe,
+        station_names=user.station_names,
+        station_script_checked="checked" if user.station_script else "",
         discord_id=user.discord_id,
         discord_webhooks=list_webhooks(user.uid),
         discord_webhook_status=request.args.get("dw"),
@@ -14958,6 +14965,7 @@ def ensure_auth_db_columns():
             sqlalchemy.text("ALTER TABLE user ADD COLUMN premium_cancel_at DATETIME")
         )
         authDb.session.commit()
+    ensure_station_name_columns(authDb.session)
 
     # Same idempotent-ALTER treatment for pending_bmc_event: create_all() created
     # the table before `tier` existed on the model, so it needs a manual ALTER too.

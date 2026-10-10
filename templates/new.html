@@ -268,6 +268,47 @@
       </div>
       <br>
       {% endif %}
+      {# Testing how stations are named, over the user's settings (src/quai.py user_lang,
+         forced_script): only with ?stationnames in the address, its choices kept as cookies. #}
+      {% if request.args.get('stationnames') is not none %}
+      <link rel="stylesheet" href="{{ static_autoversion(filename='styles/combo.css') }}">
+      <script src="{{ static_autoversion(filename='js/combo.js') }}"></script>
+      <div class="station-names-panel non_manual">
+        <div class="station-names-title">
+          <span><i class="fa-solid fa-flask"></i> {{ stationNamesLabel }}</span>
+          <a href="#" class="station-names-reset"><i class="fa-solid fa-rotate-left"></i> {{ stationNamesSettings }}</a>
+        </div>
+        {% with combo_id="quai_lang", combo_value=request.cookies.get('quai_lang', ''), combo_first=stationNamesSettings %}
+          {% include "includes/station_names_combo.html" %}
+        {% endwith %}
+        {% with switch_id="quaiForceScript", switch_name=None, heading_class="station-names-title",
+                switch_checked=request.cookies.get('quai_force_script', '1' if station_script_setting else '0') == '1' %}
+          {% include "includes/station_script_switch.html" %}
+        {% endwith %}
+      </div>
+      <script>
+        (function () {
+          function setCookie(name, value) {
+            document.cookie = name + '=' + value + '; path=/; max-age=' + (value ? 31536000 : 0);
+          }
+          var script = document.getElementById('quaiForceScript');
+          langCombo('quai_lang', { onApply: function (item) {
+            setCookie('quai_lang', item.dataset.value);
+            stationScriptFor(item.dataset.value);
+          } });
+          script.addEventListener('change', function () {
+            setCookie('quai_force_script', this.checked ? '1' : '0');
+          });
+          // Back to the settings: neither choice kept.
+          document.querySelector('.station-names-reset').addEventListener('click', function (e) {
+            e.preventDefault();
+            setCookie('quai_lang', '');
+            setCookie('quai_force_script', '');
+            location.reload();
+          });
+        })();
+      </script>
+      {% endif %}
       <label for="originManualToggle" class="checkboxLabel non_manual">{{manualOrigin}}</label>
       <input type="checkbox" id="originManualToggle" name="originManualToggle" class="non_manual" />
 

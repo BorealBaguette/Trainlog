@@ -1,0 +1,31 @@
+{# The "force script" switch under the station names dropdown (station_names_combo.html), for
+   a language read in another script than Latin (src/quai.py SCRIPT_OF_LANG), the interface's
+   for "my language": named after that script, and shown only then, as a Latin reader's names
+   are Latin already, and local ones as they are. With what the names' colours mean, shown with
+   it only: alone, the green would be the only colour to explain. The page calls
+   stationScriptFor(value) as the dropdown changes; heading_class styles the heading. #}
+<div id="{{ switch_id }}-block">
+  <label class="{{ heading_class }}" for="{{ switch_id }}">{{ stationNamesScriptLabel }}</label>
+  <div class="form-check form-switch">
+    <input class="form-check-input" type="checkbox" id="{{ switch_id }}" {% if switch_name %}name="{{ switch_name }}" form="settingsForm"{% endif %} {{ 'checked' if switch_checked }}>
+    <label class="form-check-label" for="{{ switch_id }}" id="{{ switch_id }}-label"></label>
+  </div>
+</div>
+<p class="settings2-hint station-names-colours" id="{{ switch_id }}-colours">
+  <span class="station-names-colour transliterated">{{ stationNamesOrange }}</span>
+  <span class="station-names-colour named-in-trainlog">{{ stationNamesGreen }}</span>
+</p>
+<script>
+  function stationScriptFor(value) {
+    var scripts = { ja: 'Jpan', ko: 'Hang', zh: 'Hani', ru: 'Cyrl', uk: 'Cyrl' };
+    var names = { Cyrl: {{ scriptCyrl|tojson }}, Jpan: {{ scriptJpan|tojson }},
+                  Hang: {{ scriptHang|tojson }}, Hani: {{ scriptHani|tojson }} };
+    var script = value === 'local' || value === 'int' ? null : scripts[value || {{ langId|tojson }}];
+    document.getElementById({{ switch_id|tojson }} + '-block').hidden = !script;
+    document.getElementById({{ switch_id|tojson }} + '-colours').hidden = !script;
+    if (script) {
+      document.getElementById({{ switch_id|tojson }} + '-label').textContent =
+        {{ stationNamesForce|tojson }}.replace('{script}', names[script]);
+    }
+  }
+</script>

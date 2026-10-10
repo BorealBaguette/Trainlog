@@ -820,7 +820,12 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
           }
           displayLabel = label + (item.properties.homonymy_order ? item.properties.homonymy_order : "");
           stationList.push({ "label": displayLabel, "value": displayLabel, "disambiguation": disambiguation,
-                             "source": item.properties.source, "tier": item.properties.tier, "id": id });
+                             "source": item.properties.source, "tier": item.properties.tier, "id": id,
+                             // TEMPORARY: written in the forced script by ICU, not by OSM, or
+                             // named in Trainlog (the station explorer).
+                             "transliterated": item.properties.transliterated,
+                             "namedInTrainlog": item.properties.named_by === 'trainlog',
+                             "placeTransliterated": item.properties.place_transliterated });
           globalStationDict[displayLabel] = [item.geometry.coordinates.reverse(), label];
           globalStationTracks[displayLabel] = item.properties.tracks || [];
           globalStationLines[displayLabel] = item.properties.lines || [];
@@ -971,6 +976,15 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
     widget.menu.element.addClass("stationSearchMenu").on("scroll", function () {
       loadMore(widget);
     });
+    // `text` with each of `parts` in it as a span.transliterated, escaped.
+    function markParts(text, parts) {
+      var html = sanitize(text);
+      parts.forEach(function (part) {
+        var escaped = sanitize(part);
+        if (escaped) html = html.split(escaped).join('<span class="transliterated">' + escaped + '</span>');
+      });
+      return html;
+    }
     widget._renderItem = function(ul, item) {
       if ('manual' in item) {
         return $("<li>")
@@ -988,15 +1002,22 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
           // too little room, never pushed onto the next result's line.
           $row = $("<div class='station-item'>").append(
             $("<span class='station-name'>").text(item.label),
-            $("<span class='station-place'>").text(item.disambiguation).attr("title", item.disambiguation));
+            $("<span class='station-place'>").text(item.disambiguation).attr("title", item.disambiguation)
+              .toggleClass("transliterated", !!item.placeTransliterated));
         } else {
           // Photon's homonyms keep their own line, which tells them apart.
           $row = $("<div>" + sanitize(item.label) + (item.disambiguation
             ? " <span class='disambiguation'>" + sanitize(item.disambiguation) + "</span>" : "") + "</div>");
         }
+        var $name = $row.children(".station-name");
+        if (!$name.length) $name = $row;
+        $name.toggleClass("named-in-trainlog", !!item.namedInTrainlog);
+        // Only the parts ICU wrote: "ベルゲン - オラヴ クイッレス ガテ" has Bergen's from OSM.
+        if ((item.transliterated || []).length) $name.html(markParts(item.label, item.transliterated));
         return $("<li>")
           .addClass("stationSource-" + source)
-          .attr("title", source)
+          .attr("title", source + (item.namedInTrainlog ? ", named in Trainlog" : "")
+                + ((item.transliterated || []).length || item.placeTransliterated ? ", transliterated" : ""))
           .append($row)
           .appendTo(ul);
       }

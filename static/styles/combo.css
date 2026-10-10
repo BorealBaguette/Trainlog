@@ -1,0 +1,23 @@
+/* Searchable combo (custom dropdown, static/js/combo.js): flag stays in the left icon box
+   only, never in the collapsed button text; the open list shows a flag per row plus a real
+   search box, since flag-in-list/no-flag-collapsed can't be done with a native <select>. */
+.settings2-combo { position: relative; }
+.settings2-combo-btn { display: flex; align-items: center; cursor: pointer; }
+.settings2-combo-panel {
+  display: none; position: absolute; top: calc(100% + 4px); left: 0; right: 0; z-index: 20;
+  background: #fff; border: 1px solid #dee2e6; border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12); overflow: hidden;
+}
+.settings2-combo-panel.show { display: block; }
+.settings2-combo-search { border: none; border-bottom: 1px solid #e9ecef; border-radius: 0; }
+.settings2-combo-search:focus { box-shadow: none; border-color: #0d6efd; }
+.settings2-combo-list { max-height: 260px; overflow-y: auto; padding: 4px; }
+.settings2-combo-item {
+  display: flex; align-items: center; gap: 10px; width: 100%;
+  padding: 8px 10px; border: none; background: none; border-radius: 6px;
+  text-align: left; font-size: 0.9rem; color: #212529;
+}
+.settings2-combo-item:hover { background: #f1f3f5; }
+.settings2-combo-item.active { background: #e7f0ff; color: #0d6efd; font-weight: 600; }
+.settings2-combo-flag { width: 1.3em; text-align: center; flex: none; }
+.settings2-combo-empty { padding: 10px; color: #6c757d; font-size: 0.85rem; text-align: center; }

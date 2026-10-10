@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
-from flask import session
+import sqlalchemy
+from flask import g, session
 from flask_sqlalchemy import SQLAlchemy
 
 authDb = SQLAlchemy()
@@ -63,6 +64,11 @@ class User(authDb.Model):
     live_tracking = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Routing: start with "pass exactly through every point" on.
     exact_waypoints = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    # How stations are named in searches (src/quai.py): "" in the user's language, "local" as
+    # written where they are (北京南), "int" in Latin letters (Beijingnan); and whether always
+    # in the script of the user's language, transliterated where OSM has no name in it.
+    station_names = authDb.Column(authDb.String(10), nullable=False, default="")
+    station_script = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Discord user id, set via the /discord/connect OAuth flow. Used to grant/revoke
     # the premium role automatically when membership status changes.
     discord_id = authDb.Column(authDb.String(30), nullable=True)
@@ -109,6 +115,8 @@ class User(authDb.Model):
             "flight_3d": self.flight_3d,
             "live_tracking": self.live_tracking,
             "exact_waypoints": self.exact_waypoints,
+            "station_names": self.station_names,
+            "station_script": self.station_script,
             "discord_id": self.discord_id,
             "discord_username": self.discord_username,
             "discord_autopost": self.discord_autopost,
@@ -166,6 +174,46 @@ class Friendship(authDb.Model):
     friend = authDb.relationship(
         "User", foreign_keys=[friend_id], backref="friend_users"
     )
+
+
+def valid_station_names(value):
+    """Whether `value` is a way of naming stations: "", "local", "int" or a language."""
+    from src.utils import lang
+
+    return value in ("", "local", "int") or value in lang
+
+
+def station_names_context():
+    """Template variables: the languages stations can be named in, and how the logged-in user
+    has them named (the settings, and new.html's ?stationnames testing panel)."""
+    from src.utils import lang
+
+    station_names, station_script = station_name_settings()
+    return {
+        "station_name_langs": [{"code": code, "name": lang[code][code]} for code in sorted(lang)],
+        "station_names_setting": station_names,
+        "station_script_setting": station_script,
+    }
+
+
+def ensure_station_name_columns(db_session):
+    """The station naming settings' columns, on an auth.db made before them."""
+    existing = {row[1] for row in db_session.execute(sqlalchemy.text("PRAGMA table_info(user)"))}
+    for column, definition in (("station_names", "VARCHAR(10) NOT NULL DEFAULT ''"),
+                               ("station_script", "BOOLEAN NOT NULL DEFAULT 0")):
+        if column not in existing:
+            db_session.execute(sqlalchemy.text(f"ALTER TABLE user ADD COLUMN {column} {definition}"))
+            db_session.commit()
+
+
+def station_name_settings():
+    """The logged-in user's (station_names, station_script), read once per request; ("",
+    False) for a visitor."""
+    if "station_name_settings" not in g:
+        user = User.query.filter_by(username=session.get("logged_in")).first() \
+            if session.get("logged_in") else None
+        g.station_name_settings = (user.station_names, user.station_script) if user else ("", False)
+    return g.station_name_settings
 
 
 def exact_waypoints_context():
