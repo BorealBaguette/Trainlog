@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 
 from flask import Blueprint, jsonify, render_template, request, session
 
@@ -135,7 +136,8 @@ def station_explorer_merge(mode, key):
         pg.execute(
             """
             DELETE FROM station_overrides WHERE mode = :mode AND station_key = :key
-              AND name IS NULL AND lat IS NULL AND tracks IS NULL AND merged_into IS NULL
+              AND name IS NULL AND lat IS NULL AND tracks IS NULL AND names IS NULL
+              AND merged_into IS NULL
             """,
             {"mode": mode, "key": key},
         )
@@ -146,9 +148,9 @@ def station_explorer_merge(mode, key):
 @admin_blueprint.route("/station_explorer/override/<mode>/<key>", methods=["POST"])
 @admin_required
 def station_explorer_override(mode, key):
-    """Sets the name, position and tracks Trainlog uses for a quai station ({name, lat, lng,
-    tracks}, any of them empty; tracks as merge_tracks takes them); with all of them empty,
-    removes the override."""
+    """Sets the name, position, tracks and names in given languages Trainlog uses for a quai
+    station ({name, lat, lng, tracks, names}, any of them empty; tracks as merge_tracks takes
+    them, names as {language: name}); with all of them empty, removes the override."""
     body = request.get_json(silent=True) or {}
     name = (body.get("name") or "").strip() or None
     try:
@@ -173,12 +175,21 @@ def station_explorer_override(mode, key):
         if not (-90 <= t_lat <= 90 and -180 <= t_lng <= 180):
             return jsonify(error=f"track {ref}: position out of range"), 400
         tracks.append({"ref": ref, "lat": t_lat, "lng": t_lng, "on_track": bool(t.get("on_track"))})
+    names = {}
+    for code, value in (body.get("names") or {}).items():
+        code, value = str(code).strip(), str(value or "").strip()
+        if not re.fullmatch(r"[a-z]{2,3}(-[A-Za-z]{2,4})?", code):
+            return jsonify(error=f"{code!r} is not a language code (ja, pt-BR)"), 400
+        if not value or len(value) > 200:
+            return jsonify(error=f"the {code} name must be 1 to 200 characters"), 400
+        names[code] = value
     with pg_session() as pg:
-        if name is None and lat is None and not tracks:
+        if name is None and lat is None and not tracks and not names:
             # Cleared: gone, unless it still says what the station is merged into.
             pg.execute(
                 """
-                UPDATE station_overrides SET name = NULL, lat = NULL, lng = NULL, tracks = NULL
+                UPDATE station_overrides SET name = NULL, lat = NULL, lng = NULL, tracks = NULL,
+                    names = NULL
                 WHERE mode = :mode AND station_key = :key
                 """,
                 {"mode": mode, "key": key},
@@ -193,14 +204,18 @@ def station_explorer_override(mode, key):
         else:
             pg.execute(
                 """
-                INSERT INTO station_overrides (mode, station_key, name, lat, lng, tracks, updated_by)
-                VALUES (:mode, :key, :name, :lat, :lng, CAST(:tracks AS jsonb), :user)
+                INSERT INTO station_overrides (mode, station_key, name, lat, lng, tracks, names,
+                                               updated_by)
+                VALUES (:mode, :key, :name, :lat, :lng, CAST(:tracks AS jsonb),
+                        CAST(:names AS jsonb), :user)
                 ON CONFLICT (mode, station_key) DO UPDATE SET
                     name = EXCLUDED.name, lat = EXCLUDED.lat, lng = EXCLUDED.lng,
-                    tracks = EXCLUDED.tracks, updated_by = EXCLUDED.updated_by, updated_on = now()
+                    tracks = EXCLUDED.tracks, names = EXCLUDED.names,
+                    updated_by = EXCLUDED.updated_by, updated_on = now()
                 """,
                 {"mode": mode, "key": key, "name": name, "lat": lat, "lng": lng,
-                 "tracks": json.dumps(tracks) if tracks else None, "user": getUser()},
+                 "tracks": json.dumps(tracks) if tracks else None,
+                 "names": json.dumps(names, ensure_ascii=False) if names else None, "user": getUser()},
             )
     return jsonify(ok=True)
 

@@ -74,7 +74,11 @@
     display: inline-flex; align-items: center; justify-content: center; color: #374151; flex-shrink: 0; }
   .se-icon-btn:hover { border-color: var(--se-accent); color: var(--se-accent); }
   .se-icon-btn.danger:hover { border-color: #dc2626; color: #dc2626; }
-  .se-track-rows { display: flex; flex-direction: column; gap: 4px; }
+  .se-track-rows, .se-name-rows { display: flex; flex-direction: column; gap: 4px; }
+  .se-name-row { display: grid; grid-template-columns: 64px 1fr 30px; gap: 4px; align-items: center;
+    background: var(--se-soft); border-radius: 8px; padding: 4px; }
+  .se-name-row .osm { grid-column: 1 / -1; font-size: .7rem; color: var(--se-muted); padding: 0 4px; }
+  .se-name-row .osm.same { color: #15803d; }
   .se-track-row { display: grid; grid-template-columns: 52px 1fr auto auto 30px 30px; gap: 4px; align-items: center;
     background: var(--se-soft); border-radius: 8px; padding: 4px; }
   .se-track-row label { font-size: .7rem; white-space: nowrap; display: flex; align-items: center; gap: 3px;
@@ -385,6 +389,32 @@ function bindOverride(s) {
   };
   ((s.override || {}).tracks || []).forEach(t => addTrackRow(t));
   f.querySelector('[data-action=add-track]').addEventListener('click', () => addTrackRow());
+  // A name per language, with OSM's for it beside: one OSM has gained can go.
+  const nameRows = f.querySelector('.se-name-rows');
+  const addNameRow = (code = '', value = '') => {
+    const row = document.createElement('div');
+    row.className = 'se-name-row';
+    row.innerHTML = `
+      <input class="form-control form-control-sm" name="code" placeholder="ja" value="${esc(code)}">
+      <input class="form-control form-control-sm" name="value" placeholder="Name" value="${esc(value)}">
+      <button type="button" class="se-icon-btn danger" data-action="remove-name" title="Remove"><i class="bi bi-trash"></i></button>
+      <span class="osm"></span>`;
+    const osm = row.querySelector('.osm');
+    const showOsm = () => {
+      const c = row.querySelector('[name=code]').value.trim();
+      const v = (s.osm_names || {})['name:' + c];
+      osm.textContent = !c ? '' : v ? `OSM: ${v}` : 'not in OSM';
+      osm.classList.toggle('same', !!v && v === row.querySelector('[name=value]').value.trim());
+    };
+    row.querySelectorAll('input').forEach(i => i.addEventListener('input', showOsm));
+    row.querySelector('[data-action=remove-name]').addEventListener('click', () => row.remove());
+    nameRows.appendChild(row);
+    showOsm();
+    open(true);
+    if (!code) row.querySelector('[name=code]').focus();
+  };
+  Object.entries((s.override || {}).names || {}).forEach(([code, value]) => addNameRow(code, value));
+  f.querySelector('[data-action=add-name]').addEventListener('click', () => addNameRow());
   async function save(body) {
     status.textContent = 'Saving…';
     const resp = await fetch(`{{ url_for("admin.station_explorer") }}/override/` +
@@ -409,7 +439,12 @@ function bindOverride(s) {
       if (!at) { status.textContent = `Track ${ref}: position "lat, lng"`; return; }
       tracks.push({ ref, lat: at[0], lng: at[1], on_track: row.querySelector('[name=on_track]').checked });
     }
-    save({ name: f.elements.name.value, lat: point[0], lng: point[1], tracks });
+    const names = {};
+    for (const row of nameRows.querySelectorAll('.se-name-row')) {
+      const code = row.querySelector('[name=code]').value.trim(), value = row.querySelector('[name=value]').value.trim();
+      if (code && value) names[code] = value;
+    }
+    save({ name: f.elements.name.value, lat: point[0], lng: point[1], tracks, names });
   });
   f.querySelector('[data-action=clear]').addEventListener('click', () => save({}));
   f.querySelector('[data-action=pick]').addEventListener('click', () => startPicking(f.elements.position));
@@ -569,7 +604,8 @@ function render(s) {
   const objects = s.osm_objects || [];
   const tracks = s.tracks || [];
   const lines = s.lines || [];
-  const names = s.names || {};
+  const names = s.osm_names || s.names || {};
+  const ownNames = Object.fromEntries(Object.entries((s.override || {}).names || {}).map(([c, v]) => ['name:' + c, v]));
   const place = [(s.city || {}).name, s.region].filter(Boolean).join(', ');
 
   detailEl.classList.remove('empty');
@@ -615,6 +651,14 @@ function render(s) {
           </div>
         </div>
         <div class="se-field">
+          <label>Names in languages</label>
+          <div class="se-name-rows"></div>
+          <div class="se-inline" style="margin-top: 4px;">
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="add-name"><i class="bi bi-plus"></i> Name</button>
+            <span class="se-hint">shown to readers of that language; put real names in OSM</span>
+          </div>
+        </div>
+        <div class="se-field">
           <label>Merge into</label>
           <input class="form-control form-control-sm" name="merge" placeholder="Another ${esc(s.mode)} station this one is part of">
           <ul class="se-merge-results"></ul>
@@ -654,8 +698,9 @@ function render(s) {
       </dl>
     </div>
     <details class="se-card">
-      <summary>Names <span class="count">${Object.keys(names).length}</span></summary>
+      <summary>Names <span class="count">${Object.keys(names).length + Object.keys(ownNames).length}</span></summary>
       ${tagsTable(names)}
+      ${Object.keys(ownNames).length ? `<h3 style="margin-top: 8px;">Set in Trainlog</h3>${tagsTable(ownNames)}` : ''}
     </details>
     <div class="se-card">
       <h3>OSM objects <span class="count">${objects.length}</span></h3>

@@ -73,12 +73,14 @@ def station(mode, key):
         return jsonify(error="quai unavailable"), 502
     if not data:
         return jsonify(error="unknown station"), 404
-    # quai's position, before an override moves it, then Trainlog's name for the station.
+    # quai's position and names, before an override changes them, then Trainlog's name for
+    # the station.
     # Shown as it is, not as the station it may be merged into, with what it is merged into
     # and what is merged into it.
     station = data["station"]
     station["osm_lat"], station["osm_lng"] = station["lat"], station["lng"]
     station["osm_tracks"] = station.get("tracks") or []
+    station["osm_names"] = dict(station.get("names") or {})
     apply_overrides([station], follow_merges=False)
     station["trainlog_name"] = station_label(station)
 
