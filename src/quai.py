@@ -44,12 +44,15 @@ def user_lang():
     outside a request."""
     from flask import has_request_context, request, session
 
-    from src.users import station_name_settings
+    from src.users import station_name_settings, valid_station_names
 
     if not has_request_context():
         return "en"
-    # The ?stationnames testing panel's choice (new.html), over the settings.
-    return (request.cookies.get("quai_lang") or station_name_settings()[0]
+    # The testing panel sends an override for this request only, never a cookie.
+    override = request.headers.get("X-Trainlog-Station-Lang", "")
+    if override and valid_station_names(override):
+        return override
+    return (station_name_settings()[0]
             or (session.get("userinfo") or {}).get("lang") or "en")
 
 
@@ -86,9 +89,9 @@ def forced_script():
 
     if not has_request_context():
         return None
-    # The ?stationnames testing panel's choice (new.html), over the settings.
-    forced = request.cookies.get("quai_force_script")
-    if forced is None:
+    # Request-only override from the testing panel; old test cookies are ignored.
+    forced = request.headers.get("X-Trainlog-Station-Script")
+    if forced not in ("0", "1"):
         forced = "1" if station_name_settings()[1] else ""
     if forced != "1":
         return None
