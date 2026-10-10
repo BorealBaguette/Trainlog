@@ -7951,7 +7951,7 @@ def placeAutocomplete():
 
 @app.route("/stationTracks", methods=["POST"])
 def stationTracks():
-    """The station at each timetable stop, with its tracks and lines: {type, stops: [{lat,
+    """The station at each timetable stop, with its tracks and lines: {type, line?, stops: [{lat,
     lng, platform?, name?, key?}]} gives {stops: [{station, station_key, tracks, lines, track} or null]}
     (see src/quai.py)."""
     body = request.get_json(silent=True) or {}
@@ -7959,7 +7959,7 @@ def stationTracks():
     if not isinstance(stops, list) or len(stops) > 200:
         return jsonify(error="stops must be a list of at most 200"), 400
     stops = [s if isinstance(s, dict) else {} for s in stops]
-    return jsonify(stops=stations_at(body.get("type"), stops))
+    return jsonify(stops=stations_at(body.get("type"), stops, body.get("line")))
 
 
 @app.route("/stationAutocomplete")
