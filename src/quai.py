@@ -38,26 +38,218 @@ def quai_url():
     return url.rstrip("/") if url else None
 
 
-def _place_name(place):
-    """A city's name ({name, name:en} from quai), in English where its own is not in Latin
-    script, and in its first language where bilingual ("Ixelles - Elsene" is Ixelles)."""
+def user_lang():
+    """The language quai names stations and places in: as the user's settings say (theirs,
+    "local" as written where they are, "int" in Latin letters), else the page's; English
+    outside a request."""
+    from flask import has_request_context, request, session
+
+    from src.users import station_name_settings
+
+    if not has_request_context():
+        return "en"
+    # The ?stationnames testing panel's choice (new.html), over the settings.
+    return (request.cookies.get("quai_lang") or station_name_settings()[0]
+            or (session.get("userinfo") or {}).get("lang") or "en")
+
+
+# The user's "always in my language's script" setting (station_script): every name in the
+# script of the language quai answers in. The letters of each script, as Unicode names them,
+# and the ICU transform writing a Latin name in it (none for Chinese characters).
+SCRIPT_LETTERS = {
+    "Latn": ("LATIN",), "Cyrl": ("CYRILLIC",), "Grek": ("GREEK",), "Armn": ("ARMENIAN",),
+    "Geor": ("GEORGIAN",), "Hebr": ("HEBREW",), "Arab": ("ARABIC",), "Thai": ("THAI",),
+    "Hang": ("HANGUL",), "Jpan": ("HIRAGANA", "KATAKANA", "CJK"), "Hani": ("CJK",),
+}
+FROM_LATIN = {
+    "Cyrl": "Latin-Cyrillic", "Grek": "Latin-Greek", "Armn": "Latin-Armenian",
+    "Geor": "Latin-Georgian", "Hebr": "Latin-Hebrew", "Arab": "Latin-Arabic", "Thai": "Latin-Thai",
+    "Hang": "Latin-Hangul", "Jpan": "Latin-Katakana",
+}
+# Scripts without capitals, whose transforms take a Latin capital for a letter of its own.
+CASELESS = ("Geor", "Hebr", "Arab", "Thai", "Hang", "Jpan")
+KANA = re.compile("[\u3040-\u30ff]")
+# The kana ICU writes va, ve, wi, we and wo with, long out of use: ヴェ for ヹ ("vei" ヴェイ).
+MODERN_KANA = str.maketrans({"ヷ": "ヴァ", "ヸ": "ヴィ", "ヹ": "ヴェ", "ヺ": "ヴォ", "ヰ": "ウィ",
+                             "ヱ": "ウェ", "ヲ": "オ"})
+PLAIN_LETTERS = str.maketrans({"ø": "o", "Ø": "O", "æ": "ae", "Æ": "Ae", "œ": "oe", "Œ": "Oe",
+                               "ß": "ss", "ł": "l", "Ł": "L", "đ": "d", "Đ": "D", "þ": "th", "Þ": "Th"})
+# The script each language is read in, where not Latin.
+SCRIPT_OF_LANG = {"ja": "Jpan", "ko": "Hang", "zh": "Hani", "ru": "Cyrl", "uk": "Cyrl"}
+_transliterators = {}
+
+
+def forced_script():
+    from flask import has_request_context, request
+
+    from src.users import station_name_settings
+
+    if not has_request_context():
+        return None
+    # The ?stationnames testing panel's choice (new.html), over the settings.
+    forced = request.cookies.get("quai_force_script")
+    if forced is None:
+        forced = "1" if station_name_settings()[1] else ""
+    if forced != "1":
+        return None
+    # A local name is in its own script already.
+    return None if user_lang() == "local" else SCRIPT_OF_LANG.get(user_lang(), "Latn")
+
+
+def in_script(text, script):
+    letters = [ch for ch in text or "" if ch.isalpha()]
+    return bool(letters) and all(unicodedata.name(ch, "").startswith(SCRIPT_LETTERS[script])
+                                 for ch in letters)
+
+
+def written_in_script(label, names, latin):
+    return script_written(label, names, latin)[0]
+
+
+HAN = re.compile("[\u3400-\u4dbf\u4e00-\u9fff]+")
+
+# Mandarin in katakana, as Japanese writes it (北京 ベイジン, 怀柔 ホワイロウ): each syllable's
+# pinyin, from ICU, as Japanese romaji, which ICU's Latin-Katakana reads as it should. Its
+# initial in romaji, then its final, as after a consonant; j, q and x read u as ü.
+PINYIN_INITIALS = ("zh", "ch", "sh", "b", "p", "m", "f", "d", "t", "n", "l", "g", "k", "h",
+                   "j", "q", "x", "r", "z", "c", "s")
+ROMAJI_INITIAL = {"zh": "j", "ch": "ch", "sh": "sh", "l": "r", "q": "ch", "x": "sh", "c": "ts"}
+ROMAJI_FINAL = {
+    "a": "a", "o": "ō", "e": "ō", "ai": "ai", "ei": "ei", "ao": "ao", "ou": "ou", "an": "an",
+    "en": "en", "ang": "an", "eng": "on", "ong": "on", "er": "aru", "i": "ī", "ia": "ya",
+    "ie": "ie", "iao": "yao", "iu": "iu", "ian": "ien", "in": "in", "iang": "yan", "ing": "in",
+    "iong": "yon", "u": "ū", "ua": "ua", "uo": "uo", "uai": "uai", "ui": "ui", "uan": "uan",
+    "un": "un", "uang": "uan", "v": "yū", "ve": "yue", "van": "yuen", "vn": "yun",
+}
+# Whole syllables that do not follow from their parts.
+PINYIN_KANA = {
+    "zhi": "ジー", "chi": "チー", "shi": "シー", "ri": "リー", "zi": "ズー", "ci": "ツー", "si": "スー",
+    "yi": "イー", "wu": "ウー", "wo": "ウォ", "wei": "ウェイ", "wen": "ウェン", "weng": "ウォン",
+    "hu": "フー", "hua": "ホア", "huai": "ホワイ", "hui": "ホイ", "huan": "ホアン", "huang": "ホアン",
+    "e": "オー", "ye": "イエ", "yan": "イエン", "you": "ヨウ", "yuan": "ユエン",
+}
+
+
+def pinyin_kana(syllable):
+    if syllable in PINYIN_KANA:
+        return PINYIN_KANA[syllable]
+    initial = next((i for i in PINYIN_INITIALS if syllable.startswith(i)), "")
+    final = syllable[len(initial):]
+    if initial in ("j", "q", "x") and final.startswith("u"):
+        final = "v" + final[1:]
+    # du, tu: ドゥ, トゥ, which romaji cannot say.
+    if initial in ("d", "t") and final.startswith("u"):
+        rest = ROMAJI_FINAL.get(final, final)[1:] or "ー"
+        return {"d": "ドゥ", "t": "トゥ"}[initial] + (_icu("Latin-Katakana", rest) if rest != "ー" else rest)
+    if syllable[:1] in ("y", "w") and not initial:
+        romaji = syllable.replace("yi", "i", 1).replace("wu", "u", 1)
+        romaji = ROMAJI_FINAL.get(romaji[1:] if romaji[0] in "yw" else romaji, romaji)
+        romaji = ("y" if syllable[0] == "y" and not romaji.startswith(("y", "i", "ī")) else
+                  "w" if syllable[0] == "w" and not romaji.startswith(("u", "ū")) else "") + romaji
+    else:
+        romaji = ROMAJI_INITIAL.get(initial, initial) + ROMAJI_FINAL.get(final, final)
+        # A palatal initial takes the y of its final: jia ja, xiao shao, not jya, shyao.
+        romaji = re.sub(r"^(j|ch|sh)y", r"\1", romaji)
+    return _icu("Latin-Katakana", romaji)
+
+
+def chinese_katakana(text):
+    """The Chinese characters of `text` in katakana, by their Mandarin reading, or None."""
+    han = "".join(HAN.findall(text or ""))
+    if not han:
+        return None
+    pinyin = unicodedata.normalize("NFD", _icu("Han-Latin/Names", han)).replace("u\u0308", "v")
+    syllables = "".join(ch for ch in pinyin if not unicodedata.combining(ch)).lower().split()
+    # er after a syllable is its r: 哈尔滨 ハルビン.
+    return "".join("ル" if s == "er" and i else pinyin_kana(s) for i, s in enumerate(syllables))
+
+
+def _icu(transform, text):
+    if transform not in _transliterators:
+        import icu
+
+        _transliterators[transform] = icu.Transliterator.createInstance(transform)
+    return _transliterators[transform].transliterate(text)
+
+
+def script_written(label, names, latin):
+    """`label` in the forced script, if any: as it is when written in it, else one of its OSM
+    names that is (name:<language> first), else its Latin name, which ICU writes in it. With
+    whether ICU wrote it, for the page to tell. In Japanese, a name of Chinese characters alone
+    is Japanese only as the station's name:ja: 北京南 is Chinese, in katakana ベイジングナン."""
+    script = forced_script()
+    names = {key: value for key, value in (names or {}).items()
+             if key == "name" or key.startswith("name:") or key.endswith("_name")}
+
+    def fits(text):
+        return in_script(text, script) and (
+            script != "Jpan" or text == names.get("name:ja") or bool(KANA.search(text)))
+
+    if not script or fits(label):
+        return label, False
+    own = f"name:{user_lang()}"
+    for key in sorted(names, key=lambda key: (key != own, not key.startswith("name:"))):
+        if fits(names[key]):
+            return names[key], False
+    if script == "Latn":
+        return latin or label, False
+    # A place named in Latin letters has no Latin name apart (Oslo): its own.
+    latin = latin or (label if in_script(label, "Latn") else None)
+    # A Chinese name in Japanese: by its Mandarin reading, not its Latin letters.
+    if script == "Jpan":
+        katakana = chinese_katakana(names.get("name:zh") or names.get("name") or label)
+        if katakana:
+            return katakana, True
+    if script not in FROM_LATIN or not latin:
+        return label, False
+    # Letters the transforms do not know, as their plain ones: Skøyen as Skoyen, Kjelsås as
+    # Kjelsas, not "Скøыен".
+    plain = "".join(ch for ch in unicodedata.normalize("NFD", latin.translate(PLAIN_LETTERS))
+                    if not unicodedata.combining(ch))
+    written = _icu(FROM_LATIN[script], plain.lower() if script in CASELESS else plain)
+    return (written.translate(MODERN_KANA) if script == "Jpan" else written), True
+
+
+def place_transliterated(place):
     place = place or {}
-    name = place.get("name")
-    if name and any(ord(ch) > 0x24F for ch in name if ch.isalpha()):
-        name = place.get("name:en") or name
+    return script_written(place.get("label"), place, place.get("latin") or place.get("name:en"))[1]
+
+
+def transliterated(station):
+    """The parts of a station's name ICU wrote in the forced script, as ICU guesses where OSM
+    has no name in it ([] if none): its own name, its place before it (station_label), or
+    both; "ベルゲン - オラヴ クイッレス ガテ" has Bergen's from OSM. And whether its place
+    (place_of) is one."""
+    if not forced_script():
+        return [], False
+    parts = []
+    own, by_icu = script_written(station["label"], station.get("names"), station.get("latin"))
+    if by_icu:
+        parts.append(own)
+    if station.get("needs_place"):
+        place = (station["city"] if station.get("city_override") and station.get("city")
+                 else station.get("settlement") or station.get("city"))
+        if place_transliterated(place):
+            parts.append(_place_name(place))
+    return parts, place_transliterated(station.get("settlement") or station.get("city"))
+
+
+def _place_name(place):
+    """A city's name in the user's script (quai's label), in its first language where bilingual
+    ("Ixelles - Elsene" is Ixelles)."""
+    place = place or {}
+    # In the "local" language, each place as it names itself.
+    label = place.get("name") if user_lang() == "local" else place.get("label")
+    name = written_in_script(label, place, place.get("latin") or place.get("name:en"))
     return re.split(r"\s+-\s+|\s*/\s*", name)[0] if name else None
 
 
 def _lift_end_name(name, end):
     """A lift's end where OSM maps no station, in the user's language (quai gives it as
     lift_end, lower or upper): "Tråstølheisen nedre stasjon", "Tråstølheisen, gare amont"."""
-    from flask import has_request_context, session
-
     from src.utils import lang
 
-    texts = lang["en"]
-    if has_request_context():
-        texts = lang.get((session.get("userinfo") or {}).get("lang"), texts)
+    texts = lang.get(user_lang(), lang["en"])
     return texts["liftLowerStation" if end == "lower" else "liftUpperStation"].replace("{name}", name)
 
 
@@ -83,7 +275,11 @@ def station_label(station):
     stations; "Lyon Part-Dieu" and "Brussels-Luxembourg" as they are."""
     if (station.get("override") or {}).get("name"):
         return station["override"]["name"]
-    label = station["label"]
+    # In the "local" language, each station as it names itself (but for a name set in
+    # Trainlog).
+    label = station["label"] if user_lang() != "local" or station.get("named_by") else station["name"]
+    own = written_in_script(label, station.get("names"), station.get("latin"))
+    label = own
     if station.get("lift_end"):
         label = _lift_end_name(label, station["lift_end"])
     # A lift's or funicular's station goes by its ski area, else its line, as people know it:
@@ -103,13 +299,13 @@ def station_label(station):
         return f"{line} - {label}"
     city = prefix_place_of(station)
     if station.get("needs_place") and city:
-        return f"{city} - {station['label']}"
-    return station["label"]
+        return f"{city} - {own}"
+    return own
 
 
 def station_overrides(stations):
     """The overrides set for these quai stations (station_overrides): {(mode, station_key):
-    {name, lat, lng}}. Empty if the database cannot be read: an override is never worth
+    {name, lat, lng, tracks, merged_into, names}}. Empty if the database cannot be read: an override is never worth
     failing a search for."""
     keys = [(s["mode"], s["station_key"]) for s in stations if s.get("station_key")]
     if not keys:
@@ -118,7 +314,8 @@ def station_overrides(stations):
         with pg_session() as pg:
             rows = pg.execute(
                 """
-                SELECT mode, station_key, name, lat, lng, tracks, merged_into FROM station_overrides
+                SELECT mode, station_key, name, lat, lng, tracks, merged_into, names
+                FROM station_overrides
                 WHERE (mode, station_key) IN (SELECT * FROM unnest(:modes, :keys))
                 """,
                 {"modes": [k[0] for k in keys], "keys": [k[1] for k in keys]},
@@ -128,7 +325,7 @@ def station_overrides(stations):
         return {}
     return {
         (r.mode, r.station_key): {"name": r.name, "lat": r.lat, "lng": r.lng, "tracks": r.tracks,
-                                  "merged_into": r.merged_into}
+                                  "merged_into": r.merged_into, "names": r.names or {}}
         for r in rows
     }
 
@@ -189,12 +386,13 @@ STATION_CACHE_TTL_S = 600
 
 def quai_station(mode, key):
     """quai's station of `mode` with that key (redirects followed), or None."""
-    cached = _station_cache.get((mode, key))
+    cache_key = (mode, key, user_lang())
+    cached = _station_cache.get(cache_key)
     if cached and time.monotonic() - cached[0] < STATION_CACHE_TTL_S:
         return copy.deepcopy(cached[1])
     station = (quai_get(f"station/{mode}/{key}") or {}).get("station")
     if station:
-        _station_cache[(mode, key)] = (time.monotonic(), station)
+        _station_cache[cache_key] = (time.monotonic(), station)
     return copy.deepcopy(station) if station else None
 
 
@@ -235,7 +433,8 @@ def _merge_stations(stations):
 def apply_overrides(stations, follow_merges=True):
     """quai stations as Trainlog takes them, in place: merged into another where set (unless
     follow_merges is False: the station explorer shows a station as it is), and with the
-    names and positions set for them by hand."""
+    names and positions set for them by hand. A name set for a language is among the
+    station's names, as its name:<language>, and its label for readers of it (named_by)."""
     if follow_merges:
         _merge_stations(stations)
     overrides = station_overrides(stations)
@@ -248,6 +447,14 @@ def apply_overrides(stations, follow_merges=True):
             station["lat"], station["lng"] = override["lat"], override["lng"]
         if override["tracks"]:
             station["tracks"] = merge_tracks(station.get("tracks"), override["tracks"])
+        if override["names"]:
+            station["names"] = {**(station.get("names") or {}),
+                                **{f"name:{code}": name for code, name in override["names"].items()}}
+            code = user_lang()
+            name = override["names"].get(code) or override["names"].get(code.split("-")[0])
+            if name:
+                station["label"] = name
+                station["named_by"] = "trainlog"
     return stations
 
 
@@ -280,6 +487,11 @@ def _features(stations):
                 "tracks": s.get("tracks") or [],
                 "lines": s.get("lines") or [],
                 "source": "quai",
+                # Whether ICU wrote the name and the place in the forced script, and whether
+                # the name is one set in Trainlog for the reader's language.
+                "named_by": "trainlog" if s.get("named_by") or (s.get("override") or {}).get("name") else "osm",
+                "transliterated": transliterated(s)[0],
+                "place_transliterated": transliterated(s)[1],
             },
         }
         for s in stations
@@ -304,7 +516,7 @@ def _features(stations):
 
 
 def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit=10,
-                    lang=None, timeout=None):
+                    timeout=None):
     """Stations of the trip type's mode named like `q`, or near lat/lon when `q` is None.
 
     Returns Photon-shaped features, or None if quai does not cover the type or cannot be
@@ -323,8 +535,7 @@ def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit
     else:
         endpoint = "reverse"
         params = {"lat": lat, "lon": lon, "mode": mode, "limit": limit, "radius": radius_km or 1}
-    if lang:
-        params["lang"] = lang
+    params["lang"] = user_lang()
     try:
         resp = requests.get(f"{url}/{endpoint}", params=params, timeout=timeout)
         resp.raise_for_status()
@@ -347,7 +558,8 @@ def nearest_stations(mode, points, radius_m=400, candidates=1, timeout=30):
         body = {"mode": mode, "radius": radius_m, "points": points[start:start + 5000]}
         if candidates > 1:
             body["candidates"] = candidates
-        resp = requests.post(f"{url}/nearest", json=body, timeout=timeout)
+        resp = requests.post(f"{url}/nearest", params={"lang": user_lang()}, json=body,
+                             timeout=timeout)
         resp.raise_for_status()
         found.extend(resp.json()["stations"])
     stations = [s for item in found for s in (item if isinstance(item, list) else [item]) if s]
@@ -363,7 +575,8 @@ def quai_get(path, params=None, timeout=5):
     if not url:
         return None
     try:
-        resp = requests.get(f"{url}/{path.lstrip('/')}", params=params, timeout=timeout)
+        resp = requests.get(f"{url}/{path.lstrip('/')}", params={**(params or {}), "lang": user_lang()},
+                            timeout=timeout)
         if resp.status_code == 404:
             return {}
         resp.raise_for_status()
