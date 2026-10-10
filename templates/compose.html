@@ -6,6 +6,7 @@
 {% if vehicle_type == 'ferry' %}
 <script src="{{ url_for('static', filename='js/vessel_field.js') }}"></script>
 {% endif %}
+<script src="{{ static_autoversion(filename='js/stop_slots.js') }}"></script>
 
 {% include "bootstrap/navigation.html" %}
 
@@ -285,6 +286,15 @@
     font-size: .75rem; color: #9ca3af; font-variant-numeric: tabular-nums; pointer-events: none;
   }
   .via-compose-row.has-time .form-control { padding-right: 10rem; }  /* "10:58 – 10:59 · Voie 4" */
+  /* A station's tracks or lines (stop_slots.js), left of the dot or of a via's ×. Centred
+     without a transform, which would trap its menu under the next field. */
+  .cp-station-wrap .track-dropdown, .via-compose-row .track-dropdown {
+    top: 0; bottom: 0; right: 1.2rem; height: auto; display: flex; align-items: center;
+  }
+  .cp-station-wrap .track-dropdown[hidden], .via-compose-row .track-dropdown[hidden] { display: none; }
+  .cp-station-wrap .form-control.has-stops, .via-compose-row .form-control.has-stops { padding-right: 6.2rem; }
+  .via-compose-row.has-stops .via-compose-time { right: 6rem; }
+  .via-compose-row.has-time.has-stops .form-control { padding-right: 13rem; }
 
   /* Once there are vias, a summary row heads them and folds them away on click; under
      it the stops read as its children, indented on a guide line. */
@@ -745,6 +755,10 @@
         <label>{{ originTerminal }}</label>
         <div class="cp-station-wrap">
           <input type="text" id="originStation" class="form-control stationSearch" placeholder="{{ originTerminal }}">
+          <div class="dropdown track-dropdown" hidden>
+            <button type="button" class="track-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>
+            <div class="dropdown-menu dropdown-menu-end track-menu"></div>
+          </div>
           <span class="cp-station-dot" id="dot-origin"></span>
         </div>
       </div>
@@ -772,6 +786,10 @@
         <label>{{ destinationTerminal }}</label>
         <div class="cp-station-wrap">
           <input type="text" id="destinationStation" class="form-control stationSearch" placeholder="{{ destinationTerminal }}">
+          <div class="dropdown track-dropdown" hidden>
+            <button type="button" class="track-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>
+            <div class="dropdown-menu dropdown-menu-end track-menu"></div>
+          </div>
           <span class="cp-station-dot" id="dot-dest"></span>
         </div>
       </div>
@@ -2021,7 +2039,12 @@ function startRouting() {
   updateAirRoute();
   {% else %}
   wplist = [originEntry[0]].concat(viaStations.filter(Boolean).map(function(v) { return v[0]; })).concat([destEntry[0]]);
-  window.routingWaypointMeta = viaStations.filter(Boolean).map(function(v) { return { name: v[1], stop: v[2] }; });
+  window.routingWaypointMeta = viaStations.filter(Boolean).map(function(v) {
+    return v[3] === true ? { name: v[1], stop: v[2], hard: true, auto: v[4] === 'auto' } : { name: v[1], stop: v[2] };
+  });
+  window.routingEndpointMeta = typeof endExact === 'undefined' ? [] : ['origin', 'dest'].map(function (role) {
+    return endExact[role] ? { hard: true, auto: endExact[role] === 'auto' } : {};
+  });
   renderRouteSummary('routing');
   routing(map, false, vehicle_type);
   bindPlanSync();
@@ -2125,6 +2148,11 @@ document.addEventListener('click', function (e) {
 
 function onStationSelected(role, entry, dotId) {
   document.getElementById(dotId).classList.add('resolved');
+  // Another station, however picked: its own tracks, none chosen yet.
+  if (typeof endSlots !== 'undefined' && endSlots[role]) {
+    forgetStop(endSlots[role]);
+    renderStops(endSlots[role]);
+  }
   if (role === 'origin') originEntry = entry; else destEntry = entry;
   pendingRouteFit = true;              // an end was named, so reframe once the route lands
   setTimeout(renderRouteSummary, 0);   // after startRouting has had its say
@@ -2203,6 +2231,54 @@ $(document).on('focusin', '.stationSearch', function () {
   map.panTo(L.latLng(entry[0][0], entry[0][1]), { animate: true });
 });
 
+// ── Tracks and lines (static/js/stop_slots.js) ──
+//    A station from quai comes with its tracks and lines: picking one at an end or a via
+//    moves its point there, and the route with it.
+{% if vehicle_type not in ('air', 'accommodation', 'poi', 'restaurant') %}
+window.stopSlotOptions = { preferLines: ['metro', 'tram'].indexOf(vehicle_type) !== -1,
+                          texts: { track: {{ platform_text(vehicle_type, 'word')|tojson }},
+                                   line: {{ (lineName|default('Line'))|tojson }} } };
+// Set while a timetable run's stations are matched (matchStopTracks), which reroutes once
+// for them all rather than once per pick.
+var stopsBatch = false;
+// Each end's point: '1' put on a stop position by the user, 'auto' by the page (checked by
+// the router, routing.js), '' approximate.
+var endExact = { origin: '', dest: '' };
+
+// A station entry ([point, label, record?]) as a waypoint, named, a timetable stop's record
+// riding along. Never hard: false, which would read as made approximate by hand.
+function entryWaypoint(entry, exact) {
+  return waypointFromMeta(entry[0], { name: entry[1], stop: entry[2],
+                                      hard: exact ? true : undefined, auto: exact === 'auto' });
+}
+function endWaypoint(role) {
+  var entry = role === 'origin' ? originEntry : destEntry;
+  return entryWaypoint([entry[0], entry[1]], endExact[role]);
+}
+
+var endSlots = {};
+['origin', 'dest'].forEach(function (role) {
+  var $input = $(role === 'origin' ? '#originStation' : '#destinationStation');
+  var slot = endSlots[role] = stopSlot({
+    $input: $input, $dropdown: $input.siblings('.track-dropdown'), fillsLine: true,
+    setPlatform: function (ref) { $(role === 'origin' ? '#departurePlatform' : '#arrivalPlatform').val(ref || ''); },
+    setExact: function (on, auto) { endExact[role] = on ? (auto ? 'auto' : '1') : ''; },
+    shown: function (on) { $input.toggleClass('has-stops', on); }
+  });
+  watchStopSlot(slot);
+  $input.on('stoppicked', function () {
+    var entry = stopSlotEntry(slot);
+    if (!entry || stopsBatch) return;
+    if (role === 'origin') originEntry = entry; else destEntry = entry;
+    if (!routingStarted) { placeTempPin(entry, role); return; }
+    if (!window.currentPlan) return;
+    freehandSegments.clear();
+    var wps = window.currentPlan.getWaypoints();
+    window.currentPlan.spliceWaypoints(role === 'origin' ? 0 : wps.length - 1, 1, endWaypoint(role));
+  });
+});
+{% endif %}
+
 // ── Form via stations ──
 {% if vehicle_type not in ('air', 'accommodation', 'poi', 'restaurant') %}
 var viaRows = [];   // the row elements, index-aligned with viaStations
@@ -2216,9 +2292,10 @@ function insertViaWaypoint(entry) {
   window.currentPlan.setWaypoints(wps);
 }
 // Named, so its marker's popup shows the stop rather than "Waypoint #".
-// A timetable stop's record (entry[2]) rides along as the waypoint's `stop` (routing.js).
+// A timetable stop's record (entry[2]) rides along as the waypoint's `stop` (routing.js);
+// exact (entry[3], 'auto' in entry[4] when the page made it so) on a stop position.
 function viaWaypoint(entry) {
-  return L.Routing.waypoint(L.latLng(entry[0][0], entry[0][1]), entry[1], entry[2] ? { stop: entry[2] } : {});
+  return entryWaypoint(entry, entry[3] === true && (entry[4] === 'auto' ? 'auto' : true));
 }
 
 // Once there are vias, a summary row ("Renens VD · Morges · … · Coppet  12") heads
@@ -2253,7 +2330,7 @@ function updateViaSummary() {
 function setViaStops(stops, collapse) {
   viaRows.forEach(function (r) { r.remove(); });
   viaRows.length = 0; viaStations.length = 0;
-  stops.forEach(function (stop) { addViaRow(stop.entry, stop.label, stop.time, true); });
+  stops.forEach(function (stop) { addViaRow(stop.entry, stop.label, stop.time, true, stop.track); });
   setViaCollapsed(!!collapse && stops.length > 0);
   updateViaSummary();
   if (routingStarted && window.currentPlan) {
@@ -2268,20 +2345,28 @@ function setViaStops(stops, collapse) {
 
 // entry/label are optional: passing them creates the row already filled in, which is
 // how the map's stop picker adds a via. `time` ("07:22 – 07:23", a timetable stop's) is
-// shown at the end of the row until the stop is edited; `batch` leaves the route to the
-// caller (setViaStops).
-function addViaRow(entry, label, time, batch) {
+// shown at the end of the row until the stop is edited, followed by `track` ("Voie 4")
+// unless the track dropdown shows it; `batch` leaves the route to the caller (setViaStops).
+function addViaRow(entry, label, time, batch, track) {
   var row = document.createElement('div');
   row.className = 'via-compose-row';
   row.innerHTML = '<i class="bi bi-signpost-2 via-compose-icon" aria-hidden="true"></i>' +
     '<input type="text" class="form-control stationSearch viaStation" placeholder="{{ via|default("Via") }}">' +
+    '<div class="dropdown track-dropdown" hidden>' +
+      '<button type="button" class="track-toggle" data-bs-toggle="dropdown" aria-expanded="false"></button>' +
+      '<div class="dropdown-menu dropdown-menu-end track-menu"></div>' +
+    '</div>' +
     '<button type="button" class="via-compose-remove">&times;</button>';
+  var badge = null;
+  function showTime() {
+    if (badge) badge.textContent = row.classList.contains('has-stops') || !track ? time : time + ' · ' + track;
+  }
   if (time) {
     row.classList.add('has-time');
-    var badge = document.createElement('span');
+    badge = document.createElement('span');
     badge.className = 'via-compose-time';
-    badge.textContent = time;
-    row.insertBefore(badge, row.querySelector('.via-compose-remove'));
+    row.insertBefore(badge, row.querySelector('.track-dropdown'));
+    showTime();
   }
   document.getElementById('viaContainer').appendChild(row);
   viaRows.push(row);
@@ -2306,9 +2391,46 @@ function addViaRow(entry, label, time, batch) {
   });
   input.addEventListener('input', function () {
     row.classList.remove('has-time');
-    var badge = row.querySelector('.via-compose-time');
     if (badge) badge.remove();
+    badge = null;
   });
+
+  // Its track or line: the platform into a timetable stop's record (the one picked by hand
+  // over the timetable's), exact as the 4th item, and its waypoint moved there.
+  var slot = stopSlot({
+    $input: $(input), $dropdown: $(row).find('.track-dropdown'),
+    setPlatform: function (ref) {
+      var record = (stopSlotEntry(slot) || [])[2];
+      // Already the platform the stop is at: its scheduled / live pair stays as it is.
+      if (!record || (ref && stopKey(ref) === stopKey(record.platform_rt || record.platform))) return;
+      delete record.platform_rt;
+      if (ref) record.platform = ref; else delete record.platform;
+    },
+    setExact: function (on, auto) {
+      var own = stopSlotEntry(slot);
+      if (own) { own[3] = on; own[4] = on && auto ? 'auto' : undefined; }
+    },
+    shown: function (on) { row.classList.toggle('has-stops', on); input.classList.toggle('has-stops', on); showTime(); }
+  });
+  $(row).data('stopSlot', slot);
+  // Its own entry until another station is typed or picked there: a run can call at a
+  // stop twice (a loop line).
+  if (entry) $(input).data('stationEntry', entry);
+  $(input).on('input autocompleteselect', function () { $(input).removeData('stationEntry'); });
+  watchStopSlot(slot);
+  $(input).on('stoppicked', function () {
+    var own = stopSlotEntry(slot);
+    if (!own || stopsBatch || !routingStarted || !window.currentPlan) return;
+    var wps = window.currentPlan.getWaypoints();
+    var at = wps.findIndex(function (wp, k) {
+      var o = wp.options || {};
+      return k > 0 && k < wps.length - 1 && (own[2] ? o.stop === own[2] : o.label === own[1]);
+    });
+    if (at < 0) return;
+    freehandSegments.clear();
+    window.currentPlan.spliceWaypoints(at, 1, viaWaypoint(own));
+  });
+
   row.querySelector('.via-compose-remove').addEventListener('click', function() {
     var i = idx();
     var was = viaStations[i];
@@ -2548,14 +2670,33 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
     });
   }
 
+  // The lines picked at the ends (a tram or metro station's), each ref a word of the run's
+  // line ("B" of "CTS B").
+  function pickedLines() {
+    return ['origin', 'dest'].map(function (role) {
+      var slot = endSlots[role];
+      return stopKind(stopSlotLabel(slot)) === 'line' && slot.selected;
+    }).filter(Boolean);
+  }
+  function onLines(d, lines) {
+    var words = (d.line || '').toLowerCase().split(/\s+/);
+    return lines.every(function (ref) { return words.indexOf(ref.toLowerCase()) >= 0; });
+  }
+  $('#originStation, #destinationStation').on('stoppicked', function () { if (departures.length) render(); });
+
   function render() {
     $menu.empty();
     if (!departures.length) {
       setToggle(texts.none, null, false);
       return;
     }
+    // Only the picked line's runs, where the timetable has any.
+    var lines = pickedLines();
+    var shown = lines.length && departures.some(function (d) { return onLines(d, lines); })
+      ? departures.filter(function (d) { return onLines(d, lines); }) : departures;
     $('<li>').append(moreButton('earlier')).appendTo($menu);
     departures.forEach(function (d, i) {
+      if (shown.indexOf(d) < 0) return;
       var depDate = d.departure.slice(0, 10), arrDate = d.arrival.slice(0, 10);
       var dayDiff = Math.round((Date.parse(arrDate) - Date.parse(depDate)) / 86400000);
       var $item = $('<a href="#" class="dropdown-item motis-item">').attr('data-i', i)
@@ -2589,7 +2730,7 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
     $('<li>').append(moreButton('later')).appendTo($menu);
     $('<li class="motis-source">').html('<a href="https://transitous.org" target="_blank" rel="noopener">Transitous</a>').appendTo($menu);
     // A picked run keeps its "10:53 → 12:21 · IR35" (apply) when the list is extended.
-    setToggle(applied && applied.label || texts.title, departures.length, true);
+    setToggle(applied && applied.label || texts.title, shown.length, true);
   }
 
   // What the trip keeps of a stop of the picked run: the via entry's third item, carried
@@ -2609,6 +2750,79 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
 
   function setDelay(minutesId, minutes) {
     $('#' + minutesId).val(minutes || '').trigger('input');
+  }
+
+  // The station at each of the run's stops and at its two ends, from quai: their tracks and
+  // lines become the dropdowns' choices, and the platform the run gives there is picked,
+  // which moves the point onto that track (exact when it is a stop position). A stop whose
+  // station has no such track is put where the run's line stops there going its way, else
+  // keeps the timetable's point, approximate. Then the route is drawn again, once.
+  function matchStopTracks(d) {
+    var ends = [['origin', d.from_platform, d.from_point, d.from_id], ['dest', d.to_platform, d.to_point, d.to_id]].map(function (end) {
+      var slot = endSlots[end[0]], entry = stopSlotEntry(slot);
+      // Where the run is boarded or left (on its track), for the end to be put there as its
+      // stops are; else the station's point.
+      var point = end[2] || (entry && (entry.stationPoint || entry[0]));
+      // Its name, without the flag, for quai to pick the station of that name nearby.
+      var name = slot.$input.val().replace(/^\S*[\u{1F1E6}-\u{1F1FF}]{2}\s*/u, '');
+      return { slot: slot, platform: end[1], point: point, name: name, id: end[3] || null };
+    });
+    var places = ends.slice(0, 1).concat(d.stops.map(function (stop, i) {
+      // The platform it calls at: the live one (stop[6]), else the scheduled one.
+      return { slot: viaRows[i] && $(viaRows[i]).data('stopSlot'), platform: stop[6] || stop[15],
+               point: [stop[0], stop[1]], name: stop[2] || null, id: stop[12] || null };
+    }), ends.slice(1));
+    var key = runKey(d);
+    $.ajax({
+      url: '/stationTracks', method: 'POST', contentType: 'application/json', dataType: 'json',
+      data: JSON.stringify({ type: tripType, line: d.line || null, stops: places.map(function (p) {
+        return p.point ? { lat: p.point[0], lng: p.point[1], platform: p.platform || null, name: p.name || null,
+                           id: p.id || null } : {};
+      }) }),
+      success: function (data) {
+        if (!applied || applied.key !== key) return;   // another run picked meanwhile
+        stopsBatch = true;
+        try {
+          (data.stops || []).forEach(function (station, i) {
+            var place = places[i], slot = place.slot;
+            if (!station || !slot) return;
+            var label = slot.$input.val();
+            if (!stopSlotEntry(slot)) return;
+            // A station picked by hand already has its own (quai's, or none from Photon).
+            if (!(globalStationTracks[label] || []).length && !(globalStationLines[label] || []).length) {
+              globalStationTracks[label] = station.tracks;
+              globalStationLines[label] = station.lines;
+            }
+            // The trip is saved as at that station only when it is named alike, not just near.
+            if (station.alike && !globalStationKeys[label]) globalStationKeys[label] = station.station_key;
+            // The platform the timetable's stop id names, as OSM numbers it, over the
+            // timetable's own, unless another was picked by hand.
+            var byHand = slot.selected && stopKey(slot.selected) !== stopKey(place.platform);
+            var platform = (!byHand && station.platform) || slot.selected || place.platform;
+            if (platform) pickStop(slot, 'track', platform, !byHand); else renderStops(slot);
+            // Not placed on a track of the station's: where the line stops there going this
+            // way (src/quai.py, stops_by_direction).
+            var placed = platform && findStop(globalStationTracks[label], platform);
+            var entry = stopSlotEntry(slot);
+            if (!placed && station.snap && entry) {
+              if (!entry.stationPoint) entry.stationPoint = entry[0];
+              entry[0] = station.snap;
+              slot.setExact(true, true);
+            }
+          });
+        } finally {
+          stopsBatch = false;
+        }
+        originEntry = stopSlotEntry(endSlots.origin) || originEntry;
+        destEntry = stopSlotEntry(endSlots.dest) || destEntry;
+        if (routingStarted && window.currentPlan) {
+          freehandSegments.clear();
+          pendingRouteFit = true;
+          window.currentPlan.setWaypoints([endWaypoint('origin')]
+            .concat(viaStations.filter(Boolean).map(viaWaypoint), [endWaypoint('dest')]));
+        }
+      }
+    });
   }
 
   // A rail replacement bus picked on a rail page is routed on roads and saved as a bus.
@@ -2661,7 +2875,7 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
       globalStationDict[label] = entry;
       var arrival = stop[4], departure = stop[5];
       var times = arrival && departure && arrival !== departure ? arrival + ' \u2013 ' + departure : (arrival || departure);
-      return { entry: entry, time: [times, trackLabel(stop[6])].filter(Boolean).join(' \u00b7 ') };
+      return { entry: entry, time: times, track: trackLabel(stop[6]) };
     }), true);
 
     // Real-time data on a run that has started: carry its delays over.
@@ -2679,6 +2893,7 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
     $menu.find('.motis-item[data-i="' + departures.indexOf(d) + '"]').addClass('active');
     applied.label = dep[1] + ' \u2192 ' + arr[1] + (d.line ? ' \u00b7 ' + lineLabel(d.line) : '');
     $('#motisToggleLabel').text(applied.label);
+    matchStopTracks(d);
   }
 
   $menu.on('click', '.motis-more', function (e) {
