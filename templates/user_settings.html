@@ -165,20 +165,23 @@
           <button class="settings2-navlink active" data-bs-toggle="pill" data-bs-target="#tab-preferences" type="button" role="tab">
             <i class="fa-solid fa-sliders"></i><span>{{ settingsSectionGeneral }}</span>
           </button>
-          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-privacy" type="button" role="tab">
-            <i class="fa-solid fa-shield-halved"></i><span>{{ settingsSectionPrivacy }}</span>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-trips" type="button" role="tab">
+            <i class="fa-solid fa-route"></i><span>{{ settingsSectionTrips }}</span>
           </button>
           <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-appearance" type="button" role="tab">
-            <i class="fa-solid fa-palette"></i><span>{{ settingsSectionAppearance }}</span>
+            <i class="fa-solid fa-map"></i><span>{{ settingsSectionAppearance }}</span>
           </button>
-          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-account" type="button" role="tab">
-            <i class="fa-solid fa-user"></i><span>{{ settingsSectionAccount }}</span>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-privacy" type="button" role="tab">
+            <i class="fa-solid fa-shield-halved"></i><span>{{ settingsSectionPrivacy }}</span>
           </button>
           <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-integrations" type="button" role="tab">
             <i class="fa-solid fa-plug"></i><span>{{ settingsSectionIntegrations }}</span>
           </button>
           <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-data" type="button" role="tab">
-            <i class="fa-solid fa-database"></i><span>{{ settingsSectionData }}</span>
+            <i class="fa-solid fa-right-left"></i><span>{{ settingsSectionData }}</span>
+          </button>
+          <button class="settings2-navlink" data-bs-toggle="pill" data-bs-target="#tab-account" type="button" role="tab">
+            <i class="fa-solid fa-user"></i><span>{{ settingsSectionAccount }}</span>
           </button>
         </div>
       </div>
@@ -237,14 +240,26 @@
                 </label>
               </div>
             </div>
+            {% if is_premium %}
+            <div class="form-check form-switch mt-3">
+              <input class="form-check-input" type="checkbox" id="live_tracking" name="live_tracking" form="settingsForm" {{ live_tracking_checked }}>
+              <label class="form-check-label" for="live_tracking">
+                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ liveTrackingSetting }}
+              </label>
+            </div>
+            {% endif %}
+
+            <div class="settings2-save">
+              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
+            </div>
 
           </div>
         </div>
 
-        <!-- Appearance & map -->
+        <!-- Map & display -->
         <div class="tab-pane fade" id="tab-appearance" role="tabpanel">
           <div class="settings2-card">
-            <h3 class="settings2-card-title"><i class="fa-solid fa-palette"></i> {{ settingsSectionAppearance }}</h3>
+            <h3 class="settings2-card-title"><i class="fa-solid fa-map"></i> {{ settingsSectionAppearance }}</h3>
 
             <div class="settings2-toggle-row">
               <div class="form-check form-switch">
@@ -258,18 +273,17 @@
                 <input class="form-check-input" type="checkbox" id="globe" name="globe" form="settingsForm" {% if user_globe %}checked{% endif %}>
                 <label class="form-check-label" for="globe">{{ globeLabel }}</label>
               </div>
-              <div class="form-check form-switch">
-                <input class="form-check-input" type="checkbox" id="exact_waypoints" name="exact_waypoints" form="settingsForm" {{ exact_waypoints_checked }}>
-                <label class="form-check-label" for="exact_waypoints" title="{{ allWaypointsExactHint }}">{{ allWaypointsExact }}</label>
-              </div>
             </div>
 
             <hr class="settings2-hr">
 
             <label class="settings2-label">{{ tilesetLabel }}</label>
-            <button type="button" class="form-select text-start" id="tileserverPickerBtn" style="cursor:pointer;">
-              <i class="fa-solid fa-map me-2" id="tileserverPickerIcon"></i><span id="tileserverPickerLabel"></span>
-            </button>
+            <div class="input-group">
+              <label class="input-group-text" for="tileserverPickerBtn"><i class="fa-solid fa-map" id="tileserverPickerIcon"></i></label>
+              <button type="button" class="form-select text-start settings2-combo-btn" id="tileserverPickerBtn">
+                <span id="tileserverPickerLabel"></span>
+              </button>
+            </div>
             <input type="hidden" id="tileserver" name="tileserver" form="settingsForm" value="{{ user_tileserver }}">
 
             <label class="settings2-label" for="map_lang">{{ mapLangLabel }}</label>
@@ -330,13 +344,6 @@
                 <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ flight3dSetting }}
               </label>
             </div>
-
-            <div class="form-check form-switch mt-3">
-              <input class="form-check-input" type="checkbox" id="live_tracking" name="live_tracking" form="settingsForm" {{ live_tracking_checked }}>
-              <label class="form-check-label" for="live_tracking">
-                <i class="fa-solid fa-gem" style="color: #00CED1;"></i> {{ liveTrackingSetting }}
-              </label>
-            </div>
             {% endif %}
 
             <div class="settings2-save">
@@ -349,6 +356,47 @@
         <div class="tab-pane fade show active" id="tab-preferences" role="tabpanel">
           <div class="settings2-card">
             <h3 class="settings2-card-title"><i class="fa-solid fa-sliders"></i> {{ settingsSectionGeneral }}</h3>
+
+            <label class="settings2-label" for="lang">{{language}}</label>
+            <div class="settings2-combo" data-combo="lang">
+              <div class="input-group">
+                <label class="input-group-text" id="lang-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="lang-btn">
+                  <span id="lang-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="lang" name="lang" form="settingsForm" value="{{ langs[0].code }}">
+              <div class="settings2-combo-panel" id="lang-panel">
+                <input type="text" class="form-control settings2-combo-search" id="lang-search" autocomplete="off">
+                <div class="settings2-combo-list" id="lang-list">
+                  {% for lang in langs %}
+                  <button type="button" class="settings2-combo-item" data-value="{{ lang.code }}" data-raw="{{ lang.name }}"></button>
+                  {% endfor %}
+                </div>
+                <div class="settings2-combo-empty" id="lang-empty" style="display:none;">No results</div>
+              </div>
+            </div>
+
+
+            <label class="settings2-label" for="user_currency">{{currency}}</label>
+            <div class="settings2-combo" data-combo="user_currency">
+              <div class="input-group">
+                <label class="input-group-text" id="user_currency-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="user_currency-btn">
+                  <span id="user_currency-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="user_currency" name="user_currency" form="settingsForm" value="{{ user_currency }}">
+              <div class="settings2-combo-panel" id="user_currency-panel">
+                <input type="text" class="form-control settings2-combo-search" id="user_currency-search" autocomplete="off">
+                <div class="settings2-combo-list" id="user_currency-list">
+                  {% for currency in currencyOptions %}
+                  <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" data-name="{{ currency.get('name', '') }}"></button>
+                  {% endfor %}
+                </div>
+                <div class="settings2-combo-empty" id="user_currency-empty" style="display:none;">No results</div>
+              </div>
+            </div>
 
             <label class="settings2-label" for="default_landing">{{defaultLanding}}</label>
             <div class="settings2-combo" data-combo="default_landing">
@@ -372,25 +420,16 @@
               </div>
             </div>
 
-            <label class="settings2-label" for="lang">{{language}}</label>
-            <div class="settings2-combo" data-combo="lang">
-              <div class="input-group">
-                <label class="input-group-text" id="lang-icon"></label>
-                <button type="button" class="form-select text-start settings2-combo-btn" id="lang-btn">
-                  <span id="lang-label"></span>
-                </button>
-              </div>
-              <input type="hidden" id="lang" name="lang" form="settingsForm" value="{{ langs[0].code }}">
-              <div class="settings2-combo-panel" id="lang-panel">
-                <input type="text" class="form-control settings2-combo-search" id="lang-search" autocomplete="off">
-                <div class="settings2-combo-list" id="lang-list">
-                  {% for lang in langs %}
-                  <button type="button" class="settings2-combo-item" data-value="{{ lang.code }}" data-raw="{{ lang.name }}"></button>
-                  {% endfor %}
-                </div>
-                <div class="settings2-combo-empty" id="lang-empty" style="display:none;">No results</div>
-              </div>
+            <div class="settings2-save">
+              <button type="submit" form="settingsForm" class="btn btn-primary">{{submit}}</button>
             </div>
+          </div>
+        </div>
+
+        <!-- Adding trips -->
+        <div class="tab-pane fade" id="tab-trips" role="tabpanel">
+          <div class="settings2-card">
+            <h3 class="settings2-card-title"><i class="fa-solid fa-route"></i> {{ settingsSectionTrips }}</h3>
 
             <label class="settings2-label" for="station_names">{{ stationNamesLabel }}</label>
             {% with combo_id="station_names", combo_value=station_names, combo_first=stationNamesMine %}
@@ -401,24 +440,21 @@
               {% include "includes/station_script_switch.html" %}
             {% endwith %}
 
-            <label class="settings2-label" for="user_currency">{{currency}}</label>
-            <div class="settings2-combo" data-combo="user_currency">
-              <div class="input-group">
-                <label class="input-group-text" id="user_currency-icon"></label>
-                <button type="button" class="form-select text-start settings2-combo-btn" id="user_currency-btn">
-                  <span id="user_currency-label"></span>
-                </button>
-              </div>
-              <input type="hidden" id="user_currency" name="user_currency" form="settingsForm" value="{{ user_currency }}">
-              <div class="settings2-combo-panel" id="user_currency-panel">
-                <input type="text" class="form-control settings2-combo-search" id="user_currency-search" autocomplete="off">
-                <div class="settings2-combo-list" id="user_currency-list">
-                  {% for currency in currencyOptions %}
-                  <button type="button" class="settings2-combo-item" data-value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}" data-name="{{ currency.get('name', '') }}"></button>
-                  {% endfor %}
-                </div>
-                <div class="settings2-combo-empty" id="user_currency-empty" style="display:none;">No results</div>
-              </div>
+            <label class="settings2-label" for="all_rail_stations">{{ stationSearchLabel }}</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="all_rail_stations" name="all_rail_stations" form="settingsForm" {{ 'checked' if all_rail_stations_checked }}>
+              <label class="form-check-label" for="all_rail_stations">{{ allRailStations }}</label>
+            </div>
+
+            <label class="settings2-label" for="exact_waypoints">{{ routingLabel }}</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="exact_waypoints" name="exact_waypoints" form="settingsForm" {{ exact_waypoints_checked }}>
+              <label class="form-check-label" for="exact_waypoints">{{ allWaypointsExact }}</label>
+            </div>
+            <p class="settings2-hint">{{ allWaypointsExactHint }}</p>
+            <div class="form-check form-switch mt-2">
+              <input class="form-check-input" type="checkbox" id="exact_tracks" name="exact_tracks" form="settingsForm" {{ 'checked' if exact_tracks_checked }}>
+              <label class="form-check-label" for="exact_tracks">{{ exactTracks }}</label>
             </div>
 
             <div class="settings2-save">
@@ -810,10 +846,10 @@
           </div>
         </div>
 
-        <!-- Data -->
+        <!-- Import & export -->
         <div class="tab-pane fade" id="tab-data" role="tabpanel">
           <div class="settings2-card">
-            <h3 class="settings2-card-title"><i class="fa-solid fa-database"></i> {{ settingsSectionData }}</h3>
+            <h3 class="settings2-card-title"><i class="fa-solid fa-right-left"></i> {{ settingsSectionData }}</h3>
 
             <div class="settings2-integration-row">
               <div>

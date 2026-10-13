@@ -524,6 +524,11 @@ window.removeFreehandOverlay = function(element) { setMarkerBadge(element, 'free
 // hard: false (not just absent) is a point made approximate by hand (see saving).
 function waypointFromMeta(c, meta) {
   meta = meta || {};
+  // Put on its track by the page: exact only for those who chose so (settings, exact_tracks),
+  // as a wrongly mapped track would send the route astray; near it otherwise.
+  if (meta.hard === true && meta.auto === true && !window.exactTracks) {
+    meta = L.extend({}, meta, { hard: undefined, auto: undefined });
+  }
   // auto: made exact by the page, not by the user (a timetable's stop put on its direction's
   // stop position): kept exact only where that does not lengthen the route (createCustomRouter).
   var options = { hard: meta.hard === true, modeSet: meta.hard === false,

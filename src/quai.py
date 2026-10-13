@@ -11,6 +11,7 @@ import logging
 import re
 import time
 import unicodedata
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
@@ -467,9 +468,9 @@ def _features(stations):
     # Once merged, a station and the one it is merged into are the same: listed once, where
     # the first of them came.
     seen = set()
-    stations = [s for s in stations
-                if (s.get("mode"), s.get("station_key")) not in seen
-                and not seen.add((s.get("mode"), s.get("station_key")))]
+    def ident(s):
+        return s.get("mode"), s.get("station_key") or (s.get("osm_type"), s.get("osm_id"))
+    stations = [s for s in stations if ident(s) not in seen and not seen.add(ident(s))]
     features = [
         {
             "type": "Feature",
@@ -482,6 +483,7 @@ def _features(stations):
                 "osm_type": s["osm_type"],
                 "osm_id": s["osm_id"],
                 "station_key": s["station_key"],
+                "mode": s.get("mode"),
                 # How well the name matched (0 exact … 4 fuzzy), for the page to keep quai's
                 # order while moving up stations the user knows.
                 "tier": s.get("tier"),
@@ -518,9 +520,31 @@ def _features(stations):
     return features
 
 
+# Rail lines are mapped as whichever mode their mappers chose, and logged as whatever they feel
+# like: the Wuppertal Schwebebahn's stations are metro stations, Karlsruhe's Stadtbahn stops
+# tram stops. A rail trip's station search offers the others' stations when asked, and
+# "other rail" (monorails, suspension railways: whatever the mappers made them) has them all.
+RAIL_MODES = ("train", "metro", "tram", "funicular")
+
+
+def own_modes(trip_type):
+    """The quai modes a trip type's station search looks in."""
+    return RAIL_MODES if trip_type == "rail" else (QUAI_MODES[trip_type],)
+
+
+def other_modes(trip_type):
+    """The quai modes a trip type's station search can also look in, when asked."""
+    mode = QUAI_MODES.get(trip_type)
+    return [m for m in RAIL_MODES if m not in own_modes(trip_type)] if mode in RAIL_MODES else []
+
+
 def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit=10,
-                    timeout=None):
-    """Stations of the trip type's mode named like `q`, or near lat/lon when `q` is None.
+                    timeout=None, others=False, all_rail=False):
+    """Stations of the trip type's modes (own_modes) named like `q`, or near lat/lon when `q`
+    is None; with `others`, those of its other modes instead (other_modes), with `all_rail`
+    both (the user's setting, all_rail_stations). Several modes' are
+    merged by how well the name matched, else by distance, each with its mode, and without its
+    station_key where that mode is not the trip type's quai mode, a key being its mode's own.
 
     Returns Photon-shaped features, or None if quai does not cover the type or cannot be
     reached.
@@ -532,20 +556,39 @@ def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit
     if not mode or not url:
         return None
     if q is not None:
-        endpoint, params = "search", {"q": q, "mode": mode, "limit": limit}
+        endpoint, params = "search", {"q": q, "limit": limit}
         if lat is not None and lon is not None:
             params.update(lat=lat, lon=lon)
     else:
         endpoint = "reverse"
-        params = {"lat": lat, "lon": lon, "mode": mode, "limit": limit, "radius": radius_km or 1}
+        params = {"lat": lat, "lon": lon, "limit": limit, "radius": radius_km or 1}
     params["lang"] = user_lang()
-    try:
-        resp = requests.get(f"{url}/{endpoint}", params=params, timeout=timeout)
-        resp.raise_for_status()
-        return _features(resp.json()["stations"])
-    except Exception as e:
-        logger.warning(f"quai {endpoint} failed: {e}")
+
+    def stations(of):
+        try:
+            resp = requests.get(f"{url}/{endpoint}", params={**params, "mode": of}, timeout=timeout)
+            resp.raise_for_status()
+            return resp.json()["stations"] or []
+        except Exception as e:
+            logger.warning(f"quai {endpoint} failed: {e}")
+            return None
+
+    modes = other_modes(trip_type) if others else own_modes(trip_type)
+    if all_rail and not others:
+        modes = (*modes, *other_modes(trip_type))
+    if not modes:
+        return []
+    if len(modes) == 1:
+        found = stations(modes[0])
+        return None if found is None else _features(found)
+    with ThreadPoolExecutor(max_workers=len(modes) or 1) as pool:
+        answers = list(pool.map(stations, modes))
+    if all(answer is None for answer in answers):
         return None
+    found = [s if s.get("mode") == mode else dict(s, station_key=None)
+             for answer in answers for s in answer or []]
+    found.sort(key=lambda s: s.get("tier") or 0 if q is not None else s.get("distance_m") or 0)
+    return _features(found[:limit])
 
 
 def nearest_stations(mode, points, radius_m=400, candidates=1, timeout=30):

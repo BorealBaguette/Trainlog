@@ -314,7 +314,7 @@ from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
 from src.account_export import build_account_data_csvs
 from src.delete_account import delete_account_data
-from src.users import (User, Friendship, authDb, ensure_station_name_columns,
+from src.users import (User, Friendship, all_rail_stations, authDb, ensure_station_name_columns,
                        exact_waypoints_context, map_lang_context, station_names_context,
                        valid_station_names)
 from src.email_parser import start_email_listener
@@ -327,7 +327,7 @@ from src.trip_announcer import (
     start_trip_announcer,
 )
 from src.photon import photonInstances, photonRequest, photonRequestSingle
-from src.quai import QUAI_MODES, quai_url, search_stations, stations_at
+from src.quai import QUAI_MODES, other_modes, quai_url, search_stations, stations_at
 from src.routing import forward_routing_core
 from src.gpx_import import (
     GpxIngestError,
@@ -7981,6 +7981,7 @@ def stationAutocomplete():
     # parameters.
     trip_type = (params.pop("type", None) or [None])[0]
     if trip_type in QUAI_MODES and quai_url():
+        all_rail = all_rail_stations()
         features = search_stations(
             trip_type,
             q=None if is_reverse else request.args.get("q", ""),
@@ -7988,10 +7989,15 @@ def stationAutocomplete():
             lon=request.args.get("lon", type=float),
             radius_km=request.args.get("radius", type=float),
             limit=request.args.get("limit", 10, type=int),
+            others=bool(request.args.get("others")),
+            all_rail=all_rail,
         )
         if features is None:
             return jsonify(error="station search unavailable"), 503
-        return jsonify({"type": "FeatureCollection", "features": features})
+        # The other modes the list can offer to search (src/quai.py, other_modes), unless
+        # it already has them.
+        return jsonify({"type": "FeatureCollection", "features": features,
+                        "others": [] if all_rail else other_modes(trip_type)})
     if not is_reverse:
         # The position only biases quai's ranking; Photon answers fewer results with it.
         params.pop("lat", None)
@@ -10070,6 +10076,8 @@ def user_settings(username):
         if valid_station_names(request.form.get("station_names", "")):
             params["station_names"] = request.form.get("station_names", "")
         params["station_script"] = "station_script" in request.form
+        params["all_rail_stations"] = "all_rail_stations" in request.form
+        params["exact_tracks"] = "exact_tracks" in request.form
         # Premium-only toggle: only honour it for premium users so a crafted POST
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
@@ -10119,6 +10127,8 @@ def user_settings(username):
         user_map_lang=user.map_lang,
         station_names=user.station_names,
         station_script_checked="checked" if user.station_script else "",
+        all_rail_stations_checked=user.all_rail_stations,
+        exact_tracks_checked=user.exact_tracks,
         discord_id=user.discord_id,
         discord_webhooks=list_webhooks(user.uid),
         discord_webhook_status=request.args.get("dw"),

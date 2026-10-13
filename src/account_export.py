@@ -218,6 +218,8 @@ def build_account_data_csvs(user: User) -> dict[str, str]:
                 "flight_3d": user.flight_3d,
                 "live_tracking": user.live_tracking,
                 "exact_waypoints": user.exact_waypoints,
+                "all_rail_stations": user.all_rail_stations,
+                "exact_tracks": user.exact_tracks,
                 "discord_id": user.discord_id,
                 "discord_username": user.discord_username,
                 "discord_autopost": user.discord_autopost,

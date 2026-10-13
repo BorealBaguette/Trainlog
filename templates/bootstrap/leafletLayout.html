@@ -20,5 +20,6 @@
 <script>
     window.colorblindMode = {{ 'true' if colorblind else 'false' }};
     window.exactWaypointsDefault = {{ 'true' if exact_waypoints_default else 'false' }};
+    window.exactTracks = {{ 'true' if exact_tracks else 'false' }};
 </script>
 <script src="{{ static_autoversion(filename='js/routing.js') }}"></script>

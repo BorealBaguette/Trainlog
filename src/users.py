@@ -72,6 +72,12 @@ class User(authDb.Model):
     # written where they are (北京南), "int" in Latin letters (Beijingnan); and whether always
     # in the script of the user's language, transliterated where OSM has no name in it.
     station_names = authDb.Column(authDb.String(10), nullable=False, default="int")
+    # A rail trip's station search: every rail mode's stations at once, not only on asking
+    # (src/quai.py, other_modes).
+    all_rail_stations = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    # Routing: timetable stops the page put on their track (or direction's stop position) are
+    # passed exactly, not just near; a wrongly mapped track then sends the route astray.
+    exact_tracks = authDb.Column(authDb.Boolean, nullable=False, default=False)
     station_script = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Discord user id, set via the /discord/connect OAuth flow. Used to grant/revoke
     # the premium role automatically when membership status changes.
@@ -122,6 +128,8 @@ class User(authDb.Model):
             "map_lang": self.map_lang,
             "station_names": self.station_names,
             "station_script": self.station_script,
+            "all_rail_stations": self.all_rail_stations,
+            "exact_tracks": self.exact_tracks,
             "discord_id": self.discord_id,
             "discord_username": self.discord_username,
             "discord_autopost": self.discord_autopost,
@@ -202,13 +210,22 @@ def station_names_context():
 
 
 def ensure_station_name_columns(db_session):
-    """The station naming settings' columns, on an auth.db made before them."""
+    """The station search settings' columns, on an auth.db made before them."""
     existing = {row[1] for row in db_session.execute(sqlalchemy.text("PRAGMA table_info(user)"))}
     for column, definition in (("station_names", "VARCHAR(10) NOT NULL DEFAULT 'int'"),
-                               ("station_script", "BOOLEAN NOT NULL DEFAULT 0")):
+                               ("station_script", "BOOLEAN NOT NULL DEFAULT 0"),
+                               ("all_rail_stations", "BOOLEAN NOT NULL DEFAULT 0"),
+                               ("exact_tracks", "BOOLEAN NOT NULL DEFAULT 0")):
         if column not in existing:
             db_session.execute(sqlalchemy.text(f"ALTER TABLE user ADD COLUMN {column} {definition}"))
             db_session.commit()
+
+
+def all_rail_stations():
+    """Whether the logged-in user's rail station searches look in every rail mode."""
+    user = User.query.filter_by(username=session.get("logged_in")).first() \
+        if session.get("logged_in") else None
+    return bool(user and user.all_rail_stations)
 
 
 def station_name_settings():
@@ -222,9 +239,11 @@ def station_name_settings():
 
 
 def exact_waypoints_context():
-    """Template variable: whether the logged-in user starts routing with every point exact."""
+    """Template variables: whether the logged-in user starts routing with every point exact,
+    and whether stops put on their track are passed exactly."""
     user = User.query.filter_by(username=session.get("logged_in")).first()
-    return {"exact_waypoints_default": bool(user and user.exact_waypoints)}
+    return {"exact_waypoints_default": bool(user and user.exact_waypoints),
+            "exact_tracks": bool(user and user.exact_tracks)}
 
 
 def map_lang_context():

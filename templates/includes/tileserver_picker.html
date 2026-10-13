@@ -48,7 +48,7 @@
   function updateTileserverPickerUI(value) {
     const meta = TS_META[value] || { label: value, icon: 'fa-map' };
     $('#tileserverPickerLabel').text(meta.label);
-    $('#tileserverPickerIcon').attr('class', 'fa-solid me-2 ' + meta.icon);
+    $('#tileserverPickerIcon').attr('class', 'fa-solid ' + meta.icon);
     $('.ts-option').removeClass('ts-selected');
     $(`.ts-option[data-value="${value}"]`).addClass('ts-selected');
   }
