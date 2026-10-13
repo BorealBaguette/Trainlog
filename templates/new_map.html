@@ -348,27 +348,68 @@ const DETAIL_ZOOM = 12;
 // workers) and the map fills in slice after slice, oldest first. One source
 // fed in steps would re-process everything at every step instead.
 const SLICE_COUNT = 10;
-const SLICE_SOURCES = Array.from({ length: SLICE_COUNT }, (_, i) => `trips-${i}`);
 
-// Layers on empty sources, oldest slice first so it ends up at the bottom.
-// Safe to call again — existing layers are kept.
+// Two sets of slice sources: the overview of every shown trip, kept loaded at
+// every zoom, and the full paths of the shown trips in view, only filled (and
+// only drawn) from DETAIL_ZOOM. Switching between them is a layer visibility
+// change, so zooming back out shows the overview MapLibre already holds
+// instead of re-processing it all.
+const LODS = ['overview', 'full'];
+const SLICE_SOURCES = {
+    overview: Array.from({ length: SLICE_COUNT }, (_, i) => `trips-o-${i}`),
+    full: Array.from({ length: SLICE_COUNT }, (_, i) => `trips-f-${i}`)
+};
+const sliceLayerIds = sourceId => [`${sourceId}-shadow`, `${sourceId}-line`, `${sourceId}-planned-overlay`];
+
+// Layers on empty sources, oldest slice first so it ends up at the bottom;
+// the full set above the overview. Safe to call again — existing layers are kept.
 function buildSliceLayers() {
-    SLICE_SOURCES.forEach(sourceId => {
+    LODS.forEach(lod => SLICE_SOURCES[lod].forEach(sourceId => {
         MapLibreUtils.addTripSliceLayers(map, sourceId, MapLibreUtils.MapConfig.transportTypes, {
             onLayerClick: (e) => {
                 e.originalEvent.stopPropagation();
                 showPopup(e);
             }
         });
+        // Full paths only exist for detail zoom; below it MapLibre skips them
+        if (lod === 'full') sliceLayerIds(sourceId).forEach(id => map.setLayerZoomRange(id, DETAIL_ZOOM, 24));
+    }));
+    map.on('zoom', applyLodVisibility);
+    map.on('sourcedata', (e) => {
+        if (e.sourceId && e.sourceId.startsWith('trips-f-')) applyLodVisibility();
     });
 }
 
+// The full set stands for the shown trips crossing fullBox; fullDrawing counts
+// the redraws in progress (its slices then hold a mix of old and new)
+let fullBox = null;
+let fullDrawing = 0;
+
+function boxCovers(box, bounds) {
+    return box && bounds.getWest() >= box[0] && bounds.getSouth() >= box[1]
+        && bounds.getEast() <= box[2] && bounds.getNorth() <= box[3];
+}
+
+// The overview hides only once the full paths for this view are drawn: until
+// then it stays underneath, so there is never a blank map
+let overviewHidden = null;
+function applyLodVisibility() {
+    const hide = map.getZoom() >= DETAIL_ZOOM && fullDrawing === 0
+        && boxCovers(fullBox, map.getBounds())
+        && SLICE_SOURCES.full.every(id => map.isSourceLoaded(id));
+    if (hide === overviewHidden) return;
+    overviewHidden = hide;
+    SLICE_SOURCES.overview.forEach(sourceId => sliceLayerIds(sourceId).forEach(id => {
+        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', hide ? 'none' : 'visible');
+    }));
+}
+
 // Current trips blink: their line opacity reads this feature-state
-let pulseTargets = [];
+const pulseTargets = { overview: [], full: [] };
 let pulseOn = false;
 setInterval(() => {
     pulseOn = !pulseOn;
-    pulseTargets.forEach(target => map.setFeatureState(target, { pulse: pulseOn }));
+    LODS.forEach(lod => pulseTargets[lod].forEach(target => map.setFeatureState(target, { pulse: pulseOn })));
 }, 1000);
 
 // Process trips and add to map
@@ -426,7 +467,7 @@ function processTrips() {
         map.on('moveend', () => {
             clearTimeout(moveTimer);
             moveTimer = setTimeout(() => {
-                if (map.getZoom() >= DETAIL_ZOOM || drawnLod === 'full') refreshDisplayed();
+                if (map.getZoom() >= DETAIL_ZOOM) refreshDisplayed();
             }, 250);
         });
 
@@ -513,13 +554,13 @@ function intersects(bbox, view) {
 
 // Put the trips the filters show on the map, downloading any missing paths
 // first. The sources only ever hold what is displayed: hidden years cost the
-// map nothing. Zoomed out that is every shown trip's overview; from
-// DETAIL_ZOOM the full paths of those in view. A newer call supersedes one
-// still waiting. Resolves with a promise for the first batch being on screen
-// (null when nothing had to change).
+// map nothing. The overview set gets every shown trip; from DETAIL_ZOOM the
+// full set also gets the full paths of those in view. Each set is only
+// redrawn when its trips change. A newer call supersedes one still waiting.
+// Resolves with a promise for the overview's first slice being on screen
+// (null when the overview didn't change).
 let refreshSeq = 0;
-let drawnKey = null;
-let drawnLod = null;
+const drawnKeys = { overview: null, full: null };
 // `beforeDraw(features)` gets the overview features before anything is
 // chosen or drawn, so it can move the camera (the detail set depends on it)
 async function refreshDisplayed(beforeDraw) {
@@ -529,22 +570,49 @@ async function refreshDisplayed(beforeDraw) {
     if (seq !== refreshSeq) return null;
     if (beforeDraw) beforeDraw(shown.map(t => tripLoader.overview.featureFor(t)).filter(f => f !== null));
 
-    let lod = 'overview', list = shown;
-    if (map.getZoom() >= DETAIL_ZOOM) {
-        const view = viewBox();
-        lod = 'full';
-        list = shown.filter(t => intersects(tripLoader.overview.bboxFor(t), view));
-        await tripLoader.full.ensure(list);
-        if (seq !== refreshSeq) return null;
+    let firstDrawn = null;
+    const overviewKey = tripsKey(shown);
+    if (overviewKey !== drawnKeys.overview) {
+        drawnKeys.overview = overviewKey;
+        // Whatever the full set holds was picked from another selection
+        drawnKeys.full = null;
+        fullBox = null;
+        applyLodVisibility();
+        displayedFeatures = featuresFor(shown, 'overview');
+        firstDrawn = drawSlices('overview', displayedFeatures);
     }
 
-    const key = lod + list.map(t => t.trip.uid + ':' + t.v).join(',');
-    if (key === drawnKey) return null;
-    drawnKey = key;
-    drawnLod = lod;
-    displayedFeatures = [...list].sort(byTime)
+    if (map.getZoom() >= DETAIL_ZOOM) {
+        const view = viewBox();
+        const list = shown.filter(t => intersects(tripLoader.overview.bboxFor(t), view));
+        await tripLoader.full.ensure(list);
+        if (seq !== refreshSeq) return firstDrawn;
+        const fullKey = tripsKey(list);
+        if (fullKey !== drawnKeys.full) {
+            drawnKeys.full = fullKey;
+            fullDrawing++;
+            applyLodVisibility();
+            try {
+                await drawSlices('full', featuresFor(list, 'full'));
+            } finally {
+                fullDrawing--;
+            }
+        }
+        // Same trips as drawn, or just drawn: valid for this whole view
+        if (drawnKeys.full === fullKey) fullBox = view;
+        applyLodVisibility();
+    }
+    return firstDrawn;
+}
+
+function tripsKey(list) {
+    return list.map(t => t.trip.uid + ':' + t.v).join(',');
+}
+
+// Time-ordered features of the given trips at one level of detail
+function featuresFor(list, lod) {
+    return [...list].sort(byTime)
         .map(t => tripLoader[lod].featureFor(t)).filter(f => f !== null);
-    return drawSlices(displayedFeatures, seq);
 }
 
 // Oldest first: undated past trips (-1) before everything, projects (1) after
@@ -559,12 +627,16 @@ function byTime(a, b) {
 }
 
 // Cut the (time-ordered) features into SLICE_COUNT consecutive slices of
-// about equal point counts and hand them to MapLibre oldest first, yielding in
-// between so each slice is on its way to a worker (and on screen) while the
-// next is being serialised. Returns a promise for the first slice being drawn.
-async function drawSlices(features, seq) {
+// about equal point counts and hand them to one set's sources, oldest first,
+// yielding in between so each slice is on its way to a worker (and on screen)
+// while the next is being serialised. Every slice is always written: a newer
+// call for the same set starts after this one and so overwrites each slice
+// after it. Resolves once all are handed over, with a promise for the first
+// slice being drawn.
+async function drawSlices(lod, features) {
+    const sources = SLICE_SOURCES[lod];
     const total = features.reduce((n, f) => n + f.geometry.coordinates.length, 0);
-    const slices = SLICE_SOURCES.map(() => []);
+    const slices = sources.map(() => []);
     let done = 0;
     features.forEach(f => {
         const i = Math.min(SLICE_COUNT - 1, Math.floor(done / total * SLICE_COUNT));
@@ -572,15 +644,14 @@ async function drawSlices(features, seq) {
         done += f.geometry.coordinates.length;
     });
 
-    pulseTargets = [];
+    pulseTargets[lod] = [];
     slices.forEach((slice, i) => slice.forEach(f => {
-        if (f.properties.time === 'current') pulseTargets.push({ source: SLICE_SOURCES[i], id: f.properties.id });
+        if (f.properties.time === 'current') pulseTargets[lod].push({ source: sources[i], id: f.properties.id });
     }));
 
-    const firstDrawn = tripsDrawn(SLICE_SOURCES[0]);
+    const firstDrawn = tripsDrawn(sources[0]);
     for (let i = 0; i < SLICE_COUNT; i++) {
-        if (seq !== refreshSeq) break;  // superseded: the newer call sets every source
-        const source = map.getSource(SLICE_SOURCES[i]);
+        const source = map.getSource(sources[i]);
         if (source) source.setData({ type: 'FeatureCollection', features: slices[i] });
         if (i < SLICE_COUNT - 1) await new Promise(resolve => setTimeout(resolve, 0));
     }
