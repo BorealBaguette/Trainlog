@@ -372,6 +372,7 @@
   }
   #motisGroup .motis-meta { grid-column: 3; font-size: .75rem; color: #777; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   #motisGroup .motis-bus { margin-left: 4px; color: #b45309; }
+  #motisGroup .motis-type { height: 14px; margin-left: 4px; vertical-align: -2px; }
   .cp-bus-note { display: none; margin: 0 0 .5rem; padding: 6px 10px; border-radius: 6px;
                  font-size: .8rem; color: #92400e; background: #fef3c7; }
   .replacement-bus .cp-bus-note { display: block; }
@@ -795,7 +796,7 @@
       </div>
       {% endif %}
 
-      {% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') %}
+      {% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular', 'rail') %}
       {# Direct services between the two stations around the chosen time, from MOTIS.
          Filled by initMotisDepartures() below; hidden until there is something to say. #}
       <div id="motisGroup" style="display:none">
@@ -2470,7 +2471,7 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
 });
 {% endif %}
 
-{% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular') %}
+{% if vehicle_type in ('train', 'metro', 'tram', 'bus', 'ferry', 'aerialway', 'funicular', 'rail') %}
 // ── Timetable departures (MOTIS) ──
 //    Once both ends are known, list the direct services between them around the chosen
 //    start time; picking one fills in the times, line, operator and stops (the stops
@@ -2479,6 +2480,9 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
   var url = "{{ url_for('motis.motis_departures', username=username) }}";
   var logosBase = "{{ url_for('static', filename='') }}";
   var typeIcon = "{{ url_for('static', filename='images/icons/trip_logos/' + vehicle_type + '.png') }}";
+  var tripLogos = "{{ url_for('static', filename='images/icons/trip_logos/') }}";
+  var typeNames = { train: {{ (train|default('Train'))|tojson }}, metro: {{ (metro|default('Metro'))|tojson }}, tram: {{ (tram|default('Tram'))|tojson }},
+                    funicular: {{ (funicular|default('Funicular'))|tojson }} };
   var texts = {
     title: {{ motisDepartures|tojson }},
     searching: {{ motisSearching|tojson }},
@@ -2724,6 +2728,9 @@ document.getElementById('viaSummaryClear').addEventListener('click', function (e
           d.logo_url ? '' : d.operator,
         ].filter(Boolean).join(' \u00b7 '))
         .append(d.replacement_bus ? $('<i class="fa-solid fa-bus motis-bus">').attr('title', texts.replacementBus) : null)
+        // A run its feed files as another type (a tram-train as a tram on a train search).
+        .append(!d.replacement_bus && d.type && d.type !== vehicle_type ? $('<img class="motis-type">')
+          .attr({ src: tripLogos + d.type + '.png', alt: typeNames[d.type] || d.type, title: typeNames[d.type] || d.type }) : null)
         .appendTo($item);
       $('<li>').append($item).appendTo($menu);
     });

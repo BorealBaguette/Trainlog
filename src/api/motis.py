@@ -77,6 +77,15 @@ TRANSIT_MODES = {
 }
 RAIL_MODES = set(TRANSIT_MODES["train"].split(","))
 BUS_MODES = set(TRANSIT_MODES["bus"].split(","))
+# Rail lines are filed under whichever mode their feed picked, and logged as whatever they
+# feel like: Karlsruhe's Stadtbahn and Roslagsbanan as regional rail, Paris's tram-trains and
+# Köln's Stadtbahn as trams, Hannover's Stadtbahn and Hong Kong's Airport Express as subway,
+# the Wuppertal Schwebebahn as a funicular. So these types take every rail mode; only direct
+# runs between the two stations come up anyway. "Other rail" (monorails, suspension railways)
+# has no mode of its own: Wuppertal's and Dortmund's come as funiculars, Kuala Lumpur's as subway.
+RAIL_FAMILY = ("train", "metro", "tram", "funicular", "rail")
+# The trip type a run's mode is, for a run of another type to say so.
+MODE_TYPES = {mode: trip_type for trip_type, modes in TRANSIT_MODES.items() for mode in modes.split(",")}
 
 # How far the service's first/last stop may be from the stations on the form. OSM
 # station points and GTFS stops of a big station can sit a few hundred metres apart,
@@ -91,12 +100,12 @@ def _reach(modes):
     return URBAN_STOP_DISTANCE_M if modes <= URBAN_MODES else MAX_STOP_DISTANCE_M
 
 
-def _leg_reach(leg, modes):
-    """_reach for one service. Coaches (GTFS 200-299) and rail replacement buses (714)
+def _leg_reach(leg):
+    """_reach for one service, by its own mode. Coaches (GTFS 200-299) and rail replacement buses (714)
     call at train stations, whose stops sit as far apart as the station's own: SNCF's
     replacement buses leave from its Montparnasse stop, not the bus stops on OSM."""
     route_type = leg.get("routeType") or 0
-    return MAX_STOP_DISTANCE_M if 200 <= route_type < 300 or route_type == 714 else _reach(modes)
+    return MAX_STOP_DISTANCE_M if 200 <= route_type < 300 or route_type == 714 else _reach({leg.get("mode")})
 
 
 # Fallback searches from timetable stops (see _stop_places): at most this many stops
@@ -373,8 +382,8 @@ def _direct_leg(itinerary, modes, origin, destination):
         leg
         for leg in itinerary.get("legs", [])
         if leg.get("mode") in modes
-        and _distance_m(leg["from"]["lat"], leg["from"]["lon"], *origin) <= _leg_reach(leg, modes)
-        and _distance_m(leg["to"]["lat"], leg["to"]["lon"], *destination) <= _leg_reach(leg, modes)
+        and _distance_m(leg["from"]["lat"], leg["from"]["lon"], *origin) <= _leg_reach(leg)
+        and _distance_m(leg["to"]["lat"], leg["to"]["lon"], *destination) <= _leg_reach(leg)
     ]
     return legs[0] if len(legs) == 1 else None
 
@@ -408,7 +417,7 @@ def _board_legs(stop_id, modes, start, destination, nearest_m=None):
             for i, stop in enumerate(following)
             if stop.get("dropoffType") != "NOT_ALLOWED"
         ]
-        reach = _leg_reach(dep, modes)
+        reach = _leg_reach(dep)
         if nearest_m is not None:
             reach = min(reach, nearest_m + NEAREST_STOP_SLACK_M)
         near = [(d, i) for d, i in near if d <= reach]
@@ -453,7 +462,7 @@ def _stop_places(lat, lng, modes):
         )
         if stop.get("id")
         and modes & set(stop.get("modes") or ())
-        and _distance_m(stop["lat"], stop["lon"], lat, lng) <= _reach(modes)
+        and _distance_m(stop["lat"], stop["lon"], lat, lng) <= _reach(modes & set(stop.get("modes") or ()))
     ]
     stops.sort(key=lambda stop: stop["distance_m"])
     return stops[:MAX_FALLBACK_STOPS]
@@ -543,11 +552,16 @@ def _rail_replacement(leg):
     return leg.get("routeType") == 714 or "ROUTIER_" in (leg.get("tripId") or "")
 
 
+def _modes(trip_type):
+    types = RAIL_FAMILY if trip_type in RAIL_FAMILY else (trip_type,)
+    return {mode for t in types if t in TRANSIT_MODES for mode in TRANSIT_MODES[t].split(",")}
+
+
 def _search(args):
     """The search the form asks for (from, to, date, time, type), as
     (trip type, origin, destination, start, window, plan parameters, modes)."""
     trip_type = args.get("type", "train")
-    if trip_type not in TRANSIT_MODES:
+    if trip_type not in TRANSIT_MODES and trip_type not in RAIL_FAMILY:
         abort(400)
     origin = _parse_coords(args.get("from"))
     destination = _parse_coords(args.get("to"))
@@ -587,7 +601,7 @@ def _search(args):
         "time": start.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "searchWindow": int(min(window, SEARCH_WINDOW).total_seconds()),
         "maxTransfers": 0,
-        "transitModes": TRANSIT_MODES[trip_type],
+        "transitModes": ",".join(sorted(_modes(trip_type))),
         "directModes": "WALK",
         "numItineraries": ITINERARIES,
         "maxItineraries": ITINERARIES,
@@ -597,7 +611,7 @@ def _search(args):
         # RE11): Pareto-optimal results drop them, but people do take them.
         "slowDirect": "true",
     }
-    modes = set(TRANSIT_MODES[trip_type].split(","))
+    modes = _modes(trip_type)
     return trip_type, origin, destination, start, window, params, modes
 
 
@@ -862,6 +876,9 @@ def _departures(searches, start, window, destination):
             "headsign": _headsign(leg),
             "agency": (leg.get("agencyName") or "").strip(),
             "mode": leg.get("mode"),
+            # The trip type its mode is: the list marks a run of another type than the
+            # search's (a tram-train, filed as a tram, on a train search).
+            "type": MODE_TYPES.get(leg.get("mode")),
             # Entur files its rail replacement buses under the train's route, as rail.
             "replacement_bus": leg.get("replacementBus", False)
             or ":ServiceJourney:BUS-" in (leg.get("tripId") or ""),
