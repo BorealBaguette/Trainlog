@@ -294,6 +294,30 @@
             </button>
             <input type="hidden" id="tileserver" name="tileserver" form="settingsForm" value="{{ user_tileserver }}">
 
+            <label class="settings2-label" for="map_lang">{{ mapLangLabel }}</label>
+            <div class="settings2-combo" data-combo="map_lang">
+              <div class="input-group">
+                <label class="input-group-text" id="map_lang-icon"></label>
+                <button type="button" class="form-select text-start settings2-combo-btn" id="map_lang-btn">
+                  <span id="map_lang-label"></span>
+                </button>
+              </div>
+              <input type="hidden" id="map_lang" name="map_lang" form="settingsForm" value="{{ user_map_lang }}">
+              <div class="settings2-combo-panel" id="map_lang-panel">
+                <input type="text" class="form-control settings2-combo-search" id="map_lang-search" autocomplete="off">
+                <div class="settings2-combo-list" id="map_lang-list">
+                  <button type="button" class="settings2-combo-item" data-value="" data-icon="fa-solid fa-language" data-label="{{ mapLangSite }}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="native" data-icon="fa-solid fa-map-pin" data-label="{{ mapLangNative }}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="local" data-icon="fa-solid fa-location-dot" data-label="{{ mapLangLocal }}"></button>
+                  <button type="button" class="settings2-combo-item" data-value="int" data-icon="fa-solid fa-globe" data-label="{{ mapLangInt }}"></button>
+                  {% for l in langs %}
+                  <button type="button" class="settings2-combo-item" data-value="{{ l.code }}" data-raw="{{ l.name }}"></button>
+                  {% endfor %}
+                </div>
+                <div class="settings2-combo-empty" id="map_lang-empty" style="display:none;">No results</div>
+              </div>
+            </div>
+
             {% if is_premium %}
             <div class="form-check form-switch mt-3">
               <input class="form-check-input" type="checkbox" id="orm-enabled" name="orm_enabled" form="settingsForm">
@@ -1014,9 +1038,17 @@
 
   // Language: translations ship as "🇫🇷 Français" — split the flag out into
   // the icon box / list rows and leave the button text as just the name.
-  const langCombo = initCombo('lang');
-  if (langCombo) {
-    langCombo.items.forEach(item => {
+  // The map language combo adds two leading items carrying a static data-icon.
+  function initLangCombo(id) {
+    const combo = initCombo(id);
+    if (!combo) return;
+    combo.items.forEach(item => {
+      if (!item.dataset.raw) {
+        item.dataset.flag = `<i class="${item.dataset.icon}"></i>`;
+        item.dataset.search = normalizeSearch(item.dataset.label);
+        item.innerHTML = `<span class="settings2-combo-flag">${item.dataset.flag}</span><span>${item.dataset.label}</span>`;
+        return;
+      }
       const chars = Array.from(item.dataset.raw);
       let flag = '', name = item.dataset.raw;
       if (chars.length && /\p{Regional_Indicator}/u.test(chars[0])) {
@@ -1029,8 +1061,10 @@
       item.dataset.search = normalizeSearch(`${name} ${item.dataset.value}`);
       item.innerHTML = `<span class="settings2-combo-flag">${flag}</span><span>${name}</span>`;
     });
-    langCombo.apply(langCombo.items.find(i => i.dataset.value === document.getElementById('lang').value));
+    combo.apply(combo.items.find(i => i.dataset.value === document.getElementById(id).value));
   }
+  initLangCombo('lang');
+  initLangCombo('map_lang');
 
   // Shared setup for combos whose items already carry a static data-icon
   // (FA class) and data-label from the template — just wire up search/flag.

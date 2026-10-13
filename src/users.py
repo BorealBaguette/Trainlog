@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from flask import session
+from flask import g, session
 from flask_sqlalchemy import SQLAlchemy
 
 authDb = SQLAlchemy()
@@ -63,6 +63,10 @@ class User(authDb.Model):
     live_tracking = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # Routing: start with "pass exactly through every point" on.
     exact_waypoints = authDb.Column(authDb.Boolean, nullable=False, default=False)
+    # Language of the map background's labels: "" follows the site language, "native" is
+    # as written locally, "local" the same + Latin below a non-Latin name, "int" in Latin
+    # letters only, anything else is a site language code.
+    map_lang = authDb.Column(authDb.String(10), nullable=False, default="")
     # Discord user id, set via the /discord/connect OAuth flow. Used to grant/revoke
     # the premium role automatically when membership status changes.
     discord_id = authDb.Column(authDb.String(30), nullable=True)
@@ -109,6 +113,7 @@ class User(authDb.Model):
             "flight_3d": self.flight_3d,
             "live_tracking": self.live_tracking,
             "exact_waypoints": self.exact_waypoints,
+            "map_lang": self.map_lang,
             "discord_id": self.discord_id,
             "discord_username": self.discord_username,
             "discord_autopost": self.discord_autopost,
@@ -172,3 +177,13 @@ def exact_waypoints_context():
     """Template variable: whether the logged-in user starts routing with every point exact."""
     user = User.query.filter_by(username=session.get("logged_in")).first()
     return {"exact_waypoints_default": bool(user and user.exact_waypoints)}
+
+
+def map_lang_context():
+    """Template variable: the language map backgrounds label places in, for the
+    logged-in user's map_lang or else the session's language."""
+    session_lang = (session.get("userinfo") or {}).get("lang") or "en"
+    if getattr(g, "suppress_context_queries", False) or not session.get("logged_in"):
+        return {"mapLang": session_lang}
+    user = User.query.filter_by(username=session.get("logged_in")).first()
+    return {"mapLang": (user and user.map_lang) or session_lang}

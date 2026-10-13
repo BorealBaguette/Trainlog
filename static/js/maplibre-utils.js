@@ -37,7 +37,8 @@ const MapConfig = {
 };
 
 // Resolves a tileserver value (incl. orm-vector-<type>.<base>) into a MapLibre style
-async function resolveBackground(tileserver, { styleUrl = null, userLanguage = 'en', useGlobe = false } = {}) {
+// Map labels default to the user's map language setting (window.MAP_LANG, set by the layouts)
+async function resolveBackground(tileserver, { styleUrl = null, userLanguage = window.MAP_LANG || 'en', useGlobe = false } = {}) {
     let mapStyle;
 
     // Parse the OpenRailwayMap overlay. It is always the vector one, over raster and vector
@@ -93,7 +94,7 @@ async function initializeMapLibre(options = {}) {
     const {
         container = 'map',
         useGlobe = false,
-        userLanguage = 'en',
+        userLanguage = window.MAP_LANG || 'en',
         center = [10, 50],
         zoom = 5,
         styleUrl = null,
@@ -391,13 +392,24 @@ const OFM_GLYPHS = 'https://tiles.openfreemap.org/fonts/{fontstack}/{range}.pbf'
 
 const OFM_SOURCED_STYLES = ['dark-train', 'trainlog-rail', 'ofm-liberty', 'ofm-bright', 'ofm-positron'];
 
+// "native" labels places as written locally (北京); "local" the same with the
+// Latin spelling below a non-Latin name (北京 / Beijing); "int" in Latin letters
+// only (Beijing); a language code in that language.
 function applyStyleLanguage(style, userLanguage) {
     const code = userLanguage === 'gsw' ? 'de' : userLanguage.split('-')[0];
+    const textField = code === 'local'
+        ? ['case', ['has', 'name:nonlatin'],
+            ['concat', ['get', 'name:nonlatin'], '\n', ['get', 'name:latin']],
+            ['coalesce', ['get', 'name'], ['get', 'name:latin']]]
+        : code === 'native'
+        ? ['coalesce', ['get', 'name'], ['get', 'name:latin']]
+        : code === 'int'
+        ? ['coalesce', ['get', 'name:latin'], ['get', 'name']]
+        : ['coalesce', ['get', `name:${code}`], ['get', 'name:latin'], ['get', 'name']];
     for (const layer of style.layers) {
         if (layer.type !== 'symbol' || !layer.layout || !layer.layout['text-field']) continue;
         if (!JSON.stringify(layer.layout['text-field']).includes('name')) continue;
-        layer.layout['text-field'] = ['coalesce',
-            ['get', `name:${code}`], ['get', 'name:latin'], ['get', 'name']];
+        layer.layout['text-field'] = textField;
     }
 }
 

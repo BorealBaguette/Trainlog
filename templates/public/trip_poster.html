@@ -1524,7 +1524,7 @@ async function buildMap() {
         useGlobe: false,
         // The one special case left: "International" asks for English labels
         // rather than the viewer's own language.
-        userLanguage: mapLangMode === 'intl' ? 'en' : langId,
+        userLanguage: mapLangMode === 'intl' ? 'en' : posterMapLang(),
         center: firstCoord,
         zoom: 5,
         preserveDrawingBuffer: true,
@@ -1738,9 +1738,17 @@ function applyHiddenLabelFilters(map) {
 
 // The name fields a label can be rendered from, in the order text-field
 // coalesces them. Empty-string coalesce keeps `in` off a null needle.
+// The map language setting, except that its two-line "local" labels become the
+// single Latin name, as "int" is: hiding and promoting labels match them by one name.
+function posterMapLang() {
+    const mapLang = window.MAP_LANG || langId;
+    return mapLang === 'int' || mapLang === 'local' ? 'latin' : mapLang;
+}
+
 function nameFields() {
-    const code = mapLangMode === 'intl' ? 'en' : (langId === 'gsw' ? 'de' : String(langId).split('-')[0]);
-    return ['name', 'name:latin', 'name:' + code];
+    const mapLang = posterMapLang();
+    const code = mapLangMode === 'intl' ? 'en' : (mapLang === 'gsw' ? 'de' : String(mapLang).split('-')[0]);
+    return ['name', 'name:latin', code === 'native' ? 'name' : 'name:' + code];
 }
 
 // What the label actually reads on screen, and every field that could hide it.

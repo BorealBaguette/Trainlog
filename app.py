@@ -307,7 +307,7 @@ from src.plans.import_trips import import_trips_to_plan
 from src.carbon import *
 from src.account_export import build_account_data_csvs
 from src.delete_account import delete_account_data
-from src.users import User, Friendship, authDb, exact_waypoints_context
+from src.users import User, Friendship, authDb, exact_waypoints_context, map_lang_context
 from src.email_parser import start_email_listener
 from src.trip_announcer import (
     announced_trip_ids,
@@ -1341,6 +1341,7 @@ def order_trip_types(types):
 
 
 app.context_processor(exact_waypoints_context)
+app.context_processor(map_lang_context)
 
 
 @app.context_processor
@@ -9867,6 +9868,9 @@ def user_settings(username):
         params["tileserver"] = request.form["tileserver"]
         params["globe"] = "globe" in request.form
         params["exact_waypoints"] = "exact_waypoints" in request.form
+        map_lang = request.form.get("map_lang", "")
+        if map_lang in ("", "native", "local", "int") or map_lang in lang:
+            params["map_lang"] = map_lang
         # Premium-only toggle: only honour it for premium users so a crafted POST
         # can't enable it without premium.
         params["flight_3d"] = ("flight_3d" in request.form) and bool(user.premium)
@@ -9913,6 +9917,7 @@ def user_settings(username):
         default_landing=user.default_landing,
         user_tileserver=user.tileserver,
         user_globe=user.globe,
+        user_map_lang=user.map_lang,
         discord_id=user.discord_id,
         discord_webhooks=list_webhooks(user.uid),
         discord_webhook_status=request.args.get("dw"),
@@ -14816,6 +14821,13 @@ def ensure_auth_db_columns():
         authDb.session.execute(
             sqlalchemy.text(
                 "ALTER TABLE user ADD COLUMN live_tracking BOOLEAN NOT NULL DEFAULT 0"
+            )
+        )
+        authDb.session.commit()
+    if "map_lang" not in existing:
+        authDb.session.execute(
+            sqlalchemy.text(
+                "ALTER TABLE user ADD COLUMN map_lang VARCHAR(10) NOT NULL DEFAULT ''"
             )
         )
         authDb.session.commit()
