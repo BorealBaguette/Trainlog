@@ -33,6 +33,8 @@ def explorer_page(editable):
         tileserver=user.tileserver if user else "default",
         isCurrent=has_current_trip(get_user_id()),
         modes=sorted(set(QUAI_MODES.values())),
+        # The languages Trainlog is read in, whose names the explorer lists first.
+        trainlog_langs=sorted(lang),
         **session["userinfo"],
         **lang[session["userinfo"]["lang"]],
     )

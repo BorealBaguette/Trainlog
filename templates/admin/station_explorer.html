@@ -30,71 +30,90 @@
   #se-results li:hover, #se-results li.active { background: #eef3fc; }
   #se-results .sub { display: block; color: var(--se-muted); font-size: .74rem; }
 
-  /* The station: cards */
-  #se-detail { flex: 1; overflow-y: auto; font-size: .84rem; display: flex; flex-direction: column; gap: 10px;
-    padding-right: 2px; }
+  /* The station: one panel, its sections divided by a line, the rarely needed folded at the end */
+  #se-detail { flex: 1; overflow-y: auto; font-size: .85rem; display: flex; flex-direction: column;
+    background: #fff; border: 1px solid var(--se-border); border-radius: 12px; position: relative; }
   #se-detail.empty { color: var(--se-muted); justify-content: center; text-align: center; padding: 2rem; }
   #se-detail.empty .bi { font-size: 2rem; display: block; margin-bottom: .5rem; opacity: .4; }
-  .se-card { background: #fff; border: 1px solid var(--se-border); border-radius: 10px; padding: 10px 12px; }
-  .se-card > h3 { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
-    color: var(--se-muted); margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
-  .se-card > h3 .count, details.se-card > summary .count { background: var(--se-soft); color: var(--se-muted);
-    border-radius: 8px; padding: 0 6px; font-weight: 600; letter-spacing: 0; }
-  .se-head h2 { font-size: 1.2rem; font-weight: 600; margin: 0; display: flex; align-items: center; gap: 6px; }
-  .se-badges { display: flex; flex-wrap: wrap; gap: 4px; margin: 6px 0 8px; }
-  .se-badge { background: var(--se-soft); color: #374151; border-radius: 6px; padding: 1px 8px; font-size: .74rem; }
-  .se-badge.edited { background: #dbeafe; color: #1d4ed8; }
-  .se-trainlog { display: flex; align-items: center; justify-content: space-between; gap: 8px;
-    background: var(--se-soft); border-radius: 8px; padding: 6px 10px; }
-  .se-trainlog .label { font-size: .7rem; color: var(--se-muted); text-transform: uppercase; letter-spacing: .04em; }
-  .se-trainlog .name { font-weight: 600; }
+  .se-sec { padding: 14px 16px; border-top: 1px solid var(--se-border); }
+  .se-sec:first-child { border-top: 0; }
+  .se-sec > h3, .se-fold > summary { font-size: .7rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--se-muted); margin: 0 0 8px; display: flex; align-items: center; gap: 6px; }
+  .count { color: #9ca3af; font-weight: 500; letter-spacing: 0; }
+  .se-title { font-size: 1.25rem; font-weight: 650; margin: 0; line-height: 1.25; }
+  .se-meta { color: var(--se-muted); margin-top: 4px; display: flex; flex-wrap: wrap; gap: 4px 12px; align-items: center; }
+  .se-meta .own { color: var(--se-own); }
+  .se-flag { font-family: 'FlagEmojis', sans-serif; }
+  .se-link { border: 0; background: none; padding: 0; color: var(--se-accent); font-size: .8rem; cursor: pointer; }
+  .se-link:hover { text-decoration: underline; }
+  .se-link.muted { color: var(--se-muted); }
+  .se-ico { border: 0; background: none; padding: 0 2px; color: var(--se-muted); cursor: pointer; line-height: 1; }
+  .se-ico:hover { color: var(--se-accent); }
+  .se-ico.danger:hover { color: #dc2626; }
+  .se-hint { font-size: .74rem; color: var(--se-muted); }
+  :root { --se-own: #1d4ed8; --se-own-bg: #eff6ff; }
 
   /* A station merged into another, or others merged into it */
-  .se-merge-note { margin-top: 8px; padding: 6px 10px; border-radius: 6px; background: #eef4ff; color: #1e3a8a;
-    font-size: .88rem; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .se-merge-note { margin-top: 10px; padding: 8px 10px; border-radius: 8px; background: var(--se-own-bg);
+    color: #1e3a8a; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .se-merge-note a { font-weight: 600; }
   .se-merge-note button { margin-left: auto; }
-  .se-merge-results { list-style: none; margin: 4px 0 0; padding: 0; max-height: 180px; overflow-y: auto;
-    border: 1px solid #e5e7eb; border-radius: 6px; }
+  .se-merge-results { list-style: none; margin: 4px 0 0; padding: 0; max-height: 180px; overflow-y: auto; }
   .se-merge-results:empty { display: none; }
-  .se-merge-results li { padding: 4px 8px; cursor: pointer; font-size: .88rem; }
-  .se-merge-results li:hover { background: #f1f3f6; }
-  .se-merge-results .sub { color: #6b7280; font-size: .78rem; }
-  /* The override editor, folded until wanted */
-  .se-edit-toggle { border: 1px solid var(--se-border); background: #fff; border-radius: 6px; padding: 2px 10px;
-    font-size: .78rem; white-space: nowrap; }
-  .se-edit-toggle:hover { border-color: var(--se-accent); color: var(--se-accent); }
-  .se-override { display: none; flex-direction: column; gap: 8px; margin-top: 10px; padding-top: 10px;
-    border-top: 1px dashed var(--se-border); }
-  .se-override.open { display: flex; }
-  .se-field label { display: block; font-size: .72rem; color: var(--se-muted); margin-bottom: 2px; }
-  .se-inline { display: flex; gap: 4px; align-items: center; }
-  .se-inline input { flex: 1; min-width: 0; }
-  .se-icon-btn { border: 1px solid var(--se-border); background: #fff; border-radius: 6px; width: 30px; height: 30px;
-    display: inline-flex; align-items: center; justify-content: center; color: #374151; flex-shrink: 0; }
-  .se-icon-btn:hover { border-color: var(--se-accent); color: var(--se-accent); }
-  .se-icon-btn.danger:hover { border-color: #dc2626; color: #dc2626; }
-  .se-track-rows, .se-name-rows { display: flex; flex-direction: column; gap: 4px; }
-  .se-name-row { display: grid; grid-template-columns: 64px 1fr 30px; gap: 4px; align-items: center;
-    background: var(--se-soft); border-radius: 8px; padding: 4px; }
-  .se-name-row .osm { grid-column: 1 / -1; font-size: .7rem; color: var(--se-muted); padding: 0 4px; }
-  .se-name-row .osm.same { color: #15803d; }
-  .se-track-row { display: grid; grid-template-columns: 52px 1fr auto auto 30px 30px; gap: 4px; align-items: center;
-    background: var(--se-soft); border-radius: 8px; padding: 4px; }
-  .se-track-row label { font-size: .7rem; white-space: nowrap; display: flex; align-items: center; gap: 3px;
-    color: #374151; margin: 0 2px; }
-  .se-actions { display: flex; align-items: center; gap: 6px; }
-  .se-actions .status { font-size: .74rem; color: var(--se-muted); flex: 1; }
-  .se-hint { font-size: .72rem; color: var(--se-muted); }
+  .se-merge-results li { padding: 4px 6px; border-radius: 6px; cursor: pointer; }
+  .se-merge-results li:hover { background: #eef3fc; }
+  .se-merge-results .sub { color: var(--se-muted); font-size: .76rem; }
 
-  /* Facts */
-  .se-facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0; }
-  .se-facts dt { color: var(--se-muted); font-weight: 400; }
-  .se-facts dd { margin: 0; word-break: break-word; }
+  /* Text that edits in place: plain until hovered or focused */
+  .se-in { border: 1px solid transparent; background: transparent; border-radius: 6px; padding: 3px 6px;
+    font: inherit; color: inherit; min-width: 0; width: 100%; }
+  .se-in:hover { border-color: var(--se-border); }
+  .se-in:focus { outline: 0; border-color: var(--se-accent); background: #fff; box-shadow: 0 0 0 3px rgba(37,99,235,.12); }
+  .se-in::placeholder { color: #b6bcc6; }
+
+  /* Names: one row per language, the default name first; Trainlog's tinted, OSM's beside */
+  .se-names { display: flex; flex-direction: column; gap: 1px; }
+  .se-name { display: grid; grid-template-columns: 62px 1fr auto; align-items: center; gap: 6px;
+    padding: 1px 4px; border-radius: 8px; }
+  .se-name .code { font-size: .72rem; font-weight: 600; color: var(--se-muted); font-family: ui-monospace, monospace; }
+  .se-name .was { grid-column: 2 / 3; font-size: .72rem; color: var(--se-muted); padding: 0 7px 3px; }
+  .se-name.own { background: var(--se-own-bg); }
+  .se-name.own .code, .se-name.own .se-in, .se-name.own .value { color: var(--se-own); }
+  .se-name .value { padding: 3px 7px; }
+  .se-name.new .code input { font-family: ui-monospace, monospace; font-size: .72rem; }
+  .se-other-names { margin-top: 8px; }
+  .se-other-names > summary { cursor: pointer; }
+  .se-other-names .se-name:not(.own) .se-in, .se-other-names .se-name:not(.own) .value { color: #9ca3af; }
+  .se-missing { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+  .se-lang { border: 1px dashed #c4c9d1; background: none; border-radius: 5px; padding: 0 5px;
+    font: 600 .7rem ui-monospace, monospace; color: var(--se-muted); cursor: pointer; }
+  .se-lang:hover { border-color: var(--se-accent); color: var(--se-accent); }
+
+  /* Tracks and lines: chips; a track's editor opens under them */
   .se-chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .se-chip { display: inline-flex; align-items: center; min-width: 26px; justify-content: center; padding: 1px 7px;
-    border-radius: 6px; font-weight: 600; font-size: .76rem; border: 1px solid #d1d5db; background: #fff; }
-  .se-track-chip, .se-line-chip { cursor: pointer; }
+  .se-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 28px; height: 24px;
+    padding: 0 7px; border-radius: 6px; font-weight: 600; font-size: .76rem; border: 1.5px solid #15803d;
+    background: #fff; color: #111827; cursor: pointer; }
+  .se-chip.platform { border-color: #ca8a04; }
+  .se-chip.own { box-shadow: 0 0 0 2px var(--se-own-bg), 0 0 0 3px var(--se-own); }
+  .se-chip.hidden { text-decoration: line-through; opacity: .55; border-style: dashed; }
+  .se-chip.selected { background: #111827; color: #fff; }
+  .se-chip.add { border: 1.5px dashed #c4c9d1; color: var(--se-muted); }
+  .se-line-chip { border-color: transparent; }
+  .se-line-chip.active { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--se-accent); }
+  .se-track-edit { margin-top: 10px; padding: 10px; border-radius: 10px; background: #f8fafc;
+    display: grid; grid-template-columns: auto 1fr auto; gap: 6px 10px; align-items: center; }
+  .se-track-edit .what { font-weight: 600; }
+  .se-track-edit .what input { width: 70px; display: inline-block; }
+  .se-track-edit .opts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: center; }
+  .se-track-edit .opts label { display: inline-flex; align-items: center; gap: 5px; margin: 0; cursor: pointer; }
+  .se-track-edit .opts .end { margin-left: auto; display: flex; gap: 12px; }
+  .se-legend-inline { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 8px; }
+  .se-legend-inline span::before { content: ''; display: inline-block; width: 9px; height: 9px; border-radius: 3px;
+    margin-right: 4px; vertical-align: -1px; border: 1.5px solid var(--c); }
+  .se-legend-inline span.ring::before { border-color: #9ca3af; box-shadow: 0 0 0 1.5px var(--se-own); }
+
+  /* Services */
   .se-service-list { display: flex; flex-direction: column; max-height: 260px; overflow-y: auto; }
   .se-service { display: flex; align-items: baseline; gap: 6px; padding: 3px 6px; border-radius: 6px; cursor: pointer; }
   .se-service:hover { background: #eef3fc; }
@@ -102,30 +121,40 @@
   .se-service .ref { font-weight: 600; font-size: .76rem; min-width: 52px; }
   .se-service .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .se-service .kind { color: var(--se-muted); font-size: .7rem; }
-  .se-line-chip.active { box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--se-accent); }
-  .se-track-chip:hover { box-shadow: 0 0 0 2px rgba(37,99,235,.2); }
-  .se-track-chip.override { border-style: dashed !important; }
-  .se-flag { font-family: 'FlagEmojis', sans-serif; }
-  .se-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; flex-shrink: 0; }
-  .se-tags { width: 100%; font-size: .8rem; }
+
+  /* Folded sections */
+  .se-fold { padding: 12px 16px; border-top: 1px solid var(--se-border); }
+  .se-fold > summary { cursor: pointer; list-style: none; margin: 0; }
+  .se-fold > summary::-webkit-details-marker { display: none; }
+  .se-fold > summary::before { content: '\25B8'; transition: transform .15s; }
+  .se-fold[open] > summary { margin-bottom: 10px; }
+  .se-fold[open] > summary::before { transform: rotate(90deg); }
+  .se-facts { display: grid; grid-template-columns: max-content 1fr; gap: 3px 12px; margin: 0 0 10px; }
+  .se-facts dt { color: var(--se-muted); font-weight: 400; }
+  .se-facts dd { margin: 0; word-break: break-word; }
+  .se-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+  .se-tags { width: 100%; font-size: .78rem; }
   .se-tags td { padding: 1px 4px; vertical-align: top; word-break: break-word; }
   .se-tags td:first-child { font-family: monospace; color: var(--se-muted); white-space: nowrap; width: 1%; }
-  details.se-card > summary { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
-    color: var(--se-muted); cursor: pointer; list-style: none; display: flex; align-items: center; gap: 6px; }
-  details.se-card > summary::before { content: '\25B8'; transition: transform .15s; }
-  details.se-card[open] > summary::before { transform: rotate(90deg); }
-  details.se-card[open] > summary { margin-bottom: 8px; }
-
-  /* OSM objects */
   .se-objects { display: flex; flex-direction: column; }
   .se-object { display: flex; align-items: center; gap: 6px; padding: 4px 6px; border-radius: 6px; cursor: pointer; }
   .se-object:hover { background: #eef3fc; }
   .se-object .what { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .se-object .kind { color: var(--se-muted); font-size: .72rem; }
   .se-object a { font-family: monospace; font-size: .74rem; }
-  .se-as-track { border: 1px solid var(--se-border); background: #fff; border-radius: 6px; font-size: .7rem;
-    padding: 0 6px; color: var(--se-accent); white-space: nowrap; }
-  .se-as-track:hover { border-color: var(--se-accent); }
+
+  /* Unsaved changes: one bar at the bottom of the panel */
+  .se-savebar { position: sticky; bottom: 0; margin-top: auto; display: flex; align-items: center; gap: 12px;
+    padding: 10px 16px; background: rgba(255,255,255,.96); border-top: 1px solid var(--se-border);
+    backdrop-filter: blur(4px); }
+  .se-savebar[hidden] { display: none; }
+  .se-savebar .status { flex: 1; color: var(--se-muted); }
+  .se-savebar .status.error { color: #dc2626; }
+  .se-btn { border: 0; border-radius: 8px; padding: 6px 14px; font-weight: 600; font-size: .82rem; cursor: pointer; }
+  .se-btn.primary { background: var(--se-accent); color: #fff; }
+  .se-btn.primary:hover { background: #1d4ed8; }
+  .se-btn.quiet { background: transparent; color: var(--se-muted); }
+  .se-btn.quiet:hover { color: #111827; }
 
   /* Map */
   #se-map-wrap { position: relative; flex: 1; display: flex; min-height: 0; }
@@ -140,7 +169,13 @@
     background: #15803d; border: 1.5px solid #fff; cursor: default; white-space: nowrap;
     box-shadow: 0 1px 3px rgba(0,0,0,.3); }
   .se-track.platform { background: #ca8a04; }
-  .se-track.override { background: var(--se-accent); }
+  .se-track.override { box-shadow: 0 0 0 2px var(--se-accent), 0 1px 3px rgba(0,0,0,.3); }
+  /* The track being moved: a small dot on its point, to drag precisely, its ref above */
+  .se-track-handle { width: 12px; height: 12px; border-radius: 50%; background: #15803d; border: 2px solid #fff;
+    box-shadow: 0 0 0 2px var(--se-accent), 0 1px 4px rgba(0,0,0,.4); cursor: grab; position: relative; }
+  .se-track-handle.platform { background: #ca8a04; }
+  .se-track-handle:active { cursor: grabbing; }
+  .se-track.above { position: absolute; bottom: 14px; left: 50%; transform: translateX(-50%); pointer-events: none; }
   .se-line { padding: 1px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; color: #fff;
     border: 1.5px solid #fff; white-space: nowrap; box-shadow: 0 1px 3px rgba(0,0,0,.3); }
   .se-override-pin { width: 18px; height: 18px; border-radius: 50%; border: 3px solid #dc2626;
@@ -179,6 +214,10 @@
 <script>
 const API = {{ url_for("station_explorer.station_explorer")|tojson }};
 const EDITABLE = {{ editable|tojson }};
+// Trainlog's languages, and the codes naming a station for their readers: a name in "pt" is
+// read in pt-BR and pt-PT where they have none of their own (src/quai.py, apply_overrides).
+const TRAINLOG_LANGS = {{ trainlog_langs|tojson }};
+const READ_CODES = new Set(TRAINLOG_LANGS.flatMap(l => [l, l.split('-')[0]]));
 
 // Kinds of OSM object in a station, in the order the legend lists them.
 const KINDS = [
@@ -266,8 +305,9 @@ const mapReady = (async () => {
   map.on('click', 'objects', e => { if (!picking) showObject(JSON.parse(e.features[0].properties.object)); });
   map.on('click', e => {
     if (!picking) return;
-    picking.value = `${e.lngLat.lat.toFixed(6)}, ${e.lngLat.lng.toFixed(6)}`;
-    stopPicking('Picked: save to keep it');
+    const done = picking;
+    stopPicking();
+    done([+e.lngLat.lat.toFixed(6), +e.lngLat.lng.toFixed(6)]);
   });
   map.on('mouseenter', 'objects', () => map.getCanvas().style.cursor = 'pointer');
   map.on('mouseleave', 'objects', () => map.getCanvas().style.cursor = '');
@@ -336,118 +376,100 @@ async function loadStation() {
 window.addEventListener('hashchange', loadStation);
 loadStation();
 
-// The name, position and tracks Trainlog uses for the station, set here when OSM's are
-// wrong or missing. A position is typed ("lat, lng") or picked by clicking the map. A track
-// row adds a track, or moves or hides (by its ref) one of OSM's.
-let picking = null;
-let addTrackRow = () => {};
+// ── Trainlog's own name, names, position and tracks for the station, over OSM's ──
+// Edited in place, kept in `edit` until saved: the default name (for every language without
+// its own) and one per language, the position, and tracks added, moved or hidden by ref.
+let edit = null, savedEdit = '', current = null, selectedTrack = null;
+let picking = null;   // given [lat, lng] when the map is clicked
 const pickingBanner = document.getElementById('se-picking');
-function stopPicking(message) {
+function startPicking(done) {
+  picking = done;
+  pickingBanner.hidden = false;
+  map.getCanvas().style.cursor = 'crosshair';
+}
+function stopPicking() {
   picking = null;
   pickingBanner.hidden = true;
   map.getCanvas().style.cursor = '';
-  const status = document.querySelector('#se-override .status');
-  if (status) status.textContent = message || '';
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && picking) stopPicking(); });
-function parsePosition(text) {
-  const [lat, lng] = text.trim().split(/[,\s]+/).map(Number);
-  return text.trim() && !isNaN(lat) && !isNaN(lng) ? [lat, lng] : null;
+
+function editOf(s) {
+  const o = s.override || {};
+  return { name: o.name || '', position: o.lat != null ? [o.lat, o.lng] : null,
+           tracks: (o.tracks || []).map(t => ({ ...t })), names: { ...(o.names || {}) } };
 }
-function bindOverride(s) {
-  const f = document.getElementById('se-override');
-  const status = f.querySelector('.status');
-  const rows = f.querySelector('.se-track-rows');
-  function startPicking(input) {
-    picking = input;
-    pickingBanner.hidden = false;
-    status.textContent = '';
-    map.getCanvas().style.cursor = 'crosshair';
-  }
-  // Folded until wanted, open when the station has an override to see.
-  const open = (on) => { f.classList.toggle('open', on); };
-  document.querySelector('.se-edit-toggle').addEventListener('click', () => open(!f.classList.contains('open')));
-  if (s.override) open(true);
-  addTrackRow = (t = {}) => {
-    const row = document.createElement('div');
-    row.className = 'se-track-row';
-    row.innerHTML = `
-      <input class="form-control form-control-sm" name="ref" placeholder="Track" value="${esc(t.ref || '')}">
-      <input class="form-control form-control-sm" name="tposition" placeholder="lat, lng"
-        value="${t.lat != null ? `${t.lat}, ${t.lng}` : ''}">
-      <label title="A stop position on the track: the point is exact">
-        <input type="checkbox" name="on_track" ${t.on_track === false ? '' : 'checked'}> on track</label>
-      <label title="Hide OSM's track of this ref"><input type="checkbox" name="hidden" ${t.hidden ? 'checked' : ''}> hide</label>
-      <button type="button" class="se-icon-btn" data-action="pick-track" title="Pick on the map"><i class="bi bi-crosshair"></i></button>
-      <button type="button" class="se-icon-btn danger" data-action="remove-track" title="Remove"><i class="bi bi-trash"></i></button>`;
-    row.querySelector('[data-action=pick-track]').addEventListener('click',
-      () => startPicking(row.querySelector('[name=tposition]')));
-    row.querySelector('[data-action=remove-track]').addEventListener('click', () => row.remove());
-    rows.appendChild(row);
-    open(true);
-    row.querySelector('[name=ref]').focus();
-  };
-  ((s.override || {}).tracks || []).forEach(t => addTrackRow(t));
-  f.querySelector('[data-action=add-track]').addEventListener('click', () => addTrackRow());
-  // A name per language, with OSM's for it beside: one OSM has gained can go.
-  const nameRows = f.querySelector('.se-name-rows');
-  const addNameRow = (code = '', value = '') => {
-    const row = document.createElement('div');
-    row.className = 'se-name-row';
-    row.innerHTML = `
-      <input class="form-control form-control-sm" name="code" placeholder="ja" value="${esc(code)}">
-      <input class="form-control form-control-sm" name="value" placeholder="Name" value="${esc(value)}">
-      <button type="button" class="se-icon-btn danger" data-action="remove-name" title="Remove"><i class="bi bi-trash"></i></button>
-      <span class="osm"></span>`;
-    const osm = row.querySelector('.osm');
-    const showOsm = () => {
-      const c = row.querySelector('[name=code]').value.trim();
-      const v = (s.osm_names || {})['name:' + c];
-      osm.textContent = !c ? '' : v ? `OSM: ${v}` : 'not in OSM';
-      osm.classList.toggle('same', !!v && v === row.querySelector('[name=value]').value.trim());
-    };
-    row.querySelectorAll('input').forEach(i => i.addEventListener('input', showOsm));
-    row.querySelector('[data-action=remove-name]').addEventListener('click', () => row.remove());
-    nameRows.appendChild(row);
-    showOsm();
-    open(true);
-    if (!code) row.querySelector('[name=code]').focus();
-  };
-  Object.entries((s.override || {}).names || {}).forEach(([code, value]) => addNameRow(code, value));
-  f.querySelector('[data-action=add-name]').addEventListener('click', () => addNameRow());
-  async function save(body) {
-    status.textContent = 'Saving…';
-    const resp = await fetch(`{{ url_for("admin.station_explorer") }}/override/` +
-      `${encodeURIComponent(s.mode)}/${encodeURIComponent(s.station_key)}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) { status.textContent = data.error || 'Failed'; return; }
-    loadStation();
-  }
-  f.addEventListener('submit', e => {
-    e.preventDefault();
-    const pos = f.elements.position.value.trim();
-    const point = pos ? parsePosition(pos) : [null, null];
-    if (!point) { status.textContent = 'Position: "lat, lng"'; return; }
-    const tracks = [];
-    for (const row of rows.querySelectorAll('.se-track-row')) {
-      const ref = row.querySelector('[name=ref]').value.trim();
-      if (!ref) continue;
-      if (row.querySelector('[name=hidden]').checked) { tracks.push({ ref, hidden: true }); continue; }
-      const at = parsePosition(row.querySelector('[name=tposition]').value);
-      if (!at) { status.textContent = `Track ${ref}: position "lat, lng"`; return; }
-      tracks.push({ ref, lat: at[0], lng: at[1], on_track: row.querySelector('[name=on_track]').checked });
-    }
-    const names = {};
-    for (const row of nameRows.querySelectorAll('.se-name-row')) {
-      const code = row.querySelector('[name=code]').value.trim(), value = row.querySelector('[name=value]').value.trim();
-      if (code && value) names[code] = value;
-    }
-    save({ name: f.elements.name.value, lat: point[0], lng: point[1], tracks, names });
+const trackKey = ref => String(ref || '').trim().toLowerCase();
+const isDirty = () => JSON.stringify(edit) !== savedEdit;
+
+// The names: the default one, then each language OSM or Trainlog has one in, the reader's first.
+function nameRows(s) {
+  const osm = s.osm_names || {};
+  const codes = new Set(Object.keys(osm).filter(k => /^name:[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(k)).map(k => k.slice(5)));
+  Object.keys(edit.names).forEach(c => codes.add(c));
+  const lang = form.elements.lang.value || {{ langId|tojson }};
+  const sorted = [...codes].sort((a, b) => (b === lang) - (a === lang) || a.localeCompare(b));
+  return [{ code: '', osm: osm.name || s.name || '', own: edit.name },
+          ...sorted.map(code => ({ code, osm: osm['name:' + code] || '', own: edit.names[code] || '' }))];
+}
+function setName(code, value) {
+  const row = nameRows(current).find(r => r.code === code) || { osm: '' };
+  // As OSM has it, or nothing: OSM's again.
+  const own = value.trim() && value.trim() !== row.osm ? value.trim() : '';
+  if (code) { if (own) edit.names[code] = own; else delete edit.names[code]; }
+  else edit.name = own;
+}
+
+// The tracks: OSM's, with Trainlog's over them by ref (hidden ones kept, to be shown again).
+function trackList(s) {
+  const byRef = new Map((s.osm_tracks || []).map(t => [trackKey(t.ref), { ...t }]));
+  edit.tracks.forEach(t => {
+    const osm = byRef.get(trackKey(t.ref));
+    byRef.set(trackKey(t.ref), { ...(osm || {}), ...t, own: true, osm });
   });
-  f.querySelector('[data-action=clear]').addEventListener('click', () => save({}));
-  f.querySelector('[data-action=pick]').addEventListener('click', () => startPicking(f.elements.position));
+  return [...byRef.values()].sort((a, b) =>
+    String(a.ref).localeCompare(String(b.ref), undefined, { numeric: true, sensitivity: 'base' }));
+}
+// Trainlog's entry for a track, made from OSM's when first changed.
+function ownTrack(ref) {
+  let t = edit.tracks.find(x => trackKey(x.ref) === trackKey(ref));
+  if (!t) {
+    const osm = (current.osm_tracks || []).find(x => trackKey(x.ref) === trackKey(ref)) || {};
+    t = { ref, lat: osm.lat, lng: osm.lng, on_track: osm.on_track !== false };
+    edit.tracks.push(t);
+  }
+  return t;
+}
+// A track at an object's point (an OSM platform or stop position named wrongly), or a new one.
+function addTrack(t) {
+  edit.tracks = edit.tracks.filter(x => !t.ref || trackKey(x.ref) !== trackKey(t.ref));
+  edit.tracks.push({ ref: t.ref || '', lat: t.lat, lng: t.lng, on_track: t.on_track !== false });
+  selectedTrack = t.ref || '';
+  renderEdits();
+}
+
+function saveBody() {
+  const tracks = [];
+  for (const t of edit.tracks) {
+    if (!String(t.ref || '').trim()) continue;
+    if (t.hidden) { tracks.push({ ref: t.ref, hidden: true }); continue; }
+    if (t.lat == null) return { error: `Track ${t.ref}: pick its position` };
+    tracks.push({ ref: String(t.ref).trim(), lat: t.lat, lng: t.lng, on_track: t.on_track !== false });
+  }
+  return { name: edit.name, lat: edit.position ? edit.position[0] : null,
+           lng: edit.position ? edit.position[1] : null, tracks, names: edit.names };
+}
+async function save(body) {
+  const status = detailEl.querySelector('.se-savebar .status');
+  status.classList.remove('error');
+  status.textContent = 'Saving…';
+  const resp = await fetch(`{{ url_for("admin.station_explorer") }}/override/` +
+    `${encodeURIComponent(current.mode)}/${encodeURIComponent(current.station_key)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) { status.classList.add('error'); status.textContent = data.error || 'Failed'; return; }
+  loadStation();
 }
 
 // Where a line of the station goes: each of its route variants calling there, as its stops in
@@ -550,28 +572,373 @@ function loadServices(s, unpickRoutes) {
   });
 }
 
+let fitStation = () => {}, addingName = false, newNameCode = '', othersOpen = false;
+
+function headHtml(s) {
+  const place = [(s.city || {}).name, s.region].filter(Boolean).join(', ');
+  const at = edit.position || [s.osm_lat, s.osm_lng];
+  return `
+    <h2 class="se-title">${flag(s.country)} ${esc(s.trainlog_name)}</h2>
+    <div class="se-meta">
+      <span>${esc(s.mode)}${place ? ` · ${esc(place)}` : ''}</span>
+      <span class="${edit.position ? 'own' : ''}" title="${edit.position ? 'Position set in Trainlog' : 'OSM position'}">
+        <i class="bi bi-geo-alt"></i> ${at[0].toFixed(5)}, ${at[1].toFixed(5)}
+        ${EDITABLE ? `<button type="button" class="se-ico" data-action="pick-position" title="Place it on the map"><i class="bi bi-crosshair"></i></button>` : ''}
+        ${EDITABLE && edit.position ? `<button type="button" class="se-ico" data-action="reset-position" title="Back to OSM's"><i class="bi bi-arrow-counterclockwise"></i></button>` : ''}
+      </span>
+    </div>
+    ${s.merged_into ? `<div class="se-merge-note"><i class="bi bi-box-arrow-in-right"></i>
+      Merged into <a href="#${encodeURIComponent(s.mode)}/${encodeURIComponent(s.merged_into.station_key)}">${esc(s.merged_into.name)}</a>:
+      Trainlog takes it as that station
+      ${EDITABLE ? '<button type="button" class="se-link" data-action="unmerge">Undo</button>' : ''}</div>` : ''}
+    ${(s.merged_from || []).length ? `<div class="se-merge-note"><i class="bi bi-diagram-2"></i> Includes
+      ${s.merged_from.map(m => `<a href="#${encodeURIComponent(s.mode)}/${encodeURIComponent(m.station_key)}">${esc(m.name)}</a>`).join(', ')}
+      (their tracks and lines too)</div>` : ''}`;
+}
+
+function nameRowHtml(r) {
+  return `
+        <div class="se-name${r.own ? ' own' : ''}" data-code="${esc(r.code)}">
+          <span class="code" title="${r.code ? '' : 'For every language without its own'}">${esc(r.code || 'default')}</span>
+          ${EDITABLE ? `<input class="se-in" value="${esc(r.own || r.osm)}" placeholder="${esc(r.osm || 'not in OSM')}">`
+                     : `<span class="value">${esc(r.own || r.osm)}</span>`}
+          ${EDITABLE && r.own ? `<button type="button" class="se-ico" data-action="reset-name" title="Back to OSM's"><i class="bi bi-arrow-counterclockwise"></i></button>` : '<span></span>'}
+          ${r.own ? `<span class="was">OSM: ${esc(r.osm || '—')}</span>` : ''}
+        </div>`;
+}
+
+// The names Trainlog's readers see first (the default one, those in its languages, those set
+// in Trainlog), the other languages' folded and grey; and, to editors, the languages missing.
+function namesHtml(s) {
+  const rows = nameRows(s).filter(r => !r.code || r.own || r.osm);
+  const main = rows.filter(r => !r.code || r.own || READ_CODES.has(r.code));
+  const others = rows.filter(r => !main.includes(r));
+  const named = new Set(main.map(r => r.code));
+  const missing = TRAINLOG_LANGS.filter(l => !named.has(l) && !named.has(l.split('-')[0]));
+  return `
+    <h3>Names <span class="count">${rows.length}</span></h3>
+    <div class="se-names">
+      ${main.map(nameRowHtml).join('')}
+      ${addingName ? `
+        <div class="se-name new">
+          <span class="code"><input class="se-in" name="new-code" placeholder="ja" value="${esc(newNameCode)}"></span>
+          <input class="se-in" name="new-name" placeholder="Name in that language">
+          <span></span>
+        </div>` : ''}
+    </div>
+    ${EDITABLE && missing.length ? `<div class="se-missing se-hint">No name in
+      ${missing.map(l => `<button type="button" class="se-lang" data-action="add-name" data-code="${esc(l)}">${esc(l)}</button>`).join('')}
+    </div>` : ''}
+    ${EDITABLE && !addingName ? '<button type="button" class="se-link" data-action="add-name" style="margin-top:6px"><i class="bi bi-plus"></i> Language</button>' : ''}
+    ${others.length ? `<details class="se-other-names"${othersOpen ? ' open' : ''}>
+      <summary class="se-hint">Other languages (${others.length})</summary>
+      <div class="se-names">${others.map(nameRowHtml).join('')}</div>
+    </details>` : ''}`;
+}
+
+function tracksHtml(s) {
+  const tracks = trackList(s), lines = s.lines || [];
+  const t = selectedTrack !== null ? tracks.find(x => trackKey(x.ref) === trackKey(selectedTrack)) : null;
+  return `
+    <h3>Tracks <span class="count">${tracks.filter(x => !x.hidden).length}</span></h3>
+    <div class="se-chips">
+      ${tracks.map(x => `<span class="se-chip se-track-chip${x.own ? ' own' : ''}${x.hidden ? ' hidden' : ''}${x.on_track === false ? ' platform' : ''}${t === x ? ' selected' : ''}"
+        data-ref="${esc(x.ref)}" title="${x.hidden ? 'hidden' : x.own ? 'set in Trainlog' : x.on_track ? 'stop position' : 'platform only'}">${esc(x.ref || '?')}</span>`).join('')}
+      ${EDITABLE ? '<span class="se-chip add" data-action="add-track" title="Add a track">+</span>' : ''}
+      ${!tracks.length && !EDITABLE ? '<span class="se-hint">none mapped</span>' : ''}
+    </div>
+    ${EDITABLE && t ? `
+      <div class="se-track-edit">
+        <span class="what">Track ${refInput(t)}</span>
+        <span class="se-hint">${t.lat != null ? `${(+t.lat).toFixed(6)}, ${(+t.lng).toFixed(6)} · drag it on the map` : 'no position yet: place it'}</span>
+        <button type="button" class="se-ico" data-action="pick-track" title="Place it on the map"><i class="bi bi-crosshair"></i></button>
+        <div class="opts">
+          <label title="A stop position on the track: the point is exact"><input type="checkbox" name="on_track" ${t.on_track === false ? '' : 'checked'}> On the track</label>
+          ${t.osm ? `<label title="Not one of the station's tracks"><input type="checkbox" name="hidden" ${t.hidden ? 'checked' : ''}> Hidden</label>` : ''}
+          <span class="end">
+            ${t.own ? `<button type="button" class="se-link muted" data-action="reset-track">${t.osm ? "Back to OSM's" : 'Remove'}</button>` : ''}
+            <button type="button" class="se-link" data-action="close-track">Done</button>
+          </span>
+        </div>
+      </div>` : ''}
+    <div class="se-legend-inline se-hint">
+      <span style="--c:#15803d">stop position</span><span style="--c:#ca8a04">platform only</span><span class="ring">set in Trainlog</span>
+    </div>
+    ${lines.length ? `<h3 style="margin-top:14px">Lines <span class="count">${lines.length}</span></h3>
+    <div class="se-chips">${lines.map((l, i) => `<span class="se-chip se-line-chip" data-i="${i}" title="Show where the line goes"
+      style="background:${esc(l.colour || '#fff')}; color:${l.colour ? '#fff' : 'inherit'}; border-color:${esc(l.colour || '#d1d5db')}">${esc(l.ref)}</span>`).join('')}</div>` : ''}`;
+}
+// A new track's ref is typed; an existing one's is its name.
+function refInput(t) {
+  return t.osm || t.ref ? `<b>${esc(t.ref)}</b>` : '<input class="se-in" name="track-ref" placeholder="ref">';
+}
+
+function savebarHtml() {
+  return `<span class="status">Unsaved changes</span>
+    <button type="button" class="se-btn quiet" data-action="discard">Discard</button>
+    <button type="button" class="se-btn primary" data-action="save">Save</button>`;
+}
+
+// What changes as it is edited: the names, the tracks, the position line, the bar, the map.
+function renderEdits() {
+  const folded = detailEl.querySelector('.se-other-names');
+  if (folded) othersOpen = folded.open;
+  detailEl.querySelector('.se-head').innerHTML = headHtml(current);
+  detailEl.querySelector('.se-names-sec').innerHTML = namesHtml(current);
+  detailEl.querySelector('.se-tracks-sec').innerHTML = tracksHtml(current);
+  updateSavebar();
+  drawMarkers(current);
+}
+function updateSavebar() {
+  const bar = detailEl.querySelector('.se-savebar');
+  if (!bar) return;
+  bar.hidden = !isDirty();
+  const status = bar.querySelector('.status');
+  if (!bar.hidden && !(status && status.classList.contains('error'))) bar.innerHTML = savebarHtml();
+}
+
+function render(s) {
+  current = s;
+  edit = editOf(s);
+  savedEdit = JSON.stringify(edit);
+  selectedTrack = null;
+  addingName = false;
+  othersOpen = false;
+  const objects = s.osm_objects || [];
+  detailEl.classList.remove('empty');
+  detailEl.innerHTML = `
+    <section class="se-sec se-head"></section>
+    <section class="se-sec se-names-sec"></section>
+    <section class="se-sec se-tracks-sec"></section>
+    <details class="se-fold se-services" ${['train', 'metro', 'tram'].includes(s.mode) ? '' : 'hidden'}>
+      <summary>Services <span class="count">…</span></summary>
+      <div class="se-service-list se-hint">Loading…</div>
+    </details>
+    ${EDITABLE ? `<details class="se-fold se-merge">
+      <summary>Merge into another station</summary>
+      <input class="se-in" name="merge" placeholder="Another ${esc(s.mode)} station this one is part of"
+        style="border-color: var(--se-border)">
+      <ul class="se-merge-results"></ul>
+      <div class="se-hint" style="margin-top:6px">For one station OSM maps as two (Berlin Hbf and its "(tief)" level).</div>
+    </details>` : ''}
+    <details class="se-fold">
+      <summary>OSM data</summary>
+      <dl class="se-facts">
+        <dt>station_key</dt><dd><code>${esc(s.station_key)}</code></dd>
+        <dt>OSM</dt><dd>${osmLink(s.osm_type, s.osm_id)}</dd>
+        ${s.wikidata ? `<dt>wikidata</dt><dd><a href="https://www.wikidata.org/wiki/${esc(s.wikidata)}" target="_blank" rel="noopener">${esc(s.wikidata)}</a></dd>` : ''}
+        ${s.uic_ref ? `<dt>uic_ref</dt><dd>${esc(s.uic_ref)}</dd>` : ''}
+        ${s.latin !== s.name ? `<dt>latin</dt><dd>${esc(s.latin)}</dd>` : ''}
+        <dt>weight</dt><dd>${(s.weight || 0).toFixed(2)}</dd>
+      </dl>
+      <div class="se-objects">${objects.map((o, i) => `
+        <div class="se-object" data-i="${i}">
+          <span class="se-dot" style="background:${KIND_COLOUR[kindOf(o)]}"></span>
+          <span class="what">${esc(o.tags.name || o.tags['railway:track_ref'] || o.tags.local_ref || o.tags.ref || '—')}
+            <span class="kind">${esc(o.tags.public_transport || o.tags.railway || o.tags.highway || o.tags.amenity || '')}</span></span>
+          ${EDITABLE && ['platform', 'stop_position'].includes(kindOf(o))
+            ? `<button type="button" class="se-link se-as-track" data-i="${i}" title="Make this object one of the station's tracks">→ track</button>` : ''}
+          ${osmLink(o.osm_type, o.osm_id)}
+        </div>`).join('')}
+      </div>
+      <details style="margin-top:8px"><summary class="se-hint" style="cursor:pointer">All OSM names</summary>${tagsTable(s.osm_names || {})}</details>
+      ${EDITABLE && s.override ? '<button type="button" class="se-link muted" data-action="clear-all" style="margin-top:10px">Remove every Trainlog edit of this station</button>' : ''}
+    </details>
+    ${EDITABLE ? '<div class="se-savebar" hidden></div>' : ''}`;
+  renderEdits();
+
+  const lines = s.lines || [];
+  const unpickRoutes = () => detailEl.querySelectorAll('.se-line-chip.active, .se-service.active')
+    .forEach(c => c.classList.remove('active'));
+  loadServices(s, unpickRoutes);
+  if (EDITABLE) bindMerge(s);
+
+  detailEl.onclick = e => {
+    const el = e.target.closest('[data-action], .se-track-chip, .se-line-chip, .se-as-track, .se-object');
+    if (!el) return;
+    const action = el.dataset.action;
+    if (el.classList.contains('se-line-chip')) {
+      const active = el.classList.contains('active');
+      unpickRoutes();
+      if (active) { showLine(s, null); return; }
+      el.classList.add('active');
+      showLine(s, lines[el.dataset.i]);
+    } else if (el.classList.contains('se-track-chip')) {
+      const t = trackList(s).find(x => x.ref === el.dataset.ref);
+      if (t && t.lat != null) map.easeTo({ center: [t.lng, t.lat], zoom: Math.max(map.getZoom(), 17) });
+      if (!EDITABLE) return;
+      selectedTrack = selectedTrack !== null && trackKey(selectedTrack) === trackKey(el.dataset.ref) ? null : el.dataset.ref;
+      renderEdits();
+    } else if (el.classList.contains('se-as-track')) {
+      e.stopPropagation();
+      const o = objects[el.dataset.i];
+      addTrack({ ref: o.tags.local_ref || o.tags['railway:track_ref'] || '', lat: +o.lat.toFixed(7),
+                 lng: +o.lng.toFixed(7), on_track: kindOf(o) === 'stop_position' });
+    } else if (el.classList.contains('se-object')) {
+      if (e.target.closest('a')) return;
+      const o = objects[el.dataset.i];
+      map.easeTo({ center: [o.lng, o.lat], zoom: Math.max(map.getZoom(), 17) });
+      showObject(o);
+    } else if (action === 'pick-position') {
+      startPicking(p => { edit.position = p; renderEdits(); });
+    } else if (action === 'reset-position') {
+      edit.position = null; renderEdits();
+    } else if (action === 'reset-name') {
+      setName(el.closest('.se-name').dataset.code, ''); renderEdits();
+    } else if (action === 'add-name') {
+      addingName = true;
+      newNameCode = el.dataset.code || '';
+      renderEdits();
+      detailEl.querySelector(newNameCode ? '[name=new-name]' : '[name=new-code]').focus();
+    } else if (action === 'add-track') {
+      addTrack({});
+      const ref = detailEl.querySelector('[name=track-ref]');
+      if (ref) ref.focus();
+    } else if (action === 'pick-track') {
+      const ref = selectedTrack;
+      startPicking(p => { const t = ownTrack(ref); t.lat = p[0]; t.lng = p[1]; renderEdits(); });
+    } else if (action === 'reset-track') {
+      edit.tracks = edit.tracks.filter(x => trackKey(x.ref) !== trackKey(selectedTrack));
+      if (!(s.osm_tracks || []).some(x => trackKey(x.ref) === trackKey(selectedTrack))) selectedTrack = null;
+      renderEdits();
+    } else if (action === 'close-track') {
+      selectedTrack = null; renderEdits();
+    } else if (action === 'discard') {
+      edit = JSON.parse(savedEdit); selectedTrack = null; addingName = false; renderEdits();
+    } else if (action === 'save') {
+      const body = saveBody();
+      if (body.error) {
+        const status = detailEl.querySelector('.se-savebar .status');
+        status.textContent = body.error; status.classList.add('error');
+        return;
+      }
+      save(body);
+    } else if (action === 'clear-all') {
+      if (confirm(`Remove every Trainlog edit of ${s.trainlog_name}? OSM's names, position and tracks apply again.`)) save({});
+    } else if (action === 'unmerge') {
+      mergeInto(s, null);
+    }
+  };
+  detailEl.oninput = e => {
+    const name = e.target.closest('.se-name:not(.new)');
+    if (name && e.target.matches('.se-in')) {
+      setName(name.dataset.code, e.target.value);
+      name.classList.toggle('own', !!(name.dataset.code ? edit.names[name.dataset.code] : edit.name));
+      updateSavebar();
+    } else if (e.target.name === 'track-ref') {
+      const t = edit.tracks.find(x => trackKey(x.ref) === trackKey(selectedTrack));
+      if (t) { t.ref = e.target.value.trim(); selectedTrack = t.ref; updateSavebar(); }
+    }
+  };
+  detailEl.onchange = e => {
+    if (e.target.closest('.se-name:not(.new)')) { renderEdits(); return; }
+    if (e.target.name === 'new-code' || e.target.name === 'new-name') {
+      const code = detailEl.querySelector('[name=new-code]').value.trim();
+      const value = detailEl.querySelector('[name=new-name]').value.trim();
+      if (!code || !value) return;
+      edit.names[code] = value;
+      addingName = false;
+      renderEdits();
+      return;
+    }
+    if (e.target.name === 'track-ref') { renderEdits(); return; }
+    if (e.target.name === 'on_track' || e.target.name === 'hidden') {
+      ownTrack(selectedTrack)[e.target.name] = e.target.checked;
+      renderEdits();
+    }
+  };
+
+  map.getSource('objects').setData({
+    type: 'FeatureCollection',
+    features: objects.map(o => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [o.lng, o.lat] },
+      properties: { colour: KIND_COLOUR[kindOf(o)], primary: o.is_primary, object: JSON.stringify(o) },
+    })),
+  });
+  map.getSource('line').setData({ type: 'FeatureCollection', features: [] });
+  const tracks = trackList(s).filter(t => t.lat != null);
+  const points = [[s.lng, s.lat], ...objects.map(o => [o.lng, o.lat]), ...tracks.map(t => [t.lng, t.lat])];
+  const bounds = points.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(points[0], points[0]));
+  fitStation = () => map.fitBounds(bounds, { padding: 60, maxZoom: 18, duration: 600 });
+  fitStation();
+}
+
+// The station's tracks (as edited), its lines (metro and tram: a line says which platforms)
+// and the position set in Trainlog, on the map. Labels at one point share a marker.
+function drawMarkers(s) {
+  markers.forEach(m => m.remove());
+  markers = [];
+  if (edit.position) {
+    const pin = document.createElement('div');
+    pin.className = 'se-override-pin';
+    pin.title = 'Position set in Trainlog';
+    markers.push(new maplibregl.Marker({ element: pin }).setLngLat([edit.position[1], edit.position[0]]).addTo(map));
+  }
+  const labelsAt = new Map();
+  const labelAt = (lat, lng) => {
+    const key = `${(+lat).toFixed(6)},${(+lng).toFixed(6)}`;
+    if (!labelsAt.has(key)) {
+      const el = document.createElement('div');
+      el.className = 'se-labels';
+      labelsAt.set(key, el);
+      markers.push(new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map));
+    }
+    return labelsAt.get(key);
+  };
+  trackList(s).filter(t => !t.hidden && t.lat != null).forEach(t => {
+    const el = document.createElement('span');
+    el.className = 'se-track' + (t.own ? ' override' : t.on_track ? '' : ' platform');
+    el.textContent = t.ref;
+    el.title = `Track ${t.ref}` + (t.on_track ? '' : ' (platform only)');
+    // The track being edited: its own marker, dragged to where it is.
+    if (EDITABLE && selectedTrack !== null && trackKey(t.ref) === trackKey(selectedTrack)) {
+      const handle = document.createElement('div');
+      handle.className = 'se-track-handle' + (t.on_track === false ? ' platform' : '');
+      handle.title = `Track ${t.ref}: drag it onto its stop on the track`;
+      el.className += ' above';
+      handle.appendChild(el);
+      const marker = new maplibregl.Marker({ element: handle, draggable: true }).setLngLat([t.lng, t.lat]).addTo(map);
+      marker.on('dragend', () => {
+        const at = marker.getLngLat(), own = ownTrack(t.ref);
+        own.lat = +at.lat.toFixed(7);
+        own.lng = +at.lng.toFixed(7);
+        own.on_track = true;
+        renderEdits();
+      });
+      markers.push(marker);
+      return;
+    }
+    labelAt(t.lat, t.lng).appendChild(el);
+  });
+  if (s.mode !== 'train') (s.lines || []).forEach(l => {
+    const el = document.createElement('span');
+    el.className = 'se-line';
+    el.style.background = l.colour || '#374151';
+    el.textContent = l.ref;
+    el.title = `Line ${l.ref}`;
+    labelAt(l.lat, l.lng).appendChild(el);
+  });
+}
+
 // Merging: a station OSM maps as two that are one for travellers (Berlin Hauptbahnhof and
 // its "(tief)" level) taken by Trainlog as the other, which gains its tracks and lines.
+async function mergeInto(s, into, label) {
+  const resp = await fetch(`{{ url_for("admin.station_explorer") }}/merge/` +
+    `${encodeURIComponent(s.mode)}/${encodeURIComponent(s.station_key)}`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ into }),
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) { alert(data.error || 'Merging failed'); return; }
+  if (!into) { loadStation(); return; }
+  form.elements.q.value = label;
+  resultsEl.hidden = false;
+  search();
+  location.hash = `#${s.mode}/${into}`;
+}
 function bindMerge(s) {
-  const f = document.getElementById('se-override');
-  const input = f.elements.merge, list = f.querySelector('.se-merge-results');
-  const status = f.querySelector('.status');
-  async function merge(into, label) {
-    status.textContent = 'Saving…';
-    const resp = await fetch(`{{ url_for("admin.station_explorer") }}/merge/` +
-      `${encodeURIComponent(s.mode)}/${encodeURIComponent(s.station_key)}`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ into }),
-    });
-    const data = await resp.json().catch(() => ({}));
-    if (!resp.ok) { status.textContent = data.error || 'Failed'; return; }
-    if (!into) { loadStation(); return; }
-    form.elements.q.value = label;
-    resultsEl.hidden = false;
-    search();
-    location.hash = `#${s.mode}/${into}`;
-  }
-  const undo = detailEl.querySelector('[data-action=unmerge]');
-  if (undo) undo.addEventListener('click', () => merge(null));
+  const fold = detailEl.querySelector('.se-merge');
+  const input = fold.querySelector('[name=merge]'), list = fold.querySelector('.se-merge-results');
   let timer, xhr;
   input.addEventListener('input', () => {
     clearTimeout(timer);
@@ -580,8 +947,7 @@ function bindMerge(s) {
       if (q.length < 2) { list.innerHTML = ''; return; }
       if (xhr) xhr.abort();
       xhr = new AbortController();
-      fetch(`${API}/search?` + new URLSearchParams({ q, mode: s.mode }),
-            { signal: xhr.signal })
+      fetch(`${API}/search?` + new URLSearchParams({ q, mode: s.mode }), { signal: xhr.signal })
         .then(r => r.json())
         .then(data => {
           list.innerHTML = (data.stations || []).filter(o => o.station_key !== s.station_key).map(o => `
@@ -594,213 +960,10 @@ function bindMerge(s) {
   });
   list.addEventListener('click', e => {
     const li = e.target.closest('li[data-key]');
-    if (!li) return;
-    if (confirm(`Merge ${s.label} into ${li.dataset.label}? Trainlog will take it as that station.`)) merge(li.dataset.key, li.dataset.label);
-  });
-}
-
-let fitStation = () => {};
-function render(s) {
-  const objects = s.osm_objects || [];
-  const tracks = s.tracks || [];
-  const lines = s.lines || [];
-  const names = s.osm_names || s.names || {};
-  const ownNames = Object.fromEntries(Object.entries((s.override || {}).names || {}).map(([c, v]) => ['name:' + c, v]));
-  const place = [(s.city || {}).name, s.region].filter(Boolean).join(', ');
-
-  detailEl.classList.remove('empty');
-  detailEl.innerHTML = `
-    <div class="se-card se-head">
-      <h2>${flag(s.country)} ${esc(s.label)}</h2>
-      <div class="se-badges">
-        <span class="se-badge">${esc(s.mode)}</span>
-        ${place ? `<span class="se-badge"><i class="bi bi-geo-alt"></i> ${esc(place)}</span>` : ''}
-        ${s.override ? '<span class="se-badge edited"><i class="bi bi-pencil"></i> edited in Trainlog</span>' : ''}
-      </div>
-      ${s.merged_into ? `<div class="se-merge-note"><i class="bi bi-box-arrow-in-right"></i>
-        Merged into <a href="#${encodeURIComponent(s.mode)}/${encodeURIComponent(s.merged_into.station_key)}">${esc(s.merged_into.name)}</a>:
-        Trainlog takes it as that station
-        {% if editable %}<button type="button" class="btn btn-sm btn-outline-secondary" data-action="unmerge">Undo</button>{% endif %}</div>` : ''}
-      ${(s.merged_from || []).length ? `<div class="se-merge-note"><i class="bi bi-diagram-2"></i> Includes
-        ${s.merged_from.map(m => `<a href="#${encodeURIComponent(s.mode)}/${encodeURIComponent(m.station_key)}">${esc(m.name)}</a>`).join(', ')}
-        (their tracks and lines too)</div>` : ''}
-      <div class="se-trainlog">
-        <div><div class="label">Name in Trainlog</div><div class="name">${esc(s.trainlog_name)}</div></div>
-        {% if editable %}<button type="button" class="se-edit-toggle"><i class="bi bi-pencil"></i> Edit</button>{% endif %}
-      </div>
-      {% if editable %}<form id="se-override" class="se-override" autocomplete="off">
-        <div class="se-field">
-          <label>Name</label>
-          <input class="form-control form-control-sm" name="name" placeholder="${esc(s.trainlog_name)}"
-            value="${esc((s.override || {}).name || '')}">
-        </div>
-        <div class="se-field">
-          <label>Position</label>
-          <div class="se-inline">
-            <input class="form-control form-control-sm" name="position" placeholder="${s.osm_lat.toFixed(6)}, ${s.osm_lng.toFixed(6)}"
-              value="${(s.override || {}).lat != null ? `${s.override.lat}, ${s.override.lng}` : ''}">
-            <button type="button" class="se-icon-btn" data-action="pick" title="Pick on the map"><i class="bi bi-crosshair"></i></button>
-          </div>
-        </div>
-        <div class="se-field">
-          <label>Tracks</label>
-          <div class="se-track-rows"></div>
-          <div class="se-inline" style="margin-top: 4px;">
-            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="add-track"><i class="bi bi-plus"></i> Track</button>
-            <span class="se-hint">or click a track, or "→ track" on an object, below</span>
-          </div>
-        </div>
-        <div class="se-field">
-          <label>Names in languages</label>
-          <div class="se-name-rows"></div>
-          <div class="se-inline" style="margin-top: 4px;">
-            <button type="button" class="btn btn-sm btn-outline-secondary" data-action="add-name"><i class="bi bi-plus"></i> Name</button>
-            <span class="se-hint">shown to readers of that language; put real names in OSM</span>
-          </div>
-        </div>
-        <div class="se-field">
-          <label>Merge into</label>
-          <input class="form-control form-control-sm" name="merge" placeholder="Another ${esc(s.mode)} station this one is part of">
-          <ul class="se-merge-results"></ul>
-        </div>
-        <div class="se-actions">
-          <span class="status"></span>
-          <button type="button" class="btn btn-sm btn-outline-danger" data-action="clear">Clear</button>
-          <button type="submit" class="btn btn-sm btn-primary">Save</button>
-        </div>
-      </form>{% endif %}
-    </div>
-    <div class="se-card">
-      <h3>Tracks <span class="count">${tracks.length}</span></h3>
-      <div class="se-chips">${tracks.map((t, i) => `<span class="se-chip se-track-chip${t.override ? ' override' : ''}" data-i="${i}"
-        title="${t.override ? 'set in Trainlog' : t.on_track ? 'stop position' : 'platform only'}{{ ': click to move or hide' if editable }}"
-        style="border-color:${t.override ? '#2563eb' : t.on_track ? '#15803d' : '#ca8a04'}">${esc(t.ref)}</span>`).join('') || '<span class="se-hint">none mapped</span>'}</div>
-      ${lines.length ? `<h3 style="margin-top: 10px;">Lines <span class="count">${lines.length}</span></h3>
-      <div class="se-chips">${lines.map((l, i) => `<span class="se-chip se-line-chip" data-i="${i}" title="Show where the line goes"
-        style="background:${esc(l.colour || '#fff')}; color:${l.colour ? '#fff' : 'inherit'};
-        border-color:${esc(l.colour || '#d1d5db')}">${esc(l.ref)}</span>`).join('')}</div>` : ''}
-    </div>
-    <details class="se-card se-services" ${s.mode === 'train' || s.mode === 'metro' || s.mode === 'tram' ? '' : 'hidden'}>
-      <summary>Services <span class="count">…</span></summary>
-      <div class="se-service-list se-hint">Loading…</div>
-    </details>
-    <div class="se-card">
-      <h3>Identity</h3>
-      <dl class="se-facts">
-        <dt>station_key</dt><dd><code>${esc(s.station_key)}</code></dd>
-        <dt>name</dt><dd>${esc(s.name)}</dd>
-        ${s.latin !== s.name ? `<dt>latin</dt><dd>${esc(s.latin)}</dd>` : ''}
-        <dt>OSM</dt><dd>${osmLink(s.osm_type, s.osm_id)}</dd>
-        ${s.wikidata ? `<dt>wikidata</dt><dd><a href="https://www.wikidata.org/wiki/${esc(s.wikidata)}" target="_blank" rel="noopener">${esc(s.wikidata)}</a></dd>` : ''}
-        ${s.uic_ref ? `<dt>uic_ref</dt><dd>${esc(s.uic_ref)}</dd>` : ''}
-        <dt>weight</dt><dd>${(s.weight || 0).toFixed(2)}</dd>
-        <dt>position</dt><dd>${s.osm_lat.toFixed(6)}, ${s.osm_lng.toFixed(6)}</dd>
-      </dl>
-    </div>
-    <details class="se-card">
-      <summary>Names <span class="count">${Object.keys(names).length + Object.keys(ownNames).length}</span></summary>
-      ${tagsTable(names)}
-      ${Object.keys(ownNames).length ? `<h3 style="margin-top: 8px;">Set in Trainlog</h3>${tagsTable(ownNames)}` : ''}
-    </details>
-    <div class="se-card">
-      <h3>OSM objects <span class="count">${objects.length}</span></h3>
-      <div class="se-objects">${objects.map((o, i) => `
-        <div class="se-object" data-i="${i}">
-          <span class="se-dot" style="background:${KIND_COLOUR[kindOf(o)]}"></span>
-          <span class="what">${esc(o.tags.name || o.tags['railway:track_ref'] || o.tags.local_ref || o.tags.ref || '—')}
-            <span class="kind">${esc(o.tags.public_transport || o.tags.railway || o.tags.highway || o.tags.amenity || '')}</span></span>
-          ${EDITABLE && ['platform', 'stop_position'].includes(kindOf(o))
-            ? `<button type="button" class="se-as-track" data-i="${i}" title="Make this object one of the station's tracks">→ track</button>` : ''}
-          ${osmLink(o.osm_type, o.osm_id)}
-        </div>`).join('')}
-      </div>
-    </div>`;
-  if (EDITABLE) {
-    bindOverride(s);
-    bindMerge(s);
-  }
-  // An object OSM names wrongly (a "Gare SNCF" where quay 5 is) made into a track, at its point.
-  detailEl.querySelectorAll('.se-as-track').forEach(btn => btn.addEventListener('click', e => {
-    e.stopPropagation();
-    const o = objects[btn.dataset.i];
-    addTrackRow({ ref: o.tags.local_ref || '', lat: +o.lat.toFixed(7), lng: +o.lng.toFixed(7),
-                  on_track: kindOf(o) === 'stop_position' });
-  }));
-  // One line or service drawn at a time: picking one unpicks the others.
-  const unpickRoutes = () => detailEl.querySelectorAll('.se-line-chip.active, .se-service.active')
-    .forEach(c => c.classList.remove('active'));
-  detailEl.querySelectorAll('.se-line-chip').forEach(chip => chip.addEventListener('click', () => {
-    const active = chip.classList.contains('active');
-    unpickRoutes();
-    if (active) { showLine(s, null); return; }
-    chip.classList.add('active');
-    showLine(s, lines[chip.dataset.i]);
-  }));
-  loadServices(s, unpickRoutes);
-  if (EDITABLE) detailEl.querySelectorAll('.se-track-chip').forEach(chip => chip.addEventListener('click', () => {
-    const t = tracks[chip.dataset.i];
-    addTrackRow({ ref: t.ref, lat: t.lat, lng: t.lng, on_track: t.on_track });
-  }));
-  detailEl.querySelectorAll('.se-object').forEach(row => row.addEventListener('click', e => {
-    if (e.target.closest('a, button')) return;
-    const o = objects[row.dataset.i];
-    map.easeTo({ center: [o.lng, o.lat], zoom: Math.max(map.getZoom(), 17) });
-    showObject(o);
-  }));
-
-  map.getSource('objects').setData({
-    type: 'FeatureCollection',
-    features: objects.map(o => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [o.lng, o.lat] },
-      properties: { colour: KIND_COLOUR[kindOf(o)], primary: o.is_primary, object: JSON.stringify(o) },
-    })),
-  });
-
-  markers.forEach(m => m.remove());
-  markers = [];
-  // Where an override places the station, instead of OSM's point.
-  if (s.override && s.override.lat != null) {
-    const pin = document.createElement('div');
-    pin.className = 'se-override-pin';
-    pin.title = 'Position set in Trainlog';
-    markers.push(new maplibregl.Marker({ element: pin }).setLngLat([s.override.lng, s.override.lat]).addTo(map));
-  }
-  // Labels at one point share a marker rather than piling up. Lines are shown for metro and
-  // tram, where a line says which platforms (its point is between its tracks); a train
-  // station's lines are regional routes, calling at any of its tracks.
-  const labelsAt = new Map();
-  const labelAt = (lat, lng) => {
-    const key = `${lat.toFixed(6)},${lng.toFixed(6)}`;
-    if (!labelsAt.has(key)) {
-      const el = document.createElement('div');
-      el.className = 'se-labels';
-      labelsAt.set(key, el);
-      markers.push(new maplibregl.Marker({ element: el }).setLngLat([lng, lat]).addTo(map));
+    if (li && confirm(`Merge ${s.trainlog_name} into ${li.dataset.label}? Trainlog will take it as that station.`)) {
+      mergeInto(s, li.dataset.key, li.dataset.label);
     }
-    return labelsAt.get(key);
-  };
-  tracks.forEach(t => {
-    const el = document.createElement('span');
-    el.className = 'se-track' + (t.override ? ' override' : t.on_track ? '' : ' platform');
-    el.textContent = t.ref;
-    el.title = `Track ${t.ref}` + (t.on_track ? '' : ' (platform only)');
-    labelAt(t.lat, t.lng).appendChild(el);
   });
-  if (s.mode !== 'train') lines.forEach(l => {
-    const el = document.createElement('span');
-    el.className = 'se-line';
-    el.style.background = l.colour || '#374151';
-    el.textContent = l.ref;
-    el.title = `Line ${l.ref}`;
-    labelAt(l.lat, l.lng).appendChild(el);
-  });
-
-  map.getSource('line').setData({ type: 'FeatureCollection', features: [] });
-  const points = [[s.lng, s.lat], ...objects.map(o => [o.lng, o.lat]), ...tracks.map(t => [t.lng, t.lat])];
-  const bounds = points.reduce((b, p) => b.extend(p), new maplibregl.LngLatBounds(points[0], points[0]));
-  fitStation = () => map.fitBounds(bounds, { padding: 60, maxZoom: 18, duration: 600 });
-  fitStation();
 }
 </script>
 {% endblock %}
