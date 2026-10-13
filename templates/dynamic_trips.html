@@ -2311,7 +2311,8 @@ function renderCarbon(data, type, row) {
     const co2PerKm = calculateCO2PerKm(data, row.trip_length);
     const color = getCarbonColor(co2PerKm);
     const tooltip = `${formatCarbonFootprint(data)} (${formatCO2PerKm(co2PerKm)})`;
-    return `<span data-toggle="tooltip" data-placement="top" title="${tooltip}" style="cursor:context-menu; color:${color};"><i class="fas fa-leaf"></i></span>`;
+    // Also as a variable, for a selected row to pale it (style2.css).
+    return `<span data-toggle="tooltip" data-placement="top" title="${tooltip}" style="cursor:context-menu; color:${color}; --carbon-color:${color};"><i class="fas fa-leaf"></i></span>`;
 }
 
 function renderFlags(data, type, row) {
@@ -4069,7 +4070,11 @@ function attachSelectedTrips(ticket_id){
     urlParams.append('trips', checkedTrips);
     urlParams.append('ticket_id', ticket_id);
 
-    window.open(`${url}?${urlParams.toString()}`);
+    fetch(`${url}?${urlParams.toString()}`).finally(() => {
+        // false keeps the current page: the rows stay, only their ticket changes.
+        tableObject.ajax.reload(null, false);
+        $('#ticketSearchModal').modal('hide');
+    });
 }
 
 function moveSelectedToPlan(plan_uuid){

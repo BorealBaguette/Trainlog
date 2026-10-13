@@ -9,7 +9,7 @@ from datetime import date, timedelta
 
 from dateutil.relativedelta import relativedelta
 
-from flask import Blueprint, abort, g, jsonify, redirect, render_template, request, session, url_for
+from flask import Blueprint, abort, g, jsonify, render_template, request, session
 
 from py.utils import get_all_countries
 from src.currency import get_available_currencies, get_exchange_rate
@@ -460,4 +460,4 @@ def attachSelected(username):
     if not success:
         logger.error(error)
         return jsonify(error="An error occurred while attaching the ticket"), 500
-    return redirect(url_for("tickets.ticket_page", username=username, ticket_id=ticket_id))
+    return jsonify(success=True)

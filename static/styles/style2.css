@@ -325,6 +325,20 @@ tr.selected td img{
   border-radius: 6px;
 }
 
+/* Coloured icons (CO2 level, ticket) in a pale version on a selected row, or they drown in the
+   blue; their colour is inline, hence !important. */
+tr.selected td .fa-leaf{
+  color: color-mix(in srgb, var(--carbon-color) 40%, #fff) !important;
+}
+tr.selected td .bi-ticket-perforated-fill{
+  color: #b8ecc4 !important;
+}
+
+tr.selected td .modalButton,
+tr.selected td .modalButton:hover{
+  color: #fff;
+}
+
 td .operatorLogo{
   max-height: 38px;
   max-width: 100px;
