@@ -231,8 +231,7 @@ def transliterated(station):
     if by_icu:
         parts.append(own)
     if station.get("needs_place"):
-        place = (station["city"] if station.get("city_override") and station.get("city")
-                 else station.get("settlement") or station.get("city"))
+        place = _prefix_place(station)
         if place_transliterated(place):
             parts.append(_place_name(place))
     return parts, place_transliterated(station.get("settlement") or station.get("city"))
@@ -263,13 +262,23 @@ def place_of(station):
     return _place_name(station.get("settlement") or station.get("city"))
 
 
-def prefix_place_of(station):
+def _prefix_place(station):
     """The place put before a station's name where it needs one: a city places.csv names
     (London, city_override), whose parts are told apart by the hint only ("London - Euston
-    Road", shown in Camden Town), else where it is (place_of)."""
-    if station.get("city_override") and station.get("city"):
-        return _place_name(station["city"])
-    return place_of(station)
+    Road", shown in Camden Town); a town or village known apart from its municipality
+    (Åndalsnes in Rauma, Insjön in Leksand); else the municipality, not a hamlet or locality
+    within it ("Herzogenrath - Bachstraße", not "Bank")."""
+    city, settlement = station.get("city"), station.get("settlement")
+    if station.get("city_override") and city:
+        return city
+    if (settlement and settlement.get("place") in ("city", "town", "village")
+            and settlement.get("label") != (city or {}).get("label")):
+        return settlement
+    return city or settlement
+
+
+def prefix_place_of(station):
+    return _place_name(_prefix_place(station))
 
 
 def station_label(station):
