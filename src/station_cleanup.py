@@ -57,16 +57,20 @@ def station_of_end(label, station_key, nearby):
 
 def station_groups(user_id):
     """The user's stations: [{mode, station_key, name, city, country, lat, lng, names: [{label,
-    origin, destination}], tidy}], untidy ones (several names, or one other than the
-    station's) first, the most travelled first; and how many trip ends matched no station."""
+    origin, destination}], tidy, ignored}], untidy ones (several names, or one other than the
+    station's) first, the most travelled first; and the trips of the ends that matched no station,
+    once per end."""
     with pg_session() as pg:
         ends = pg.execute(ENDS_SQL, {"user_id": user_id, "types": list(QUAI_MODES)}).fetchall()
+        ignored = {(row.mode, row.station_key): set(row.labels) for row in pg.execute(
+            "SELECT mode, station_key, labels FROM station_cleanup_ignored WHERE user_id = :user_id",
+            {"user_id": user_id})}
 
     by_mode = {}
     for end in ends:
         by_mode.setdefault(QUAI_MODES[end.trip_type], []).append(end)
 
-    groups, unmatched = {}, 0
+    groups, unmatched = {}, []
     for mode, mode_ends in by_mode.items():
         points = sorted({(end.lat, end.lng) for end in mode_ends})
         at = dict(zip(points, nearest_stations(mode, [list(p) for p in points], END_RADIUS_M,
@@ -74,7 +78,7 @@ def station_groups(user_id):
         for end in mode_ends:
             nearby = at[(end.lat, end.lng)]
             if not nearby:
-                unmatched += len(end.trip_ids)
+                unmatched.extend(end.trip_ids)
                 continue
             # A trip saved at a station since merged into another is at that one.
             key = end.station_key and resolve_key(mode, end.station_key)
@@ -104,9 +108,12 @@ def station_groups(user_id):
                        key=lambda n: -(len(n["origin"]) + len(n["destination"])))
         group["names"] = names
         group["tidy"] = [n["label"] for n in names] == [group["name"]]
+        # Ignored until it gets a name it didn't have then.
+        group["ignored"] = {n["label"] for n in names} <= ignored.get(
+            (group["mode"], group["station_key"]), set())
         group["trips"] = sum(len(n["origin"]) + len(n["destination"]) for n in names)
         result.append(group)
-    result.sort(key=lambda g: (g["tidy"], -g["trips"]))
+    result.sort(key=lambda g: (g["tidy"] or g["ignored"], -g["trips"]))
     return result, unmatched
 
 
@@ -135,3 +142,25 @@ def rename_station(user_id, to, station_key, labels, origin_ids, destination_ids
             {**params, "ids": destination_ids},
         ).rowcount
     return origins + destinations
+
+
+def ignore_station(user_id, mode, station_key, labels):
+    """Leaves the station with the names `labels` it has, or stops doing so without labels."""
+    with pg_session() as pg:
+        if labels:
+            pg.execute(
+                """
+                INSERT INTO station_cleanup_ignored (user_id, mode, station_key, labels)
+                VALUES (:user_id, :mode, :key, :labels)
+                ON CONFLICT (user_id, mode, station_key) DO UPDATE SET labels = EXCLUDED.labels
+                """,
+                {"user_id": user_id, "mode": mode, "key": station_key, "labels": labels},
+            )
+        else:
+            pg.execute(
+                """
+                DELETE FROM station_cleanup_ignored
+                WHERE user_id = :user_id AND mode = :mode AND station_key = :key
+                """,
+                {"user_id": user_id, "mode": mode, "key": station_key},
+            )

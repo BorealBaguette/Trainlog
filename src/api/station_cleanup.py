@@ -5,7 +5,7 @@ import logging
 
 from flask import Blueprint, jsonify, render_template, request, session
 
-from src.station_cleanup import rename_station, station_groups
+from src.station_cleanup import ignore_station, rename_station, station_groups
 from src.utils import get_user_id, has_current_trip, lang, login_required
 
 logger = logging.getLogger(__name__)
@@ -55,3 +55,16 @@ def tidy_stations_rename(username):
     renamed = rename_station(get_user_id(username), to, station_key, labels, origin_ids,
                              destination_ids)
     return jsonify(renamed=renamed)
+
+
+@station_cleanup_blueprint.route("/u/<username>/stations/tidy/ignore", methods=["POST"])
+@login_required
+def tidy_stations_ignore(username):
+    body = request.get_json(silent=True) or {}
+    mode = (body.get("mode") or "").strip()[:20]
+    station_key = (body.get("station_key") or "").strip()[:100]
+    labels = [label for label in body.get("labels") or [] if isinstance(label, str)]
+    if not mode or not station_key:
+        return jsonify(error="a station is required"), 400
+    ignore_station(get_user_id(username), mode, station_key, labels)
+    return jsonify(ok=True)

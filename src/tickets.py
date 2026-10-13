@@ -294,12 +294,18 @@ def _render(template, username, tickets, **context):
 def ticket_list(username):
     tickets = _tickets(username)
     groups = _groups(tickets)
+    # Past groups by the year of their latest ticket, newest first.
+    past_years = defaultdict(list)
+    for group in groups:
+        if not group["live"]:
+            latest = group["latest"]
+            past_years[(latest["valid_from"] or latest["purchasing_date"])[:4]].append(group)
     return _render(
         "ticket_list.html",
         username,
         tickets,
         live_groups=[g for g in groups if g["live"]],
-        past_groups=[g for g in groups if not g["live"]],
+        past_years=sorted(past_years.items(), reverse=True),
     )
 
 

@@ -26,16 +26,20 @@
   .tidy-names li.other .label { color: #9a3412; }
   .tidy-names li.current .label { color: #15803d; }
   .tidy-names .n { color: #6b7280; font-size: .78rem; white-space: nowrap; }
+  .tidy-names a.n { text-decoration: none; }
+  .tidy-names a.n:hover { text-decoration: underline; }
   .tidy-names .tidy-pick { margin: 0 4px 0 0; vertical-align: -2px; float: none; }
-  .tidy-card .action { flex-shrink: 0; align-self: center; }
+  .tidy-card .action { flex-shrink: 0; align-self: center; display: flex; gap: 6px; align-items: center; }
   .tidy-card .renamed { color: #15803d; font-size: .85rem; white-space: nowrap; }
   .tidy-empty, .tidy-note { color: #6b7280; text-align: center; padding: 24px 0; }
   .tidy-note { padding: 12px 0 0; font-size: .85rem; }
+  .tidy-note a { color: inherit; }
 </style>
 
 <div id="tidy">
   <h1>{{ tidyStations }}</h1>
   <p class="intro">{{ tidyStationsIntro }}</p>
+  <div class="alert alert-warning small">{{ tidyStationsHow }}</div>
   <div class="tidy-bar">
     <div class="tidy-tabs">
       <button type="button" data-show="untidy" class="active">{{ tidyStationsToTidy }}<span class="count" id="tidyCountUntidy"></span></button>
@@ -57,6 +61,8 @@
     unmatched: {{ tidyStationsUnmatched|tojson }},
     confirm: {{ tidyStationsConfirm|tojson }},
     useName: {{ tidyStationsUseName|tojson }},
+    ignore: {{ tidyStationsIgnore|tojson }},
+    unignore: {{ tidyStationsUnignore|tojson }},
     nothing: {{ tidyStationsNothing|tojson }},
     error: {{ tidyStationsError|tojson }},
   };
@@ -73,19 +79,20 @@
       ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   }
   const tripsOf = n => n.origin.length + n.destination.length;
+  const untidy = g => !g.tidy && !g.ignored;
 
   function render() {
     const q = filter.value.trim().toLowerCase();
-    const shown = groups.filter(g => (show === 'all' || !g.tidy || g.renamed) &&
+    const shown = groups.filter(g => (show === 'all' || untidy(g) || g.renamed) &&
       (!q || g.name.toLowerCase().includes(q) || g.names.some(n => n.label.toLowerCase().includes(q))));
-    document.getElementById('tidyCountUntidy').textContent = groups.filter(g => !g.tidy).length;
+    document.getElementById('tidyCountUntidy').textContent = groups.filter(untidy).length;
     document.getElementById('tidyCountAll').textContent = groups.length;
     if (!shown.length) {
       list.innerHTML = `<div class="tidy-empty">${esc(show === 'untidy' && !q ? texts.nothing : '—')}</div>`;
       return;
     }
     list.innerHTML = shown.map(g => `
-      <div class="tidy-card${g.tidy ? ' done' : ''}" data-i="${groups.indexOf(g)}">
+      <div class="tidy-card${untidy(g) ? '' : ' done'}" data-i="${groups.indexOf(g)}">
         <div class="icon"><i class="${ICONS[g.mode] || 'fa-solid fa-location-dot'}"></i></div>
         <div class="body">
           <div class="name">${esc(g.name)}</div>
@@ -94,16 +101,18 @@
             <li class="${n.label === g.name ? 'current' : 'other'}">
               <span class="label">${n.label === g.name
                 ? '<i class="bi bi-check2"></i>'
-                : `<input type="checkbox" class="form-check-input tidy-pick" data-j="${j}" ${picked(n) ? 'checked' : ''}${g.renamed ? ' disabled' : ''}>`}
+                : `<input type="checkbox" class="form-check-input tidy-pick" data-j="${j}" ${picked(n) ? 'checked' : ''}${g.renamed || !untidy(g) ? ' disabled' : ''}>`}
                 ${esc(n.label)}</span>
-              <span class="n">${esc(pluralize(texts.trips, tripsOf(n)))}</span>
+              <a class="n" href="/public/trip/${n.origin.concat(n.destination).join(',')}" target="_blank" rel="noopener">${esc(pluralize(texts.trips, tripsOf(n)))}</a>
             </li>`).join('')}
           </ul>
         </div>
         <div class="action">${g.renamed
           ? `<span class="renamed"><i class="bi bi-check-circle"></i> ${esc(pluralize(texts.renamed, g.renamed))}</span>`
-          : g.tidy ? '' : `<button type="button" class="btn btn-sm btn-primary" data-rename${
-              g.names.some(n => n.label !== g.name && picked(n)) ? '' : ' disabled'}>${esc(texts.useName)}</button>`}</div>
+          : untidy(g) ? `<button type="button" class="btn btn-sm btn-primary" data-rename${
+              g.names.some(n => n.label !== g.name && picked(n)) ? '' : ' disabled'}>${esc(texts.useName)}</button>` : ''}${
+          untidy(g) ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-ignore>${esc(texts.ignore)}</button>`
+          : g.ignored && !g.tidy ? `<button type="button" class="btn btn-sm btn-outline-secondary" data-ignore>${esc(texts.unignore)}</button>` : ''}</div>
       </div>`).join('');
   }
 
@@ -139,6 +148,19 @@
     render();
   }
 
+  // Ignoring keeps the names the station has now; one given later brings it back.
+  async function ignore(g, button) {
+    button.disabled = true;
+    const resp = await fetch(base + '/ignore', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode: g.mode, station_key: g.station_key,
+                             labels: g.ignored ? [] : g.names.map(n => n.label) }),
+    });
+    if (!resp.ok) { button.disabled = false; alert(texts.error); return; }
+    g.ignored = !g.ignored;
+    render();
+  }
+
   list.addEventListener('change', e => {
     const box = e.target.closest('.tidy-pick');
     if (!box) return;
@@ -150,6 +172,8 @@
   list.addEventListener('click', e => {
     const button = e.target.closest('[data-rename]');
     if (button) rename(groups[button.closest('.tidy-card').dataset.i], button);
+    const ignoring = e.target.closest('[data-ignore]');
+    if (ignoring) ignore(groups[ignoring.closest('.tidy-card').dataset.i], ignoring);
   });
   document.querySelectorAll('.tidy-tabs button').forEach(b => b.addEventListener('click', () => {
     document.querySelectorAll('.tidy-tabs button').forEach(x => x.classList.toggle('active', x === b));
@@ -160,9 +184,10 @@
 
   fetch(base + '/data').then(r => r.ok ? r.json() : Promise.reject()).then(data => {
     groups = data.groups;
-    if (data.unmatched) {
+    if (data.unmatched.length) {
       const note = document.getElementById('tidyUnmatched');
-      note.textContent = pluralize(texts.unmatched, data.unmatched);
+      note.innerHTML = `<a href="/public/trip/${[...new Set(data.unmatched)].join(',')}" target="_blank" rel="noopener">${
+        esc(pluralize(texts.unmatched, data.unmatched.length))}</a>`;
       note.hidden = false;
     }
     render();

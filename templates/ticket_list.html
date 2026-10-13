@@ -21,11 +21,11 @@
         height: 4px;
         max-width: 220px;
     }
-    [aria-controls="pastTickets"] .bi {
+    .ticket-year-toggle .bi {
         display: inline-block;
         transition: transform .15s;
     }
-    [aria-controls="pastTickets"][aria-expanded="true"] .bi {
+    .ticket-year-toggle[aria-expanded="true"] .bi {
         transform: rotate(90deg);
     }
     /* Fixed widths, so the columns line up from one row to the next whatever their labels. */
@@ -64,7 +64,7 @@
 {% macro group_row(group) %}
     {# The ticket in use, or else the latest. #}
     {% set shown = (group.tickets|selectattr('state', 'in', ['valid', 'active', 'upcoming'])|list or [group.latest])|first %}
-    <div class="list-group-item list-group-item-action position-relative d-flex align-items-center gap-3 py-3">
+    <div class="list-group-item list-group-item-action position-relative d-flex align-items-center gap-3 py-3 ticket-row" data-search="{{ group.name }} {{ group.latest.operator or '' }} {{ group.latest.secondary_operators or '' }} {{ (group.latest.active_countries or '').replace(',', ' ') }}">
         <div class="ticket-logo">
             {% if logos.get(group.latest.operator) %}
                 <img src="{{ url_for('static', filename=logos[group.latest.operator]) }}" alt="">
@@ -73,7 +73,15 @@
             {% endif %}
         </div>
         <div class="flex-grow-1" style="min-width: 0;">
-            <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=group.latest.uid) }}" class="stretched-link text-reset text-decoration-none fw-bold d-block text-truncate">{{ group.name }}</a>
+            <div class="d-flex align-items-center gap-2" style="min-width: 0;">
+                <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=group.latest.uid) }}" class="stretched-link text-reset text-decoration-none fw-bold text-truncate">{{ group.name }}</a>
+                {% if group.latest.active_countries %}
+                    {# Above the row's link, for their names on hover. #}
+                    <span class="ticket-flags position-relative text-nowrap" style="z-index: 2;">
+                        {% for country in group.latest.active_countries.split(',') %}<span class="flag" data-bs-toggle="tooltip" title="{{ country }}">{{ country_list[country] }}</span>{% endfor %}
+                    </span>
+                {% endif %}
+            </div>
             <div class="small text-muted text-truncate">
                 {% if group.latest.operator and not logos.get(group.latest.operator) %}{{ group.latest.operator }} · {% endif %}{{ status(shown) }}{% if group.latest.auto_renew %} <i class="bi bi-arrow-repeat text-success" title="{{ticketAutoRenew}}"></i>{% endif %}
             </div>
@@ -108,35 +116,45 @@
 {% endmacro %}
 
 <div class="container-xl py-3">
-    <div class="d-flex align-items-center gap-2 mb-3">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
         <h1 class="h2 mb-0 me-auto">{{nav_tickets}}</h1>
+        {% if live_groups or past_years %}
+            <input type="search" id="ticketSearch" class="form-control form-control-sm" style="width: 220px;" placeholder="{{ticketSearch}}">
+        {% endif %}
         <button id="newTicketButton" type="button" class="btn btn-primary btn-sm">
             <i class="fa-solid fa-plus"></i> {{new_ticket}}
         </button>
     </div>
 
-    {% if not live_groups and not past_groups %}
+    {% if not live_groups and not past_years %}
         <p class="text-muted">{{ticketNone}}</p>
     {% endif %}
 
     {% if live_groups %}
-        <h2 class="h6 text-uppercase text-muted mt-4">{{ticketCurrent}}</h2>
-        <div class="list-group mb-4">
-            {% for group in live_groups %}{{ group_row(group) }}{% endfor %}
-        </div>
+        <section class="ticket-section">
+            <h2 class="h6 text-uppercase text-muted mt-4">{{ticketCurrent}}</h2>
+            <div class="list-group mb-4">
+                {% for group in live_groups %}{{ group_row(group) }}{% endfor %}
+            </div>
+        </section>
     {% endif %}
 
-    {% if past_groups %}
-        <h2 class="h6 text-uppercase mt-4">
-            <button type="button" class="btn btn-link text-muted text-uppercase text-decoration-none p-0 fs-6 fw-bold" data-bs-toggle="collapse" data-bs-target="#pastTickets" aria-expanded="false" aria-controls="pastTickets">
-                <i class="bi bi-chevron-right"></i> {{ticketPast}} ({{ past_groups|length }})
-            </button>
-        </h2>
-        <div class="collapse" id="pastTickets">
-            <div class="list-group">
-                {% for group in past_groups %}{{ group_row(group) }}{% endfor %}
-            </div>
-        </div>
+    {% if past_years %}
+        <h2 class="h6 text-uppercase text-muted mt-4 ticket-past-title">{{ticketPast}}</h2>
+        {% for year, groups in past_years %}
+            <section class="ticket-section">
+                <h3 class="h6 mt-3 mb-2">
+                    <button type="button" class="btn btn-link text-muted text-decoration-none p-0 fw-bold ticket-year-toggle" data-bs-toggle="collapse" data-bs-target="#tickets{{ year }}" aria-expanded="false" aria-controls="tickets{{ year }}">
+                        <i class="bi bi-chevron-right"></i> {{ year }} ({{ groups|length }})
+                    </button>
+                </h3>
+                <div class="collapse ticket-year" id="tickets{{ year }}">
+                    <div class="list-group">
+                        {% for group in groups %}{{ group_row(group) }}{% endfor %}
+                    </div>
+                </div>
+            </section>
+        {% endfor %}
     {% endif %}
 </div>
 
@@ -147,6 +165,25 @@ $(function () {
     formatTicketPage();
     $('#newTicketButton').on('click', function () { openTicketForm(null, 'new'); });
     $('.renew-button').on('click', function () { openTicketForm($(this).data('ticket'), 'renew'); });
+
+    // Searching shows the matching rows of every section, the years opened; cleared, the years
+    // close again.
+    $('.ticket-row').each(function () { this.dataset.search = normalizeForSearch(this.dataset.search); });
+    $('#ticketSearch').on('input', function () {
+        var query = normalizeForSearch(this.value);
+        $('.ticket-row').each(function () {
+            $(this).toggleClass('d-none', Boolean(query) && !this.dataset.search.includes(query));
+        });
+        $('.ticket-section').each(function () {
+            $(this).toggleClass('d-none', !$(this).find('.ticket-row:not(.d-none)').length);
+        });
+        $('.ticket-past-title').toggleClass('d-none', !$('.ticket-year').closest('.ticket-section:not(.d-none)').length);
+        $('.ticket-year').each(function () {
+            var open = Boolean(query);
+            $(this).toggleClass('show', open);
+            $('[data-bs-target="#' + this.id + '"]').attr('aria-expanded', String(open));
+        });
+    });
 });
 </script>
 
