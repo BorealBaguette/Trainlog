@@ -410,7 +410,7 @@ function nameRows(s) {
   const lang = form.elements.lang.value || {{ langId|tojson }};
   const sorted = [...codes].sort((a, b) => (b === lang) - (a === lang) || a.localeCompare(b));
   return [{ code: '', osm: osm.name || s.name || '', own: edit.name },
-          ...sorted.map(code => ({ code, osm: osm['name:' + code] || '', own: edit.names[code] || '' }))];
+          ...sorted.map(code => ({ code, osm: osm['name:' + code] || (code === 'int' && s.latin) || '', own: edit.names[code] || '' }))];
 }
 function setName(code, value) {
   const row = nameRows(current).find(r => r.code === code) || { osm: '' };
