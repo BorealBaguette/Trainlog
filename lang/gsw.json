@@ -1289,6 +1289,8 @@
     "bookedLabel": "Scho buecht",
     "impossibleConnection": "Fährt ab, bevor de vorherige Abschnitt aachunnt",
     "manage_manual_stations": "Manual stations",
+    "addManualStation": "Station dezuetue",
+    "addManualStationHint": "Klick uf d Charte, zum si z platziere, oder gib iri Koordinate ii.",
     "confirm_delete_manual_station": "Are you sure you want to delete this manual station?",
     "licensedToTrainlog": "Lizenziert für Trainlog",
     "accountEmailLabel": "E-Mail-Adresse",

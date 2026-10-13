@@ -1288,6 +1288,8 @@
     "bookedLabel": "Már lefoglalt",
     "impossibleConnection": "Az előző szakasz megérkezése előtt indul",
     "manage_manual_stations": "Manuális állomások",
+    "addManualStation": "Megálló hozzáadása",
+    "addManualStationHint": "Kattints a térképre az elhelyezéséhez, vagy add meg a koordinátáit.",
     "confirm_delete_manual_station": "Biztosan törölni szeretnéd ezt a manuális állomást?",
     "licensedToTrainlog": "A Trainlog számára licencelve",
     "accountEmailLabel": "E-mail",

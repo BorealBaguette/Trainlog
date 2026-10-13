@@ -212,7 +212,7 @@
           <a class="dropdown-item" href="{{ url_for('live_map') }}"><i class="fa-solid fa-globe"></i> {{ live_map }}</a>
           <a class="dropdown-item" href="{{ url_for('timeline.timeline', username=username) }}"><i class="bi bi-calendar3"></i> {{ timeline }}</a>
           <a class="dropdown-item" href="{{ url_for('user_bounds', username=username) }}"><i class="fa-solid fa-arrows-to-circle"></i> {{ travel_bounds_header }}</a>
-          <a class="dropdown-item" href="{{ url_for('userManualStations', username=username) }}"><i class="bi bi-sign-stop-lights"></i> {{ manage_manual_stations }}</a>
+          <a class="dropdown-item" href="{{ url_for('manual_stations.userManualStations', username=username) }}"><i class="bi bi-sign-stop-lights"></i> {{ manage_manual_stations }}</a>
           <a class="dropdown-item" href="{{ url_for('friends', username=username) }}"><i class="bi bi-people"></i>{{friendsIcon | safe}} {{friends}}</a>
           <a class="dropdown-item" href="{{ url_for('trainset.trainset_builder') }}"><i class="fa-solid fa-screwdriver-wrench"></i>{{tsBuilderTitle}}</a>
           {% if is_alpha %}

@@ -182,6 +182,7 @@ from src.api.og import og_blueprint, og_image_url
 from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
+from src.manual_stations import manual_stations_blueprint
 from src.discord_webhooks import (
     discord_webhooks_blueprint,
     enabled_webhooks,
@@ -359,6 +360,7 @@ app.register_blueprint(feature_requests_blueprint)
 app.register_blueprint(finance_blueprint)
 app.register_blueprint(bmc_blueprint)
 app.register_blueprint(discord_oauth_blueprint)
+app.register_blueprint(manual_stations_blueprint)
 app.register_blueprint(discord_webhooks_blueprint)
 app.register_blueprint(news_blueprint)
 app.register_blueprint(og_blueprint)
@@ -12827,67 +12829,6 @@ def deleteManual(id):
     with pg_session() as pg:
         pg.execute("DELETE FROM manual_stations WHERE uid = :uid", {"uid": id})
     return redirect(url_for("adminManual"))
-
-
-@app.route("/u/<username>/manualStations")
-@login_required
-def userManualStations(username):
-    with pg_session() as pg:
-        stationsList = [
-            dict(row._mapping)
-            for row in pg.execute(
-                "SELECT * FROM manual_stations WHERE creator = :creator"
-                " ORDER BY station_type, name",
-                {"creator": username},
-            ).fetchall()
-        ]
-    return render_template(
-        "manual_stations.html",
-        stationsList=stationsList,
-        username=username,
-        nav="bootstrap/navigation.html",
-        isCurrent=has_current_trip(get_user_id()),
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-    )
-
-
-@app.route("/u/<username>/manualStations/<int:id>/update", methods=["POST"])
-@login_required
-def updateUserManualStation(username, id):
-    with pg_session() as pg:
-        owner_row = pg.execute(
-            "SELECT creator FROM manual_stations WHERE uid = :uid", {"uid": id}
-        ).fetchone()
-        if owner_row is None or owner_row["creator"] != username:
-            abort(401)
-        pg.execute(
-            """
-            UPDATE manual_stations
-            SET name = :name, lat = :lat, lng = :lng
-            WHERE uid = :uid
-            """,
-            {
-                "name": request.form.get("name"),
-                "lat": request.form.get("lat"),
-                "lng": request.form.get("lng"),
-                "uid": id,
-            },
-        )
-    return redirect(url_for("userManualStations", username=username))
-
-
-@app.route("/u/<username>/manualStations/<int:id>/delete", methods=["POST"])
-@login_required
-def deleteUserManualStation(username, id):
-    with pg_session() as pg:
-        owner_row = pg.execute(
-            "SELECT creator FROM manual_stations WHERE uid = :uid", {"uid": id}
-        ).fetchone()
-        if owner_row is None or owner_row["creator"] != username:
-            abort(401)
-        pg.execute("DELETE FROM manual_stations WHERE uid = :uid", {"uid": id})
-    return redirect(url_for("userManualStations", username=username))
 
 
 @app.route("/editManual/<int:id>", methods=["GET", "POST"])

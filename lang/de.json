@@ -1291,6 +1291,8 @@
     "settingsSectionGeneral": "General",
     "settingsSectionData": "Import und Export",
     "manage_manual_stations": "Manuell hinzugefügte Haltestellen",
+    "addManualStation": "Station hinzufügen",
+    "addManualStationHint": "Klicke auf die Karte, um sie zu platzieren, oder gib ihre Koordinaten ein.",
     "confirm_delete_manual_station": "Möchten Sie diese manuell hinzugefügte Haltestelle wirklich löschen?",
     "licensedToTrainlog": "Lizenziert für Trainlog",
     "accountEmailLabel": "E-Mail",

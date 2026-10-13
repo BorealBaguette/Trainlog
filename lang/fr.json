@@ -1323,6 +1323,8 @@
     "settingsSectionIntegrations": "Intégrations",
     "discordHint": "Connectez votre compte Discord pour recevoir automatiquement votre rôle premium.",
     "manage_manual_stations": "Gares manuelles",
+    "addManualStation": "Ajouter une gare",
+    "addManualStationHint": "Cliquez sur la carte pour la placer, ou saisissez ses coordonnées.",
     "confirm_delete_manual_station": "Voulez-vous vraiment supprimer cette gare manuelle ?",
     "licensedToTrainlog": "Sous licence pour Trainlog",
     "busRouterDedicated": "Calculé avec le routeur bus dédié.",
