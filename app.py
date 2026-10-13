@@ -327,7 +327,7 @@ from src.trip_announcer import (
     start_trip_announcer,
 )
 from src.photon import photonInstances, photonRequest, photonRequestSingle
-from src.quai import QUAI_MODES, other_modes, quai_url, search_stations, stations_at
+from src.quai import QUAI_MODES, quai_url, search_stations, stations_at
 from src.routing import forward_routing_core
 from src.gpx_import import (
     GpxIngestError,
@@ -3580,7 +3580,6 @@ def signup():
         "getPublicTrips",
         "airportAutocomplete",
         "countries",
-        "editStation",
         "signup",
         "remove_admin",
         "getAdminUsers",
@@ -3603,7 +3602,6 @@ def signup():
         "public",
         "getPublicStats",
         "getVesselPhoto",
-        "stations-data",
         "stationAutocomplete",
         "admin",
         "login",
@@ -7989,17 +7987,11 @@ def stationAutocomplete():
             lon=request.args.get("lon", type=float),
             radius_km=request.args.get("radius", type=float),
             limit=request.args.get("limit", 10, type=int),
-            others=bool(request.args.get("others")),
             all_rail=all_rail,
         )
         if features is None:
             return jsonify(error="station search unavailable"), 503
-        # The other modes the list can offer to search (src/quai.py, other_modes), unless
-        # it already has them: all of them by the user's setting, or their good matches.
-        others = other_modes(trip_type)
-        if all_rail or any(f["properties"]["mode"] in others for f in features):
-            others = []
-        return jsonify({"type": "FeatureCollection", "features": features, "others": others})
+        return jsonify({"type": "FeatureCollection", "features": features})
     if not is_reverse:
         # The position only biases quai's ranking; Photon answers fewer results with it.
         params.pop("lat", None)
@@ -12913,149 +12905,6 @@ def deleteUserManualStation(username, id):
             abort(401)
         pg.execute("DELETE FROM manual_stations WHERE uid = :uid", {"uid": id})
     return redirect(url_for("userManualStations", username=username))
-
-
-@app.route("/editStation/<int:id>", methods=["GET", "POST"])
-@admin_required
-def editStation(id):
-    if request.method == "POST":
-        action = request.form.get("action")
-
-        if action == "delete":
-            # Delete the station
-            with pg_session() as pg:
-                pg.execute("DELETE FROM train_stations WHERE id = :id", {"id": id})
-            return redirect(url_for("stations"))
-        else:
-            # Update the station details
-            with pg_session() as pg:
-                pg.execute(
-                    """
-                    UPDATE train_stations
-                    SET name=:name, latin_name=:latin_name, city=:city, latin_city=:latin_city,
-                        country_code=:country_code, latitude=:latitude, longitude=:longitude,
-                        processed_name=:processed_name
-                    WHERE id=:id
-                """,
-                    {
-                        "name": request.form.get("name"),
-                        "latin_name": request.form.get("latin_name"),
-                        "city": request.form.get("city"),
-                        "latin_city": request.form.get("latin_city"),
-                        "country_code": request.form.get("country_code"),
-                        "latitude": request.form.get("latitude"),
-                        "longitude": request.form.get("longitude"),
-                        "processed_name": request.form.get("processed_name"),
-                        "id": id,
-                    },
-                )
-            return redirect(url_for("stations"))
-    else:
-        # Fetch the station details
-        with pg_session() as pg:
-            station = pg.execute(
-                "SELECT * FROM train_stations WHERE id = :id", {"id": id}
-            ).fetchone()
-        return render_template(
-            "admin/edit_station.html",
-            station=station,
-            username=getUser(),
-            nav="bootstrap/navigation.html",
-            isCurrent=has_current_trip(get_user_id()),
-            **lang[session["userinfo"]["lang"]],
-            **session["userinfo"],
-        )
-
-
-@app.route("/stations-data")
-@admin_required
-def stations_data():
-    draw = request.args.get("draw", default=1, type=int)
-    start = request.args.get("start", default=0, type=int)
-    length = request.args.get("length", default=10, type=int)
-    search_value = request.args.get("search[value]", default="", type=str)
-    order_column = request.args.get("order[0][column]", type=int)
-    order_dir = request.args.get("order[0][dir]", type=str)
-
-    columns = [
-        "name",
-        "latin_name",
-        "city",
-        "latin_city",
-        "country_code",
-        "latitude",
-        "longitude",
-        "processed_name",
-    ]
-
-    # Construct the ORDER BY clause
-    order_by_clause = ""
-    if order_column is not None and order_dir in ["asc", "desc"]:
-        order_by_clause = f"ORDER BY {columns[order_column]} {order_dir}"
-
-    # Construct the WHERE clause for search
-    where_clause = ""
-    params = {}
-    if search_value:
-        search_terms = [f"{col} LIKE :search" for col in columns]
-        where_clause = f"WHERE {' OR '.join(search_terms)}"
-        params["search"] = f"%{search_value}%"
-
-    # Count total records
-    with pg_session() as pg:
-        total_records = pg.execute("SELECT COUNT(id) FROM train_stations").scalar()
-
-        # Fetch filtered records
-        query = (
-            f"SELECT * FROM train_stations {where_clause} {order_by_clause} "
-            "LIMIT :limit OFFSET :offset"
-        )
-        stations = pg.execute(
-            query, {**params, "limit": length, "offset": start}
-        ).fetchall()
-
-        # Count filtered records
-        filtered_records = pg.execute(
-            f"SELECT COUNT(id) FROM train_stations {where_clause}", params
-        ).scalar()
-
-    data = []
-    for station in stations:
-        data.append(
-            {
-                "name": station["name"],
-                "latin_name": station["latin_name"],
-                "city": station["city"],
-                "latin_city": station["latin_city"],
-                "country_code": station["country_code"],
-                "latitude": station["latitude"],
-                "longitude": station["longitude"],
-                "processed_name": station["processed_name"],
-                "actions": f'<a href={url_for("editStation", id=station["id"])} class="btn btn-primary">Edit</a>',
-            }
-        )
-
-    response = {
-        "draw": draw,
-        "recordsTotal": total_records,
-        "recordsFiltered": filtered_records,
-        "data": data,
-    }
-
-    return jsonify(response)
-
-
-@app.route("/stations", methods=["GET"])
-@admin_required
-def stations():
-    return render_template(
-        "admin/stations.html",
-        username=getUser(),
-        nav="bootstrap/navigation.html",
-        isCurrent=has_current_trip(get_user_id()),
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-    )
 
 
 @app.route("/editManual/<int:id>", methods=["GET", "POST"])
