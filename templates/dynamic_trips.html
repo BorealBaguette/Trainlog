@@ -4063,7 +4063,7 @@ function exportGpx(){
 }
 
 function attachSelectedTrips(ticket_id){
-    url=`{{ url_for('attachSelected', username=username)}}`;
+    url=`{{ url_for('tickets.attachSelected', username=username)}}`;
 
     const urlParams = new URLSearchParams();
     urlParams.append('trips', checkedTrips);
@@ -4143,7 +4143,7 @@ if (planSearchModal) {
 }
 
 const ticketSearchModal = document.getElementById('ticketSearchModal');
-ticketSearchModal.addEventListener('show.bs.modal', fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}"));
+ticketSearchModal.addEventListener('show.bs.modal', fetchTickets('{{ url_for("tickets.get_all_tickets", username=username) }}', "{{none_t}}"));
 
 let tags = [];
 // Fetch all tags once when the page loads

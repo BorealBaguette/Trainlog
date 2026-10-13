@@ -176,7 +176,7 @@
         <div class="dropdown-menu" aria-labelledby="navbarDropdownMenuLink">
           <a class="dropdown-item" href="{{ url_for('ai.new_trip_ai', username=username) }}"><i class="fa-solid fa-wand-magic-sparkles"></i> {{smart_logging}} ᵦ</a>
           <hr class="dropdown-divider">
-          <a class="dropdown-item" href="{{ url_for('ticket_list', username=username) }}">
+          <a class="dropdown-item" href="{{ url_for('tickets.ticket_list', username=username) }}">
             <i class="bi bi-ticket-detailed"></i> {{nav_tickets}}
           </a>
           <a class="dropdown-item" href="{{ url_for('tag_list', username=username) }}">

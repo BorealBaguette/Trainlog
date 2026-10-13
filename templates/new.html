@@ -435,6 +435,17 @@
                  placeholder="{{operator}}" autocomplete="off"/>
         </div>
       </group>
+      {% if not plan_uuid %}
+      {# A ticket valid that day with the trip's operator, offered rather than picked: the
+         ticket picker is out of sight under the details. #}
+      <style>
+        #ticketSuggestion { display: none; margin: -8px 0 14px; }
+        #ticketSuggestion.chosen { background: #198754; border-color: #198754; color: #fff; }
+      </style>
+      <button type="button" id="ticketSuggestion" class="btn btn-outline-success btn-sm rounded-pill non_poi">
+        <i class="bi bi-ticket-perforated"></i> <span></span>
+      </button>
+      {% endif %}
 
       <label for="lineName" class="sr-only">{{lineName}}</label>
       <input type="text" name="lineName" id="lineName" class="non_poi" placeholder="{{lineName}}"/>
@@ -844,6 +855,8 @@
   function setOperatorValue(value) {
     $('#operator').val(value);
     if (operatorPills) operatorPills.set(value);
+    // Set from code, it fires no change: the ticket suggestion is refreshed by hand.
+    if (typeof refreshTickets === 'function') refreshTickets();
   }
   var visitedStations = {};
   var routingURL = "{{url_for('routing', username=username)}}";
@@ -1634,7 +1647,31 @@
       }
   }).trigger('input'); // Trigger on load to apply initial state
   {% if not plan_uuid %}
-  fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{none_t}}");
+  var refreshTickets = fetchTickets('{{ url_for("tickets.get_all_tickets", username=username) }}', "{{none_t}}", null, function () {
+    var precision = $('input[name="precision"]:checked').val();
+    var date = precision === 'preciseDates' ? $('#newTripStartDate').val()
+             : precision === 'onlyDate' ? $('#newTripStartOnlyDate').val() : null;
+    return { date: date, operators: $('#operator').val() };
+  }, showTicketSuggestion);
+  $('#newTripStartDate, #newTripStartOnlyDate, #operator, input[name="precision"]').on('change', refreshTickets);
+
+  // One click takes the suggested ticket, another leaves it.
+  var suggestedTicket = null;
+  function showTicketSuggestion(ticket) {
+    suggestedTicket = ticket;
+    var $chip = $('#ticketSuggestion');
+    if (!ticket) { $chip.hide(); return; }
+    var chosen = $('#ticketSearchInput').val() == ticket.uid;
+    $chip.toggleClass('chosen', chosen).css('display', 'inline-block');
+    $chip.find('i').attr('class', chosen ? 'bi bi-check2' : 'bi bi-ticket-perforated');
+    $chip.find('span').text(chosen ? ticketLabel(ticket) : {{ ticketUse|tojson }} + ' ' + ticketLabel(ticket));
+  }
+  $('#ticketSuggestion').on('click', function () {
+    var chosen = $('#ticketSearchInput').val() == suggestedTicket.uid;
+    $('#ticketSearchInput').val(chosen ? '' : suggestedTicket.uid);
+    showTicketSuggestion(suggestedTicket);
+  });
+  $('#ticketSearchInput').on('change', function () { showTicketSuggestion(suggestedTicket); });
   {% endif %}
   setupTagAutocomplete(`{{ url_for("get_all_tags", username=username) }}`, null, {
     url: `{{ url_for("quick_create_tag", username=username) }}`,

@@ -1576,47 +1576,70 @@ function formatNumber(locale, value) {
   }).format(value);
 }
 
-function fetchTickets(url, none_text, ticket_id=null) {
+// A ticket's name with its operator, which the name itself may leave out ("Zone A" of Skyss).
+function ticketLabel(ticket) {
+  const name = ticket.name || '';
+  const operator = ticket.operator || '';
+  return operator && !normalizeForSearch(name).includes(normalizeForSearch(operator))
+    ? `${operator} ${name}` : name;
+}
+
+// `context`, when given, returns the trip's {date, operators}: tickets valid that day are offered
+// even when no longer active, and `onSuggest` is told of the one taken by the trip's operator, its
+// own or one it is also valid with, if only one is (else null), for the page to offer it. Nothing
+// is picked for the user: a trip outside the ticket's zone would be picked wrong.
+// Returns the function that refreshes the list when the context changes.
+function fetchTickets(url, none_text, ticket_id=null, context=null, onSuggest=null) {
+  const ticketSearchInput = document.getElementById('ticketSearchInput');
+  let tickets = [];
+  let rendered = false;
+
+  // A clipping card with uses left covers any day, or any within its dates if it has some.
+  function covers(ticket, date) {
+    if (ticket.uses != null && ticket.used >= ticket.uses) return false;
+    if (!(ticket.valid_from || ticket.valid_until)) return ticket.uses != null && ticket.active;
+    return Boolean(date && (!ticket.valid_from || date >= ticket.valid_from)
+      && (!ticket.valid_until || date <= ticket.valid_until));
+  }
+
+  function runsOn(ticket, operators) {
+    return [ticket.operator, ...String(ticket.secondary_operators || '').split(',')]
+      .map(normalizeOperatorName).some(name => name && operators.includes(name));
+  }
+
+  function render() {
+    const ctx = context ? context() : null;
+    const operators = ctx ? String(ctx.operators || '').split(',').map(normalizeOperatorName).filter(Boolean) : [];
+    const covering = ctx ? tickets.filter(t => covers(t, ctx.date)) : [];
+    const fitting = covering.filter(t => runsOn(t, operators));
+    const selected = rendered ? ticketSearchInput.value : (ticket_id == null ? '' : String(ticket_id));
+    rendered = true;
+
+    ticketSearchInput.innerHTML = '';
+    const noneOption = document.createElement('option');
+    noneOption.textContent = none_text;
+    noneOption.value = "";
+    ticketSearchInput.add(noneOption);
+
+    tickets.forEach(ticket => {
+      if (!(ticket.active || covering.includes(ticket) || String(ticket.uid) === selected)) return;
+      const option = document.createElement('option');
+      option.value = ticket.uid;
+      option.setAttribute('data-price', ticket.price);
+      option.setAttribute('data-currency', ticket.currency);
+      option.setAttribute('data-purchasing-date', ticket.purchasing_date);
+      option.textContent = `${ticketLabel(ticket)} – ${ticket.price ?? ''} ${ticket.currency || ''} (${ticket.valid_from || ticket.purchasing_date || ''})`;
+      ticketSearchInput.add(option);
+    });
+    ticketSearchInput.value = selected;
+    if (onSuggest) onSuggest(fitting.length === 1 ? fitting[0] : null);
+  }
+
   fetch(url)
     .then(response => response.json())
-    .then(data => {
-      const ticketSearchInput = document.getElementById('ticketSearchInput');
-      ticketSearchInput.innerHTML = '';
-
-      // Create a "None" option
-      const noneOption = document.createElement('option');
-      noneOption.textContent = none_text; // Set text from function parameter
-      noneOption.value = ""; 
-      ticketSearchInput.add(noneOption);
-
-      // Create an option element for each ticket
-      data.tickets.forEach(ticket => {
-        if (ticket.active || ticket.uid == ticket_id)
-          {
-            const option = document.createElement('option');
-            option.value = ticket.uid;
-            option.setAttribute('data-price', ticket.price);
-            option.setAttribute('data-currency', ticket.currency);
-            option.setAttribute('data-purchasing-date', ticket.purchasing_date);
-            if (ticket.uid == ticket_id){
-              option.selected = true; 
-            }
-    
-            // Construct complex HTML for the option's inner HTML
-            const optionText = `
-              <span class="d-flex align-items-center">
-                <i class="bi bi-ticket-perforated me-2"></i>
-                <span>${sanitize(String(ticket.name || ''))}</span>
-                <span class="ms-auto">${sanitize(String(ticket.price || ''))} ${sanitize(String(ticket.currency || ''))} (${sanitize(String(ticket.purchasing_date || ''))})</span>
-              </span>
-            `;
-            option.innerHTML = optionText;
-    
-            ticketSearchInput.add(option);
-          }
-      });
-    })
+    .then(data => { tickets = data.tickets; render(); })
     .catch(error => console.error('Error:', error));
+  return render;
 }
 
 function getTextColor(bgColor) {

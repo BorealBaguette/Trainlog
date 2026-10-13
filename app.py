@@ -107,7 +107,7 @@ from src.sql.stations import (
     get_manual_stations_query,
 )
 from src.sql.tags import get_tags_query
-from src.sql.tickets import get_ticket_query, get_tickets_query
+from src.sql.tickets import get_ticket_query
 from src.sql.trips import (
     get_duplicate_query,
     get_dynamic_user_trips_query,
@@ -183,6 +183,7 @@ from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
 from src.manual_stations import manual_stations_blueprint
+from src.tickets import ticket_trip_share, tickets_blueprint
 from src.discord_webhooks import (
     discord_webhooks_blueprint,
     enabled_webhooks,
@@ -269,12 +270,10 @@ from src.trips import (
     update_trip,
     delete_trip,
     update_trip_type,
-    attach_ticket_to_trips,
     bulk_edit_trips,
     bulk_change_type,
     bulk_set_power_type,
     change_trips_visibility,
-    delete_ticket_from_db,
     get_current_trip_id,
 )
 from src.paths import Path, coords_to_ewkt, fetch_path, fetch_raw_path, geom_geojson_to_coords
@@ -361,6 +360,7 @@ app.register_blueprint(finance_blueprint)
 app.register_blueprint(bmc_blueprint)
 app.register_blueprint(discord_oauth_blueprint)
 app.register_blueprint(manual_stations_blueprint)
+app.register_blueprint(tickets_blueprint)
 app.register_blueprint(discord_webhooks_blueprint)
 app.register_blueprint(news_blueprint)
 app.register_blueprint(og_blueprint)
@@ -1177,7 +1177,7 @@ def formatTrip(trip, public=False):
     if trip["ticket_id"] not in (None, ""):
         ticket = get_ticket_cached(trip["ticket_id"])
         trip["ticket"] = ticket["name"]
-        trip["ticket_price"] = ticket["price"] / ticket["trip_count"]
+        trip["ticket_price"] = ticket_trip_share(trip["ticket_id"], trip["uid"])
         trip["ticket_currency"] = ticket["currency"]
         trip["ticket_price_in_user_currency"] = get_exchange_rate(
             price=trip["ticket_price"],
@@ -2999,76 +2999,6 @@ def save_gpx_advanced(username):
     return jsonify({"success": True, "count": saved_count}), 200
 
 
-@app.route("/u/<username>/submit_ticket", methods=["POST"])
-@login_required
-def submit_ticket(username):
-    name = request.form["name"]
-    price = request.form["price"]
-    currency = request.form["currency"]
-    purchasing_date = request.form["purchasing_date"]
-    notes = request.form.get("notes", "")
-    active_countries = request.form.getlist("active_countries[]")
-    active_countries_str = ",".join(active_countries) if active_countries else None
-
-    if not name or not username or not price:
-        flash("Name, Username, and Price are required!")
-        return redirect(url_for("ticket_list", username=username))
-
-    with pg_session() as pg:
-        pg.execute(
-            "INSERT INTO tickets (name, username, price, currency, purchasing_date, notes, active_countries)"
-            " VALUES (:name, :username, :price, :currency, :purchasing_date, :notes, :active_countries)",
-            {
-                "name": name,
-                "username": username,
-                "price": float(price),
-                "currency": currency,
-                "purchasing_date": purchasing_date,
-                "notes": notes,
-                "active_countries": active_countries_str,
-            },
-        )
-    return redirect(url_for("ticket_list", username=username))
-
-
-@app.route("/u/<username>/edit_ticket", methods=["POST"])
-@login_required
-def edit_ticket(username):
-    ticket_id = request.form["ticket_id"]
-    name = request.form["name"]
-    price = request.form["price"]
-    currency = request.form["currency"]
-    purchasing_date = request.form["purchasing_date"]
-    notes = request.form.get("notes", "")
-    active_countries = request.form.getlist("active_countries[]")
-    active_countries_str = ",".join(active_countries) if active_countries else None
-
-    if not name or not price or not purchasing_date:
-        return jsonify(
-            success=False, error="Name, Price, and Purchasing Date are required."
-        )
-
-    with pg_session() as pg:
-        pg.execute(
-            "UPDATE tickets SET name = :name, price = :price, currency = :currency,"
-            " purchasing_date = :purchasing_date, notes = :notes,"
-            " active_countries = :active_countries"
-            " WHERE uid = :uid AND username = :username",
-            {
-                "name": name,
-                "price": float(price),
-                "currency": currency,
-                "purchasing_date": purchasing_date,
-                "notes": notes,
-                "active_countries": active_countries_str,
-                "uid": ticket_id,
-                "username": username,
-            },
-        )
-
-    return jsonify(success=True)
-
-
 def convert_to_user_currency(amount, base_currency, target_currency, date):
     if amount is None or amount == "":
         return ""
@@ -3089,145 +3019,6 @@ def convert_currency():
 
     converted_amount = convert_to_user_currency(amount, base_currency, target_currency, date)
     return jsonify({"converted_amount": converted_amount})
-
-
-@app.route("/u/<username>/ticket_list")
-@login_required
-def ticket_list(username):
-    with pg_session() as pg:
-        tickets = [
-            dict(row._mapping)
-            for row in pg.execute(
-                get_tickets_query(), {"username": username}
-            ).fetchall()
-        ]
-
-    result = []
-    user_currency = getLoggedUserCurrency()
-
-    for ticket in tickets:
-        # Avoid colons and ampersand to avoid breaking datatables
-        end_ticket = {
-            k: (
-                v.replace(":", "∶").replace("&", "＆")
-                if isinstance(v, str) and k in ("notes", "name")
-                else v
-            )
-            for k, v in ticket.items()
-        }
-        end_ticket["user_currency"] = user_currency
-
-        # Convert basic price
-        end_ticket["price_in_user_currency"] = convert_to_user_currency(
-            ticket["price"],
-            ticket["currency"],
-            user_currency,
-            ticket["purchasing_date"],
-        )
-
-        if ticket["trip_count"] > 0:
-            # Calculate country-specific price_per_km if active_countries is set
-            if ticket["active_countries"]:
-                with pg_session() as pg:
-                    trips = pg.execute(
-                        "SELECT trip_id AS uid, countries FROM trips WHERE ticket_id = :tid",
-                        {"tid": ticket["uid"]},
-                    ).fetchall()
-
-                active_countries = set(ticket["active_countries"].split(","))
-                trips_in_active_countries = []
-                total_distance = 0
-
-                for trip in trips:
-                    countries_data = json.loads(trip["countries"])
-                    
-                    # Check if any active country is in this trip
-                    has_active_country = any(
-                        country in active_countries
-                        for country in countries_data.keys()
-                    )
-                    
-                    if has_active_country:
-                        trips_in_active_countries.append(trip)
-                        
-                        # Calculate distance based on format
-                        for country, value in countries_data.items():
-                            if country in active_countries:
-                                if isinstance(value, dict):
-                                    # New format: {FR: {elec: 50, nonelec: 50}}
-                                    total_distance += sum(value.values())
-                                else:
-                                    # Old format: {FR: 100}
-                                    total_distance += value
-
-                end_ticket["trip_count"] = len(trips_in_active_countries)
-                end_ticket["trip_ids"] = ",".join(
-                    [str(trip["uid"]) for trip in trips_in_active_countries]
-                )
-                if len(trips_in_active_countries) > 0:
-                    end_ticket["price_per_trip"] = ticket["price"] / len(
-                        trips_in_active_countries
-                    )
-                    end_ticket["price_per_trip_in_user_currency"] = (
-                        convert_to_user_currency(
-                            end_ticket["price_per_trip"],
-                            ticket["currency"],
-                            user_currency,
-                            ticket["purchasing_date"],
-                        )
-                    )
-                else:
-                    end_ticket["price_per_trip"] = ""
-                    end_ticket["price_per_trip_in_user_currency"] = ""
-
-                if total_distance > 0:
-                    end_ticket["price_per_km"] = ticket["price"] / (
-                        total_distance / 1000
-                    )
-                    end_ticket["price_per_km_in_user_currency"] = (
-                        convert_to_user_currency(
-                            end_ticket["price_per_km"],
-                            ticket["currency"],
-                            user_currency,
-                            ticket["purchasing_date"],
-                        )
-                    )
-                else:
-                    end_ticket["price_per_km"] = ""
-                    end_ticket["price_per_km_in_user_currency"] = ""
-            else:
-                end_ticket["price_per_trip_in_user_currency"] = (
-                    convert_to_user_currency(
-                        ticket["price_per_trip"],
-                        ticket["currency"],
-                        user_currency,
-                        ticket["purchasing_date"],
-                    )
-                )
-                # Use SQL-calculated price_per_km when no countries specified
-                end_ticket["price_per_km_in_user_currency"] = convert_to_user_currency(
-                    ticket["price_per_km"],
-                    ticket["currency"],
-                    user_currency,
-                    ticket["purchasing_date"],
-                )
-        else:
-            end_ticket["price_per_trip_in_user_currency"] = ""
-            end_ticket["price_per_km_in_user_currency"] = ""
-
-        result.append(end_ticket)
-
-    return render_template(
-        "ticket_list.html",
-        title=lang[session["userinfo"]["lang"]]["ticket_list"],
-        tickets=result,
-        username=username,
-        country_list=get_all_countries(),
-        currencyOptions=get_available_currencies(username),
-        user_currency=user_currency,
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-    )
 
 
 @app.route("/u/<username>/tag_list")
@@ -3381,14 +3172,6 @@ def update_tag(username, tag_id):
     return redirect(url_for("tag_list", username=username))
 
 
-@app.route("/u/<username>/get_all_tickets")
-@login_required
-def get_all_tickets(username):
-    with pg_session() as pg:
-        tickets = pg.execute(get_tickets_query(), {"username": username}).fetchall()
-    return jsonify(tickets=[dict(ticket._mapping) for ticket in tickets])
-
-
 @app.route("/u/<username>/get_all_tags")
 @login_required
 def get_all_tags(username):
@@ -3396,35 +3179,6 @@ def get_all_tags(username):
         tags = pg.execute(get_tags_query(), {"username": username}).fetchall()
     return jsonify(tags=[dict(tag._mapping) for tag in tags])
 
-
-@app.route("/u/<username>/delete_ticket/<ticket_id>")
-@login_required
-def delete_ticket(username, ticket_id):
-    success, error = delete_ticket_from_db(username, ticket_id)
-    if success:
-        return jsonify({"success": True}), 200
-    else:
-        logger.exception(error)
-        return jsonify({"error": "An error occurred while deleting the ticket"}), 500
-
-
-@app.route("/u/<username>/attachSelected")
-@login_required
-def attachSelected(username):
-    trip_ids = request.args.get("trips")
-    ticket_id = request.args.get("ticket_id")
-
-    if not trip_ids or not ticket_id:
-        return jsonify({"error": "Missing parameters"}), 400
-
-    trip_id_list = trip_ids.split(",")
-    success, error = attach_ticket_to_trips(username, ticket_id, trip_id_list)
-
-    if success:
-        return redirect(url_for("ticket_list", username=username))
-    else:
-        logger.exception(error)
-        return jsonify({"error": "An error occurred while attaching the ticket"}), 500
 
 @app.route("/u/<username>/bulkChangeVisibility")
 @login_required
@@ -3467,24 +3221,6 @@ def bulkEditTrips(username):
     else:
         logger.exception(error)
         return jsonify({"error": "An error occurred while editing trips"}), 500
-
-
-@app.route("/u/<username>/toggle_ticket_active/<ticket_id>")
-@login_required
-def toggle_ticket_active(username, ticket_id):
-    try:
-        with pg_session() as pg:
-            pg.execute(
-                "UPDATE tickets SET active = NOT active WHERE username = :username AND uid = :uid",
-                {"username": username, "uid": ticket_id},
-            )
-
-        # If no exceptions, return success
-        return jsonify({"success": True}), 200
-    except Exception as e:
-        # Return an error message
-        print(e)
-        return jsonify({"error": "An error occurred while toggling the ticket"}), 500
 
 
 @app.route("/u/<username>/new_flight")
@@ -8947,7 +8683,7 @@ def processPublicTrips(tripIds):
         if trip["ticket_id"] not in (None, ""):
             ticket = get_ticket_cached(trip["ticket_id"])
             trip["ticket"] = ticket["name"]
-            trip["ticket_price"] = ticket["price"] / ticket["trip_count"]
+            trip["ticket_price"] = ticket_trip_share(trip["ticket_id"], trip["uid"])
             trip["ticket_currency"] = ticket["currency"]
             trip["ticket_price_in_user_currency"] = get_exchange_rate(
                 price=trip["ticket_price"],

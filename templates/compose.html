@@ -3429,7 +3429,7 @@ updatePriceExtras();
 
 // ── Tickets ──
 {% if not plan_uuid %}
-fetchTickets('{{ url_for("get_all_tickets", username=username) }}', "{{ none_t|default('None') }}");
+fetchTickets('{{ url_for("tickets.get_all_tickets", username=username) }}', "{{ none_t|default('None') }}");
 {% endif %}
 
 // ── Tags ── (createOpts lets an unknown term be created as a tag on the spot)
