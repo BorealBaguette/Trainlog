@@ -351,9 +351,10 @@ const SLICE_COUNT = 10;
 
 // Two sets of slice sources: the overview of every shown trip, kept loaded at
 // every zoom, and the full paths of the shown trips in view, only filled (and
-// only drawn) from DETAIL_ZOOM. Switching between them is a layer visibility
-// change, so zooming back out shows the overview MapLibre already holds
-// instead of re-processing it all.
+// only drawn) from DETAIL_ZOOM. Switching between them is a fixed layer zoom
+// range, never a data swap or a visibility toggle: zooming back out shows the
+// overview from the data MapLibre already holds, and nothing changes while
+// tiles load.
 const LODS = ['overview', 'full'];
 const SLICE_SOURCES = {
     overview: Array.from({ length: SLICE_COUNT }, (_, i) => `trips-o-${i}`),
@@ -374,33 +375,30 @@ function buildSliceLayers() {
         // Full paths only exist for detail zoom; below it MapLibre skips them
         if (lod === 'full') sliceLayerIds(sourceId).forEach(id => map.setLayerZoomRange(id, DETAIL_ZOOM, 24));
     }));
-    map.on('zoom', applyLodVisibility);
-    map.on('sourcedata', (e) => {
-        if (e.sourceId && e.sourceId.startsWith('trips-f-')) applyLodVisibility();
+    // Leaving the area the full set was made for: fall back to the overview
+    // right away (the refresh on moveend brings the full paths back)
+    map.on('move', () => {
+        if (fullReady && map.getZoom() >= DETAIL_ZOOM && !boxCovers(fullBox, map.getBounds())) setFullReady(false);
     });
 }
 
-// The full set stands for the shown trips crossing fullBox; fullDrawing counts
-// the redraws in progress (its slices then hold a mix of old and new)
+// The full set holds the full paths of the shown trips crossing fullBox
 let fullBox = null;
-let fullDrawing = 0;
 
 function boxCovers(box, bounds) {
     return box && bounds.getWest() >= box[0] && bounds.getSouth() >= box[1]
         && bounds.getEast() <= box[2] && bounds.getNorth() <= box[3];
 }
 
-// The overview hides only once the full paths for this view are drawn: until
-// then it stays underneath, so there is never a blank map
-let overviewHidden = null;
-function applyLodVisibility() {
-    const hide = map.getZoom() >= DETAIL_ZOOM && fullDrawing === 0
-        && boxCovers(fullBox, map.getBounds())
-        && SLICE_SOURCES.full.every(id => map.isSourceLoaded(id));
-    if (hide === overviewHidden) return;
-    overviewHidden = hide;
+// Once the full set is completely drawn for the view, the overview stops at
+// DETAIL_ZOOM; until then it carries on underneath at every zoom, so the map
+// is never blank while full paths load. Only changes on data, not on tiles.
+let fullReady = null;
+function setFullReady(ready) {
+    if (ready === fullReady) return;
+    fullReady = ready;
     SLICE_SOURCES.overview.forEach(sourceId => sliceLayerIds(sourceId).forEach(id => {
-        if (map.getLayer(id)) map.setLayoutProperty(id, 'visibility', hide ? 'none' : 'visible');
+        if (map.getLayer(id)) map.setLayerZoomRange(id, 0, ready ? DETAIL_ZOOM : 24);
     }));
 }
 
@@ -577,9 +575,9 @@ async function refreshDisplayed(beforeDraw) {
         // Whatever the full set holds was picked from another selection
         drawnKeys.full = null;
         fullBox = null;
-        applyLodVisibility();
+        setFullReady(false);
         displayedFeatures = featuresFor(shown, 'overview');
-        firstDrawn = drawSlices('overview', displayedFeatures);
+        firstDrawn = (await drawSlices('overview', displayedFeatures)).first;
     }
 
     if (map.getZoom() >= DETAIL_ZOOM) {
@@ -587,20 +585,23 @@ async function refreshDisplayed(beforeDraw) {
         const list = shown.filter(t => intersects(tripLoader.overview.bboxFor(t), view));
         await tripLoader.full.ensure(list);
         if (seq !== refreshSeq) return firstDrawn;
+        if (!boxCovers(fullBox, map.getBounds())) setFullReady(false);
+
         const fullKey = tripsKey(list);
         if (fullKey !== drawnKeys.full) {
             drawnKeys.full = fullKey;
-            fullDrawing++;
-            applyLodVisibility();
-            try {
-                await drawSlices('full', featuresFor(list, 'full'));
-            } finally {
-                fullDrawing--;
-            }
+            // Ready once every slice is drawn, if nothing replaced it meanwhile
+            const { all } = await drawSlices('full', featuresFor(list, 'full'));
+            all.then(() => {
+                if (drawnKeys.full !== fullKey) return;
+                fullBox = view;
+                setFullReady(true);
+            });
+        } else if (!fullDrawing.has(fullKey)) {
+            // Same trips as drawn, so it covers this view too
+            fullBox = view;
+            setFullReady(true);
         }
-        // Same trips as drawn, or just drawn: valid for this whole view
-        if (drawnKeys.full === fullKey) fullBox = view;
-        applyLodVisibility();
     }
     return firstDrawn;
 }
@@ -631,8 +632,9 @@ function byTime(a, b) {
 // yielding in between so each slice is on its way to a worker (and on screen)
 // while the next is being serialised. Every slice is always written: a newer
 // call for the same set starts after this one and so overwrites each slice
-// after it. Resolves once all are handed over, with a promise for the first
-// slice being drawn.
+// after it. Resolves once all are handed over, with promises for the first
+// slice and for every slice being drawn.
+const fullDrawing = new Set();  // keys of full sets still being drawn
 async function drawSlices(lod, features) {
     const sources = SLICE_SOURCES[lod];
     const total = features.reduce((n, f) => n + f.geometry.coordinates.length, 0);
@@ -649,13 +651,16 @@ async function drawSlices(lod, features) {
         if (f.properties.time === 'current') pulseTargets[lod].push({ source: sources[i], id: f.properties.id });
     }));
 
-    const firstDrawn = tripsDrawn(sources[0]);
+    const key = lod === 'full' ? drawnKeys.full : null;
+    if (key) fullDrawing.add(key);
+    const drawn = sources.map(id => tripsDrawn(id));  // listening before setData
     for (let i = 0; i < SLICE_COUNT; i++) {
         const source = map.getSource(sources[i]);
         if (source) source.setData({ type: 'FeatureCollection', features: slices[i] });
         if (i < SLICE_COUNT - 1) await new Promise(resolve => setTimeout(resolve, 0));
     }
-    return firstDrawn;
+    const all = Promise.all(drawn).then(() => { if (key) fullDrawing.delete(key); });
+    return { first: drawn[0], all };
 }
 
 // Show popup for trip
