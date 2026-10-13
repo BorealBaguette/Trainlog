@@ -7995,9 +7995,11 @@ def stationAutocomplete():
         if features is None:
             return jsonify(error="station search unavailable"), 503
         # The other modes the list can offer to search (src/quai.py, other_modes), unless
-        # it already has them.
-        return jsonify({"type": "FeatureCollection", "features": features,
-                        "others": [] if all_rail else other_modes(trip_type)})
+        # it already has them: all of them by the user's setting, or their good matches.
+        others = other_modes(trip_type)
+        if all_rail or any(f["properties"]["mode"] in others for f in features):
+            others = []
+        return jsonify({"type": "FeatureCollection", "features": features, "others": others})
     if not is_reverse:
         # The position only biases quai's ranking; Photon answers fewer results with it.
         params.pop("lat", None)

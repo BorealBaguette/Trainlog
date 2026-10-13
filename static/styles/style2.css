@@ -658,14 +658,6 @@ body::before {
   background-color: #ffb4b43b;
 }
 
-/* Which search answered (stationSearchAutocomplete): a faint edge, to spot a fallback. */
-.ui-autocomplete .stationSource-quai{
-  box-shadow: inset 3px 0 0 rgba(34, 139, 84, 0.35);
-}
-.ui-autocomplete .stationSource-photon{
-  box-shadow: inset 3px 0 0 rgba(214, 140, 30, 0.35);
-}
-
 /* The other rail modes' stations, searched on a click (stationSearchAutocomplete), and
    their icon on each of them once listed */
 .ui-autocomplete .station-others{

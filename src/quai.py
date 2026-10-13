@@ -273,11 +273,12 @@ def prefix_place_of(station):
 
 
 def station_label(station):
-    """The name Trainlog gives a station: the one set for it by hand (apply_overrides), else
-    quai's label, after its lift or funicular line if on one, else after its city where the
-    name alone does not say where it is ("Royan - Gare"), as Trainlog has always named
-    stations; "Lyon Part-Dieu" and "Brussels-Luxembourg" as they are."""
-    if (station.get("override") or {}).get("name"):
+    """The name Trainlog gives a station: the one set for it by hand (apply_overrides), unless
+    one is set for the reader's language, else quai's label, after its lift or funicular line
+    if on one, else after its city where the name alone does not say where it is ("Royan -
+    Gare"), as Trainlog has always named stations; "Lyon Part-Dieu" and "Brussels-Luxembourg"
+    as they are."""
+    if (station.get("override") or {}).get("name") and not station.get("named_by"):
         return station["override"]["name"]
     # In the "local" language, each station as it names itself (but for a name set in
     # Trainlog).
@@ -493,8 +494,10 @@ def _features(stations):
                 "lines": s.get("lines") or [],
                 "source": "quai",
                 # Whether ICU wrote the name and the place in the forced script, and whether
-                # the name is one set in Trainlog for the reader's language.
-                "named_by": "trainlog" if s.get("named_by") or (s.get("override") or {}).get("name") else "osm",
+                # the name is one set in Trainlog for the reader's language: told apart from a
+                # transliterated one only with the forced script.
+                "named_by": "trainlog" if forced_script() and (s.get("named_by") or (s.get("override") or {}).get("name"))
+                            else "osm",
                 "transliterated": transliterated(s)[0],
                 "place_transliterated": transliterated(s)[1],
             },
@@ -525,6 +528,12 @@ def _features(stations):
 # tram stops. A rail trip's station search offers the others' stations when asked, and
 # "other rail" (monorails, suspension railways: whatever the mappers made them) has them all.
 RAIL_MODES = ("train", "metro", "tram", "funicular")
+
+
+# quai's match tiers run from 0 (the name as typed) to 4 (fuzzy: a typo's neighbours, or the
+# stations of a place named, "Bergen busstasjon" listing Bergen's).
+GOOD_MATCH_TIER = 1
+FUZZY_TIER = 4
 
 
 def own_modes(trip_type):
@@ -573,22 +582,50 @@ def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit
             logger.warning(f"quai {endpoint} failed: {e}")
             return None
 
+    def fetch(of_modes):
+        with ThreadPoolExecutor(max_workers=len(of_modes)) as pool:
+            return list(pool.map(stations, of_modes))
+
+    def merge(answers):
+        if all(answer is None for answer in answers):
+            return None
+        seen, found = set(), []
+        for station in (s for answer in answers for s in answer or []):
+            # One stop in several modes (a light-rail stop is a metro and a tram one): listed
+            # once, as the first mode's.
+            if (station["osm_type"], station["osm_id"]) in seen:
+                continue
+            seen.add((station["osm_type"], station["osm_id"]))
+            found.append(station if station.get("mode") == mode else dict(station, station_key=None))
+        found.sort(key=lambda s: s.get("tier") or 0 if q is not None else s.get("distance_m") or 0)
+        return found[:limit]
+
+    def good(station):
+        return (station.get("tier") or 0) <= GOOD_MATCH_TIER
+
+    def features(found):
+        # Beside a good match, fuzzy ones are noise (Bond Street and Bondi Junction for Bondy).
+        if q is not None and any(map(good, found)):
+            found = [s for s in found if (s.get("tier") or 0) < FUZZY_TIER]
+        return _features(found)
+
     modes = other_modes(trip_type) if others else own_modes(trip_type)
     if all_rail and not others:
         modes = (*modes, *other_modes(trip_type))
     if not modes:
         return []
-    if len(modes) == 1:
-        found = stations(modes[0])
-        return None if found is None else _features(found)
-    with ThreadPoolExecutor(max_workers=len(modes) or 1) as pool:
-        answers = list(pool.map(stations, modes))
-    if all(answer is None for answer in answers):
+    if len(modes) > 1:
+        found = merge(fetch(modes))
+        return None if found is None else features(found)
+    found = stations(modes[0])
+    if found is None:
         return None
-    found = [s if s.get("mode") == mode else dict(s, station_key=None)
-             for answer in answers for s in answer or []]
-    found.sort(key=lambda s: s.get("tier") or 0 if q is not None else s.get("distance_m") or 0)
-    return _features(found[:limit])
+    # No good match of the trip's own mode (quai's tier 0, exact, or 1): the other rail modes'
+    # good matches come first ("Bergen busstasjon", a Bybanen stop, on a train trip).
+    if q is not None and not others and other_modes(trip_type) and not any(map(good, found)):
+        better = [[s for s in answer or [] if good(s)] for answer in fetch(other_modes(trip_type))]
+        found = merge([found, *better])
+    return features(found)
 
 
 def nearest_stations(mode, points, radius_m=400, candidates=1, timeout=30):
