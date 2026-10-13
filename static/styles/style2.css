@@ -658,19 +658,7 @@ body::before {
   background-color: #ffb4b43b;
 }
 
-/* The other rail modes' stations, searched on a click (stationSearchAutocomplete), and
-   their icon on each of them once listed */
-.ui-autocomplete .station-others{
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 10px;
-  border-top: 1px solid #eee;
-  color: #888;
-  cursor: pointer;
-}
-.ui-autocomplete .station-others:hover{ background: #f1f3f6; }
-.ui-autocomplete .station-others img{ height: 18px; }
+/* Another rail mode's station in the list (stationSearchAutocomplete): its mode's icon */
 .ui-autocomplete .station-mode{ height: 14px; margin-right: 4px; vertical-align: -2px; }
 
 /* Scrolls, as reaching its end loads the next stations (stationSearchAutocomplete). */

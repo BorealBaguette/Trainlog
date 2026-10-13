@@ -791,8 +791,6 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
     // A page may give a point to search around (window.stationSearchBias(input) -> [lat, lng]),
     // such as the trip's other end: of the stops sharing a name, the nearby ones come first.
     var query = { q: term, limit: limit };
-    // Asked for (the list's last row): the stations of the other rail modes instead.
-    if (widget.stationOthers) query.others = 1;
     var bias = typeof window.stationSearchBias === 'function' ? window.stationSearchBias(inputElement) : null;
     if (bias) { query.lat = bias[0]; query.lon = bias[1]; }
     widget.stationXhr = $.ajax({
@@ -842,7 +840,7 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
           }
         });
         inputElement.removeClass("spinning");
-        done(stationList, data.features.length, data.others || []);
+        done(stationList, data.features.length);
       },
       error: function (xhr, status) {
         if (widget.stationXhr === xhr) {
@@ -947,7 +945,6 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
       } else if (added.length) {
         // Only the new ones drawn, below the others, which stay as they are.
         added.forEach(function (item) { widget._renderItemData(ul, item); });
-        ul.children(".station-others").appendTo(ul);
         widget.menu.refresh();
       }
       loadMore(widget);
@@ -963,30 +960,17 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
       var manStationList = $.ui.autocomplete.filter(
         typeof manualStationsList !== 'undefined' ? manualStationsList : [], request.term);
       widget.stationTerm = request.term;
-      // The other modes only when their row was clicked, for that search.
-      widget.stationOthers = !!widget.stationOthersNext;
-      widget.stationOthersNext = false;
-      function search() {
-        widget.stationLimit = STATION_SEARCH_FIRST;
-        widget.stationAll = false;
-        fetchStations(widget, request.term, STATION_SEARCH_FIRST, function (stationList, count, others) {
-          if (widget.stationTerm !== request.term) {
-            return;
-          }
-          // Nothing of the trip's own mode: the others straight away.
-          if (!count && others.length && !widget.stationOthers) {
-            widget.stationOthers = true;
-            search();
-            return;
-          }
-          widget.stationOthersTypes = widget.stationOthers ? [] : others;
-          widget.stationAll = gotAll(stationList, count, 0, STATION_SEARCH_FIRST);
-          widget.stationCount = count;
-          widget.stationItems = rankStations(stationList, manStationList, request.term);
-          response(widget.stationItems);
-        });
-      }
-      search();
+      widget.stationLimit = STATION_SEARCH_FIRST;
+      widget.stationAll = false;
+      fetchStations(widget, request.term, STATION_SEARCH_FIRST, function (stationList, count) {
+        if (widget.stationTerm !== request.term) {
+          return;
+        }
+        widget.stationAll = gotAll(stationList, count, 0, STATION_SEARCH_FIRST);
+        widget.stationCount = count;
+        widget.stationItems = rankStations(stationList, manStationList, request.term);
+        response(widget.stationItems);
+      });
     },
     open: function () {
       loadMore($(this).autocomplete("instance"));
@@ -996,24 +980,6 @@ function stationSearchAutocomplete(autoClass, visitedStations, url, manual) {
     widget.menu.element.addClass("stationSearchMenu").on("scroll", function () {
       loadMore(widget);
     });
-    // The last row, not an item: the other rail modes' icons (a Schwebebahn station is a
-    // metro one, a Stadtbahn stop a tram one), which search their stations instead.
-    widget.menu.option("items", "> :not(.station-others)");
-    var renderMenu = widget._renderMenu;
-    widget._renderMenu = function (ul, items) {
-      renderMenu.call(this, ul, items);
-      if (!(widget.stationOthersTypes || []).length) return;
-      var $row = $("<li class='station-others'>").append($("<i class='fa-solid fa-magnifying-glass'>"));
-      widget.stationOthersTypes.forEach(function (type) {
-        $row.append($("<img>").attr({ src: "/static/images/icons/trip_logos/" + type + ".png", alt: type, title: type }));
-      });
-      $row.on("mousedown", function (e) { e.preventDefault(); })
-        .on("click", function () {
-          widget.stationOthersNext = true;
-          widget.search(widget.stationTerm);
-        })
-        .appendTo(ul);
-    };
     // `text` with each of `parts` in it as a span.transliterated, escaped.
     function markParts(text, parts) {
       var html = sanitize(text);

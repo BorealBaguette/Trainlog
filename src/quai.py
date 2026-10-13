@@ -548,12 +548,12 @@ def other_modes(trip_type):
 
 
 def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit=10,
-                    timeout=None, others=False, all_rail=False):
+                    timeout=None, all_rail=False):
     """Stations of the trip type's modes (own_modes) named like `q`, or near lat/lon when `q`
-    is None; with `others`, those of its other modes instead (other_modes), with `all_rail`
-    both (the user's setting, all_rail_stations). Several modes' are
-    merged by how well the name matched, else by distance, each with its mode, and without its
-    station_key where that mode is not the trip type's quai mode, a key being its mode's own.
+    is None, with those of its other modes (other_modes) where it has no good match, or always
+    with `all_rail` (the user's setting, all_rail_stations). Several modes' are merged by how
+    well the name matched, else by distance, each with its mode, and without its station_key
+    where that mode is not the trip type's quai mode, a key being its mode's own.
 
     Returns Photon-shaped features, or None if quai does not cover the type or cannot be
     reached.
@@ -609,23 +609,30 @@ def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit
             found = [s for s in found if (s.get("tier") or 0) < FUZZY_TIER]
         return _features(found)
 
-    modes = other_modes(trip_type) if others else own_modes(trip_type)
-    if all_rail and not others:
+    modes = own_modes(trip_type)
+    if all_rail:
         modes = (*modes, *other_modes(trip_type))
-    if not modes:
-        return []
     if len(modes) > 1:
         found = merge(fetch(modes))
         return None if found is None else features(found)
-    found = stations(modes[0])
-    if found is None:
+    # The trip's own mode and, at once, its other rail modes, in case it has no good match. A
+    # stop listed already is not another: a light-rail stop is a metro and a tram one.
+    answers = fetch((modes[0], *other_modes(trip_type))) if q is not None else [stations(modes[0])]
+    own = answers[0]
+    if own is None:
         return None
-    # No good match of the trip's own mode (quai's tier 0, exact, or 1): the other rail modes'
-    # good matches come first ("Bergen busstasjon", a Bybanen stop, on a train trip).
-    if q is not None and not others and other_modes(trip_type) and not any(map(good, found)):
-        better = [[s for s in answer or [] if good(s)] for answer in fetch(other_modes(trip_type))]
-        found = merge([found, *better])
-    return features(found)
+    listed = {(s["osm_type"], s["osm_id"]) for s in own}
+    # Not the fuzzy guesses (the stations of a place named): only those it is worth looking at.
+    extra = [[s for s in answer or [] if (s["osm_type"], s["osm_id"]) not in listed
+              and (q is None or (s.get("tier") or 0) < FUZZY_TIER)]
+             for answer in answers[1:]]
+    # The trip's own mode alone, unless it has no good match (quai's tier 0, exact, or 1): then
+    # the other rail modes' good matches come first ("Bergen busstasjon", a Bybanen stop, on a
+    # train trip).
+    better = [[s for s in answer if good(s)] for answer in extra]
+    if q is None or any(map(good, own)) or not any(better):
+        return features(own)
+    return features(merge([own, *better]))
 
 
 def nearest_stations(mode, points, radius_m=400, candidates=1, timeout=30):
