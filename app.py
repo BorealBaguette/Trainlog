@@ -105,7 +105,6 @@ from src.sql.percents import upsert_percent_query
 from src.sql.stations import (
     get_airports_query,
     get_manual_stations_query,
-    get_train_stations_query,
 )
 from src.sql.tags import get_tags_query
 from src.sql.tickets import get_ticket_query, get_tickets_query
@@ -3595,7 +3594,6 @@ def signup():
         "forwardRouting",
         "getMultiTrips",
         "static",
-        "trainStationAutocomplete",
         "tile",
         "password_reset",
         "editManual",
@@ -7867,21 +7865,6 @@ def airportAutocomplete(searchPattern):
             ).fetchall()
         ]
     return jsonify(airports)
-
-
-@app.route("/trainStationAutocomplete")
-def trainStationAutocomplete():
-    searchPattern = request.args.get("q")
-    params = {
-        "searchPatternStart": searchPattern + "%",
-        "searchPatternAnywhere": "%" + searchPattern + "%",
-    }
-    with pg_session() as pg:
-        trainStations = [
-            dict(trainStation._mapping)
-            for trainStation in pg.execute(get_train_stations_query(), params).fetchall()
-        ]
-    return jsonify(trainStations)
 
 
 @app.route("/placeAutocomplete")
