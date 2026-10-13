@@ -650,8 +650,9 @@ function tracksHtml(s) {
     ${EDITABLE && t ? `
       <div class="se-track-edit">
         <span class="what">Track ${refInput(t)}</span>
-        <span class="se-hint">${t.lat != null ? `${(+t.lat).toFixed(6)}, ${(+t.lng).toFixed(6)} · drag it on the map` : 'no position yet: place it'}</span>
-        <button type="button" class="se-ico" data-action="pick-track" title="Place it on the map"><i class="bi bi-crosshair"></i></button>
+        ${t.lat != null ? `<span class="se-hint">${(+t.lat).toFixed(6)}, ${(+t.lng).toFixed(6)} · drag it on the map</span>
+        <button type="button" class="se-ico" data-action="pick-track" title="Place it on the map"><i class="bi bi-crosshair"></i></button>`
+          : '<button type="button" class="se-link" data-action="pick-track" style="grid-column: 2 / -1; justify-self: start"><i class="bi bi-crosshair"></i> Place it on the map</button>'}
         <div class="opts">
           <label title="A stop position on the track: the point is exact"><input type="checkbox" name="on_track" ${t.on_track === false ? '' : 'checked'}> On the track</label>
           ${t.osm ? `<label title="Not one of the station's tracks"><input type="checkbox" name="hidden" ${t.hidden ? 'checked' : ''}> Hidden</label>` : ''}
