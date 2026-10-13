@@ -69,6 +69,11 @@
   <div class="row">
     <div>
       <h2 class="mb-3 text-center">{{ manage_gpx_files }}</h2>
+      <div class="text-end mb-2">
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#uploadGPXModal">
+          <i class="bi bi-cloud-upload"></i> {{ upload_gpx_files }}
+        </button>
+      </div>
       
       <div class="d-flex justify-content-between align-items-center mb-3">
         <button id="saveSelectedButton" class="btn btn-labeled btn-primary" disabled>
@@ -184,6 +189,35 @@
 </div>
 
 <!-- Delete Confirmation Modal -->
+<!-- Upload: files and notes, then each file is read in turn under the progress bar -->
+<div class="modal fade" id="uploadGPXModal" tabindex="-1" aria-labelledby="uploadGPXModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="uploadGPXModalLabel">{{ upload_gpx_files }}</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body">
+        <form id="uploadGPXForm" autocomplete="off">
+          <div class="mb-3">
+            <label for="gpx_files" class="form-label fw-semibold">{{ select_gpx_files }}</label>
+            <input type="file" class="form-control" id="gpx_files" name="gpx_files" accept=".gpx,.kml" multiple required>
+            <small class="text-muted">{{ gpx_file_help_text }}</small>
+          </div>
+          <div class="mb-3">
+            <label for="gpx_notes" class="form-label fw-semibold">{{ notes }}</label>
+            <textarea class="form-control" id="gpx_notes" name="notes" placeholder="{{ additional_notes }}"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary w-100"><i class="bi bi-upload me-2"></i>{{ upload_gpx_files }}</button>
+        </form>
+        <div class="text-center mt-3">
+          <a class="small" href="{{ url_for('upload_gpx', username=username, maprika=1) }}"><i class="bi bi-box-arrow-up-right me-1"></i>Maprika</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <div class="modal fade" id="deleteGPXModal" tabindex="-1" aria-labelledby="deleteGPXModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered">
     <div class="modal-content">
@@ -252,6 +286,29 @@
       }, 1000);
     }
   }
+
+  // The files uploaded one at a time, the list shown again once they all are.
+  $('#uploadGPXForm').on('submit', async function (e) {
+    e.preventDefault();
+    const files = document.getElementById('gpx_files').files;
+    if (!files.length) { alert({{ alert_no_file_selected|tojson }}); return; }
+    $('#uploadGPXModal').modal('hide');
+    $('#progress-bar').css('width', '0%');
+    $('#progress-overlay').css('display', 'flex').fadeIn();
+    for (let i = 0; i < files.length; i++) {
+      const formData = new FormData();
+      formData.append('gpx_files', files[i]);
+      formData.append('notes', document.getElementById('gpx_notes').value);
+      try {
+        const response = await fetch({{ url_for('handle_gpx_upload', username=username, source='Trainlog')|tojson }},
+                                     { method: 'POST', body: formData });
+        if (!response.ok) throw new Error();
+      } catch (error) {
+        alert({{ failed_upload|tojson }} + ': ' + files[i].name);
+      }
+      updateProgress(i + 1, files.length);
+    }
+  });
 
   $(document).ready(function() {
     // Initialize tooltips

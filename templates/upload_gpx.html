@@ -130,7 +130,7 @@
 </div>
 
 <script>
-// Toggle between simple and Maprika modes
+// Toggle between simple and Maprika modes; ?maprika (the GPX list's link) opens on Maprika.
 $('#maprikaToggle').on('change', function() {
   if (this.checked) {
     $('#simpleSection').addClass('d-none');
@@ -140,6 +140,8 @@ $('#maprikaToggle').on('change', function() {
     $('#simpleSection').removeClass('d-none');
   }
 });
+
+if (new URLSearchParams(location.search).has('maprika')) $('#maprikaToggle').prop('checked', true).trigger('change');
 
 // ---- Simple upload ----
 $(document).ready(function () {

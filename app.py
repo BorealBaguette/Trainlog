@@ -2029,21 +2029,6 @@ def remove_tag_member(username, tag_id):
     return redirect(url_for("tag_list", username=username))
 
 
-@app.route("/u/<username>/new_ticket")
-@login_required
-def new_ticket(username):
-    return render_template(
-        "new_ticket.html",
-        title=lang[session["userinfo"]["lang"]]["new_ticket"],
-        country_list=get_all_countries(),
-        username=username,
-        **lang[session["userinfo"]["lang"]],
-        **session["userinfo"],
-        currencyOptions=get_available_currencies(username),
-        user_currency=getLoggedUserCurrency(),
-    )
-
-
 @app.route("/u/<username>/handle_gpx_upload/<source>", methods=["POST"])
 @login_required
 def handle_gpx_upload(username, source):
@@ -3027,7 +3012,7 @@ def submit_ticket(username):
 
     if not name or not username or not price:
         flash("Name, Username, and Price are required!")
-        return redirect(url_for("new_ticket"))
+        return redirect(url_for("ticket_list", username=username))
 
     with pg_session() as pg:
         pg.execute(
@@ -3239,6 +3224,7 @@ def ticket_list(username):
         username=username,
         country_list=get_all_countries(),
         currencyOptions=get_available_currencies(username),
+        user_currency=user_currency,
         **lang[session["userinfo"]["lang"]],
         **session["userinfo"],
     )

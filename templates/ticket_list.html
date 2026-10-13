@@ -15,7 +15,10 @@
     <h1 class="mt-3">{{nav_tickets}}</h1>
 
     <!-- NEW: toggle inactive tickets (DataTables-native filtering; no CSS hide) -->
-    <div>
+    <div class="d-flex gap-2">
+        <button id="newTicketButton" type="button" class="btn btn-primary btn-sm">
+            <i class="fa-solid fa-plus"></i> {{new_ticket}}
+        </button>
         <button id="toggleInactiveTickets" type="button" class="btn btn-outline-secondary btn-sm">
             <i class="fa-regular fa-eye"></i> {{show_inactive_tickets}}
         </button>
@@ -110,26 +113,26 @@
     </div>
 </div>
 
-<!-- Edit Ticket Modal -->
+<!-- Ticket Modal: a new ticket, or one edited -->
 <div class="modal fade" id="editTicketModal" tabindex="-1" aria-labelledby="editTicketModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title" id="editTicketModalLabel">Edit Ticket</h5>
+                <h5 class="modal-title" id="editTicketModalLabel">{{edit_ticket}}</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
                 <form id="editTicketForm">
                     <div class="mb-3">
-                        <label for="editTicketName" class="form-label">Name</label>
-                        <input type="text" class="form-control" id="editTicketName" name="name" required>
+                        <label for="editTicketName" class="form-label">{{ticket_name}}</label>
+                        <input type="text" class="form-control" id="editTicketName" name="name" required placeholder="{{enter_ticket_name}}">
                     </div>
                     <div class="mb-3">
-                        <label for="editTicketPrice" class="form-label">Price</label>
-                        <input type="number" step="0.01" class="form-control" id="editTicketPrice" name="price" required>
+                        <label for="editTicketPrice" class="form-label">{{price}}</label>
+                        <input type="number" step="0.01" class="form-control" id="editTicketPrice" name="price" required placeholder="{{enter_ticket_price}}">
                     </div>
                      <div class="mb-3">
-                        <label for="editTicketCurrency" class="form-label">Currency</label>
+                        <label for="editTicketCurrency" class="form-label">{{currency}}</label>
                         <select class="form-control" id="editTicketCurrency" name="currency">
                             {% for currency in currencyOptions %}
                             <option value="{{ currency['currency'] }}" data-country="{{ currency['country'] }}" data-emoji="{{ currency.get('emoji', '') }}">
@@ -139,7 +142,7 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label for="editTicketDate" class="form-label">Purchasing Date</label>
+                        <label for="editTicketDate" class="form-label">{{purchasing_date}}</label>
                         <input type="date" class="form-control" id="editTicketDate" name="purchasing_date" required>
                     </div>
                     <div class="form-group mb-3">
@@ -153,11 +156,11 @@
                         </select>
                     </div>
                     <div class="mb-3">
-                        <label for="editTicketNotes" class="form-label">Notes</label>
-                        <textarea class="form-control" id="editTicketNotes" name="notes" rows="3"></textarea>
+                        <label for="editTicketNotes" class="form-label">{{notes}}</label>
+                        <textarea class="form-control" id="editTicketNotes" name="notes" rows="3" placeholder="{{ additional_notes }}"></textarea>
                     </div>
                     <input type="hidden" id="editTicketId" name="ticket_id">
-                    <button type="submit" class="btn btn-primary">Save changes</button>
+                    <button type="submit" class="btn btn-primary w-100">{{submit}}</button>
                 </form>
             </div>
         </div>
@@ -367,6 +370,7 @@ $(document).ready(function () {
             var ticketNotes = $(this).data('ticket-notes');
             var ticketActiveCountries = $(this).data('ticket-active-countries');
 
+            $('#editTicketModalLabel').text({{ edit_ticket|tojson }});
             $('#editTicketId').val(ticketId);
             $('#editTicketName').val(ticketName);
             $('#editTicketPrice').val(ticketPrice);
@@ -385,17 +389,31 @@ $(document).ready(function () {
         updateTable(); // Call updateTable on each draw event
     });
 
-    // Submit edit ticket form
+    // A new ticket: the same form, empty, in the user's currency, bought today.
+    $('#newTicketButton').on('click', function () {
+        $('#editTicketForm')[0].reset();
+        $('#editTicketModalLabel').text({{ new_ticket|tojson }});
+        $('#editTicketId').val('');
+        $('#editTicketCurrency').val({{ user_currency|tojson }});
+        $('#editTicketDate').val(new Date().toISOString().slice(0, 10));
+        $('#ticket_countries').selectpicker('val', []);
+        $('#editTicketModal').modal('show');
+    });
+    $('#editTicketModal').on('shown.bs.modal', function () { $('#editTicketName').trigger('focus'); });
+
+    // Saved as a new ticket, or over the one edited.
     $('#editTicketForm').on('submit', function (e) {
         e.preventDefault();
         var formData = $(this).serialize();
+        var isNew = !$('#editTicketId').val();
 
         $.ajax({
-            url: '/u/{{ username }}/edit_ticket',
+            url: isNew ? {{ url_for('submit_ticket', username=username)|tojson }} : '/u/{{ username }}/edit_ticket',
             type: 'POST',
             data: formData,
             success: function (response) {
-                if (response.success) {
+                // A new ticket's answer is the list it redirects to.
+                if (isNew || response.success) {
                     location.reload(); // Reload the page to see the updated ticket details
                 } else {
                     alert('Error: ' + response.error);
