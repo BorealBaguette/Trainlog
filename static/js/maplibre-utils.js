@@ -653,6 +653,45 @@ function applyLiveTracks(trips, liveTracks, features) {
     });
 }
 
+// One trip -> its GeoJSON feature, or null when the path is unusable.
+// Takes the path either as trip.path ([[lat, lng], ...], as the trip endpoints
+// return it) or as trip.coords ([[lng, lat], ...], already decoded — the
+// trips map builds those from encoded polylines and skips the swap).
+function tripToFeature(trip) {
+    trip = computeTimeStatus(trip);
+    if (trip.trip.type == 'helicopter'){
+        trip.trip.type = 'air';
+    }
+
+    try {
+        let coords = trip.coords || trip.path.map(c => [c[1], c[0]]);
+        coords = normalizePathCoords(coords);
+        if ((trip.trip.type === 'air') && coords.length === 2) {
+            coords = createGeodesicLine(coords[0], coords[1]);
+        }
+
+        return {
+            type: 'Feature',
+            geometry: { type: 'LineString', coordinates: coords },
+            properties: {
+                id: trip.trip.uid,
+                type: trip.trip.type,
+                time: trip.time,
+                // -1 = undated past trip, matched by the 'undated' pseudo-year
+                year: trip.trip.start_datetime === -1 ? 'undated'
+                    : trip.trip.start_datetime !== 1
+                    ? trip.trip.start_datetime.substring(0, 4)
+                    : null,
+                origin: trip.trip.origin_station,
+                destination: trip.trip.destination_station
+            }
+        };
+    } catch (error) {
+        console.warn('Broken trip:', trip.trip.uid);
+        return null;
+    }
+}
+
 // Build trip layers for the map
 function buildTripLayers(map, trips, transportTypes, options = {}) {
     const {
@@ -662,40 +701,7 @@ function buildTripLayers(map, trips, transportTypes, options = {}) {
     } = options;
 
     // Create features from trips
-    const features = trips.map(trip => {
-        trip = computeTimeStatus(trip);
-        if (trip.trip.type == 'helicopter'){
-            trip.trip.type = 'air';
-        }
-
-        try {
-            let coords = trip.path.map(c => [c[1], c[0]]);
-            coords = normalizePathCoords(coords);
-            if ((trip.trip.type === 'air') && coords.length === 2) {
-                coords = createGeodesicLine(coords[0], coords[1]);
-            }
-            
-            return {
-                type: 'Feature',
-                geometry: { type: 'LineString', coordinates: coords },
-                properties: {
-                    id: trip.trip.uid,
-                    type: trip.trip.type,
-                    time: trip.time,
-                    // -1 = undated past trip, matched by the 'undated' pseudo-year
-                    year: trip.trip.start_datetime === -1 ? 'undated'
-                        : trip.trip.start_datetime !== 1
-                        ? trip.trip.start_datetime.substring(0, 4)
-                        : null,
-                    origin: trip.trip.origin_station,
-                    destination: trip.trip.destination_station
-                }
-            };
-        } catch (error) {
-            console.warn('Broken trip:', trip.trip.uid);
-            return null;
-        }
-    }).filter(feature => feature !== null);
+    const features = trips.map(tripToFeature).filter(feature => feature !== null);
 
     // Add source
     if (!map.getSource('trips')) {
@@ -826,6 +832,85 @@ function buildTripLayers(map, trips, transportTypes, options = {}) {
     return features;
 }
 
+// Layers for one time slice of trips on its own source (the trips map draws
+// its trips as consecutive slices in time, oldest at the bottom). Unlike
+// buildTripLayers there is one layer per role, styled per feature, so lines
+// stack in data order across transport types: the slice's shadows, then its
+// lines (features in time order), then the dashes of planned trips. The
+// source holds only the trips to display, so nothing is filtered here.
+// Features need `type` and `time` properties; ids are promoted from `id` so
+// feature-state (the pulse of current trips) can address them.
+function addTripSliceLayers(map, sourceId, transportTypes, options = {}) {
+    const { onLayerClick = null } = options;
+    const time = ['get', 'time'];
+    const isAir = ['==', ['get', 'type'], 'air'];
+    const typeColor = ['match', ['get', 'type']];
+    transportTypes.forEach(type => typeColor.push(type.id, type.color));
+    typeColor.push('#888888');
+
+    if (!map.getSource(sourceId)) {
+        map.addSource(sourceId, {
+            type: 'geojson',
+            data: { type: 'FeatureCollection', features: [] },
+            promoteId: 'id'
+        });
+    }
+
+    const layout = { 'line-join': 'round', 'line-cap': 'round' };
+    const layers = [
+        {
+            id: `${sourceId}-shadow`,
+            paint: {
+                'line-color': '#000000',
+                'line-width': ['case', isAir, 3, 5],
+                'line-opacity': ['case', ['==', time, 'future'], 0.3, 0.8],
+                'line-blur': 0.5
+            }
+        },
+        {
+            id: `${sourceId}-line`,
+            clickable: true,
+            paint: {
+                'line-color': ['case',
+                    ['==', time, 'current'], '#ff0000',
+                    ['==', time, 'future'], '#ffffff',
+                    typeColor
+                ],
+                'line-width': ['case', ['==', time, 'current'], 4, isAir, 1, 3],
+                'line-opacity': ['case',
+                    ['==', time, 'current'],
+                    ['case', ['boolean', ['feature-state', 'pulse'], false], 0.3, 1],
+                    0.8
+                ]
+            }
+        },
+        {
+            // Planned trips: their line in the type colour, white dashes on top
+            id: `${sourceId}-planned-overlay`,
+            filter: ['==', time, 'plannedFuture'],
+            clickable: true,
+            paint: {
+                'line-color': '#ffffff',
+                'line-width': ['case', isAir, 1, 3],
+                'line-opacity': 0.8,
+                'line-dasharray': [3, 3]
+            }
+        }
+    ];
+
+    layers.forEach(layer => {
+        if (map.getLayer(layer.id)) return;
+        const spec = { id: layer.id, type: 'line', source: sourceId, layout, paint: layer.paint };
+        if (layer.filter) spec.filter = layer.filter;
+        map.addLayer(spec);
+        if (layer.clickable) {
+            if (onLayerClick) map.on('click', layer.id, onLayerClick);
+            map.on('mouseenter', layer.id, () => { map.getCanvas().style.cursor = 'pointer'; });
+            map.on('mouseleave', layer.id, () => { map.getCanvas().style.cursor = ''; });
+        }
+    });
+}
+
 // Update layer visibility based on filters
 function updateLayerVisibility(map, transportTypes, filters) {
     transportTypes.forEach(type => {
@@ -902,7 +987,18 @@ function updateLayerVisibility(map, transportTypes, filters) {
 }
 
 // Fit map bounds to visible features
-function fitBoundsToVisibleFeatures(map, features, filters, type=null) {
+// `fitOptions` is merged into the fitBounds options, e.g. { animate: false }.
+function fitBoundsToVisibleFeatures(map, features, filters, type=null, fitOptions={}) {
+    // Listen before moving: without animation, moveend fires inside fitBounds
+    const moved = new Promise(resolve => {
+        map.once('moveend', () => {
+            resolve({
+                center: map.getCenter(),
+                zoom: map.getZoom()
+            });
+        });
+    });
+
     const visibleFeatures = features.filter(feature => {
         const type = feature.properties.type;
         const time = feature.properties.time;
@@ -941,26 +1037,20 @@ function fitBoundsToVisibleFeatures(map, features, filters, type=null) {
         if (type == 'public_trip'){
             if (window.innerWidth <= 600) {
                 // Mobile: smaller padding
-                map.fitBounds(bounds, { padding: 50 });
+                map.fitBounds(bounds, { padding: 50, ...fitOptions });
             } else {
                 // Desktop: large padding with offset
                 map.fitBounds(bounds, {
                     padding: 300,
-                    offset: [-100, 0]
+                    offset: [-100, 0],
+                    ...fitOptions
                 });
             }
         } else {
-            map.fitBounds(bounds, { padding: 50 });
+            map.fitBounds(bounds, { padding: 50, ...fitOptions });
         }
     }
-    return new Promise(resolve => {
-        map.once('moveend', () => {
-            resolve({
-                center: map.getCenter(),
-                zoom: map.getZoom()
-            });
-        });
-    });
+    return moved;
 }
 
 // Utility function to modify vector style sources
@@ -1320,7 +1410,9 @@ window.MapLibreUtils = {
     liveOriginBridge,
     computeTimeStatus,
     applyLiveTracks,
+    tripToFeature,
     buildTripLayers,
+    addTripSliceLayers,
     updateLayerVisibility,
     fitBoundsToVisibleFeatures,
     modifyVectorStyle

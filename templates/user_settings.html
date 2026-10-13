@@ -1092,7 +1092,17 @@
 
   // Clear cache
   document.getElementById("clear-cache").addEventListener("click", function () {
-    localforage.clear().then(() => alert("{{cacheCleared}}")).catch(() => alert("{{cacheError}}"));
+    // 'trainlog-map' is the trips map's own IndexedDB (static/js/map_trip_cache.js)
+    const clearMapCache = new Promise(resolve => {
+      try {
+        const req = indexedDB.deleteDatabase('trainlog-map');
+        req.onsuccess = req.onerror = req.onblocked = () => resolve();
+      } catch (e) {
+        resolve();
+      }
+    });
+    Promise.all([localforage.clear(), clearMapCache])
+      .then(() => alert("{{cacheCleared}}")).catch(() => alert("{{cacheError}}"));
   });
 
   // Remember which settings tab was active across a save (full page reload)

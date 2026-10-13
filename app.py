@@ -4,6 +4,7 @@
 # Standard Library Imports
 import calendar
 import csv
+import hashlib
 import logging.config
 import os
 import pathlib
@@ -110,6 +111,8 @@ from src.sql.tickets import get_ticket_query, get_tickets_query
 from src.sql.trips import (
     get_duplicate_query,
     get_dynamic_user_trips_query,
+    get_map_paths_query,
+    get_map_trips_query,
     get_material_types_query,
     get_number_stations_query,
     get_operators_query,
@@ -8669,6 +8672,115 @@ def fetchUpdatedTrips(username, lastLocal, public):
 def get_updated_trips(username, lastLocal):
     result = fetchUpdatedTrips(username, lastLocal, public=0)
     return jsonify(result)
+
+
+# Trips map (new_map.html) data, split in two so the page can draw what's on
+# screen first and keep everything else cached on the device:
+#   mapTrips — every map trip WITHOUT geometry, compact rows + per-path version;
+#              ?h=<hash of the last copy> answers {unchanged: true} when nothing moved
+#   mapPaths — encoded polylines for a batch of trip ids, fetched on demand;
+#              {"lod": "overview"} gives the simplified zoomed-out version
+# Bump when the row layout changes, so cached copies stop matching.
+MAP_TRIPS_FORMAT = 1
+MAP_PATHS_MAX_BATCH = 1000
+
+
+def fetch_map_trips(username, public):
+    user_id = get_user_id(username)
+    with pg_session() as pg:
+        rows = pg.execute(
+            get_map_trips_query(),
+            {
+                "user_id": user_id,
+                "public": public,
+                "friend": int(current_user_is_friend_with(username)),
+            },
+        ).fetchall()
+
+    # Dates arrive pre-formatted from SQL; a NULL becomes the 1 (project) /
+    # -1 (undated) sentinel, as adapt_pg_trip_row does — inlined, since that
+    # generic adapter was most of this request's time on large accounts.
+    out = []
+    for row in rows:
+        missing = 1 if row.is_project else -1
+        out.append(
+            [
+                row.uid,
+                row.trip_type,
+                row.start_datetime or missing,
+                row.utc_filtered_start_datetime or missing,
+                row.utc_filtered_end_datetime or missing,
+                row.origin_station,
+                row.destination_station,
+                row.path_version,
+            ]
+        )
+    digest = hashlib.md5(json.dumps(out, separators=(",", ":")).encode()).hexdigest()
+    return f"{MAP_TRIPS_FORMAT}-{digest}", out
+
+
+def map_trips_response(username, public):
+    h, rows = fetch_map_trips(username, public)
+    if request.args.get("h") == h:
+        response = jsonify(h=h, unchanged=True)
+    else:
+        response = jsonify(h=h, rows=rows)
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+def map_paths_response(username, public):
+    body = request.get_json(silent=True) or {}
+    ids = body.get("ids") or []
+    overview = body.get("lod") == "overview"
+    try:
+        ids = [int(i) for i in ids[:MAP_PATHS_MAX_BATCH]]
+    except (TypeError, ValueError):
+        abort(400)
+    if not ids:
+        return jsonify(paths=[])
+
+    with pg_session() as pg:
+        rows = pg.execute(
+            get_map_paths_query(),
+            {
+                "user_id": get_user_id(username),
+                "trip_ids": ids,
+                "overview": int(overview),
+                "public": public,
+                "friend": int(current_user_is_friend_with(username)),
+            },
+        ).fetchall()
+    response = jsonify(
+        paths=[[r.uid, r.path_version, r.polyline] for r in rows],
+        precision=5 if overview else 6,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+@app.route("/u/<username>/mapTrips")
+@login_required
+def get_map_trips(username):
+    return map_trips_response(username, public=0)
+
+
+@app.route("/public/<username>/mapTrips")
+@public_required
+def public_get_map_trips(username):
+    return map_trips_response(username, public=1)
+
+
+@app.route("/u/<username>/mapPaths", methods=["POST"])
+@login_required
+def get_map_paths(username):
+    return map_paths_response(username, public=0)
+
+
+@app.route("/public/<username>/mapPaths", methods=["POST"])
+@public_required
+def public_get_map_paths(username):
+    return map_paths_response(username, public=1)
 
 
 def processPublicTrips(tripIds):
