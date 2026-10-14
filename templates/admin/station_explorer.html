@@ -377,8 +377,9 @@ window.addEventListener('hashchange', loadStation);
 loadStation();
 
 // ── Trainlog's own name, names, position and tracks for the station, over OSM's ──
-// Edited in place, kept in `edit` until saved: the default name (for every language without
-// its own) and one per language, the position, and tracks added, moved or hidden by ref.
+// Edited in place, kept in `edit` until saved: the local name, one per language (that in
+// "int" the default, for every language without its own), the position, and tracks added,
+// moved or hidden by ref.
 let edit = null, savedEdit = '', current = null, selectedTrack = null;
 let picking = null;   // given [lat, lng] when the map is clicked
 const pickingBanner = document.getElementById('se-picking');
@@ -402,17 +403,25 @@ function editOf(s) {
 const trackKey = ref => String(ref || '').trim().toLowerCase();
 const isDirty = () => JSON.stringify(edit) !== savedEdit;
 
-// The names: the default one, then each language OSM or Trainlog has one in, the reader's first.
+// The names: the default one, shown in every language without its own (the "int" name: OSM's
+// int_name, else the local name in Latin letters, as quai's latin), the local one (OSM's name,
+// for readers of the "local" language), then each language OSM or Trainlog has one in, the
+// reader's first.
+const NAME_HINTS = {
+  int: 'Shown in every language without a name of its own',
+  '': 'As the station names itself, for readers of the "local" language',
+};
 function nameRows(s) {
   const osm = s.osm_names || {};
   const codes = new Set(Object.keys(osm).filter(k => /^name:[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(k)).map(k => k.slice(5)));
-  // OSM's int_name is the "int" name: the one shown where a language has none (quai's latin).
-  if (osm.int_name) codes.add('int');
   Object.keys(edit.names).forEach(c => codes.add(c));
+  codes.delete('int');
   const lang = form.elements.lang.value || {{ langId|tojson }};
   const sorted = [...codes].sort((a, b) => (b === lang) - (a === lang) || a.localeCompare(b));
-  return [{ code: '', osm: osm.name || s.name || '', own: edit.name },
-          ...sorted.map(code => ({ code, osm: osm['name:' + code] || (code === 'int' && (osm.int_name || s.osm_latin)) || '', own: edit.names[code] || '' }))];
+  return [{ code: 'int', label: 'default', fixed: true, osm: osm['name:int'] || osm.int_name || s.osm_latin || '',
+            own: edit.names.int || '' },
+          { code: '', label: 'local', fixed: true, osm: s.osm_name || '', own: edit.name },
+          ...sorted.map(code => ({ code, osm: osm['name:' + code] || '', own: edit.names[code] || '' }))];
 }
 function setName(code, value) {
   const row = nameRows(current).find(r => r.code === code) || { osm: '' };
@@ -601,7 +610,7 @@ function headHtml(s) {
 function nameRowHtml(r) {
   return `
         <div class="se-name${r.own ? ' own' : ''}" data-code="${esc(r.code)}">
-          <span class="code" title="${r.code ? '' : 'For every language without its own'}">${esc(r.code || 'default')}</span>
+          <span class="code" title="${esc(NAME_HINTS[r.code] || '')}">${esc(r.label || r.code)}</span>
           ${EDITABLE ? `<input class="se-in" value="${esc(r.own || r.osm)}" placeholder="${esc(r.osm || 'not in OSM')}">`
                      : `<span class="value">${esc(r.own || r.osm)}</span>`}
           ${EDITABLE && r.own ? `<button type="button" class="se-ico" data-action="reset-name" title="Back to OSM's"><i class="bi bi-arrow-counterclockwise"></i></button>` : '<span></span>'}
@@ -609,14 +618,15 @@ function nameRowHtml(r) {
         </div>`;
 }
 
-// The names Trainlog's readers see first (the default one, those in its languages, those set
-// in Trainlog), the other languages' folded and grey; and, to editors, the languages missing.
+// The names Trainlog's readers see first (the default and local ones, those in its languages,
+// those set in Trainlog), the other languages' folded and grey; and, to editors, the languages
+// missing (but "int", the default).
 function namesHtml(s) {
-  const rows = nameRows(s).filter(r => !r.code || r.own || r.osm);
-  const main = rows.filter(r => !r.code || r.own || READ_CODES.has(r.code));
+  const rows = nameRows(s).filter(r => r.fixed || r.own || r.osm);
+  const main = rows.filter(r => r.fixed || r.own || READ_CODES.has(r.code));
   const others = rows.filter(r => !main.includes(r));
   const named = new Set(main.map(r => r.code));
-  const missing = TRAINLOG_LANGS.filter(l => !named.has(l) && !named.has(l.split('-')[0]));
+  const missing = TRAINLOG_LANGS.filter(l => l !== 'int' && !named.has(l) && !named.has(l.split('-')[0]));
   return `
     <h3>Names <span class="count">${rows.length}</span></h3>
     <div class="se-names">

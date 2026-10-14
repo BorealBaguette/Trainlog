@@ -282,14 +282,11 @@ def prefix_place_of(station):
 
 
 def station_label(station):
-    """The name Trainlog gives a station: the one set for it by hand (apply_overrides), unless
-    one is set for the reader's language, else quai's label, after its lift or funicular line
-    if on one, else after its city where the name alone does not say where it is ("Royan -
-    Gare"), as Trainlog has always named stations; "Lyon Part-Dieu" and "Brussels-Luxembourg"
-    as they are."""
-    if (station.get("override") or {}).get("name") and not station.get("named_by"):
-        return station["override"]["name"]
-    # In the "local" language, each station as it names itself (but for a name set in
+    """The name Trainlog gives a station: quai's label, with the names set for it by hand
+    (apply_overrides), after its lift or funicular line if on one, else after its city where
+    the name alone does not say where it is ("Royan - Gare"), as Trainlog has always named
+    stations; "Lyon Part-Dieu" and "Brussels-Luxembourg" as they are."""
+    # In the "local" language, each station as it names itself (its own local name if set in
     # Trainlog).
     label = station["label"] if user_lang() != "local" or station.get("named_by") else station["name"]
     own = written_in_script(label, station.get("names"), station.get("latin"))
@@ -448,7 +445,9 @@ def apply_overrides(stations, follow_merges=True):
     """quai stations as Trainlog takes them, in place: merged into another where set (unless
     follow_merges is False: the station explorer shows a station as it is), and with the
     names and positions set for them by hand. A name set for a language is among the
-    station's names, as its name:<language>, and its label for readers of it (named_by)."""
+    station's names, as its name:<language>, and its label for readers of it (named_by); the
+    "int" one is the name where a language has none (quai's latin), and the name set without
+    a language its local name, as it names itself, for readers of the "local" language."""
     if follow_merges:
         _merge_stations(stations)
     overrides = station_overrides(stations)
@@ -461,15 +460,17 @@ def apply_overrides(stations, follow_merges=True):
             station["lat"], station["lng"] = override["lat"], override["lng"]
         if override["tracks"]:
             station["tracks"] = merge_tracks(station.get("tracks"), override["tracks"])
+        if override.get("name"):
+            station["name"] = override["name"]
         if override["names"]:
-            station["names"] = {**(station.get("names") or {}),
-                                **{f"name:{code}": name for code, name in override["names"].items()}}
-            # The "int" name is also the one shown where a language has none (quai's latin).
+            code = user_lang()
+            osm_names = station.get("names") or {}
             if override["names"].get("int"):
-                if station.get("label") == station.get("latin"):
+                if not (osm_names.get(f"name:{code}") or osm_names.get(f"name:{code.split('-')[0]}")):
                     station["label"] = override["names"]["int"]
                 station["latin"] = override["names"]["int"]
-            code = user_lang()
+            station["names"] = {**osm_names,
+                                **{f"name:{lang}": name for lang, name in override["names"].items()}}
             name = override["names"].get(code) or override["names"].get(code.split("-")[0])
             if name:
                 station["label"] = name
@@ -510,7 +511,7 @@ def _features(stations):
                 # Whether ICU wrote the name and the place in the forced script, and whether
                 # the name is one set in Trainlog for the reader's language: told apart from a
                 # transliterated one only with the forced script.
-                "named_by": "trainlog" if forced_script() and (s.get("named_by") or (s.get("override") or {}).get("name"))
+                "named_by": "trainlog" if forced_script() and s.get("named_by")
                             else "osm",
                 "transliterated": transliterated(s)[0],
                 "place_transliterated": transliterated(s)[1],

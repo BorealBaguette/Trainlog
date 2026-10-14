@@ -84,7 +84,7 @@ def station(mode, key):
     station["osm_lat"], station["osm_lng"] = station["lat"], station["lng"]
     station["osm_tracks"] = station.get("tracks") or []
     station["osm_names"] = dict(station.get("names") or {})
-    station["osm_latin"] = station.get("latin")
+    station["osm_name"], station["osm_latin"] = station.get("name"), station.get("latin")
     apply_overrides([station], follow_merges=False)
     station["trainlog_name"] = station_label(station)
 
