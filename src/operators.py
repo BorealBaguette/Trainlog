@@ -18,8 +18,10 @@ LOGO_UPLOAD_FOLDER = "static/images/operator_logos/new"
 # in migration 0042 — keep the two in step.
 OWN_POOL_TRIP_TYPES = frozenset(["accommodation", "car", "poi"])
 
-# The pools an operator can belong to (operators.operator_type).
-OPERATOR_TYPES = ("operator", "accommodation", "car", "poi")
+# The pools an operator can belong to (operators.operator_type). 'ticket' holds ticket
+# brands, called products in the code (Interrail, Deutschlandticket): no trip type draws
+# from it.
+OPERATOR_TYPES = ("operator", "accommodation", "car", "poi", "ticket")
 
 
 def operator_bucket(trip_type: str | None) -> str:

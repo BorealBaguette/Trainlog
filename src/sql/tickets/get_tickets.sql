@@ -17,6 +17,7 @@ SELECT
     auto_renew,
     operator,
     secondary_operators,
+    product,
     active_countries,
     notes
 FROM tickets

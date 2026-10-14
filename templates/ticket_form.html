@@ -1,6 +1,6 @@
-{# The ticket form, shared by the ticket list and a ticket's page: openTicketForm(ticket, mode)
-   opens it empty ("new"), on a ticket ("edit"), on the ticket that follows it ("renew"), or on
-   what all the tickets of its group share ("group"). #}
+{# The ticket form, shared by the ticket list and a ticket's page with the styles of their
+   tables: openTicketForm(ticket, mode) opens it empty ("new"), on a ticket ("edit"), on the
+   ticket that follows it ("renew"), or on what all the tickets of its group share ("group"). #}
 <style>
     /* The operator suggestions open above the modal, not behind it. */
     .ui-front { z-index: 9999999 !important; }
@@ -56,6 +56,102 @@
         margin-bottom: .25rem;
         font-size: .85rem;
         color: #6c757d;
+    }
+    .ticket-table-card {
+        border: 1px solid #dee2e6;
+        border-radius: .75rem;
+        overflow: hidden;
+    }
+    .ticket-table {
+        margin-bottom: 0;
+        font-variant-numeric: tabular-nums;
+    }
+    /* Not the blue headers every other table gets. */
+    .ticket-table th {
+        background-color: #f8f9fa !important;
+        color: #6c757d;
+        font-weight: 500;
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        white-space: nowrap;
+        padding: .75rem;
+    }
+    .ticket-table td {
+        padding: .75rem;
+    }
+    .ticket-table tbody tr:last-child td {
+        border-bottom: 0;
+    }
+    .ticket-table th[data-sort] {
+        cursor: pointer;
+        user-select: none;
+    }
+    .ticket-table th[data-sort]:hover,
+    .ticket-table th[aria-sort] {
+        color: var(--bs-body-color);
+    }
+    .ticket-table th[aria-sort="ascending"]::after { content: " ↑"; }
+    .ticket-table th[aria-sort="descending"]::after { content: " ↓"; }
+    /* Wide enough for the longest date, so the arrows and end dates line up. */
+    .ticket-from {
+        display: inline-block;
+        min-width: 7.5em;
+    }
+    .ticket-actions .btn {
+        color: #6c757d;
+        border: 0;
+    }
+    .ticket-actions .btn:hover { color: var(--bs-body-color); background: #e9ecef; }
+    .ticket-actions .delete-button:hover { color: var(--bs-danger); }
+    /* On a phone, each ticket a block of its dates and actions above its labelled figures. */
+    @media (max-width: 767.98px) {
+        .ticket-table thead {
+            display: none;
+        }
+        .ticket-table tbody tr {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            padding: .6rem .75rem;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .ticket-table tbody tr:last-child {
+            border-bottom: 0;
+        }
+        .ticket-table td {
+            display: block;
+            padding: 0;
+            border: 0;
+        }
+        .ticket-table .ticket-cell-validity,
+        .ticket-table .ticket-cell-actions {
+            order: -1;
+        }
+        .ticket-table .ticket-cell-validity {
+            flex: 1 1 0;
+            min-width: 0;
+            white-space: normal;
+        }
+        .ticket-table .ticket-cell-stat {
+            order: 1;
+            flex: 1 1 0;
+            margin-top: .4rem;
+            text-align: left !important;
+            font-size: .9rem;
+        }
+        .ticket-table .ticket-cell-stat::before {
+            content: attr(data-label);
+            display: block;
+            font-size: .7rem;
+            color: #6c757d;
+        }
+        /* A full-width break between the dates and actions, and the figures under them. */
+        .ticket-table tbody tr::before {
+            content: "";
+            order: 0;
+            flex-basis: 100%;
+        }
     }
 </style>
 
@@ -155,6 +251,14 @@
                         </div>
                     </div>
                     <div class="mb-3">
+                        <label for="ticketProductSearch" class="form-label">{{ticketProduct}}</label>
+                        <input type="hidden" id="ticketProduct" name="product">
+                        <div class="operatorPillsField" id="ticketProductPills">
+                            <input type="text" id="ticketProductSearch" class="op-pill-placeholder" autocomplete="off">
+                        </div>
+                        <div class="form-text">{{ticketProductHint}}</div>
+                    </div>
+                    <div class="mb-3">
                         <label for="ticketOperatorSearch" class="form-label">{{operator}}</label>
                         <input type="hidden" id="ticketOperator" name="operator">
                         <div class="operatorPillsField" id="ticketOperatorPills">
@@ -191,7 +295,7 @@
 
 <script>
 var openTicketForm = (function () {
-    var operatorPills = null, secondaryPills = null;
+    var operatorPills = null, secondaryPills = null, productPills = null;
 
     function addDays(day, days) {
         var d = new Date(day + 'T00:00:00Z');
@@ -211,13 +315,20 @@ var openTicketForm = (function () {
             operatorPills = operatorPillsInput($('#ticketOperator'), $('#ticketOperatorSearch'), $('#ticketOperatorPills'), manAndOps, staticUrl, 'train');
             secondaryPills = operatorPillsInput($('#ticketSecondary'), $('#ticketSecondarySearch'), $('#ticketSecondaryPills'), manAndOps, staticUrl, 'train');
         });
+        $.get({{ url_for('tickets.ticket_products', username=username)|tojson }}, function (products) {
+            productPills = operatorPillsInput($('#ticketProduct'), $('#ticketProductSearch'), $('#ticketProductPills'), products, {{ url_for('static', filename='')|tojson }}, 'train');
+        });
     }
 
-    // A ticket has one operator: the one picked last replaces the one before.
-    $('#ticketOperator').on('change', function () {
-        var names = this.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
-        if (names.length > 1) operatorPills.set(names[names.length - 1]);
-    });
+    // A ticket has one operator and one product: the one picked last replaces the one before.
+    function keepLast(pills) {
+        return function () {
+            var names = this.value.split(',').map(function (s) { return s.trim(); }).filter(Boolean);
+            if (names.length > 1) pills().set(names[names.length - 1]);
+        };
+    }
+    $('#ticketOperator').on('change', keepLast(function () { return operatorPills; }));
+    $('#ticketProduct').on('change', keepLast(function () { return productPills; }));
 
     function applyKind() {
         var kind = $('input[name="kind"]:checked').val();
@@ -234,13 +345,15 @@ var openTicketForm = (function () {
         $('#ticketValidUntil').val(addDays(from, $(this).data('days') - 1));
     });
 
-    function setOperators(head, secondary) {
+    function setOperators(head, secondary, product) {
         $('#ticketOperator').val(head || '');
         $('#ticketSecondary').val(secondary || '');
+        $('#ticketProduct').val(product || '');
         if (operatorPills) {
             operatorPills.set(head || '');
             secondaryPills.set(secondary || '');
         }
+        if (productPills) productPills.set(product || '');
     }
 
     var saveUrl = {{ url_for('tickets.save_ticket', username=username)|tojson }};
@@ -297,13 +410,31 @@ var openTicketForm = (function () {
         $('#ticketKind_' + kind).prop('checked', true);
         if (mode !== 'group') applyKind();
         $('#ticketAutoRenew').prop('checked', mode !== 'new' && Boolean(ticket.auto_renew));
-        setOperators(ticket.operator, ticket.secondary_operators);
+        setOperators(ticket.operator, ticket.secondary_operators, ticket.product);
         countriesSelect.selectpicker('val', ticket.active_countries ? ticket.active_countries.split(',') : []);
         $('#ticketNotes').val(mode === 'edit' ? (ticket.notes || '') : '');
-        $('#ticketGroupName').val(ticket.name || '');
+        // Tickets of one product may each have their own name: left empty, they keep it.
+        $('#ticketGroupName').val(ticket.mixed_names ? '' : (ticket.name || ''))
+            .prop('required', mode === 'group' && !ticket.mixed_names);
         $('#ticketModal').modal('show');
     };
 })();
+
+// A column sorts descending on its first click, then flips; empty cells go last.
+function sortableTicketTable($table) {
+    $table.find('th[data-sort]').on('click', function () {
+        var $th = $(this), column = $th.index(), numeric = $th.data('sort') === 'number';
+        var direction = $th.attr('aria-sort') === 'descending' ? 1 : -1;
+        $table.find('th').removeAttr('aria-sort');
+        $th.attr('aria-sort', direction === 1 ? 'ascending' : 'descending');
+        var rows = $table.find('tbody tr').get().sort(function (a, b) {
+            var x = a.cells[column].dataset.order, y = b.cells[column].dataset.order;
+            if (!x || !y) return !x - !y;
+            return direction * (numeric ? parseFloat(x) - parseFloat(y) : x.localeCompare(y));
+        });
+        $table.find('tbody').append(rows);
+    });
+}
 
 // Amounts and dates as the reader writes them.
 function formatTicketPage() {

@@ -4,6 +4,7 @@ with their renewals, and the trips each one covers."""
 import json
 import logging
 import re
+import unicodedata
 from collections import Counter, defaultdict
 from datetime import date, timedelta
 
@@ -26,6 +27,86 @@ from src.utils import get_user_id, lang, login_required
 logger = logging.getLogger(__name__)
 
 tickets_blueprint = Blueprint("tickets", __name__)
+
+
+def _words(text):
+    """The words of a name, lowercased and without accents."""
+    text = unicodedata.normalize("NFKD", text or "").lower()
+    return re.findall(r"[^\W_]+", "".join(c for c in text if not unicodedata.combining(c)))
+
+
+def _logo_at(logos, day):
+    """Of logos (effective date, url), newest first, the one in force on a day: the newest
+    from before it, or one never dated; without a day, the current one."""
+    for effective, url in logos or ():
+        if day is None or effective is None or effective.isoformat() <= day:
+            return url
+    return None
+
+
+def _product_rows():
+    """Each spelling of a ticket product (the 'ticket' pool of operators), with the product's
+    names and every logo, newest first."""
+    with pg_session() as pg:
+        return pg.execute(
+            "SELECT a.alias, o.short_name, o.long_name, l.effective_date, l.logo_url"
+            " FROM operators o JOIN operator_aliases a ON a.operator_id = o.operator_id"
+            " LEFT JOIN operator_logos l ON l.operator_id = o.operator_id"
+            " WHERE o.operator_type = 'ticket'"
+            " ORDER BY a.alias, l.effective_date DESC NULLS LAST, l.uid DESC"
+        ).fetchall()
+
+
+def _products():
+    """The ticket products by each of their spellings, written without spaces or punctuation:
+    their name and logos, newest first."""
+    products = {}
+    for row in _product_rows():
+        key = "".join(_words(row["alias"]))
+        if key:
+            product = products.setdefault(key, {"name": row["short_name"], "logos": []})
+            if row["logo_url"]:
+                product["logos"].append((row["effective_date"], row["logo_url"]))
+    return products
+
+
+def _product_in(name, products):
+    """The product a ticket's name speaks of: the longest run of its words that, written
+    together, spells one, so that "Deutschland-Ticket Juli" and "Interrail 2024" are found."""
+    words = _words(name)
+    for length in range(len(words), 0, -1):
+        for start in range(len(words) - length + 1):
+            found = products.get("".join(words[start:start + length]))
+            if found:
+                return found
+    return None
+
+
+def _day(ticket):
+    return ticket["valid_from"] or ticket["purchasing_date"]
+
+
+def _with_product(ticket, products):
+    """The ticket's product, the one chosen or else the one its name speaks of: a known one
+    with its name and the logo it had then, or a free text one as typed."""
+    chosen = ticket["product"]
+    if chosen is None:
+        found = _product_in(ticket["name"], products)
+    elif chosen:
+        found = products.get("".join(_words(chosen))) or {"name": chosen.strip(), "logos": []}
+    else:
+        found = None
+    ticket["product"] = found["name"] if found else None
+    ticket["product_logo"] = _logo_at(found["logos"], _day(ticket)) if found else None
+
+
+def _product_to_save(product, name, products):
+    """The product a form gives: none written is left to the name, unless the name speaks of
+    one, which the user has then taken off."""
+    product = (product or "").strip()
+    if product:
+        return product
+    return "" if _product_in(name, products) else None
 
 
 def _user_currency():
@@ -90,14 +171,14 @@ def _renew_due(username):
                 pg.execute(
                     "INSERT INTO tickets (name, username, price, currency, purchasing_date,"
                     " valid_from, valid_until, uses, use_minutes, operator, secondary_operators,"
-                    " active_countries, notes, auto_renew)"
+                    " product, active_countries, notes, auto_renew)"
                     " VALUES (:name, :username, :price, :currency, :start, :start, :end, :uses,"
                     " :use_minutes,"
-                    " :operator, :secondary_operators, :active_countries, '', :auto_renew)",
+                    " :operator, :secondary_operators, :product, :active_countries, '', :auto_renew)",
                     {
                         **{key: ticket[key] for key in (
                             "name", "username", "price", "currency", "uses", "use_minutes", "operator",
-                            "secondary_operators", "active_countries",
+                            "secondary_operators", "product", "active_countries",
                         )},
                         "start": start,
                         "end": end,
@@ -131,9 +212,9 @@ def _with_uses(ticket, starts):
 
 
 def _load_tickets(username):
-    """The user's tickets, newest first, renewed when due, with their trips in departure order.
-    Each counts its uses, its trips unless it is a clipping card, and a used-up card is no longer
-    active."""
+    """The user's tickets, newest first, renewed when due, with their product and their trips
+    in departure order. Each counts its uses, its trips unless it is a clipping card, and a
+    used-up card is no longer active."""
     _renew_due(username)
     with pg_session() as pg:
         tickets = [
@@ -149,7 +230,9 @@ def _load_tickets(username):
     by_ticket = defaultdict(list)
     for trip in trips:
         by_ticket[trip["ticket_id"]].append(trip)
+    products = _products() if tickets else {}
     for ticket in tickets:
+        _with_product(ticket, products)
         ticket_trips = by_ticket[ticket["uid"]]
         if ticket["uses"] is None:
             ticket["used"] = len(ticket_trips)
@@ -232,11 +315,15 @@ def _tickets(username):
 
 
 def _groups(tickets):
-    """Tickets gathered with their renewals: those of one name and operator."""
+    """Tickets gathered with their renewals: those of one product whatever their names, or
+    else of one name and operator."""
     groups = defaultdict(list)
     for ticket in tickets:
-        operator = re.sub(r"\W+", "", (ticket["operator"] or "").lower())
-        groups[(operator, ticket["name"].strip().lower())].append(ticket)
+        if ticket["product"]:
+            key = ("product", "".join(_words(ticket["product"])))
+        else:
+            key = (re.sub(r"\W+", "", (ticket["operator"] or "").lower()), ticket["name"].strip().lower())
+        groups[key].append(ticket)
 
     summaries = []
     for tickets in groups.values():
@@ -247,7 +334,8 @@ def _groups(tickets):
         summaries.append({
             "tickets": tickets,
             "latest": tickets[0],
-            "name": tickets[0]["name"],
+            "name": tickets[0]["product"] or tickets[0]["name"],
+            "mixed_names": len({t["name"].strip().lower() for t in tickets}) > 1,
             "live": any(t["state"] in ("valid", "active", "upcoming") for t in tickets),
             "spent": spent,
             "trips": trips,
@@ -259,18 +347,22 @@ def _groups(tickets):
 
 
 def _logos(tickets):
-    """Each operator the tickets name, with its logo when it has one."""
+    """Each operator the tickets name, with its current logo when it has one; and each ticket
+    its logo as it was on its date, its product's or else its operator's."""
     names = {
         name
         for t in tickets
         for name in [t["operator"], *split_operators(t["secondary_operators"])]
         if name
     }
-    if not names:
-        return {}
-    with pg_session() as pg:
-        rows = pg.execute(get_operator_logos_query(), {"names": list(names)}).fetchall()
-    return {row["name"]: row["logo_url"] for row in rows}
+    logos = defaultdict(list)
+    if names:
+        with pg_session() as pg:
+            for row in pg.execute(get_operator_logos_query(), {"names": list(names)}).fetchall():
+                logos[row["name"]].append((row["effective_date"], row["logo_url"]))
+    for ticket in tickets:
+        ticket["logo"] = ticket["product_logo"] or _logo_at(logos.get(ticket["operator"]), _day(ticket))
+    return {name: _logo_at(eras, None) for name, eras in logos.items()}
 
 
 def _render(template, username, tickets, **context):
@@ -294,18 +386,26 @@ def _render(template, username, tickets, **context):
 def ticket_list(username):
     tickets = _tickets(username)
     groups = _groups(tickets)
-    # Past groups by the year of their latest ticket, newest first.
-    past_years = defaultdict(list)
-    for group in groups:
-        if not group["live"]:
-            latest = group["latest"]
-            past_years[(latest["valid_from"] or latest["purchasing_date"])[:4]].append(group)
+    # Each year with the groups of its own tickets: a pass used over several years is in each,
+    # with what it was that year.
+    by_year = defaultdict(list)
+    for ticket in tickets:
+        by_year[_day(ticket)[:4]].append(ticket)
+    years = [(year, _groups(by_year[year])) for year in sorted(by_year, reverse=True)]
+    # A year's group whose tickets go on in other years, with the whole of it to go to.
+    whole_of = {t["uid"]: group for group in groups for t in group["tickets"]}
+    for _, year_groups in years:
+        for group in year_groups:
+            whole = whole_of[group["latest"]["uid"]]
+            if len(whole["tickets"]) > len(group["tickets"]):
+                group["whole"] = whole
     return _render(
         "ticket_list.html",
         username,
         tickets,
         live_groups=[g for g in groups if g["live"]],
-        past_years=sorted(past_years.items(), reverse=True),
+        years=years,
+        all_tickets=tickets,
     )
 
 
@@ -319,8 +419,21 @@ def _group_of(username, ticket_id):
 @tickets_blueprint.route("/u/<username>/ticket/<int:ticket_id>")
 @login_required
 def ticket_page(username, ticket_id):
-    group = _group_of(username, ticket_id)
-    return _render("ticket.html", username, group["tickets"], group=group)
+    """A ticket's group; with ?only, the ticket alone, and with ?year=, the group's tickets of
+    that year: what the row followed showed."""
+    whole = _group_of(username, ticket_id)
+    group = whole
+    if "only" in request.args:
+        group = _groups([t for t in whole["tickets"] if t["uid"] == ticket_id])[0]
+        group["name"] = group["latest"]["name"]
+    elif request.args.get("year"):
+        year = [t for t in whole["tickets"] if _day(t)[:4] == request.args["year"]]
+        if year:
+            group = _groups(year)[0]
+            group["name"] = f"{group['name']} · {request.args['year']}"
+    return _render(
+        "ticket.html", username, whole["tickets"], group=group, whole=whole if group is not whole else None
+    )
 
 
 @tickets_blueprint.route("/u/<username>/ticket/<int:ticket_id>/edit_group", methods=["POST"])
@@ -335,8 +448,20 @@ def edit_group(username, ticket_id):
         abort(400)
     if days is not None and days < 1:
         abort(400)
-    uids = [t["uid"] for t in _group_of(username, ticket_id)["tickets"]]
+    tickets = _group_of(username, ticket_id)["tickets"]
+    name = form.get("name", "").strip() or None
+    products = _products()
     with pg_session() as pg:
+        # The product per ticket: their names may each speak of one, or not.
+        for ticket in tickets:
+            pg.execute(
+                "UPDATE tickets SET product = :product WHERE uid = :uid AND username = :username",
+                {
+                    "product": _product_to_save(form.get("product"), name or ticket["name"], products),
+                    "uid": ticket["uid"],
+                    "username": username,
+                },
+            )
         pg.execute(
             "UPDATE tickets SET name = COALESCE(:name, name), operator = :operator, secondary_operators = :secondary_operators,"
             " active_countries = :active_countries,"
@@ -347,12 +472,12 @@ def edit_group(username, ticket_id):
             "     ELSE valid_until END"
             " WHERE uid = ANY(:uids) AND username = :username",
             {
-                "name": form.get("name", "").strip() or None,
+                "name": name,
                 "operator": form.get("operator", "").strip() or None,
                 "secondary_operators": ", ".join(split_operators(form.get("secondary_operators"))) or None,
                 "active_countries": ",".join(form.getlist("active_countries[]")) or None,
                 "days": days,
-                "uids": uids,
+                "uids": [t["uid"] for t in tickets],
                 "username": username,
             },
         )
@@ -391,6 +516,7 @@ def save_ticket(username):
     values["auto_renew"] = bool(form.get("auto_renew") and values["valid_from"] and values["valid_until"])
     if not values["name"] or not values["currency"] or not values["purchasing_date"]:
         abort(400)
+    values["product"] = _product_to_save(form.get("product"), values["name"], _products())
     if values["valid_from"] and values["valid_until"] and values["valid_from"] > values["valid_until"]:
         abort(400)
 
@@ -398,10 +524,10 @@ def save_ticket(username):
         if uid is None:
             uid = pg.execute(
                 "INSERT INTO tickets (name, username, price, currency, purchasing_date, valid_from,"
-                " valid_until, uses, use_minutes, operator, secondary_operators, active_countries,"
-                " notes, auto_renew)"
+                " valid_until, uses, use_minutes, operator, secondary_operators, product,"
+                " active_countries, notes, auto_renew)"
                 " VALUES (:name, :username, :price, :currency, :purchasing_date, :valid_from,"
-                " :valid_until, :uses, :use_minutes, :operator, :secondary_operators,"
+                " :valid_until, :uses, :use_minutes, :operator, :secondary_operators, :product,"
                 " :active_countries, :notes, :auto_renew)"
                 " RETURNING uid",
                 values,
@@ -411,7 +537,7 @@ def save_ticket(username):
             " purchasing_date = :purchasing_date, valid_from = :valid_from,"
             " valid_until = :valid_until, uses = :uses, use_minutes = :use_minutes,"
             " operator = :operator,"
-            " secondary_operators = :secondary_operators,"
+            " secondary_operators = :secondary_operators, product = :product,"
             " active_countries = :active_countries, notes = :notes, auto_renew = :auto_renew"
             " WHERE uid = :uid AND username = :username RETURNING uid",
             values,
@@ -421,11 +547,35 @@ def save_ticket(username):
             # One renewing ticket per group, or each period would be added twice.
             pg.execute(
                 "UPDATE tickets SET auto_renew = FALSE"
-                " WHERE username = :username AND uid <> :uid AND lower(trim(name)) = lower(:name)"
-                " AND COALESCE(operator_normalize(operator), '') = COALESCE(operator_normalize(:operator), '')",
+                " WHERE username = :username AND uid <> :uid AND ("
+                "     (lower(trim(name)) = lower(:name) AND COALESCE(operator_normalize(operator), '')"
+                "         = COALESCE(operator_normalize(:operator), ''))"
+                "     OR (COALESCE(:product, '') <> ''"
+                "         AND operator_normalize(product) = operator_normalize(:product)))",
                 {**values, "uid": uid},
             )
     return jsonify(success=True, uid=uid)
+
+
+@tickets_blueprint.route("/u/<username>/ticket_products")
+@login_required
+def ticket_products(username):
+    """The ticket products for the form's picker, shaped as the operator one expects: each
+    spelling with its logo, and the product it stands for."""
+    rows = _product_rows()
+    current = {}
+    for row in rows:
+        # Newest first: the first logo of a spelling is its current one.
+        current.setdefault(row["alias"], row["logo_url"])
+    return jsonify(
+        operators=current,
+        operatorCanonical={row["alias"]: row["short_name"] for row in rows},
+        operatorHints={
+            row["alias"]: row["long_name"] if row["alias"] == row["short_name"] else row["short_name"]
+            for row in rows
+            if row["alias"] != row["short_name"] or row["long_name"] != row["short_name"]
+        },
+    )
 
 
 @tickets_blueprint.route("/u/<username>/get_all_tickets")

@@ -24,6 +24,11 @@
         max-height: 100%;
         object-fit: contain;
     }
+    .ticket-row-logo {
+        height: 20px;
+        max-width: 60px;
+        object-fit: contain;
+    }
     .ticket-operator {
         height: 26px;
         display: inline-flex;
@@ -47,55 +52,7 @@
         font-weight: 600;
         font-variant-numeric: tabular-nums;
     }
-    .ticket-table-card {
-        border: 1px solid #dee2e6;
-        border-radius: .75rem;
-        overflow: hidden;
-    }
-    #ticketsTable {
-        margin-bottom: 0;
-        font-variant-numeric: tabular-nums;
-    }
-    /* Not the blue headers every other table gets. */
-    #ticketsTable th {
-        background-color: #f8f9fa !important;
-        color: #6c757d;
-        font-weight: 500;
-        font-size: .75rem;
-        text-transform: uppercase;
-        letter-spacing: .03em;
-        white-space: nowrap;
-        padding: .75rem;
-    }
-    #ticketsTable td {
-        padding: .75rem;
-    }
-    #ticketsTable tbody tr:last-child td {
-        border-bottom: 0;
-    }
-    #ticketsTable th[data-sort] {
-        cursor: pointer;
-        user-select: none;
-    }
-    #ticketsTable th[data-sort]:hover,
-    #ticketsTable th[aria-sort] {
-        color: var(--bs-body-color);
-    }
-    #ticketsTable th[aria-sort="ascending"]::after { content: " ↑"; }
-    #ticketsTable th[aria-sort="descending"]::after { content: " ↓"; }
-    /* Wide enough for the longest date, so the arrows and end dates line up. */
-    .ticket-from {
-        display: inline-block;
-        min-width: 7.5em;
-    }
-    .ticket-actions .btn {
-        color: #6c757d;
-        border: 0;
-    }
-    .ticket-actions .btn:hover { color: var(--bs-body-color); background: #e9ecef; }
-    .ticket-actions .delete-button:hover { color: var(--bs-danger); }
-    /* On a phone: a smaller logo beside the title, three stats a line, and each ticket a block
-       of its dates and actions above its labelled figures. */
+    /* On a phone: a smaller logo beside the title, and three stats a line. */
     @media (max-width: 767.98px) {
         .ticket-logo {
             min-width: 48px;
@@ -112,52 +69,6 @@
         .ticket-stat-value {
             font-size: 1rem;
         }
-        #ticketsTable thead {
-            display: none;
-        }
-        #ticketsTable tbody tr {
-            display: flex;
-            flex-wrap: wrap;
-            align-items: center;
-            padding: .6rem .75rem;
-            border-bottom: 1px solid #dee2e6;
-        }
-        #ticketsTable tbody tr:last-child {
-            border-bottom: 0;
-        }
-        #ticketsTable td {
-            display: block;
-            padding: 0;
-            border: 0;
-        }
-        #ticketsTable .ticket-cell-validity,
-        #ticketsTable .ticket-cell-actions {
-            order: -1;
-        }
-        #ticketsTable .ticket-cell-validity {
-            flex: 1 1 0;
-            min-width: 0;
-            white-space: normal;
-        }
-        #ticketsTable .ticket-cell-stat {
-            order: 1;
-            flex: 1 1 0;
-            margin-top: .4rem;
-            text-align: left !important;
-            font-size: .9rem;
-        }
-        #ticketsTable .ticket-cell-stat::before {
-            content: attr(data-label);
-            display: block;
-            font-size: .7rem;
-            color: #6c757d;
-        }
-        /* A full-width break between the dates and actions, and the figures under them. */
-        #ticketsTable tbody tr::before {
-            content: "";
-            order: 0;
-            flex-basis: 100%;
-        }
     }
 </style>
 
@@ -172,6 +83,8 @@
 {% set latest = group.latest %}
 {% set has_uses = group.tickets|selectattr('uses')|list %}
 {% set all_trip_ids = group.tickets|map(attribute='trip_ids')|sum(start=[]) %}
+{# A product or operator whose logo changed over the years: each ticket with the one of its day. #}
+{% set mixed_logos = group.tickets|map(attribute='logo')|unique|list|length > 1 %}
 
 <div class="container-xl py-3">
     <a href="{{ url_for('tickets.ticket_list', username=username) }}" class="small text-decoration-none">
@@ -180,16 +93,23 @@
 
     <div class="d-flex flex-wrap align-items-center gap-3 mt-2 mb-4">
         <div class="d-flex gap-3 me-auto" style="min-width: 0;">
+        {% set logo = latest.logo %}
         <div class="ticket-logo">
-            {% if logos.get(latest.operator) %}
-                <img src="{{ url_for('static', filename=logos[latest.operator]) }}" alt="">
+            {% if logo %}
+                <img src="{{ url_for('static', filename=logo) }}" alt="">
             {% else %}
                 <i class="bi bi-ticket-perforated fs-1 text-muted"></i>
             {% endif %}
         </div>
         <div style="min-width: 0;">
             <h1 class="h2 mb-1">{{ group.name }}</h1>
+            {% if whole %}
+                <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=whole.latest.uid) }}" class="small text-decoration-none d-inline-block mb-1">
+                    <i class="bi bi-collection"></i> {{ticketSeeGroup}} ({{ whole.tickets|length }})
+                </a>
+            {% endif %}
             <div class="d-flex flex-wrap align-items-center gap-1 small text-muted">
+                {% if latest.product_logo and latest.operator %}{{ operator_pill(latest.operator) }}{% endif %}
                 {% if latest.secondary_operators %}
                     {{ticketAlsoValidWith}}
                     {% for name in latest.secondary_operators.split(',') %}{{ operator_pill(name.strip()) }}{% endfor %}
@@ -208,12 +128,15 @@
                     <i class="bi bi-map"></i> {{map}}
                 </a>
             {% endif %}
-            <button type="button" class="btn btn-outline-secondary btn-sm group-button" data-ticket='{{ latest|tojson }}'>
+            {# Acting on the whole group: only from its own page. #}
+            {% if not whole %}
+            <button type="button" class="btn btn-outline-secondary btn-sm group-button" data-ticket='{{ dict(latest, mixed_names=group.mixed_names)|tojson }}'>
                 <i class="fa-regular fa-pen-to-square"></i> {{ticketEditAll}}
             </button>
             <button type="button" class="btn btn-primary btn-sm renew-button" data-ticket='{{ latest|tojson }}'>
                 <i class="bi bi-arrow-repeat"></i> {{ticketRenew}}
             </button>
+            {% endif %}
         </div>
     </div>
 
@@ -235,7 +158,7 @@
     </div>
 
     <div class="ticket-table-card table-responsive">
-        <table id="ticketsTable" class="table table-hover align-middle">
+        <table id="ticketsTable" class="ticket-table table table-hover align-middle">
             <thead>
                 <tr>
                     <th data-sort="text" aria-sort="descending">{{ticketValidity}}</th>
@@ -251,6 +174,12 @@
                 {% for ticket in group.tickets %}
                 <tr id="ticket_{{ ticket.uid }}">
                     <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}">
+                        {% if group.mixed_names or mixed_logos %}
+                            <div class="d-flex align-items-center gap-2 fw-medium text-wrap">
+                                {% if mixed_logos and ticket.logo %}<img src="{{ url_for('static', filename=ticket.logo) }}" alt="" class="ticket-row-logo">{% endif %}
+                                {% if group.mixed_names %}{{ ticket.name }}{% endif %}
+                            </div>
+                        {% endif %}
                         {% if ticket.valid_from or ticket.valid_until %}
                             <span class="ticket-date ticket-from" data-date="{{ ticket.valid_from or ticket.valid_until }}"></span>
                             {% if ticket.valid_from and ticket.valid_until and ticket.valid_from != ticket.valid_until %}
@@ -316,19 +245,7 @@
 $(function () {
     formatTicketPage();
 
-    // A column sorts descending on its first click, then flips; empty cells go last.
-    $('#ticketsTable th[data-sort]').on('click', function () {
-        var $th = $(this), column = $th.index(), numeric = $th.data('sort') === 'number';
-        var direction = $th.attr('aria-sort') === 'descending' ? 1 : -1;
-        $('#ticketsTable th').removeAttr('aria-sort');
-        $th.attr('aria-sort', direction === 1 ? 'ascending' : 'descending');
-        var rows = $('#ticketsTable tbody tr').get().sort(function (a, b) {
-            var x = a.cells[column].dataset.order, y = b.cells[column].dataset.order;
-            if (!x || !y) return !x - !y;
-            return direction * (numeric ? parseFloat(x) - parseFloat(y) : x.localeCompare(y));
-        });
-        $('#ticketsTable tbody').append(rows);
-    });
+    sortableTicketTable($('#ticketsTable'));
 
     $('.renew-button').on('click', function () { openTicketForm($(this).data('ticket'), 'renew'); });
     $('.edit-button').on('click', function () { openTicketForm($(this).data('ticket'), 'edit'); });
@@ -343,7 +260,7 @@ $(function () {
                 // The page may be addressed by the ticket just deleted: go on by one still there.
                 var left = $('#ticketsTable tbody tr').not('#ticket_' + deleted).first();
                 location.href = left.length
-                    ? {{ url_for('tickets.ticket_page', username=username, ticket_id=0)|tojson }}.replace(/0$/, left.attr('id').replace('ticket_', ''))
+                    ? {{ url_for('tickets.ticket_page', username=username, ticket_id=0)|tojson }}.replace(/0$/, left.attr('id').replace('ticket_', '')) + location.search
                     : {{ url_for('tickets.ticket_list', username=username)|tojson }};
             })
             .fail(function () { alert('Failed to delete the ticket. Please try again.'); });
