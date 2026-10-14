@@ -406,11 +406,13 @@ const isDirty = () => JSON.stringify(edit) !== savedEdit;
 function nameRows(s) {
   const osm = s.osm_names || {};
   const codes = new Set(Object.keys(osm).filter(k => /^name:[a-z]{2,3}(-[A-Za-z]{2,4})?$/.test(k)).map(k => k.slice(5)));
+  // OSM's int_name is the "int" name: the one shown where a language has none (quai's latin).
+  if (osm.int_name) codes.add('int');
   Object.keys(edit.names).forEach(c => codes.add(c));
   const lang = form.elements.lang.value || {{ langId|tojson }};
   const sorted = [...codes].sort((a, b) => (b === lang) - (a === lang) || a.localeCompare(b));
   return [{ code: '', osm: osm.name || s.name || '', own: edit.name },
-          ...sorted.map(code => ({ code, osm: osm['name:' + code] || (code === 'int' && s.latin) || '', own: edit.names[code] || '' }))];
+          ...sorted.map(code => ({ code, osm: osm['name:' + code] || (code === 'int' && (osm.int_name || s.osm_latin)) || '', own: edit.names[code] || '' }))];
 }
 function setName(code, value) {
   const row = nameRows(current).find(r => r.code === code) || { osm: '' };
@@ -729,7 +731,7 @@ function render(s) {
         <dt>OSM</dt><dd>${osmLink(s.osm_type, s.osm_id)}</dd>
         ${s.wikidata ? `<dt>wikidata</dt><dd><a href="https://www.wikidata.org/wiki/${esc(s.wikidata)}" target="_blank" rel="noopener">${esc(s.wikidata)}</a></dd>` : ''}
         ${s.uic_ref ? `<dt>uic_ref</dt><dd>${esc(s.uic_ref)}</dd>` : ''}
-        ${s.latin !== s.name ? `<dt>latin</dt><dd>${esc(s.latin)}</dd>` : ''}
+        ${s.osm_latin !== s.name ? `<dt>latin</dt><dd>${esc(s.osm_latin)}</dd>` : ''}
         <dt>weight</dt><dd>${(s.weight || 0).toFixed(2)}</dd>
       </dl>
       <div class="se-objects">${objects.map((o, i) => `

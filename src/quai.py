@@ -464,6 +464,11 @@ def apply_overrides(stations, follow_merges=True):
         if override["names"]:
             station["names"] = {**(station.get("names") or {}),
                                 **{f"name:{code}": name for code, name in override["names"].items()}}
+            # The "int" name is also the one shown where a language has none (quai's latin).
+            if override["names"].get("int"):
+                if station.get("label") == station.get("latin"):
+                    station["label"] = override["names"]["int"]
+                station["latin"] = override["names"]["int"]
             code = user_lang()
             name = override["names"].get(code) or override["names"].get(code.split("-")[0])
             if name:
