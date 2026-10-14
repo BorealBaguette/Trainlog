@@ -401,6 +401,7 @@
     "ticketViewAll": "Усі квитки",
     "ticketSeeGroup": "Показати всю групу",
     "ticketAllYears": "Усі роки",
+    "ticketGroupMixedHint": "Порожні поля відрізняються в цих квитках: кожен збереже своє значення, якщо ви їх не заповните.",
     "ticketRenew": "Продовжити",
     "ticketCurrent": "Поточні",
     "ticketUpcoming": "Майбутній",

@@ -1,0 +1,8 @@
+{# A ticket's countries as flags: the first few, then how many more, named on hover. #}
+{% macro flags(countries, limit=5) %}
+    {%- set codes = countries.split(',') -%}
+    <span class="text-nowrap d-inline-flex align-items-center" style="gap: .3rem;">
+        {%- for country in codes[:limit] %}<span class="flag" data-bs-toggle="tooltip" title="{{ country }}">{{ country_list[country] }}</span>{% endfor -%}
+        {%- if codes|length > limit %} <span class="badge bg-light text-secondary border fw-normal flag-more" data-bs-toggle="tooltip" data-countries="{{ codes[limit:]|join(',') }}">+{{ codes|length - limit }}</span>{% endif -%}
+    </span>
+{%- endmacro %}

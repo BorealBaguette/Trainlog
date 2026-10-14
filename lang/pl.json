@@ -401,6 +401,7 @@
     "ticketViewAll": "Wszystkie bilety",
     "ticketSeeGroup": "Zobacz całą grupę",
     "ticketAllYears": "Wszystkie lata",
+    "ticketGroupMixedHint": "Puste pola różnią się między tymi biletami: każdy zachowuje swoją wartość, chyba że je wypełnisz.",
     "ticketRenew": "Odnów",
     "ticketCurrent": "Aktualne",
     "ticketUpcoming": "Nadchodzący",

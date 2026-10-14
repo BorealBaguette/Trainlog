@@ -399,6 +399,7 @@
     "ticketViewAll": "모든 티켓",
     "ticketSeeGroup": "그룹 전체 보기",
     "ticketAllYears": "전체 연도",
+    "ticketGroupMixedHint": "비어 있는 항목은 티켓마다 다릅니다. 입력하지 않으면 각 티켓의 값이 그대로 유지됩니다.",
     "ticketRenew": "갱신",
     "ticketCurrent": "현재",
     "ticketUpcoming": "예정",

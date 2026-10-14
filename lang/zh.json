@@ -399,6 +399,7 @@
     "ticketViewAll": "所有票",
     "ticketSeeGroup": "查看整个分组",
     "ticketAllYears": "所有年份",
+    "ticketGroupMixedHint": "留空的字段在这些票之间各不相同：除非你填写，否则每张票保留各自的值。",
     "ticketRenew": "续购",
     "ticketCurrent": "当前",
     "ticketUpcoming": "即将生效",

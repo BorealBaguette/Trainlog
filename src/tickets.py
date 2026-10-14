@@ -327,6 +327,11 @@ def _groups(tickets):
 
     summaries = []
     for tickets in groups.values():
+        # What "Edit all" opens on: the latest ticket, the fields its tickets differ in empty.
+        mixed = [
+            field for field in ("operator", "secondary_operators", "product", "active_countries")
+            if len({t[field] or "" for t in tickets}) > 1
+        ]
         spent = sum(t["user_price"] or 0 for t in tickets)
         trips = sum(len(t["trip_ids"]) for t in tickets)
         per_count = sum(t["per_count"] for t in tickets)
@@ -336,6 +341,16 @@ def _groups(tickets):
             "latest": tickets[0],
             "name": tickets[0]["product"] or tickets[0]["name"],
             "mixed_names": len({t["name"].strip().lower() for t in tickets}) > 1,
+            "edit": {
+                **tickets[0],
+                **{field: None for field in mixed},
+                "mixed": mixed,
+                "mixed_names": len({t["name"].strip().lower() for t in tickets}) > 1,
+            },
+            # Every country one of its tickets is valid in, in the order they come.
+            "countries": ",".join(dict.fromkeys(
+                country for t in tickets for country in (t["active_countries"] or "").split(",") if country
+            )),
             "live": any(t["state"] in ("valid", "active", "upcoming") for t in tickets),
             "spent": spent,
             "trips": trips,
@@ -439,9 +454,11 @@ def ticket_page(username, ticket_id):
 @tickets_blueprint.route("/u/<username>/ticket/<int:ticket_id>/edit_group", methods=["POST"])
 @login_required
 def edit_group(username, ticket_id):
-    """What the tickets of a group share, set on all of them, and their name when one is given;
-    those without dates, given a number of days, become valid that long from their purchase."""
+    """The fields changed in the form (changed[]) set on all the tickets of a group, the others
+    left as each ticket has them, and their name when one is given; those without dates, given a
+    number of days, become valid that long from their purchase."""
     form = request.form
+    changed = set(form.getlist("changed[]"))
     try:
         days = int(form["validity_days"]) if form.get("validity_days") else None
     except ValueError:
@@ -453,7 +470,7 @@ def edit_group(username, ticket_id):
     products = _products()
     with pg_session() as pg:
         # The product per ticket: their names may each speak of one, or not.
-        for ticket in tickets:
+        for ticket in tickets if "product" in changed else ():
             pg.execute(
                 "UPDATE tickets SET product = :product WHERE uid = :uid AND username = :username",
                 {
@@ -462,9 +479,13 @@ def edit_group(username, ticket_id):
                     "username": username,
                 },
             )
+        shared = "".join(
+            f" {field} = :{field},"
+            for field in ("operator", "secondary_operators", "active_countries")
+            if field in changed
+        )
         pg.execute(
-            "UPDATE tickets SET name = COALESCE(:name, name), operator = :operator, secondary_operators = :secondary_operators,"
-            " active_countries = :active_countries,"
+            "UPDATE tickets SET name = COALESCE(:name, name)," + shared +
             " valid_from = CASE WHEN CAST(:days AS int) IS NOT NULL AND valid_from IS NULL"
             "     AND valid_until IS NULL THEN purchasing_date::date ELSE valid_from END,"
             " valid_until = CASE WHEN CAST(:days AS int) IS NOT NULL AND valid_from IS NULL"

@@ -12,6 +12,11 @@
         flex: 1 1 auto;
         min-height: 0;
     }
+    /* style2.css sets every number input a line height of 1, which leaves them shorter than the
+       fields beside them. */
+    #ticketForm input[type=number] {
+        line-height: 1.5;
+    }
     .ticket-kinds {
         display: flex;
         gap: 3px;
@@ -146,6 +151,14 @@
             font-size: .7rem;
             color: #6c757d;
         }
+        /* Bootstrap paints the hover cell by cell, which the cells as blocks turn into patches:
+           the whole row instead. */
+        .ticket-table.table-hover > tbody > tr:hover > * {
+            --bs-table-accent-bg: transparent;
+        }
+        .ticket-table.table-hover > tbody > tr:hover {
+            background-color: var(--bs-table-hover-bg);
+        }
         /* A full-width break between the dates and actions, and the figures under them. */
         .ticket-table tbody tr::before {
             content: "";
@@ -239,6 +252,7 @@
                         <input type="date" class="form-control" id="ticketCardUntil" name="valid_until">
                     </div>
                     </div>
+                    <div class="ticket-group alert alert-light small py-2 mb-3" id="ticketGroupMixed">{{ticketGroupMixedHint}}</div>
                     <div class="ticket-group mb-3">
                         <label for="ticketGroupName" class="form-label">{{ticket_name}}</label>
                         <input type="text" class="form-control" id="ticketGroupName" name="name" required>
@@ -356,10 +370,26 @@ var openTicketForm = (function () {
         if (productPills) productPills.set(product || '');
     }
 
+    // For "Edit all": the fields as the form opened, so that only those changed are sent to be
+    // set on every ticket, the others left as each has them.
+    var groupFields = {
+        operator: function () { return $('#ticketOperator').val(); },
+        secondary_operators: function () { return $('#ticketSecondary').val(); },
+        product: function () { return $('#ticketProduct').val(); },
+        active_countries: function () { return (countriesSelect.val() || []).join(','); }
+    };
+    var groupOpened = null;
+
     var saveUrl = {{ url_for('tickets.save_ticket', username=username)|tojson }};
     $('#ticketForm').on('submit', function (e) {
         e.preventDefault();
-        $.post(saveUrl, $(this).serialize())
+        var data = $(this).serialize();
+        if (groupOpened) {
+            Object.keys(groupFields).forEach(function (field) {
+                if (groupFields[field]() !== groupOpened[field]) data += '&' + $.param({ 'changed[]': field });
+            });
+        }
+        $.post(saveUrl, data)
             .done(function () { location.reload(); })
             .fail(function () { alert('Failed to save the ticket. Please try again.'); });
     });
@@ -416,6 +446,12 @@ var openTicketForm = (function () {
         // Tickets of one product may each have their own name: left empty, they keep it.
         $('#ticketGroupName').val(ticket.mixed_names ? '' : (ticket.name || ''))
             .prop('required', mode === 'group' && !ticket.mixed_names);
+        $('#ticketGroupMixed').toggle(mode === 'group' && Boolean((ticket.mixed || []).length));
+        groupOpened = null;
+        if (mode === 'group') {
+            groupOpened = {};
+            Object.keys(groupFields).forEach(function (field) { groupOpened[field] = groupFields[field](); });
+        }
         $('#ticketModal').modal('show');
     };
 })();
@@ -450,6 +486,9 @@ function formatTicketPage() {
     });
     $('.flag[data-bs-toggle="tooltip"]').each(function () {
         this.title = regionNames.of(this.title);
+    }).tooltip();
+    $('.flag-more').each(function () {
+        this.title = this.dataset.countries.split(',').map(function (code) { return regionNames.of(code); }).join(', ');
     }).tooltip();
 }
 </script>

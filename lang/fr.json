@@ -397,6 +397,7 @@
     "ticketViewAll": "Tous les billets",
     "ticketSeeGroup": "Voir tout le groupe",
     "ticketAllYears": "Toutes les années",
+    "ticketGroupMixedHint": "Les champs laissés vides diffèrent selon les billets : chacun garde le sien, sauf si vous les remplissez.",
     "ticketRenew": "Renouveler",
     "ticketCurrent": "En cours",
     "ticketUpcoming": "À venir",

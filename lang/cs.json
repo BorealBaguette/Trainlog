@@ -401,6 +401,7 @@
     "ticketViewAll": "Všechny vstupenky",
     "ticketSeeGroup": "Zobrazit celou skupinu",
     "ticketAllYears": "Všechny roky",
+    "ticketGroupMixedHint": "Prázdná pole se mezi těmito vstupenkami liší: každá si ponechá svou hodnotu, pokud je nevyplníte.",
     "ticketRenew": "Obnovit",
     "ticketCurrent": "Aktuální",
     "ticketUpcoming": "Nadcházející",

@@ -400,6 +400,7 @@
     "ticketViewAll": "Alle billetter",
     "ticketSeeGroup": "Se hele gruppen",
     "ticketAllYears": "Alle år",
+    "ticketGroupMixedHint": "Tomme felter er forskellige mellem disse billetter: hver beholder sin egen, medmindre du udfylder dem.",
     "ticketRenew": "Forny",
     "ticketCurrent": "Aktuelle",
     "ticketUpcoming": "Kommende",

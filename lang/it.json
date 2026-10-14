@@ -400,6 +400,7 @@
     "ticketViewAll": "Tutti i biglietti",
     "ticketSeeGroup": "Vedi tutto il gruppo",
     "ticketAllYears": "Tutti gli anni",
+    "ticketGroupMixedHint": "I campi lasciati vuoti variano tra questi biglietti: ognuno mantiene il proprio, a meno che non li compili.",
     "ticketRenew": "Rinnova",
     "ticketCurrent": "In corso",
     "ticketUpcoming": "In arrivo",

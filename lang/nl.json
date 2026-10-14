@@ -400,6 +400,7 @@
     "ticketViewAll": "Alle tickets",
     "ticketSeeGroup": "Hele groep bekijken",
     "ticketAllYears": "Alle jaren",
+    "ticketGroupMixedHint": "Lege velden verschillen tussen deze tickets: elk houdt zijn eigen waarde, tenzij je ze invult.",
     "ticketRenew": "Verlengen",
     "ticketCurrent": "Huidig",
     "ticketUpcoming": "Aankomend",

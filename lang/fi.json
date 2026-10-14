@@ -400,6 +400,7 @@
     "ticketViewAll": "Kaikki liput",
     "ticketSeeGroup": "Näytä koko ryhmä",
     "ticketAllYears": "Kaikki vuodet",
+    "ticketGroupMixedHint": "Tyhjät kentät vaihtelevat näiden lippujen välillä: kukin säilyttää omansa, ellet täytä niitä.",
     "ticketRenew": "Uusi",
     "ticketCurrent": "Voimassa olevat",
     "ticketUpcoming": "Tuleva",

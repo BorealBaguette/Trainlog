@@ -401,6 +401,7 @@
     "ticketViewAll": "Sve karte",
     "ticketSeeGroup": "Prikaži cijelu grupu",
     "ticketAllYears": "Sve godine",
+    "ticketGroupMixedHint": "Prazna polja razlikuju se među ovim kartama: svaka zadržava svoju vrijednost osim ako ih ne ispunite.",
     "ticketRenew": "Obnovi",
     "ticketCurrent": "Aktualne",
     "ticketUpcoming": "Nadolazeća",

@@ -399,6 +399,7 @@
     "ticketViewAll": "Kõik piletid",
     "ticketSeeGroup": "Vaata kogu rühma",
     "ticketAllYears": "Kõik aastad",
+    "ticketGroupMixedHint": "Tühjaks jäetud väljad erinevad nende piletite vahel: igaüks jääb oma väärtusega, kui sa neid ei täida.",
     "ticketRenew": "Uuenda",
     "ticketCurrent": "Kehtivad",
     "ticketUpcoming": "Tulevane",

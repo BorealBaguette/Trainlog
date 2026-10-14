@@ -397,6 +397,7 @@
     "ticketViewAll": "All tickets",
     "ticketSeeGroup": "See the whole group",
     "ticketAllYears": "All years",
+    "ticketGroupMixedHint": "Fields left empty differ between these tickets: each keeps its own unless you fill them in.",
     "ticketRenew": "Renew",
     "ticketCurrent": "Current",
     "ticketUpcoming": "Upcoming",

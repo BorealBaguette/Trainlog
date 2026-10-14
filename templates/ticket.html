@@ -2,6 +2,7 @@
 
 {% block content %}
 {% include "bootstrap/navigation.html" %}
+{% from "ticket_flags.html" import flags with context %}
 
 <style>
     /* As high as the title and the line under it. */
@@ -23,6 +24,11 @@
         max-width: 100%;
         max-height: 100%;
         object-fit: contain;
+    }
+    .ticket-flag-wall {
+        display: inline-grid;
+        gap: .25rem .3rem;
+        justify-items: center;
     }
     .ticket-row-logo {
         height: 20px;
@@ -85,6 +91,8 @@
 {% set all_trip_ids = group.tickets|map(attribute='trip_ids')|sum(start=[]) %}
 {# A product or operator whose logo changed over the years: each ticket with the one of its day. #}
 {% set mixed_logos = group.tickets|map(attribute='logo')|unique|list|length > 1 %}
+{# Tickets valid in different countries (a Global pass, a One Country one): each with its own. #}
+{% set mixed_countries = group.tickets|map(attribute='active_countries')|unique|list|length > 1 %}
 
 <div class="container-xl py-3">
     <a href="{{ url_for('tickets.ticket_list', username=username) }}" class="small text-decoration-none">
@@ -114,12 +122,15 @@
                     {{ticketAlsoValidWith}}
                     {% for name in latest.secondary_operators.split(',') %}{{ operator_pill(name.strip()) }}{% endfor %}
                 {% endif %}
-                {% if latest.active_countries %}
-                    {% for country in latest.active_countries.split(',') %}
-                        <span class="flag" data-bs-toggle="tooltip" title="{{ country }}">{{ country_list[country] }}</span>
-                    {% endfor %}
-                {% endif %}
             </div>
+            {% if group.countries %}
+                {# A block of even rows, ten flags at most each: 34 come as 9, 9, 9 and 7. #}
+                {% set codes = group.countries.split(',') %}
+                {% set rows = (codes|length + 9) // 10 %}
+                <div class="ticket-flag-wall small mt-1" style="grid-template-columns: repeat({{ (codes|length + rows - 1) // rows }}, auto);">
+                    {% for country in codes %}<span class="flag" data-bs-toggle="tooltip" title="{{ country }}">{{ country_list[country] }}</span>{% endfor %}
+                </div>
+            {% endif %}
         </div>
         </div>
         <div class="d-flex flex-wrap gap-2">
@@ -130,7 +141,7 @@
             {% endif %}
             {# Acting on the whole group: only from its own page. #}
             {% if not whole %}
-            <button type="button" class="btn btn-outline-secondary btn-sm group-button" data-ticket='{{ dict(latest, mixed_names=group.mixed_names)|tojson }}'>
+            <button type="button" class="btn btn-outline-secondary btn-sm group-button" data-ticket='{{ group.edit|tojson }}'>
                 <i class="fa-regular fa-pen-to-square"></i> {{ticketEditAll}}
             </button>
             <button type="button" class="btn btn-primary btn-sm renew-button" data-ticket='{{ latest|tojson }}'>
@@ -174,10 +185,13 @@
                 {% for ticket in group.tickets %}
                 <tr id="ticket_{{ ticket.uid }}">
                     <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}">
-                        {% if group.mixed_names or mixed_logos %}
-                            <div class="d-flex align-items-center gap-2 fw-medium text-wrap">
+                        {% if group.mixed_names or mixed_logos or (mixed_countries and ticket.active_countries) %}
+                            <div class="d-flex flex-wrap align-items-center gap-2 fw-medium text-wrap">
                                 {% if mixed_logos and ticket.logo %}<img src="{{ url_for('static', filename=ticket.logo) }}" alt="" class="ticket-row-logo">{% endif %}
                                 {% if group.mixed_names %}{{ ticket.name }}{% endif %}
+                                {% if mixed_countries and ticket.active_countries %}
+                                    <span class="fw-normal">{{ flags(ticket.active_countries) }}</span>
+                                {% endif %}
                             </div>
                         {% endif %}
                         {% if ticket.valid_from or ticket.valid_until %}
@@ -191,7 +205,8 @@
                         {% else %}
                             <span class="ticket-date ticket-from" data-date="{{ ticket.purchasing_date }}"></span>
                             <div class="form-check form-switch d-inline-block mb-0 align-middle">
-                                <input class="form-check-input ticket-active-switch" type="checkbox" role="switch" data-ticket-id="{{ ticket.uid }}" title="{{active}}" {% if ticket.active %}checked{% endif %}>
+                                <input class="form-check-input ticket-active-switch" type="checkbox" role="switch" id="ticketActive{{ ticket.uid }}" data-ticket-id="{{ ticket.uid }}" {% if ticket.active %}checked{% endif %}>
+                                <label class="form-check-label small text-muted" for="ticketActive{{ ticket.uid }}">{{active}}</label>
                             </div>
                         {% endif %}
                         {% if ticket.state == 'used' %}<span class="badge bg-secondary">{{ticketUsedUp}}</span>{% endif %}

@@ -400,6 +400,7 @@
     "ticketViewAll": "Alla biljetter",
     "ticketSeeGroup": "Visa hela gruppen",
     "ticketAllYears": "Alla år",
+    "ticketGroupMixedHint": "Tomma fält skiljer sig mellan dessa biljetter: var och en behåller sitt, om du inte fyller i dem.",
     "ticketRenew": "Förnya",
     "ticketCurrent": "Aktuella",
     "ticketUpcoming": "Kommande",

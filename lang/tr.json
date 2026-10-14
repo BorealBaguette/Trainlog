@@ -399,6 +399,7 @@
     "ticketViewAll": "Tüm biletler",
     "ticketSeeGroup": "Tüm grubu gör",
     "ticketAllYears": "Tüm yıllar",
+    "ticketGroupMixedHint": "Boş bırakılan alanlar bu biletlerde farklıdır: doldurmadığınız sürece her biri kendi değerini korur.",
     "ticketRenew": "Yenile",
     "ticketCurrent": "Güncel",
     "ticketUpcoming": "Yaklaşan",

@@ -401,6 +401,7 @@
     "ticketViewAll": "Все билеты",
     "ticketSeeGroup": "Показать всю группу",
     "ticketAllYears": "Все годы",
+    "ticketGroupMixedHint": "Пустые поля различаются у этих билетов: у каждого останется своё значение, если вы их не заполните.",
     "ticketRenew": "Продлить",
     "ticketCurrent": "Текущие",
     "ticketUpcoming": "Предстоящий",

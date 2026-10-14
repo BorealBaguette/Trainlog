@@ -399,6 +399,7 @@
     "ticketViewAll": "Összes jegy",
     "ticketSeeGroup": "Az egész csoport megtekintése",
     "ticketAllYears": "Minden év",
+    "ticketGroupMixedHint": "Az üresen hagyott mezők jegyenként eltérnek: mindegyik megtartja a sajátját, hacsak ki nem tölti őket.",
     "ticketRenew": "Megújítás",
     "ticketCurrent": "Aktuális",
     "ticketUpcoming": "Közelgő",

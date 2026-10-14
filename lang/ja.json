@@ -399,6 +399,7 @@
     "ticketViewAll": "すべての切符",
     "ticketSeeGroup": "グループ全体を見る",
     "ticketAllYears": "全期間",
+    "ticketGroupMixedHint": "空欄の項目は切符ごとに異なります。入力しない限り、それぞれの値がそのまま残ります。",
     "ticketRenew": "更新",
     "ticketCurrent": "有効",
     "ticketUpcoming": "開始前",

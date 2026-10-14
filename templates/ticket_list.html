@@ -2,6 +2,7 @@
 
 {% block content %}
 {% include "bootstrap/navigation.html" %}
+{% from "ticket_flags.html" import flags with context %}
 
 <style>
     .ticket-logo {
@@ -79,7 +80,7 @@
     {# The ticket in use, or else the latest. #}
     {% set shown = (group.tickets|selectattr('state', 'in', ['valid', 'active', 'upcoming'])|list or [group.latest])|first %}
     {% set logo = group.latest.logo %}
-    <div class="list-group-item list-group-item-action position-relative d-flex align-items-center gap-3 py-3 ticket-row" data-search="{{ group.name }} {{ group.tickets|map(attribute='name')|unique|join(' ') }} {{ group.latest.operator or '' }} {{ group.latest.secondary_operators or '' }} {{ (group.latest.active_countries or '').replace(',', ' ') }}">
+    <div class="list-group-item list-group-item-action position-relative d-flex align-items-center gap-3 py-3 ticket-row" data-search="{{ group.name }} {{ group.tickets|map(attribute='name')|unique|join(' ') }} {{ group.latest.operator or '' }} {{ group.latest.secondary_operators or '' }} {{ group.countries.replace(',', ' ') }}">
         <div class="ticket-logo">
             {% if logo %}
                 <img src="{{ url_for('static', filename=logo) }}" alt="">
@@ -90,15 +91,17 @@
         <div class="flex-grow-1" style="min-width: 0;">
             <div class="d-flex align-items-center gap-2" style="min-width: 0;">
                 <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=group.latest.uid, year=year) }}" class="stretched-link text-reset text-decoration-none fw-bold text-truncate">{{ group.name }}</a>
-                {% if group.latest.active_countries %}
+                {% if group.countries %}
                     {# Above the row's link, for their names on hover. #}
-                    <span class="ticket-flags position-relative text-nowrap" style="z-index: 2;">
-                        {% for country in group.latest.active_countries.split(',') %}<span class="flag" data-bs-toggle="tooltip" title="{{ country }}">{{ country_list[country] }}</span>{% endfor %}
+                    <span class="ticket-flags position-relative text-nowrap ms-1" style="z-index: 2;">
+                        {{ flags(group.countries) }}
                     </span>
                 {% endif %}
             </div>
             <div class="small text-muted text-truncate">
                 {% if group.latest.operator and not logos.get(group.latest.operator) %}{{ group.latest.operator }} · {% endif %}{{ status(shown) }}{% if group.latest.auto_renew %} <i class="bi bi-arrow-repeat text-success" title="{{ticketAutoRenew}}"></i>{% endif %}
+                {#- Above the row's link, which opens the year only. #}
+                {%- if year and group.whole %} · <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=group.whole.latest.uid) }}" class="position-relative text-decoration-none" style="z-index: 2;">{{ticketAllYears}} ({{ group.whole.tickets|length }})</a>{% endif %}
             </div>
             {% if shown.elapsed %}
                 <div class="progress ticket-progress mt-2" role="progressbar" aria-valuenow="{{ shown.elapsed }}" aria-valuemin="0" aria-valuemax="100">
@@ -128,10 +131,6 @@
         <button type="button" class="btn btn-outline-primary btn-sm position-relative renew-button" style="z-index: 2;" data-ticket='{{ group.latest|tojson }}'>
             <i class="bi bi-arrow-repeat"></i><span class="d-none d-sm-inline"> {{ticketRenew}}</span>
         </button>
-        {% elif group.whole %}
-        <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=group.whole.latest.uid) }}" class="btn btn-outline-secondary btn-sm position-relative text-nowrap" style="z-index: 2;" title="{{ticketSeeGroup}}">
-            <i class="bi bi-collection"></i><span class="d-none d-sm-inline"> {{ticketAllYears}}</span> ({{ group.whole.tickets|length }})
-        </a>
         {% endif %}
     </div>
 {% endmacro %}
@@ -217,6 +216,9 @@
                                 {% if logo %}<img src="{{ url_for('static', filename=logo) }}" alt="">{% else %}<i class="bi bi-ticket-perforated text-muted"></i>{% endif %}
                             </span>
                             <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=ticket.uid, only=1) }}" class="text-reset text-decoration-none fw-medium">{{ ticket.name }}</a>
+                            {% if ticket.active_countries %}
+                                {{ flags(ticket.active_countries) }}
+                            {% endif %}
                         </div>
                     </td>
                     <td class="ticket-cell-stat text-nowrap" data-label="{{ticketValidity}}" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}">
