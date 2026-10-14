@@ -15,7 +15,6 @@ from concurrent.futures import ThreadPoolExecutor
 
 import requests
 
-from py.utils import load_config
 from src.pg import pg_session
 
 logger = logging.getLogger(__name__)
@@ -34,9 +33,7 @@ QUAI_MODES = {
 }
 
 
-def quai_url():
-    url = load_config().get("quai", {}).get("url", "https://quai.srv.trainlog.me")
-    return url.rstrip("/") if url else None
+QUAI_URL = "https://quai.srv.trainlog.me"
 
 
 def user_lang():
@@ -574,10 +571,10 @@ def search_stations(trip_type, q=None, lat=None, lon=None, radius_km=None, limit
     reached.
     """
     mode = QUAI_MODES.get(trip_type)
-    # Long enough for a quai answering from disk while it rebuilds (quai.timeout, seconds).
-    timeout = timeout or load_config().get("quai", {}).get("timeout", 10)
-    url = quai_url()
-    if not mode or not url:
+    # Long enough for a quai answering from disk while it rebuilds.
+    timeout = timeout or 30
+    url = QUAI_URL
+    if not mode:
         return None
     if q is not None:
         endpoint, params = "search", {"q": q, "limit": limit}
@@ -655,9 +652,7 @@ def nearest_stations(mode, points, radius_m=400, candidates=1, timeout=30):
     order (None where none), with Trainlog's overrides applied and its name for each
     ("trainlog_name"). With candidates above 1, that many of the nearest for each point, as a
     list, nearest first. Raises if quai cannot be reached."""
-    url = quai_url()
-    if not url:
-        raise RuntimeError("quai is not configured")
+    url = QUAI_URL
     found = []
     for start in range(0, len(points), 5000):
         body = {"mode": mode, "radius": radius_m, "points": points[start:start + 5000]}
@@ -676,9 +671,7 @@ def nearest_stations(mode, points, radius_m=400, candidates=1, timeout=30):
 
 def quai_get(path, params=None, timeout=5):
     """quai's own JSON for `path`, or None if it cannot be reached."""
-    url = quai_url()
-    if not url:
-        return None
+    url = QUAI_URL
     try:
         resp = requests.get(f"{url}/{path.lstrip('/')}", params={**(params or {}), "lang": user_lang()},
                             timeout=timeout)
@@ -785,7 +778,7 @@ def stops_by_direction(mode, keys, line=None, timeout=5):
     if not any(keys):
         return [None] * len(keys)
     try:
-        resp = requests.post(f"{quai_url()}/directions", json={"mode": mode, "keys": keys, "ref": line},
+        resp = requests.post(f"{QUAI_URL}/directions", json={"mode": mode, "keys": keys, "ref": line},
                              timeout=timeout)
         resp.raise_for_status()
         return resp.json()["positions"]

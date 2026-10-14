@@ -314,6 +314,7 @@ from src.carbon import *
 from src.account_export import build_account_data_csvs
 from src.delete_account import delete_account_data
 from src.users import (User, Friendship, all_rail_stations, authDb, ensure_station_name_columns,
+                       new_station_search,
                        exact_waypoints_context, map_lang_context, station_names_context,
                        valid_station_names)
 from src.email_parser import start_email_listener
@@ -326,7 +327,7 @@ from src.trip_announcer import (
     start_trip_announcer,
 )
 from src.photon import photonInstances, photonRequest, photonRequestSingle
-from src.quai import QUAI_MODES, quai_url, search_stations, stations_at
+from src.quai import QUAI_MODES, search_stations, stations_at
 from src.routing import forward_routing_core
 from src.gpx_import import (
     GpxIngestError,
@@ -7669,6 +7670,9 @@ def stationTracks():
     if not isinstance(stops, list) or len(stops) > 200:
         return jsonify(error="stops must be a list of at most 200"), 400
     stops = [s if isinstance(s, dict) else {} for s in stops]
+    # Ends searched with Photon have no quai station to be placed in.
+    if not new_station_search():
+        return jsonify(stops=[None] * len(stops))
     return jsonify(stops=stations_at(body.get("type"), stops, body.get("line")))
 
 
@@ -7685,7 +7689,7 @@ def stationAutocomplete():
     # stations. Photon answers everything else (addresses, POIs...); it rejects unknown
     # parameters.
     trip_type = (params.pop("type", None) or [None])[0]
-    if trip_type in QUAI_MODES and quai_url():
+    if trip_type in QUAI_MODES and new_station_search():
         all_rail = all_rail_stations()
         features = search_stations(
             trip_type,
@@ -9777,6 +9781,7 @@ def user_settings(username):
         if valid_station_names(request.form.get("station_names", "")):
             params["station_names"] = request.form.get("station_names", "")
         params["station_script"] = "station_script" in request.form
+        params["new_station_search"] = "new_station_search" in request.form
         params["all_rail_stations"] = "all_rail_stations" in request.form
         params["exact_tracks"] = "exact_tracks" in request.form
         # Premium-only toggle: only honour it for premium users so a crafted POST
@@ -9828,6 +9833,7 @@ def user_settings(username):
         user_map_lang=user.map_lang,
         station_names=user.station_names,
         station_script_checked="checked" if user.station_script else "",
+        new_station_search_checked=user.new_station_search,
         all_rail_stations_checked=user.all_rail_stations,
         exact_tracks_checked=user.exact_tracks,
         discord_id=user.discord_id,

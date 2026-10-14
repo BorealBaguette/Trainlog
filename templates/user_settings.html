@@ -105,6 +105,14 @@
     font-size: 0.82rem; font-weight: 600;
   }
 
+  /* As the map background picker's (tileserver_tabs.html .ts-beta), inline. */
+  .settings2-beta {
+    margin-left: 0.3rem; padding: 0.3em 0.5em 0.2em; border-radius: 1em;
+    background: #fd7e14; color: white; vertical-align: middle;
+    font-size: 0.6rem; font-weight: 600; line-height: 1.2; text-transform: uppercase;
+    /* Room above for accented capitals (BÊTA). */
+  }
+
   .settings2-danger-card { border-color: #f5c2c7; min-height: 0; }
 
   /* Visually masked like a password field, but deliberately type="text" with a
@@ -431,6 +439,16 @@
           <div class="settings2-card">
             <h3 class="settings2-card-title"><i class="fa-solid fa-route"></i> {{ settingsSectionTrips }}</h3>
 
+            <label class="settings2-label" for="new_station_search">{{ stationSearchLabel }}</label>
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="new_station_search" name="new_station_search" form="settingsForm" {{ 'checked' if new_station_search_checked }}>
+              <label class="form-check-label" for="new_station_search">{{ newStationSearch }}
+                <span class="settings2-beta">{{ beta }}</span></label>
+            </div>
+            <p class="settings2-hint">{{ newStationSearchHint }}</p>
+
+            {# Only quai's stations are named per language and searched across rail modes. #}
+            <div id="newStationSearchSettings" {{ 'hidden' if not new_station_search_checked }}>
             <label class="settings2-label" for="station_names">{{ stationNamesLabel }}</label>
             {% with combo_id="station_names", combo_value=station_names, combo_first=stationNamesMine %}
               {% include "includes/station_names_combo.html" %}
@@ -440,11 +458,16 @@
               {% include "includes/station_script_switch.html" %}
             {% endwith %}
 
-            <label class="settings2-label" for="all_rail_stations">{{ stationSearchLabel }}</label>
-            <div class="form-check form-switch">
+            <div class="form-check form-switch mt-2">
               <input class="form-check-input" type="checkbox" id="all_rail_stations" name="all_rail_stations" form="settingsForm" {{ 'checked' if all_rail_stations_checked }}>
               <label class="form-check-label" for="all_rail_stations">{{ allRailStations }}</label>
             </div>
+            </div>
+            <script>
+              document.getElementById('new_station_search').addEventListener('change', function () {
+                document.getElementById('newStationSearchSettings').hidden = !this.checked;
+              });
+            </script>
 
             <label class="settings2-label" for="exact_waypoints">{{ routingLabel }}</label>
             <div class="form-check form-switch">

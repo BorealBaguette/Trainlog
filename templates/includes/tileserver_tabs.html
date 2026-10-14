@@ -84,7 +84,7 @@
       </button>
       <button type="button" class="ts-option ts-vector" data-value="trainlog-rail">
         <i class="fa-solid fa-train"></i><span>Trainlog Rail</span>
-        <span class="ts-beta">Beta</span>
+        <span class="ts-beta">{{ beta }}</span>
       </button>
     </div>
   </div>
@@ -137,8 +137,9 @@
   .ts-gem { position: absolute; top: 6px; right: 6px; font-size: 0.65rem !important; color: #00ced1 !important; }
   .ts-beta {
     position: absolute; top: 5px; right: 5px;
-    padding: 0 5px; border-radius: 8px;
+    padding: 0.3em 0.5em 0.2em; border-radius: 1em;
     background: #fd7e14; color: white;
-    font-size: 0.6rem; font-weight: 600; line-height: 1.5; text-transform: uppercase;
+    font-size: 0.6rem; font-weight: 600; line-height: 1.2; text-transform: uppercase;
+    /* Room above for accented capitals (BÊTA). */
   }
 </style>

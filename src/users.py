@@ -72,6 +72,8 @@ class User(authDb.Model):
     # written where they are (北京南), "int" in Latin letters (Beijingnan); and whether always
     # in the script of the user's language, transliterated where OSM has no name in it.
     station_names = authDb.Column(authDb.String(10), nullable=False, default="int")
+    # Station search by quai (src/quai.py) rather than Photon: in beta, so opted into.
+    new_station_search = authDb.Column(authDb.Boolean, nullable=False, default=False)
     # A rail trip's station search: every rail mode's stations at once, not only on asking
     # (src/quai.py, other_modes).
     all_rail_stations = authDb.Column(authDb.Boolean, nullable=False, default=False)
@@ -127,6 +129,7 @@ class User(authDb.Model):
             "exact_waypoints": self.exact_waypoints,
             "map_lang": self.map_lang,
             "station_names": self.station_names,
+            "new_station_search": self.new_station_search,
             "station_script": self.station_script,
             "all_rail_stations": self.all_rail_stations,
             "exact_tracks": self.exact_tracks,
@@ -215,10 +218,18 @@ def ensure_station_name_columns(db_session):
     for column, definition in (("station_names", "VARCHAR(10) NOT NULL DEFAULT 'int'"),
                                ("station_script", "BOOLEAN NOT NULL DEFAULT 0"),
                                ("all_rail_stations", "BOOLEAN NOT NULL DEFAULT 0"),
+                               ("new_station_search", "BOOLEAN NOT NULL DEFAULT 0"),
                                ("exact_tracks", "BOOLEAN NOT NULL DEFAULT 0")):
         if column not in existing:
             db_session.execute(sqlalchemy.text(f"ALTER TABLE user ADD COLUMN {column} {definition}"))
             db_session.commit()
+
+
+def new_station_search():
+    """Whether the logged-in user searches stations with quai (in beta) rather than Photon."""
+    user = User.query.filter_by(username=session.get("logged_in")).first() \
+        if session.get("logged_in") else None
+    return bool(user and user.new_station_search)
 
 
 def all_rail_stations():
