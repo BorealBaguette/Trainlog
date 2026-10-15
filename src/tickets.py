@@ -109,6 +109,10 @@ def _product_to_save(product, name, products):
     return "" if _product_in(name, products) else None
 
 
+# The shortest pass renewed automatically, by months: four weeks, for one over February.
+MIN_RENEW_DAYS = 28
+
+
 def _user_currency():
     return User.query.filter_by(username=session["logged_in"]).first().user_currency
 
@@ -390,6 +394,7 @@ def _render(template, username, tickets, **context):
         country_list=get_all_countries(),
         currencyOptions=get_available_currencies(username),
         user_currency=_user_currency(),
+        min_renew_days=MIN_RENEW_DAYS,
         **context,
         **texts,
         **session["userinfo"],
@@ -534,7 +539,11 @@ def save_ticket(username):
         "active_countries": ",".join(form.getlist("active_countries[]")) or None,
         "notes": form.get("notes", ""),
     }
-    values["auto_renew"] = bool(form.get("auto_renew") and values["valid_from"] and values["valid_until"])
+    values["auto_renew"] = bool(
+        form.get("auto_renew") and values["valid_from"] and values["valid_until"]
+        and (date.fromisoformat(values["valid_until"]) - date.fromisoformat(values["valid_from"])).days + 1
+        >= MIN_RENEW_DAYS
+    )
     if not values["name"] or not values["currency"] or not values["purchasing_date"]:
         abort(400)
     values["product"] = _product_to_save(form.get("product"), values["name"], _products())

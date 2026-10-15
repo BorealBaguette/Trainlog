@@ -222,15 +222,16 @@
                         </div>
                         <div class="d-flex align-items-center gap-1 mb-3 small text-muted">
                             {{ticketValidFor}}
-                            {% for days in (1, 7, 30, 365) %}
-                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 ticket-duration" data-days="{{ days }}">{{ days }}</button>
+                            {# Days counted as such; months and years as on the calendar. #}
+                            {% for unit, count, label in (('days', 1, ticketDuration1Day), ('days', 7, ticketDuration7Days), ('months', 1, ticketDuration1Month), ('months', 12, ticketDuration1Year)) %}
+                            <button type="button" class="btn btn-outline-secondary btn-sm py-0 ticket-duration" data-{{ unit }}="{{ count }}">{{ label }}</button>
                             {% endfor %}
-                            {{ticketDays}}
                         </div>
                         <div class="form-check mb-0">
                             <input class="form-check-input" type="checkbox" id="ticketAutoRenew" name="auto_renew">
                             <label class="form-check-label" for="ticketAutoRenew">{{ticketAutoRenew}}</label>
                             <div class="form-text">{{ticketAutoRenewHint}}</div>
+                            <div class="form-text fw-medium" id="ticketRenewNext"></div>
                         </div>
                     </div>
                     <div class="ticket-kind ticket-kind-box" data-kind="card">
@@ -321,6 +322,60 @@ var openTicketForm = (function () {
         return Math.round((Date.parse(until) - Date.parse(from)) / 86400000);
     }
 
+    // As dateutil's relativedelta: the same day, months later, or the month's last if shorter.
+    function addMonths(day, months) {
+        var d = new Date(day + 'T00:00:00Z');
+        var target = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + months, 1));
+        var last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+        target.setUTCDate(Math.min(d.getUTCDate(), last));
+        return target.toISOString().slice(0, 10);
+    }
+
+    // How many months a pass lasts, as its renewals count them (src/tickets.py, _renew_due);
+    // none under four weeks, which are not renewed by months.
+    function passMonths(from, until) {
+        var days = daysBetween(from, until) + 1;
+        return days >= {{ min_renew_days }} ? Math.max(1, Math.round(days / 30.44)) : null;
+    }
+
+    // The pass after one from `from` to `until`: on the same day of the month for one of months,
+    // or as many days long; following on, or from today if it has ended.
+    function nextPeriod(from, until, today) {
+        var months = passMonths(from, until);
+        if (until >= today) {
+            if (months) return [addMonths(from, months), addDays(addMonths(from, 2 * months), -1)];
+            return [addDays(until, 1), addDays(until, 1 + daysBetween(from, until))];
+        }
+        if (months) return [today, addDays(addMonths(today, months), -1)];
+        return [today, addDays(today, daysBetween(from, until))];
+    }
+
+    function formatDay(day) {
+        return new Date(day + 'T00:00:00').toLocaleDateString({{ langId|tojson }}, { day: 'numeric', month: 'short', year: 'numeric' });
+    }
+
+    // Renewing is for passes of a month or more: the next one shown, or why it cannot be.
+    function updateRenew() {
+        var from = $('#ticketValidFrom').val(), until = $('#ticketValidUntil').val();
+        var dated = Boolean(from && until && from <= until);
+        var months = dated ? passMonths(from, until) : null;
+        var $box = $('#ticketAutoRenew');
+        // Left alone while the pass fields are, those of another kind of ticket.
+        if (!$('#ticketValidFrom').prop('disabled')) $box.prop('disabled', !months);
+        if (!months) $box.prop('checked', false);
+        var text = '';
+        if (dated && !months) {
+            text = {{ ticketAutoRenewMonthOnly|tojson }};
+        } else if (months && $box.prop('checked')) {
+            // Renewals keep to the first one's day of the month, whenever this one ended.
+            text = {{ ticketRenewNext|tojson }}
+                .replace('{start}', formatDay(addMonths(from, months)))
+                .replace('{end}', formatDay(addDays(addMonths(from, 2 * months), -1)));
+        }
+        $('#ticketRenewNext').text(text);
+    }
+    $('#ticketValidFrom, #ticketValidUntil, #ticketAutoRenew').on('change', updateRenew);
+
     // Loaded on the first opening only: the operator list is long.
     function loadOperators() {
         if (operatorPills) return;
@@ -350,13 +405,17 @@ var openTicketForm = (function () {
             var shown = this.dataset.kind === kind;
             $(this).toggle(shown).find(':input').prop('disabled', !shown);
         });
+        updateRenew();
     }
     $('input[name="kind"]').on('change', applyKind);
 
     $('.ticket-duration').on('click', function () {
         var from = $('#ticketValidFrom').val() || getCurrentDate();
         $('#ticketValidFrom').val(from);
-        $('#ticketValidUntil').val(addDays(from, $(this).data('days') - 1));
+        $('#ticketValidUntil').val(this.dataset.months
+            ? addDays(addMonths(from, Number(this.dataset.months)), -1)
+            : addDays(from, Number(this.dataset.days) - 1));
+        updateRenew();
     });
 
     function setOperators(head, secondary, product) {
@@ -421,9 +480,13 @@ var openTicketForm = (function () {
         var validFrom = ticket.valid_from || '', validUntil = ticket.valid_until || '';
         if (mode === 'renew') {
             // The next one starts once this one ends, or today if it has already.
-            var from = validUntil && validUntil >= today ? addDays(validUntil, 1) : today;
-            validUntil = validFrom && validUntil ? addDays(from, daysBetween(validFrom, validUntil)) : '';
-            validFrom = validUntil ? from : '';
+            if (validFrom && validUntil) {
+                var next = nextPeriod(validFrom, validUntil, today);
+                validFrom = next[0];
+                validUntil = next[1];
+            } else {
+                validFrom = validUntil = '';
+            }
         }
 
         $('#ticketId').val(mode === 'edit' ? ticket.uid : '');
@@ -440,6 +503,7 @@ var openTicketForm = (function () {
         $('#ticketKind_' + kind).prop('checked', true);
         if (mode !== 'group') applyKind();
         $('#ticketAutoRenew').prop('checked', mode !== 'new' && Boolean(ticket.auto_renew));
+        updateRenew();
         setOperators(ticket.operator, ticket.secondary_operators, ticket.product);
         countriesSelect.selectpicker('val', ticket.active_countries ? ticket.active_countries.split(',') : []);
         $('#ticketNotes').val(mode === 'edit' ? (ticket.notes || '') : '');
