@@ -2281,6 +2281,12 @@ var endSlots = {};
     window.currentPlan.spliceWaypoints(role === 'origin' ? 0 : wps.length - 1, 1, endWaypoint(role));
   });
 });
+// Each end with the line where it stops going that way (stop_slots.js).
+function placeLinesByDirection() { placeLineByDirection(endSlots.origin, endSlots.dest, vehicle_type); }
+$('#originStation, #destinationStation').on('stoppicked', function (e, byDirection) {
+  if (!byDirection) placeLinesByDirection();
+}).on('autocompleteselect', function () { setTimeout(placeLinesByDirection, 0); });
+$('#lineName').on('change', placeLinesByDirection);
 {% endif %}
 
 // ── Form via stations ──
@@ -3514,6 +3520,25 @@ $(document).on('hidden.bs.modal', '#tsbModal', updateMaterialTypeDisplay);
         $('#originStation').val(label);
         document.getElementById('dot-origin').classList.remove('resolved');
         onStationSelected('origin', entry, 'dot-origin');
+        // Its station's key, tracks and lines, which the entry does not carry: that of the
+        // key the last trip was saved at (prevDestKey), else the one there named alike.
+        // Its platform is not carried over: one leaves from another.
+        if (typeof endSlots !== 'undefined' && endSlots.origin) {
+          if (qp.get('prevDestKey')) globalStationKeys[label] = qp.get('prevDestKey');
+          $.ajax({
+            url: '/stationTracks', method: 'POST', contentType: 'application/json', dataType: 'json',
+            data: JSON.stringify({ type: vehicle_type, stops: [{ lat: entry[0][0], lng: entry[0][1],
+              key: qp.get('prevDestKey') || null, name: label.replace(/^[\u{1F1E6}-\u{1F1FF}]{2}\s*/u, '') }] }),
+            success: function (data) {
+              var station = (data.stops || [])[0];
+              if (!station || $('#originStation').val() !== label) return;   // retyped meanwhile
+              globalStationTracks[label] = station.tracks || [];
+              globalStationLines[label] = station.lines || [];
+              if (station.alike && !globalStationKeys[label]) globalStationKeys[label] = station.station_key;
+              renderStops(endSlots.origin, label);
+            }
+          });
+        }
         {% if vehicle_type in ('accommodation', 'poi', 'restaurant') %}
         destEntry = entry; // single-point types reuse origin as destination
         {% endif %}
@@ -3671,6 +3696,9 @@ function composeSave(continueTrip) {
       // departure timing carried forward from this leg's arrival.
       var contUrl = '{{ url_for("compose", username=username, vehicle_type="__VT__") }}'.replace('__VT__', vehicle_type) +
         '?prevDest=' + encodeURIComponent(JSON.stringify(newTrip.destinationStation));
+      if (newTrip.destinationStationKey) {
+        contUrl += '&prevDestKey=' + encodeURIComponent(newTrip.destinationStationKey);
+      }
       if (plan_uuid) {
         contUrl += '&plan=' + encodeURIComponent(plan_uuid);
       }

@@ -326,7 +326,7 @@ from src.trip_announcer import (
     start_trip_announcer,
 )
 from src.photon import photonInstances, photonRequest, photonRequestSingle
-from src.quai import QUAI_MODES, search_stations, stations_at
+from src.quai import QUAI_MODES, search_stations, stations_at, stops_by_direction
 from src.routing import forward_routing_core
 from src.gpx_import import (
     GpxIngestError,
@@ -7650,6 +7650,21 @@ def stationTracks():
     if not new_station_search():
         return jsonify(stops=[None] * len(stops))
     return jsonify(stops=stations_at(body.get("type"), stops, body.get("line")))
+
+
+@app.route("/stopsByDirection", methods=["POST"])
+def stopsByDirection():
+    """Where `line` stops at each of two stations going from the first to the second: {type,
+    keys: [from, to], line} gives {positions: [[lat, lng] or null, ...]} (src/quai.py)."""
+    body = request.get_json(silent=True) or {}
+    keys = body.get("keys") or []
+    mode = QUAI_MODES.get(body.get("type"))
+    if not isinstance(keys, list) or len(keys) != 2 or not all(isinstance(k, str) and k for k in keys):
+        return jsonify(error="keys must be two station keys"), 400
+    line = body.get("line") if isinstance(body.get("line"), str) else None
+    if not mode or not line or not new_station_search():
+        return jsonify(positions=[None, None])
+    return jsonify(positions=stops_by_direction(mode, keys, line))
 
 
 @app.route("/stationAutocomplete")

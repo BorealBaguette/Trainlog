@@ -1048,6 +1048,46 @@
 
   watchStopSlot(endSlots.origin);
   watchStopSlot(endSlots.destination);
+  // Each end with the line where it stops going that way (stop_slots.js).
+  function placeLinesByDirection() { placeLineByDirection(endSlots.origin, endSlots.destination, routingType); }
+  $('#originStation, #destinationStation').on('stoppicked', function (e, byDirection) {
+    if (!byDirection) placeLinesByDirection();
+  }).on('autocompleteselect', function () { setTimeout(placeLinesByDirection, 0); });
+  $('#lineName').on('change', placeLinesByDirection);
+
+  // "Save & continue": the origin, the last trip's destination, comes as a point and a label
+  // only (prevDest). Its station's key, tracks and lines are those the last trip's form kept
+  // (lastStations, util.js), back on the station's own point rather than its arrival track;
+  // else, in another tab, the station there (/stationTracks). Its platform is not carried over.
+  (function loadPrevDestStops() {
+    var label = $('#originStation').val(), entry = globalStationDict[label];
+    if (!searchParams.has('prevDest') || !entry) return;
+    var s = {};
+    try { s = (JSON.parse(sessionStorage.getItem("lastStations") || "{}").destination) || {}; } catch (e) {}
+    // Its label in the field there, which a homonym's " (b)" follows.
+    var same = s.value && (s.value === label || (s.value.indexOf(label) === 0 && /^ \(\w\)$/.test(s.value.slice(label.length))));
+    if (same && (s.tracks || s.lines)) {
+      if (s.point) entry[0] = s.point;
+      if (s.key) globalStationKeys[label] = s.key;
+      globalStationTracks[label] = s.tracks || [];
+      globalStationLines[label] = s.lines || [];
+      renderStops(endSlots.origin, label);
+      return;
+    }
+    $.ajax({
+      url: '/stationTracks', method: 'POST', contentType: 'application/json', dataType: 'json',
+      data: JSON.stringify({ type: routingType, stops: [{ lat: entry[0][0], lng: entry[0][1],
+        name: label.replace(/^[\u{1F1E6}-\u{1F1FF}]{2}\s*/u, '') }] }),
+      success: function (data) {
+        var station = (data.stops || [])[0];
+        if (!station || $('#originStation').val() !== label) return;   // retyped meanwhile
+        globalStationTracks[label] = station.tracks || [];
+        globalStationLines[label] = station.lines || [];
+        if (station.alike) globalStationKeys[label] = station.station_key;
+        renderStops(endSlots.origin, label);
+      }
+    });
+  })();
 
   // The way back: the two ends swapped, stations or points entered by hand. Not their tracks
   // or platforms (where one leaves A is not where one arrives at it), nor a point put on one

@@ -927,22 +927,19 @@ body::before {
   position: absolute;
   top: 50%;
   transform: translateY(-75%);
-  width: 100%;
+  /* Only the flag shows: the box ends just past it (4px + a 1em glyph), so the select clips
+     the option's country code ("🇳🇴 NO"), which otherwise peeks out as a sliver of black.
+     Not color: transparent, as Chrome draws colour glyphs with the text's alpha (no flag). */
+  width: 28px;
   height: 100%;
   padding-left: 4px;
+  padding-right: 0;
   border: none;
   background-color: transparent;
   font-size: 20px;
   font-family: Twemoji !important;
   -webkit-appearance: none;
   appearance: none; /* Remove default dropdown arrow */
-  /* Only the flag shows: the option's text ("🇳🇴 NO") is transparent, as its country code
-     otherwise peeks out past the 35px box at some sizes (a sliver of black). The flag, a
-     colour glyph, keeps its colours; the open list its text. */
-  color: transparent;
-}
-.flagDropdownWrapper select option {
-  color: #212529;
 }
 
 /* The input field next to the flag select, similar to #operator */
@@ -2169,8 +2166,9 @@ html, body {
 
 /* The edit page's origin and destination: the name, then at its end the station's tracks and
    whether typing renames it or searches for another station (inside the field, so they line up
-   with it whatever margin the form gives its inputs) */
-.end-station-field { position: relative; flex: 1; min-width: 0; margin-left: 5px; }
+   with it whatever margin the form gives its inputs). No margin of its own: the 35px flag box
+   alone puts it where the operator field starts, past its 31px logo and the gap after it. */
+.end-station-field { position: relative; flex: 1; min-width: 0; margin-left: 0; }
 #originGroup .flagDropdownWrapper, #destinationGroup .flagDropdownWrapper { flex: none; }
 #form .end-station-field input { width: 100%; margin-left: 0; padding-right: 40px; text-overflow: ellipsis; }
 #form .end-station-field input.has-stops { padding-right: 112px; }

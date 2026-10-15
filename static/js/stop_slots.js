@@ -12,7 +12,7 @@
 // goes (setPlatform, setExact; shown(on) when the dropdown appears or goes).
 
 function stopSlot(o) {
-  return $.extend({ selected: null, lineFilled: null, fillsLine: false }, o);
+  return $.extend({ selected: null, lineFilled: null, fillsLine: false, directed: false }, o);
 }
 
 // The station a slot is for: its fixed label where the page keeps one (the edit page, whose
@@ -111,8 +111,8 @@ function renderStops(slot, label) {
   // leaves the point at the station.
   var shown = chosen ? chosen.ref : slot.selected || '';
   var $toggle = slot.$dropdown.find('.track-toggle').empty().attr('title', title)
-    .toggleClass('exact', !!(chosen && chosen.on_track))
-    .toggleClass('placed', !!(chosen && !chosen.on_track))
+    .toggleClass('exact', !!(chosen && chosen.on_track) || slot.directed)
+    .toggleClass('placed', !!(chosen && !chosen.on_track) && !slot.directed)
     .toggleClass('unmapped', !chosen && !!shown);
   $toggle.append($('<i>').addClass(kind === 'track' ? 'bi bi-signpost-split' : 'bi bi-diagram-3'));
   // A line's colour as a dot, so that its number keeps the colour saying how exact it is.
@@ -143,6 +143,7 @@ function pickStop(slot, kind, ref, auto) {
   }
   slot.setExact(!!(choice && choice.on_track), auto);
   slot.selected = ref || null;
+  slot.directed = false;
   if (kind === 'track') {
     slot.setPlatform(ref || '');
   } else if (slot.fillsLine) {
@@ -157,6 +158,7 @@ function pickStop(slot, kind, ref, auto) {
 function forgetStop(slot) {
   if (slot.lineFilled && $('#lineName').val() === slot.lineFilled) $('#lineName').val('');
   slot.lineFilled = slot.selected = null;
+  slot.directed = false;
   slot.setPlatform('');
   slot.setExact(false);
 }
@@ -170,4 +172,61 @@ function watchStopSlot(slot) {
     forgetStop(slot);
     hideStops(slot);
   });
+}
+
+// A line's point at a station is the middle of its stops there, on neither track where its two
+// directions stop at platforms apart (Strasbourg's République, C at one going west and at
+// another going east). Once both ends are quai stations, each end with the line in the line
+// field, and no other stop picked there, goes where the line stops going from one to the other
+// (OSM's route relations; src/quai.py, stops_by_direction), exact; back where it was when that
+// no longer holds. A page calls it whenever an end, its stop or the line changes.
+var lineDirectionRequest = 0;
+function placeLineByDirection(from, to, type) {
+  var ref = ($('#lineName').val() || '').trim();
+  var ends = [from, to];
+  var movable = ends.map(function (slot) {
+    var label = stopSlotLabel(slot);
+    return !!ref && stopKind(label) === 'line' && !!findStop(globalStationLines[label], ref)
+      && (!slot.selected || stopKey(slot.selected) === stopKey(ref));
+  });
+  var keys = ends.map(function (slot) { return globalStationKeys[stopSlotLabel(slot)] || null; });
+  var request = ++lineDirectionRequest;
+  ends.forEach(function (slot, i) { if (!movable[i] || !keys[0] || !keys[1]) unplaceLineByDirection(slot); });
+  if (!keys[0] || !keys[1] || !movable.some(Boolean)) return;
+  var labels = ends.map(stopSlotLabel);
+  $.ajax({
+    url: '/stopsByDirection', method: 'POST', contentType: 'application/json', dataType: 'json',
+    data: JSON.stringify({ type: type, keys: keys, line: ref }),
+    success: function (data) {
+      // Another end, stop or line meanwhile: its own request answers.
+      if (request !== lineDirectionRequest || ends.some(function (slot, i) { return stopSlotLabel(slot) !== labels[i]; })) return;
+      (data.positions || []).forEach(function (point, i) {
+        var slot = ends[i], entry = stopSlotEntry(slot);
+        if (!movable[i] || !point || !entry) { unplaceLineByDirection(slot); return; }
+        if (!entry.stationPoint) entry.stationPoint = entry[0];
+        entry[0] = point;
+        slot.directed = true;
+        if (slot.moved) slot.moved(entry[0], true);
+        slot.setExact(true, true);
+        renderStops(slot);
+        slot.$input.trigger('stoppicked', [true]);
+      });
+    }
+  });
+}
+
+// Back to the point of the stop picked there, else the station's own.
+function unplaceLineByDirection(slot) {
+  if (!slot.directed) return;
+  slot.directed = false;
+  var label = stopSlotLabel(slot), entry = stopSlotEntry(slot);
+  var kind = stopKind(label);
+  var choice = slot.selected && kind ? findStop((kind === 'track' ? globalStationTracks : globalStationLines)[label], slot.selected) : null;
+  if (entry && entry.stationPoint) {
+    entry[0] = choice ? [choice.lat, choice.lng] : entry.stationPoint;
+    if (slot.moved) slot.moved(entry[0], !!(choice && choice.on_track));
+  }
+  slot.setExact(!!(choice && choice.on_track));
+  renderStops(slot);
+  slot.$input.trigger('stoppicked', [true]);
 }
