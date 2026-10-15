@@ -118,7 +118,8 @@
             display: flex;
             flex-wrap: wrap;
             align-items: center;
-            padding: .6rem .75rem;
+            gap: .4rem .9rem;
+            padding: .75rem;
             border-bottom: 1px solid #dee2e6;
         }
         .ticket-table tbody tr:last-child {
@@ -138,10 +139,11 @@
             min-width: 0;
             white-space: normal;
         }
+        /* Three figures a line, the same width from one ticket to the next. */
         .ticket-table .ticket-cell-stat {
             order: 1;
-            flex: 1 1 0;
-            margin-top: .4rem;
+            flex: 1 1 28%;
+            min-width: 0;
             text-align: left !important;
             font-size: .9rem;
         }
@@ -158,6 +160,10 @@
         }
         .ticket-table.table-hover > tbody > tr:hover {
             background-color: var(--bs-table-hover-bg);
+        }
+        /* What would be cut short beside others: a line of its own. */
+        .ticket-table .ticket-cell-wide {
+            flex-basis: 100%;
         }
         /* A full-width break between the dates and actions, and the figures under them. */
         .ticket-table tbody tr::before {
