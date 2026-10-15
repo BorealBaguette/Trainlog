@@ -107,7 +107,6 @@ from src.sql.stations import (
     get_manual_stations_query,
 )
 from src.sql.tags import get_tags_query
-from src.sql.tickets import get_ticket_query
 from src.sql.trips import (
     get_duplicate_query,
     get_dynamic_user_trips_query,
@@ -183,7 +182,7 @@ from src.api.finance import finance_blueprint
 from src.api.bmc import bmc_blueprint, reconcile_pending_events
 from src.api.discord_oauth import discord_oauth_blueprint
 from src.manual_stations import manual_stations_blueprint
-from src.tickets import ticket_trip_share, tickets_blueprint
+from src.tickets import tickets_blueprint, trip_ticket_fields
 from src.discord_webhooks import (
     discord_webhooks_blueprint,
     enabled_webhooks,
@@ -890,8 +889,8 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         newTrip["waypoints"] = ""
     if "notes" not in newTrip.keys():
         newTrip["notes"] = ""
-    if "ticket_id" not in newTrip.keys():
-        newTrip["ticket_id"] = ""
+    # The form's ticket_ids, or the single ticket_id older callers send.
+    newTrip["ticket_ids"] = newTrip.get("ticket_ids", newTrip.get("ticket_id"))
 
     if trip_type in ("air", "helicopter"):
         countries = {}
@@ -952,7 +951,7 @@ def saveTripToDb(username, newTrip, newPath, trip_type="train", altitude=None, t
         price=sanitize_param(newTrip["price"]),
         currency=sanitize_param(newTrip["currency"]),
         purchasing_date=sanitize_param(newTrip["purchasing_date"]),
-        ticket_id=sanitize_param(newTrip["ticket_id"]),
+        ticket_ids=newTrip["ticket_ids"],
         is_project=start_datetime == 1 or end_datetime == 1,
         path=newPath,
         visibility=sanitize_param(newTrip.get("visibility", get_default_trip_visibility(trip_type))),
@@ -1098,20 +1097,6 @@ def hasPrivateTrips(username):
         ).scalar() is True
 
 
-def get_ticket_cached(ticket_id):
-    """Ticket row by uid, cached for the request: many trips share one ticket, and
-    get_ticket.sql counts the ticket's trips, so per-trip lookups repeat real work."""
-    cache = getattr(g, "_ticket_cache", None)
-    if cache is None:
-        cache = g._ticket_cache = {}
-    if ticket_id not in cache:
-        with pg_session() as pg:
-            cache[ticket_id] = pg.execute(
-                get_ticket_query(), {"uid": ticket_id}
-            ).fetchall()[0]
-    return cache[ticket_id]
-
-
 def formatTrip(trip, public=False):
     if trip["start_datetime"] not in (1, -1) and trip["end_datetime"] not in (
         1,
@@ -1175,17 +1160,8 @@ def formatTrip(trip, public=False):
             price=trip["price"],
         )
 
-    if trip["ticket_id"] not in (None, ""):
-        ticket = get_ticket_cached(trip["ticket_id"])
-        trip["ticket"] = ticket["name"]
-        trip["ticket_price"] = ticket_trip_share(trip["ticket_id"], trip["uid"])
-        trip["ticket_currency"] = ticket["currency"]
-        trip["ticket_price_in_user_currency"] = get_exchange_rate(
-            price=trip["ticket_price"],
-            base_currency=trip["ticket_currency"],
-            target_currency=trip["user_currency"],
-            date=ticket["purchasing_date"],
-        )
+    if trip.get("ticket_ids"):
+        trip.update(trip_ticket_fields(trip["ticket_ids"], trip["uid"], trip["user_currency"]))
 
     if trip["operator"] is None or trip["operator"] == "":
         trip["operator"] = ""
@@ -4628,7 +4604,7 @@ def render_public_trip_page(
                 SELECT string_agg(trips.trip_id::text, ',') AS trip_ids,
                        tickets.name AS ticket_name
                 FROM trips
-                LEFT JOIN tickets ON trips.ticket_id = tickets.uid
+                LEFT JOIN tickets ON trips.ticket_ids @> ARRAY[tickets.uid]
                 WHERE tickets.uid = :uid
                 GROUP BY tickets.name
                 """,
@@ -5041,7 +5017,7 @@ def multi_trip(tripIds=None, tagId=None, ticketId=None, period=None):
                     SELECT string_agg(trips.trip_id::text, ',') AS trip_ids,
                         tickets.name AS ticket_name
                     FROM trips
-                    LEFT JOIN tickets ON trips.ticket_id = tickets.uid
+                    LEFT JOIN tickets ON trips.ticket_ids @> ARRAY[tickets.uid]
                     WHERE tickets.uid = :uid
                     GROUP BY tickets.name
                     """,
@@ -5719,7 +5695,7 @@ def build_plan_trip_list(plan_uuid, allowed_visibilities=None):
             "price": pt["price"],
             "currency": pt["currency"],
             "purchasing_date": pt["purchase_date"],
-            "ticket_id": None,
+            "ticket_ids": [],
             "visibility": pt["visibility"],
             "departure_delay": None,
             "arrival_delay": None,
@@ -6399,7 +6375,7 @@ def plan_trip_editor(username, plan_uuid, plan_trip_uid):
         tripPurchasingDate=purchasing_date,
         tripBooked=pt["booked"],
         tripType=pt["trip_type"],
-        tripTicketId="",
+        tripTicketIds=[],
         wplist=wplist,
         waypoint_meta=waypoint_meta,
         stored_waypoints=stored,
@@ -7102,7 +7078,7 @@ def get_trip(trip_id):
         price=sanitize_param(trip["price"]),
         currency=sanitize_param(trip["currency"]),
         purchasing_date=sanitize_param(trip["purchasing_date"]),
-        ticket_id=sanitize_param(trip["ticket_id"]),
+        ticket_ids=trip["ticket_ids"],
         is_project=trip["start_datetime"] == 1 or trip["end_datetime"] == 1,
         path=path,
         departure_delay=trip.get("departure_delay"),
@@ -7302,7 +7278,7 @@ def update_trip_values_from_form_data(trip_id, formData, update_created_ts=False
         purchasing_date=sanitize_param(formData.get("purchasing_date"))
         if formData["price"] != ""
         else None,
-        ticket_id=sanitize_param(formData.get("ticket_id")),
+        ticket_ids=formData.get("ticket_ids", formData.get("ticket_id")),
         is_project=start_datetime == 1 or end_datetime == 1,
         path=path,
         visibility=visibility if visibility != "" else None,
@@ -8684,18 +8660,9 @@ def processPublicTrips(tripIds):
                 trip.pop("logo_url", None)
 
         # Process pricing
-        if trip["ticket_id"] not in (None, ""):
-            ticket = get_ticket_cached(trip["ticket_id"])
-            trip["ticket"] = ticket["name"]
-            trip["ticket_price"] = ticket_trip_share(trip["ticket_id"], trip["uid"])
-            trip["ticket_currency"] = ticket["currency"]
-            trip["ticket_price_in_user_currency"] = get_exchange_rate(
-                price=trip["ticket_price"],
-                base_currency=trip["ticket_currency"],
-                target_currency=user_currency,
-                date=ticket["purchasing_date"],
-            )
-            if trip["ticket_price_in_user_currency"] is not None:
+        if trip.get("ticket_ids"):
+            trip.update(trip_ticket_fields(trip["ticket_ids"], trip["uid"], user_currency))
+            if trip.get("ticket_price_in_user_currency") is not None:
                 total_price += trip["ticket_price_in_user_currency"]
 
         if trip["price"] not in (None, ""):
@@ -8973,8 +8940,8 @@ def mergeTrips(username, tripIds):
     newTrip["price"] = priceDict.get("total_price", 0)
     newTrip["currency"] = priceDict.get("user_currency", "USD")
 
-    # Set ticket_id to empty since individual ticket info may not apply
-    newTrip["ticket_id"] = ""
+    # No tickets, since individual ticket info may not apply
+    newTrip["ticket_ids"] = []
 
     # Set defaults for other required fields
     newTrip["reg"] = ""
@@ -9313,7 +9280,7 @@ def get_trips_api_internal(username, is_public=False):
         # code so that "NO" does not find every trip with a "nonelec" split.
         terms.append(f"COALESCE(countries, '') LIKE :{param}_country")
         terms.append(
-            "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = FilteredTrips.ticket_id"
+            "EXISTS (SELECT 1 FROM tickets tk WHERE tk.uid = ANY(FilteredTrips.ticket_ids)"
             f" AND remove_diacritics(LOWER(COALESCE(tk.name, ''))) LIKE remove_diacritics(LOWER(:{param})))"
         )
         terms.append(
@@ -9434,13 +9401,17 @@ def get_trips_api_internal(username, is_public=False):
             f" uid {sort_direction} LIMIT :limit OFFSET :offset"
         )
     elif sort_column_name == "price":
-        ticket_share_sql = "(SELECT t.price / NULLIF((SELECT COUNT(*) FROM trips t2 WHERE t2.ticket_id = t.uid), 0) FROM tickets t WHERE t.uid = ticket_id)"
-        ticket_currency_sql = "(SELECT t.currency FROM tickets t WHERE t.uid = ticket_id)"
-        ticket_date_sql = "(SELECT t.purchasing_date::date FROM tickets t WHERE t.uid = ticket_id)"
+        # The trip's share of each of its tickets, an even split over the ticket's trips.
+        ticket_shares_sql = (
+            "(SELECT SUM(price_to_eur("
+            "t.price / NULLIF((SELECT COUNT(*) FROM trips t2 WHERE t2.ticket_ids @> ARRAY[t.uid]), 0),"
+            " t.currency, t.purchasing_date::date))"
+            " FROM tickets t WHERE t.uid = ANY(ticket_ids))"
+        )
         price_expr = (
-            f"CASE WHEN price IS NULL AND ticket_id IS NULL THEN NULL "
+            f"CASE WHEN price IS NULL AND ticket_ids = '{{}}' THEN NULL "
             f"ELSE COALESCE(price_to_eur(price, currency, purchasing_date::date), 0)"
-            f"   + COALESCE(price_to_eur({ticket_share_sql}, {ticket_currency_sql}, {ticket_date_sql}), 0) "
+            f"   + COALESCE({ticket_shares_sql}, 0) "
             f"END"
         )
         data_query = base_data_query + (
@@ -10211,7 +10182,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
     tripReg = trip["reg"]
     tripType = trip["type"]
     tripNotes = trip["notes"]
-    tripTicketId = trip["ticket_id"]
+    tripTicketIds = trip["ticket_ids"]
     tripPrice = (
         (trip["price"] if trip["price"] % 1 != 0 else int(trip["price"]))
         if trip["price"] not in [None, ""]
@@ -10300,7 +10271,7 @@ def edit_copy_trip(username, tripId, edit_copy_type):
         "tripCurrency": tripCurrency or "",
         "tripPurchasingDate": tripPurchasingDate or "",
         "tripType": tripType,
-        "tripTicketId": tripTicketId or "",
+        "tripTicketIds": tripTicketIds,
         "wplist": wplist,
         "waypoint_meta": waypoint_meta,
         # As saved, for the stops editor: it writes them back with the stops edited.
@@ -10356,7 +10327,7 @@ def _export_trips_csv_text(username, requested_trip_ids=None):
             ).fetchall():
                 paths[path["trip_id"]] = path["path"]
 
-    columns = [k for k in trips[0].keys() if k != "ticket_id"] if trips else []
+    columns = [k for k in trips[0].keys() if k != "ticket_ids"] if trips else []
     cw.writerow(columns + ["path"])
     processedRows = []
     for trip in trips:
@@ -10664,7 +10635,7 @@ def _save_mfr24_trip(username, newTrip, newPath):
         trip.price = sanitize_param(newTrip["price"])
         trip.currency = sanitize_param(newTrip["currency"])
         trip.purchasing_date = sanitize_param(newTrip["purchasing_date"])
-        trip.ticket_id = None
+        trip.ticket_ids = []
         trip.is_project = options["start_datetime"] == 1 or end_datetime == 1
         trip.path = newPath
         update_trip(trip.trip_id, trip, newTrip)
@@ -10696,7 +10667,7 @@ def _save_mfr24_trip(username, newTrip, newPath):
             price=sanitize_param(newTrip["price"]),
             currency=sanitize_param(newTrip["currency"]),
             purchasing_date=sanitize_param(newTrip["purchasing_date"]),
-            ticket_id=None,
+            ticket_ids=[],
             is_project=options["start_datetime"] == 1 or end_datetime == 1,
             path=newPath,
             departure_delay=sanitize_param(newTrip.get("departure_delay")),
@@ -10845,7 +10816,7 @@ def importAll(username):
     dataDict["username"] = username
     user_id = User.query.filter_by(username=username).first().uid
     dataDict["user_id"] = user_id
-    dataDict["ticket_id"] = ""
+    dataDict["ticket_ids"] = []
     # Remove path from main dict
     if dataDict.get("path"):
         rawPath = dataDict.pop("path")
@@ -10925,7 +10896,7 @@ def importAll(username):
         price=sanitize_param(dataDict["price"]),
         currency=sanitize_param(dataDict["currency"]),
         purchasing_date=sanitize_param(dataDict["purchasing_date"]),
-        ticket_id=sanitize_param(dataDict["ticket_id"]),
+        ticket_ids=dataDict["ticket_ids"],
         is_project=dataDict["start_datetime"] == 1 or dataDict["end_datetime"] == 1,
         visibility=visibility,
         path=path,

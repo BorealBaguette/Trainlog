@@ -7,6 +7,23 @@ from src.carbon import calculate_carbon_footprint_for_trip
 from src.paths import Path
 
 
+def ticket_id_list(raw):
+    """A trip's tickets, the main one first, as ids: from a list, a comma-separated text
+    ("12,34", as a form sends them), a single id, or nothing; each once."""
+    if raw in (None, ""):
+        return []
+    parts = raw if isinstance(raw, (list, tuple)) else str(raw).split(",")
+    ids = []
+    for part in parts:
+        try:
+            ticket_id = int(str(part).strip())
+        except ValueError:
+            continue
+        if ticket_id not in ids:
+            ids.append(ticket_id)
+    return ids
+
+
 def _strip_tags(value):
     """Strip HTML tags (e.g. <script>, <img onerror=...>) from a string.
     Lone < or > not forming a complete tag (e.g. '<3') are preserved."""
@@ -44,7 +61,7 @@ class Trip:
         price,
         currency,
         purchasing_date,
-        ticket_id,
+        ticket_ids,
         path,
         is_project,
         trip_id=None,
@@ -96,7 +113,7 @@ class Trip:
         if price not in (None, "") and purchasing_date in (None, ""):
             purchasing_date = datetime.date.today()
         self.purchasing_date = purchasing_date
-        self.ticket_id = ticket_id
+        self.ticket_ids = ticket_id_list(ticket_ids)
         self.is_project = is_project
         self.departure_delay = departure_delay
         self.arrival_delay = arrival_delay

@@ -27,7 +27,7 @@ INSERT INTO trips (
     notes,
     price,
     currency,
-    ticket_id,
+    ticket_ids,
     purchase_date,
     visibility,
     route_source
@@ -61,7 +61,7 @@ SELECT
     notes,
     price,
     currency,
-    ticket_id,
+    ticket_ids,
     purchase_date,
     visibility,
     route_source

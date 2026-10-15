@@ -1584,62 +1584,14 @@ function ticketLabel(ticket) {
     ? `${operator} ${name}` : name;
 }
 
-// `context`, when given, returns the trip's {date, operators}: tickets valid that day are offered
-// even when no longer active, and `onSuggest` is told of the one taken by the trip's operator, its
-// own or one it is also valid with, if only one is (else null), for the page to offer it. Nothing
-// is picked for the user: a trip outside the ticket's zone would be picked wrong.
-// Returns the function that refreshes the list when the context changes.
-function fetchTickets(url, none_text, ticket_id=null, context=null, onSuggest=null) {
-  const ticketSearchInput = document.getElementById('ticketSearchInput');
-  let tickets = [];
-  let rendered = false;
-
-  // A clipping card with uses left covers any day, or any within its dates if it has some.
-  function covers(ticket, date) {
-    if (ticket.uses != null && ticket.used >= ticket.uses) return false;
-    if (!(ticket.valid_from || ticket.valid_until)) return ticket.uses != null && ticket.active;
-    return Boolean(date && (!ticket.valid_from || date >= ticket.valid_from)
-      && (!ticket.valid_until || date <= ticket.valid_until));
-  }
-
-  function runsOn(ticket, operators) {
-    return [ticket.operator, ...String(ticket.secondary_operators || '').split(',')]
-      .map(normalizeOperatorName).some(name => name && operators.includes(name));
-  }
-
-  function render() {
-    const ctx = context ? context() : null;
-    const operators = ctx ? String(ctx.operators || '').split(',').map(normalizeOperatorName).filter(Boolean) : [];
-    const covering = ctx ? tickets.filter(t => covers(t, ctx.date)) : [];
-    const fitting = covering.filter(t => runsOn(t, operators));
-    const selected = rendered ? ticketSearchInput.value : (ticket_id == null ? '' : String(ticket_id));
-    rendered = true;
-
-    ticketSearchInput.innerHTML = '';
-    const noneOption = document.createElement('option');
-    noneOption.textContent = none_text;
-    noneOption.value = "";
-    ticketSearchInput.add(noneOption);
-
-    tickets.forEach(ticket => {
-      if (!(ticket.active || covering.includes(ticket) || String(ticket.uid) === selected)) return;
-      const option = document.createElement('option');
-      option.value = ticket.uid;
-      option.setAttribute('data-price', ticket.price);
-      option.setAttribute('data-currency', ticket.currency);
-      option.setAttribute('data-purchasing-date', ticket.purchasing_date);
-      option.textContent = `${ticketLabel(ticket)} – ${ticket.price ?? ''} ${ticket.currency || ''} (${ticket.valid_from || ticket.purchasing_date || ''})`;
-      ticketSearchInput.add(option);
-    });
-    ticketSearchInput.value = selected;
-    if (onSuggest) onSuggest(fitting.length === 1 ? fitting[0] : null);
-  }
-
-  fetch(url)
-    .then(response => response.json())
-    .then(data => { tickets = data.tickets; render(); })
-    .catch(error => console.error('Error:', error));
-  return render;
+// A trip's ticket icon, with how many tickets it rides on when more than one. Styled inline:
+// the pages showing it do not share a stylesheet.
+function ticketIcon(iconHtml, count) {
+  if (!(count > 1)) return iconHtml;
+  return '<span style="position:relative;display:inline-block;">' + iconHtml
+    + '<span style="position:absolute;top:-.55em;right:-.75em;min-width:1.3em;padding:0 .25em;'
+    + 'border-radius:1em;background:#198754;color:#fff;font:600 .6rem/1.3em sans-serif;'
+    + 'text-align:center;">' + count + '</span></span>';
 }
 
 function getTextColor(bgColor) {

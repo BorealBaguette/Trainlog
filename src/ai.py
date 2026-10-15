@@ -622,7 +622,7 @@ def create_trip_from_parsed(user, parsed_trip, purchase_date=None, source="ai"):
         trip_length=trip_length, estimated_trip_duration=estimated_duration, manual_trip_duration=None,
         operator=parsed_trip.get("operator"), line_name=parsed_trip.get("line_name"), created=now, last_modified=now,
         type=trip_type, price=parsed_trip.get("price"), currency=parsed_trip.get("currency"), purchasing_date=purchase_date,
-        ticket_id=None, is_project=False, path=path, countries=countries, seat=parsed_trip.get("seat"),
+        ticket_ids=[], is_project=False, path=path, countries=countries, seat=parsed_trip.get("seat"),
         material_type=material_type, material_type_advanced=None, reg=None, waypoints=parsed_trip.get("_waypoints"), notes=build_notes(parsed_trip, user.lang, source), visibility=get_default_trip_visibility(trip_type),
         departure_platform=parsed_trip.get("departure_platform"), arrival_platform=parsed_trip.get("arrival_platform"),
         departure_delay=parsed_trip.get("departure_delay"), arrival_delay=parsed_trip.get("arrival_delay"),

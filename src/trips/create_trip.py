@@ -42,7 +42,7 @@ def create_trip(trip: Trip, pg_session=None):
                 "notes": trip.notes,
                 "price": trip.price,
                 "currency": trip.currency,
-                "ticket_id": trip.ticket_id,
+                "ticket_ids": trip.ticket_ids,
                 "purchase_date": trip.purchasing_date,
                 "carbon": trip.carbon,
                 "visibility": trip.visibility,

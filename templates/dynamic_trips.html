@@ -1166,7 +1166,7 @@
         <ul class="dropdown-menu" style="min-width: 12rem;">
             <li class="dropdown-item" onclick="exportSelected();"><i class="fa-solid fa-file-export"></i>  {{export}}</li>
             {% if not isPublic %}
-            <li class="dropdown-item" onclick="$('#ticketSearchModal').modal('show');"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</li>
+            <li class="dropdown-item" onclick="bulkTicketPicker.open();"><i class="bi bi-ticket-perforated-fill"></i>  {{associate_ticket}}</li>
             <li class="dropdown-item" onclick="$('#planSearchModal').modal('show');"><i class="fa-solid fa-map-location-dot"></i>  {{ moveToPlan|default('Move to a plan') }}</li>
             <li class="dropdown-item tagSearchLink" style="display:none;" onclick="$('#tagSearchModal').modal('show');"><i class="fa-solid fa-tags"></i>  {{manage_tags}}</li>
             {% endif %}
@@ -1222,25 +1222,7 @@
     </table>
 </div>
 
-<div class="modal fade" id="ticketSearchModal" tabindex="-1" role="dialog" aria-labelledby="ticketSearchModalLabel" aria-hidden="true">
-  <div class="modal-dialog modal-dialog-centered" role="document">
-    <div class="modal-content">
-      <div class="modal-header">
-        <h5 class="modal-title" id="ticketSearchModalLabel">{{associate_ticket}}</h5>
-        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-      </div>
-      <div class="modal-body">
-        <div class="form-group">
-          <label for="ticketSearchInput" class="form-label">{{ select_ticket }}</label>
-          <select id="ticketSearchInput" class="form-select"></select>
-        </div>
-      </div>
-      <div class="modal-footer">
-        <button type="button" class="btn btn-primary" onclick="attachSelectedTrips($('#ticketSearchInput').val())">{{submit}}</button>
-      </div>
-    </div>
-  </div>
-</div>
+{% include "ticket_picker.html" %}
 
 <div class="modal fade" id="planSearchModal" tabindex="-1" role="dialog" aria-labelledby="planSearchModalLabel" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered" role="document">
@@ -2457,7 +2439,7 @@ function renderPrices(data, type, row) {
             }
             formattedTicketInfo =  $('<span>')
             .append($('<span>').attr("style", "display:none;").text(row.ticket_price_in_user_currency))
-            .append(`<span data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${formattedTicketPrice}"><i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i></span>`);
+            .append(`<span data-toggle="tooltip" style="cursor:context-menu;" data-placement="top" title="${formattedTicketPrice}">${ticketIcon('<i style="color:#228B22;" class="bi bi-ticket-perforated-fill"></i>', row.ticket_count)}</span>`);
         }
         if (isNumber(row.price)) {
             let formattedPriceText = formatCurrency("{{langId}}", row.price_in_user_currency, row.user_currency);
@@ -4063,17 +4045,19 @@ function exportGpx(){
     window.open(url);
 }
 
-function attachSelectedTrips(ticket_id){
+// The tickets picked added to the selected trips', or in place of them.
+function attachSelectedTrips(ticket_ids, replace){
     url=`{{ url_for('tickets.attachSelected', username=username)}}`;
 
     const urlParams = new URLSearchParams();
     urlParams.append('trips', checkedTrips);
-    urlParams.append('ticket_id', ticket_id);
+    urlParams.append('ticket_ids', ticket_ids.join(','));
+    if (replace) urlParams.append('replace', '1');
 
     fetch(`${url}?${urlParams.toString()}`).finally(() => {
-        // false keeps the current page: the rows stay, only their ticket changes.
+        // false keeps the current page: the rows stay, only their tickets change.
         tableObject.ajax.reload(null, false);
-        $('#ticketSearchModal').modal('hide');
+        $('#ticketPickerModal').modal('hide');
     });
 }
 
@@ -4147,8 +4131,14 @@ if (planSearchModal) {
     });
 }
 
-const ticketSearchModal = document.getElementById('ticketSearchModal');
-ticketSearchModal.addEventListener('show.bs.modal', fetchTickets('{{ url_for("tickets.get_all_tickets", username=username) }}', "{{none_t}}"));
+const bulkTicketPicker = ticketPicker({
+    url: {{ url_for("tickets.get_all_tickets", username=username)|tojson }},
+    staticUrl: {{ url_for('static', filename='')|tojson }},
+    lang: {{ langId|tojson }},
+    texts: { add: {{ ticketPickerAdd|tojson }}, none: {{ ticketNone|tojson }} },
+    title: {{ associate_ticket|tojson }},
+    onSubmit: attachSelectedTrips
+});
 
 let tags = [];
 // Fetch all tags once when the page loads

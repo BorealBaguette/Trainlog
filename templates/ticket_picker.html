@@ -1,0 +1,104 @@
+{# The ticket picker's modal, once a page: ticketPicker() (static/js/ticket_picker.js) fills it,
+   from a trip's form, where the field is three lines of its own, or for trips picked in bulk. #}
+<style>
+    .ticket-picker-field {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: .35rem;
+        min-height: 38px;
+        padding: .3rem .4rem;
+        border: 1px solid #ced4da;
+        border-radius: .375rem;
+        background: #fff;
+        cursor: pointer;
+    }
+    .ticket-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: .35rem;
+        max-width: 100%;
+        padding: .15rem .3rem .15rem .45rem;
+        border: 1px solid #dee2e6;
+        border-radius: 1rem;
+        background: #f8f9fa;
+        font-size: .9rem;
+    }
+    .ticket-pill-logo {
+        height: 18px;
+        max-width: 48px;
+        object-fit: contain;
+    }
+    .ticket-pill-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .ticket-pill-x {
+        border: 0;
+        background: none;
+        padding: 0 .2rem;
+        line-height: 1;
+        color: #6c757d;
+    }
+    .ticket-pill-x:hover { color: var(--bs-danger); }
+    .ticket-picker-add {
+        color: #6c757d;
+        font-size: .9rem;
+        padding: 0 .3rem;
+    }
+    .ticket-picker-section {
+        font-size: .75rem;
+        text-transform: uppercase;
+        letter-spacing: .03em;
+        color: #6c757d;
+        margin: .5rem 0 .3rem;
+    }
+    .ticket-picker-row { cursor: pointer; }
+    .ticket-picker-row.active-pick { background: #f0f6ff; }
+    .ticket-picker-logo {
+        width: 48px;
+        height: 28px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .ticket-picker-logo img {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    #ticketPickerModal .ticket-picker-bulk-only { display: none; }
+    #ticketPickerModal.ticket-picker-bulk .ticket-picker-bulk-only { display: flex; }
+    #ticketPickerModal.ticket-picker-bulk .ticket-picker-form-only { display: none; }
+</style>
+
+<div class="modal fade" id="ticketPickerModal" tabindex="-1" aria-labelledby="ticketPickerTitle" aria-hidden="true"
+     data-title="{{ select_ticket }}" data-that-day="{{ ticketPickerThatDay }}" data-current="{{ ticketCurrent }}" data-past="{{ ticketPickerPast }}">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="ticketPickerTitle">{{ select_ticket }}</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="{{ close }}"></button>
+            </div>
+            <div class="modal-body">
+                <input type="search" id="ticketPickerSearch" class="form-control form-control-sm mb-2" placeholder="{{ ticketSearch }}" autocomplete="off">
+                <div id="ticketPickerList"></div>
+                <button type="button" id="ticketPickerShowAll" class="btn btn-link btn-sm text-decoration-none px-0">{{ ticketPickerShowPast }}</button>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary w-100 ticket-picker-form-only" data-bs-dismiss="modal">{{ ticketPickerDone }}</button>
+                <div class="ticket-picker-bulk-only w-100 align-items-center justify-content-between gap-2">
+                    <div class="form-check mb-0">
+                        <input class="form-check-input" type="checkbox" id="ticketPickerReplace">
+                        <label class="form-check-label" for="ticketPickerReplace">{{ ticketPickerReplace }}</label>
+                    </div>
+                    <button type="button" id="ticketPickerSubmit" class="btn btn-primary">{{ submit }}</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="{{ static_autoversion(filename='js/ticket_picker.js') }}"></script>

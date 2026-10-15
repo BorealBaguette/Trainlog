@@ -1093,8 +1093,9 @@
       {# A plan trip is costed through the plan's own budget, so it has no ticket. #}
       {% if not plan_uuid %}
       <div class="cp-input-row">
-        <label for="ticketSearchInput" id="ticketSearchInputLabel">{{ select_ticket|default('Ticket') }}</label>
-        <select id="ticketSearchInput" name="ticket_id" class="form-select"></select>
+        <label for="ticketPickerField" id="ticketSearchInputLabel">{{ select_ticket|default('Ticket') }}</label>
+        <input type="hidden" id="ticketIds" name="ticket_ids">
+        <div id="ticketPickerField" class="ticket-picker-field" role="button" tabindex="0"></div>
       </div>
       {% endif %}
 
@@ -1143,6 +1144,8 @@
     </div>
   </div>
 </div>
+
+{% if not plan_uuid %}{% include "ticket_picker.html" %}{% endif %}
 
 <script src="{{ static_autoversion(filename='js/map.js') }}"></script>
 <script src="{{ url_for('static', filename='js/lib/leaflet.geometryutil.js') }}"></script>
@@ -3429,7 +3432,14 @@ updatePriceExtras();
 
 // ── Tickets ──
 {% if not plan_uuid %}
-fetchTickets('{{ url_for("tickets.get_all_tickets", username=username) }}', "{{ none_t|default('None') }}");
+ticketPicker({
+  url: {{ url_for("tickets.get_all_tickets", username=username)|tojson }},
+    staticUrl: {{ url_for('static', filename='')|tojson }},
+    lang: {{ langId|tojson }},
+    texts: { add: {{ ticketPickerAdd|tojson }}, none: {{ ticketNone|tojson }} },
+  input: '#ticketIds',
+  field: '#ticketPickerField'
+});
 {% endif %}
 
 // ── Tags ── (createOpts lets an unknown term be created as a tag on the spot)
@@ -3640,7 +3650,7 @@ function composeSave(continueTrip) {
   newTrip.price = document.getElementById('price').value;
   newTrip.currency = document.getElementById('currency').value;
   newTrip.purchasing_date = document.getElementById('purchasing_date').value;
-  newTrip.ticket_id = (document.getElementById('ticketSearchInput') || {}).value || '';
+  newTrip.ticket_ids = (document.getElementById('ticketIds') || {}).value || '';
   newTrip.powerType = (document.querySelector('input[name="powerType"]:checked') || {}).value || 'auto';
   newTrip.co2Override = (document.getElementById('co2Override') || {}).value || '';
   newTrip.tag_ids = Array.from(document.querySelectorAll('#tagList [data-tag-id]')).map(function(el) { return el.dataset.tagId; });

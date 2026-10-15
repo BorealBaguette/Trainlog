@@ -109,7 +109,7 @@ def validate_plan(plan, start_date, plan_trip_uids=None, pg_session=None):
                 price=pt["price"],
                 currency=pt["currency"],
                 purchasing_date=pt["purchase_date"],
-                ticket_id=None,
+                ticket_ids=[],
                 # date-less -> a project (future/unknown); dated -> a real trip
                 is_project=start_dt is None,
                 path=path,
@@ -163,8 +163,10 @@ def validate_plan(plan, start_date, plan_trip_uids=None, pg_session=None):
                         {"ticket_id": ticket_uid, "now": now, "uid": cm["uid"],
                          "plan_id": plan["uid"]},
                     )
+                # Added to the leg's tickets: a leg may be on several shared costs.
                 pg.execute(
-                    "UPDATE trips SET ticket_id = :tid WHERE trip_id = ANY(:ids)",
+                    "UPDATE trips SET ticket_ids = ticket_ids || CAST(:tid AS integer)"
+                    " WHERE trip_id = ANY(:ids) AND NOT ticket_ids @> ARRAY[CAST(:tid AS integer)]",
                     {"tid": ticket_uid, "ids": trip_ids},
                 )
 

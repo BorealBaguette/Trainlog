@@ -17,9 +17,10 @@
 
 <style>
     /* Stops dialog (initStopsEditor): the trip as a timeline, origin to destination.
-       Columns: line | name | arrival | departure | platform | reorder + remove */
+       Columns: line | name | arrival | departure | platform | edit + reorder + remove.
+       Rows read as text; the one opened (.stop-open) spans them all with its fields. */
     #stopsModal .stops-head, #stopsModal .stop-row {
-        display: grid; grid-template-columns: 22px minmax(0, 1fr) 104px 104px 64px 58px;
+        display: grid; grid-template-columns: 22px minmax(0, 1fr) 104px 104px 64px 76px;
         column-gap: 8px; align-items: start;
     }
     #stopsModal .stops-head { font-size: .72rem; color: #9aa3af; text-transform: uppercase; letter-spacing: .04em; margin-bottom: 2px; }
@@ -48,6 +49,43 @@
     }
     #stopsModal .stop-end-name { line-height: 32px; font-weight: 600; color: #1f2733; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #stopsModal .stop-cell { display: flex; flex-direction: column; min-width: 0; }
+    #stopsModal .stop-row.stop-closed { cursor: pointer; border-radius: 6px; }
+    #stopsModal .stop-row.stop-closed:hover { background: #f5f7fa; }
+    #stopsModal .stop-name, #stopsModal .stop-value {
+        line-height: 32px; font-size: .875rem; color: #1f2733; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    #stopsModal .stop-row.plain .stop-name { color: #6b7280; }
+    #stopsModal .stop-value { padding-left: 8px; font-variant-numeric: tabular-nums; }
+    #stopsModal .stop-text .stop-sched { padding-left: 8px; }
+    /* The opened row: name and buttons, then scheduled | delay | actual per time */
+    #stopsModal .stop-editor {
+        grid-column: 2 / -1; min-width: 0; margin-bottom: 8px; padding: 8px 10px 10px;
+        border: 1px solid #dfe3e8; border-radius: 8px; background: #fafbfc;
+    }
+    #stopsModal .stop-editor-top { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+    #stopsModal .stop-editor-top .stop-station, #stopsModal .stop-editor-top .stop-end-name { flex: 1 1 auto; min-width: 0; }
+    #stopsModal .stop-when { display: flex; gap: 4px; min-width: 0; }
+    #stopsModal .stop-when input { flex: 0 0 104px; }
+    #stopsModal .stop-day {
+        min-width: 0; height: 32px; padding: 0 4px; font-size: .8rem; color: #4b5563;
+        border: 1px solid #dfe3e8; border-radius: 6px; background: #fff;
+    }
+    #stopsModal .stop-day-break {
+        display: grid; grid-template-columns: 22px minmax(0, 1fr); column-gap: 8px; height: 22px;
+        font-size: .75rem; color: #6b7280; font-weight: 600;
+    }
+    #stopsModal .stop-day-break > span:last-child::first-letter { text-transform: uppercase; }
+    #stopsModal .stop-day-break > span:last-child { line-height: 22px; border-top: 1px dashed #dfe3e8; }    #stopsModal .stop-fields {
+        display: grid; grid-template-columns: auto auto 88px minmax(0, 1fr); gap: 4px 8px; align-items: center;
+    }
+    #stopsModal .stop-fields.no-delays { grid-template-columns: auto auto minmax(0, 1fr); }
+    #stopsModal .stop-caption { font-size: .72rem; color: #9aa3af; text-transform: uppercase; letter-spacing: .04em; line-height: 1.2; }
+    #stopsModal .stop-label { font-size: .8rem; color: #6b7280; padding-right: 4px; }
+    #stopsModal .stop-actual { font-size: .875rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+    #stopsModal .stop-row .stop-platform-actual { max-width: 88px; }
+    #stopsModal .stop-open .stop-dot { top: 25px; }   /* the middle of the editor's first line */
+    #stopsModal .stop-origin.stop-open .stop-track::before { top: 25px; }
+    #stopsModal .stop-destination.stop-open .stop-track::before { height: 25px; }
     /* The day, in the origin's arrival / destination's departure slot */
     #stopsModal .stop-end-date {
         height: 32px; line-height: 32px; padding-left: 8px; font-size: .8rem; color: #9aa3af;
@@ -58,16 +96,34 @@
     #stopsModal .stop-sched:empty { display: none; }
     #stopsModal .stop-delay { font-weight: 600; color: #6b7280; }
     #stopsModal .stop-delay.late { color: #c0392b; }
+    #stopsModal .stop-value s { color: #9aa3af; }
+    /* The actual time, under the struck scheduled one (and in the opened row) */
+    #stopsModal .stop-ran, #stopsModal .stop-actual { font-weight: 600; color: #1e8449; }
+    #stopsModal .stop-ran { font-size: .8rem; font-variant-numeric: tabular-nums; }
+    #stopsModal .stop-ran.late, #stopsModal .stop-actual.late { color: #c0392b; }
+    #stopsModal .stop-actual:not(.late):not(.early) { color: inherit; font-weight: normal; }
     #stopsModal .stop-actions { display: flex; align-items: center; justify-content: flex-end; gap: 2px; height: 32px; }
-    #stopsModal .stop-move { display: flex; flex-direction: column; }
-    #stopsModal .stop-move button, #stopsModal .stop-remove {
+    #stopsModal .stop-grip, #stopsModal .stop-remove, #stopsModal .stop-edit, #stopsModal .stop-close {
         border: 0; background: transparent; color: #9aa3af; padding: 0 4px; line-height: 1; cursor: pointer;
     }
-    #stopsModal .stop-move button { font-size: .65rem; height: 15px; }
-    #stopsModal .stop-move button:disabled { visibility: hidden; }
-    #stopsModal .stop-remove { font-size: .95rem; height: 32px; }
-    #stopsModal .stop-move button:hover, #stopsModal .stop-remove:hover { color: #1f2733; }
+    #stopsModal .stop-grip { font-size: .9rem; height: 32px; cursor: grab; touch-action: none; }
+    #stopsModal .stop-grip:disabled { visibility: hidden; }
+    #stopsModal .stop-row.dragging {
+        z-index: 1070; background: #fff; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.18); pointer-events: none;
+    }
+    #stopsModal .stop-gap { border: 2px dashed #c7d6f5; border-radius: 6px; background: #f5f8fe; margin-left: 30px; }
+    #stopsModal .stop-row.dragging, #stopsModal .stop-row.dragging .stop-grip { cursor: grabbing; }
+    #stopsModal .stop-remove, #stopsModal .stop-edit, #stopsModal .stop-close { font-size: .95rem; height: 32px; }
+    #stopsModal .stop-edit { font-size: .8rem; }
+    #stopsModal .stop-close { color: #3b63b8; }
+    #stopsModal .stop-grip:hover, #stopsModal .stop-remove:hover, #stopsModal .stop-edit:hover, #stopsModal .stop-close:hover { color: #1f2733; }
     #stopsModal .stops-note { font-size: .8rem; color: #8a5a00; margin: 8px 0 0; }
+    #stopsModal .stops-note.stops-wrong { color: #b42318; }
+    /* A time before the one above it */
+    #stopsModal .stop-row.stop-wrong { background: #fdecea; border-radius: 6px; }
+    #stopsModal .stop-row.stop-wrong .stop-value, #stopsModal .stop-row.stop-wrong .stop-value s { color: #b42318; }
+    #stopsModal .stop-row.stop-wrong .stop-dot { border-color: #b42318; }
+    #stopsModal .stop-row.stop-wrong .stop-editor { border-color: #f1aeb5; background: #fdf3f4; }
     #stopsModal .stops-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-left: 30px; }
     /* The runs to pick from (pickRun), as the new-trip form's timetable list */
     #stopsModal .stops-runs { margin: 10px 0 0 30px; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden; }
@@ -102,19 +158,20 @@
            arrival | departure | platform under it, in line with the head. */
         #stopsModal .modal-body { padding: 12px 12px 16px; }
         #stopsModal .stops-head, #stopsModal .stop-row {
-            grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) 52px 48px; column-gap: 6px;
+            grid-template-columns: 22px minmax(0, 1fr) minmax(0, 1fr) 52px 72px; column-gap: 6px;
         }
         #stopsModal .stops-head > :nth-child(2), #stopsModal .stops-head > :nth-child(6) { display: none; }
         #stopsModal .stops-head > :nth-child(5) { grid-column: 4 / -1; }
         #stopsModal .stop-row { row-gap: 4px; min-height: 0; padding-bottom: 10px; }
         #stopsModal .stop-track { grid-row: 1 / 3; margin-bottom: -10px; }
         #stopsModal .stop-destination .stop-track { margin-bottom: 0; }
-        #stopsModal .stop-station, #stopsModal .stop-end-name { grid-row: 1; grid-column: 2 / 5; min-width: 0; }
-        #stopsModal .stop-end-name { grid-column: 2 / -1; line-height: 24px; }
+        #stopsModal .stop-name, #stopsModal .stop-end-name { grid-row: 1; grid-column: 2 / 5; min-width: 0; }
+        #stopsModal .stop-name { line-height: 36px; }
+        #stopsModal .stop-end-name { line-height: 24px; }
+        #stopsModal .stop-end .stop-actions { height: 24px; }
         #stopsModal .stop-actions { grid-row: 1; grid-column: 5; }
         #stopsModal .stop-cell { grid-row: 2; }
         #stopsModal .stop-row > :nth-child(5) { grid-column: 4 / -1; }
-        #stopsModal .stop-end > :last-child { display: none; }
         #stopsModal .stop-origin .stop-track::before { top: 12px; }
         #stopsModal .stop-dot { top: 18px; }   /* the middle of the 36px name field */
         #stopsModal .stop-end .stop-dot { top: 12px; }
@@ -122,12 +179,27 @@
         /* 16px stops iOS from zooming in on focus */
         #stopsModal .stop-row input { font-size: 16px; padding: 4px 6px; height: 36px; }
         #stopsModal .stop-end-date { height: 36px; line-height: 36px; padding-left: 6px; }
+        #stopsModal .stop-value { line-height: 36px; padding-left: 6px; }
+        #stopsModal .stop-text .stop-sched { padding-left: 6px; }
+        #stopsModal .stop-open .stop-track { grid-row: 1; }
+        #stopsModal .stop-editor { grid-row: 1; padding: 8px; }
+        #stopsModal .stop-editor-top .stop-end-name { line-height: 36px; }
+        #stopsModal .stop-fields { grid-template-columns: auto minmax(0, 1fr) 60px minmax(0, .7fr); gap: 4px 6px; }
+        #stopsModal .stop-fields.no-delays { grid-template-columns: auto minmax(0, 1fr) minmax(0, .7fr); }
+        /* The day under the time, both the cell's width */
+        #stopsModal .stop-when { flex-direction: column; }
+        #stopsModal .stop-when input { flex: none; }
+        #stopsModal .stop-day { height: 30px; font-size: 16px; }
+        #stopsModal .stop-day-break .stop-track { grid-row: auto; margin-bottom: 0; }
+        #stopsModal .stop-open .stop-dot, #stopsModal .stop-end.stop-open .stop-dot { top: 27px; }
+        #stopsModal .stop-origin.stop-open .stop-track::before { top: 27px; }
+        #stopsModal .stop-destination.stop-open .stop-track::before { height: 27px; }
         #stopsModal .stop-actions { height: 36px; }
         /* The field opens the picker on a phone: the clock icon only takes room */
         #stopsModal .stop-row input[type=time]::-webkit-calendar-picker-indicator { display: none; }
         #stopsModal .stop-row input[type=time] { text-align: center; }
-        #stopsModal .stop-move button { height: 18px; padding: 0 6px; font-size: .75rem; }
-        #stopsModal .stop-remove { height: 36px; padding: 0 6px; }
+        #stopsModal .stop-grip { height: 36px; padding: 0 6px; }
+        #stopsModal .stop-remove, #stopsModal .stop-edit, #stopsModal .stop-close { height: 36px; padding: 0 6px; }
         #stopsModal .stops-actions, #stopsModal .stops-runs { padding-left: 0; margin-left: 0; }
         #stopsModal .stops-actions .btn { flex: 1 1 auto; }
     }
@@ -588,9 +660,9 @@
         </fieldset>
 
         {% if not plan_uuid %}
-        <label for="ticketSearchInput" id="ticketSearchInputLabel" class="form-label">{{select_ticket}}</label>
-        <select id="ticketSearchInput" name="ticket_id" class="form-select">
-        </select>
+<label for="ticketPickerField" id="ticketSearchInputLabel" class="form-label">{{select_ticket}}</label>
+        <input type="hidden" id="ticketIds" name="ticket_ids">
+        <div id="ticketPickerField" class="ticket-picker-field" role="button" tabindex="0"></div>
         {% endif %}
 
         <!-- Power Type Toggle -->
@@ -873,6 +945,8 @@
     </form>
 </div>
 
+{% if not plan_uuid %}{% include "ticket_picker.html" %}{% endif %}
+
 {# Stops along the route (initStopsEditor) #}
 <div class="modal fade" id="stopsModal" tabindex="-1" aria-labelledby="stopsModalTitle" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-fullscreen-sm-down modal-dialog-scrollable">
@@ -904,6 +978,7 @@
                     </button>
                 </div>
                 <p class="stops-note" id="stopsRefreshNone" style="display:none">{{stopsRefreshNone}}</p>
+                <p class="stops-note stops-wrong" id="stopsOrderNote" style="display:none">{{stopsOutOfOrder}}</p>
                 <p class="stops-note" id="stopsRouteNote" style="display:none">{{stopsRouteNote}}</p>
             </div>
             <div class="modal-footer">
@@ -1163,18 +1238,204 @@
             if (rows.length !== stored.length) return true;
             return rows.some(function (r, i) { return r.source !== stored[i] || r.moved; });
         }
-        function refreshNote() { $('#stopsRouteNote').toggle(structural()); }
-        // Under a time that differs from the schedule: "~~15:37~~ +12" (late in red)
-        function setHint($hint, scheduled, delay) {
-            $hint.empty();
-            if (!scheduled || !delay) return;
-            $hint.append($('<s>').text(scheduled), ' ',
-                $('<b class="stop-delay">').toggleClass('late', delay > 0).text((delay > 0 ? '+' : '') + Math.round(delay)));
+        function refreshNote() { $('#stopsRouteNote').toggle(structural()); checkOrder(); }
+        // The rows' order is the route's, and a timed stop's place is its time's: it isn't
+        // moved (a time typed wrong would reroute the trip), but a time before the one above
+        // it shows in red, as it is typed.
+        function timed(row) { return !!(row.stop && (row.stop.arr || row.stop.dep)); }
+        function checkOrder() {
+            if (!ends) return;
+            var wrong = [], precise = $('#radioPreciseDates').is(':checked');
+            var o = ends.origin, d = ends.destination;
+            // Twice: as scheduled, and as it ran (actual times where set, else scheduled):
+            // a stop left late reaching the next one before it left is as wrong.
+            [false, true].forEach(function (ran) {
+                var last = null;
+                function see(iso, who) {
+                    var ms = Date.parse(iso);
+                    if (isNaN(ms)) return;
+                    if (last != null && ms < last && wrong.indexOf(who) < 0) wrong.push(who);
+                    last = ms;
+                }
+                function end(e, tz) {
+                    var iso = toUtc(e.date, e.time, tz);
+                    return ran && e.delay ? plusMinutes(iso, e.delay) : iso;
+                }
+                if (precise && o.date && o.time) see(end(o, tzNear(0)), 'origin');
+                rows.forEach(function (r) {
+                    var st = r.stop;
+                    if (!st) return;
+                    ['arr', 'dep'].forEach(function (f) {
+                        if (st[f]) see(ran && st[f + '_rt'] || st[f], r);
+                    });
+                });
+                if (precise && d.date && d.time) see(end(d, tzNear(rows.length - 1)), 'destination');
+            });
+            $rows.children('.stop-row').each(function () {
+                $(this).toggleClass('stop-wrong', wrong.indexOf($(this).data('row')) >= 0);
+            });
+            $('#stopsOrderNote').toggle(wrong.length > 0);
+        }
+
+        // ---- the rows: read as text, one opened at a time to edit (`open`: its row, or
+        // 'origin' / 'destination'). Opened, a time is its scheduled time and its delay, each
+        // set on its own, so a schedule that came out wrong can be put right.
+        var open = null;
+        var noDelays = {{ 'true' if plan_uuid else 'false' }};   // plans are tentative: no delays
+        function minutes(a, b) { return Math.round((Date.parse(a) - Date.parse(b)) / 60000); }
+        // 'YYYY-MM-DD' plus days; a wall-clock date and time as a number, to compare and subtract
+        function addDays(date, k) {
+            var d = date.split('-').map(Number);
+            return new Date(Date.UTC(d[0], d[1] - 1, d[2] + k)).toISOString().slice(0, 10);
+        }
+        function wallMs(date, time) {
+            var d = date.split('-').map(Number), t = time.split(':').map(Number);
+            return Date.UTC(d[0], d[1] - 1, d[2], t[0], t[1]);
+        }
+        function plusMinutes(iso, m) { return new Date(Date.parse(iso) + m * 60000).toISOString().replace(/\.\d{3}Z$/, 'Z'); }
+        function openRow(which) { open = which; render(); }
+
+        // A read cell: the value as it was, what was planned struck under it when it differs
+        function textCell(value) {
+            return $('<span class="stop-cell stop-text">').append(
+                $('<span class="stop-value">').text(value || ''), $('<small class="stop-sched">'));
+        }
+        // A time as read: the scheduled one, struck when it ran otherwise, with the actual one
+        // under it, red late, green early (the delay in its tooltip).
+        function timeText(sched, delay, actual) {
+            var $cell = textCell(sched), d = Math.round(delay || 0);
+            if (sched && d) {
+                $cell.find('.stop-value').empty().append($('<s>').text(sched));
+                $cell.find('.stop-sched').append($('<span class="stop-ran">').toggleClass('late', d > 0).text(actual)
+                    .attr('title', (d > 0 ? '+' : '') + d + ' min'));
+            }
+            return $cell;
+        }
+        function timeCell(st, field) {
+            var sched = st && st[field], actual = st && st[field + '_rt'];
+            if (!sched) return textCell(actual ? toLocal(actual, st.tz).time : '');
+            return timeText(toLocal(sched, st.tz).time, actual ? minutes(actual, sched) : 0, actual ? toLocal(actual, st.tz).time : '');
+        }
+        function platformCell(st) {
+            var $cell = textCell(st && (st.platform_rt || st.platform));
+            if (st && st.platform && st.platform_rt) $cell.find('.stop-sched').append($('<s>').text(st.platform));
+            return $cell;
+        }
+        function editButton(which) {
+            return $('<button type="button" class="stop-edit"><i class="fa-solid fa-pen"></i></button>')
+                .attr({ title: {{ edit|tojson }}, 'aria-label': {{ edit|tojson }} })
+                .on('click', function () { openRow(which); });
+        }
+        // Anywhere on a read row opens it, but its other buttons
+        function opens($row, which) {
+            return $row.addClass('stop-closed').on('click', function (e) {
+                if (!$(e.target).closest('button, input').length) openRow(which);
+            });
+        }
+        function closeButton() {
+            return $('<button type="button" class="stop-close"><i class="fa-solid fa-check"></i></button>')
+                .attr({ title: {{ close|tojson }}, 'aria-label': {{ close|tojson }} })
+                .on('click', function () { openRow(null); });
+        }
+
+        // The opened row's fields:
+        //             Scheduled   Delay (min)   Actual
+        //  Arrival    [06:34]     [ 2 ]         06:36 +2
+        //  Platform   [3]                       [4]
+        function fieldsGrid() {
+            var $g = $('<div class="stop-fields">').toggleClass('no-delays', noDelays);
+            $g.append('<span>', $('<span class="stop-caption">').text({{ stopScheduled|tojson }}));
+            if (!noDelays) $g.append($('<span class="stop-caption">').text({{ stopDelay|tojson }}));
+            return $g.append($('<span class="stop-caption">').text({{ delayActual|tojson }}));
+        }
+        // o: { time: scheduled 'HH:MM', date: its day, delay: minutes, enabled,
+        //      set(time, delay, date): the day it went on, if another,
+        //      actual(time, delay, date): the 'HH:MM' they make }
+        // The day is picked beside the time (a night train's stops past midnight), among the
+        // day before, its own and the day after.
+        function timeLine($g, label, o) {
+            var $time = $('<input type="time">').val(o.time || '').prop('disabled', o.enabled === false)
+                .attr('aria-label', label + ' · ' + {{ stopScheduled|tojson }});
+            var $day = $('<select class="stop-day">').prop('disabled', o.enabled === false)
+                .attr('aria-label', label + ' · ' + {{ stopScheduled|tojson }});
+            [-1, 0, 1].forEach(function (k) {
+                var date = addDays(o.date, k);
+                $('<option>').val(date).text(dayText(date)).appendTo($day);
+            });
+            $day.val(o.date);
+            var $delay = $('<input type="number" step="1" placeholder="0">').val(o.delay ? Math.round(o.delay) : '')
+                .attr('aria-label', label + ' · ' + {{ stopDelay|tojson }});
+            var $actual = $('<span class="stop-actual">');
+            function show() {
+                var t = $time.val(), d = parseInt($delay.val(), 10) || 0;
+                $delay.prop('disabled', !t || o.enabled === false);
+                $actual.text(t && d ? o.actual(t, d, $day.val()) : '').toggleClass('late', d > 0).toggleClass('early', d < 0);
+            }
+            function changed() {
+                var t = $time.val(), date = o.set(t, t ? parseInt($delay.val(), 10) || 0 : 0, $day.val());
+                if (date) $day.val(date);
+                show();
+                checkOrder();
+            }
+            $time.add($day).on('change', changed);
+            $delay.on('input', changed);
+            $g.append($('<span class="stop-label">').text(label), $('<span class="stop-when">').append($time, $day));
+            if (!noDelays) $g.append($delay);
+            $g.append($actual);
+            show();
+        }
+        function platformLine($g, $sched, $actual) {
+            $g.append($('<span class="stop-label">').text({{ platform_text(tripType, 'word')|tojson }}), $sched);
+            if (!noDelays) $g.append('<span>');
+            $g.append($actual || '<span>');
+        }
+
+        // Dragged by its grip, a row follows the pointer, the others making room where it
+        // would go; dropped, it goes there (the rows out of view keep their places).
+        function dragRow(e, row, $row) {
+            if (e.button) return;
+            e.preventDefault();
+            var body = $rows.closest('.modal-body')[0], box = $row[0].getBoundingClientRect();
+            var grab = e.clientY - box.top;
+            var $gap = $('<div class="stop-gap">').height(box.height).insertAfter($row);
+            $row.addClass('dragging').css({ position: 'fixed', left: box.left, top: box.top, width: box.width });
+            function others() { return $rows.children('.stop-row').not('.stop-end').not($row); }
+            $(document).on('pointermove.stopdrag', function (ev) {
+                var y = ev.clientY, before = null, $others = others();
+                $row.css('top', y - grab);
+                $others.each(function () {
+                    var r = this.getBoundingClientRect();
+                    if (y < r.top + r.height / 2) { before = this; return false; }
+                });
+                if (before) { if ($gap.next()[0] !== before) $gap.insertBefore(before); }
+                else if ($others.length && $gap.prev()[0] !== $others.last()[0]) $gap.insertAfter($others.last());
+                var b = body.getBoundingClientRect();   // near the dialog's edges, it scrolls
+                if (y < b.top + 40) body.scrollTop -= 12; else if (y > b.bottom - 40) body.scrollTop += 12;
+            }).on('pointerup.stopdrag pointercancel.stopdrag', function () {
+                $(document).off('.stopdrag');
+                var $next = $gap.nextAll('.stop-row').not('.stop-end').not($row).first();
+                var $prev = $gap.prevAll('.stop-row').not('.stop-end').not($row).first();
+                if ($next.length || $prev.length) {
+                    rows.splice(rows.indexOf(row), 1);
+                    if ($next.length) rows.splice(rows.indexOf($next.data('row')), 0, row);
+                    else rows.splice(rows.indexOf($prev.data('row')) + 1, 0, row);
+                }
+                render();
+            });
         }
 
         function render() {
             $rows.empty();
             $rows.append(endRow('origin'));
+            // A line with the day where it changes from the row before's (a night train)
+            var lastDay = ends.origin.date;
+            function dayBreak(st) {
+                var when = st && (st.arr || st.dep), day = when && toLocal(when, st.tz).date;
+                if (!day || !lastDay || day === lastDay) { lastDay = day || lastDay; return; }
+                lastDay = day;
+                $rows.append($('<div class="stop-day-break">').append('<span class="stop-track"></span>',
+                    $('<span>').text(dayText(day))));
+            }
             var nPlain = rows.filter(function (r) { return !r.stop && r.source; }).length;
             var otherLabel = (showPlain ? {{ stopsHideOther|tojson }} : {{ stopsShowOther|tojson }}) + ' (' + nPlain + ')';
             $('#stopsOther').toggle(nPlain > 0).attr({ title: otherLabel, 'aria-label': otherLabel })
@@ -1186,24 +1447,45 @@
             }
             function moveTo(i, j) { rows.splice(j, 0, rows.splice(i, 1)[0]); render(); }
             rows.forEach(function (row, i) {
-                if (hidden(row)) return;
-                var stop = row.stop;
+                if (hidden(row) && open !== row) return;
+                dayBreak(row.stop);
                 var up = visibleFrom(i, -1), down = visibleFrom(i, 1);
-                var $row = $('<div class="stop-row">').toggleClass('plain', !stop);
+                var $row = $('<div class="stop-row">').toggleClass('plain', !row.stop);
                 $('<span class="stop-track"><span class="stop-dot"></span></span>').appendTo($row);
-                var $move = $('<span class="stop-move">');
-                $('<button type="button"><i class="fa-solid fa-chevron-up"></i></button>')
-                    .attr('title', {{ moveUp|tojson }}).prop('disabled', up < 0)
-                    .on('click', function () { moveTo(i, up); })
-                    .appendTo($move);
-                $('<button type="button"><i class="fa-solid fa-chevron-down"></i></button>')
-                    .attr('title', {{ moveDown|tojson }}).prop('disabled', down < 0)
-                    .on('click', function () { moveTo(i, down); })
-                    .appendTo($move);
+                $row.data('row', row);
+                // Dragged to its place, or moved a step at a time with the arrow keys
+                var $move = $('<button type="button" class="stop-grip"><i class="fa-solid fa-grip-vertical"></i></button>')
+                    .attr({ title: {{ dragToReorder|tojson }}, 'aria-label': {{ dragToReorder|tojson }} })
+                    .prop('disabled', timed(row) || (up < 0 && down < 0))
+                    .on('pointerdown', function (e) { if (!timed(row)) dragRow(e, row, $row); })
+                    .on('keydown', function (e) {
+                        var j = e.key === 'ArrowUp' ? up : e.key === 'ArrowDown' ? down : -1;
+                        if (j < 0 || timed(row)) return;
+                        e.preventDefault();
+                        moveTo(i, j);
+                        $rows.children('.stop-row').filter(function () { return $(this).data('row') === row; })
+                            .find('.stop-grip').focus();
+                    });
+                var $actions = $('<span class="stop-actions">');
+                var $remove = $('<button type="button" class="stop-remove"><i class="fa-regular fa-trash-can"></i></button>')
+                    .attr('title', {{ remove|tojson }})
+                    .on('click', function () { rows.splice(i, 1); if (open === row) open = null; render(); });
 
+                if (open !== row) {
+                    $('<span class="stop-name">').text(row.label).attr('title', row.label).appendTo($row);
+                    $row.append(timeCell(row.stop, 'arr'), timeCell(row.stop, 'dep'), platformCell(row.stop));
+                    $actions.append($move, editButton(row), $remove).appendTo($row);
+                    $rows.append(opens($row, row));
+                    return;
+                }
+
+                $row.addClass('stop-open');
+                var $editor = $('<div class="stop-editor">').appendTo($row);
                 // Typing renames it; picking a station from the list puts it there instead.
                 var $station = $('<input type="text" class="stop-station">').val(row.label)
-                    .attr('placeholder', {{ via|tojson }}).appendTo($row);
+                    .attr('placeholder', {{ via|tojson }});
+                $('<div class="stop-editor-top">').append($station,
+                    $actions.append($move, $remove, closeButton())).appendTo($editor);
                 stationSearchAutocomplete($station, {}, stationUrl, {{ manual|default('Manual')|tojson }});
                 $station.on('autocompleteselect', function (e, ui) {
                     var input = this;
@@ -1223,9 +1505,7 @@
                     }, 0);
                 }).on('input', function () { row.label = this.value; });
 
-                // The actual times and platform (live, or corrected here: *_rt) are what
-                // the fields edit; the scheduled ones show greyed under them when they
-                // differ. A stop with no schedule (added here) just takes what is typed.
+                // A stop with no schedule (added here) takes the time typed as its schedule.
                 function ensureStop() {
                     if (row.stop) return row.stop;
                     var f = splitFlag(row.label);   // a plain point given a time becomes a stop
@@ -1234,62 +1514,61 @@
                     $row.removeClass('plain');
                     return row.stop;
                 }
-                function minutes(a, b) { return Math.round((Date.parse(a) - Date.parse(b)) / 60000); }
+                var $g = fieldsGrid().appendTo($editor);
                 ['arr', 'dep'].forEach(function (field) {
-                    var rt = field + '_rt';
-                    var $cell = $('<span class="stop-cell">').appendTo($row);
-                    var $hint = $('<small class="stop-sched">');
-                    function showHint() {
-                        var st = row.stop, sched = st && st[field], actual = st && st[rt];
-                        setHint($hint, sched && actual ? toLocal(sched, st.tz).time : '',
-                                sched && actual ? minutes(actual, sched) : 0);
+                    var rt = field + '_rt', st = row.stop;
+                    var local = st && st[field] && toLocal(st[field], st.tz);
+                    // A stop's first time goes on the day nearest its other one or the stop
+                    // before (past midnight on a night train, the next); after that, on the day picked.
+                    function firstDay(t, tz, date) {
+                        var s = row.stop, near = s && (s.arr || s.dep);
+                        for (var j = i - 1; !near && j >= 0; j--) near = rows[j].stop && (rows[j].stop.dep || rows[j].stop.arr);
+                        if (!near) return date;
+                        var best = null;
+                        [-1, 0, 1].forEach(function (k) {
+                            var day = addDays(date, k), gap = Math.abs(Date.parse(toUtc(day, t, tz)) - Date.parse(near));
+                            if (!best || gap < best.gap) best = { gap: gap, day: day };
+                        });
+                        return best.day;
                     }
-                    var current = stop && (stop[rt] || stop[field]);
-                    var local = current && toLocal(current, stop.tz);
-                    $('<input type="time">').val(local ? local.time : '')
-                        .attr('aria-label', field === 'arr' ? {{ stopArrival|tojson }} : {{ stopDeparture|tojson }})
-                        .on('change', function () {
-                            var v = this.value, st = ensureStop();
-                            if (!v) { delete st[field]; delete st[rt]; }
-                            else {
-                                var iso = toUtc((local && local.date) || baseDate(i), v, st.tz);
-                                if (!st[field]) st[field] = iso;          // nothing scheduled: it's the time
-                                else if (iso === st[field]) delete st[rt]; // back on schedule
-                                else st[rt] = iso;
+                    timeLine($g, field === 'arr' ? {{ stopArrival|tojson }} : {{ stopDeparture|tojson }}, {
+                        time: local ? local.time : '', date: local ? local.date : baseDate(i),
+                        delay: st && st[field] && st[rt] ? minutes(st[rt], st[field]) : 0,
+                        set: function (t, d, date) {
+                            if (!t) {
+                                if (row.stop) { delete row.stop[field]; delete row.stop[rt]; }
+                                return;
                             }
-                            showHint();
-                        }).appendTo($cell);
-                    $cell.append($hint);
-                    showHint();
+                            var s = ensureStop();
+                            if (!s[field]) date = firstDay(t, s.tz, date);
+                            s[field] = toUtc(date, t, s.tz);
+                            if (d) s[rt] = plusMinutes(s[field], d); else delete s[rt];
+                            return date;
+                        },
+                        actual: function (t, d, date) {
+                            var tz = row.stop && row.stop.tz;
+                            return toLocal(plusMinutes(toUtc(date, t, tz), d), tz).time;
+                        }
+                    });
                 });
-                (function () {
-                    var $cell = $('<span class="stop-cell">').appendTo($row);
-                    var $hint = $('<small class="stop-sched">');
-                    function showHint() {
-                        var st = row.stop;
-                        $hint.empty();
-                        if (st && st.platform && st.platform_rt) $hint.append($('<s>').text(st.platform));
+                var $pSched = $('<input type="text" maxlength="12">').val(row.stop && row.stop.platform || '')
+                    .attr('aria-label', {{ platform_text(tripType, 'word')|tojson }} + ' · ' + {{ stopScheduled|tojson }});
+                var $pActual = $('<input type="text" maxlength="12" class="stop-platform-actual">').val(row.stop && row.stop.platform_rt || '')
+                    .attr('aria-label', {{ platform_text(tripType, 'word')|tojson }} + ' · ' + {{ delayActual|tojson }});
+                $pSched.add($pActual).on('change', function () {
+                    var p = $pSched.val().trim(), a = $pActual.val().trim();
+                    if (!p && !a) {
+                        if (row.stop) { delete row.stop.platform; delete row.stop.platform_rt; }
+                        return;
                     }
-                    $('<input type="text" maxlength="12">').val(stop && (stop.platform_rt || stop.platform) || '')
-                        .attr('aria-label', {{ platform_text(tripType, 'word')|tojson }})
-                        .on('change', function () {
-                            var v = this.value.trim(), st = ensureStop();
-                            if (!v) { delete st.platform; delete st.platform_rt; }
-                            else if (!st.platform) st.platform = v;
-                            else if (v === st.platform) delete st.platform_rt;
-                            else st.platform_rt = v;
-                            showHint();
-                        }).appendTo($cell);
-                    $cell.append($hint);
-                    showHint();
-                })();
-                var $actions = $('<span class="stop-actions">').append($move).appendTo($row);
-                $('<button type="button" class="stop-remove"><i class="fa-regular fa-trash-can"></i></button>')
-                    .attr('title', {{ remove|tojson }})
-                    .on('click', function () { rows.splice(i, 1); render(); })
-                    .appendTo($actions);
+                    var s = ensureStop();
+                    if (p) s.platform = p; else delete s.platform;
+                    if (a && a !== p) s.platform_rt = a; else delete s.platform_rt;
+                });
+                platformLine($g, $pSched, $pActual);
                 $rows.append($row);
             });
+            if (ends.destination.date) dayBreak({ dep: ends.destination.date + 'T12:00:00Z', tz: 'UTC' });
             $rows.append(endRow('destination'));
             refreshNote();
         }
@@ -1308,7 +1587,11 @@
                     platform: $(origin ? '#departurePlatform' : '#arrivalPlatform').val() || ''
                 };
             }
-            return { origin: end('origin'), destination: end('destination') };
+            var r = { origin: end('origin'), destination: end('destination') };
+            ['origin', 'destination'].forEach(function (k) {   // as in the form
+                r[k].date0 = r[k].date; r[k].time0 = r[k].time;
+            });
+            return r;
         }
         // 'HH:MM' at scheduled date+time plus minutes
         function shifted(date, time, minutes) {
@@ -1335,41 +1618,58 @@
         }
         function endRow(kind) {
             var end = ends[kind], precise = $('#radioPreciseDates').is(':checked') && end.date && end.time;
-            var $row = $('<div class="stop-row stop-end">').addClass('stop-' + kind);
+            var origin = kind === 'origin', field = origin ? 'dep' : 'arr';
+            var $row = $('<div class="stop-row stop-end">').addClass('stop-' + kind).data('row', kind);
             $('<span class="stop-track">').append($('<span class="stop-dot">').append(
-                $('<i class="fa-solid">').addClass(kind === 'origin' ? 'fa-flag' : 'fa-flag-checkered')
+                $('<i class="fa-solid">').addClass(origin ? 'fa-flag' : 'fa-flag-checkered')
             )).appendTo($row);
             // The trip's own stations: named in the form, so shown, not edited, here.
-            $('<span class="stop-end-name">').text(end.name).attr('title', end.name).appendTo($row);
-            ['arr', 'dep'].forEach(function (field) {
-                var $cell = $('<span class="stop-cell">').appendTo($row);
-                // Only the departure at the origin, the arrival at the destination; the
-                // other slot shows the day, so a run past midnight reads at a glance.
-                if ((field === 'dep') !== (kind === 'origin')) {
-                    $cell.append($('<span class="stop-end-date">').text(dayText(end.date) || '\u2014'));
-                    return;
-                }
-                var $hint = $('<small class="stop-sched">');
-                function showHint() {
-                    setHint($hint, end.time, end.delay);
-                }
-                $('<input type="time">').val(precise ? shifted(end.date, end.time, end.delay) : '')
-                    .prop('disabled', !precise)
-                    .attr('aria-label', field === 'arr' ? {{ stopArrival|tojson }} : {{ stopDeparture|tojson }})
-                    .on('change', function () {
-                        end.delay = this.value ? delayFor(end.time, this.value) : 0;
-                        showHint();
-                    }).appendTo($cell);
-                $cell.append($hint);
-                showHint();
+            var $name = $('<span class="stop-end-name">').text(end.name).attr('title', end.name);
+
+            if (open !== kind) {
+                $row.append($name);
+                ['arr', 'dep'].forEach(function (f) {
+                    // Only the departure at the origin, the arrival at the destination; the
+                    // other slot shows the day, so a run past midnight reads at a glance.
+                    if (f !== field) {
+                        $row.append($('<span class="stop-cell">').append(
+                            $('<span class="stop-end-date">').text(dayText(end.date) || '—')));
+                        return;
+                    }
+                    $row.append(precise ? timeText(end.time, end.delay, shifted(end.date, end.time, end.delay)) : textCell(''));
+                });
+                $row.append(textCell(end.platform), $('<span class="stop-actions">').append(editButton(kind)));
+                return opens($row, kind);
+            }
+
+            // Opened: its scheduled time is the form's start (end) time, and goes there on Update.
+            $row.addClass('stop-open');
+            var $editor = $('<div class="stop-editor">').appendTo($row);
+            $('<div class="stop-editor-top">').append($name,
+                $('<span class="stop-actions">').append(closeButton())).appendTo($editor);
+            var $g = fieldsGrid().appendTo($editor);
+            timeLine($g, origin ? {{ stopDeparture|tojson }} : {{ stopArrival|tojson }}, {
+                time: precise ? end.time : '', date: end.date || baseDate(0), delay: precise ? end.delay : 0, enabled: !!precise,
+                set: function (t, d, date) {
+                    end.delay = d;
+                    if (t) { end.time = t; end.date = date; }
+                },
+                actual: function (t, d, date) { return shifted(date, t, d); }
             });
-            $('<span class="stop-cell">').append(
-                $('<input type="text" maxlength="12">').val(end.platform)
-                    .attr('aria-label', {{ platform_text(tripType, 'word')|tojson }})
-                    .on('change', function () { end.platform = this.value.trim(); })
-            ).appendTo($row);
-            $('<span>').appendTo($row);
+            platformLine($g, $('<input type="text" maxlength="12">').val(end.platform)
+                .attr('aria-label', {{ platform_text(tripType, 'word')|tojson }})
+                .on('change', function () { end.platform = this.value.trim(); }));
             return $row;
+        }
+        // The start the page opened with, as stopsStart reads ('YYYY-MM-DD HH:MM', local)
+        var loadedStart = (function (s) {
+            return /^\d{4}-\d\d-\d\d.\d\d:\d\d/.test(s) ? s.slice(0, 10) + ' ' + s.slice(11, 16) : null;
+        })({{ start_datetime|string|tojson }});
+        function minutesOfDay(time) { var t = time.split(':').map(Number); return t[0] * 60 + t[1]; }
+        function shiftedStart(start, minutes) {
+            var d = start.slice(0, 10).split('-').map(Number);
+            var ms = Date.UTC(d[0], d[1] - 1, d[2]) + (minutesOfDay(start.slice(11, 16)) + minutes) * 60000;
+            return new Date(ms).toISOString().slice(0, 16).replace('T', ' ');
         }
         // Into the form: platforms always, delays when the trip has precise times.
         function applyEnds() {
@@ -1380,13 +1680,20 @@
                 var slot = endSlots[end];
                 if (slot) { slot.selected = ends[end].platform || null; renderStops(slot); }
             });
-            // A run refreshed ahead of time moved the trip's start/end (renewEnd)
-            if (ends.origin.renewed) {
-                stopsStart = ends.origin.date + ' ' + ends.origin.time;
+            // A run refreshed ahead of time moved the trip's start/end (renewEnd); or its
+            // scheduled time was put right here, which doesn't move the stops: the start
+            // they're for moves along, so they shift on save only as they would have.
+            function edited(end) { return end.date !== end.date0 || end.time !== end.time0; }
+            if (ends.origin.renewed) stopsStart = ends.origin.date + ' ' + ends.origin.time;
+            else if (edited(ends.origin) && (stopsStart || loadedStart)) {
+                var o = ends.origin, moved = (wallMs(o.date, o.time) - wallMs(o.date0, o.time0)) / 60000;
+                stopsStart = shiftedStart(stopsStart || loadedStart, moved);
+            }
+            if (ends.origin.renewed || edited(ends.origin)) {
                 $('#newTripStartDate').val(ends.origin.date).trigger('change');
                 $('#newTripStartTime').val(ends.origin.time).trigger('change');
             }
-            if (ends.destination.renewed) {
+            if (ends.destination.renewed || edited(ends.destination)) {
                 $('#newTripEndDate').val(ends.destination.date).trigger('change');
                 $('#newTripEndTime').val(ends.destination.time).trigger('change');
             }
@@ -1409,6 +1716,7 @@
         $('#stopsModalButton').on('click', function () {
             rows = stored.map(rowFor);
             showPlain = false;
+            open = null;
             ends = readEnds();
             $('#stopsRuns').hide();
             $('#stopsRefreshNone').hide();
@@ -1670,8 +1978,10 @@
                 // live data changes is the timetable (DB publishes the coming days' changes
                 // that way), so its current times become the scheduled ones, and the trip's
                 // start and end move to them, rather than reading as a delay everywhere.
+                // Another run picked moves the trip to its scheduled times, and its live ones
+                // still read as delays (taken as the schedule, they'd count twice).
                 var first = runStops[0], leaves = first && (first.dep_rt || first.dep || first.arr);
-                var renew = !!moveTrip || (!!leaves && Date.parse(leaves) - Date.now() > 3 * 3600 * 1000);
+                var renew = !!leaves && Date.parse(leaves) - Date.now() > 3 * 3600 * 1000;
                 matchRunStops(runStops, ids[0], !!moveTrip);
                 rows.forEach(function (r) {
                     var st = r.stop, fresh = st && st.id && byId[st.id];
@@ -1687,7 +1997,7 @@
                             return;
                         }
                         if (fresh[f]) st[f] = fresh[f];
-                        if (fresh[f + '_rt']) st[f + '_rt'] = fresh[f + '_rt']; else if (freshLive) delete st[f + '_rt'];
+                        if (fresh[f + '_rt']) st[f + '_rt'] = fresh[f + '_rt']; else if (freshLive || moveTrip) delete st[f + '_rt'];
                     });
                     if (renew && (fresh.platform_rt || fresh.platform)) {
                         st.platform = fresh.platform_rt || fresh.platform;
@@ -1695,7 +2005,7 @@
                     } else {
                         if (fresh.platform) st.platform = fresh.platform;
                         if (fresh.platform_rt && fresh.platform_rt !== st.platform) st.platform_rt = fresh.platform_rt;
-                        else if (freshLive || st.platform_rt === st.platform) delete st.platform_rt;
+                        else if (freshLive || moveTrip || st.platform_rt === st.platform) delete st.platform_rt;
                     }
                     if (fresh.tz && !st.tz) st.tz = fresh.tz;
                 });
@@ -1714,18 +2024,20 @@
                 if (typeof wplist !== 'undefined' && wplist.length >= 2) {
                     var startStop = nearest(wplist[0]), endStop = nearest(wplist[wplist.length - 1]);
                     // Renewed: the trip's own start/end at the run's current times, on time.
+                    // Moved to another run: at its scheduled times, its live ones as delays.
                     function renewEnd(end, st, f) {
-                        var at = toLocal(st[f + '_rt'] || st[f], st.tz);
+                        var at = toLocal(renew ? st[f + '_rt'] || st[f] : st[f] || st[f + '_rt'], st.tz);
                         if (!at) return;
-                        end.date = at.date; end.time = at.time; end.delay = 0; end.renewed = true;
+                        end.date = at.date; end.time = at.time; end.renewed = true;
+                        end.delay = renew ? 0 : late(st, f);
                     }
                     if (startStop) {
-                        if (renew) renewEnd(ends.origin, startStop, 'dep');
+                        if (renew || moveTrip) renewEnd(ends.origin, startStop, 'dep');
                         else if (live) ends.origin.delay = late(startStop, 'dep');
                         ends.origin.platform = startStop.platform_rt || startStop.platform || ends.origin.platform;
                     }
                     if (endStop) {
-                        if (renew) renewEnd(ends.destination, endStop, 'arr');
+                        if (renew || moveTrip) renewEnd(ends.destination, endStop, 'arr');
                         else if (live) ends.destination.delay = late(endStop, 'arr');
                         ends.destination.platform = endStop.platform_rt || endStop.platform || ends.destination.platform;
                     }
@@ -1741,9 +2053,10 @@
         $('#stopsOther').on('click', function () { showPlain = !showPlain; render(); });
 
         $('#stopsAdd').on('click', function () {
-            rows.push(rowFor(null));
-            render();
-            $rows.find('.stop-station').last().focus();
+            var row = rowFor(null);
+            rows.push(row);
+            openRow(row);
+            $rows.find('.stop-open .stop-station').focus();
         });
 
         $('#stopsSave').on('click', function () {
@@ -3399,7 +3712,15 @@
     updatePriceFields(); // Apply initial state
 
     {% if not plan_uuid %}
-    fetchTickets('{{ url_for("tickets.get_all_tickets", username=username) }}', "{{none_t}}", {{ tripTicketId }});
+    ticketPicker({
+    url: {{ url_for("tickets.get_all_tickets", username=username)|tojson }},
+    staticUrl: {{ url_for('static', filename='')|tojson }},
+    lang: {{ langId|tojson }},
+    texts: { add: {{ ticketPickerAdd|tojson }}, none: {{ ticketNone|tojson }} },
+    input: '#ticketIds',
+    field: '#ticketPickerField',
+    selected: {{ tripTicketIds|tojson }}
+    });
     {% endif %}
     var _tagSetup = setupTagAutocomplete(
         '{{ url_for("get_all_tags", username=username) }}',

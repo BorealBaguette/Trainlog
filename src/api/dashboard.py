@@ -850,10 +850,10 @@ def dashboard_year(username):
         # Ticket usage by trip_type — all time (denominator for proportional split)
         ticket_by_type_total_rows = pg.execute(
             """
-            SELECT ticket_id, trip_type, COUNT(*) AS cnt
-            FROM trips
-            WHERE user_id = :uid AND NOT is_project AND ticket_id IS NOT NULL
-            GROUP BY ticket_id, trip_type
+            SELECT tid AS ticket_id, trip_type, COUNT(*) AS cnt
+            FROM trips, unnest(ticket_ids) AS tid
+            WHERE user_id = :uid AND NOT is_project
+            GROUP BY tid, trip_type
             """,
             p,
         ).fetchall()
@@ -861,12 +861,12 @@ def dashboard_year(username):
         # Ticket usage by trip_type — selected year
         ticket_by_type_ytd_rows = pg.execute(
             """
-            SELECT ticket_id, trip_type, COUNT(*) AS cnt
-            FROM trips
-            WHERE user_id = :uid AND NOT is_project AND ticket_id IS NOT NULL
+            SELECT tid AS ticket_id, trip_type, COUNT(*) AS cnt
+            FROM trips, unnest(ticket_ids) AS tid
+            WHERE user_id = :uid AND NOT is_project
               AND EXTRACT(YEAR FROM COALESCE(utc_start_datetime, start_datetime)) = :yr
               AND COALESCE(utc_start_datetime, start_datetime) <= :cutoff
-            GROUP BY ticket_id, trip_type
+            GROUP BY tid, trip_type
             """,
             p,
         ).fetchall()

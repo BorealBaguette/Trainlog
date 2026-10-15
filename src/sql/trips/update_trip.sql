@@ -24,7 +24,7 @@ UPDATE trips SET
     notes = :notes,
     price = :price,
     currency = :currency,
-    ticket_id = :ticket_id,
+    ticket_ids = CAST(:ticket_ids AS integer[]),
     purchase_date = :purchase_date,
     carbon = :carbon,
     visibility = :visibility,

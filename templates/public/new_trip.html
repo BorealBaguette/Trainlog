@@ -1581,7 +1581,7 @@ function buildItinerary(trips, prices) {
             // Inline value is the ticket's share of the price alone — its *name* is
             // free text with no short form, so that stays in the tooltip.
             let shortTicketPrice = formatCurrency("{{langId}}", trip.trip.ticket_price_in_user_currency, trip.trip.user_currency);
-            formattedTicketInfo = `<div class="popupInfo ticket_popupInfo legMetaItem" popupinfo_content="${formattedTicketPrice}"><i class="fa-solid fa-ticket legMetaIcon legIconTicket"></i><span class="legValue">${shortTicketPrice}</span></div>`;
+            formattedTicketInfo = `<div class="popupInfo ticket_popupInfo legMetaItem" popupinfo_content="${formattedTicketPrice}">${ticketIcon('<i class="fa-solid fa-ticket legMetaIcon legIconTicket"></i>', trip.trip.ticket_count)}<span class="legValue">${shortTicketPrice}</span></div>`;
         }
         if (isNumber(trip.trip.price_in_user_currency)) {
             formattedTripPrice = formatCurrency("{{langId}}", trip.trip.price_in_user_currency, trip.trip.user_currency);

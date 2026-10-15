@@ -18,9 +18,11 @@ from src.operators import split_operators
 from src.pg import pg_session
 from src.sql.tickets import (
     get_operator_logos_query,
+    get_ticket_query,
     get_tickets_query,
 )
 from src.trips.edits import attach_ticket_to_trips, delete_ticket_from_db
+from src.trips.trip import ticket_id_list
 from src.users import User
 from src.utils import get_user_id, lang, login_required
 
@@ -226,14 +228,15 @@ def _load_tickets(username):
             for row in pg.execute(get_tickets_query(), {"username": username, "uid": None}).fetchall()
         ]
         trips = pg.execute(
-            "SELECT trip_id, ticket_id, start_datetime, trip_length, countries FROM trips"
-            " WHERE user_id = :user_id AND ticket_id = ANY(:ids)"
+            "SELECT trip_id, ticket_ids, start_datetime, trip_length, countries FROM trips"
+            " WHERE user_id = :user_id AND ticket_ids && CAST(:ids AS integer[])"
             " ORDER BY start_datetime NULLS LAST, trip_id",
             {"user_id": get_user_id(username), "ids": [t["uid"] for t in tickets]},
         ).fetchall()
     by_ticket = defaultdict(list)
     for trip in trips:
-        by_ticket[trip["ticket_id"]].append(trip)
+        for ticket_id in trip["ticket_ids"]:
+            by_ticket[ticket_id].append(trip)
     products = _products() if tickets else {}
     for ticket in tickets:
         _with_product(ticket, products)
@@ -255,7 +258,7 @@ def _trip_shares(ticket_id):
             return {}
         ticket = dict(pg.execute(get_tickets_query(), {"username": owner, "uid": ticket_id}).fetchone()._mapping)
         trips = pg.execute(
-            "SELECT trip_id, start_datetime FROM trips WHERE ticket_id = :uid"
+            "SELECT trip_id, start_datetime FROM trips WHERE ticket_ids @> ARRAY[CAST(:uid AS integer)]"
             " ORDER BY start_datetime NULLS LAST, trip_id",
             {"uid": ticket_id},
         ).fetchall()
@@ -399,6 +402,39 @@ def _render(template, username, tickets, **context):
         **texts,
         **session["userinfo"],
     )
+
+
+def trip_ticket_fields(ticket_ids, trip_id, user_currency):
+    """A trip's tickets as it is shown: their names, and its share of each, summed in the
+    user's currency, and in the tickets' own when they have one. Tickets are read once a
+    request, as a trip list asks for the same ones over and over."""
+    cache = g.setdefault("_trip_tickets", {})
+    missing = [uid for uid in ticket_ids if uid not in cache]
+    if missing:
+        with pg_session() as pg:
+            for row in pg.execute(get_ticket_query(), {"uids": missing}).fetchall():
+                cache[row["uid"]] = row
+    tickets = [cache[uid] for uid in ticket_ids if uid in cache]
+    if not tickets:
+        return {}
+    shares = [ticket_trip_share(t["uid"], trip_id) for t in tickets]
+    in_user = [
+        get_exchange_rate(
+            price=share, base_currency=t["currency"], target_currency=user_currency,
+            date=t["purchasing_date"],
+        )
+        for share, t in zip(shares, tickets)
+    ]
+    total = None if None in in_user else sum(in_user)
+    currencies = {t["currency"] for t in tickets}
+    one_currency = len(currencies) == 1
+    return {
+        "ticket": " + ".join(t["name"] for t in tickets),
+        "ticket_count": len(tickets),
+        "ticket_price": sum(shares) if one_currency else total,
+        "ticket_currency": currencies.pop() if one_currency else user_currency,
+        "ticket_price_in_user_currency": total,
+    }
 
 
 @tickets_blueprint.route("/u/<username>/ticket_list")
@@ -611,7 +647,10 @@ def ticket_products(username):
 @tickets_blueprint.route("/u/<username>/get_all_tickets")
 @login_required
 def get_all_tickets(username):
-    return jsonify(tickets=_load_tickets(username)[0])
+    """The user's tickets for the ticket picker, each with its logo."""
+    tickets = _load_tickets(username)[0]
+    _logos(tickets)
+    return jsonify(tickets=tickets)
 
 
 @tickets_blueprint.route("/u/<username>/delete_ticket/<int:ticket_id>")
@@ -638,11 +677,14 @@ def toggle_ticket_active(username, ticket_id):
 @tickets_blueprint.route("/u/<username>/attachSelected")
 @login_required
 def attachSelected(username):
+    """The tickets given (ticket_ids, or a single ticket_id) added to the trips', or with
+    ?replace, in place of them: none detaching them all."""
     trip_ids = request.args.get("trips")
-    ticket_id = request.args.get("ticket_id", type=int)
-    if not trip_ids or not ticket_id:
+    ticket_ids = ticket_id_list(request.args.get("ticket_ids", request.args.get("ticket_id")))
+    replace = "replace" in request.args
+    if not trip_ids or not (ticket_ids or replace):
         abort(400)
-    success, error = attach_ticket_to_trips(username, ticket_id, trip_ids.split(","))
+    success, error = attach_ticket_to_trips(username, ticket_ids, trip_ids.split(","), replace)
     if not success:
         logger.error(error)
         return jsonify(error="An error occurred while attaching the ticket"), 500

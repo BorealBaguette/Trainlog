@@ -53,7 +53,7 @@ def update_trip(trip_id: int, trip: Trip, formData=None, updateCreated=False):
                 "notes": trip.notes,
                 "price": trip.price if trip.price != "" else None,
                 "currency": trip.currency,
-                "ticket_id": trip.ticket_id if trip.ticket_id != "" else None,
+                "ticket_ids": trip.ticket_ids,
                 "purchase_date": trip.purchasing_date,
                 "carbon": trip.carbon,
                 "visibility": trip.visibility if trip.visibility != "" else None,

@@ -118,7 +118,7 @@ def convert_motis_to_trip(itinerary, username):
         'originManualName': '',
         'reg': '',
         'seat': '',
-        'ticket_id': '',
+        'ticket_ids': [],
         'trip_length': total_distance,
         'precision': 'preciseDates',
         'notes': f'Imported from MOTIS routing - {itinerary["transfers"]} transfers'

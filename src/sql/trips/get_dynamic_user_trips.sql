@@ -32,7 +32,7 @@ WITH base AS (
         notes,
         price,
         currency,
-        ticket_id,
+        ticket_ids,
         purchase_date AS purchasing_date,
         carbon,
         visibility,
@@ -151,7 +151,7 @@ trip_tags AS (
 -- empty search the predicate is absent, so Postgres can elide the airliners join
 -- (its columns are unused by the COUNT query) and there is no tickets join at all,
 -- roughly halving the count-query cost. The ticket-name match is done there as a
--- correlated EXISTS on ticket_id, so this CTE no longer needs to join tickets.
+-- correlated EXISTS on ticket_ids, so this CTE no longer needs to join tickets.
 -- (Keep this CTE last so the file ends with ')': the builder concatenates the final
 -- SELECT directly onto this template.)
 FilteredTrips AS (

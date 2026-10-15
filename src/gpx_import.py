@@ -386,7 +386,7 @@ def parse_trip_params(args):
         ("seat",),
         ("reg",),
         ("visibility",),
-        ("ticket_id",),
+        ("ticket_ids", "ticket_id"),
         ("currency",),
         ("notes",),
     ]:
@@ -483,7 +483,7 @@ def build_trip_payload(row, trip_type, params, use_routing, flask_request):
         "seat",
         "reg",
         "visibility",
-        "ticket_id",
+        "ticket_ids",
     ):
         if params.get(key) is not None:
             newTrip[key] = params[key]

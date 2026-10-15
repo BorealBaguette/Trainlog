@@ -525,9 +525,9 @@
         </fieldset>
 
         {% if not plan_uuid %}
-        <label for="ticketSearchInput" id="ticketSearchInputLabel" class="form-label">{{select_ticket}}</label>
-        <select id="ticketSearchInput" name="ticket_id" class="form-select">
-        </select>
+<label for="ticketPickerField" id="ticketSearchInputLabel" class="form-label">{{select_ticket}}</label>
+        <input type="hidden" id="ticketIds" name="ticket_ids">
+        <div id="ticketPickerField" class="ticket-picker-field" role="button" tabindex="0"></div>
         {% endif %}
         <!-- Power Type Toggle -->
         {% if vehicle_type == 'train' %}
@@ -770,6 +770,8 @@
     </form>
   </div>
 </div>
+
+{% if not plan_uuid %}{% include "ticket_picker.html" %}{% endif %}
 
 <script>
 
@@ -1647,31 +1649,36 @@
       }
   }).trigger('input'); // Trigger on load to apply initial state
   {% if not plan_uuid %}
-  var refreshTickets = fetchTickets('{{ url_for("tickets.get_all_tickets", username=username) }}', "{{none_t}}", null, function () {
-    var precision = $('input[name="precision"]:checked').val();
-    var date = precision === 'preciseDates' ? $('#newTripStartDate').val()
-             : precision === 'onlyDate' ? $('#newTripStartOnlyDate').val() : null;
-    return { date: date, operators: $('#operator').val() };
-  }, showTicketSuggestion);
-  $('#newTripStartDate, #newTripStartOnlyDate, #operator, input[name="precision"]').on('change', refreshTickets);
-
   // One click takes the suggested ticket, another leaves it.
   var suggestedTicket = null;
   function showTicketSuggestion(ticket) {
     suggestedTicket = ticket;
     var $chip = $('#ticketSuggestion');
     if (!ticket) { $chip.hide(); return; }
-    var chosen = $('#ticketSearchInput').val() == ticket.uid;
+    var chosen = ticketPickerField.has(ticket.uid);
     $chip.toggleClass('chosen', chosen).css('display', 'inline-block');
     $chip.find('i').attr('class', chosen ? 'bi bi-check2' : 'bi bi-ticket-perforated');
     $chip.find('span').text(chosen ? ticketLabel(ticket) : {{ ticketUse|tojson }} + ' ' + ticketLabel(ticket));
   }
-  $('#ticketSuggestion').on('click', function () {
-    var chosen = $('#ticketSearchInput').val() == suggestedTicket.uid;
-    $('#ticketSearchInput').val(chosen ? '' : suggestedTicket.uid);
-    showTicketSuggestion(suggestedTicket);
+  var ticketPickerField = ticketPicker({
+    url: {{ url_for("tickets.get_all_tickets", username=username)|tojson }},
+    staticUrl: {{ url_for('static', filename='')|tojson }},
+    lang: {{ langId|tojson }},
+    texts: { add: {{ ticketPickerAdd|tojson }}, none: {{ ticketNone|tojson }} },
+    input: '#ticketIds',
+    field: '#ticketPickerField',
+    context: function () {
+      var precision = $('input[name="precision"]:checked').val();
+      var date = precision === 'preciseDates' ? $('#newTripStartDate').val()
+               : precision === 'onlyDate' ? $('#newTripStartOnlyDate').val() : null;
+      return { date: date, operators: $('#operator').val() };
+    },
+    onSuggest: showTicketSuggestion
   });
-  $('#ticketSearchInput').on('change', function () { showTicketSuggestion(suggestedTicket); });
+  var refreshTickets = ticketPickerField.refresh;
+  $('#newTripStartDate, #newTripStartOnlyDate, #operator, input[name="precision"]').on('change', refreshTickets);
+  $('#ticketSuggestion').on('click', function () { ticketPickerField.toggle(suggestedTicket.uid); });
+  $('#ticketIds').on('change', function () { showTicketSuggestion(suggestedTicket); });
   {% endif %}
   setupTagAutocomplete(`{{ url_for("get_all_tags", username=username) }}`, null, {
     url: `{{ url_for("quick_create_tag", username=username) }}`,
