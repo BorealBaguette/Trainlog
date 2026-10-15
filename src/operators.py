@@ -449,6 +449,33 @@ class OperatorsRepository:
                         "conflict": dict(taken._mapping),
                     }
 
+            if field == "operator_type" and value != operator_type:
+                # The alias FK cascades operator_type, moving every spelling of this
+                # operator into the new pool — reject if one is already taken there
+                # rather than hit the unique index mid-cascade. No merge offer: merge
+                # requires both operators to share a type, which they don't yet.
+                taken = pg.execute(
+                    """
+                    SELECT a.alias, o.short_name, o.long_name
+                    FROM operator_aliases mine
+                    JOIN operator_aliases a
+                      ON a.operator_type = :new_type AND a.normalized = mine.normalized
+                    JOIN operators o ON o.operator_id = a.operator_id
+                    WHERE mine.operator_id = :id
+                    ORDER BY a.alias
+                    """,
+                    {"new_type": value, "id": operator_id},
+                ).fetchall()
+                if taken:
+                    clashes = ", ".join(
+                        f"'{r.alias}' ({r.long_name or r.short_name})" for r in taken
+                    )
+                    return {
+                        "success": False,
+                        "error": f"Cannot move to '{value}': already taken there by "
+                        f"{clashes}. Rename or remove the alias first.",
+                    }
+
             pg.execute(
                 f"UPDATE operators SET {field} = :value WHERE operator_id = :operator_id",
                 {"value": value, "operator_id": operator_id},
