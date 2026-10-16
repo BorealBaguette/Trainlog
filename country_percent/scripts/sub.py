@@ -117,7 +117,7 @@ def clip_to_state(train_lines_gdf, state_boundary_geojson):
 
 def process(country_code):
     train_lines_gdf = gpd.read_file(
-        f"countries/processed/{country_code.lower()}.geojson"
+        f"countries/processed/{country_code.upper()}.geojson"
     )
 
     for subdivision in get_subdivisions(country_code):
