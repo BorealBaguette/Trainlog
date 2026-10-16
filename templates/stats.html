@@ -397,7 +397,7 @@
     var fullscreenWheelHandler = null;
     var bodyOverflowBeforeFullscreen = '';
 
-    var operatorImages = {{logosList | safe}};
+    var operatorImages = {{ logosList | tojson }};
     var staticLink = "{{ url_for('resize_image', max_width=240, target_height=40, image_path='')}}";
 
     // Which time bucket the time-series chart plots: months once a year is

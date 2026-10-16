@@ -128,7 +128,7 @@
 <script src="{{ url_for('static', filename='js/trip_progress.js') }}"></script>
 
 <script>
-var logosList   = {{ logosList | safe }};
+var logosList   = {{ logosList | tojson }};
 var apiEndpoint = "{{ api_endpoint }}";
 
 /* ── datetime helpers ────────────────────────────────────────────────────── */
