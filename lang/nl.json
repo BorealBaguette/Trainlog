@@ -396,6 +396,7 @@
     "ticketAlsoValidWith": "Ook geldig bij",
     "ticketProduct": "Merk",
     "ticketProductHint": "Een merk zoals Interrail: de tickets ervan worden gegroepeerd, ongeacht hun naam.",
+    "ticketSearchOperators": "Zoeken onder vervoerders",
     "ticketViewGroups": "Groepen",
     "ticketViewAll": "Alle tickets",
     "ticketSeeGroup": "Hele groep bekijken",

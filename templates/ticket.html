@@ -80,9 +80,10 @@
 
 {% macro money(value, currency) %}<span class="money" data-value="{{ value }}" data-currency="{{ currency }}"></span>{% endmacro %}
 
-{% macro operator_pill(name) %}
-    <span class="ticket-operator badge bg-light text-dark border fw-normal" title="{{ name }}">
+{% macro operator_pill(name, count=none) %}
+    <span class="ticket-operator badge bg-light text-dark border fw-normal gap-1" title="{{ name }}">
         {% if logos.get(name) %}<img src="{{ url_for('static', filename=logos[name]) }}" alt="{{ name }}">{% else %}{{ name }}{% endif %}
+        {% if count %}<span class="text-muted">×{{ count }}</span>{% endif %}
     </span>
 {% endmacro %}
 
@@ -93,6 +94,8 @@
 {% set mixed_logos = group.tickets|map(attribute='logo')|unique|list|length > 1 %}
 {# Tickets valid in different countries (a Global pass, a One Country one): each with its own. #}
 {% set mixed_countries = group.tickets|map(attribute='active_countries')|unique|list|length > 1 %}
+{# Tickets of one brand bought from several operators: each with its own. #}
+{% set mixed_operators = group.operators|length > 1 %}
 
 <div class="container-xl py-3">
     <a href="{{ url_for('tickets.ticket_list', username=username) }}" class="small text-decoration-none">
@@ -111,16 +114,19 @@
         </div>
         <div style="min-width: 0;">
             <h1 class="h2 mb-1">{{ group.name }}</h1>
+            {% if group.ticket_name and group.ticket_name != group.name %}<div class="text-muted mb-1">{{ group.ticket_name }}</div>{% endif %}
             {% if whole %}
                 <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=whole.latest.uid) }}" class="small text-decoration-none d-inline-block mb-1">
                     <i class="bi bi-collection"></i> {{ticketSeeGroup}} ({{ whole.tickets|length }})
                 </a>
             {% endif %}
             <div class="d-flex flex-wrap align-items-center gap-1 small text-muted">
-                {% if latest.product_logo and latest.operator %}{{ operator_pill(latest.operator) }}{% endif %}
-                {% if latest.secondary_operators %}
+                {% if mixed_operators %}
+                    {% for name, count in group.operators %}{{ operator_pill(name, count) }}{% endfor %}
+                {% elif latest.product_logo and latest.operator %}{{ operator_pill(latest.operator) }}{% endif %}
+                {% if group.secondary_operators %}
                     {{ticketAlsoValidWith}}
-                    {% for name in latest.secondary_operators.split(',') %}{{ operator_pill(name.strip()) }}{% endfor %}
+                    {% for name in group.secondary_operators %}{{ operator_pill(name) }}{% endfor %}
                 {% endif %}
             </div>
             {% if group.countries %}
@@ -172,6 +178,7 @@
         <table id="ticketsTable" class="ticket-table table table-hover align-middle">
             <thead>
                 <tr>
+                    {% if mixed_operators %}<th data-sort="text">{{operator}}</th>{% endif %}
                     <th data-sort="text" aria-sort="descending">{{ticketValidity}}</th>
                     <th data-sort="number" class="text-end">{{price}}</th>
                     <th data-sort="number" class="text-end">{{trips}}</th>
@@ -184,6 +191,11 @@
             <tbody>
                 {% for ticket in group.tickets %}
                 <tr id="ticket_{{ ticket.uid }}">
+                    {% if mixed_operators %}
+                    <td class="ticket-cell-operator text-nowrap" data-order="{{ ticket.operator or '' }}">
+                        {% if ticket.operator %}{{ operator_pill(ticket.operator) }}{% endif %}
+                    </td>
+                    {% endif %}
                     <td class="ticket-cell-validity text-nowrap" data-order="{{ ticket.valid_from or ticket.valid_until or ticket.purchasing_date }}">
                         {% if group.mixed_names or mixed_logos or (mixed_countries and ticket.active_countries) %}
                             <div class="d-flex flex-wrap align-items-center gap-2 fw-medium text-wrap">

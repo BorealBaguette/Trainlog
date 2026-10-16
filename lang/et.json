@@ -395,6 +395,7 @@
     "ticketAlsoValidWith": "Kehtib ka",
     "ticketProduct": "Kaubamärk",
     "ticketProductHint": "Kaubamärk nagu Interrail: selle piletid rühmitatakse kokku olenemata nimest.",
+    "ticketSearchOperators": "Otsi vedajate hulgast",
     "ticketViewGroups": "Rühmad",
     "ticketViewAll": "Kõik piletid",
     "ticketSeeGroup": "Vaata kogu rühma",

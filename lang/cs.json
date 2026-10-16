@@ -397,6 +397,7 @@
     "ticketAlsoValidWith": "Platí také u",
     "ticketProduct": "Značka",
     "ticketProductHint": "Značka jako Interrail: její vstupenky se seskupí bez ohledu na název.",
+    "ticketSearchOperators": "Hledat mezi dopravci",
     "ticketViewGroups": "Skupiny",
     "ticketViewAll": "Všechny vstupenky",
     "ticketSeeGroup": "Zobrazit celou skupinu",

@@ -397,6 +397,7 @@
     "ticketAlsoValidWith": "Також діє у",
     "ticketProduct": "Бренд",
     "ticketProductHint": "Бренд на кшталт Interrail: його квитки групуються разом, хоч як би вони називалися.",
+    "ticketSearchOperators": "Шукати серед перевізників",
     "ticketViewGroups": "Групи",
     "ticketViewAll": "Усі квитки",
     "ticketSeeGroup": "Показати всю групу",

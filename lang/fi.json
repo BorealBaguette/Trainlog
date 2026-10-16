@@ -396,6 +396,7 @@
     "ticketAlsoValidWith": "Käy myös",
     "ticketProduct": "Brändi",
     "ticketProductHint": "Brändi kuten Interrail: sen liput ryhmitellään yhteen nimestä riippumatta.",
+    "ticketSearchOperators": "Hae liikennöitsijöistä",
     "ticketViewGroups": "Ryhmät",
     "ticketViewAll": "Kaikki liput",
     "ticketSeeGroup": "Näytä koko ryhmä",

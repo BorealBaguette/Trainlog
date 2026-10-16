@@ -396,6 +396,7 @@
     "ticketAlsoValidWith": "Også gyldig hos",
     "ticketProduct": "Merke",
     "ticketProductHint": "Et merke som Interrail: billettene grupperes sammen, uansett hva de heter.",
+    "ticketSearchOperators": "Søk blant operatører",
     "ticketViewGroups": "Grupper",
     "ticketViewAll": "Alle billetter",
     "ticketSeeGroup": "Se hele gruppen",

@@ -396,6 +396,7 @@
     "ticketAlsoValidWith": "También válido con",
     "ticketProduct": "Marca",
     "ticketProductHint": "Una marca como Interrail: sus boletos se agrupan, sea cual sea su nombre.",
+    "ticketSearchOperators": "Buscar entre los operadores",
     "ticketViewGroups": "Grupos",
     "ticketViewAll": "Todos los boletos",
     "ticketSeeGroup": "Ver todo el grupo",

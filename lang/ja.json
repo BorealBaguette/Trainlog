@@ -395,6 +395,7 @@
     "ticketAlsoValidWith": "他の利用可能な事業者",
     "ticketProduct": "ブランド",
     "ticketProductHint": "Interrailなどのブランド：名前が違っても切符がまとめて表示されます。",
+    "ticketSearchOperators": "事業者から検索",
     "ticketViewGroups": "グループ",
     "ticketViewAll": "すべての切符",
     "ticketSeeGroup": "グループ全体を見る",

@@ -395,6 +395,7 @@
     "ticketAlsoValidWith": "Şunlarda da geçerli",
     "ticketProduct": "Marka",
     "ticketProductHint": "Interrail gibi bir marka: biletleri, adları ne olursa olsun birlikte gruplanır.",
+    "ticketSearchOperators": "İşletmeciler arasında ara",
     "ticketViewGroups": "Gruplar",
     "ticketViewAll": "Tüm biletler",
     "ticketSeeGroup": "Tüm grubu gör",

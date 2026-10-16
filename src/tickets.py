@@ -46,30 +46,53 @@ def _logo_at(logos, day):
     return None
 
 
-def _product_rows():
+def _product_rows(names=None):
     """Each spelling of a ticket product (the 'ticket' pool of operators), with the product's
-    names and every logo, newest first."""
+    names and every logo, newest first. Given names, those of any operator spelled so
+    instead: a ticket product first, then a train operator, then the others."""
+    where = "o.operator_type = 'ticket'"
+    if names is not None:
+        where = (
+            "operator_normalize(a.alias) IN"
+            " (SELECT operator_normalize(n) FROM unnest(CAST(:names AS text[])) n)"
+        )
     with pg_session() as pg:
         return pg.execute(
-            "SELECT a.alias, o.short_name, o.long_name, l.effective_date, l.logo_url"
+            "SELECT a.alias, o.operator_id, o.short_name, o.long_name, l.effective_date, l.logo_url"
             " FROM operators o JOIN operator_aliases a ON a.operator_id = o.operator_id"
             " LEFT JOIN operator_logos l ON l.operator_id = o.operator_id"
-            " WHERE o.operator_type = 'ticket'"
-            " ORDER BY a.alias, l.effective_date DESC NULLS LAST, l.uid DESC"
+            f" WHERE {where}"
+            " ORDER BY a.alias, o.operator_type <> 'ticket', o.operator_type <> 'operator', o.operator_id,"
+            " l.effective_date DESC NULLS LAST, l.uid DESC",
+            {"names": names},
         ).fetchall()
 
 
-def _products():
+def _products(names=None):
     """The ticket products by each of their spellings, written without spaces or punctuation:
-    their name and logos, newest first."""
+    their name and logos, newest first. Given names, the operators of any kind they spell."""
     products = {}
-    for row in _product_rows():
+    for row in _product_rows(names):
         key = "".join(_words(row["alias"]))
         if key:
-            product = products.setdefault(key, {"name": row["short_name"], "logos": []})
-            if row["logo_url"]:
+            product = products.setdefault(
+                key, {"id": row["operator_id"], "name": row["short_name"], "logos": []}
+            )
+            # A spelling two operators share: the first one's logos only.
+            if row["logo_url"] and product["id"] == row["operator_id"]:
                 product["logos"].append((row["effective_date"], row["logo_url"]))
     return products
+
+
+def _with_operator_products(tickets, products):
+    """The ticket products, and the operators the tickets' chosen products name that are
+    none: a brand may be any operator."""
+    others = {
+        t["product"].strip()
+        for t in tickets
+        if t["product"] and "".join(_words(t["product"])) not in products
+    }
+    return {**_products(sorted(others)), **products} if others else products
 
 
 def _product_in(name, products):
@@ -237,7 +260,7 @@ def _load_tickets(username):
     for trip in trips:
         for ticket_id in trip["ticket_ids"]:
             by_ticket[ticket_id].append(trip)
-    products = _products() if tickets else {}
+    products = _with_operator_products(tickets, _products()) if tickets else {}
     for ticket in tickets:
         _with_product(ticket, products)
         ticket_trips = by_ticket[ticket["uid"]]
@@ -343,11 +366,26 @@ def _groups(tickets):
         trips = sum(len(t["trip_ids"]) for t in tickets)
         per_count = sum(t["per_count"] for t in tickets)
         km = sum(t["km"] for t in tickets)
+        # Who its tickets were bought from, the most used first (the latest on a tie), and
+        # who else they were valid with.
+        sellers = Counter(t["operator"] for t in tickets if t["operator"])
+        operators = sorted(sellers, key=lambda name: -sellers[name])
+        secondary = [
+            name
+            for name in dict.fromkeys(n for t in tickets for n in split_operators(t["secondary_operators"]))
+            if name not in sellers
+        ]
         summaries.append({
             "tickets": tickets,
             "latest": tickets[0],
             "name": tickets[0]["product"] or tickets[0]["name"],
             "mixed_names": len({t["name"].strip().lower() for t in tickets}) > 1,
+            # The name all its tickets bear, when the product's title does not already say it.
+            "ticket_name": tickets[0]["name"] if tickets[0]["product"]
+            and len({t["name"].strip().lower() for t in tickets}) == 1
+            and _words(tickets[0]["name"]) != _words(tickets[0]["product"]) else None,
+            "operators": [(name, sellers[name]) for name in operators],
+            "secondary_operators": secondary,
             "edit": {
                 **tickets[0],
                 **{field: None for field in mixed},

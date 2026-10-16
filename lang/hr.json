@@ -397,6 +397,7 @@
     "ticketAlsoValidWith": "Vrijedi i kod",
     "ticketProduct": "Marka",
     "ticketProductHint": "Marka poput Interraila: njezine karte grupiraju se zajedno, bez obzira na naziv.",
+    "ticketSearchOperators": "Traži među prijevoznicima",
     "ticketViewGroups": "Grupe",
     "ticketViewAll": "Sve karte",
     "ticketSeeGroup": "Prikaži cijelu grupu",

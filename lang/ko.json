@@ -395,6 +395,7 @@
     "ticketAlsoValidWith": "함께 이용 가능",
     "ticketProduct": "브랜드",
     "ticketProductHint": "Interrail 같은 브랜드: 이름이 달라도 티켓이 함께 묶입니다.",
+    "ticketSearchOperators": "운영사에서 검색",
     "ticketViewGroups": "그룹",
     "ticketViewAll": "모든 티켓",
     "ticketSeeGroup": "그룹 전체 보기",

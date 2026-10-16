@@ -395,6 +395,7 @@
     "ticketAlsoValidWith": "Ezeknél is érvényes",
     "ticketProduct": "Márka",
     "ticketProductHint": "Egy márka, például az Interrail: a jegyei egy csoportba kerülnek, bármi is a nevük.",
+    "ticketSearchOperators": "Keresés az üzemeltetők között",
     "ticketViewGroups": "Csoportok",
     "ticketViewAll": "Összes jegy",
     "ticketSeeGroup": "Az egész csoport megtekintése",

@@ -395,6 +395,7 @@
     "ticketAlsoValidWith": "也适用于",
     "ticketProduct": "品牌",
     "ticketProductHint": "例如 Interrail 这样的品牌：无论名称如何，其票都会归为一组。",
+    "ticketSearchOperators": "在运营商中搜索",
     "ticketViewGroups": "分组",
     "ticketViewAll": "所有票",
     "ticketSeeGroup": "查看整个分组",

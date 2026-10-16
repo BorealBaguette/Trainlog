@@ -131,6 +131,7 @@
             border: 0;
         }
         .ticket-table .ticket-cell-validity,
+        .ticket-table .ticket-cell-operator,
         .ticket-table .ticket-cell-actions {
             order: -1;
         }
@@ -385,13 +386,15 @@ var openTicketForm = (function () {
     // Loaded on the first opening only: the operator list is long.
     function loadOperators() {
         if (operatorPills) return;
-        $.get({{ url_for('getManAndOps', username=username, station_type='train')|tojson }}, function (manAndOps) {
-            var staticUrl = {{ url_for('static', filename='')|tojson }};
+        var staticUrl = {{ url_for('static', filename='')|tojson }};
+        var operatorsLoaded = $.get({{ url_for('getManAndOps', username=username, station_type='train')|tojson }}, function (manAndOps) {
             operatorPills = operatorPillsInput($('#ticketOperator'), $('#ticketOperatorSearch'), $('#ticketOperatorPills'), manAndOps, staticUrl, 'train');
             secondaryPills = operatorPillsInput($('#ticketSecondary'), $('#ticketSecondarySearch'), $('#ticketSecondaryPills'), manAndOps, staticUrl, 'train');
         });
-        $.get({{ url_for('tickets.ticket_products', username=username)|tojson }}, function (products) {
-            productPills = operatorPillsInput($('#ticketProduct'), $('#ticketProductSearch'), $('#ticketProductPills'), products, {{ url_for('static', filename='')|tojson }}, 'train');
+        // A brand may be any operator too, searched only when asked for from the menu.
+        $.when($.get({{ url_for('tickets.ticket_products', username=username)|tojson }}), operatorsLoaded).done(function (products, operators) {
+            productPills = operatorPillsInput($('#ticketProduct'), $('#ticketProductSearch'), $('#ticketProductPills'), products[0], staticUrl, 'train',
+                { more: operators[0], moreLabel: {{ ticketSearchOperators|tojson }} });
         });
     }
 

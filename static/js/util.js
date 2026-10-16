@@ -1233,18 +1233,32 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
   pillContainer.find('.op-pill-placeholder').show();
   // Built once: every known spelling in its normalised form, so a pill can find its
   // logo without rescanning thousands of names on each render.
+  // opts.more: a second pool (same shape as manAndOps) searched only once the user asks
+  // for it from the menu, under opts.moreLabel. Its names still get their logos.
+  var more = opts.more || null;
+  var moreOn = false;
+  var pools = more ? [manAndOps, more] : [manAndOps];
+  function fromPools(field, name) {
+    for (var i = 0; i < pools.length; i++) {
+      var map = pools[i][field] || {};
+      if (Object.prototype.hasOwnProperty.call(map, name)) return map[name];
+    }
+    return undefined;
+  }
+
   var logosByNormalized = {};
-  Object.keys(manAndOps.operators).forEach(function (name) {
-    var key = normalizeOperatorName(name);
-    if (key && !(key in logosByNormalized)) logosByNormalized[key] = manAndOps.operators[name];
+  pools.forEach(function (pool) {
+    Object.keys(pool.operators).forEach(function (name) {
+      var key = normalizeOperatorName(name);
+      if (key && !(key in logosByNormalized)) logosByNormalized[key] = pool.operators[name];
+    });
   });
 
   function logoFor(name) {
     // Exact spelling first, then the normalised form — the user may have typed a
     // punctuated or accented variant of a name we know.
-    if (Object.prototype.hasOwnProperty.call(manAndOps.operators, name)) {
-      return manAndOps.operators[name];
-    }
+    var exact = fromPools('operators', name);
+    if (exact !== undefined) return exact;
     var key = normalizeOperatorName(name);
     return key && key in logosByNormalized ? logosByNormalized[key] : null;
   }
@@ -1312,56 +1326,79 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
       // loose form rather than replacing it: stripping spaces would stop a
       // multi-word term like "sncf nouvelle" matching "SNCF TER Nouvelle-Aquitaine".
       var strictTerm = normalizeOperatorName(request.term);
-      var canonicalMap = manAndOps.operatorCanonical || {};
 
       // The suggestion for a match is the operator's canonical (short) name, not the
       // spelling that matched — so typing "Eth" collapses ETHIAD and "Ethiad airways"
       // into the single "Etihad Airways" rather than listing every alias. Matching
       // still happens against every spelling, so an alias-only term ("ETHIAD") still
       // finds its operator. An unresolved free-text spelling is its own canonical.
-      function canonical(name) { return canonicalMap[name] || name; }
+      function canonical(name) { return fromPools('operatorCanonical', name) || name; }
 
       var chosen = names.map(function (n) { return normalizeOperatorName(canonical(n)); });
 
       // Best match per canonical operator, keyed by its normalised name.
       var best = {};
+      var taken = [];
       function offer(canonName, rank, len) {
         var key = normalizeOperatorName(canonName);
         if (chosen.indexOf(key) !== -1) return;            // operator already a pill
+        if (taken.indexOf(key) !== -1) return;             // offered by the first pool
         var prev = best[key];
         if (!prev || rank < prev.rank || (rank === prev.rank && len < prev.len)) {
           best[key] = { label: canonName, value: canonName, rank: rank, len: len };
         }
       }
 
-      Object.keys(manAndOps.operators).forEach(function (name) {
-        var canonName = canonical(name);
-        var canonLen = normalizeForSearch(canonName).length;
-        var norm = normalizeForSearch(name);
-        var at = norm.indexOf(term);
-        if (at === -1) {
-          // No loose match: fall back to the punctuation-free comparison.
-          var strictName = normalizeOperatorName(name);
-          if (!strictTerm || strictName.indexOf(strictTerm) === -1) return;
-          offer(canonName, strictName === strictTerm ? 0 : 3, canonLen);
-          return;
-        }
-        // Rank: exact, then prefix, then start-of-word, then anywhere. Within a
-        // rank prefer the shorter operator name, so "SNCF" beats "SNCF Intercités".
-        var rank;
-        if (norm === term) rank = 0;
-        else if (at === 0) rank = 1;
-        else if (norm[at - 1] === ' ' || norm[at - 1] === '-') rank = 2;
-        else rank = 3;
-        offer(canonName, rank, canonLen);
-      });
+      function collect(pool) {
+        best = {};
+        Object.keys(pool.operators).forEach(function (name) {
+          var canonName = canonical(name);
+          var canonLen = normalizeForSearch(canonName).length;
+          var norm = normalizeForSearch(name);
+          var at = norm.indexOf(term);
+          if (at === -1) {
+            // No loose match: fall back to the punctuation-free comparison.
+            var strictName = normalizeOperatorName(name);
+            if (!strictTerm || strictName.indexOf(strictTerm) === -1) return;
+            offer(canonName, strictName === strictTerm ? 0 : 3, canonLen);
+            return;
+          }
+          // Rank: exact, then prefix, then start-of-word, then anywhere. Within a
+          // rank prefer the shorter operator name, so "SNCF" beats "SNCF Intercités".
+          var rank;
+          if (norm === term) rank = 0;
+          else if (at === 0) rank = 1;
+          else if (norm[at - 1] === ' ' || norm[at - 1] === '-') rank = 2;
+          else rank = 3;
+          offer(canonName, rank, canonLen);
+        });
 
-      var matches = Object.keys(best).map(function (k) { return best[k]; });
-      matches.sort(function (a, b) { return a.rank - b.rank || a.len - b.len || a.label.localeCompare(b.label); });
-      // The operator list runs to thousands of names; an uncapped menu is unusable.
-      response(matches.slice(0, 10));
+        var matches = Object.keys(best).map(function (k) { return best[k]; });
+        matches.sort(function (a, b) { return a.rank - b.rank || a.len - b.len || a.label.localeCompare(b.label); });
+        // The operator list runs to thousands of names; an uncapped menu is unusable.
+        return matches.slice(0, 10);
+      }
+
+      var matches = collect(manAndOps);
+      if (more) {
+        taken = matches.map(function (m) { return normalizeOperatorName(m.value); });
+        if (moreOn) {
+          var extra = collect(more);
+          if (extra.length) extra[0].firstMore = true;
+          matches = matches.concat(extra);
+        } else {
+          matches.push({ label: opts.moreLabel || 'More', value: '', more: true });
+        }
+      }
+      response(matches);
     },
     select: function (event, ui) {
+      if (ui.item.more) {
+        // Search again, the second pool included, keeping the menu open.
+        moreOn = true;
+        setTimeout(function () { searchInput.autocomplete('search', searchInput.val()); });
+        return false;
+      }
       add(ui.item.value);
       return false;   // don't write the raw value back into the search box
     },
@@ -1373,8 +1410,14 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
     // Show the logo next to each suggestion, so the right operator is pickable by
     // sight when several spellings look alike.
     instance._renderItem = function (ul, item) {
+      if (item.more) {
+        return $('<li class="op-suggestion op-suggestion-more"></li>')
+          .append($('<div></div>').append($('<i class="bi bi-search"></i>'), ' ', $('<span></span>').text(item.label)))
+          .appendTo(ul);
+      }
       var logo = logoFor(item.value);
       var $li = $('<li class="op-suggestion"></li>');
+      if (item.firstMore) $li.addClass('op-suggestion-first-more');
       var $div = $('<div></div>');
       if (logo) {
         $div.append($('<img class="op-suggestion-logo">').attr('src', logosUrl + logo).attr('alt', ''));
@@ -1385,7 +1428,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
       // The operator's other name, so a spelling says what it maps to: "SBB" is
       // followed by Schweizerische Bundesbahnen, an alias by the operator it
       // resolves to. Absent for names that would only repeat themselves.
-      var hint = (manAndOps.operatorHints || {})[item.value];
+      var hint = fromPools('operatorHints', item.value);
       if (hint) $div.append($('<span class="op-suggestion-hint"></span>').text(hint));
       return $li.append($div).appendTo(ul);
     };
@@ -1399,8 +1442,8 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
       searchInput.autocomplete('close');
     } else if (e.key === 'Enter') {
       // Only swallow Enter when there is text to commit, so an empty field still
-      // submits the form as before.
-      if (searchInput.val().trim()) {
+      // submits the form as before. A menu item chosen with it has been handled.
+      if (searchInput.val().trim() && !e.isDefaultPrevented()) {
         e.preventDefault();
         add(searchInput.val());
         searchInput.autocomplete('close');
@@ -1464,6 +1507,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
   // as focus leaves the field on that click. Clicking an autocomplete suggestion does
   // not blur the input (jQuery UI suppresses it), so this cannot double-add.
   searchInput.on('blur.opPills', function () {
+    moreOn = false;
     if (searchInput.val().trim()) add(searchInput.val());
   });
 

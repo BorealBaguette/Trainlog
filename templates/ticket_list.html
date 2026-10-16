@@ -80,7 +80,7 @@
     {# The ticket in use, or else the latest. #}
     {% set shown = (group.tickets|selectattr('state', 'in', ['valid', 'active', 'upcoming'])|list or [group.latest])|first %}
     {% set logo = group.latest.logo %}
-    <div class="list-group-item list-group-item-action position-relative d-flex align-items-center gap-3 py-3 ticket-row" data-search="{{ group.name }} {{ group.tickets|map(attribute='name')|unique|join(' ') }} {{ group.latest.operator or '' }} {{ group.latest.secondary_operators or '' }} {{ group.countries.replace(',', ' ') }}">
+    <div class="list-group-item list-group-item-action position-relative d-flex align-items-center gap-3 py-3 ticket-row" data-search="{{ group.name }} {{ group.tickets|map(attribute='name')|unique|join(' ') }} {{ group.operators|map('first')|join(' ') }} {{ group.secondary_operators|join(' ') }} {{ group.countries.replace(',', ' ') }}">
         <div class="ticket-logo">
             {% if logo %}
                 <img src="{{ url_for('static', filename=logo) }}" alt="">
@@ -99,7 +99,8 @@
                 {% endif %}
             </div>
             <div class="small text-muted text-truncate">
-                {% if group.latest.operator and not logos.get(group.latest.operator) %}{{ group.latest.operator }} · {% endif %}{{ status(shown) }}{% if group.latest.auto_renew %} <i class="bi bi-arrow-repeat text-success" title="{{ticketAutoRenew}}"></i>{% endif %}
+                {% if group.ticket_name %}{{ group.ticket_name }} · {% endif %}
+                {%- if group.latest.operator and not logos.get(group.latest.operator) %}{{ group.latest.operator }} · {% endif %}{{ status(shown) }}{% if group.latest.auto_renew %} <i class="bi bi-arrow-repeat text-success" title="{{ticketAutoRenew}}"></i>{% endif %}
                 {#- Above the row's link, which opens the year only. #}
                 {%- if year and group.whole %} · <a href="{{ url_for('tickets.ticket_page', username=username, ticket_id=group.whole.latest.uid) }}" class="position-relative text-decoration-none" style="z-index: 2;">{{ticketAllYears}} ({{ group.whole.tickets|length }})</a>{% endif %}
             </div>

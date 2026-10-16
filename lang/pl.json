@@ -397,6 +397,7 @@
     "ticketAlsoValidWith": "Ważny także u",
     "ticketProduct": "Marka",
     "ticketProductHint": "Marka taka jak Interrail: jej bilety są grupowane niezależnie od nazwy.",
+    "ticketSearchOperators": "Szukaj wśród przewoźników",
     "ticketViewGroups": "Grupy",
     "ticketViewAll": "Wszystkie bilety",
     "ticketSeeGroup": "Zobacz całą grupę",
