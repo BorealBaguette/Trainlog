@@ -120,6 +120,13 @@
         opacity: 0.9;
     }
 
+    /* The flag picker's offsets are tuned for the new-trip form's 32px inputs; next to a
+       38px .form-control it would sit high. */
+    #massEditModal .flagDropdownWrapper { height: 38px; flex: none; border-radius: 4px; }
+    #massEditModal .flagDropdownWrapper select { transform: translateY(-50%); }
+    /* A station typed while the trips' countries differ needs one picked first. */
+    #massEditModal .flagDropdownWrapper.flag-missing { outline: 2px solid #dc3545; outline-offset: 2px; }
+
     /* Dated future trips shown on the past page via the "show upcoming" toggle */
     tr.upcoming-trip > td { opacity: 0.65; }
 
@@ -1403,6 +1410,7 @@
           <div class="d-flex align-items-center gap-2">
             <div class="flagDropdownWrapper">
               <select id="massEditOriginCountry" class="custom-select-flag">
+                <option value="" hidden>🌐</option>
                 {% for code, emoji in country_list.items() %}
                 <option value="{{ emoji }}" data-code="{{ code }}">{{ emoji }} {{ code }}</option>
                 {% endfor %}
@@ -1416,6 +1424,7 @@
           <div class="d-flex align-items-center gap-2">
             <div class="flagDropdownWrapper">
               <select id="massEditDestCountry" class="custom-select-flag">
+                <option value="" hidden>🌐</option>
                 {% for code, emoji in country_list.items() %}
                 <option value="{{ emoji }}" data-code="{{ code }}">{{ emoji }} {{ code }}</option>
                 {% endfor %}
@@ -3689,18 +3698,26 @@ function deleteTrip(tripId){
 const massEditDirtyFields = new Set();
 
 function _massEditPrefillStation(countrySelId, stationInputId, trips, field) {
-    const values = new Set(trips.map(function(t) { return t[field] ?? ''; }));
     const stationInput = document.getElementById(stationInputId);
     const countrySel = document.getElementById(countrySelId);
-    if (values.size === 1) {
-        const full = [...values][0];
+    const flagValues = new Set([...countrySel.options].map(function(o) { return o.value; }).filter(Boolean));
+    // "🇫🇷 Paris Nord" -> ["🇫🇷", "Paris Nord"]; a name with no known flag in front stays whole.
+    const split = function(full) {
         const spaceIdx = full.indexOf(' ');
-        if (spaceIdx > 0) {
-            countrySel.value = full.slice(0, spaceIdx);
-            stationInput.value = full.slice(spaceIdx + 1);
-        } else {
-            stationInput.value = full;
-        }
+        const flag = spaceIdx > 0 ? full.slice(0, spaceIdx) : '';
+        return flagValues.has(flag) ? [flag, full.slice(spaceIdx + 1)] : ['', full];
+    };
+    const parts = trips.map(function(t) { return split(t[field] ?? ''); });
+    const flags = new Set(parts.map(function(p) { return p[0]; }));
+    const names = new Set(parts.map(function(p) { return p[1]; }));
+
+    // One country for all the trips shows its flag even when the stations differ;
+    // otherwise the neutral globe, rather than whichever country comes first (Aruba).
+    countrySel.value = flags.size === 1 ? [...flags][0] : '';
+    countrySel.closest('.flagDropdownWrapper').classList.remove('flag-missing');
+
+    if (names.size === 1) {
+        stationInput.value = [...names][0];
         stationInput.placeholder = '';
     } else {
         stationInput.value = '';
@@ -3912,6 +3929,12 @@ document.addEventListener('DOMContentLoaded', function() {
     updateCountryNames(document.getElementById('massEditOriginCountry'));
     updateCountryNames(document.getElementById('massEditDestCountry'));
 
+    ['massEditOriginCountry', 'massEditDestCountry'].forEach(function(id) {
+        document.getElementById(id).addEventListener('change', function() {
+            this.closest('.flagDropdownWrapper').classList.remove('flag-missing');
+        });
+    });
+
     // Station dirty tracking
     ['massEditOriginCountry', 'massEditOriginStation'].forEach(function(id) {
         document.getElementById(id).addEventListener('input', function() { massEditDirtyFields.add('origin_station'); });
@@ -3942,6 +3965,20 @@ function openMassEditTsb() {
 }
 
 function submitMassEdit() {
+    // A station typed while the globe is showing has no country to go with it.
+    for (const [field, selId, inputId] of [
+        ['origin_station', 'massEditOriginCountry', 'massEditOriginStation'],
+        ['destination_station', 'massEditDestCountry', 'massEditDestStation'],
+    ]) {
+        const countrySel = document.getElementById(selId);
+        if (massEditDirtyFields.has(field) && !countrySel.value
+                && document.getElementById(inputId).value.trim()) {
+            countrySel.closest('.flagDropdownWrapper').classList.add('flag-missing');
+            countrySel.focus();
+            return;
+        }
+    }
+
     const fields = {};
     massEditDirtyFields.forEach(function(fieldName) {
         if (fieldName === 'origin_station') {
