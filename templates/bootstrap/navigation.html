@@ -433,7 +433,7 @@
           group.header.appendTo(group.header.parent());
           group.countries.forEach(function (country) {
             if (country.level > 0) {
-              country.element.css('padding-left', (1 + 1.5 * country.level) + 'rem');
+              country.element.css('padding-left', (1 + country.level) + 'rem');
             }
             country.element.html(country.html);
             country.element.appendTo(country.element.parent());

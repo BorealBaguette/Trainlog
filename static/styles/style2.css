@@ -101,6 +101,8 @@
 .flagPNG {
   height:20px;
   max-width: 35px;
+  /* .dropdown-item is a flex row: a long name would otherwise squash the flag. */
+  flex-shrink: 0;
   display: inline-block;
   vertical-align: -5px;
   border-radius: 3px; 
