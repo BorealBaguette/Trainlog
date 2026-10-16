@@ -78,35 +78,25 @@ function getFlagEmoji(countryCode) {
     return String.fromCodePoint(...codePoints);
   }
 
-function getTooltipSVG(countryCode, gb=false) {
-  var imageCode = (gb || countryCode).toLowerCase();
-  var CountryName = regionNames.of(countryCode);
-
-  return `<img class="flagPNG" src="/static/images/flags/${imageCode}.svg"
-    alt="${CountryName} flag"
-    onerror="fallbackFlag(this)">`;
+// The deepest flag there is for a code: gb-eng-h has none of its own, so it takes
+// gb-eng's. The sprite index lists exactly the flags in static/images/flags, so it
+// answers for the SVGs too. null when not even the country has one.
+function resolveFlagCode(code, positions) {
+  let lookup = code.toLowerCase();
+  while (!positions[lookup] && lookup.includes("-")) {
+    lookup = lookup.substring(0, lookup.lastIndexOf("-"));
+  }
+  return positions[lookup] ? lookup : null;
 }
 
-function fallbackFlag(image) {
-  image.onerror = null;
+function getTooltipSVG(countryCode, gb=false) {
+  var code = (gb || countryCode).toLowerCase();
+  // flagPositions is the sprite index layout.html defines; "" if it failed to load.
+  var positions = typeof flagPositions !== 'undefined' && flagPositions ? flagPositions : null;
+  var imageCode = (positions && resolveFlagCode(code, positions)) || code;
+  var CountryName = regionNames.of(countryCode);
 
-  var code = image.src.split("/").pop().replace(".svg", "");
-  var parts = code.split("-");
-
-  if (parts.length <= 2) {
-    return;
-  }
-
-  // Keep country + first subdivision, e.g. gb-eng-h -> gb-eng
-  code = parts.slice(0, 2).join("-");
-
-  image.onerror = function() {
-    // If the regional flag itself doesn't exist, fall back to the country.
-    this.onerror = null;
-    this.src = `/static/images/flags/${parts[0]}.svg`;
-  };
-
-  image.src = `/static/images/flags/${code}.svg`;
+  return `<img class="flagPNG" src="/static/images/flags/${imageCode}.svg" alt="${CountryName} flag">`;
 }
 
 function getTooltipSprite(countryCode, positions, gb = false) {
@@ -116,23 +106,8 @@ function getTooltipSprite(countryCode, positions, gb = false) {
     countryCode = gb;
   }
 
-  let lookupCode = countryCode.toLowerCase();
-  let position;
-
-  while (lookupCode) {
-    position = positions[lookupCode];
-
-    if (position) {
-      break;
-    }
-
-    const lastDash = lookupCode.lastIndexOf("-");
-    if (lastDash === -1) {
-      break;
-    }
-
-    lookupCode = lookupCode.substring(0, lastDash);
-  }
+  const lookupCode = resolveFlagCode(countryCode, positions);
+  const position = lookupCode && positions[lookupCode];
 
   if (!position) {
     return `<div class="flagPNG" style="background: red;" alt="${CountryName} flag">Flag not found</div>`;

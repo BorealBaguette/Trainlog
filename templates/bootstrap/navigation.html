@@ -399,37 +399,42 @@
       }
     });
 
-    // Sort countries by frontend name, grouped by hierarchy level.
-    // Normal countries have depth 1; GB-ENG-C has depth 3, etc.
+    // Sort by name, each subdivision straight under its parent (GB-ENG-H under
+    // GB-ENG), and indent it one step per level below the group's top level.
     sortedGroups.forEach(function (group) {
-        var countries = group.countries;
+        var byIso = {};
+        group.countries.forEach(function (c) { byIso[c.iso] = c; });
 
-        // Determine hierarchy depth from the ISO code.
-        function getDepth(iso) {
-            return iso.split("-").length;
-        }
-
-        // Sort by hierarchy level first, then frontend name.
-        countries.sort(function (a, b) {
-            var depthA = getDepth(a.iso);
-            var depthB = getDepth(b.iso);
-
-            if (depthA !== depthB) {
-                return depthA - depthB;
+        // Names of the entry and of its ancestors present in the group, top first:
+        // ["England", "London"] for gb-eng-i.
+        group.countries.forEach(function (c) {
+            var parts = c.iso.split("-");
+            c.path = [];
+            for (var i = 1; i <= parts.length; i++) {
+                var ancestor = byIso[parts.slice(0, i).join("-")];
+                if (ancestor) c.path.push(ancestor.name || ancestor.iso);
             }
-
-            return (a.name || a.iso || '').localeCompare(
-                b.name || b.iso || ''
-            );
         });
+
+        group.countries.sort(function (a, b) {
+            for (var i = 0; i < Math.min(a.path.length, b.path.length); i++) {
+                var cmp = a.path[i].localeCompare(b.path[i]);
+                if (cmp) return cmp;
+            }
+            return a.path.length - b.path.length;
+        });
+
+        var top = Math.min.apply(null, group.countries.map(function (c) { return c.path.length; }));
+        group.countries.forEach(function (c) { c.level = c.path.length - top; });
     });
-
-
 
         // Reattach the sorted groups to the DOM
         sortedGroups.forEach(function (group, index) {
           group.header.appendTo(group.header.parent());
           group.countries.forEach(function (country) {
+            if (country.level > 0) {
+              country.element.css('padding-left', (1 + 1.5 * country.level) + 'rem');
+            }
             country.element.html(country.html);
             country.element.appendTo(country.element.parent());
           });
