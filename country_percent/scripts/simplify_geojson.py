@@ -292,4 +292,5 @@ def process(country_code):
 
 
 if __name__ == "__main__":
-    process(sys.argv[1])
+    for country_code in sys.argv[1:]:
+        process(country_code)
