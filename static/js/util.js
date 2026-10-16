@@ -1140,7 +1140,7 @@ function getReadableAge(creationDate) {
   }
 }
 
-function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
+function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url) {
   select.autocomplete({
     source: function (request, response) {
         // Normalize the search term
@@ -1170,15 +1170,17 @@ function operatorAutocomplete(select, manAndOps, logos_url, no_logo_url, type) {
         response(sortedOperatorNames);
     },
     select: function (event, ui) {
-        var selectedOperator = ui.item.value;
-        var logoUrl = manAndOps.operators[selectedOperator] 
-                      ? logos_url + manAndOps.operators[selectedOperator] 
-                      : no_logo_url;
+        if (logos_url && no_logo_url) {
+          var selectedOperator = ui.item.value;
+          var logoUrl = manAndOps.operators[selectedOperator]
+                        ? logos_url + manAndOps.operators[selectedOperator]
+                        : no_logo_url;
 
-        $.ajax(logoUrl)
-            .done(function () {
-                $(".operatorLogo").attr("src", logoUrl);
-            })
+          $.ajax(logoUrl)
+              .done(function () {
+                  $(".operatorLogo").attr("src", logoUrl);
+              })
+        }
     }
   });
 }
@@ -1522,7 +1524,7 @@ function operatorPillsInput(hiddenInput, searchInput, pillContainer, manAndOps, 
   };
 }
 
-function materialTypeAutocomplete(select, manAndOps, type) {
+function materialTypeAutocomplete(select, manAndOps) {
   select.autocomplete({
     source: function (request, response) {
         // Normalize the search term
