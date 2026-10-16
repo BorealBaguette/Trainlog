@@ -7291,8 +7291,13 @@ def _as_form_value(value):
     """As a form would carry it: everything is text, and "" means unset — which
     sanitize_param turns back into NULL. Keeping to that spelling matters, since
     the pipeline tests some fields for truthiness and a bare 0 would read as
-    unset where "0" does not."""
-    return "" if value is None else str(value)
+    unset where "0" does not. A list is the int[] ticket_ids, which the form
+    sends comma-separated ("12,34")."""
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return ",".join(str(v) for v in value)
+    return str(value)
 
 
 def _trip_datetime(value):
@@ -7360,7 +7365,8 @@ def _read_patch_payload(payload):
     serialised, and null meaning "clear" just as an empty form field does."""
     patched = {}
     for key, value in payload.items():
-        if isinstance(value, (list, dict)):
+        # ticket_ids is an int[] column, not JSON text: keep it a list.
+        if isinstance(value, (list, dict)) and key != "ticket_ids":
             value = json.dumps(value)
         patched[key] = "" if value is None else value
 
